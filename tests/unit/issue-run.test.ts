@@ -5,9 +5,11 @@ import {
   changedRunPrices,
   issueRunSequence,
   overriddenFields,
+  priceListTabTarget,
   repeatedStamps,
   resolveRunCopyDetails,
   runBlockers,
+  runPriceLines,
   runPriceSubjects,
   treeOrder,
   type RunCopyDetails,
@@ -250,6 +252,118 @@ describe("the issue's stamps, in turn (#1220)", () => {
       ]);
       // No primary catalogue is no field and nothing to write.
       assert.deepEqual(changedRunPrices(subjects, () => null), []);
+    });
+  });
+
+  describe("the price list, typed down (#1223)", () => {
+    const details = (conditionId: string, certificateStatusId = ""): RunCopyDetails => ({
+      conditionId,
+      certificateStatusId,
+      formatId: "",
+      lotId: "",
+      location: { locationId: "", locationRef: "" },
+      disposition: { inCollection: false, forSale: false, forTrade: false },
+    });
+    const members = [
+      member("s2", "202"),
+      member("s1", "201"),
+      member("s1a", "201a", { parentId: "s1", actsAsVariant: true }),
+      member("s3", "203"),
+    ];
+
+    it("is one line per stamp × condition × certificate, holding its tiles in tick order", () => {
+      const run = assignInTurn(["t9", "t4", "t6", "t2"], ["s1", "s1", "s2", "s1"]);
+      const lines = runPriceLines(
+        run,
+        [details("used"), details("used"), details("used"), details("used")],
+        members,
+        MI,
+        ["used"],
+        []
+      );
+      assert.deepEqual(
+        lines.map((l) => [l.stampId, l.tileIds]),
+        [
+          ["s1", ["t9", "t4", "t2"]],
+          ["s2", ["t6"]],
+        ]
+      );
+      // The keys are the subjects the tile's own field reads and writes, so the two cannot disagree.
+      assert.deepEqual(
+        lines.map((l) => l.key),
+        runPriceSubjects(run, [details("used"), details("used"), details("used"), details("used")])
+          .map((s) => s.key)
+          .sort((a, b) => (a < b ? -1 : 1))
+      );
+    });
+
+    it("reads in catalogue order whatever order the tiles were ticked in, variants in their place", () => {
+      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s3", "s1a", "s2", "s1"]);
+      const resolved = [details("used"), details("used"), details("used"), details("used")];
+      assert.deepEqual(
+        runPriceLines(run, resolved, members, MI, ["used"], []).map((l) => l.stampId),
+        ["s1", "s1a", "s2", "s3"]
+      );
+    });
+
+    it("orders one stamp's lines by the collection's conditions, then no certificate before its certificates", () => {
+      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s1", "s1", "s1", "s1"]);
+      const resolved = [
+        details("used", "cert-b"),
+        details("mint"),
+        details("used"),
+        details("used", "cert-a"),
+      ];
+      assert.deepEqual(
+        runPriceLines(run, resolved, members, MI, ["mint", "used"], ["cert-a", "cert-b"]).map(
+          (l) => [l.conditionId, l.certificateStatusId]
+        ),
+        [
+          ["mint", null],
+          ["used", null],
+          ["used", "cert-a"],
+          ["used", "cert-b"],
+        ]
+      );
+    });
+
+    it("keeps the run's order for what it cannot place, after what it can", () => {
+      const run = assignInTurn(["t1", "t2", "t3"], ["unknown-b", "s2", "unknown-a"]);
+      const resolved = [details("used"), details("used"), details("used")];
+      assert.deepEqual(
+        runPriceLines(run, resolved, members, MI, ["used"], []).map((l) => l.stampId),
+        ["s2", "unknown-b", "unknown-a"]
+      );
+    });
+
+    it("has no line for a tile without a stamp or a condition", () => {
+      const run = assignInTurn(["t1", "t2", "t3"], ["s1", "s2"]);
+      assert.deepEqual(
+        runPriceLines(run, [details(""), details("used"), details("used")], members, MI, [], []).map(
+          (l) => l.tileIds
+        ),
+        [["t2"]]
+      );
+    });
+
+    describe("Tab", () => {
+      const keys = ["a", "b", "c"];
+
+      it("moves to the next value and Shift+Tab to the previous, with nothing between", () => {
+        assert.deepEqual(priceListTabTarget(keys, "a", false, true), { key: "b" });
+        assert.deepEqual(priceListTabTarget(keys, "c", true, true), { key: "b" });
+      });
+
+      it("goes from the last value to confirming the run, never to Back", () => {
+        assert.equal(priceListTabTarget(keys, "c", false, true), "confirm");
+        // A disabled confirm cannot hold focus, so the browser's own order stands.
+        assert.equal(priceListTabTarget(keys, "c", false, false), null);
+      });
+
+      it("leaves Shift+Tab off the first value, and a key it does not know, to the browser", () => {
+        assert.equal(priceListTabTarget(keys, "a", true, true), null);
+        assert.equal(priceListTabTarget(keys, "zz", false, true), null);
+      });
     });
   });
 });

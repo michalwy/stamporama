@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DialogActions,
@@ -23,9 +23,11 @@ import {
   changedRunPrices,
   issueRunSequence,
   overriddenFields,
+  priceListTabTarget,
   repeatedStamps,
   resolveRunCopyDetails,
   runBlockers,
+  runPriceLines,
   runPriceSubjects,
   treeOrder,
   RUN_DETAIL_FIELDS,
@@ -44,7 +46,11 @@ import {
   orderedCatalogLabels,
   pickedStampText,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
-import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import {
+  PhotoThumb,
+  THUMB_OBJECT_FIT,
+  ThumbPreview,
+} from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
 import { CREATE_LINK_STYLE } from "./chip-styles";
 import { NumericInput } from "./numeric-input";
@@ -345,6 +351,48 @@ export function IssueRunDialog({
     !membersLoading &&
     !savingPrices;
 
+  /**
+   * The same values as **one list, typed down** (#1223): a line per subject in catalogue order, each
+   * field the field — no row to select first. It edits `typedPrices` exactly as the tile's own field
+   * does, so the two always show the same figure.
+   */
+  const priceLines = runPriceLines(
+    assignments,
+    resolved,
+    members,
+    primaryVendorId,
+    conditions.map((c) => c.id),
+    certificateStatuses.map((c) => c.id)
+  ).flatMap((line) => {
+    const field = priceField(line.key);
+    return field ? [{ line, field }] : [];
+  });
+  const priceInputs = useRef(new Map<string, HTMLInputElement | null>());
+  const confirmRef = useRef<HTMLButtonElement | null>(null);
+  /** Tab walks the values and nothing else, and off the last one lands on Identify (#726). */
+  function tabThroughPrices(e: React.KeyboardEvent<HTMLInputElement>, key: string) {
+    if (e.key !== "Tab") return;
+    const confirm = confirmRef.current;
+    const target = priceListTabTarget(
+      priceLines.map((p) => p.line.key),
+      key,
+      e.shiftKey,
+      confirm != null && !confirm.disabled
+    );
+    if (target === null) return;
+    e.preventDefault();
+    if (target === "confirm") {
+      confirm?.focus();
+      return;
+    }
+    const input = priceInputs.current.get(target.key);
+    input?.focus();
+    input?.select();
+  }
+  const priceListCatalogs = new Set(priceLines.map((p) => p.field.value.catalogNameId));
+  const priceListCatalog = priceListCatalogs.size === 1 ? priceLines[0]?.field.catalog : undefined;
+  const priceListMissing = priceLines.filter((p) => p.field.value.amount.trim() === "").length;
+
   const describe = (field: RunDetailField, d: RunCopyDetails): string => {
     switch (field) {
       case "conditionId":
@@ -643,6 +691,84 @@ export function IssueRunDialog({
                 </div>
               </div>
             </section>
+
+            {/* Every value the run can record, typed down one list (#1223). Here rather than beside
+                the tile in hand, because it is about the whole run and needs no tile selected. */}
+            {priceSubjects.length > 0 ? (
+              <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                <h3 style={SECTION_HEADING}>
+                  Catalog values
+                  {priceListCatalog && (
+                    <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>
+                      {" "}
+                      — {priceListCatalog.catalogLabel} {priceListCatalog.editionYear} ·{" "}
+                      {priceListCatalog.currency}
+                    </span>
+                  )}
+                </h3>
+                {prices.isLoading ? (
+                  <p style={MUTED}>Reading the catalog values on file…</p>
+                ) : prices.isError ? (
+                  <p style={{ ...MUTED, color: "var(--color-error)" }}>
+                    The catalog values on file could not be read: {prices.error.message}
+                  </p>
+                ) : priceLines.length === 0 ? (
+                  <p style={MUTED}>
+                    This issue&rsquo;s area has no primary catalog with an edition to record a value
+                    on.
+                  </p>
+                ) : (
+                  <>
+                    <p style={MUTED}>
+                      One line per stamp in a condition, in catalogue order. Type a value and press
+                      Tab for the next; Tab from the last goes to <em>Identify</em>.
+                      {priceListMissing > 0 && (
+                        <span style={{ color: "var(--color-warning)" }}>
+                          {" "}
+                          {priceListMissing} {priceListMissing === 1 ? "has" : "have"} no value yet.
+                        </span>
+                      )}
+                    </p>
+                    {priceLines.map(({ line, field }) => {
+                      const node = memberById.get(line.stampId);
+                      const tiles = line.tileIds
+                        .map((id) => inRun.find((p) => p.tileId === id))
+                        .filter((p): p is IdentifiedPiece => p != null);
+                      const condition = conditions.find((c) => c.id === line.conditionId);
+                      const certificate = certificateStatuses.find(
+                        (c) => c.id === line.certificateStatusId
+                      );
+                      const number = node
+                        ? (orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId)[0] ||
+                          node.name ||
+                          "No catalog number")
+                        : "…";
+                      return (
+                        <PriceLine
+                          key={line.key}
+                          collectionId={collectionId}
+                          piece={tiles[0] ?? null}
+                          moreTiles={Math.max(0, tiles.length - 1)}
+                          number={number}
+                          condition={condition ? `${condition.name} (${condition.abbreviation})` : ""}
+                          certificate={certificate?.name ?? null}
+                          currency={priceListCatalog ? null : (field.catalog?.currency ?? null)}
+                          amount={field.value.amount}
+                          disabled={isPending || savingPrices}
+                          inputRef={(el) => {
+                            priceInputs.current.set(line.key, el);
+                          }}
+                          onChange={(v) => setTypedPrices((prev) => new Map(prev).set(line.key, v))}
+                          onKeyDown={(e) => tabThroughPrices(e, line.key)}
+                        />
+                      );
+                    })}
+                  </>
+                )}
+              </section>
+            ) : assignments.some((a) => a.stampId) && withoutCondition.length > 0 ? (
+              <p style={MUTED}>Choose a condition to record the run&rsquo;s catalog values.</p>
+            ) : null}
 
             <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
               <h3 style={SECTION_HEADING}>The run</h3>
@@ -990,6 +1116,7 @@ export function IssueRunDialog({
           cancelLabel="Back"
           onCancel={onBack}
           onAction={() => void submit()}
+          actionRef={confirmRef}
           disabled={isPending || !canConfirm}
           cancelDisabled={isPending}
           error={priceError ?? error}
@@ -1031,6 +1158,119 @@ export function IssueRunDialog({
 }
 
 // ── Pieces ───────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * One line of the run's price list (#1223): the tile's picture, what is being priced, and the field.
+ *
+ * **The picture is the tile's own**, the first of the line's tiles in tick order — every line is
+ * guaranteed one, and it is what gets matched against the catalogue page. It enlarges on hover
+ * (#632's `ThumbPreview`) and is **never focusable**: nothing in it is a button, and a press on it
+ * keeps the cursor in the value being typed, since a picture that took focus would bring back the
+ * clicking the list exists to remove.
+ */
+function PriceLine({
+  collectionId,
+  piece,
+  moreTiles,
+  number,
+  condition,
+  certificate,
+  currency,
+  amount,
+  disabled,
+  inputRef,
+  onChange,
+  onKeyDown,
+}: {
+  collectionId: string;
+  piece: IdentifiedPiece | null;
+  /** The line's tiles past the one pictured. */
+  moreTiles: number;
+  number: string;
+  condition: string;
+  certificate: string | null;
+  /** Named per line only where the list's catalogs differ; otherwise it is in the heading. */
+  currency: string | null;
+  amount: string;
+  disabled: boolean;
+  inputRef: (el: HTMLInputElement | null) => void;
+  onChange: (value: string) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}) {
+  const front = piece ? (piece.sides.find((s) => s.side === "front") ?? piece.sides[0]) : undefined;
+  const empty = amount.trim() === "";
+  const thumb = front ? `/api/collections/${collectionId}/photos/${front.photoId}/thumb` : null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+        padding: "0.25rem 0.5rem",
+        borderRadius: "0.375rem",
+        border: `1px solid ${empty ? "var(--color-warning)" : "var(--color-border)"}`,
+        background: "var(--color-bg-elevated)",
+      }}
+    >
+      <span
+        // A press on the picture must not take the cursor out of the value being typed.
+        onMouseDown={(e) => e.preventDefault()}
+        style={{ flexShrink: 0, width: "2.75rem", height: "2.75rem" }}
+      >
+        {front && thumb && (
+          <ThumbPreview
+            src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
+            thumbSrc={thumb}
+            label={`Tile ${(piece?.position ?? 0) + 1}`}
+            style={{ width: "100%", height: "100%" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={thumb}
+              alt={`Tile ${(piece?.position ?? 0) + 1}`}
+              draggable={false}
+              style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
+            />
+          </ThumbPreview>
+        )}
+      </span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <strong
+          style={{
+            fontSize: "0.875rem",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {number}
+        </strong>
+        <span style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}>
+          {[condition, certificate].filter(Boolean).join(" · ")}
+        </span>
+        {(moreTiles > 0 || empty) && (
+          <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+            {moreTiles > 0 && `+${moreTiles} more ${moreTiles === 1 ? "tile" : "tiles"}`}
+            {moreTiles > 0 && empty && " · "}
+            {empty && <span style={{ color: "var(--color-warning)" }}>no value yet</span>}
+          </span>
+        )}
+      </span>
+      <NumericInput
+        ref={inputRef}
+        aria-label={`${number} ${condition}${certificate ? ` ${certificate}` : ""} catalog value`}
+        value={amount}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        disabled={disabled}
+        placeholder="—"
+        autoComplete="off"
+        style={{ ...INPUT_STYLE, width: "6.5rem", textAlign: "right" }}
+      />
+      {currency && <span style={{ ...MUTED, flexShrink: 0 }}>{currency}</span>}
+    </div>
+  );
+}
 
 /** One field of a tile's own details: the shared value while it follows the run, the control once
  * it is the tile's own. */

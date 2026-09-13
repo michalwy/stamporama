@@ -75,12 +75,24 @@ export function issueRunSequence(
   members: readonly RunMember[],
   primaryVendorId: string | null
 ): string[] {
-  const ordered = treeOrder(members);
   const inIssue = new Set(members.map((m) => m.stampId));
-  const main = ordered.filter((m) => !(m.parentId && inIssue.has(m.parentId) && m.actsAsVariant));
-  return main
+  return catalogueOrder(members, primaryVendorId)
+    .filter((m) => !(m.parentId && inIssue.has(m.parentId) && m.actsAsVariant))
+    .map((m) => m.stampId);
+}
+
+/**
+ * Every member — variants included — in **catalogue order**: the primary catalogue's number, and
+ * the tree's own order for the stamps with none (after the numbered ones) and between equal numbers.
+ * The one ordering both the sequence and the run's price list (#1223) read.
+ */
+export function catalogueOrder<T extends RunMember>(
+  members: readonly T[],
+  primaryVendorId: string | null
+): T[] {
+  return treeOrder(members)
     .map((m, index) => ({
-      stampId: m.stampId,
+      m,
       index,
       key: computeCatalogSortKey(
         m.catalogNumbers.map((n) => ({ catalogVendorId: n.catalogVendorId, value: n.number })),
@@ -88,7 +100,7 @@ export function issueRunSequence(
       ),
     }))
     .sort((a, b) => compareCatalogSortKeys(a.key, b.key) || a.index - b.index)
-    .map((m) => m.stampId);
+    .map(({ m }) => m);
 }
 
 // ── Assigning ────────────────────────────────────────────────────────────────────────────────────
@@ -277,6 +289,77 @@ export function runPriceSubjects(
     });
   }
   return out;
+}
+
+/** One line of the run's price list (#1223): a subject, and the tiles of the run it is the value for. */
+export interface RunPriceLine extends RunPriceSubject {
+  /** In the order they were ticked — the first is the one whose picture the line shows. */
+  tileIds: string[];
+}
+
+/**
+ * The run's catalogue values as **one list, typed down** (#1223): a line per subject — never per
+ * tile, so Tab never visits one figure twice — in the order the collector reads the catalogue.
+ *
+ * **Catalogue order** is the stamp's place in {@link catalogueOrder}; the lines of one stamp follow
+ * the order the collection lists its conditions in, and within a condition *no certificate* comes
+ * before the certificates, in theirs. A stamp not among `members` (the issue still being read) and a
+ * condition or certificate not in its list keep the order of the run, after the ones that are.
+ */
+export function runPriceLines(
+  assignments: readonly RunAssignment[],
+  resolved: readonly RunCopyDetails[],
+  members: readonly RunMember[],
+  primaryVendorId: string | null,
+  conditionOrder: readonly string[],
+  certificateOrder: readonly string[]
+): RunPriceLine[] {
+  const subjects = runPriceSubjects(assignments, resolved);
+  const tilesByKey = new Map<string, string[]>();
+  for (const [i, a] of assignments.entries()) {
+    const d = resolved[i];
+    if (!a.stampId || !d?.conditionId) continue;
+    const key = catalogValueSubjectKey(a.stampId, d.conditionId, d.certificateStatusId);
+    tilesByKey.set(key, [...(tilesByKey.get(key) ?? []), a.tileId]);
+  }
+  const rankIn = (order: ReadonlyMap<string, number>, id: string) =>
+    order.get(id) ?? Number.MAX_SAFE_INTEGER;
+  const stampRank = new Map(catalogueOrder(members, primaryVendorId).map((m, i) => [m.stampId, i]));
+  const conditionRank = new Map(conditionOrder.map((id, i) => [id, i]));
+  // No certificate first, then the certificates in the collection's own order.
+  const certificateRank = new Map(certificateOrder.map((id, i) => [id, i + 1]));
+  const certificateRankOf = (id: string | null) => (id ? rankIn(certificateRank, id) : 0);
+  return subjects
+    .map((subject, runIndex) => ({ subject, runIndex }))
+    .sort(
+      (a, b) =>
+        rankIn(stampRank, a.subject.stampId) - rankIn(stampRank, b.subject.stampId) ||
+        rankIn(conditionRank, a.subject.conditionId) -
+          rankIn(conditionRank, b.subject.conditionId) ||
+        certificateRankOf(a.subject.certificateStatusId) -
+          certificateRankOf(b.subject.certificateStatusId) ||
+        a.runIndex - b.runIndex
+    )
+    .map(({ subject }) => ({ ...subject, tileIds: tilesByKey.get(subject.key) ?? [] }));
+}
+
+/**
+ * Where Tab goes from a value of the price list (#1223): the next value, or with Shift the previous
+ * one — and **off the last value, the confirm action**, never Cancel (#726's bug, met again here
+ * because the footer draws Back before Identify). `null` leaves the key to the browser: Shift+Tab off
+ * the first value, and Tab off the last while confirming is not possible and so cannot hold focus.
+ */
+export function priceListTabTarget(
+  keys: readonly string[],
+  from: string,
+  shift: boolean,
+  canConfirm: boolean
+): { key: string } | "confirm" | null {
+  const index = keys.indexOf(from);
+  if (index === -1) return null;
+  const next = shift ? index - 1 : index + 1;
+  if (next >= keys.length) return canConfirm ? "confirm" : null;
+  return next < 0 ? null : { key: keys[next] };
 }
 
 /**
