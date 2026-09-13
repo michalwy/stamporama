@@ -262,7 +262,68 @@ export type AlbumTemplateParseResult =
 /** The raw strings the Settings form submits — every field as typed, before any of it is trusted. */
 export type AlbumTemplateRawInput = Record<keyof AlbumTemplateInput, string>;
 
+/** The same fields without the name: what an album's own values dialog submits (#1215). An album's
+ *  name is not a template value — it is the album's identity, edited beside its language. */
+export type AlbumRenderPresetRawInput = Record<keyof AlbumRenderPreset, string>;
+
+export type AlbumRenderPresetParseResult =
+  | { ok: true; value: AlbumRenderPreset }
+  | { ok: false; message: string };
+
 type FieldResult<T> = { ok: true; value: T } | { ok: false; message: string };
+
+/**
+ * Every preset field the form submits, as typed. **Listed rather than looped** so a field added to
+ * the preset without being added here is a type error instead of a value that silently stops being
+ * saved.
+ *
+ * Here rather than in a server action because two forms submit these fields — the template's in
+ * Settings (#766) and the album's own (#1215) — and a second list would be the drift the shared
+ * preset type exists to prevent.
+ */
+export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawInput {
+  const str = (key: keyof AlbumRenderPreset) =>
+    ((formData.get(key) as string | null) ?? "").trim();
+  return {
+    pageWidthMm: str("pageWidthMm"),
+    pageHeightMm: str("pageHeightMm"),
+    marginTopMm: str("marginTopMm"),
+    marginRightMm: str("marginRightMm"),
+    marginBottomMm: str("marginBottomMm"),
+    marginLeftMm: str("marginLeftMm"),
+    blocksPerBand: str("blocksPerBand"),
+    blockGapMm: str("blockGapMm"),
+    borderStyle: str("borderStyle"),
+    borderWidthMm: str("borderWidthMm"),
+    borderInsetMm: str("borderInsetMm"),
+    boxGapXMm: str("boxGapXMm"),
+    boxGapYMm: str("boxGapYMm"),
+    headingSpaceAboveMm: str("headingSpaceAboveMm"),
+    headingSpaceBelowMm: str("headingSpaceBelowMm"),
+    verticalClearanceMm: str("verticalClearanceMm"),
+    horizontalMarginMm: str("horizontalMarginMm"),
+    titleFace: str("titleFace"),
+    titleSizePt: str("titleSizePt"),
+    chapterFace: str("chapterFace"),
+    chapterSizePt: str("chapterSizePt"),
+    headingFace: str("headingFace"),
+    headingSizePt: str("headingSizePt"),
+    labelFace: str("labelFace"),
+    labelSizePt: str("labelSizePt"),
+    footerFace: str("footerFace"),
+    footerSizePt: str("footerSizePt"),
+    boxBorderStyle: str("boxBorderStyle"),
+    boxBorderWidthMm: str("boxBorderWidthMm"),
+    labelPosition: str("labelPosition"),
+    printTitle: str("printTitle"),
+    printPhotos: str("printPhotos"),
+    photoOpacityPercent: str("photoOpacityPercent"),
+    chapterTemplate: str("chapterTemplate"),
+    checklistTemplate: str("checklistTemplate"),
+    boxLabelTemplate: str("boxLabelTemplate"),
+    footerTemplate: str("footerTemplate"),
+  };
+}
 
 /** Parses a whole-number field (columns, opacity). Its own parser rather than the millimetre one:
  *  `1.5 columns` is not a rounding question, it is a mistake. */
@@ -332,8 +393,20 @@ function parseChoice<T extends string>(
 export function parseAlbumTemplateInput(raw: AlbumTemplateRawInput): AlbumTemplateParseResult {
   const name = raw.name.trim();
   if (!name) return { ok: false, message: "Name is required." };
+  const preset = parseAlbumRenderPreset(raw);
+  if (!preset.ok) return preset;
+  return { ok: true, value: { name, ...preset.value } };
+}
 
-  const mm = (key: keyof AlbumRenderPreset, label: string, min: number, max: number) =>
+/**
+ * The preset alone, by the same rules — the template's parser without the name. An album's own
+ * values (#1215) go through exactly this, so an album can never be given a figure its template would
+ * have refused, and its live preview draws only what a save would store.
+ */
+export function parseAlbumRenderPreset(
+  raw: AlbumRenderPresetRawInput
+): AlbumRenderPresetParseResult {
+  const mm =(key: keyof AlbumRenderPreset, label: string, min: number, max: number) =>
     parseHawidMillimetres(raw[key], label, min, max);
 
   const pageWidthMm = mm("pageWidthMm", "Page width", MIN_PAGE_MM, MAX_PAGE_MM);
@@ -448,7 +521,6 @@ export function parseAlbumTemplateInput(raw: AlbumTemplateRawInput): AlbumTempla
   return {
     ok: true,
     value: {
-      name,
       pageWidthMm: pageWidthMm.value,
       pageHeightMm: pageHeightMm.value,
       marginTopMm: marginTopMm.value,

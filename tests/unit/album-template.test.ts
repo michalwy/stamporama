@@ -14,7 +14,9 @@ import {
   DEFAULT_ALBUM_PRESET,
   albumHawidMargins,
   albumTemplateSummary,
+  parseAlbumRenderPreset,
   parseAlbumTemplateInput,
+  readAlbumPresetFields,
   type AlbumTemplateInput,
   type AlbumTemplateRawInput,
 } from "../../src/lib/album-template-rules";
@@ -136,6 +138,38 @@ describe("parseAlbumTemplateInput", () => {
 
   it("accepts an empty text — a page with no footer is an ordinary thing to want", () => {
     assert.equal(parsedOk({ footerTemplate: "" }).footerTemplate, "");
+  });
+});
+
+// An album's own values (#1215) have no name and go through the template's rules, not a copy of them.
+describe("parseAlbumRenderPreset", () => {
+  it("parses the preset without asking for a name", () => {
+    const { name: _name, ...raw } = rawDefaults({ name: "" });
+    void _name;
+    const result = parseAlbumRenderPreset(raw);
+    assert.ok(result.ok, result.ok ? "" : result.message);
+    assert.deepEqual(result.value, DEFAULT_ALBUM_PRESET);
+    assert.equal("name" in result.value, false);
+  });
+
+  it("refuses exactly what a template refuses", () => {
+    const result = parseAlbumRenderPreset(rawDefaults({ marginLeftMm: "150", marginRightMm: "150" }));
+    assert.ok(!result.ok);
+    assert.match(result.message, /between 0 and 100/);
+  });
+});
+
+describe("readAlbumPresetFields", () => {
+  it("reads every preset field off a form, and nothing else", () => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(rawDefaults({ name: "Polska A4" }))) {
+      if (value !== "") form.set(key, value);
+    }
+    const raw = readAlbumPresetFields(form);
+    assert.deepEqual(Object.keys(raw).sort(), Object.keys(DEFAULT_ALBUM_PRESET).sort());
+    const parsed = parseAlbumRenderPreset(raw);
+    assert.ok(parsed.ok, parsed.ok ? "" : parsed.message);
+    assert.deepEqual(parsed.value, DEFAULT_ALBUM_PRESET);
   });
 });
 

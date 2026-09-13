@@ -186,9 +186,11 @@ function primaryNumber(
  * clearances and the live stock (#765), and the texts render in the album's language (#755). The
  * geometry happens after all of it, once, in `album-layout.ts`.
  *
- * `presetOverride` answers *what would this album look like under that preset* and has one caller,
- * the album template's preview (#795). Nothing is written and the album keeps the values copied onto
- * it; see the note where it is substituted for why it has to be substituted there and not later.
+ * `presetOverride` answers *what would this album look like under that preset* and has two callers:
+ * the live preview beside a template or an album's own values (#795, #1215), and the count of
+ * printed sheets a change to an album's own values would make diverge (#1215). Nothing is written
+ * and the album keeps the values it holds; see the note where it is substituted for why it has to be
+ * substituted there and not later.
  */
 export interface AlbumPlanContext {
   album: AlbumData;
@@ -230,9 +232,9 @@ export async function albumPlanContext(
   const row = await getAlbum(ownerId, albumId);
   if (!row) return null;
   // The album's own values, unless a caller is asking *what would this album look like under that
-  // preset* — which is the album template's preview (#795) and nothing else. It is read-only in the
-  // strongest sense: the override never reaches a write, the album keeps the values copied onto it
-  // (#308's rule, #766), and the next read of this album is unaffected. It is substituted **here**,
+  // preset* — the preview (#795, #1215) and the divergence count before a save (#1215). It is
+  // read-only in the strongest sense: the override never reaches a write, the album keeps the values
+  // it holds (#308's rule, #766), and the next read of this album is unaffected. It is substituted **here**,
   // before anything is resolved, because the clearances are read once into `margins` below and the
   // texts are read through this object — a caller swapping the preset afterwards would get the new
   // faces with the old box heights, which is precisely the confident wrong answer a preview must

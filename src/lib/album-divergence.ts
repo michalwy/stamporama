@@ -419,6 +419,39 @@ export function compareAlbumPages(
   return rankAlbumDivergences(found);
 }
 
+/** A printed sheet as the report states it, reduced to what *does it still match* reads. */
+export interface AlbumSheetMatch {
+  id: string;
+  /** A sheet awaiting a reprint is out of the comparison altogether, so it matches nothing. */
+  reprinting: boolean;
+  divergences: readonly AlbumDivergence[];
+}
+
+/** The screen's own *Still matches*: nothing to report, and not already on its way to a reprint. */
+function stillMatches(sheet: AlbumSheetMatch): boolean {
+  return !sheet.reprinting && sheet.divergences.length === 0;
+}
+
+/**
+ * How many printed sheets that match **today** would stop matching under a change (#1215).
+ *
+ * The collector is told this before an album's own template values are saved, because one margin
+ * moved can mark half a binder out of date. **A sheet already out of date is not counted**, decided
+ * with the collector on 2026-09-13: the change does not mark it out of date for the first time, and
+ * a figure that included every card already carrying a new picture would say *this change* about
+ * cards the change has nothing to do with.
+ *
+ * Both reports come from the same planner — the second with the new values substituted — so the
+ * count and what the report says after the save are one answer rather than two that agree today.
+ */
+export function countNewlyDivergingSheets(
+  now: readonly AlbumSheetMatch[],
+  after: readonly AlbumSheetMatch[]
+): number {
+  const matching = new Set(now.filter(stillMatches).map((s) => s.id));
+  return after.filter((s) => matching.has(s.id) && !stillMatches(s)).length;
+}
+
 /** Most serious first, stable within a kind. */
 export function rankAlbumDivergences(found: readonly AlbumDivergence[]): AlbumDivergence[] {
   return [...found].sort(

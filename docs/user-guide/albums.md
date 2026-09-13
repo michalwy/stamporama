@@ -34,6 +34,30 @@ texts — are an [album template](collections.md#album-templates) in Settings, a
 
 The album gathers its entries straight away.
 
+## The album's own page template
+
+**Page template…**, at the top of an album's screen, opens every value the album took from its
+template — page and margins, spacing, hawid clearances, type, boxes and photos, and the four texts —
+with the album's own pages drawn beside them, redrawn as you type. It is the same form and the same
+preview as a template in Settings, pointed at this album.
+
+**What you change there applies to this album only.** The template it was made from is not touched,
+no other album started from that template changes, and the album does not become linked to anything.
+Nothing has to be reseeded to correct one margin.
+
+These are layout values, not just drawing settings, so saving them **re-plans the album**: boxes can
+move between rows and sheets, and the number of sheets can change. **Printed cards never change.**
+They stay exactly as printed and report the difference under *Printed cards*, where you answer it
+with a continuation page or a reprint as usual — or leave it.
+
+Before anything is saved you are told **how many printed cards that match today** the change would
+make stop matching, and you confirm that figure. A card that already reports something — a new
+picture, say — is not in the count, because this change does not make it out of date for the first
+time. If the count is zero, the values are simply saved.
+
+*Apply a template* on the album list is still there, and is the other thing: it replaces **all** of
+the album's values with a template's.
+
 ## The language is the album's own, and it changes the plan
 
 An album is printed in one language. Names, checklist headings and everything else resolve to that
