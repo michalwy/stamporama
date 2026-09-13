@@ -4,14 +4,13 @@ import {
   assignInTurn,
   changedRunPrices,
   overriddenFields,
-  priceListTabTarget,
   repeatedStamps,
   resolveRunCopyDetails,
   runBlockers,
   runChoices,
-  runPriceLines,
   runPriceSubjects,
-  runStampOrder,
+  runValueSlots,
+  runValueTabTarget,
   treeOrder,
   type RunCopyDetails,
   type RunMember,
@@ -54,8 +53,6 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
         choices.others.map((g) => [g.issueId, g.nodes.map((n) => [n.node.stampId, n.depth])]),
         [["i1", [["s2", 0]]]]
       );
-      // The price list reads in the same order.
-      assert.deepEqual(runStampOrder(choices), ["s3", "s1a", "s1", "s2"]);
     });
 
     it("indents another stamp only under an ancestor drawn in the same group", () => {
@@ -267,110 +264,82 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
     });
   });
 
-  describe("the price list, typed down (#1223)", () => {
-    const details = (conditionId: string, certificateStatusId = ""): RunCopyDetails => ({
-      conditionId,
-      certificateStatusId,
+  describe("values on the run's rows (#1229)", () => {
+    const shared: RunCopyDetails = {
+      conditionId: "used",
+      certificateStatusId: "",
       formatId: "",
       lotId: "",
       location: { locationId: "", locationRef: "" },
       disposition: { inCollection: false, forSale: false, forTrade: false },
-    });
-    /** The checklist's stamps in its own order, then the other stamps — `runStampOrder`'s answer. */
-    const order = ["s1", "s1a", "s2", "s3"];
-
-    it("is one line per stamp × condition × certificate, holding its tiles in tick order", () => {
-      const run = assignInTurn(["t9", "t4", "t6", "t2"], ["s1", "s1", "s2", "s1"]);
-      const lines = runPriceLines(
+    };
+    const entries = (
+      run: ReturnType<typeof assignInTurn>,
+      overrides: ReadonlyArray<Partial<RunCopyDetails> | undefined>
+    ) =>
+      runValueSlots(
         run,
-        [details("used"), details("used"), details("used"), details("used")],
-        order,
-        ["used"],
-        []
-      );
+        run.map((_, i) => resolveRunCopyDetails(shared, overrides[i]))
+      ).map((slot) => slot.entryIndex);
+
+    it("gives the first tile of a stamp × condition × certificate the field, and points the rest at it", () => {
+      const run = assignInTurn(["t1", "t2", "t3", "t4", "t5"], ["s1", "s2", "s1", "s1", "s1"]);
+      const overrides = [undefined, undefined, undefined, { certificateStatusId: "cert" }, { conditionId: "mint" }];
+      assert.deepEqual(entries(run, overrides), [0, 1, 0, 3, 4]);
+      // The keys are the subjects the values are read and written under, once each.
+      const resolved = run.map((_, i) => resolveRunCopyDetails(shared, overrides[i]));
+      const slots = runValueSlots(run, resolved);
+      assert.equal(slots[2].key, slots[0].key);
       assert.deepEqual(
-        lines.map((l) => [l.stampId, l.tileIds]),
-        [
-          ["s1", ["t9", "t4", "t2"]],
-          ["s2", ["t6"]],
-        ]
-      );
-      // The keys are the subjects the tile's own field reads and writes, so the two cannot disagree.
-      assert.deepEqual(
-        lines.map((l) => l.key),
-        runPriceSubjects(run, [details("used"), details("used"), details("used"), details("used")])
-          .map((s) => s.key)
-          .sort((a, b) => (a < b ? -1 : 1))
+        [...new Set(slots.map((s) => s.key))],
+        runPriceSubjects(run, resolved).map((s) => s.key)
       );
     });
 
-    it("reads in the checklist's own order whatever order the tiles were ticked in (#1225)", () => {
-      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s1", "s2", "s3", "s1a"]);
-      const resolved = [details("used"), details("used"), details("used"), details("used")];
-      // A hand-set order that is not catalogue order: 203, 201, 201a, 202.
-      assert.deepEqual(
-        runPriceLines(run, resolved, ["s3", "s1", "s1a", "s2"], ["used"], []).map((l) => l.stampId),
-        ["s3", "s1", "s1a", "s2"]
-      );
+    it("follows the run's order, not the order the stamps are listed in", () => {
+      // The second tile ticked is the first of its stamp, so it carries the field.
+      const run = assignInTurn(["t1", "t2", "t3"], ["s2", "s1", "s2"], new Map([["t3", "s1"]]));
+      assert.deepEqual(entries(run, []), [0, 1, 1]);
     });
 
-    it("orders one stamp's lines by the collection's conditions, then no certificate before its certificates", () => {
-      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s1", "s1", "s1", "s1"]);
-      const resolved = [
-        details("used", "cert-b"),
-        details("mint"),
-        details("used"),
-        details("used", "cert-a"),
-      ];
-      assert.deepEqual(
-        runPriceLines(run, resolved, order, ["mint", "used"], ["cert-a", "cert-b"]).map(
-          (l) => [l.conditionId, l.certificateStatusId]
-        ),
-        [
-          ["mint", null],
-          ["used", null],
-          ["used", "cert-a"],
-          ["used", "cert-b"],
-        ]
-      );
+    it("has no field for a tile without a stamp or a condition", () => {
+      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s1", "s1", "s1"]);
+      assert.deepEqual(entries(run, [{ conditionId: "" }]), [null, 1, 1, null]);
     });
 
-    it("keeps the run's order for what it cannot place, after what it can", () => {
-      const run = assignInTurn(["t1", "t2", "t3"], ["unknown-b", "s2", "unknown-a"]);
-      const resolved = [details("used"), details("used"), details("used")];
+    it("moves the field when a tile's condition or certificate changes", () => {
+      const run = assignInTurn(["t1", "t2", "t3"], ["s1", "s1", "s1"]);
+      assert.deepEqual(entries(run, []), [0, 0, 0]);
+      // A certificate of its own: no longer sharing with the tile above, so a field of its own.
+      assert.deepEqual(entries(run, [undefined, { certificateStatusId: "cert" }]), [0, 1, 0]);
+      // …and the tile after it, changed onto the same certificate, shares that one.
       assert.deepEqual(
-        runPriceLines(run, resolved, order, ["used"], []).map((l) => l.stampId),
-        ["s2", "unknown-b", "unknown-a"]
+        entries(run, [undefined, { certificateStatusId: "cert" }, { certificateStatusId: "cert" }]),
+        [0, 1, 1]
       );
-    });
-
-    it("has no line for a tile without a stamp or a condition", () => {
-      const run = assignInTurn(["t1", "t2", "t3"], ["s1", "s2"]);
-      assert.deepEqual(
-        runPriceLines(run, [details(""), details("used"), details("used")], order, [], []).map(
-          (l) => l.tileIds
-        ),
-        [["t2"]]
-      );
+      // The first tile changed away hands the field to the next tile still on the old condition.
+      assert.deepEqual(entries(run, [{ conditionId: "mint" }]), [0, 1, 1]);
+      // Changing it back makes the second tile's field the shared kind again.
+      assert.deepEqual(entries(run, [{ conditionId: "used" }]), [0, 0, 0]);
     });
 
     describe("Tab", () => {
       const keys = ["a", "b", "c"];
 
       it("moves to the next value and Shift+Tab to the previous, with nothing between", () => {
-        assert.deepEqual(priceListTabTarget(keys, "a", false, true), { key: "b" });
-        assert.deepEqual(priceListTabTarget(keys, "c", true, true), { key: "b" });
+        assert.deepEqual(runValueTabTarget(keys, "a", false, true), { key: "b" });
+        assert.deepEqual(runValueTabTarget(keys, "c", true, true), { key: "b" });
       });
 
       it("goes from the last value to confirming the run, never to Back", () => {
-        assert.equal(priceListTabTarget(keys, "c", false, true), "confirm");
+        assert.equal(runValueTabTarget(keys, "c", false, true), "confirm");
         // A disabled confirm cannot hold focus, so the browser's own order stands.
-        assert.equal(priceListTabTarget(keys, "c", false, false), null);
+        assert.equal(runValueTabTarget(keys, "c", false, false), null);
       });
 
       it("leaves Shift+Tab off the first value, and a key it does not know, to the browser", () => {
-        assert.equal(priceListTabTarget(keys, "a", true, true), null);
-        assert.equal(priceListTabTarget(keys, "zz", false, true), null);
+        assert.equal(runValueTabTarget(keys, "a", true, true), null);
+        assert.equal(runValueTabTarget(keys, "zz", false, true), null);
       });
     });
   });

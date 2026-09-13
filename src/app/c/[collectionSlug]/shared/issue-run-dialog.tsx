@@ -22,14 +22,13 @@ import {
   assignInTurn,
   changedRunPrices,
   overriddenFields,
-  priceListTabTarget,
   repeatedStamps,
   resolveRunCopyDetails,
   runBlockers,
   runChoices,
-  runPriceLines,
   runPriceSubjects,
-  runStampOrder,
+  runValueSlots,
+  runValueTabTarget,
   RUN_DETAIL_FIELDS,
   type IssueRunIdentification,
   type RunCopyDetails,
@@ -88,9 +87,10 @@ import {
  * **Three columns, because three things are looked at together.** The piece, at the size and with
  * the tools a single tile has (#585's viewer, #598's measuring, #625's watermark) — never a reduced
  * version for the bulk case, since telling `240a` from `240b` is the same act on the fifth tile of a
- * set as on a tile alone. The run, which is the sequence and every answer in it at a glance. And the
- * tile in hand: its stamp — the checklist's first, then the rest of its issues' — marked by what was
- * read off it (#740), and its own copy details.
+ * set as on a tile alone. The run, which is the sequence and every answer in it at a glance, with each
+ * catalogue value typed on its own row (#1229). And the tile in hand: its stamp — the checklist's
+ * first, then the rest of its issues' — marked by what was read off it (#740), and its own copy
+ * details.
  *
  * **Nothing is created until every tile in the run has a stamp**, and the count is stated before
  * anything is. The write re-checks all of it and refuses the whole pass rather than half of it.
@@ -337,6 +337,9 @@ export function IssueRunDialog({
     enabled: priceSubjects.length > 0,
     staleTime: 0,
     gcTime: 0,
+    // A changed condition re-reads the run; the rows whose subjects did not change keep their fields
+    // meanwhile rather than all blinking out at once.
+    placeholderData: (previous) => previous,
   });
   /** What was typed, by subject — so a figure typed on one tile is the figure of every tile sharing
    * its stamp and condition, and a change of condition leaves it under the subject it was typed for
@@ -364,14 +367,6 @@ export function IssueRunDialog({
       },
     };
   };
-  const priceKeyOf = (i: number): string | null => {
-    const a = assignments[i];
-    const d = resolved[i];
-    return a?.stampId && d?.conditionId
-      ? catalogValueSubjectKey(a.stampId, d.conditionId, d.certificateStatusId)
-      : null;
-  };
-
   const canConfirm =
     checklist !== null &&
     inRun.length > 0 &&
@@ -381,28 +376,24 @@ export function IssueRunDialog({
     !savingPrices;
 
   /**
-   * The same values as **one list, typed down** (#1223): a line per subject in the checklist's order,
-   * each field the field — no row to select first. It edits `typedPrices` exactly as the tile's own field
-   * does, so the two always show the same figure.
+   * The values **on the run's own rows** (#1229): each row's field is the field — no row to select
+   * first — and of the tiles sharing a stamp × condition × certificate only the first in run order
+   * carries one, the rest showing its figure. All of them read and write `typedPrices` by subject.
    */
-  const priceLines = runPriceLines(
-    assignments,
-    resolved,
-    runStampOrder(choices),
-    conditions.map((c) => c.id),
-    certificateStatuses.map((c) => c.id)
-  ).flatMap((line) => {
-    const field = priceField(line.key);
-    return field ? [{ line, field }] : [];
-  });
+  const valueSlots = runValueSlots(assignments, resolved);
+  const valueFields = valueSlots.map((slot) => priceField(slot.key));
+  /** The editable fields in run order — what Tab walks. */
+  const valueKeys = valueSlots.flatMap((slot, i) =>
+    slot.key && slot.entryIndex === i && valueFields[i] ? [slot.key] : []
+  );
   const priceInputs = useRef(new Map<string, HTMLInputElement | null>());
   const confirmRef = useRef<HTMLButtonElement | null>(null);
   /** Tab walks the values and nothing else, and off the last one lands on Identify (#726). */
-  function tabThroughPrices(e: React.KeyboardEvent<HTMLInputElement>, key: string) {
+  function tabThroughValues(e: React.KeyboardEvent<HTMLInputElement>, key: string) {
     if (e.key !== "Tab") return;
     const confirm = confirmRef.current;
-    const target = priceListTabTarget(
-      priceLines.map((p) => p.line.key),
+    const target = runValueTabTarget(
+      valueKeys,
       key,
       e.shiftKey,
       confirm != null && !confirm.disabled
@@ -417,9 +408,11 @@ export function IssueRunDialog({
     input?.focus();
     input?.select();
   }
-  const priceListCatalogs = new Set(priceLines.map((p) => p.field.value.catalogNameId));
-  const priceListCatalog = priceListCatalogs.size === 1 ? priceLines[0]?.field.catalog : undefined;
-  const priceListMissing = priceLines.filter((p) => p.field.value.amount.trim() === "").length;
+  const runCatalogs = new Set(valueFields.flatMap((f) => (f ? [f.value.catalogNameId] : [])));
+  const runCatalog = runCatalogs.size === 1 ? valueFields.find((f) => f != null)?.catalog : undefined;
+  const valuesMissing = valueSlots.filter(
+    (slot, i) => slot.entryIndex === i && valueFields[i]?.value.amount.trim() === ""
+  ).length;
 
   const describe = (field: RunDetailField, d: RunCopyDetails): string => {
     switch (field) {
@@ -572,7 +565,8 @@ export function IssueRunDialog({
       <DialogShell
         title={`Identify as the stamps of ${runTitle}`}
         onClose={onClose}
-        maxWidth="min(98vw, 110rem)"
+        // Wider since #1229, so a run row holds its value field on the same line as the rest.
+        maxWidth="min(98vw, 122rem)"
         height="92vh"
         // A stamp being created over this dialog owns Escape, as the picker hands it over.
         dismissable={!addingStamp}
@@ -633,7 +627,7 @@ export function IssueRunDialog({
           {/* The answers given once, and the run. */}
           <div
             style={{
-              width: "27rem",
+              width: "39rem",
               flexShrink: 0,
               overflowY: "auto",
               display: "flex",
@@ -723,91 +717,46 @@ export function IssueRunDialog({
               </div>
             </section>
 
-            {/* Every value the run can record, typed down one list (#1223). Here rather than beside
-                the tile in hand, because it is about the whole run and needs no tile selected. */}
-            {priceSubjects.length > 0 ? (
-              <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                <h3 style={SECTION_HEADING}>
-                  Catalog values
-                  {priceListCatalog && (
-                    <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>
-                      {" "}
-                      — {priceListCatalog.catalogLabel} {priceListCatalog.editionYear} ·{" "}
-                      {priceListCatalog.currency}
-                    </span>
-                  )}
-                </h3>
-                {prices.isLoading ? (
+            <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+              <h3 style={SECTION_HEADING}>
+                The run
+                {runCatalog && (
+                  <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>
+                    {" "}
+                    — values in {runCatalog.catalogLabel} {runCatalog.editionYear} ·{" "}
+                    {runCatalog.currency}
+                  </span>
+                )}
+              </h3>
+              {/* The values are typed on the rows below (#1229); what the rows cannot say goes here. */}
+              {priceSubjects.length > 0 ? (
+                prices.isLoading || (prices.isFetching && valueKeys.length === 0) ? (
                   <p style={MUTED}>Reading the catalog values on file…</p>
                 ) : prices.isError ? (
                   <p style={{ ...MUTED, color: "var(--color-error)" }}>
                     The catalog values on file could not be read: {prices.error.message}
                   </p>
-                ) : priceLines.length === 0 ? (
+                ) : valueKeys.length === 0 ? (
                   <p style={MUTED}>
                     This checklist&rsquo;s area has no primary catalog with an edition to record a
                     value on.
                   </p>
                 ) : (
-                  <>
-                    <p style={MUTED}>
-                      One line per stamp in a condition, in the checklist&rsquo;s order. Type a value and press
-                      Tab for the next; Tab from the last goes to <em>Identify</em>.
-                      {priceListMissing > 0 && (
-                        <span style={{ color: "var(--color-warning)" }}>
-                          {" "}
-                          {priceListMissing} {priceListMissing === 1 ? "has" : "have"} no value yet.
-                        </span>
-                      )}
-                    </p>
-                    {priceLines.map(({ line, field }) => {
-                      const node = memberById.get(line.stampId);
-                      const tiles = line.tileIds
-                        .map((id) => inRun.find((p) => p.tileId === id))
-                        .filter((p): p is IdentifiedPiece => p != null);
-                      const condition = conditions.find((c) => c.id === line.conditionId);
-                      const certificate = certificateStatuses.find(
-                        (c) => c.id === line.certificateStatusId
-                      );
-                      const lineVendors = vendorsOf(line.stampId);
-                      const number = node
-                        ? (orderedCatalogLabels(
-                            node.catalogNumbers,
-                            lineVendors.vendorMap,
-                            lineVendors.primaryVendorId
-                          )[0] ||
-                          node.name ||
-                          "No catalog number")
-                        : "…";
-                      return (
-                        <PriceLine
-                          key={line.key}
-                          collectionId={collectionId}
-                          piece={tiles[0] ?? null}
-                          moreTiles={Math.max(0, tiles.length - 1)}
-                          number={number}
-                          condition={condition ? `${condition.name} (${condition.abbreviation})` : ""}
-                          certificate={certificate?.name ?? null}
-                          currency={priceListCatalog ? null : (field.catalog?.currency ?? null)}
-                          amount={field.value.amount}
-                          disabled={isPending || savingPrices}
-                          inputRef={(el) => {
-                            priceInputs.current.set(line.key, el);
-                          }}
-                          onChange={(v) => setTypedPrices((prev) => new Map(prev).set(line.key, v))}
-                          onKeyDown={(e) => tabThroughPrices(e, line.key)}
-                        />
-                      );
-                    })}
-                  </>
-                )}
-              </section>
-            ) : assignments.some((a) => a.stampId) && withoutCondition.length > 0 ? (
-              <p style={MUTED}>Choose a condition to record the run&rsquo;s catalog values.</p>
-            ) : null}
-
-            <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-              <h3 style={SECTION_HEADING}>The run</h3>
+                  <p style={MUTED}>
+                    Type each catalog value on its row and press Tab for the next; Tab from the last
+                    goes to <em>Identify</em>. Tiles of one stamp in one condition share a value, typed
+                    on the first of them.
+                    {valuesMissing > 0 && (
+                      <span style={{ color: "var(--color-warning)" }}>
+                        {" "}
+                        {valuesMissing} {valuesMissing === 1 ? "has" : "have"} no value yet.
+                      </span>
+                    )}
+                  </p>
+                )
+              ) : assignments.some((a) => a.stampId) && withoutCondition.length > 0 ? (
+                <p style={MUTED}>Choose a condition to record the run&rsquo;s catalog values.</p>
+              ) : null}
               {!membersLoading && checklist && sequence.length === 0 && (
                 <p style={{ ...MUTED, color: "var(--color-warning)" }}>
                   This checklist has no stamps yet. Add them, and the tiles take them in turn.
@@ -821,6 +770,9 @@ export function IssueRunDialog({
               {assignments.map((a, i) => {
                 const piece = inRun[i];
                 const front = piece.sides.find((s) => s.side === "front") ?? piece.sides[0];
+                const thumb = front
+                  ? `/api/collections/${collectionId}/photos/${front.photoId}/thumb`
+                  : null;
                 const own = overriddenFields(overrides.get(a.tileId));
                 const isActive = piece.tileId === active?.tileId;
                 const sameAs = a.stampId
@@ -828,8 +780,20 @@ export function IssueRunDialog({
                       .filter((b) => b.tileId !== a.tileId && b.stampId === a.stampId)
                       .map((b) => `#${turnOf.get(b.tileId)}`)
                   : [];
+                const d = resolved[i];
+                const condition = conditions.find((c) => c.id === d.conditionId);
+                const certificate = certificateStatuses.find((c) => c.id === d.certificateStatusId);
+                const notes = [
+                  a.corrected ? "corrected" : null,
+                  own.length > 0 ? `own ${own.map((f) => FIELD_LABEL[f].toLowerCase()).join(", ")}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                const slot = valueSlots[i];
+                const field = valueFields[i];
+                const label = labelOf(a.stampId) ?? "…";
                 return (
-                  <div key={a.tileId} style={{ display: "flex", alignItems: "stretch", gap: "0.25rem" }}>
+                  <div key={a.tileId} style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                     <button
                       type="button"
                       onClick={() => setActiveId(a.tileId)}
@@ -837,6 +801,7 @@ export function IssueRunDialog({
                       style={{
                         flex: 1,
                         minWidth: 0,
+                        alignSelf: "stretch",
                         display: "flex",
                         alignItems: "center",
                         gap: "0.5rem",
@@ -854,62 +819,97 @@ export function IssueRunDialog({
                       <strong style={{ width: "1.75rem", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                         #{i + 1}
                       </strong>
-                      {front ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={`/api/collections/${collectionId}/photos/${front.photoId}/thumb`}
-                          alt={`Tile ${piece.position + 1}`}
-                          draggable={false}
-                          style={{ width: "2.5rem", height: "2.5rem", objectFit: "contain", flexShrink: 0 }}
-                        />
-                      ) : (
-                        <span style={{ width: "2.5rem", flexShrink: 0 }} />
-                      )}
+                      <span
+                        // A press on the picture takes this tile in hand but leaves the cursor in the
+                        // value being typed (#1223).
+                        onMouseDown={(e) => e.preventDefault()}
+                        style={{ width: "2.5rem", height: "2.5rem", flexShrink: 0 }}
+                      >
+                        {front && thumb && (
+                          <ThumbPreview
+                            src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
+                            thumbSrc={thumb}
+                            label={`Tile ${piece.position + 1}`}
+                            style={{ width: "100%", height: "100%" }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={thumb}
+                              alt={`Tile ${piece.position + 1}`}
+                              draggable={false}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: THUMB_OBJECT_FIT,
+                                display: "block",
+                              }}
+                            />
+                          </ThumbPreview>
+                        )}
+                      </span>
                       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                         {a.stampId ? (
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {labelOf(a.stampId) ?? "…"}
+                            {label}
                           </span>
                         ) : (
                           <span style={{ color: "var(--color-error)" }}>No stamp</span>
                         )}
-                        <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-                          {[
-                            `tile ${piece.position + 1}`,
-                            a.corrected ? "corrected" : null,
-                            own.length > 0
-                              ? `own ${own.map((f) => FIELD_LABEL[f].toLowerCase()).join(", ")}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                        {(() => {
-                          // Whether this tile's stamp has a value for its condition — the gap closing
-                          // a lot would otherwise find a month from now.
-                          const field = priceField(priceKeyOf(i));
-                          if (!field) return null;
-                          const amount = field.value.amount.trim();
-                          return (
-                            <span
-                              style={{
-                                fontSize: "0.6875rem",
-                                color: amount ? "var(--color-text-muted)" : "var(--color-warning)",
-                              }}
-                            >
-                              {amount
-                                ? `${field.catalog?.vendorAbbreviation ?? "CV"} ${amount} ${field.catalog?.currency ?? ""}`
-                                : "no catalog value"}
-                            </span>
-                          );
-                        })()}
+                        {notes && (
+                          <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                            {notes}
+                          </span>
+                        )}
                         {a.stampId && repeated.has(a.stampId) && (
                           <span style={{ fontSize: "0.6875rem", color: "var(--color-warning)" }}>
                             <Icon name="warning" size="xs" /> Same stamp as {sameAs.join(", ")}
                           </span>
                         )}
                       </span>
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          fontSize: "0.75rem",
+                          color: "var(--color-text-muted)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        tile {piece.position + 1}
+                      </span>
+                      <span
+                        style={{
+                          width: "4.5rem",
+                          flexShrink: 0,
+                          fontSize: "0.75rem",
+                          color: condition ? "var(--color-text-secondary)" : "var(--color-warning)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {condition
+                          ? [condition.abbreviation, certificate?.abbreviation].filter(Boolean).join(" · ")
+                          : "no condition"}
+                      </span>
                     </button>
+                    <RowValue
+                      entry={slot.key != null && slot.entryIndex === i}
+                      entryTurn={slot.entryIndex != null && slot.entryIndex !== i ? slot.entryIndex + 1 : null}
+                      amount={field?.value.amount ?? null}
+                      currency={runCatalog ? null : (field?.catalog?.currency ?? null)}
+                      label={`#${i + 1} ${label} ${condition?.abbreviation ?? ""}${certificate ? ` ${certificate.abbreviation}` : ""} catalog value`}
+                      disabled={isPending || savingPrices}
+                      inputRef={(el) => {
+                        if (slot.key) priceInputs.current.set(slot.key, el);
+                      }}
+                      onChange={(v) => {
+                        const key = slot.key;
+                        if (key) setTypedPrices((prev) => new Map(prev).set(key, v));
+                      }}
+                      onKeyDown={(e) => {
+                        if (slot.key) tabThroughValues(e, slot.key);
+                      }}
+                    />
                     <Tooltip content="Take this tile out of the run — it stays ticked on the card">
                       <DialogSecondaryButton onClick={() => takeOut(a.tileId)} disabled={isPending}>
                         <Icon name="remove" size="sm" />
@@ -1040,61 +1040,6 @@ export function IssueRunDialog({
                     );
                   })()}
                 </section>
-
-                {(() => {
-                  const key = priceKeyOf(activeIndex);
-                  const field = priceField(key);
-                  if (!key) {
-                    return activeAssignment.stampId ? (
-                      <p style={MUTED}>Choose a condition to record this stamp&rsquo;s catalog value.</p>
-                    ) : null;
-                  }
-                  if (!field) return null;
-                  const d = resolved[activeIndex];
-                  const subject = [
-                    conditions.find((c) => c.id === d.conditionId)?.abbreviation,
-                    certificateStatuses.find((c) => c.id === d.certificateStatusId)?.abbreviation,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
-                  const sharing = assignments.filter((_, j) => priceKeyOf(j) === key).length;
-                  return (
-                    <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                      <h3 style={SECTION_HEADING}>
-                        <label htmlFor="run-catalog-value">#{activeIndex + 1} — catalog value</label>
-                      </h3>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <NumericInput
-                          id="run-catalog-value"
-                          // One input per subject, so moving to a tile of another stamp starts
-                          // clean rather than carrying a caret across.
-                          key={key}
-                          value={field.value.amount}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setTypedPrices((prev) => new Map(prev).set(key, v));
-                          }}
-                          disabled={isPending || savingPrices || prices.isFetching}
-                          placeholder="0.00"
-                          style={{ ...INPUT_STYLE, width: "8rem", textAlign: "right" }}
-                        />
-                        <span style={{ ...MUTED, minWidth: 0 }}>
-                          {field.catalog
-                            ? `${field.catalog.catalogLabel} ${field.catalog.editionYear} · ${field.catalog.currency}`
-                            : null}
-                          {" — for "}
-                          <strong style={{ color: "var(--color-text-secondary)" }}>{subject}</strong>
-                          {field.value.recorded != null ? ", already on file" : ""}
-                        </span>
-                      </div>
-                      {sharing > 1 && (
-                        <p style={MUTED}>
-                          The same value for all {sharing} tiles of this stamp in this condition.
-                        </p>
-                      )}
-                    </section>
-                  );
-                })()}
 
                 <section style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   <h3 style={SECTION_HEADING}>#{activeIndex + 1} — its own details</h3>
@@ -1231,115 +1176,90 @@ export function IssueRunDialog({
 // ── Pieces ───────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * One line of the run's price list (#1223): the tile's picture, what is being priced, and the field.
+ * A run row's catalogue value (#1229).
  *
- * **The picture is the tile's own**, the first of the line's tiles in tick order — every line is
- * guaranteed one, and it is what gets matched against the catalogue page. It enlarges on hover
- * (#632's `ThumbPreview`) and is **never focusable**: nothing in it is a button, and a press on it
- * keeps the cursor in the value being typed, since a picture that took focus would bring back the
- * clicking the list exists to remove.
+ * **The entry row** — the first tile in run order of its stamp × condition × certificate — carries the
+ * field, framed in amber while it is empty. **A sharing row** shows the same figure read-only and
+ * names the row it is typed on, so nothing asks for one value twice. A row with nothing to record, or
+ * whose field is not read yet, keeps the slot empty so the rows stay aligned.
  */
-function PriceLine({
-  collectionId,
-  piece,
-  moreTiles,
-  number,
-  condition,
-  certificate,
-  currency,
+function RowValue({
+  entry,
+  entryTurn,
   amount,
+  currency,
+  label,
   disabled,
   inputRef,
   onChange,
   onKeyDown,
 }: {
-  collectionId: string;
-  piece: IdentifiedPiece | null;
-  /** The line's tiles past the one pictured. */
-  moreTiles: number;
-  number: string;
-  condition: string;
-  certificate: string | null;
-  /** Named per line only where the list's catalogs differ; otherwise it is in the heading. */
+  entry: boolean;
+  /** The position of the row the value is typed on, for a sharing row; null otherwise. */
+  entryTurn: number | null;
+  /** Null where there is no field — nothing to record, or the read not in yet. */
+  amount: string | null;
+  /** Named per row only where the run's catalogs differ; otherwise it is in the heading. */
   currency: string | null;
-  amount: string;
+  label: string;
   disabled: boolean;
   inputRef: (el: HTMLInputElement | null) => void;
   onChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }) {
-  const front = piece ? (piece.sides.find((s) => s.side === "front") ?? piece.sides[0]) : undefined;
-  const empty = amount.trim() === "";
-  const thumb = front ? `/api/collections/${collectionId}/photos/${front.photoId}/thumb` : null;
+  const empty = amount != null && amount.trim() === "";
   return (
-    <div
+    <span
       style={{
+        width: "9.5rem",
+        flexShrink: 0,
         display: "flex",
         alignItems: "center",
-        gap: "0.5rem",
-        padding: "0.25rem 0.5rem",
-        borderRadius: "0.375rem",
-        border: `1px solid ${empty ? "var(--color-warning)" : "var(--color-border)"}`,
-        background: "var(--color-bg-elevated)",
+        gap: "0.375rem",
+        fontSize: "0.75rem",
       }}
     >
-      <span
-        // A press on the picture must not take the cursor out of the value being typed.
-        onMouseDown={(e) => e.preventDefault()}
-        style={{ flexShrink: 0, width: "2.75rem", height: "2.75rem" }}
-      >
-        {front && thumb && (
-          <ThumbPreview
-            src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
-            thumbSrc={thumb}
-            label={`Tile ${(piece?.position ?? 0) + 1}`}
-            style={{ width: "100%", height: "100%" }}
+      {amount == null ? null : entry ? (
+        <>
+          <NumericInput
+            ref={inputRef}
+            aria-label={label}
+            value={amount}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            disabled={disabled}
+            placeholder="—"
+            autoComplete="off"
+            style={{
+              ...INPUT_STYLE,
+              width: "6.5rem",
+              padding: "0.375rem 0.5rem",
+              textAlign: "right",
+              border: `1px solid ${empty ? "var(--color-warning)" : "var(--color-border-strong)"}`,
+            }}
+          />
+          {currency && <span style={{ color: "var(--color-text-muted)" }}>{currency}</span>}
+        </>
+      ) : entryTurn != null ? (
+        <>
+          <span
+            style={{
+              width: "6.5rem",
+              flexShrink: 0,
+              boxSizing: "border-box",
+              padding: "0 0.5rem",
+              textAlign: "right",
+              fontSize: "0.875rem",
+              fontVariantNumeric: "tabular-nums",
+              color: empty ? "var(--color-warning)" : "var(--color-text-secondary)",
+            }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={thumb}
-              alt={`Tile ${(piece?.position ?? 0) + 1}`}
-              draggable={false}
-              style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
-            />
-          </ThumbPreview>
-        )}
-      </span>
-      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <strong
-          style={{
-            fontSize: "0.875rem",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {number}
-        </strong>
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}>
-          {[condition, certificate].filter(Boolean).join(" · ")}
-        </span>
-        {(moreTiles > 0 || empty) && (
-          <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-            {moreTiles > 0 && `+${moreTiles} more ${moreTiles === 1 ? "tile" : "tiles"}`}
-            {moreTiles > 0 && empty && " · "}
-            {empty && <span style={{ color: "var(--color-warning)" }}>no value yet</span>}
+            {empty ? "—" : amount}
           </span>
-        )}
-      </span>
-      <NumericInput
-        ref={inputRef}
-        aria-label={`${number} ${condition}${certificate ? ` ${certificate}` : ""} catalog value`}
-        value={amount}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        disabled={disabled}
-        placeholder="—"
-        autoComplete="off"
-        style={{ ...INPUT_STYLE, width: "6.5rem", textAlign: "right" }}
-      />
-      {currency && <span style={{ ...MUTED, flexShrink: 0 }}>{currency}</span>}
-    </div>
+          <span style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>as #{entryTurn}</span>
+        </>
+      ) : null}
+    </span>
   );
 }
 
