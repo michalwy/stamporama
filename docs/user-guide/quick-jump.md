@@ -27,7 +27,7 @@ Press **Ctrl+K** (**⌘K** on a Mac) from anywhere in the collection to put the 
 ## Recently visited
 
 Clicking into the box — or pressing **⌘K** — also drops a **Recent** panel under it, listing the
-records you were last on: copies, stamps, issues, offers, purchases, sales and auction sales, most
+records you were last on: copies, stamps, issues, offers, purchases, sales, auction sales and trades, most
 recent first. Pick one to go back to it.
 
 - **↓** and **↑** walk the list, **Enter** opens the highlighted row, **Escape** closes the panel.
@@ -36,6 +36,13 @@ recent first. Pick one to go back to it.
   `o 42`.
 - The list keeps the last **12** records, one entry per record however often you return to it.
 - **Clear** empties it.
+
+Each entry is **coloured by the section of the sidebar it comes from** — its icon, and the word
+naming what it is (*Offer*, *Copy*, *Trade*) — in the same colour that section has in the
+navigation: a stamp or an issue in Catalog's slate, a copy in Collection's green, an offer or a sale
+in Selling's blue, a purchase or an auction sale in Buying's amber, a trade in Partners' violet. So
+the list can be read at a glance by where each record lives. The colours are the navigation's own,
+so they always match it.
 
 The list lives **in this browser**, per collection, alongside your other view preferences — it is a
 note of where you have been, not part of the collection, so it is not shared between browsers and
