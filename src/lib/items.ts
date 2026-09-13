@@ -18,7 +18,12 @@ import {
   type CopyValuation,
   type HoldingsSummary,
 } from "./valuation";
-import { valuateItemRows, type ValuationRow } from "./item-valuation";
+import {
+  CARRIER_VALUATION_SELECT,
+  carrierValuationOf,
+  valuateItemRows,
+  type ValuationRow,
+} from "./item-valuation";
 import { marketKeyOf } from "./market-value";
 import { readMarketMedians } from "./market-values";
 import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
@@ -1391,6 +1396,7 @@ async function resolveValuationNarrowedIds(
       conditionId: true,
       certificateStatusId: true,
       formatId: true,
+      ...CARRIER_VALUATION_SELECT,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
@@ -1402,6 +1408,7 @@ async function resolveValuationNarrowedIds(
     formatId: row.formatId,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
+    carrier: carrierValuationOf(row),
   }));
   const valuations = await valuateItemRows(collectionId, valuationRows);
   return rows.filter((row) => keep(valuations.get(row.id)!)).map((row) => row.id);
@@ -1698,7 +1705,8 @@ const ITEM_LIST_SELECT = {
   // Whether the piece is a carrier, and what it carries (#748). Read for every row because a select
   // cannot be conditional on the row it selects; an ordinary copy has exactly one entry, so the cost
   // is one narrow row each, and the mapping below drops it again.
-  stampCount: true,
+  // …and the value a carrier is priced at instead of the catalogue (#747), `stampCount` included.
+  ...CARRIER_VALUATION_SELECT,
   stamps: {
     orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: {
@@ -1749,6 +1757,7 @@ function valuationInputFromRow(row: ItemListRow): ValuationRow {
     formatId: row.format?.id ?? null,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
+    carrier: carrierValuationOf(row),
   };
 }
 
@@ -2258,6 +2267,7 @@ export async function listItemDuplicateGroups(
       conditionId: true,
       formatId: true,
       certificateStatusId: true,
+      ...CARRIER_VALUATION_SELECT,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
       offerSetMemberships: {
         where: { offerSet: { offer: { state: { notIn: [...CLOSED_OFFER_STATES] } } } },
@@ -2276,6 +2286,7 @@ export async function listItemDuplicateGroups(
       certificateStatusId: m.certificateStatusId,
       formatId: m.formatId,
       unknownVariant: isUnknownVariantStamp(m.stamp),
+      carrier: carrierValuationOf(m),
     }))
   );
 
@@ -3608,6 +3619,7 @@ export async function valuateItemsByIds(
       conditionId: true,
       certificateStatusId: true,
       formatId: true,
+      ...CARRIER_VALUATION_SELECT,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
@@ -3619,6 +3631,7 @@ export async function valuateItemsByIds(
     formatId: row.formatId,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
+    carrier: carrierValuationOf(row),
   }));
   return valuateItemRows(collectionId, valuationRows);
 }
@@ -3667,6 +3680,8 @@ const HOLDINGS_ROW_SELECT = {
   // The two axes `isHeld` reads (#396) — which side of the summary a copy lands on.
   disposedAt: true,
   deliveryState: true,
+  // A carrier contributes the value recorded on it, or counts as unpriced (#747).
+  ...CARRIER_VALUATION_SELECT,
   stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
 } as const;
 
@@ -3699,6 +3714,7 @@ async function makeHoldingsSummarizer(
     certificateStatusId: row.certificateStatusId,
     formatId: row.formatId,
     unknownVariant: isUnknownVariantStamp(row.stamp),
+    carrier: carrierValuationOf(row),
   }));
 
   // Actual purchase cost-basis over the same copy set (#134). Snapshots are frozen in

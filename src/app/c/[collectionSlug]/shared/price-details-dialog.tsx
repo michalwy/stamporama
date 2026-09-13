@@ -7,7 +7,9 @@ import { Tooltip } from "./tooltip";
 import { Segmented } from "./segmented";
 import type { StampPriceDetails } from "@/lib/stamps";
 import type { ChecklistPriceDetails } from "@/lib/issues";
+import type { CollectionAreaData } from "@/lib/areas";
 import { CollapsibleSection } from "./collapsible-section";
+import { CarrierValueSections } from "./carrier-value-sections";
 import {
   collectCertColumns,
   MatrixTable,
@@ -40,10 +42,13 @@ import {
 } from "./estimated-value-sections";
 
 /** What the dialog describes: a single stamp, or one checklist's stamps (#531 — an issue may carry
- *  several goals, so "the set" is named by a checklist rather than by the publication). */
+ *  several goals, so "the set" is named by a checklist rather than by the publication), or a
+ *  **multi-stamp copy** (#747), which is a copy of none of its stamps and so is not described by any
+ *  one stamp's window. `areas` names the carried stamps' catalog numbers the way the row did. */
 export type PriceDetailsTarget =
   | { kind: "stamp"; stampId: string }
-  | { kind: "checklist"; collectionId: string; checklistId: string };
+  | { kind: "checklist"; collectionId: string; checklistId: string }
+  | { kind: "copy"; collectionId: string; itemId: string; areas: CollectionAreaData[] };
 
 type Scope = "latest" | "all";
 type CurrencyMode = "catalog" | "collection";
@@ -111,7 +116,30 @@ export function PriceDetailsDialog({
     },
   });
 
-  const isLoading = target.kind === "stamp" ? stampQuery.isLoading : checklistQuery.isLoading;
+  const isLoading =
+    target.kind === "stamp"
+      ? stampQuery.isLoading
+      : target.kind === "checklist"
+        ? checklistQuery.isLoading
+        : false;
+
+  // A multi-stamp copy's window is its own (#747): the value the collector recorded, and the sum of
+  // its stamps as a suggestion. Neither toggle means anything there — the recorded figure has no
+  // edition, and the sum is read at the latest one in collection currency — so no toolbar is drawn
+  // rather than two controls that do nothing.
+  if (target.kind === "copy") {
+    return (
+      <DialogShell title="Valuation" onClose={onClose} maxWidth="min(96vw, 60rem)" height="min(92vh, 48rem)">
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "1.25rem 1.5rem" }}>
+          <CarrierValueSections
+            collectionId={target.collectionId}
+            itemId={target.itemId}
+            areas={target.areas}
+          />
+        </div>
+      </DialogShell>
+    );
+  }
 
   return (
     <DialogShell

@@ -313,7 +313,9 @@ export function CopyDetailPanel({
                     </Tooltip>
                   ) : null}
                 </Field>
-                <Field label="Catalog value">
+                {/* A piece carrying several stamps is priced by no catalog (#745); its figure is the
+                    one recorded on it (#747), and the label must not say otherwise. */}
+                <Field label={item.multiStamp ? "Recorded value" : "Catalog value"}>
                   {value.unpriced
                     ? null
                     : `${value.amount} ${value.currency}${

@@ -8,7 +8,8 @@ import {
 } from "./pricing";
 import type { RawCatalogPrice } from "./catalog-price";
 import { makeFormatFactorLookup } from "./format-pricing";
-import { valuateCopy, type CopyValuation } from "./valuation";
+import type { CarrierValuationInput } from "./carrier-value";
+import { valuateCopy, valuateExplicitValue, type CopyValuation } from "./valuation";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 
 // Split out of `items.ts` so that **market** valuation can reuse it without the two modules
@@ -35,7 +36,26 @@ export interface ValuationRow {
   formatId: string | null;
   /** True when the copy links to a base stamp that has variants (variant unknown). */
   unknownVariant: boolean;
+  /**
+   * Non-null exactly when the row is a **multi-stamp copy** (#747; ADR-0044 §6), carrying the value
+   * the collector recorded on it (null when none). Such a copy is a copy of none of its stamps (#745),
+   * so the catalogue is not consulted for it at all: it is valued at that figure, or it is unpriced.
+   *
+   * Required rather than optional, and that is the point: every caller has to say whether its row is
+   * a copy and, if so, whether it is a carrier — an omitted field would quietly value a cover at its
+   * leading stamp. A row that is not a copy (an auction lot line, a want key, a trade receive line, a
+   * carrier's own component) passes `null`. Build it from a copy with {@link carrierValuationOf}.
+   */
+  carrier: CarrierValuationInput | null;
 }
+
+// Pure, and so living in `carrier-value.ts` where the unit suite can reach them; re-exported so every
+// copy reader takes the select and the builder from the module it takes `valuateItemRows` from.
+export {
+  CARRIER_VALUATION_SELECT,
+  carrierValuationOf,
+  type CarrierValuationInput,
+} from "./carrier-value";
 
 const VALUATION_PRICE_SELECT = {
   price: true,
@@ -84,15 +104,20 @@ export async function valuateItemRows(
     getCollectionBaseCurrency(collectionId),
   ]);
 
+  // A multi-stamp copy is valued at what the collector recorded and never from the catalogue (#747),
+  // so its stamps are not loaded at all: reading them would be the first step towards pricing the
+  // piece as its leading stamp, which is the claim #745 removes.
+  const catalogRows = rows.filter((r) => r.carrier === null);
+
   const unknownStampIds = new Set(
-    rows.filter((r) => r.unknownVariant).map((r) => r.stampId)
+    catalogRows.filter((r) => r.unknownVariant).map((r) => r.stampId)
   );
   const descendantsByStamp = await buildDescendantMap(collectionId, unknownStampIds);
 
   // Every stamp whose prices/area we must load: the copies' own stamps plus the
   // descendant variants of any unknown-variant copy.
   const stampIds = new Set<string>();
-  for (const r of rows) stampIds.add(r.stampId);
+  for (const r of catalogRows) stampIds.add(r.stampId);
   for (const set of descendantsByStamp.values()) {
     for (const id of set) stampIds.add(id);
   }
@@ -143,10 +168,18 @@ export async function valuateItemRows(
     issueByStamp.set(s.id, s.issueMemberships[0]?.issueId ?? null);
   }
 
+  // A recorded value is converted to base by the very rates a catalogue price is.
+  for (const r of rows) {
+    if (r.carrier?.explicitValue) currencies.push(r.carrier.explicitValue.currency);
+  }
   const rates = await safeRateMap(collectionId, baseCurrency, currencies);
 
   const result = new Map<string, CopyValuation>();
   for (const r of rows) {
+    if (r.carrier !== null) {
+      result.set(r.id, valuateExplicitValue(r.carrier.explicitValue, baseCurrency, rates));
+      continue;
+    }
     const descendants = r.unknownVariant
       ? [...(descendantsByStamp.get(r.stampId) ?? new Set<string>())].filter(
           (id) => isVariantByStamp.get(id) ?? false

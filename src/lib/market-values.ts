@@ -203,6 +203,7 @@ export async function readStampMarketValues(
         certificateStatusId: line.certificateStatusId,
         formatId: line.formatId,
         unknownVariant: isUnknownVariantStamp(line.stamp),
+        carrier: null,
       }))
     )
   );

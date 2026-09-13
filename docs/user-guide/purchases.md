@@ -1696,6 +1696,12 @@ can price consistently — the target rows are marked with an arrow. Closing sti
 **primary-catalog** price. (For fuller edits, a copy's **⋮** menu → **Edit stamp** opens the
 **Prices** tab.) Then try the close again.
 
+A **piece carrying several stamps** is split by the value you **recorded** on it instead, since no
+catalog prices it — so until you record one it is among the unpriced and blocks the close like any
+other. Its **+ value** link opens the piece's Valuation window, where the sum of its stamps is offered
+as a starting point; see [What a piece carrying several stamps is
+worth](inventory.md#what-a-piece-carrying-several-stamps-is-worth).
+
 The way to meet this blocker least often is not to reach it: the intake step has its own
 [**Catalog value** field](#the-catalogue-value-while-the-catalogue-is-still-open), filled in while
 the paper catalogue is still open at the stamp. A copy priced there is never among the unpriced.

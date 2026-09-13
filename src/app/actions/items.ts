@@ -18,6 +18,13 @@ import {
 import type { ItemListItem, ItemStampsRead } from "@/lib/items";
 import type { ItemStampEntryInput } from "@/lib/item-stamps";
 import { parseItemStampEntries } from "@/lib/item-stamp-entries";
+import {
+  CarrierValueError,
+  getCarrierValuation,
+  setCarrierValue,
+  type CarrierValuationRead,
+} from "@/lib/carrier-values";
+import { parseExplicitValueInput } from "@/lib/carrier-value";
 import { isDisposalReason } from "@/lib/disposal";
 import { isDelivered } from "@/lib/delivery-state";
 import type { ArrivingCopy } from "@/lib/want-rules";
@@ -128,6 +135,34 @@ function parseItemFields(formData: FormData): ParsedItemFields {
 function parseItemStamps(formData: FormData): ItemStampEntryInput[] | undefined {
   // The reading is shared with the scan-tile identification, which submits the same list (#750).
   return parseItemStampEntries(formData.get("itemStamps"));
+}
+
+/** A multi-stamp copy's recorded value beside the sum of its stamps, for the Valuation dialog (#747). */
+export async function getCarrierValuationAction(itemId: string): Promise<CarrierValuationRead> {
+  const session = await getSession();
+  return getCarrierValuation(session.user.id, itemId);
+}
+
+/** Record a multi-stamp copy's value, or clear it with a blank amount (#747). Only what the collector
+ *  saves is stored — the suggested sum reaches here only as a figure they chose to keep. */
+export async function setCarrierValueAction(
+  itemId: string,
+  amount: string,
+  currency: string
+): Promise<ItemActionState> {
+  const session = await getSession();
+  const parsed = parseExplicitValueInput(amount, currency);
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    await setCarrierValue(session.user.id, itemId, parsed.value);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message:
+        e instanceof CarrierValueError ? e.message : "Failed to save the value. Please try again.",
+    };
+  }
 }
 
 /** The stamps a copy carries, for the dialog that edits them and the copy's own screen (#746). */

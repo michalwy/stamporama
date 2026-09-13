@@ -271,6 +271,7 @@ export async function getOfferListedVariantChoice(
         // Each variant priced **as itself**, not rolled up: what the picker states is the price
         // recorded on that entry, which is what "cheapest" was decided on.
         unknownVariant: false,
+        carrier: null,
       }))
     ),
     automaticFor(collectionId, subject, stampId, conditionId, ownCatalogItemId, labeller),

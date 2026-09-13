@@ -850,6 +850,30 @@ these pieces or leaves them out, and grouping by duplicates or by issue collects
 Its own page shows the stamps it carries in your order, under **Stamps on this piece**, and a
 **Several stamps** chip beside the state chips says why the counts leave it out.
 
+### What a piece carrying several stamps is worth
+
+No catalog prices a cover franked with three different stamps, so the piece has a value **you
+record** — an amount and a currency. Until you do, it is **unpriced**: its row shows **+ value**
+where other copies show a price, the Copies list total counts it as unpriced, and it never borrows the
+price of the first stamp on it.
+
+Click **+ value** on its row (or **⋮ → Show valuation**) to open the piece's **Valuation** window. It
+has two sections:
+
+- **Value of this piece** — type the amount, pick the currency and **Save**. **Clear** takes the value
+  off again, and the piece is unpriced once more.
+- **Sum of its stamps** — a suggestion to start from: every stamp on the piece at the piece's
+  condition, **in its own format** (a block of four is priced as a block), with **no certificate**,
+  times how many of it there are — at the latest catalog edition, in your collection currency. A
+  stamp with no catalog price is marked and left out, and the sum says it is **partial**. **Use this
+  sum** copies the figure into the field above; nothing is saved until you press **Save**, because what
+  a cover is worth depends on its usage and franking, not only on the stamps.
+
+The value you save is the figure the Copies list total adds up, the asking price that is pre-filled
+when you list the piece, and your own valuation of it in a trade (see
+[Trades](trades.md#every-line-needs-a-value)). Its row and its own page call it a **recorded value**,
+never a catalog value. Take the piece back down to one stamp and it is valued from the catalog again.
+
 ## Adding a catalog value
 
 Click a copy's **value** in the list to price it in place — a **+ catalog value** link when the
@@ -1380,6 +1404,10 @@ dialog for the stamp this copy is of — what the market has paid for it, what y
 copies you hold, and what the catalogs list it at. It is the same window the **Stamps** and
 **Issues** lists open, and it changes nothing: close it and you are back on the list, in the same
 place. See [The Valuation dialog](collections.md#the-valuation-dialog).
+
+On a piece carrying several stamps the same action opens **that piece's** window instead — the value
+you recorded on it and the sum of its stamps, which is the one place that value is set. See [What a
+piece carrying several stamps is worth](#what-a-piece-carrying-several-stamps-is-worth).
 
 This is not **Edit stamp**, which is on the same menu and opens the stamp *editor* — use that one
 when you want to record a catalog value rather than read one.

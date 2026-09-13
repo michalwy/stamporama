@@ -2875,6 +2875,13 @@ model Item {
   // Base-currency cost-basis snapshot (ADR-0009 §2/§3). Null = pending (lot still open,
   // or the copy entered via a channel that has not written a cost yet).
   costBasis           Decimal? @db.Decimal(10, 2)
+  // The collector's own value for a **multi-stamp copy** (#747, ADR-0044 §6): an amount and the
+  // currency it was stated in, both or neither (CHECK `item_explicit_value_pair`). The catalogue grid
+  // resolves nothing for a carrier, so this is the only figure one has — and it is explicit: the sum
+  // of the components is a suggestion the Valuation dialog offers, never written here unaccepted.
+  // Read only while `stampCount` > 1; an ordinary copy is valued from the catalogue as before.
+  explicitValue         Decimal? @db.Decimal(10, 2)
+  explicitValueCurrency String?
   notes               String?
   // Physical storage: at most one assignable `Location` per copy, plus an optional
   // free-text identifier within that location (e.g. a page/pocket ref like `A234`),

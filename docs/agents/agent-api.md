@@ -761,7 +761,7 @@ of asking one question.
 The two figures are **never merged**. `catalogValue` is a book's opinion at this exact
 `condition × certificate × format`; `marketValue` is the median of what copies like it have actually
 fetched (#458), and it is **absent** where no auction result answers, which is *no evidence* and
-deliberately not a catalogue-derived stand-in (ADR-0022 §6).
+deliberately not a catalogue-derived stand-in (ADR-0022 §6). On a copy carrying several stamps the first figure is not a book's at all: no catalogue prices such a piece (#745), so `catalogValue` is the value the collector recorded on it and says so with `recorded: true` (#747) — a field added, never a meaning changed for any other copy.
 
 ### `get_offer`'s `pricing` is four claims, not a recommendation
 
