@@ -4,7 +4,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -23,6 +22,8 @@ import { Icon } from "@/app/icons";
 import { ProgressBar } from "@/app/progress-bar";
 import { THUMB_OBJECT_FIT } from "./photo-thumb";
 import { turnBy, type QuarterTurn } from "@/lib/tile-turn";
+import { PHOTO_SOURCE_MAX_LENGTH } from "@/lib/photo-source";
+import { derivePhotoChangeSet } from "./photo-change-set";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -33,8 +34,9 @@ import { turnBy, type QuarterTurn } from "@/lib/tile-turn";
 // uploads + removals/role-changes/reorders/retitles of committed photos) and reports it upward
 // so Save applies it in one action. Nothing is persisted until Save; Cancel discards.
 
-/** Photo the copy already has, when editing (add mode passes none). */
-export type CommittedPhoto = PhotoSummary;
+/** Photo the copy already has, when editing (add mode passes none). The source is only read by an
+ * editor that records it (#1001). */
+export type CommittedPhoto = PhotoSummary & { sourceUrl?: string | null };
 
 type PhotoRole = SlotRole | null;
 type EntryStatus = "uploading" | "done" | "error";
@@ -62,6 +64,8 @@ interface Entry {
   ownsPreviewUrl: boolean;
   role: PhotoRole;
   title: string;
+  /** Where the picture came from (#1001), as typed. */
+  sourceUrl: string;
   status: EntryStatus;
   errorMsg?: string;
   /** Upload progress 0..1 (staged uploads only; committed photos are always 1). */
@@ -101,6 +105,10 @@ interface PhotoEditorProps {
   disabled?: boolean;
   /** Reserved-slot layout: `front-back` (copies, default) or `main` (stamps, #137). */
   roleMode?: RoleMode;
+  /** Offer a free-text source on every card — where the picture came from (#1001). The stamp editor
+   * sets it, since that is where reference photos live; without it the source is neither shown nor
+   * sent. */
+  recordSource?: boolean;
   onChange: (value: PhotoEditorValue) => void;
   /** The pictures on the strip as the shared viewer takes them, in strip order and with any turn
    * still to be saved (#1207) — for the intake step, which shows the photos just added beside the
@@ -139,6 +147,7 @@ function committedToEntry(
     // Keep the role only if it's a reserved slot for this mode; anything else is an extra.
     role: isSlotRole(p.role) && slots.includes(p.role) ? p.role : null,
     title: p.title ?? "",
+    sourceUrl: p.sourceUrl ?? "",
     status: "done",
     progress: 1,
     size: 0,
@@ -175,6 +184,7 @@ export function PhotoEditor({
   initialPhotos,
   disabled = false,
   roleMode = "front-back",
+  recordSource = false,
   onChange,
   onPreviewsChange,
   onPromotePhoto,
@@ -182,14 +192,6 @@ export function PhotoEditor({
   const slots = SLOT_ROLES[roleMode];
   const [entries, setEntries] = useState<Entry[]>(() =>
     buildInitialEntries(collectionId, initialPhotos, slots)
-  );
-  const initialIds = useMemo(
-    () => new Set(initialPhotos.map((p) => p.id)),
-    [initialPhotos]
-  );
-  const initialById = useMemo(
-    () => new Map(initialPhotos.map((p) => [p.id, p])),
-    [initialPhotos]
   );
 
   // Revoke object URLs we created, on unmount.
@@ -203,37 +205,10 @@ export function PhotoEditor({
 
   // --- Derive + report the change-set whenever the strip changes ---
   useEffect(() => {
-    const presentCommittedIds = new Set(
-      entries.filter((e) => e.source === "committed").map((e) => e.photoId!)
-    );
-    const remove = [...initialIds].filter((id) => !presentCommittedIds.has(id));
-
-    const add: PhotoChangeSet["add"] = [];
-    const update: PhotoChangeSet["update"] = [];
-    entries.forEach((e, index) => {
-      const role = e.role;
-      // Front/back are labelled by their role, so they don't carry a title.
-      const title = role === null ? e.title.trim() || null : null;
-      const sortOrder = index;
-      if (e.source === "staged") {
-        if (e.status === "done" && e.uploadId) {
-          add.push({ uploadId: e.uploadId, role, title, sortOrder, turn: e.turn });
-        }
-        return;
-      }
-      const orig = initialById.get(e.photoId!);
-      if (!orig) return;
-      const origRole =
-        isSlotRole(orig.role) && slots.includes(orig.role) ? orig.role : null;
-      const origTitle = origRole === null ? (orig.title?.trim() || null) : null;
-      if (origRole !== role || origTitle !== title || orig.sortOrder !== sortOrder) {
-        update.push({ photoId: e.photoId!, role, title, sortOrder });
-      }
-    });
-
+    const changeSet = derivePhotoChangeSet(entries, initialPhotos, slots, recordSource);
     const uploading = entries.some((e) => e.status === "uploading");
-    onChange({ changeSet: { add, update, remove }, uploading });
-  }, [entries, initialIds, initialById, onChange, slots]);
+    onChange({ changeSet, uploading });
+  }, [entries, initialPhotos, onChange, slots, recordSource]);
 
   // --- Report the pictures themselves, for a caller that shows them elsewhere (#1207) ---
   // A failed upload is left out: it will not be saved, so it is not a picture of the copy.
@@ -342,6 +317,7 @@ export function PhotoEditor({
           ownsPreviewUrl: true,
           role: null,
           title: "",
+          sourceUrl: "",
           status: "uploading" as const,
           progress: 0,
           size: file.size,
@@ -381,6 +357,12 @@ export function PhotoEditor({
   const setTitle = useCallback((localId: string, title: string) => {
     setEntries((es) =>
       es.map((e) => (e.localId === localId ? { ...e, title } : e))
+    );
+  }, []);
+
+  const setSourceUrl = useCallback((localId: string, sourceUrl: string) => {
+    setEntries((es) =>
+      es.map((e) => (e.localId === localId ? { ...e, sourceUrl } : e))
     );
   }, []);
 
@@ -481,6 +463,9 @@ export function PhotoEditor({
                 slots={slots}
                 onToggleRole={(role) => toggleRole(entry.localId, role)}
                 onSetTitle={(title) => setTitle(entry.localId, title)}
+                onSetSource={
+                  recordSource ? (source) => setSourceUrl(entry.localId, source) : undefined
+                }
                 onRemove={() => removeEntry(entry.localId)}
                 // Only a photo being added. One already saved is a picture other things may be
                 // showing already, and a sideways scan is put right the moment it is added — which
@@ -521,6 +506,7 @@ function PhotoCard({
   slots,
   onToggleRole,
   onSetTitle,
+  onSetSource,
   onRemove,
   onTurn,
   onPromote,
@@ -532,6 +518,8 @@ function PhotoCard({
   slots: SlotRole[];
   onToggleRole: (role: SlotRole) => void;
   onSetTitle: (title: string) => void;
+  /** Present only where the editor records sources (#1001). */
+  onSetSource?: (source: string) => void;
   onRemove: () => void;
   onTurn?: () => void;
   onPromote?: (target: {
@@ -542,13 +530,15 @@ function PhotoCard({
   onDropOn: () => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
+  const [editingSource, setEditingSource] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const promoteBtnRef = useRef<HTMLButtonElement>(null);
   const hasRole = isSlotRole(entry.role);
   // Delicate, distinct tints per slot (theme-aware): front = blue, back = violet, main = accent.
   const roleColor = hasRole ? ROLE_META[entry.role as SlotRole].color : null;
 
-  const dragLocked = disabled || editingTitle || promoteOpen;
+  const dragLocked = disabled || editingTitle || editingSource || promoteOpen;
+  const source = entry.sourceUrl.trim();
 
   return (
     <div
@@ -728,80 +718,168 @@ function PhotoCard({
         )}
       </div>
 
-      {/* Footer: role label for front/back, otherwise a title toggle/editor */}
+      {/* Footer: role label for a slot, otherwise a title toggle/editor — and, where the editor
+          records sources (#1001), a source toggle beside it that takes the whole footer to edit. */}
       <div
         style={{
           height: "1.9rem",
           display: "flex",
           alignItems: "center",
+          gap: "0.25rem",
           padding: "0 0.375rem",
           borderTop: "1px solid var(--color-border)",
         }}
       >
-        {hasRole ? (
-          <span
-            style={{
-              fontSize: "0.75rem",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.03em",
-              color: roleColor!,
-            }}
-          >
-            {entry.role}
-          </span>
-        ) : editingTitle ? (
+        {onSetSource && editingSource ? (
           <input
             autoFocus
             type="text"
-            value={entry.title}
-            placeholder="Title"
+            value={entry.sourceUrl}
+            placeholder="Source — link or citation"
+            aria-label="Photo source"
+            maxLength={PHOTO_SOURCE_MAX_LENGTH}
             disabled={disabled}
-            onChange={(e) => onSetTitle(e.target.value)}
-            onBlur={() => setEditingTitle(false)}
+            onChange={(e) => onSetSource(e.target.value)}
+            onBlur={() => setEditingSource(false)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === "Escape") setEditingTitle(false);
+              if (e.key === "Enter" || e.key === "Escape") setEditingSource(false);
             }}
-            style={{
-              width: "100%",
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: "0.75rem",
-              color: "var(--color-text-primary)",
-              padding: 0,
-            }}
+            style={FOOTER_INPUT}
           />
         ) : (
-          <Tooltip content="Add a title" align="start" style={{ width: "100%" }}>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => setEditingTitle(true)}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                border: "none",
-                background: "transparent",
-                cursor: disabled ? "default" : "pointer",
-                fontSize: "0.75rem",
-                color: entry.title ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                padding: 0,
-              }}
-            >
-              {entry.title || (
-                <>
-                  <Icon name="add" size="xs" /> Title
-                </>
-              )}
-            </button>
-          </Tooltip>
+          <>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
+              <TitleFooter
+                entry={entry}
+                hasRole={hasRole}
+                roleColor={roleColor}
+                disabled={disabled}
+                editingTitle={editingTitle}
+                setEditingTitle={setEditingTitle}
+                onSetTitle={onSetTitle}
+              />
+            </div>
+            {onSetSource && !editingTitle && (
+              <Tooltip
+                content={
+                  source ? (
+                    <span style={{ overflowWrap: "anywhere" }}>{source}</span>
+                  ) : (
+                    "Add where this photo came from"
+                  )
+                }
+                align="end"
+                maxWidth="20rem"
+              >
+                <button
+                  type="button"
+                  aria-label={source ? "Edit photo source" : "Add photo source"}
+                  aria-pressed={!!source}
+                  disabled={disabled}
+                  onClick={() => setEditingSource(true)}
+                  style={{
+                    width: "1.25rem",
+                    height: "1.25rem",
+                    flexShrink: 0,
+                    padding: 0,
+                    borderRadius: "0.25rem",
+                    border: "none",
+                    background: source ? "var(--color-accent-soft)" : "transparent",
+                    color: source ? "var(--color-accent)" : "var(--color-text-muted)",
+                    cursor: disabled ? "default" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon name="link" size="xs" />
+                </button>
+              </Tooltip>
+            )}
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+/** A card footer's left side: the slot's label, or the extra's title and its inline editor. */
+function TitleFooter({
+  entry,
+  hasRole,
+  roleColor,
+  disabled,
+  editingTitle,
+  setEditingTitle,
+  onSetTitle,
+}: {
+  entry: Entry;
+  hasRole: boolean;
+  roleColor: string | null;
+  disabled: boolean;
+  editingTitle: boolean;
+  setEditingTitle: (editing: boolean) => void;
+  onSetTitle: (title: string) => void;
+}) {
+  if (hasRole) {
+    return (
+      <span
+        style={{
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.03em",
+          color: roleColor!,
+        }}
+      >
+        {entry.role}
+      </span>
+    );
+  }
+  if (editingTitle) {
+    return (
+      <input
+        autoFocus
+        type="text"
+        value={entry.title}
+        placeholder="Title"
+        disabled={disabled}
+        onChange={(e) => onSetTitle(e.target.value)}
+        onBlur={() => setEditingTitle(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === "Escape") setEditingTitle(false);
+        }}
+        style={FOOTER_INPUT}
+      />
+    );
+  }
+  return (
+    <Tooltip content="Add a title" align="start" style={{ width: "100%" }}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setEditingTitle(true)}
+        style={{
+          width: "100%",
+          textAlign: "left",
+          border: "none",
+          background: "transparent",
+          cursor: disabled ? "default" : "pointer",
+          fontSize: "0.75rem",
+          color: entry.title ? "var(--color-text-primary)" : "var(--color-text-muted)",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          padding: 0,
+        }}
+      >
+        {entry.title || (
+          <>
+            <Icon name="add" size="xs" /> Title
+          </>
+        )}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1134,6 +1212,17 @@ function Dropzone({
     </>
   );
 }
+
+/** A card footer's inline text field — the title's and the source's. */
+const FOOTER_INPUT: React.CSSProperties = {
+  width: "100%",
+  border: "none",
+  outline: "none",
+  background: "transparent",
+  fontSize: "0.75rem",
+  color: "var(--color-text-primary)",
+  padding: 0,
+};
 
 const SECTION_LABEL: React.CSSProperties = {
   display: "block",

@@ -34,8 +34,8 @@ import {
   listStampPhotos,
   parsePhotoChangeSet,
   promoteCopyPhotoToStamp,
+  type EditablePhotoSummary,
   type PhotoRole,
-  type PhotoSummary,
 } from "@/lib/photos";
 import { getStampMarketValueByStamp } from "@/lib/market-values";
 import type { StampMarketValue } from "@/lib/market-values";
@@ -465,13 +465,14 @@ export async function getStampTranslationsAction(
  * collection-scoped serving route addresses variant bytes by photo id. */
 export async function listStampPhotosAction(
   stampId: string
-): Promise<PhotoSummary[]> {
+): Promise<EditablePhotoSummary[]> {
   const session = await getSession();
   const photos = await listStampPhotos(session.user.id, stampId);
   return photos.map((p) => ({
     id: p.id,
     role: p.role,
     title: p.title,
+    sourceUrl: p.sourceUrl,
     sortOrder: p.sortOrder,
   }));
 }
