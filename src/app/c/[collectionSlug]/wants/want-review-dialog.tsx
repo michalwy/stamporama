@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { DialogShell, DialogBody, DialogFooter, DialogSecondaryButton } from "@/app/dialog-shell";
 import { formatItemNo } from "@/lib/item-number";
-import { narrowConditionSeed, type ArrivingCopy } from "@/lib/want-rules";
+import { groupWantMatches, narrowConditionSeed, type ArrivingCopy } from "@/lib/want-rules";
 import type { WantAcceptanceInput, WantListItem, WantMatchForCopy } from "@/lib/wants";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
@@ -46,6 +46,10 @@ const MUTED: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-
 
 /** Above this dialog's panel, so an acceptance menu opened inside it paints in front of it. */
 const MENU_Z_INDEX = 200;
+
+/** How many of a want's matching copies are named before the rest are counted — a bulk *Store* of
+ *  a whole card can raise one want from dozens of copies, and the row is read, not scanned. */
+const MATCHED_BY_NAMED = 5;
 
 /** How a want reads in the review: what it will take, in the axis order the list row uses. An axis
  *  with nothing on it is stated as "any" rather than left out — a silent axis reads as a narrow
@@ -121,15 +125,19 @@ export function WantReviewDialog({
       id === null ? "single" : ((formats ?? []).find((f) => f.id === id)?.name ?? "?"),
   };
 
-  /** One want may be raised by several arriving copies; it is shown once, under the first. */
-  const rows = useMemo(() => {
-    const seen = new Set<string>();
-    return matches.filter((m) => {
-      if (seen.has(m.want.id)) return false;
-      seen.add(m.want.id);
-      return true;
-    });
-  }, [matches]);
+  /** One want may be raised by several arriving copies; it is asked once, naming them all (#1262). */
+  const rows = useMemo(() => groupWantMatches(matches), [matches]);
+  const matchedCopyCount = useMemo(() => new Set(matches.map((m) => m.itemId)).size, [matches]);
+
+  /** `#00123 · U, #00124 · U and 3 more` — each copy with the condition it arrived in. */
+  function matchedBy(rowCopies: ArrivingCopy[]): string {
+    const named = rowCopies
+      .slice(0, MATCHED_BY_NAMED)
+      .map((c) => `${formatItemNo(c.itemNo, itemNoPad)} · ${conditionName(c.conditionId)}`)
+      .join(", ");
+    const rest = rowCopies.length - MATCHED_BY_NAMED;
+    return rest > 0 ? `${named} and ${rest} more` : named;
+  }
 
   function run(wantId: string, next: RowState, mutate: () => Promise<{ status: string; message?: string }>) {
     setError(undefined);
@@ -145,7 +153,7 @@ export function WantReviewDialog({
 
   return (
     <DialogShell
-      title={rows.length === 1 ? "A want this copy could satisfy" : "Wants these copies could satisfy"}
+      title={`${rows.length === 1 ? "A want" : "Wants"} ${matchedCopyCount === 1 ? "this copy" : "these copies"} could satisfy`}
       onClose={onClose}
       maxWidth="36rem"
       dismissable={!menuOpen}
@@ -158,8 +166,12 @@ export function WantReviewDialog({
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {rows.map(({ itemId, want }) => {
-            const copy = copyByItemId.get(itemId);
+          {rows.map(({ itemIds, want }) => {
+            const rowCopies = itemIds.flatMap((id) => {
+              const copy = copyByItemId.get(id);
+              return copy ? [copy] : [];
+            });
+            const arrivedConditionIds = [...new Set(rowCopies.map((c) => c.conditionId))];
             const state = states[want.id] ?? "pending";
             const seed = narrowing[want.id];
 
@@ -169,11 +181,8 @@ export function WantReviewDialog({
                   <strong style={{ fontSize: "0.875rem" }}>
                     {want.stampName ?? "(unnamed stamp)"}
                   </strong>
-                  {copy && (
-                    <span style={MUTED}>
-                      matched by {formatItemNo(copy.itemNo, itemNoPad)} ·{" "}
-                      {conditionName(copy.conditionId)}
-                    </span>
+                  {rowCopies.length > 0 && (
+                    <span style={MUTED}>matched by {matchedBy(rowCopies)}</span>
                   )}
                 </div>
                 <span style={MUTED}>{acceptanceSummary(want, axisNames)}</span>
@@ -208,17 +217,17 @@ export function WantReviewDialog({
                     <button
                       type="button"
                       style={BUTTON}
-                      disabled={isPending || !copy}
+                      disabled={isPending || rowCopies.length === 0}
                       onClick={() =>
-                        copy &&
+                        rowCopies.length > 0 &&
                         setNarrowing((n) => ({
                           ...n,
                           [want.id]: {
-                            // The one step that is certainly right: the condition that just arrived
-                            // is no longer wanted. Everything else is left for the collector.
+                            // The one step that is certainly right: the conditions that just arrived
+                            // are no longer wanted. Everything else is left for the collector.
                             conditionIds: narrowConditionSeed(
                               (conditions ?? []).map((c) => c.id),
-                              copy.conditionId,
+                              arrivedConditionIds,
                               want.conditionIds
                             ),
                             certificateStatusIds: want.certificateStatusIds,
@@ -254,8 +263,9 @@ export function WantReviewDialog({
                       onPopoverOpenChange={setMenuOpen}
                     />
                     <p style={{ ...MUTED, margin: 0 }}>
-                      Suggested: everything except the condition that just arrived. Nothing is saved
-                      until you press Save.
+                      Suggested: everything except the{" "}
+                      {arrivedConditionIds.length === 1 ? "condition" : "conditions"} that just
+                      arrived. Nothing is saved until you press Save.
                     </p>
                     <div style={{ display: "flex", gap: "0.5rem" }}>
                       <button

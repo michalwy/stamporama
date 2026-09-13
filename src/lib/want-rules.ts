@@ -169,14 +169,38 @@ export function wantMatchesCopy(want: WantAcceptance, copy: WantCandidateCopy): 
  * Every box is editable before saving, and a seed that empties the set (a one-condition dictionary)
  * is returned empty — which reads as "anything" again, and is honest: there is nothing left to
  * narrow to.
+ *
+ * **Several conditions may have arrived at once** (#1262): one pass can create several copies that
+ * answer the same want, and every condition among them is no longer wanted — so a list, of which the
+ * ordinary case is a list of one.
  */
 export function narrowConditionSeed(
   allConditionIds: string[],
-  arrivedConditionId: string,
+  arrivedConditionIds: readonly string[],
   currentConditionIds: string[]
 ): string[] {
   if (currentConditionIds.length > 0) return [...currentConditionIds];
-  return allConditionIds.filter((id) => id !== arrivedConditionId);
+  return allConditionIds.filter((id) => !arrivedConditionIds.includes(id));
+}
+
+/**
+ * The review's rows (#1262): **each want once**, with every arriving copy that could satisfy it, in
+ * the order the matches came — the first copy to raise a want places it.
+ *
+ * One pass can create several copies answering one want — a card of the same stamp (#596), a run
+ * (#1220), a bulk *Store* — and a want is one decision however many copies raised it, so it is asked
+ * once and names them all. A copy named twice against one want is named once.
+ */
+export function groupWantMatches<W extends { id: string }>(
+  matches: readonly { itemId: string; want: W }[]
+): { want: W; itemIds: string[] }[] {
+  const rows = new Map<string, { want: W; itemIds: string[] }>();
+  for (const { itemId, want } of matches) {
+    const row = rows.get(want.id);
+    if (!row) rows.set(want.id, { want, itemIds: [itemId] });
+    else if (!row.itemIds.includes(itemId)) row.itemIds.push(itemId);
+  }
+  return [...rows.values()];
 }
 
 /**

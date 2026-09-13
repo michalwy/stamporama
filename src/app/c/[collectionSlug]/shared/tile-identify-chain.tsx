@@ -27,6 +27,7 @@ import {
 } from "./intake-condition-dialog";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import type { ScanTileData } from "@/lib/scan-sheets";
+import type { ArrivingCopy } from "@/lib/want-rules";
 import type { IdentifyHistoryAnswers } from "@/lib/tile-identify-history";
 import type { TileStampPick } from "./tile-identify-dialog";
 import type { IssueListItem } from "@/lib/issues";
@@ -48,8 +49,9 @@ import { IssueRunDialog } from "./issue-run-dialog";
  * absent is the shape the condition step already had for *the lot is not in question*.
  *
  * The chain owns no writing. `run` is the caller's — the purchase screen's version refreshes the
- * order, invalidates its copy pages and raises the want review (#532) — so what happens after a
- * copy is created stays where the knowledge of it is.
+ * order and invalidates its copy pages, the card-scans screen's raises the want review from the
+ * copies a pass created (#1262) — so what happens after a copy is created stays where the knowledge
+ * of it is.
  */
 
 /**
@@ -375,10 +377,10 @@ export interface TileIdentifyChainDialogsProps {
    * says; see the condition step below. */
   lotChoice?: IntakeConditionDialogProps["lotChoice"];
   /** The screen's own runner: what happens after a copy exists. The purchase screen refreshes the
-   * order, invalidates its copy pages and raises the want review; the card-scans screen has none of
-   * those to do and does the two that are common. */
+   * order and invalidates its copy pages; the card-scans screen has none of those to do, and raises
+   * the want review from `outcomes` instead (#1262), its copies being created `delivered`. */
   run: (
-    fn: () => Promise<{ status: string; message?: string; id?: string }>,
+    fn: () => Promise<{ status: string; message?: string; id?: string; outcomes?: ArrivingCopy[] }>,
     onDone?: (result: { status: string; message?: string; id?: string }) => void
   ) => void;
   /** Re-read the strip after a tile has become — or stopped being — a copy. Identifying touches
