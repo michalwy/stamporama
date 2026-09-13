@@ -7,6 +7,7 @@ import { parseQuickJump, QUICK_JUMP_PREFIXES } from "@/lib/quick-jump";
 import { RECENT_ENTITY_LABELS, type RecentEntityKind } from "@/lib/recent-entities";
 import { useRecentEntities } from "./shared/use-recent-entities";
 import { Icon, type IconName } from "@/app/icons";
+import { sectionTintForHref } from "./nav-sections";
 
 /**
  * The quick-jump box (#431) — one field in the sidebar that takes a type prefix and a short number
@@ -47,7 +48,14 @@ const KIND_ICON: Record<RecentEntityKind, IconName> = {
   trade: "trades",
 };
 
-export function QuickJumpBox({ collectionId }: { collectionId: string }) {
+export function QuickJumpBox({
+  collectionId,
+  collectionSlug,
+}: {
+  collectionId: string;
+  /** Only to read which section an entry's link lands in (#1193). */
+  collectionSlug: string;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -309,73 +317,89 @@ export function QuickJumpBox({ collectionId }: { collectionId: string }) {
               </button>
             </div>
 
-            {shown.map((entry, i) => (
-              <button
-                key={`${entry.kind}:${entry.id}`}
-                id={`quick-jump-recent-${i}`}
-                type="button"
-                role="option"
-                aria-selected={i === active}
-                // The field keeps the keyboard through the click: losing focus first would close
-                // this panel out from under the press.
-                onMouseDown={(e) => e.preventDefault()}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => go(entry.href)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "0.375rem 0.5rem",
-                  border: "none",
-                  borderRadius: "0.375rem",
-                  background: i === active ? "var(--color-bg-muted)" : "transparent",
-                  cursor: "pointer",
-                  color: "var(--color-text-primary)",
-                }}
-              >
-                <span style={{ color: "var(--color-text-muted)", flexShrink: 0, display: "flex" }}>
-                  <Icon name={KIND_ICON[entry.kind]} size="sm" />
-                </span>
-                <span style={{ minWidth: 0, flex: 1 }}>
+            {shown.map((entry, i) => {
+              // The section the entry comes from, in the colour the sidebar already gives it
+              // (#1193), read off the entry's own link through the same tables the sidebar is drawn
+              // from. The sidebar's split, too: the icon carries the hue at full strength, and the
+              // kind label beside it the hue mixed back towards its text colour, so it stays text.
+              // An entry landing in no section keeps today's muted look — listed all the same.
+              const tint = sectionTintForHref(entry.href, `/c/${collectionSlug}`);
+              return (
+                <button
+                  key={`${entry.kind}:${entry.id}`}
+                  id={`quick-jump-recent-${i}`}
+                  type="button"
+                  role="option"
+                  aria-selected={i === active}
+                  // The field keeps the keyboard through the click: losing focus first would close
+                  // this panel out from under the press.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => go(entry.href)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "0.375rem 0.5rem",
+                    border: "none",
+                    borderRadius: "0.375rem",
+                    background: i === active ? "var(--color-bg-muted)" : "transparent",
+                    cursor: "pointer",
+                    color: "var(--color-text-primary)",
+                  }}
+                >
                   <span
                     style={{
-                      display: "block",
-                      fontSize: "0.8125rem",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      color: tint ? `var(--color-tag-${tint})` : "var(--color-text-muted)",
+                      flexShrink: 0,
+                      display: "flex",
                     }}
                   >
-                    {entry.label}
+                    <Icon name={KIND_ICON[entry.kind]} size="sm" />
                   </span>
-                  {entry.sublabel && (
+                  <span style={{ minWidth: 0, flex: 1 }}>
                     <span
                       style={{
                         display: "block",
-                        fontSize: "0.6875rem",
-                        color: "var(--color-text-muted)",
+                        fontSize: "0.8125rem",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {entry.sublabel}
+                      {entry.label}
                     </span>
-                  )}
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.6875rem",
-                    color: "var(--color-text-muted)",
-                    flexShrink: 0,
-                  }}
-                >
-                  {RECENT_ENTITY_LABELS[entry.kind]}
-                </span>
-              </button>
-            ))}
+                    {entry.sublabel && (
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: "0.6875rem",
+                          color: "var(--color-text-muted)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {entry.sublabel}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.6875rem",
+                      color: tint
+                        ? `color-mix(in srgb, var(--color-tag-${tint}) 55%, var(--color-text-muted))`
+                        : "var(--color-text-muted)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {RECENT_ENTITY_LABELS[entry.kind]}
+                  </span>
+                </button>
+              );
+            })}
           </div>,
           document.body
         )}

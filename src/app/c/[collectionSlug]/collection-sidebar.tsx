@@ -463,7 +463,7 @@ export function CollectionSidebar({
 
       {/* Directly under the collection it is scoped to (#431): the numbers it takes are per
           collection, so the field belongs to that identity rather than floating above the nav. */}
-      <QuickJumpBox collectionId={collectionId} />
+      <QuickJumpBox collectionId={collectionId} collectionSlug={collectionSlug} />
 
       {/* Main navigation */}
       <nav
@@ -508,6 +508,18 @@ export function CollectionSidebar({
               nested
             />
           </NavGroup>
+          {/* Areas are how the catalogue is organised (#1234) — the tree issues and stamps hang on,
+              and the facet every catalogue screen filters by — so the collector looks for them
+              here. #775 moved them out of Settings on frequency, and that stands; it filed them
+              under Collection, which this corrects. Last in the section, because Issues and Stamps
+              are the lists opened daily and the tree is reached when it needs changing (#971). The
+              address is still `/areas`. */}
+          <NavItem
+            href={`${base}/areas`}
+            icon={<Icon name="areas" />}
+            label="Areas"
+            active={isActive(`${base}/areas`)}
+          />
         </NavSection>
 
         <NavSection {...sectionProps("collection")}>
@@ -529,20 +541,7 @@ export function CollectionSidebar({
               nested
             />
           </NavGroup>
-          {/* Areas (#775) leave Settings for the section they organise. The rule they used to sit
-              under — catalog taxonomy set up once belongs in Settings — put them beside the
-              catalogs and the condition list, but an area is not set up once: it is added to,
-              renamed, re-nested and re-prefixed as the collection grows, and it is what every list
-              on this screen filters by. It is the same line Albums are on below, and the same one
-              that gave Locations its own page. Directly under Inventory, because it is how the
-              list above it is divided; Locations and Albums follow, being where the paper
-              physically sits. */}
-          <NavItem
-            href={`${base}/areas`}
-            icon={<Icon name="areas" />}
-            label="Areas"
-            active={isActive(`${base}/areas`)}
-          />
+          {/* Locations and Albums follow Inventory, being where the paper physically sits. */}
           <NavItem
             href={`${base}/locations`}
             icon={<Icon name="locations" />}

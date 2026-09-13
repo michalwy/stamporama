@@ -54,7 +54,7 @@ interface SettingsPageProps {
 export default async function SettingsPage({ params, searchParams }: SettingsPageProps) {
   const { collectionSlug } = await params;
 
-  // Areas left Settings for the Collection section (#775), and `?tab=areas` is an address a
+  // Areas left Settings for a page of their own (#775; in the Catalog section since #1234), and `?tab=areas` is an address a
   // collector has had in front of them for months — every mention of it in the user guide was one,
   // and the tab strip itself was a bookmark. Without this the query simply falls through to
   // General, which is the one outcome worth avoiding: it does not look like a move, it looks like

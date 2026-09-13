@@ -23,8 +23,10 @@ export type SectionKey = "catalog" | "collection" | "selling" | "buying" | "part
  * them apart: `/c/x/auctions/sales` does not begin with `/c/x/sales`.
  */
 export const SECTION_ROUTES: Record<SectionKey, string[]> = {
-  catalog: ["/issues", "/stamps"],
-  collection: ["/inventory", "/areas", "/locations", "/albums"],
+  // Areas are the Catalog's (#1234): the tree issues and stamps hang on and the facet every catalogue
+  // screen filters by. #775 gave them a page in Collection; only the section moved, not the address.
+  catalog: ["/issues", "/stamps", "/areas"],
+  collection: ["/inventory", "/locations", "/albums"],
   selling: ["/offers", "/sales"],
   buying: ["/wants", "/purchases", "/auctions"],
   partners: ["/trades", "/contacts", "/colnect"],
@@ -72,4 +74,19 @@ export function sectionForPath(pathname: string, base: string): SectionKey | nul
     if (owns) return key;
   }
   return null;
+}
+
+/**
+ * The hue a link into the app speaks in: its section's tint, or null where the link lands in no
+ * section.
+ *
+ * The Recent list behind *Jump to…* (#1193) colours each entry by it, and it reads the same two
+ * tables the sidebar is drawn from — so a colour the collector has learned in the navigation is the
+ * colour the entry wears, and moving a screen or re-tinting a section changes both at once. There is
+ * deliberately no second palette keyed by record kind: it would drift the first time either changed.
+ */
+export function sectionTintForHref(href: string, base: string): string | null {
+  // A query or a fragment says which view of a screen, never which screen.
+  const section = sectionForPath(href.split(/[?#]/)[0], base);
+  return section ? SECTION_TINTS[section] : null;
 }
