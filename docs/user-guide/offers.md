@@ -1365,8 +1365,11 @@ platform, taken together, cover every stamp of it:
 "Covers" means what it means in the lot builder: a copy of a **variant** covers its parent's place,
 and the conditions and formats do not have to match across the series.
 
-Three things are deliberately **not** listed:
+Four things are deliberately **not** listed:
 
+- A checklist of **one stamp**. The single offer holding that stamp already is the whole series, so
+  composing it would only make a second offer of the same thing — whether the stamp is offered on its
+  own or not offered yet.
 - A series the **available copies complete on their own**. Nothing has to be taken out of an offer for
   that one; the lot builder offers it whole already.
 - A series **still missing a stamp** even after the singles are counted.
