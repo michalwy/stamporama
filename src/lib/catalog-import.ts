@@ -324,7 +324,7 @@ async function writeFill(
     collectionId,
     row.issue.id,
     autoCreateInput(target.catalogVendorId, row.missingNumbers),
-    CATALOG_IMPORT_MAX_STAMPS_PER_ROW
+    { maxStamps: CATALOG_IMPORT_MAX_STAMPS_PER_ROW }
   );
 
   // Widen the declared range over the numbers just appended — `computeIssueRangeExtension`'s rule,

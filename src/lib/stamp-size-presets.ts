@@ -303,9 +303,41 @@ export async function reorderStampSizePresets(
 }
 
 /**
- * What a preset is being applied to (ADR-0048 §4). Four entry points, three subjects: the stamp-range
- * dialog and the stamp tree's selection both name an explicit list of stamps, while an issue and a
- * checklist name themselves. They differ only in how they name the set — one write serves all four.
+ * A preset's pair, for a write that puts it on stamps **as they are created** — the stamp-range
+ * dialog (#807), where the collector types `Mi 1-20`, picks the size, and the stamps are born with
+ * it.
+ *
+ * That entry point takes the pair rather than calling {@link applyStampSizePreset}, and the reason is
+ * that everything the apply exists to do is vacuous there: a stamp that does not exist yet has no
+ * size to skip (§6) and no subtree to descend (§7), so there is nothing to preview either — #807
+ * refuses the confirmation for exactly that reason. What is left is copying two numbers, and doing
+ * it inside the creating transaction is what makes *born with it* true: an apply run afterwards
+ * would be a second write that can fail after the first has landed, leaving a range on the issue
+ * without the size the collector chose. Copied, not referenced (§1), either way.
+ *
+ * Scoped to the collection the stamps are being created in: a preset from another collection is an
+ * error, not a size.
+ */
+export async function getStampSizePresetPair(
+  collectionId: string,
+  presetId: string
+): Promise<StampSizePresetPair> {
+  const preset = await prisma.stampSizePreset.findUnique({
+    where: { id: presetId },
+    select: { ...PRESET_SELECT, collectionId: true },
+  });
+  if (!preset || preset.collectionId !== collectionId) {
+    throw new Error("Stamp size preset not found.");
+  }
+  const { widthMm, heightMm } = presetData(preset);
+  return { widthMm, heightMm };
+}
+
+/**
+ * What a preset is being applied to (ADR-0048 §4). Four entry points; three of them name an existing
+ * set of stamps and come here — an issue and a checklist name themselves, the stamp tree's selection
+ * names an explicit list. The fourth, the stamp-range dialog, names stamps that do not exist yet and
+ * takes {@link getStampSizePresetPair} instead.
  */
 export type StampSizePresetSubject =
   | { kind: "issue"; issueId: string }

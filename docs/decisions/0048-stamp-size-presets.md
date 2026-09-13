@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, partly implemented: #803–#806 have landed, #807–#809 have not. Designed 2026-09-06 with the collector. The work is tracked in #803
+Accepted, partly implemented: #803–#807 have landed, #808 and #809 have not. Designed 2026-09-06 with the collector. The work is tracked in #803
 (the dictionary, the migration and the write module), #804 (the Settings panel), #805 (the row beside
 the stamp's width and height), #806 (applying to an issue or a checklist), #807 (choosing one while
 creating a stamp range), #808 (multi-select on the stamp tree) and #809 (applying to a tree
@@ -120,6 +120,14 @@ features:
 One write module takes `{ presetId, subject }` where the subject is an issue, a checklist, or an
 explicit list of stamp ids, resolves it to stamp ids, and writes. The four entry points differ only in
 how they name the subject.
+
+**The stamp-range dialog does not go through that write, as built in #807.** It names stamps that do
+not exist yet, so everything the write exists to do — skip a stated size (decision 6), descend a
+subtree (decision 7), count for a preview — has nothing to act on, and what is left is copying the
+pair. It is copied in the transaction that creates the stamps (`getStampSizePresetPair`, then
+`createRangeStamps`), because an apply run afterwards would be a second write able to fail after the
+range had landed, leaving it without the size the collector chose. Decision 1 holds unchanged: the
+pair is copied, and the stamp holds no reference.
 
 The selection case is deliberately the last of the four to be built, and it is **two** pieces of
 work rather than one: the stamp tree has no multi-select today, so applying a preset to a selection

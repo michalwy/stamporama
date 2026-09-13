@@ -276,6 +276,8 @@ Numbers that would duplicate one you already hold are the ordinary **Fill** case
 
 You can bulk-add stamps to an issue after it was created, the same way they are generated when you first create one. Open the issue's **⋮** menu on the **Issues** list and choose **Add stamp range…**. Tick the catalog(s) you want and enter the numbers for each in [the same notation](#writing-the-numbers) the create dialog uses (`100-105`, or `2895A-2897A, 2895B-2897B`); the dialog shows how many stamps will be created, with a short preview. Entering a lone number for a secondary catalog completes it to the primary's span, exactly as on the create form. When more than one catalog is selected, each must come to the same number of stamps, since they are matched by position. Click **Add stamps** and the new stamps join the issue as additional root nodes, alongside anything already there.
 
+If you already know how big the stamps are — a new run of overprints on a design you have measured before — choose a [size preset](#size-presets) under **Size** in the same dialog. Every stamp the dialog creates is given that width and height, and the preview line says so (*Will create 20 stamps (1, 2, 3…), each 25 × 30 mm.*). There is nothing to confirm: the stamps are all new, so no size you entered earlier can be replaced. **Clear** takes the choice back. Leave **Size** at *No size* and the stamps are created without one, as they always were. A stamp already in the collection is never given the size, even one whose catalog number the range repeats.
+
 If a generated catalog number would duplicate one already in the collection, the dialog surfaces a warning naming the collisions. In a collection set to **block** duplicates (see [Duplicate catalog numbers](duplicate-catalog-numbers.md)) this prevents the add until you resolve it; in a collection set to **warn**, it is advisory and you can add anyway.
 
 If the added stamps fall **outside the issue's declared catalog range**, a follow-up prompt appears right away showing the proposed widened range (for example, `Mi 100–105 → 100–110`) and asks you to choose **Widen range** or **Keep as-is** — the same decision offered when adding a single stamp. Keeping it as-is leaves the range warning on the issue row, which you can act on later.
@@ -745,6 +747,10 @@ That is the one place a preset is saved from on purpose. A figure measured on th
 the tile's crop becomes a preset by the same route — press **Use as size** first, so it is in the
 fields, then **Save as preset** — which means an estimate can only become a preset after you have
 accepted it as this stamp's size.
+
+#### Giving a new range of stamps a preset
+
+When you add a range of stamps to an issue with **Add stamp range…**, the dialog has a **Size** control with the same filterable list: choose a preset and every stamp it creates is born with that size. See [Adding a stamp range to an existing issue](#adding-a-stamp-range-to-an-existing-issue).
 
 #### Applying a preset to an issue or a checklist
 

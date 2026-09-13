@@ -663,8 +663,13 @@ export async function addStampRangeToIssueAction(
   );
   if (blockMessage) return { status: "error", message: blockMessage };
 
+  // The size preset chosen in the dialog (#807), or none: an empty value is the control left alone.
+  const sizePresetId = ((formData.get("sizePresetId") as string | null) ?? "").trim() || null;
+
   try {
-    await addStampRangeToIssue(session.user.id, collectionId, issueId, built.input);
+    await addStampRangeToIssue(session.user.id, collectionId, issueId, built.input, {
+      sizePresetId,
+    });
     return { status: "success", issueId };
   } catch {
     return { status: "error", message: "Failed to add stamps. Please try again." };
