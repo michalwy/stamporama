@@ -174,3 +174,30 @@ export function selectedInView<T extends SelectableTile>(
 ): T[] {
   return selectedInOrder(selected, tilesInView(tiles, filter));
 }
+
+/**
+ * The ticked tiles in the order they were **ticked** (#1220) — not the order of the card.
+ *
+ * Identifying a run as the stamps of one issue hands the first ticked tile the issue's first stamp,
+ * the second the second, so the collector who clicks the pieces in catalogue order gets the right
+ * assignment even when the set lies scattered across the card. The order needs no state of its own:
+ * a `Set` iterates in insertion order, `toggleTile` appends a tick and drops an untick, and
+ * `pruneSelection` keeps what survives in the order it was ticked — so the selection already *is*
+ * the sequence. A batch box ticks what it adds in card order, which is the order a whole card of a
+ * set laid out in catalogue order wants.
+ *
+ * `tiles` is whichever set the caller is about (`selectedInView`'s answer, for the run); anything
+ * in it that is not ticked is left out.
+ */
+export function inTickOrder<T extends SelectableTile>(
+  selected: ReadonlySet<string>,
+  tiles: readonly T[]
+): T[] {
+  const byId = new Map(tiles.map((t) => [t.id, t]));
+  const out: T[] = [];
+  for (const id of selected) {
+    const tile = byId.get(id);
+    if (tile && isSelectableTile(tile)) out.push(tile);
+  }
+  return out;
+}

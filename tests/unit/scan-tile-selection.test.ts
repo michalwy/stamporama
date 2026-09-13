@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   batchBoxState,
+  inTickOrder,
   isSelectableTile,
   pruneSelection,
   selectedInOrder,
@@ -224,5 +225,38 @@ describe("scan tile selection (#596)", () => {
       selectedInOrder(new Set(["t4", "t3", "t2"]), tiles).map((t) => t.id),
       ["t3", "t4"]
     );
+  });
+
+  describe("the order the tiles were ticked in (#1220)", () => {
+    const card = [tile("t1"), tile("t2"), tile("t3"), tile("t4"), tile("t5", "consumed")];
+
+    it("follows the clicks, not the card", () => {
+      // A set scattered over the card, clicked in catalogue order: t4, then t1, then t3.
+      let selected: ReadonlySet<string> = new Set();
+      for (const id of ["t4", "t1", "t3"]) selected = toggleTile(selected, id);
+      assert.deepEqual(inTickOrder(selected, card).map((t) => t.id), ["t4", "t1", "t3"]);
+      // The card order is still what `selectedInOrder` answers — the two must differ here, or this
+      // test proves nothing about which one the run reads.
+      assert.deepEqual(selectedInOrder(selected, card).map((t) => t.id), ["t1", "t3", "t4"]);
+    });
+
+    it("drops an untick from the sequence and puts a re-tick at its end", () => {
+      let selected: ReadonlySet<string> = new Set();
+      for (const id of ["t2", "t1", "t3", "t1"]) selected = toggleTile(selected, id);
+      assert.deepEqual(inTickOrder(selected, card).map((t) => t.id), ["t2", "t3"]);
+      selected = toggleTile(selected, "t1");
+      assert.deepEqual(inTickOrder(selected, card).map((t) => t.id), ["t2", "t3", "t1"]);
+    });
+
+    it("survives pruning in the order it was ticked, and leaves out what the caller is not about", () => {
+      let selected: ReadonlySet<string> = new Set();
+      for (const id of ["t3", "t5", "t2", "t1"]) selected = toggleTile(selected, id);
+      const pruned = pruneSelection(selected, card);
+      assert.deepEqual([...pruned], ["t3", "t2", "t1"]);
+      assert.deepEqual(
+        inTickOrder(pruned, [tile("t1"), tile("t3")]).map((t) => t.id),
+        ["t3", "t1"]
+      );
+    });
   });
 });

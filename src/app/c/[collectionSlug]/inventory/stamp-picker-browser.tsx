@@ -116,8 +116,10 @@ export interface PickedIssue {
 export function StampPickerBrowser({
   collectionId,
   areas,
+  title = "Browse stamps",
   onPick,
   onPickIssue,
+  issueRun,
   marked,
   aside,
   asideWidth,
@@ -125,10 +127,23 @@ export function StampPickerBrowser({
 }: DialogAsideProps & {
   collectionId: string;
   areas: CollectionAreaData[];
+  /** The popup's heading — what it is being browsed *for*, where that is not a stamp. */
+  title?: string;
   onPick: (picked: PickedStamp) => void;
   /** When provided, each issue row offers one "add this whole set" button per checklist
    *  (lot intake, #121; #531). */
   onPickIssue?: (picked: PickedIssue) => void;
+  /**
+   * Identifying a ticked run of scan tiles **as the stamps of one issue** (#1220): the picker is
+   * browsed for an issue rather than a stamp, and every issue row offers to take the run.
+   *
+   * It is this picker rather than an issue picker of its own because this is where an issue is
+   * **created** in the middle of an identification (#105) and where its stamps are added right after
+   * — a set met on a card whose issue is not in the catalogue yet is exactly the case, and a second
+   * chooser would have to grow both. A stamp pressed on a row picks **its issue**: the tree is open
+   * to be read and added to, and a press on it meaning nothing would read as a press that failed.
+   */
+  issueRun?: { tileCount: number; onPick: (issue: IssueListItem) => void };
   /**
    * Stamps the caller has **already taken**, marked on their rows (#607) — see
    * `SelectableStampNode`. Only a picker that does not close on the pick needs it: the tile
@@ -350,7 +365,7 @@ export function StampPickerBrowser({
   return createPortal(
     <>
       <DialogShell
-        title="Browse stamps"
+        title={title}
         onClose={onClose}
         // A create dialog stacks above this one; while it is up this dialog must stop dismissing
         // itself, or one Esc would close both.
@@ -402,6 +417,7 @@ export function StampPickerBrowser({
               justCreatedIssueId={justCreatedIssueId}
               onPick={onPick}
               onPickIssue={onPickIssue}
+              issueRun={issueRun}
               marked={marked}
               onNewIssue={(a) => openCreate({ kind: "issue", areaId: a })}
               onNewStamp={(issue) => openCreate({ kind: "stamp", issue })}
@@ -516,6 +532,7 @@ function IssueBrowser({
   justCreatedIssueId,
   onPick,
   onPickIssue,
+  issueRun,
   marked,
   onNewIssue,
   onNewStamp,
@@ -540,6 +557,8 @@ function IssueBrowser({
   justCreatedIssueId: string | null;
   onPick: (picked: PickedStamp) => void;
   onPickIssue?: (picked: PickedIssue) => void;
+  /** Browsing for an issue to identify a run of tiles as (#1220). */
+  issueRun?: { tileCount: number; onPick: (issue: IssueListItem) => void };
   /** Stamps already taken by the caller, marked on their rows (#607). */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onNewIssue: (areaId: string | null) => void;
@@ -555,6 +574,11 @@ function IssueBrowser({
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) {
+    // Browsing for an issue (#1220): the stamp pressed names the issue it is on.
+    if (issueRun) {
+      issueRun.onPick(issue);
+      return;
+    }
     const vm = vendorMapFor(issue.collectionAreaId, issue.id);
     const catalogLabels = orderedCatalogLabels(
       node.catalogNumbers,
@@ -629,6 +653,11 @@ function IssueBrowser({
               search={search}
               onPick={handlePick}
               marked={marked}
+              issueRun={
+                issueRun
+                  ? { tileCount: issueRun.tileCount, onPick: () => issueRun.onPick(issue) }
+                  : undefined
+              }
               onPickIssue={
                 onPickIssue
                   ? (checklist) =>
@@ -672,6 +701,7 @@ function PickIssueRow({
   search,
   onPick,
   onPickIssue,
+  issueRun,
   marked,
   onNewStamp,
   onNewVariant,
@@ -694,6 +724,8 @@ function PickIssueRow({
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
   /** Called with the checklist whose button was pressed (#531). */
   onPickIssue?: (checklist: IssueChecklistSummary) => void;
+  /** Take this issue for a run of tiles (#1220). */
+  issueRun?: { tileCount: number; onPick: () => void };
   /** Stamps already taken by the caller, marked on their rows (#607). */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
   onNewStamp: () => void;
@@ -809,6 +841,38 @@ function PickIssueRow({
           >
             <IssueTitle name={issue.name} year={issue.year} />
           </span>
+
+          {/* The one press this picker is open for when a run of tiles is being identified (#1220).
+              On every row, a new issue with no stamps yet included: its stamps are added from the
+              tree under it, and the step that follows says so if there are still none. */}
+          {issueRun && (
+            <Tooltip
+              content={`Give the ${issueRun.tileCount} ticked tiles this issue's stamps, in the order you ticked them`}
+              align="end"
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  issueRun.onPick();
+                }}
+                style={{
+                  flexShrink: 0,
+                  padding: "0.25rem 0.5rem",
+                  background: "var(--color-accent-soft)",
+                  color: "var(--color-accent)",
+                  border: "1px solid var(--color-accent)",
+                  borderRadius: "0.375rem",
+                  fontSize: "0.75rem",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Its stamps, in turn
+              </button>
+            </Tooltip>
+          )}
 
           {/* One button per checklist (#531). With one it reads as it always did; with several
               each names its own set, which is better than a chooser the collector has to open to

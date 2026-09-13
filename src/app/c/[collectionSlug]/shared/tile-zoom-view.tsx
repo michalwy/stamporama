@@ -227,6 +227,7 @@ export function IdentifiedPieceAside({
   onGauge,
   onTurn,
   turning,
+  runOrder,
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
@@ -241,6 +242,9 @@ export function IdentifiedPieceAside({
    * and only for tiles whose pictures are still their own. */
   onTurn?: (tileId: string, side: TileSideView["side"], turn: QuarterTurn) => void;
   turning?: boolean;
+  /** The pieces are a run about to take one issue's stamps in turn (#1220), in the order they were
+   * ticked — so the grid says that rather than *one stamp*, and numbers each by its turn. */
+  runOrder?: boolean;
 }) {
   const shown = pieces.filter((p) => p.sides.length > 0);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -357,7 +361,14 @@ export function IdentifiedPieceAside({
       </div>
     );
   }
-  return <IdentifiedPieceGrid collectionId={collectionId} pieces={shown} onOpen={setOpenId} />;
+  return (
+    <IdentifiedPieceGrid
+      collectionId={collectionId}
+      pieces={shown}
+      runOrder={runOrder}
+      onOpen={setOpenId}
+    />
+  );
 }
 
 /**
@@ -370,10 +381,12 @@ export function IdentifiedPieceAside({
 function IdentifiedPieceGrid({
   collectionId,
   pieces,
+  runOrder,
   onOpen,
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
+  runOrder?: boolean;
   onOpen: (tileId: string) => void;
 }) {
   return (
@@ -385,8 +398,17 @@ function IdentifiedPieceGrid({
           color: "var(--color-text-secondary)",
         }}
       >
-        <strong>{pieces.length} pieces</strong>, being identified as one stamp. Check them against
-        each other before you confirm — click one to look at it closely.
+        {runOrder ? (
+          <>
+            <strong>{pieces.length} pieces</strong>, in the order you ticked them — they take the
+            issue&rsquo;s stamps in turn. Click one to look at it closely.
+          </>
+        ) : (
+          <>
+            <strong>{pieces.length} pieces</strong>, being identified as one stamp. Check them
+            against each other before you confirm — click one to look at it closely.
+          </>
+        )}
       </p>
       <div
         style={{
@@ -399,7 +421,7 @@ function IdentifiedPieceGrid({
           alignContent: "start",
         }}
       >
-        {pieces.map((piece) => {
+        {pieces.map((piece, turn) => {
           const front = piece.sides.find((s) => s.side === "front") ?? piece.sides[0];
           return (
             <ThumbPreview
@@ -440,7 +462,9 @@ function IdentifiedPieceGrid({
                   objectFit: "contain",
                 }}
               />
-              <span style={{ fontSize: "0.6875rem" }}>{piece.position + 1}</span>
+              <span style={{ fontSize: "0.6875rem" }}>
+                {runOrder ? `#${turn + 1} · tile ${piece.position + 1}` : piece.position + 1}
+              </span>
             </button>
             </ThumbPreview>
           );

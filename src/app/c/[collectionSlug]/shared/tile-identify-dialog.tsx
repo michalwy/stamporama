@@ -34,9 +34,7 @@ import {
   type TileCandidate,
 } from "@/lib/tile-candidates";
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
-import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { perforationMatches, type PerforationMatch } from "@/lib/perforation";
-import { formatGaugeStep, formatMeasuredGauge, nearestCatalogueGauge } from "@/lib/scan-measure";
 import { StampPickerBrowser } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
 import { orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
@@ -56,6 +54,7 @@ import type {
   IdentifyHistoryEntry,
 } from "@/lib/tile-identify-history";
 import { IdentifyHistory } from "./identify-history";
+import { MeasuredMark, MeasuredNarrowing } from "./measured-marks";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import {
   useOwnerCopiesInfinite,
@@ -224,6 +223,12 @@ interface Props {
    */
   onIdentifyNew: (pieces: IdentifiedPiece[]) => void;
   /**
+   * *As the stamps of one issue* (#1220) — a ticked run handed on to be given one issue's stamps in
+   * turn, rather than one stamp for all of it (#596). Offered only for a run: one tile is one stamp,
+   * which is the picker's own question.
+   */
+  onIdentifyIssueRun: (pieces: IdentifiedPiece[]) => void;
+  /**
    * The screen's last identifications, newest first (#757) — drawn beside the piece, each with its
    * picture, and each a press away from identifying this tile the same way.
    *
@@ -336,6 +341,7 @@ export function TileIdentifyDialog({
   fromAuction,
   copyHref,
   onIdentifyNew,
+  onIdentifyIssueRun,
   history,
   onRepeat,
   onIdentifyAs,
@@ -910,6 +916,17 @@ export function TileIdentifyDialog({
           onAction={() => onIdentifyNew(pieces)}
           leading={
             <>
+              {/* A set rather than a run of duplicates (#1220): the tiles take one issue's stamps in
+                  the order they were ticked. Beside the one-stamp confirm, since the two are the
+                  two answers a ticked run of pieces to identify has. */}
+              {count > 1 && (
+                <DialogSecondaryButton
+                  onClick={() => onIdentifyIssueRun(pieces)}
+                  disabled={pending || !canIdentify}
+                >
+                  <Icon name="list" size="sm" /> As the stamps of one issue…
+                </DialogSecondaryButton>
+              )}
               {parked ? putBack : park}
               {discard}
               {/* Only when there is something to assign to — which is the very condition that chose
@@ -1024,8 +1041,8 @@ function IdentifyIntro({
           : // What the run's own answer creates, said before anything is created: one stamp, one
             // condition, one lot — and one copy per piece, each keeping its own pictures.
             inOrder
-            ? `Identify these ${count} pieces as one stamp — the lot, condition, certificate and location are answered once, and each piece becomes its own copy with its own images.`
-            : `Identify these ${count} pieces as one stamp — condition, certificate and location are answered once, and each piece becomes its own copy with its own images.`
+            ? `Identify these ${count} pieces as one stamp — the lot, condition, certificate and location are answered once, and each piece becomes its own copy with its own images. A set of one issue instead? Its stamps can go onto the pieces in the order you ticked them.`
+            : `Identify these ${count} pieces as one stamp — condition, certificate and location are answered once, and each piece becomes its own copy with its own images. A set of one issue instead? Its stamps can go onto the pieces in the order you ticked them.`
         : count === 1
           ? "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify this tile, or assign the images to a copy the order already holds."
           : "Every lot on this order is closed, so none of them takes a new copy. Reopen one to identify these pieces — setting them aside and discarding them still work."}
@@ -1470,125 +1487,6 @@ function CandidateShortlist({
         />
       )}
     </div>
-  );
-}
-
-/**
- * What has been read off the piece, and the one thing that has to be **said** rather than measured
- * (#740).
- *
- * The intake measuring stack produces two kinds of answer and this is where they meet the candidate
- * list. The **gauge** arrives on its own from the viewer beside this column — the collector marks a
- * run and the figure appears, so there is nothing to ask for here and the line only reports it. The
- * **watermark** is the opposite: #625 makes it visible and the eye reads it, so the app is told
- * rather than measuring, and the control is a plain select over what the candidates actually differ
- * by.
- *
- * Both are stated as *what was seen*, never as *what this is*: the marks below propose, and every
- * row stays pressable whether it was marked, unmarked or contradicted.
- */
-function MeasuredNarrowing({
-  gauge,
-  anyPerforation,
-  watermarks,
-  watermarkId,
-  onWatermark,
-}: {
-  gauge: number | null;
-  anyPerforation: boolean;
-  watermarks: { id: string; name: string }[];
-  watermarkId: string;
-  onWatermark: (id: string) => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: "0.5rem",
-        fontSize: "0.75rem",
-        color: "var(--color-text-muted)",
-      }}
-    >
-      {anyPerforation &&
-        (gauge === null ? (
-          // Said only where it can be acted on, and said as an invitation rather than as a warning:
-          // most tiles are identified without a gauge ever being taken.
-          <span>Gauge a run on the piece to mark the ones it fits.</span>
-        ) : (
-          <span style={{ color: "var(--color-text-secondary)" }}>
-            <Icon name="measure" size="xs" /> Measured{" "}
-            <strong>{formatGaugeStep(nearestCatalogueGauge(gauge))}</strong> (
-            {formatMeasuredGauge(gauge)})
-          </span>
-        ))}
-      {watermarks.length > 0 && (
-        <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-          Watermark seen
-          <select
-            value={watermarkId}
-            onChange={(e) => onWatermark(e.target.value)}
-            style={{
-              ...FILTER_CONTROL_STYLE,
-              fontSize: "0.75rem",
-              padding: "0.15rem 0.35rem",
-            }}
-          >
-            {/* *Not said* is the resting state and the way back out of a pick — nothing on this
-                panel is an assertion the collector has to undo somewhere else. */}
-            <option value="">—</option>
-            {watermarks.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-    </div>
-  );
-}
-
-/** What a reading says about one row: a mark for the ones it fits, the stated value alone for the
- * ones it does not, and nothing at all where there is nothing to compare (#740). The stated value is
- * printed either way, because *what this stamp says its perforation is* is the fact the collector
- * came to the shortlist for — the mark is an opinion about it, not a replacement for it. */
-function MeasuredMark({
-  match,
-  label,
-  what,
-}: {
-  match: PerforationMatch;
-  label: string;
-  what: string;
-}) {
-  const fits = match === "fits";
-  return (
-    <Tooltip
-      content={
-        fits
-          ? `The ${what} read off the piece fits this stamp's ${label}`
-          : `This stamp states ${label} — what was read off the piece does not fit it`
-      }
-    >
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.15rem",
-          padding: "0 0.3rem",
-          borderRadius: "0.25rem",
-          border: `1px solid ${fits ? "var(--color-accent-border)" : "var(--color-border)"}`,
-          background: fits ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-          color: fits ? "var(--color-accent-hover)" : "var(--color-text-muted)",
-          fontSize: "0.6875rem",
-        }}
-      >
-        {fits && <Icon name="check" size="xs" />}
-        {label}
-      </span>
-    </Tooltip>
   );
 }
 

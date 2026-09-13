@@ -798,6 +798,55 @@ against. Hover a row to see that piece at full size, the way hovering a tile on 
 It is the companion of ticking, not a lesser version of it: tick the tiles when you can see the run
 on the strip before you start, and use the list when you only discover the duplicate on reaching it.
 
+**A set rather than duplicates: identify the tiles as the stamps of one issue.** A card often holds
+several — or all — of one issue's stamps, and walking each through the browse popup says *this issue,
+the next value* once per stamp. Instead, **tick the tiles in catalogue order**: while you tick, each
+box shows the tile's **turn** — *1*, *2*, *3* — in the order you clicked, so the pieces can lie
+anywhere on the card. Press **Work through N tiles**, then **As the stamps of one issue…**.
+
+The browse popup opens to pick the **issue**: each issue row has an **Its stamps, in turn** button
+(pressing any stamp in a row picks that row's issue too). A set whose issue is not in the catalogue
+yet is no detour — **+ New issue** works here as it always does, and so does **+ New stamp** under it.
+
+The next step has three columns. On the left is the tile in hand, in the usual viewer with every tool
+a single tile has — zoom, front and back, the ruler, the perforation gauge and the watermark view —
+and *Previous* / *Next* to step along the run. In the middle is **For all N tiles** (condition,
+certificate, format, lot, location with its ref, disposition) and **the run**: every tile in turn with
+the stamp it has taken. On the right is the tile in hand again: **its stamp**, among all of the
+issue's stamps, and **its own details**.
+
+- **The tiles take the issue's main stamps in catalogue order** — the first tile you ticked the first
+  stamp, the second the second. Variants are not in the sequence; a variant is chosen on the tile.
+- **Fewer tiles than stamps is normal** — you have several of the set, so the tiles take the first
+  stamps. Click the tile that skips a value and press the stamp it really is, **variants included**.
+  *Back to its turn* undoes that. A correction does not move the tiles after it.
+- **Two tiles on the same stamp is allowed** — duplicates are real — and the run says *Same stamp as
+  #3* so a slip is noticed.
+- **More tiles than stamps leaves the extra tiles with no stamp.** Give each one a stamp, take it out
+  of the run with the **−** button (it stays ticked on the card, and *Taken out* puts it back), or add
+  the missing stamp with **+ New stamp in this issue** — a tile still waiting for its turn takes it.
+  Nothing can be confirmed while a tile in the run has no stamp.
+- **Copy details are set once and overridden per tile.** Tick a field under *its own details* and that
+  tile keeps its own value — its row says *own condition*, for instance — and changing the shared
+  value afterwards does not touch it. Untick it to follow the run again.
+- **Where a stamp states a perforation or a watermark, what you read off the piece marks it**, exactly
+  as it does on a shortlist: gauge a run in the viewer, or say which watermark you see, and the
+  stamps it fits are marked.
+
+The footer says how many copies will be created before anything is; **Identify N tiles** creates one
+copy per tile, each of its own stamp and each keeping **its own pictures**, numbered in the order you
+ticked. If any tile cannot be worked — dealt with meanwhile in another tab, say — the whole pass is
+refused and nothing is created.
+
+**Catalogue values while the catalogue is open.** Under *its stamp*, the tile in hand has a
+**catalog value** field for your primary catalogue, for that tile's condition and certificate —
+the same field a single tile's condition step has. It opens on the value already on file, and it is
+**one value per stamp in a condition**: two tiles of the same stamp in the same condition share it,
+so typing it on one fills the other. The run says *no catalog value* on every tile whose stamp still
+has none for its condition. The figure is always the single's, whatever format you file the piece
+as. Values are saved before any copy is created; if saving one fails, nothing is created and you can
+correct it and confirm again.
+
 The list is read from the card itself, not remembered for the length of a sitting: reload the page,
 come back tomorrow, open the next batch of the same order — the identifications are still there. It
 spans **every batch of the order** (or, for a card that belongs to no order, of the collection),
