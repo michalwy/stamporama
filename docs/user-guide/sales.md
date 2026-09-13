@@ -38,7 +38,10 @@ Click **Record sale** and fill in:
   is saved to the platform.
 Every amount field accepts either a comma or a period as the decimal separator — type `12,50` or
 `12.50`, whichever your keyboard gives you. It also takes a small sum: type `12,50+7,50` or
-`(4,20+1,80)/2` and the field replaces it with the result as soon as you leave it.
+`(4,20+1,80)/2` and the field replaces it with the result as soon as you leave it. Once you leave
+it — Tab, Enter or a click elsewhere — the amount is shown with two decimal places (`1,5` becomes
+`1.50`, `3` becomes `3.00`), and a third decimal is rounded half up (`1.555` becomes `1.56`): what
+the field shows is what is saved. An empty field stays empty.
 
 - **Buyer handling** and **Commission** — the amounts you know at sale time: the postage/handling
   the buyer paid you (**adds** to proceeds) and the platform's fee (**subtracts**).

@@ -3,7 +3,7 @@
 import { useMemo, useRef, type KeyboardEvent } from "react";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { formatAmountInput, normalizeDecimalInput } from "@/lib/decimal-input";
 import type { CatalogVendorData } from "@/lib/catalog";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { StampConditionData } from "@/lib/conditions";
@@ -24,14 +24,6 @@ const CELL_INPUT: React.CSSProperties = {
   width: "5.5rem",
   textAlign: "right" as const,
 };
-
-export function formatPrice(value: string): string {
-  const trimmed = normalizeDecimalInput(value.trim());
-  if (trimmed === "") return "";
-  const n = Number(trimmed);
-  if (Number.isNaN(n)) return trimmed;
-  return n.toFixed(2);
-}
 
 /** Form/state key for one price cell. `certId` null → the "no certificate" column; `formatId`
  *  null → the single, which is what a stamp is when no format is chosen. The format segment is
@@ -382,12 +374,12 @@ export function StampCatalogPricesTab({
                         return (
                           <td key={col.id ?? "none"} style={tdCellStyle}>
                             <NumericInput
+                              kind="amount"
                               ref={(el) => {
                                 inputRefs.current.set(key, el);
                               }}
                               value={price}
                               onChange={(e) => onPriceChange(key, e.target.value)}
-                              onBlur={(e) => onPriceChange(key, formatPrice(e.target.value))}
                               onKeyDown={(e) => handleCellKeyDown(e, key)}
                               disabled={disabled}
                               placeholder={derived ?? "—"}
@@ -425,7 +417,7 @@ export function StampCatalogPricesTab({
                                 <button
                                   type="button"
                                   disabled={disabled}
-                                  onClick={() => onPriceChange(newestKey, formatPrice(price))}
+                                  onClick={() => onPriceChange(newestKey, formatAmountInput(price))}
                                   aria-label="Copy this price into the newest edition"
                                   // Auxiliary to the grid's price inputs (#446): tabbing a price
                                   // table should walk the figures, not the shortcuts beside them.

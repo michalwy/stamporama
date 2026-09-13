@@ -21,6 +21,7 @@ import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chi
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { roundAmount } from "@/lib/decimal-input";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 import {
   TemplateBuilder,
@@ -107,17 +108,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
  * field saying what the collector typed.
  */
 function NumberField({
+  kind,
   ariaLabel,
   value,
   onCommit,
   placeholder,
 }: {
+  /** An `"amount"` is shown to the cent (#1231); a year or a count is shown as the number it is. */
+  kind: "amount" | "number";
   ariaLabel: string;
   value: number | null;
   onCommit: (value: number | null) => void;
   placeholder?: string;
 }) {
-  const text = value === null ? "" : String(value);
+  const show = (n: number | null) => (n === null ? "" : kind === "amount" ? roundAmount(n) : String(n));
+  const text = show(value);
   const [draft, setDraft] = useState(text);
   // The committed value can change from outside the field — a link opened, a criterion cleared — and
   // the draft has to follow it. Adjusted during render rather than in an effect, which is React's
@@ -135,12 +140,13 @@ function NumberField({
     const parsed = numberOrNull(raw);
     // Re-render the field from the parsed value, so an unparseable entry visibly falls back to what
     // is actually in force rather than sitting there looking like a criterion.
-    setDraft(parsed === null ? "" : String(parsed));
+    setDraft(show(parsed));
     if (parsed !== value) onCommit(parsed);
   };
 
   return (
     <NumericInput
+      kind={kind}
       aria-label={ariaLabel}
       style={NUMBER_STYLE}
       placeholder={placeholder}
@@ -160,6 +166,7 @@ function NumberField({
 /** A `min`–`max` pair. Both bounds are optional and either stands alone, which is what makes a
  *  target a *range* rather than a number to hit exactly (#758). */
 function RangeField({
+  kind,
   label,
   min,
   max,
@@ -167,6 +174,7 @@ function RangeField({
   placeholderMin = "min",
   placeholderMax = "max",
 }: {
+  kind: "amount" | "number";
   label: string;
   min: number | null;
   max: number | null;
@@ -178,6 +186,7 @@ function RangeField({
     <Field label={label}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
         <NumberField
+          kind={kind}
           ariaLabel={`${label} minimum`}
           placeholder={placeholderMin}
           value={min}
@@ -185,6 +194,7 @@ function RangeField({
         />
         <span style={{ color: "var(--color-text-muted)" }}>–</span>
         <NumberField
+          kind={kind}
           ariaLabel={`${label} maximum`}
           placeholder={placeholderMax}
           value={max}
@@ -420,6 +430,7 @@ export function LotBuilderPanel({
             </Field>
 
             <RangeField
+              kind="number"
               label="Issued years"
               min={criteria.yearFrom}
               max={criteria.yearTo}
@@ -466,6 +477,7 @@ export function LotBuilderPanel({
                 and the readout below says how many there are. */}
             <Field label="Max value per copy">
               <NumberField
+                kind="amount"
                 ariaLabel="Per-copy catalogue-value ceiling"
                 placeholder="any"
                 value={criteria.maxCatalogValue}
@@ -501,6 +513,7 @@ export function LotBuilderPanel({
           />
           <div style={CONTROL_ROW}>
             <RangeField
+              kind="number"
               label="Pieces"
               min={criteria.countMin}
               max={criteria.countMax}
@@ -512,6 +525,7 @@ export function LotBuilderPanel({
               }
             />
             <RangeField
+              kind="amount"
               label="Catalogue value"
               min={criteria.valueMin}
               max={criteria.valueMax}
@@ -524,6 +538,7 @@ export function LotBuilderPanel({
             />
             <Field label="Max copies per stamp">
               <NumberField
+                kind="number"
                 ariaLabel="How many copies of one stamp the lot may hold"
                 placeholder="no cap"
                 value={criteria.maxPerStamp}

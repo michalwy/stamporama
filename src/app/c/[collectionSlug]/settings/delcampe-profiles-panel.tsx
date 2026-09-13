@@ -689,6 +689,7 @@ function DelcampeProfileDialog({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
               <div>
                 <NumericInput
+                  kind="amount"
                   id="delcampe-profile-step-below"
                   value={stepBelow}
                   onChange={(e) => setStepBelow(e.currentTarget.value)}
@@ -699,6 +700,7 @@ function DelcampeProfileDialog({
               </div>
               <div>
                 <NumericInput
+                  kind="amount"
                   id="delcampe-profile-threshold"
                   value={threshold}
                   onChange={(e) => setThreshold(e.currentTarget.value)}
@@ -709,6 +711,7 @@ function DelcampeProfileDialog({
               </div>
               <div>
                 <NumericInput
+                  kind="amount"
                   id="delcampe-profile-step-above"
                   value={stepAtOrAbove}
                   onChange={(e) => setStepAtOrAbove(e.currentTarget.value)}

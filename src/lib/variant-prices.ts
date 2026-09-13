@@ -18,6 +18,7 @@ import {
 import { unpricedVariantCells, type CoverageVariant } from "./variant-price-coverage";
 import type { RawCatalogPrice } from "./catalog-price";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
+import { roundAmount } from "./decimal-input";
 
 // The variant price grid (#618): a grid over a **tree**, because that is the shape of the source.
 //
@@ -585,7 +586,7 @@ export async function setVariantCatalogPrice(
     return;
   }
   const data = {
-    price: write.amount.toFixed(2),
+    price: roundAmount(write.amount),
     currency: edition.catalogName.currency,
   };
   if (existing) {

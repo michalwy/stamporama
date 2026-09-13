@@ -11,6 +11,7 @@ import {
 import type { CopyValuation } from "./valuation";
 import { buildVendorCatalogMap, getCollectionBaseCurrency } from "./pricing";
 import { getOrFetchRate } from "./exchange-rates";
+import { roundAmount } from "./decimal-input";
 import { readCollectionAreas } from "./areas";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { isUnknownVariantStamp } from "./variant-classification";
@@ -888,7 +889,7 @@ export async function setTradeLineValue(
       if (!Number.isFinite(input.manualValue) || input.manualValue < 0) {
         throw new Error("A manual value cannot be negative.");
       }
-      data.manualValue = new Prisma.Decimal(input.manualValue.toFixed(2));
+      data.manualValue = new Prisma.Decimal(roundAmount(input.manualValue));
     }
   }
   if (input.catalogVendorId !== undefined) {

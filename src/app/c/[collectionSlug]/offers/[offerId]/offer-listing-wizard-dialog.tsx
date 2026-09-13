@@ -402,6 +402,7 @@ export function OfferListingWizardDialog({
               </h3>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
                 <NumericInput
+                  kind="amount"
                   value={draft}
                   onChange={(e) => setDraft(e.currentTarget.value)}
                   onBlur={commitPrice}

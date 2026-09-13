@@ -11,6 +11,8 @@
 // up, a dot on the way back down) is the export's own business (#610); this module answers *what*
 // the row says, never how it is spelled.
 
+import { roundAmount } from "./decimal-input";
+
 /** How long a **fixed-price** listing runs before it renews itself, in days, and how many times it
  *  may. Delcampe's shop-stock behaviour: a listing that simply stays up until it sells. An auction
  *  takes its own two figures from the profile's auction group instead (#620), which is seeded with
@@ -143,8 +145,9 @@ function requireAmount(value: number, field: string): number {
     throw new Error(`${field} must be an amount of 0 or more.`);
   }
   // Delcampe's file carries two decimals, and a third one stored here would be silently rounded on
-  // the way out — a figure that reads one way in Settings and another in the upload.
-  return Math.round(value * 100) / 100;
+  // the way out — a figure that reads one way in Settings and another in the upload. Half up, as the
+  // field itself rounds (#1231).
+  return Number(roundAmount(value));
 }
 
 /**

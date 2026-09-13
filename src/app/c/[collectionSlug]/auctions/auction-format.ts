@@ -109,18 +109,3 @@ export function fromBase(typed: string, rate: number | null): string | null {
   if (!Number.isFinite(n) || n < 0) return null;
   return (n / rate).toFixed(2);
 }
-
-/**
- * An amount as it is *stored*: two decimals, always. `40` becomes `40.00`, `20,5` becomes `20.50`.
- *
- * Used the moment a figure is committed — a field left, an inline edit confirmed — so what the
- * collector sees is already what the database will hold, rather than their own keystrokes waiting
- * to be rewritten by the next fetch. Blank stays blank (an unrecorded amount is not zero), and
- * anything unparseable is left exactly as typed for the server to reject with a message.
- */
-export function formatAmountInput(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  const n = Number(trimmed.replace(/,/g, "."));
-  return Number.isFinite(n) && n >= 0 ? n.toFixed(2) : raw;
-}

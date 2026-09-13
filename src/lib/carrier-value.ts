@@ -1,4 +1,4 @@
-import { normalizeDecimalInput } from "./decimal-input";
+import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 import { isMultiStampCount } from "./multi-stamp";
 import type { CopyValuation, ExplicitValue } from "./valuation";
 
@@ -182,5 +182,5 @@ export function parseExplicitValueInput(
   if (n > MAX_EXPLICIT_VALUE) return { ok: false, message: "The value is too large." };
   const currency = currencyRaw.trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, message: "Choose a currency." };
-  return { ok: true, value: { amount: n.toFixed(2), currency } };
+  return { ok: true, value: { amount: roundAmount(n), currency } };
 }

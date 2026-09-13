@@ -279,6 +279,7 @@ export function useLotOutcomeActions(
                   What it went for ({lot.currency})
                 </label>
                 <NumericInput
+                  kind="amount"
                   id="lot-final-price"
                   data-autofocus-select
                   value={finalPrice}

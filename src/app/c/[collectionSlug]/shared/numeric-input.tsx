@@ -1,7 +1,11 @@
 "use client";
 
 import { forwardRef } from "react";
-import { normalizeDecimalInput, sanitizeDecimalInput } from "@/lib/decimal-input";
+import {
+  formatAmountInput,
+  normalizeDecimalInput,
+  sanitizeDecimalInput,
+} from "@/lib/decimal-input";
 
 /**
  * A decimal amount field that accepts both "," and "." as the decimal separator, regardless of
@@ -15,14 +19,31 @@ import { normalizeDecimalInput, sanitizeDecimalInput } from "@/lib/decimal-input
  * fails validation like any other unparseable amount. The same evaluation runs server-side
  * (`normalizeDecimalInput`), which covers a form submitted before the field was ever blurred.
  *
+ * **`kind` is required**, so no field can skip the question (#1231). An `"amount"` — money of any
+ * sort — is shown at exactly two decimal places the moment the collector leaves it, by Tab, a click
+ * elsewhere or Enter (`formatAmountInput`); a `"number"` — a percentage, a quantity — is only
+ * evaluated. Nothing is rewritten while the field is still being typed in.
+ *
  * Drop-in for the money `<input>`s across the app: it forwards every input prop and calls through
  * the given `onChange` after rewriting the DOM value, so it works both controlled
  * (`value`/`onChange`) and uncontrolled (`name`/`defaultValue`, read back via `FormData`).
  */
 export const NumericInput = forwardRef<
   HTMLInputElement,
-  Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">
->(function NumericInput({ onChange, onBlur, inputMode = "decimal", ...rest }, ref) {
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & { kind: "amount" | "number" }
+>(function NumericInput({ kind, onChange, onBlur, onKeyDown, inputMode = "decimal", ...rest }, ref) {
+  // Rewrites the field to what leaving it means, and tells a controlled parent: a blur or key event
+  // carries the same target, so the parent reads the new value off it exactly as it would from a
+  // change — without this the state keeps the keystrokes while the DOM shows the result.
+  const settle = (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    const settled = kind === "amount" ? formatAmountInput(el.value) : normalizeDecimalInput(el.value);
+    if (settled !== el.value) {
+      el.value = settled;
+      onChange?.(e as unknown as React.ChangeEvent<HTMLInputElement>);
+    }
+  };
+
   return (
     <input
       {...rest}
@@ -42,15 +63,15 @@ export const NumericInput = forwardRef<
         }
         onChange?.(e);
       }}
+      onKeyDown={(e) => {
+        // Enter is leaving the field too, and it often submits the form without a blur ever
+        // happening — so the amount is settled first, before the caller's handler or the submit
+        // reads it.
+        if (kind === "amount" && e.key === "Enter") settle(e);
+        onKeyDown?.(e);
+      }}
       onBlur={(e) => {
-        const el = e.currentTarget;
-        const evaluated = normalizeDecimalInput(el.value);
-        if (evaluated !== el.value) {
-          el.value = evaluated;
-          // A blur event carries the same target, so a controlled parent reads the new value off
-          // it exactly as it would from a change — without this the state keeps the expression.
-          onChange?.(e as unknown as React.ChangeEvent<HTMLInputElement>);
-        }
+        settle(e);
         onBlur?.(e);
       }}
     />

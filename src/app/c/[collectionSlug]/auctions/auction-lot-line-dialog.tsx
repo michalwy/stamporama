@@ -359,6 +359,7 @@ export function AuctionLotLineDialog({
             <div style={{ width: "7rem", flexShrink: 0 }}>
               <LabelWithError htmlFor="lot-line-quantity">Quantity</LabelWithError>
               <NumericInput
+                kind="number"
                 id="lot-line-quantity"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}

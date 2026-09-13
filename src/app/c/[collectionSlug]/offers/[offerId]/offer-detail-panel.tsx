@@ -883,7 +883,7 @@ export function OfferDetailPanel({
                   }
                   editable={editable}
                   isPending={isPending}
-                  inputType="number"
+                  inputType="amount"
                   suffix={offer.currency}
                   // A price is retyped whole, never amended in the middle (#329).
                   selectOnEdit
@@ -912,7 +912,7 @@ export function OfferDetailPanel({
                       }
                       editable={editable}
                       isPending={isPending}
-                      inputType="number"
+                      inputType="amount"
                       suffix={offer.currency}
                       selectOnEdit
                       onSave={(v) => patch("startingPrice", v)}

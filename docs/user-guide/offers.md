@@ -133,7 +133,8 @@ gap in your data, not a set worth nothing — and the hover says how many of you
 4. Once you know them, set the **asking price** and paste the **listing URL** **in place** on the
    offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
    asking price accepts either a comma or a period as the decimal separator (`12,50` or `12.50`) — or
-   a small sum such as `12,50*3`, worked out when you leave the field — and
+   a small sum such as `12,50*3`, worked out when you leave the field and shown with two decimal
+   places, like every amount (`12,5` becomes `12.50`) — and
    opens with its current value **selected**, so typing a new one replaces it rather than running into
    it. Once a listing URL is set, its **Listing** link opens the listing when clicked; use the **✎**
    pencil beside it to change the URL. The listing URL stays editable in **every** state — including a

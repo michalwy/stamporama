@@ -340,6 +340,7 @@ export function TradeGiveRequirementDialog({
             <div style={{ width: "7rem", flexShrink: 0 }}>
               <LabelWithError htmlFor="give-requirement-quantity">Quantity</LabelWithError>
               <NumericInput
+                kind="number"
                 id="give-requirement-quantity"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}

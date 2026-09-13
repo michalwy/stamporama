@@ -62,6 +62,7 @@ import {
   type StampAttributeLabels,
 } from "./stamp-attribute-kinds";
 import type { StampSizeFields } from "./stamp-size";
+import { roundAmount } from "./decimal-input";
 import type { Prisma } from "@/generated/prisma/client";
 
 /** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
@@ -2025,7 +2026,7 @@ export async function quickSetCatalogPrices(
     if (!catalog) throw new Error("Catalog not found in this collection.");
     const edition = catalog.catalogEditions[0];
     if (!edition) throw new Error("That catalog has no editions yet.");
-    const priceStr = entry.amount.toFixed(2);
+    const priceStr = roundAmount(entry.amount);
     // The (stamp, edition, condition, cert, format) uniqueness uses NULLS NOT DISTINCT, which
     // Prisma can't target in `upsert`; find-then-write instead.
     const existing = await prisma.stampCatalogPrice.findFirst({

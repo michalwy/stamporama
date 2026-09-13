@@ -30,7 +30,7 @@ import {
 } from "@/lib/lots";
 import type { ArrivingCopy } from "@/lib/want-rules";
 import { parsePhotoChangeSet } from "@/lib/photos";
-import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { normalizeDecimalInput, roundAmount } from "@/lib/decimal-input";
 
 export type PurchaseActionState =
   | { status: "idle" }
@@ -93,7 +93,7 @@ function parseMoney(raw: string): number | null {
   if (!raw) return null;
   const n = Number(normalizeDecimalInput(raw));
   if (!Number.isFinite(n) || n < 0) return null;
-  return Math.round(n * 100) / 100;
+  return Number(roundAmount(n));
 }
 
 const VALID_STATUS = new Set<PurchaseStatus>(["preparing", "in_transit", "arrived"]);

@@ -31,6 +31,10 @@ describe("parsePrice", () => {
   it("accepts a comma decimal separator (#233)", () => {
     assert.deepEqual(parsePrice("3,5"), { ok: true, value: "3.50" });
   });
+  it("rounds a third decimal half up, as the field shows it (#1231)", () => {
+    assert.deepEqual(parsePrice("1.555"), { ok: true, value: "1.56" });
+    assert.deepEqual(parsePrice("1+0,005"), { ok: true, value: "1.01" });
+  });
   it("rejects blank, non-numeric, and negative", () => {
     assert.equal(parsePrice("").ok, false);
     assert.equal(parsePrice("abc").ok, false);

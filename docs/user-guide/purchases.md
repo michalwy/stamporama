@@ -25,6 +25,12 @@ of a number — `1+2`, `12,50*3`, `(4,20+1,80)/2` — and it is worked out for y
 field. If the sum doesn't make sense, the text stays as you typed it and the field is rejected like
 any other bad amount.
 
+When you leave an amount field — Tab, Enter or a click elsewhere — the amount is shown with exactly
+two decimal places: `1.5` becomes `1.50`, `.7` becomes `0.70`, `3` becomes `3.00`, and `1+2,5`
+becomes `3.50`. A third decimal is rounded half up (`1.555` becomes `1.56`), and that rounded figure
+is what gets saved. Nothing changes while you are still typing, and an empty field stays empty —
+*no value* is not the same as *zero*.
+
 The order's line items are managed separately, during **lot intake**:
 
 - **Lots** — the *inventory* lines. A lot is a priced parcel — a single stamp, a whole

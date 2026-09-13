@@ -435,6 +435,7 @@ function DraftFields({
         ))}
       </select>
       <NumericInput
+        kind="amount"
         id={`${idPrefix}-cost`}
         value={cost}
         onChange={(e) => setCost(e.target.value)}

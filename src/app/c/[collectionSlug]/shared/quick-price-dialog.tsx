@@ -419,6 +419,7 @@ export function QuickPriceDialog({
                       </span>
                     </label>
                     <NumericInput
+                      kind="amount"
                       id={`quick-price-${c.catalogNameId}`}
                       ref={c.isPrimary ? primaryInputRef : undefined}
                       name={`amount-${c.catalogNameId}`}

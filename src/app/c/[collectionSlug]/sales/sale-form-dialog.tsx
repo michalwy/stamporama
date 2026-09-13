@@ -425,6 +425,7 @@ export function SaleFormDialog({
               {handlingMode === "direct" ? (
                 <>
                   <NumericInput
+                    kind="amount"
                     id="sale-handling"
                     placeholder="0.00"
                     value={buyerHandling}
@@ -439,6 +440,7 @@ export function SaleFormDialog({
               ) : (
                 <>
                   <NumericInput
+                    kind="amount"
                     id="sale-total-paid"
                     placeholder="0.00"
                     value={totalPaid}
@@ -471,6 +473,7 @@ export function SaleFormDialog({
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="sale-commission">Commission</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="sale-commission"
                 placeholder="0.00"
                 value={commission}
@@ -533,6 +536,7 @@ export function SaleFormDialog({
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="sale-shipping-cost">My shipping</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="sale-shipping-cost"
                 placeholder="0.00"
                 value={shippingCost}

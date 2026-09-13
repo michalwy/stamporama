@@ -1222,6 +1222,7 @@ function RowValue({
       {amount == null ? null : entry ? (
         <>
           <NumericInput
+            kind="amount"
             ref={inputRef}
             aria-label={label}
             value={amount}

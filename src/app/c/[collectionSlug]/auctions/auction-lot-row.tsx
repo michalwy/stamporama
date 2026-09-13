@@ -35,7 +35,8 @@ import {
   OverCeilingChip,
 } from "./auction-badges";
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
-import { formatAmountInput, formatInstant, formatRelative } from "./auction-format";
+import { formatInstant, formatRelative } from "./auction-format";
+import { formatAmountInput } from "@/lib/decimal-input";
 import { AmountWithBase } from "./auction-base-amount";
 import {
   BidRecommendationPopover,
@@ -1114,7 +1115,7 @@ export function AuctionLotRow({
                   <InlineText
                     value={currentBid ?? ""}
                     placeholder="0.00"
-                    inputType="number"
+                    inputType="amount"
                     selectOnEdit
                     editable={editable && !terminal}
                     isPending={isPending}
@@ -1162,7 +1163,7 @@ export function AuctionLotRow({
                   <InlineText
                     value={myBid ?? ""}
                     placeholder="0.00"
-                    inputType="number"
+                    inputType="amount"
                     selectOnEdit
                     editable={editable && !terminal}
                     isPending={isPending}
@@ -1193,7 +1194,7 @@ export function AuctionLotRow({
                   <InlineText
                     value={bidRoom ?? ""}
                     placeholder="0.00"
-                    inputType="number"
+                    inputType="amount"
                     selectOnEdit
                     editable={editable}
                     isPending={isPending}
@@ -1308,7 +1309,7 @@ export function AuctionLotRow({
                   <InlineText
                     value={myAllIn ?? ""}
                     placeholder="0.00"
-                    inputType="number"
+                    inputType="amount"
                     selectOnEdit
                     editable={editable && !terminal}
                     isPending={isPending}
@@ -1332,7 +1333,7 @@ export function AuctionLotRow({
                   <InlineText
                     value={maxBid ?? ""}
                     placeholder="0.00"
-                    inputType="number"
+                    inputType="amount"
                     selectOnEdit
                     editable={editable}
                     isPending={isPending}

@@ -130,6 +130,7 @@ function CarrierSections({
               Value
             </label>
             <NumericInput
+              kind="amount"
               id="carrier-value-amount"
               value={shown.amount}
               onChange={(e) => setDraft({ ...shown, amount: e.target.value })}

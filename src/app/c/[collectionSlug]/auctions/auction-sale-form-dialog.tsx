@@ -12,7 +12,8 @@ import {
 } from "@/lib/auction-rules";
 import type { AuctionSaleRaw } from "@/app/actions/auctions";
 import { useOpenAuctionSale, type AuctionSaleView } from "./use-auctions-query";
-import { formatAmountInput, fromLocalInputValue, toLocalInputValue } from "./auction-format";
+import { fromLocalInputValue, toLocalInputValue } from "./auction-format";
+import { formatAmountInput } from "@/lib/decimal-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -270,6 +271,7 @@ export function AuctionSaleFormDialog({
             <div style={{ ...FIELD_GAP, flex: 1 }}>
               <LabelWithError htmlFor="sale-premium-percent">Buyer&apos;s premium %</LabelWithError>
               <NumericInput
+                kind="number"
                 id="sale-premium-percent"
                 value={premiumPercent}
                 onChange={(e) => setPremiumPercent(e.target.value)}
@@ -281,10 +283,10 @@ export function AuctionSaleFormDialog({
             <div style={{ ...FIELD_GAP, flex: 1 }}>
               <LabelWithError htmlFor="sale-premium-fixed">Lot fee</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="sale-premium-fixed"
                 value={premiumFixed}
                 onChange={(e) => setPremiumFixed(e.target.value)}
-                onBlur={(e) => setPremiumFixed(formatAmountInput(e.target.value))}
                 placeholder="0.00"
                 style={INPUT_STYLE}
               />
@@ -292,10 +294,10 @@ export function AuctionSaleFormDialog({
             <div style={{ ...FIELD_GAP, flex: 1 }}>
               <LabelWithError htmlFor="sale-shipping">Shipping</LabelWithError>
               <NumericInput
+                kind="amount"
                 id="sale-shipping"
                 value={shippingCost}
                 onChange={(e) => setShippingCost(e.target.value)}
-                onBlur={(e) => setShippingCost(formatAmountInput(e.target.value))}
                 placeholder="0.00"
                 style={INPUT_STYLE}
               />
