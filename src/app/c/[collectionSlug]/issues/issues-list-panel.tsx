@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   DialogShell,
   DialogBody,
@@ -44,6 +45,7 @@ import { Icon } from "@/app/icons";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import {
+  issueKeys,
   useIssuesInfinite,
   useIssueYears,
   useIssueAreaFacets,
@@ -58,11 +60,26 @@ import {
   type AddStampParent,
   type ExpandStampSignal,
   type IssueRowCallbacks,
+  type StampTreeSelection,
 } from "./issue-row";
+import { useRowsInView } from "@/app/c/[collectionSlug]/inventory/use-rows-in-view";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import {
+  carriedByTick,
+  describeStampSelection,
+  existingTicks,
+  selectionReach,
+  toggleStampTick,
+} from "@/lib/stamp-tree-selection";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
-import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import {
+  ListToolbar,
+  LIST_BANNER_STYLE,
+  type SortOption,
+  type CatalogVendorOption,
+} from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
 import { tagFilterFromParams, DEFAULT_TAG_FILTER_MODE, type TagFilterOpts } from "@/lib/tag-filter";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
@@ -338,6 +355,78 @@ export function IssuesListPanel({
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
+  /*
+   * Multi-select on the stamp tree (#808), on the Copies list's model (#373, #1021).
+   *
+   * **It lives here, in the panel, and nowhere more durable.** A filter, an area or a year on this
+   * list is a `router.push` to this same screen, which keeps the panel mounted — so the ticks survive
+   * every way of narrowing the list — while leaving for another screen unmounts it, which is what
+   * clears them on navigation. No URL state and no storage: a selection is what the collector is
+   * doing now, not a view to share or come back to.
+   *
+   * **A tick carries the stamp's whole subtree** — every descendant at any depth, variant or distinct
+   * entry — ADR-0048 §7's rule, so that the count on the bar and the stamps a preset write reaches
+   * (#809) are the same set. The reasoning is `stamp-tree-selection.ts`.
+   *
+   * **The bar counts and acts on the ticks in view**; the rest stay ticked and come back when the
+   * filter is released (`ui-patterns.md`). *In view* is what the rows report their trees drawing,
+   * narrowed or folded — the same register the Copies list's groups use. It is never reset on a
+   * filter change, unlike that list's: an issue row narrows its tree synchronously from the filter
+   * it is handed, so a row surviving the change reports its new tree on the same commit rather than
+   * last filter's members, and a reset would drop the reports of rows whose tree did not change —
+   * they would never send them again.
+   */
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
+  const { inView: stampsInView, register: registerStampsInView } = useRowsInView("issues");
+  const askedIds = useMemo(() => [...ticked].sort(), [ticked]);
+  // Which ticks still exist, and what each carries. Keyed under the issues prefix, so every write on
+  // this screen that already refreshes the tree (`invalidateStampsAndIssues`) re-asks it too — a
+  // stamp deleted or given a new child changes the answer. The previous answer stands in while the
+  // next loads, and `existingTicks` / `selectionReach` both refuse to read it about an id it was
+  // never asked about.
+  const { data: selectionData } = useQuery({
+    queryKey: [...issueKeys.all(collectionId), "selection-subtrees", askedIds],
+    enabled: askedIds.length > 0,
+    placeholderData: (previous) => previous,
+    queryFn: async () => {
+      const { getStampSelectionSubtreesAction } = await import("@/app/actions/stamps");
+      return getStampSelectionSubtreesAction(collectionId, askedIds);
+    },
+  });
+  const selectionAnswer = askedIds.length > 0 ? selectionData : undefined;
+  const tickedStamps = useMemo(
+    () => existingTicks([...ticked], selectionAnswer),
+    [ticked, selectionAnswer]
+  );
+  const tickedInView = useMemo(
+    () => tickedStamps.filter((id) => stampsInView.has(id)),
+    [tickedStamps, stampsInView]
+  );
+  const selectionReached = useMemo(
+    () => selectionReach(tickedInView, selectionAnswer?.subtrees),
+    [tickedInView, selectionAnswer]
+  );
+  const carriedStamps = useMemo(
+    () => carriedByTick(tickedInView, selectionAnswer?.subtrees),
+    [tickedInView, selectionAnswer]
+  );
+  const selectionWording = describeStampSelection(
+    tickedStamps.length,
+    tickedInView.length,
+    selectionReached?.size ?? null
+  );
+  /** Clearing is the collector's own act and clears everything, hidden ticks included. */
+  const clearTicks = useCallback(() => setTicked(new Set()), []);
+  const stampSelection = useMemo<StampTreeSelection>(
+    () => ({
+      ticked,
+      carried: carriedStamps,
+      onToggle: (stampId, absorbed) => setTicked((prev) => toggleStampTick(prev, stampId, absorbed)),
+      registerInView: registerStampsInView,
+    }),
+    [ticked, carriedStamps, registerStampsInView]
+  );
+
   function openDialog(d: DialogState) {
     setActionState({ status: "idle" });
     setAutoExpandIssueId(null);
@@ -529,6 +618,50 @@ export function IssuesListPanel({
             rememberCatalogVendor(vid);
             updateParams({ catalogVendorId: vid, catalogNumber: num });
           }}
+          /* The stamp selection's bar (#808), the Copies list's shape (#1021): up while anything is
+             ticked — with every tick hidden it reads `0 of 5` and keeps only Clear, the one control
+             still reaching them — naming the ticks in view, the subtree they carry, and what became
+             of the rest. */
+          footer={
+            tickedStamps.length > 0 ? (
+              <div style={LIST_BANNER_STYLE}>
+                <span
+                  style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-accent)" }}
+                >
+                  {selectionWording.headline}
+                </span>
+                {selectionWording.reach && (
+                  <Tooltip content="A ticked stamp brings all its variants and child stamps with it, at any depth.">
+                    <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                      {selectionWording.reach}
+                    </span>
+                  </Tooltip>
+                )}
+                {selectionWording.hidden && (
+                  <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                    {selectionWording.hidden}
+                  </span>
+                )}
+                <Tooltip content={selectionWording.clearHint}>
+                  <button
+                    type="button"
+                    onClick={clearTicks}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-secondary)",
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Clear
+                  </button>
+                </Tooltip>
+              </div>
+            ) : undefined
+          }
         >
           <button
             type="button"
@@ -660,6 +793,7 @@ export function IssuesListPanel({
                   displayFormatId={displayFormatId}
                   formats={formats}
                   stampFilter={stampFilter}
+                  selection={stampSelection}
                 />
               );
             })}

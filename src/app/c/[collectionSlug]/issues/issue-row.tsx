@@ -67,6 +67,11 @@ import {
 import { useAddWantAction } from "@/app/c/[collectionSlug]/wants/use-add-want-action";
 import { useAddIssueWantsAction } from "@/app/c/[collectionSlug]/wants/use-add-issue-wants-action";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import {
+  useReportRowsInView,
+  type RowsInView,
+} from "@/app/c/[collectionSlug]/inventory/use-rows-in-view";
+import { descendantsAmongMembers, stampIdsInTree } from "@/lib/stamp-tree-selection";
 import { Icon } from "@/app/icons";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
@@ -130,6 +135,11 @@ interface StampTreeNodeProps {
   reorder: StampTreeReorder | null;
   /** This row's place in its sibling group's drag list, or null when it cannot move. */
   drag: StampNodeDragProps | null;
+  /** The list's stamp selection (#808), or null where the tree carries none. */
+  selection: StampTreeSelection | null;
+  /** True when a stamp above this one in the tree is ticked, so this one is carried with it. */
+  ancestorSelected: boolean;
+  onToggleTick: (stampId: string) => void;
 }
 
 function StampTreeNode({
@@ -158,6 +168,9 @@ function StampTreeNode({
   narrowed,
   reorder,
   drag,
+  selection,
+  ancestorSelected,
+  onToggleTick,
 }: StampTreeNodeProps) {
   const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
@@ -165,6 +178,12 @@ function StampTreeNode({
   const reordering = !!reorder;
   const indent = `${depth * 1.25}rem`;
   const isContextOnly = contextIds.has(node.stampId);
+  // A tick carries the whole subtree (#808, ADR-0048 §7). *Carried* is read two ways that agree: the
+  // tree itself for an ancestor drawn above this row, and the server's walk for one in another issue
+  // — a variant whose base belongs elsewhere is drawn as a root here, with its parent off this tree.
+  const ticked = selection?.ticked.has(node.stampId) ?? false;
+  const carried = ancestorSelected || (selection?.carried.has(node.stampId) ?? false);
+  const selected = ticked || carried;
 
   // Expansion is *derived*, never a setState-in-effect: a node is open when it just gained a
   // sub-stamp (#359), when a filter narrowed the tree around it (#631), or when the collector
@@ -297,7 +316,13 @@ function StampTreeNode({
         style={{
           padding: `0.4rem 1rem 0.55rem calc(0.5rem + ${indent})`,
           fontSize: "0.8125rem",
-          background: hovered ? "var(--color-bg-row-hover)" : undefined,
+          // A selected stamp leads, as a ticked copy does on the Copies list: it is what the bar is
+          // about to act on — and a carried one is shaded too, because it will be acted on as well.
+          background: hovered
+            ? "var(--color-bg-row-hover)"
+            : selected && selection
+              ? "var(--color-accent-soft)"
+              : undefined,
           transition: "background 0.1s ease",
           borderBottom: isLast ? undefined : "1px solid var(--color-border)",
           // Context, not a member of the filtered set — legible enough to read the number off,
@@ -334,6 +359,30 @@ function StampTreeNode({
             </button>
           ) : (
             <span style={{ width: "0.875rem", flexShrink: 0 }} />
+          )}
+
+          {/* The selection box (#808), after the caret so it indents with the node: a child's box
+              sits under its parent's, which is the shape a tick carries. A carried stamp is drawn
+              ticked and locked, and says why on hover — the rule shown where it acts. Put away while
+              reordering, where the grip is what the row is for; the ticks stay. */}
+          {selection && !reordering && (
+            <Tooltip
+              content={
+                carried
+                  ? "Selected with the ticked stamp above it — a ticked stamp brings all its variants and child stamps with it."
+                  : ""
+              }
+              style={{ alignSelf: "center", flexShrink: 0 }}
+            >
+              <input
+                type="checkbox"
+                checked={selected}
+                disabled={carried}
+                onChange={() => onToggleTick(node.stampId)}
+                aria-label={carried ? "Selected with the stamp above it" : "Select this stamp"}
+                style={{ margin: 0, cursor: carried ? "default" : "pointer" }}
+              />
+            </Tooltip>
           )}
 
           {/* Catalog-level photo of this stamp (#137) as a left column, so the row reads as
@@ -431,6 +480,9 @@ function StampTreeNode({
               narrowed={narrowed}
               reorder={reorder}
               drag={childDrag}
+              selection={selection}
+              ancestorSelected={selected}
+              onToggleTick={onToggleTick}
             />
           )}
         />
@@ -438,6 +490,24 @@ function StampTreeNode({
     </>
   );
 }
+
+/**
+ * The Issues list's stamp selection (#808), handed to every row. The panel owns it — a selection
+ * spans issues — and a row only draws it and reports which stamps it is showing.
+ */
+export interface StampTreeSelection {
+  /** Every ticked stamp, filter or no filter. */
+  ticked: ReadonlySet<string>;
+  /** Stamps below an in-view tick, from the server's walk — drawn ticked and locked. */
+  carried: ReadonlySet<string>;
+  /** Tick or untick one stamp; `absorbed` is what a tick on a parent takes over (its descendants
+   *  in this issue), so the branch clears with the click that visibly clears it. */
+  onToggle: (stampId: string, absorbed: string[]) => void;
+  /** Where a row reports the stamps its tree is drawing, for the bar's *in view* count. */
+  registerInView: RowsInView["register"];
+}
+
+const NO_REGISTER: RowsInView["register"] = () => {};
 
 // ── IssueRow ────────────────────────────────────────────────────────────────
 
@@ -494,6 +564,8 @@ interface IssueRowProps {
    *  search and the catalog number. Where the row's own header does not account for it, the tree
    *  is narrowed to the stamps that do; area and year are the issue's own and are not here. */
   stampFilter?: StampFilterQuery;
+  /** The list's stamp selection (#808); absent draws no boxes. */
+  selection?: StampTreeSelection;
 }
 
 export function IssueRow({
@@ -514,6 +586,7 @@ export function IssueRow({
   displayFormatId,
   formats,
   stampFilter,
+  selection,
 }: IssueRowProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
   const [hovered, setHovered] = useState(false);
@@ -577,6 +650,14 @@ export function IssueRow({
     effectiveChecklistIds,
     effectiveMatchedIds
   );
+
+  // The stamps this row is drawing, reported for the bar's *in view* count (#808). The narrowed tree
+  // and not the members: a stamp the checklist chips or the list's search hid is ticked and out of
+  // view, exactly as a copy under a chip is. A collapsed issue or node still reports what it holds —
+  // a fold is not a filter (`ui-patterns.md`) — and an issue never expanded holds nothing yet.
+  useReportRowsInView(selection?.registerInView ?? NO_REGISTER, stampIdsInTree(stampTree));
+  const toggleTick = (stampId: string) =>
+    selection?.onToggle(stampId, descendantsAmongMembers(loadedMembers, stampId));
 
   const addCopy = useInventoryAddAction({
     collectionId,
@@ -1091,6 +1172,9 @@ export function IssueRow({
                   narrowed={!!effectiveMatchedIds}
                   reorder={treeReorder.reorder}
                   drag={drag}
+                  selection={selection ?? null}
+                  ancestorSelected={false}
+                  onToggleTick={toggleTick}
                 />
                 )}
               />

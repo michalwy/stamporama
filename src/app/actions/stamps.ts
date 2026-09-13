@@ -42,6 +42,8 @@ import type { StampMarketValue } from "@/lib/market-values";
 import { getStampEstimatedValue } from "@/lib/estimated-values";
 import type { StampEstimatedValue } from "@/lib/estimated-values";
 import { getStampPurchaseCosts } from "@/lib/purchase-costs";
+import { getStampSelectionSubtrees } from "@/lib/stamp-selection";
+import type { StampSelectionAnswer } from "@/lib/stamp-tree-selection";
 import type { StampPurchaseCosts } from "@/lib/purchase-costs";
 import type {
   CatalogPriceInput,
@@ -594,4 +596,15 @@ export async function getStampPurchaseCostsAction(
 ): Promise<StampPurchaseCosts> {
   const session = await getSession();
   return getStampPurchaseCosts(session.user.id, stampId);
+}
+
+/** What a selection on the Issues list's stamp tree reaches (#808): which ticked stamps still exist,
+ * and every stamp below each at any depth — the subtree a tick carries, on ADR-0048 §7's walk. Read
+ * whenever the ticks change; nothing is stored, the selection being the screen's own state. */
+export async function getStampSelectionSubtreesAction(
+  collectionId: string,
+  stampIds: string[]
+): Promise<StampSelectionAnswer> {
+  const session = await getSession();
+  return getStampSelectionSubtrees(session.user.id, collectionId, stampIds);
 }
