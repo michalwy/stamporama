@@ -11,6 +11,7 @@ import {
   runPriceSubjects,
   runValueSlots,
   runValueTabTarget,
+  tilesOnUmbrella,
   treeOrder,
   type RunCopyDetails,
   type RunMember,
@@ -161,6 +162,35 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
 
     it("says nothing is repeated when nothing is, and ignores the tiles with no stamp", () => {
       assert.equal(repeatedStamps(assignInTurn(["t1", "t2", "t3"], ["s1"])).size, 0);
+    });
+  });
+
+  describe("tiles on an umbrella rather than a final variant (#1247)", () => {
+    // "u" has variants of its own; "u-a" is one of them and has sub-variants, so it is an umbrella
+    // too; "u-a-1" and "plain" have none.
+    const umbrellas = new Set(["u", "u-a"]);
+    const isUmbrella = (id: string) => umbrellas.has(id);
+
+    it("marks a tile on a stamp with variants, including a variant with sub-variants, and no other", () => {
+      const run = assignInTurn(["t1", "t2", "t3", "t4"], ["u", "plain", "u-a", "u-a-1"]);
+      assert.deepEqual([...tilesOnUmbrella(run, isUmbrella)], ["t1", "t3"]);
+    });
+
+    it("follows corrections: onto a final variant clears the mark, onto an umbrella sets it", () => {
+      const run = assignInTurn(
+        ["t1", "t2"],
+        ["u", "plain"],
+        new Map([
+          ["t1", "u-a-1"],
+          ["t2", "u"],
+        ])
+      );
+      assert.deepEqual([...tilesOnUmbrella(run, isUmbrella)], ["t2"]);
+    });
+
+    it("ignores a tile with no stamp", () => {
+      const run = assignInTurn(["t1", "t2"], ["u"]);
+      assert.deepEqual([...tilesOnUmbrella(run, isUmbrella)], ["t1"]);
     });
   });
 

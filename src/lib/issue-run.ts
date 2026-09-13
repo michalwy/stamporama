@@ -192,6 +192,27 @@ export function repeatedStamps(assignments: readonly RunAssignment[]): Set<strin
   return repeated;
 }
 
+/**
+ * The tiles on an **umbrella** — a stamp with variants of its own, at any depth — rather than on a
+ * final variant (#1247). A run built on a checklist lands on umbrellas easily, since checklists hold
+ * them, and a row on one looks exactly like a row on a variant.
+ *
+ * **A signal, never a block**: a copy of an umbrella is a legitimate unknown-variant copy (#130), and
+ * sometimes the picture cannot tell the variant. What this changes is that the collector sees the
+ * decision before *Identify* makes it. Re-derived from the assignments, so a correction onto a final
+ * variant clears the tile at once and one onto an umbrella marks it.
+ *
+ * `isUmbrella` answers for a stamp id; a stamp not read yet answers false.
+ */
+export function tilesOnUmbrella(
+  assignments: readonly RunAssignment[],
+  isUmbrella: (stampId: string) => boolean
+): Set<string> {
+  return new Set(
+    assignments.filter((a) => a.stampId != null && isUmbrella(a.stampId)).map((a) => a.tileId)
+  );
+}
+
 /** The tiles that stop the pass: still in the run with no stamp. Empty is the only state in which
  * anything is created. */
 export function runBlockers(assignments: readonly RunAssignment[]): string[] {

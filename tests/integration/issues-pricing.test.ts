@@ -353,6 +353,18 @@ describe("issue headline price rolls up from variants (#238)", () => {
     assert.equal(plain?.mainCatalogPriceUncertain, false);
   });
 
+  it("member node: says which stamps are umbrellas, an intermediate one included (#1247)", async () => {
+    const members = await listIssueMembers(userId, collectionId, issueId);
+    const umbrella = (id: string | undefined) => members.find((n) => n.stampId === id)?.isUmbrella;
+    assert.equal(umbrella(umbrellaId), true);
+    assert.equal(umbrella(midId), true);
+    // The final variants "10aI" and "10b" have none of their own.
+    const leafIds = members.filter((n) => n.name === "10aI" || n.name === "10b").map((n) => n.stampId);
+    assert.equal(leafIds.length, 2);
+    for (const id of leafIds) assert.equal(umbrella(id), false);
+    assert.equal(umbrella(plainId), false);
+  });
+
   it("issue total: sums the rolled-up umbrella price and flags the estimate", async () => {
     const { items } = await listIssuesPaginated(userId, collectionId, {});
     const t = items.find((i) => i.id === issueId)?.checklists[0]?.priceTotal;

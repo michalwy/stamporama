@@ -29,6 +29,7 @@ import {
   runPriceSubjects,
   runValueSlots,
   runValueTabTarget,
+  tilesOnUmbrella,
   RUN_DETAIL_FIELDS,
   type IssueRunIdentification,
   type RunCopyDetails,
@@ -51,7 +52,7 @@ import {
   ThumbPreview,
 } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
-import { CREATE_LINK_STYLE } from "./chip-styles";
+import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
 import { NumericInput } from "./numeric-input";
 import { StampDetailLine, StampTitle } from "./issue-view";
 import { StampFormDialog } from "./stamp-form-dialog";
@@ -144,6 +145,34 @@ const MUTED: React.CSSProperties = {
   margin: 0,
   fontSize: "0.75rem",
   color: "var(--color-text-muted)",
+};
+
+/** A run row's warning flag (#1247) — the row chip in the warning hue, as the trade line's *unknown
+ * variant* flag wears it. A flag rather than a tint, since the row's colour is its selection. */
+const WARNING_FLAG: React.CSSProperties = {
+  ...ROW_CHIP,
+  flexShrink: 0,
+  padding: "0 0.375rem",
+  fontSize: "0.6875rem",
+  color: "var(--color-warning)",
+  borderColor: "var(--color-warning-border, var(--color-border))",
+};
+
+/** Taking a tile out of the run (#1246): a bare × that takes only an icon's room, where a secondary
+ * button drew a box as large as the value field and read as a second input. Out of the Tab order, so
+ * Tab goes from one row's value straight to the next (#1223). */
+const TAKE_OUT_BUTTON: React.CSSProperties = {
+  flexShrink: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "0.125rem",
+  border: "none",
+  background: "none",
+  borderRadius: "0.25rem",
+  color: "var(--color-text-muted)",
+  cursor: "pointer",
+  lineHeight: 1,
 };
 
 export function IssueRunDialog({
@@ -245,6 +274,9 @@ export function IssueRunDialog({
     corrections
   );
   const repeated = repeatedStamps(assignments);
+  /** Tiles on a stamp with variants of its own rather than a final variant (#1247) — flagged, never
+   * refused: a copy of an umbrella is a legitimate unknown-variant copy. */
+  const onUmbrella = tilesOnUmbrella(assignments, (id) => memberById.get(id)?.isUmbrella ?? false);
   const blockers = runBlockers(assignments);
   const turnOf = new Map(inRun.map((p, i) => [p.tileId, i + 1]));
 
@@ -560,6 +592,20 @@ export function IssueRunDialog({
 
   const activeOwn = active ? (overrides.get(active.tileId) ?? {}) : {};
 
+  /** Whether the run's values note is drawn, which the umbrella count then sits beside. */
+  const valuesNoteShown =
+    priceSubjects.length > 0 &&
+    !(prices.isLoading || (prices.isFetching && valueKeys.length === 0)) &&
+    !prices.isError &&
+    valueKeys.length > 0;
+  const umbrellaNote =
+    onUmbrella.size > 0 ? (
+      <span style={{ color: "var(--color-warning)" }}>
+        {" "}
+        {onUmbrella.size} on an umbrella.
+      </span>
+    ) : null;
+
   return (
     <>
       <DialogShell
@@ -752,11 +798,15 @@ export function IssueRunDialog({
                         {valuesMissing} {valuesMissing === 1 ? "has" : "have"} no value yet.
                       </span>
                     )}
+                    {umbrellaNote}
                   </p>
                 )
               ) : assignments.some((a) => a.stampId) && withoutCondition.length > 0 ? (
                 <p style={MUTED}>Choose a condition to record the run&rsquo;s catalog values.</p>
               ) : null}
+              {/* Where the values note is not drawn, the umbrella count still is — at the top, so a
+                  long run need not be scrolled to find them (#1247). */}
+              {!valuesNoteShown && umbrellaNote && <p style={MUTED}>{umbrellaNote}</p>}
               {!membersLoading && checklist && sequence.length === 0 && (
                 <p style={{ ...MUTED, color: "var(--color-warning)" }}>
                   This checklist has no stamps yet. Add them, and the tiles take them in turn.
@@ -849,8 +899,15 @@ export function IssueRunDialog({
                       </span>
                       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                         {a.stampId ? (
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {label}
+                          <span style={{ display: "flex", alignItems: "center", gap: "0.375rem", minWidth: 0 }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {label}
+                            </span>
+                            {onUmbrella.has(a.tileId) && (
+                              <Tooltip content="This stamp has variants of its own. Pick the variant the tile is, or Identify creates an unknown-variant copy.">
+                                <span style={WARNING_FLAG}>umbrella</span>
+                              </Tooltip>
+                            )}
                           </span>
                         ) : (
                           <span style={{ color: "var(--color-error)" }}>No stamp</span>
@@ -910,10 +967,17 @@ export function IssueRunDialog({
                         if (slot.key) tabThroughValues(e, slot.key);
                       }}
                     />
-                    <Tooltip content="Take this tile out of the run — it stays ticked on the card">
-                      <DialogSecondaryButton onClick={() => takeOut(a.tileId)} disabled={isPending}>
-                        <Icon name="remove" size="sm" />
-                      </DialogSecondaryButton>
+                    <Tooltip content="Take this tile out of the run — nothing is deleted, and it stays ticked on the card">
+                      <button
+                        type="button"
+                        onClick={() => takeOut(a.tileId)}
+                        disabled={isPending}
+                        tabIndex={-1}
+                        aria-label={`Take #${i + 1} out of the run`}
+                        style={{ ...TAKE_OUT_BUTTON, cursor: isPending ? "not-allowed" : "pointer" }}
+                      >
+                        <Icon name="close" size="sm" />
+                      </button>
                     </Tooltip>
                   </div>
                 );
