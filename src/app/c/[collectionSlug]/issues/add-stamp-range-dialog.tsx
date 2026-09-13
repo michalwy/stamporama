@@ -5,7 +5,9 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DialogSecondaryButton,
 } from "@/app/dialog-shell";
+import { Icon } from "@/app/icons";
 import {
   resolveCatalogRange,
   formatSchemeValue,
@@ -18,6 +20,9 @@ import type {
   CatalogDuplicateGroup,
   DuplicateCatalogMode,
 } from "@/lib/duplicate-catalog";
+import type { StampSizePresetData } from "@/lib/stamp-size-presets";
+import { stampSizePresetPair } from "@/lib/stamp-size-preset-rules";
+import { StampSizePresetPicker } from "../shared/stamp-size-preset-picker";
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -102,6 +107,13 @@ export function AddStampRangeDialog({
       ])
     )
   );
+
+  // The size every created stamp is born with (#807; ADR-0048), or none. **Blank by default**, so a
+  // collector who ignores the control gets exactly the dialog this was before presets. No preview
+  // and no overwrite choice: every stamp here is new, so there is nothing to count and nothing to
+  // skip — the apply dialog's confirmation would be noise.
+  const [sizePreset, setSizePreset] = useState<StampSizePresetData | null>(null);
+  const [presetPickerOpen, setPresetPickerOpen] = useState(false);
 
   function update(vendorId: string, patch: Partial<VendorRow>) {
     setRows((prev) => ({ ...prev, [vendorId]: { ...prev[vendorId], ...patch } }));
@@ -192,7 +204,12 @@ export function AddStampRangeDialog({
   })();
 
   return (
-    <DialogShell title="Add stamp range" onClose={onClose} minHeight="24rem">
+    <DialogShell
+      title="Add stamp range"
+      onClose={onClose}
+      minHeight="24rem"
+      dismissable={!presetPickerOpen}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -297,6 +314,50 @@ export function AddStampRangeDialog({
                 );
               })}
 
+              {/* Size preset (#807) — optional; only the stamps this dialog creates get it. */}
+              <div style={{ marginTop: "0.25rem" }}>
+                <div
+                  style={{
+                    marginBottom: "0.25rem",
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-muted)",
+                    fontWeight: 600,
+                  }}
+                >
+                  Size <span style={{ fontWeight: 400 }}>(optional)</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <StampSizePresetPicker
+                    collectionId={collectionId}
+                    selectedId={sizePreset?.id ?? null}
+                    triggerLabel={sizePreset ? undefined : "No size"}
+                    width="16rem"
+                    disabled={isPending}
+                    onOpenChange={setPresetPickerOpen}
+                    onPick={setSizePreset}
+                    ariaLabel="Size preset for the new stamps"
+                  />
+                  {sizePreset && (
+                    <DialogSecondaryButton
+                      onClick={() => setSizePreset(null)}
+                      disabled={isPending}
+                    >
+                      <Icon name="clear" size="sm" /> Clear
+                    </DialogSecondaryButton>
+                  )}
+                  {sizePreset && <input type="hidden" name="sizePresetId" value={sizePreset.id} />}
+                </div>
+                <div
+                  style={{
+                    marginTop: "0.25rem",
+                    fontSize: "0.75rem",
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  Every stamp created gets this width and height. Left empty, they state no size.
+                </div>
+              </div>
+
               {/* Live summary */}
               <div style={{ marginTop: "0.25rem", fontSize: "0.8125rem" }}>
                 {!anyEntered ? (
@@ -324,6 +385,11 @@ export function AddStampRangeDialog({
                         ({previewNumbers.slice(0, 8).join(", ")}
                         {previewNumbers.length > 8 ? "…" : ""})
                       </span>
+                    )}
+                    {sizePreset && (
+                      <>
+                        , each <strong>{stampSizePresetPair(sizePreset)}</strong>
+                      </>
                     )}
                     .
                   </span>

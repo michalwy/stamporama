@@ -51,6 +51,7 @@ import { allocateEntityNumber } from "./items";
 import { ensureIssueChecklist, putStampOnChecklists } from "./checklists";
 import { parseEntityNoSearch } from "./quick-jump";
 import { checkSiblingGroup, sortOrderAssignments } from "./issue-member-order";
+import { getStampSizePresetPair, type StampSizePresetPair } from "./stamp-size-presets";
 
 /** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -1638,9 +1639,12 @@ async function createRangeStamps(
     /** The stamp the run hangs under, with the subtype every one of its children carries.
      *  Absent for a root-level range. */
     parent?: { stampId: string; subtypeId: string | null };
+    /** A size preset's pair, written onto every stamp as it is created (#807). Absent, the stamps
+     *  state no size — exactly as before presets existed. */
+    size?: StampSizePresetPair | null;
   }
 ): Promise<string[]> {
-  const { collectionId, areaId, issueId, issuedYear, input, parent } = params;
+  const { collectionId, areaId, issueId, issuedYear, input, parent, size } = params;
   const { count, vendors } = input;
   const stampIds: string[] = [];
 
@@ -1651,6 +1655,8 @@ async function createRangeStamps(
         issuedYear,
         parentId: parent?.stampId ?? null,
         subtypeId: parent?.subtypeId ?? null,
+        widthMm: size?.widthMm ?? null,
+        heightMm: size?.heightMm ?? null,
       },
       select: { id: true },
     });
@@ -1790,18 +1796,28 @@ export async function createIssue(
  * additional root nodes in the issue's own area, alongside anything already there. The
  * generated numbers and per-vendor spans are prepared by the caller (same generation as
  * creation); duplicate-catalog enforcement (#85) also happens in the action layer.
+ *
+ * `sizePresetId` (#807; ADR-0048) puts that preset's pair on every stamp the call creates, in the
+ * creating transaction — see `getStampSizePresetPair` for why this is not `applyStampSizePreset`.
+ * Only stamps created here are sized: a catalog number that duplicates one already held still makes
+ * a **new** stamp in a warning collection and makes nothing in a blocking one, so no existing stamp
+ * is ever reached. The preset is resolved before anything is written, so a preset from another
+ * collection fails the whole add rather than leaving an unsized range behind.
  */
 export async function addStampRangeToIssue(
   ownerId: string,
   collectionId: string,
   issueId: string,
   input: AutoCreateStampsInput,
-  maxStamps?: number
+  options: { maxStamps?: number; sizePresetId?: string | null } = {}
 ): Promise<void> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
-  assertAutoCreateInput(input, maxStamps);
+  assertAutoCreateInput(input, options.maxStamps);
+  const size = options.sizePresetId
+    ? await getStampSizePresetPair(collectionId, options.sizePresetId)
+    : null;
 
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
@@ -1815,6 +1831,7 @@ export async function addStampRangeToIssue(
       issueId,
       issuedYear: issue?.year ?? null,
       input,
+      size,
     })
   );
   await recomputeStampSortKeys(collectionId, stampIds);
