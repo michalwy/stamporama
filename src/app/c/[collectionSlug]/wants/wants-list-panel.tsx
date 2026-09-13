@@ -25,10 +25,10 @@ import {
   useWantIssueGroups,
   useWantYears,
   useWantAreaFacets,
-  useInvalidateWants,
   type WantListFilters,
   type WantAreaFacetFilters,
 } from "./use-wants-query";
+import { useInvalidateWantSignals } from "./use-invalidate-want-signals";
 import { WantIssueGroupRow } from "./want-issue-group-row";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { WantFormDialog } from "./want-form-dialog";
@@ -111,7 +111,7 @@ export function WantsListPanel({
   // report which, or "Add 12 wants" silently doing nothing reads as a bug.
   const [notice, setNotice] = useState<string | null>(null);
 
-  const { invalidate } = useInvalidateWants();
+  const { invalidateWantSignals } = useInvalidateWantSignals();
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const { data: conditions } = useCollectionConditions(collectionId);
   const { data: certificateStatuses } = useCollectionCertificateStatuses(collectionId);
@@ -191,7 +191,9 @@ export function WantsListPanel({
   function handleSuccess() {
     setDialog({ kind: "none" });
     setActionError(undefined);
-    invalidate(collectionId);
+    // Every surface the want chip is drawn on, not only this list (#1236) — a want closed or
+    // deleted here must not leave the marker lit on the rows the collector goes back to.
+    void invalidateWantSignals(collectionId);
   }
 
   /** Run a want mutation, refreshing the list and surfacing its message on failure. */
@@ -529,7 +531,7 @@ export function WantsListPanel({
       {dialog.kind === "delete" && (
         <ConfirmDialog
           title="Delete want"
-          message="Permanently delete this want? Closing it instead keeps the record that you were looking for it."
+          message="Permanently delete this want? This cannot be undone. Closing it instead keeps the record that you were looking for it."
           actionLabel="Delete want"
           pendingLabel="Deleting…"
           variant="destructive"

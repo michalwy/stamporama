@@ -25,6 +25,7 @@ import {
 import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
+import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
@@ -397,8 +398,18 @@ export function CopyDetailPanel({
             <CatalogPricesCard target={{ kind: "stamp", stampId: item.stampId }} />
           </DetailColumn>
 
-          {/* Right: its trade history, in the order it happens — bought, sold, listed. */}
+          {/* Right: what the collection wants of its stamp, then its trade history, in the order it
+              happens — bought, sold, listed. */}
           <DetailColumn>
+            {/* The stamp's own Wants card (#1236), leading the column as it does on the stamp's
+                screen: reading a copy is often when a want turns out to be met, so it is closed or
+                deleted here rather than hunted down on the want list. Not on a piece carrying
+                several stamps — it is a copy of none of them and closes no want (#745), so offering
+                one stamp's wants beside it would say the opposite of the chip above. */}
+            {!item.multiStamp && (
+              <RelatedWantsCard collectionId={collectionId} stampId={item.stampId} />
+            )}
+
             <DetailCard title="Purchase" empty={!item.purchase}>
               {item.purchase && (
                 <Link
