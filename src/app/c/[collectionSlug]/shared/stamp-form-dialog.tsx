@@ -14,7 +14,7 @@ import {
   PhotoEditor,
   type PhotoEditorValue,
 } from "@/app/c/[collectionSlug]/inventory/photo-editor";
-import type { PhotoSummary } from "@/lib/photos";
+import type { EditablePhotoSummary } from "@/lib/photos";
 import { useIssueMembers } from "@/app/c/[collectionSlug]/issues/use-issues-query";
 import type { IssueListItem } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
@@ -212,7 +212,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
     setPhotosUploading(value.uploading);
   }, []);
   // Existing stamp photos (edit only); add mode starts empty.
-  const [initialPhotos, setInitialPhotos] = useState<PhotoSummary[]>([]);
+  const [initialPhotos, setInitialPhotos] = useState<EditablePhotoSummary[]>([]);
   const [photosLoaded, setPhotosLoaded] = useState(props.mode === "add");
 
   // ── Per-language names (#296) ──
@@ -1273,6 +1273,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
                   initialPhotos={initialPhotos}
                   disabled={isPending}
                   roleMode="main"
+                  recordSource
                   onChange={handlePhotoChange}
                 />
               )}

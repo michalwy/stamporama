@@ -3100,6 +3100,10 @@ model Photo {
   kind           String   @default("original")
   role           String?
   title          String?
+  /** Where the picture came from (#1001, ADR-0049 §3) — an auction or Colnect URL, a forum thread,
+   * a book citation. Free text under a length cap and read by nothing but the stamp photo editor:
+   * a reference photo's provenance is most of what it is worth. */
+  sourceUrl      String?  @map("source_url")
   storageBackend String   @default("filesystem")
   storageKey     String
   mime           String

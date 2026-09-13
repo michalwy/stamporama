@@ -17,6 +17,11 @@ import {
   UnsupportedImageError,
 } from "./photos/process";
 import { asQuarterTurn, isSideways } from "./tile-turn";
+import {
+  PHOTO_SOURCE_MAX_LENGTH,
+  normalizePhotoSource,
+  photoSourceTooLong,
+} from "./photo-source";
 import { VARIANT_FLAG_SELECT, childIsVariant } from "./variant-classification";
 
 // Server-side photo domain for inventory copies (#112) and catalog stamps (#137, ADR-0011).
@@ -64,6 +69,8 @@ export interface PhotoData {
   stampId: string | null;
   role: PhotoRole;
   title: string | null;
+  /** Where the picture came from (#1001) — free text, see `photo-source.ts`. */
+  sourceUrl: string | null;
   mime: string;
   width: number;
   height: number;
@@ -78,6 +85,12 @@ export interface PhotoSummary {
   role: PhotoRole;
   title: string | null;
   sortOrder: number;
+}
+
+/** A photo as the stamp edit dialog seeds its editor (#1001): the summary plus where the picture
+ * came from. Kept off `PhotoSummary`, which a dozen list rows build and none of them shows. */
+export interface EditablePhotoSummary extends PhotoSummary {
+  sourceUrl: string | null;
 }
 
 /** What `stageUpload` returns to the dialog: enough to preview + reference the staged bytes
@@ -104,11 +117,16 @@ export interface PhotoChangeSet {
      * outside itself, so no reader has to learn a transform (a scan tile is the other case, and is
      * turned where it is cut). */
     turn?: number;
+    /** Where the picture came from (#1001). Absent and blank both mean none. */
+    sourceUrl?: string | null;
   }[];
   update: {
     photoId: string;
     role?: PhotoRole;
     title?: string | null;
+    /** Absent leaves the stored source alone; blank or null clears it (#1001). Only the stamp
+     * editor sends it, so a copy's save can never touch a source it does not show. */
+    sourceUrl?: string | null;
     sortOrder?: number;
   }[];
   remove: string[];
@@ -358,6 +376,14 @@ async function applyPhotoChangeSetForOwner(
       throw new PhotoValidationError("Staged upload not found or expired.");
     }
   }
+  // The source's one rule (#1001), checked with the rest so an over-long one moves no bytes.
+  for (const entry of [...changeSet.add, ...changeSet.update]) {
+    if (photoSourceTooLong(normalizePhotoSource(entry.sourceUrl))) {
+      throw new PhotoValidationError(
+        `A photo's source can be at most ${PHOTO_SOURCE_MAX_LENGTH} characters.`
+      );
+    }
+  }
 
   // Removals: explicit list plus any front/back incumbent displaced by an add into its slot
   // (replace semantics) that the client did not already remove.
@@ -474,6 +500,7 @@ async function applyPhotoChangeSetForOwner(
         data: {
           ...(u.role !== undefined ? { role: normalizeRole(u.role) } : {}),
           ...(u.title !== undefined ? { title: u.title } : {}),
+          ...(u.sourceUrl !== undefined ? { sourceUrl: normalizePhotoSource(u.sourceUrl) } : {}),
           ...(u.sortOrder !== undefined ? { sortOrder: u.sortOrder } : {}),
         },
       });
@@ -485,6 +512,7 @@ async function applyPhotoChangeSetForOwner(
           ...owner,
           role: p.role,
           title: p.role === null ? p.add.title : null,
+          sourceUrl: normalizePhotoSource(p.add.sourceUrl),
           storageBackend: p.upload.storageBackend,
           storageKey: p.toPrefix,
           mime: p.upload.mime,
@@ -785,6 +813,7 @@ async function listOwnerPhotos(
       stampId: r.stampId,
       role: normalizeRole(r.role),
       title: r.title,
+      sourceUrl: r.sourceUrl,
       mime: r.mime,
       width: r.width,
       height: r.height,
