@@ -1460,17 +1460,28 @@ composing the series offer afterwards.
   you pick), so the column down the card's left edge is the set you are putting together.
 - **Check the outcome.** The dialog says what is about to happen: a new **Preparing** offer on the
   platform holding the series as **one set**, and every single offer that loses a set — whether it
-  keeps other sets or, left with nothing, is **withdrawn**, and whether it is **live** (Active or
-  Paused).
+  keeps other sets or is left with nothing, whether it is **live** (Active or Paused), and what
+  happens to it: a live offer left empty says it **stays in its state and appears in Needs action**,
+  one never listed says it is **withdrawn**.
 - **Compose.** The new offer opens, holding exactly the copies you chose — from a collapsed line or
   an opened one alike. For every chosen copy that came from a single offer, only **its
-  own one-copy set** is taken out of that offer; the offer's other sets stay where they are. An offer
-  left with no sets is withdrawn.
+  own one-copy set** is taken out of that offer; the offer's other sets stay where they are.
 
-The app does not touch the listings on the marketplace. A live offer that lost a set and kept others
-is flagged **changed after listing**, as after any other change to a listing that is up, so you know
-to update it there; a live offer that was withdrawn has to be taken down there by hand — the dialog
-says which.
+The app does not touch the listings on the marketplace, so what happens to an offer that loses a set
+depends on whether it is up there:
+
+- **A live offer** (Active or Paused) is flagged **Changed since listed**, as after any other change
+  to a listing that is up, and appears under **Needs action**. If it kept other sets, update the
+  listing on the platform. **If nothing is left in it, it is not withdrawn**: it stays Active or
+  Paused, carries a **No sets left** badge, and stays in Needs action — **Mark listing up to date**
+  is refused on it, because an empty listing can only come down. Take the listing down on the
+  platform, then **withdraw the offer** yourself; that is what takes it off the list.
+- **An offer never listed** (Preparing or Ready) keeps its other sets, or, left with nothing, is
+  **withdrawn** — there is no listing anywhere to take down.
+
+Before this was changed, composing withdrew a live offer it emptied, and its listing may still be up
+on the platform. Those offers carry the **No sets left** badge too: select the **Withdrawn** state
+chip on the Offers list to find them, then close their listings on the platform.
 
 **The copies are checked again when you compose.** If a chosen copy is no longer a candidate by then
 — it sold (even if its offer is still Active), went into active bidding, was put into another set, is
@@ -1835,6 +1846,10 @@ Three things clear it:
 - **Mark listing up to date** in the offer's own actions menu. Every platform Stamporama cannot reach
   needs this — you go and edit the listing yourself, then say so — and it is also the honest answer
   when the change turned out not to be worth going back for.
+
+None of them clears it on a live offer with **no sets left** — the menu does not offer *Mark listing
+up to date* there, and an update is not accepted either. A listing with nothing in it can only be
+taken down, so the offer stays flagged until you **withdraw** it.
 
 The flag is not carried by sold or withdrawn offers. What a closed listing said is a record, not a
 claim.

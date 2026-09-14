@@ -50,6 +50,21 @@ export function isListedState(state: OfferState): boolean {
 }
 
 /**
+ * An offer that **was up on a platform and has nothing left in it** (#1277) — a listing that can only
+ * be taken down, never brought back into step.
+ *
+ * Active or Paused with no sets is the case the flag cannot clear: there is nothing for an update to
+ * type back into the form, so *Mark listing up to date* is refused and only a withdrawal takes it off
+ * *Needs action*. A **withdrawn** offer with no sets is in too, because composing a series (#1211)
+ * used to withdraw a listed offer it emptied, and the listing on the platform may still be up — the
+ * chip is how the collector finds those under Withdrawn. Preparing and Ready are out: an offer that
+ * was never posted is often empty while it is being put together, and there is nothing to take down.
+ */
+export function isEmptiedListing(state: OfferState, setCount: number): boolean {
+  return setCount === 0 && (isListedState(state) || state === "withdrawn");
+}
+
+/**
  * The parts of an offer's **header** a change to which the platform would show differently.
  *
  * Composition changes are not listed here — every one of them counts, without exception, and they

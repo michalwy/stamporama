@@ -157,6 +157,30 @@ export function ListingOutOfDateChip({ since }: { since: Date | string | null })
   );
 }
 
+/**
+ * An offer that was up on a platform and has **no sets left** (#1277) — see `isEmptiedListing`,
+ * which decides where it is drawn.
+ *
+ * Without it an emptied listing reads like any other: a live row with a price and a listing link,
+ * selling nothing. On a live offer it is `warning`-tinted beside *Changed since listed*, the same
+ * grade: the listing is wrong, not a double sale. On a withdrawn one it is plain — the offer is
+ * closed, and the chip is only there so the listing it may have left up on the platform can be found.
+ */
+export function EmptiedListingChip({ state }: { state: OfferState }) {
+  if (state === "withdrawn") {
+    return (
+      <Tooltip content="Withdrawn with no sets left in it — if its listing is still up on the platform, take it down there">
+        <span style={CHIP}>No sets left</span>
+      </Tooltip>
+    );
+  }
+  return tinted(
+    "warning",
+    "No sets left",
+    "Nothing is left in this offer — take the listing down on the platform, then withdraw the offer"
+  );
+}
+
 /** "In active bidding" (#215): an auction bid has been placed on this offer, committing the
  * collector before the sale is actually recorded. */
 export function InActiveBiddingChip() {

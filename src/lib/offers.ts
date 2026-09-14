@@ -5339,9 +5339,19 @@ const EDITED_FLAG: Record<OfferTextField, "nameEdited" | "descriptionEdited" | "
  *
  * Deliberately *not* called by resuming a paused offer. A resume puts the same live entry back in
  * front of buyers; nothing about it says the entry was rewritten.
+ *
+ * **Refused on a listed offer with no sets** (#1277, decided with the user on 2026-09-14). No update
+ * can put an empty offer's listing back in step — it can only come down — so the flag stays and the
+ * offer stays in *Needs action* until the collector withdraws it.
  */
 export async function markOfferListingSynced(ownerId: string, offerId: string): Promise<void> {
-  await assertOfferOwner(ownerId, offerId);
+  const ref = await assertOfferOwner(ownerId, offerId);
+  if (isListedState(ref.state) && (await prisma.offerSet.count({ where: { offerId } })) === 0) {
+    throw new OfferActionBlockedError(
+      "empty",
+      "This offer has no sets left, so its listing cannot match it. Take the listing down on the platform, then withdraw the offer."
+    );
+  }
   await clearListingContentChanged(offerId);
 }
 

@@ -13,6 +13,7 @@ import {
   requiresSets,
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
+import { isEmptiedListing } from "@/lib/offer-listing-drift";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -25,6 +26,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   OfferStateChip,
   AuctionEndedChip,
+  EmptiedListingChip,
   NeedsActionChip,
   PlatformSaleChip,
   InActiveBiddingChip,
@@ -333,6 +335,9 @@ export function OfferRow({
               chips and before the plain descriptive ones: it is a problem, but the mildest of them —
               a listing that is wrong rather than stock promised twice. */}
           {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
+          {/* …and why that listing cannot simply be updated: nothing is left in it (#1277). Also on a
+              withdrawn offer, which is how one emptied before the fix is found under Withdrawn. */}
+          {isEmptiedListing(offer.state, offer.setCount) && <EmptiedListingChip state={offer.state} />}
           {offer.setCount > 1 && (
             <Tooltip content="Sets in this offer">
               <span style={CHIP}>{offer.setCount}×</span>

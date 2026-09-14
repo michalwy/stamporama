@@ -2,14 +2,22 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
-import { addOfferSet, createOffer } from "../../src/lib/offers";
+import {
+  addOfferSet,
+  createOffer,
+  listOffersPaginated,
+  markOfferListingSynced,
+  OfferActionBlockedError,
+  setOfferState,
+} from "../../src/lib/offers";
 import { composeSeriesOffer, findSeriesRecombinations } from "../../src/lib/series-recombination";
 import { formatItemNo } from "../../src/lib/item-number";
 import type { OfferState } from "../../src/lib/offer-rules";
+import { isEmptiedListing } from "../../src/lib/offer-listing-drift";
 
 // Composing a series out of single offers (#1211): one new Preparing offer holding the series as one
-// set, each chosen single's one-copy set taken out of its offer, an emptied offer withdrawn, a live
-// offer that kept something flagged — and a chosen copy that stopped being a candidate refusing the
+// set, each chosen single's one-copy set taken out of its offer, an emptied offer never listed
+// withdrawn, a live offer that lost a set flagged and left in its state even when emptied (#1277) — and a chosen copy that stopped being a candidate refusing the
 // whole commit, with nothing written. Each case builds a series of its own.
 
 const ts = Date.now();
@@ -165,7 +173,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("#754's use case: one new Preparing offer with the five copies, the three singles withdrawn", async () => {
+  it("#754's use case: one new Preparing offer with the five copies, each single emptied", async () => {
     const ids = await stamps(5);
     const setId = await checklist(ids);
     const copies = [await copy(ids[0]), await copy(ids[1]), await copy(ids[2]), await copy(ids[3]), await copy(ids[4])];
@@ -192,15 +200,64 @@ describe("compose a series offer out of single offers (#1211)", () => {
       "the set holds all five copies"
     );
     for (const singleId of singles) {
-      const single = await offerRow(singleId);
-      assert.equal(single.sets.length, 0, "the single lost its set");
-      assert.equal(single.state, "withdrawn", "and, being empty, is withdrawn");
-      assert.ok(single.closedAt, "closed as a withdrawal by hand is");
+      assert.equal((await offerRow(singleId)).sets.length, 0, "the single lost its set");
     }
+    // A listed single is left in its state, empty and flagged (#1277); only the one never listed is
+    // withdrawn.
+    const [active, paused, preparing] = await Promise.all(singles.map((id) => offerRow(id)));
     assert.deepEqual(
-      { copies: result.copies, withdrawn: result.withdrawnOffers, live: result.withdrawnLiveOffers },
-      { copies: 5, withdrawn: 3, live: 2 }
+      [active, paused].map((row) => [row.state, row.closedAt, row.listingContentChangedAt !== null]),
+      [
+        ["active", null, true],
+        ["paused", null, true],
+      ]
     );
+    assert.equal(preparing.state, "withdrawn", "never listed and empty, so withdrawn");
+    assert.ok(preparing.closedAt, "closed as a withdrawal by hand is");
+    assert.deepEqual(
+      {
+        copies: result.copies,
+        withdrawn: result.withdrawnOffers,
+        emptiedLive: result.emptiedLiveOffers,
+        changedLive: result.changedLiveOffers,
+      },
+      { copies: 5, withdrawn: 1, emptiedLive: 2, changedLive: 0 }
+    );
+  });
+
+  it("keeps an emptied Active single in Needs action until it is withdrawn (#1277)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    const [first, second] = [await copy(ids[0]), await copy(ids[1])];
+    const live = await offer([[first]], "active");
+    const ready = await offer([[second]], "ready");
+
+    await composeSeriesOffer(userId, collectionId, {
+      platformId,
+      checklistId: setId, combination: plain(),
+      picks: { [ids[0]]: first, [ids[1]]: second },
+    });
+
+    const liveRow = await offerRow(live);
+    assert.equal(liveRow.state, "active", "a listed offer emptied by composing is not withdrawn");
+    assert.equal(liveRow.sets.length, 0);
+    assert.ok(liveRow.listingContentChangedAt, "flagged as changed after listing");
+    assert.equal((await offerRow(ready)).state, "withdrawn", "a Ready offer emptied is still withdrawn");
+
+    const needing = async () =>
+      (await listOffersPaginated(userId, collectionId, { needsAction: true })).items.map((item) => item.id);
+    assert.ok((await needing()).includes(live), "listed in Needs action");
+
+    await assert.rejects(
+      markOfferListingSynced(userId, live),
+      (e: unknown) => e instanceof OfferActionBlockedError && e.reason === "empty",
+      "an empty listing cannot be marked up to date"
+    );
+    assert.ok((await offerRow(live)).listingContentChangedAt, "the refusal leaves the flag");
+    assert.ok((await needing()).includes(live), "and the offer in Needs action");
+
+    await setOfferState(userId, live, "withdrawn");
+    assert.ok(!(await needing()).includes(live), "withdrawing it is what takes it off");
   });
 
   it("leaves a single offer's other sets and its state; a live one is flagged as changed (#542)", async () => {
@@ -234,6 +291,20 @@ describe("compose a series offer out of single offers (#1211)", () => {
     );
   });
 
+  it("lets a listed offer emptied and withdrawn before the fix be found under Withdrawn (#1277)", async () => {
+    const [stampId] = await stamps(1);
+    const emptied = await offer([[await copy(stampId)]], "active");
+    // What #1211's compose left behind: the set gone and the offer withdrawn.
+    await prisma.offerSet.deleteMany({ where: { offerId: emptied } });
+    await prisma.offer.update({ where: { id: emptied }, data: { state: "withdrawn", closedAt: new Date() } });
+
+    const row = (await listOffersPaginated(userId, collectionId, { states: ["withdrawn"] })).items.find(
+      (item) => item.id === emptied
+    );
+    assert.ok(row, "listed under Withdrawn");
+    assert.equal(isEmptiedListing(row.state, row.setCount), true, "and carrying the No sets left badge");
+  });
+
   it("composes the copy the collector picked where a slot had several candidates", async () => {
     const ids = await stamps(2);
     const setId = await checklist(ids);
@@ -255,7 +326,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
       [singleFirst, second].sort(),
       "the picked single, not the available copy"
     );
-    assert.equal((await offerRow(holding)).state, "withdrawn");
+    assert.equal((await offerRow(holding)).state, "active", "listed, so left in its state (#1277)");
     assert.equal((await offerRow(secondOffer)).state, "withdrawn");
     assert.equal(
       await prisma.offerSetItem.count({ where: { itemId: availableFirst } }),
