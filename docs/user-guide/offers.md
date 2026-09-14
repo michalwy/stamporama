@@ -1740,6 +1740,14 @@ paste the address into the offer's header first.
 The composition is **not** something an update can change. Selling some of the sets is a smaller
 quantity, which the form does edit; an offer whose stamps are different is a different listing.
 
+### Close via Assistant
+
+And the way down: an **Active** Colnect offer's header also carries **Close via Assistant**. After
+you confirm, the Assistant closes the listing on Colnect and the offer is **withdrawn** here — the one
+step instead of closing it on Colnect and then withdrawing it by hand. If Colnect does not confirm the
+close, nothing changes and the dialog says why. The details are in the
+[Assistant guide](assistant.md#closing-a-colnect-listing).
+
 ### Publishing
 
 **Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the

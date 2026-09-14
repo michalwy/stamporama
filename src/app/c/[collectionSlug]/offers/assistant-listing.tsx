@@ -1,7 +1,11 @@
 "use client";
 
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { hasListingModule, supportsAssistantUpdate } from "@/lib/platform-modules";
+import {
+  hasListingModule,
+  supportsAssistantClose,
+  supportsAssistantUpdate,
+} from "@/lib/platform-modules";
 import type { AssistantHandoff } from "./assistant-handoff";
 import { Icon } from "@/app/icons";
 
@@ -174,6 +178,61 @@ export function UpdateViaAssistantButton({
       >
         <Icon name="refresh" size="sm" />
         {running ? "Updating…" : "Update via Assistant"}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * **Close via Assistant** — take the listing this offer is live as **down on the platform**, and then
+ * withdraw the offer (#729). The click only opens the confirmation; nothing is sent before the
+ * collector confirms there.
+ *
+ * Renders nothing where the platform cannot be closed through the Assistant, and nothing without a
+ * recorded sale to name — facts about the platform and the offer, as {@link UpdateViaAssistantButton}'s
+ * are. A missing Assistant is the fault kind, and disables it with the reason.
+ */
+export function CloseViaAssistantButton({
+  platformModule,
+  saleId,
+  present,
+  running,
+  disabled,
+  style,
+  onStart,
+}: {
+  platformModule: string | null;
+  /** The platform's own code for the listing (#696). Without one there is nothing to close. */
+  saleId: string | null;
+  present: string | null;
+  running: boolean;
+  disabled?: boolean;
+  style: React.CSSProperties;
+  onStart: () => void;
+}) {
+  if (!supportsAssistantClose(platformModule) || !saleId?.trim()) return null;
+  const hint = assistantHint({ blockerCount: 0, present, busy: false });
+  const inert = hint !== null || running;
+
+  return (
+    <Tooltip
+      content={
+        hint ??
+        "Close this listing on Colnect, then withdraw this offer. You confirm first; on Colnect the listing can be reopened from its own page."
+      }
+    >
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={inert || disabled}
+        style={{
+          ...style,
+          opacity: inert || disabled ? 0.55 : 1,
+          cursor: inert ? "default" : "pointer",
+        }}
+      >
+        <Icon name="withdraw" size="sm" />
+        {running ? "Closing…" : "Close via Assistant"}
       </button>
     </Tooltip>
   );

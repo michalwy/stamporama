@@ -478,6 +478,29 @@ registers your instance's address when you connect it, which is what lets a page
 offer over without any click on the toolbar. Connect it again from **Settings → Assistant** if the
 button says it is not installed on a browser where it plainly is.
 
+## Closing a Colnect listing
+
+An **Active** Colnect offer's header carries **Close via Assistant**, for the day the stamps should
+stop being for sale there. It asks you to confirm first; confirm, and the Assistant closes the listing
+on Colnect and Stamporama then **withdraws the offer**. The dialog stays busy until both have
+happened, and a toast says so.
+
+It uses your own Colnect session in this browser, from a Colnect tab it finds open (or opens in the
+background), exactly as [applying a Colnect list difference](#applying-a-colnect-list-difference)
+does. Nothing is typed or clicked on Colnect's page.
+
+- **Only Colnect's own confirmation counts.** If Colnect answers anything else — you are not signed in,
+  the sale is paused there, it has no listing by that code — the dialog shows why and **the offer
+  stays Active**. Resume a sale paused on Colnect, or sign in, and try again.
+- **A closed listing can be reopened on Colnect**, from its own page. The offer here cannot: Withdrawn
+  is final, and selling again means a new offer.
+- **If Colnect closed it but the offer could not be withdrawn**, the dialog says that too, and its
+  button then retries only the withdrawal.
+
+The button is there only for an offer that records which Colnect sale it is — the one set when the
+listing's URL was captured or pasted in. Offers on other platforms are withdrawn by hand, after taking
+the listing down there.
+
 ## Clickable Stamporama links
 
 If you put the [`{offerUrl}` token](contacts.md) in a platform's **private note** template, your

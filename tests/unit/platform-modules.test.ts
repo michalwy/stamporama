@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   ALLEGRO_PLATFORM_MODULE,
   COLNECT_PLATFORM_MODULE,
+  DELCAMPE_PLATFORM_MODULE,
   hasListingModule,
   listingModuleRules,
+  supportsAssistantClose,
   usesPlatformCatalogue,
   usesPlatformConditions,
 } from "../../src/lib/platform-modules";
@@ -38,5 +40,18 @@ describe("listingModuleRules", () => {
     assert.equal(hasListingModule(ALLEGRO_PLATFORM_MODULE), true);
     assert.equal(usesPlatformCatalogue(ALLEGRO_PLATFORM_MODULE), false);
     assert.equal(usesPlatformConditions(ALLEGRO_PLATFORM_MODULE), false);
+  });
+});
+
+describe("supportsAssistantClose (#729)", () => {
+  it("answers for Colnect, whose sale code is what a close names", () => {
+    assert.equal(supportsAssistantClose(COLNECT_PLATFORM_MODULE), true);
+  });
+
+  it("answers no for every other marketplace, listable or not", () => {
+    // Allegro can be listed to through the Assistant (#493) and still gains no close with it.
+    assert.equal(supportsAssistantClose(ALLEGRO_PLATFORM_MODULE), false);
+    assert.equal(supportsAssistantClose(DELCAMPE_PLATFORM_MODULE), false);
+    assert.equal(supportsAssistantClose(null), false);
   });
 });

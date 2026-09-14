@@ -40,8 +40,19 @@ import {
   parseExportHandoff,
   type ExportHandoffState,
 } from "../core/colnect-export-handoff";
+import {
+  CLOSE_ELEMENT_ID,
+  CLOSE_MESSAGE_ATTRIBUTE,
+  CLOSE_REQUEST_ATTRIBUTE,
+  CLOSE_STATE_ATTRIBUTE,
+  describeClosed,
+  parseCloseHandoff,
+  type CloseHandoffState,
+} from "../core/colnect-close-handoff";
 import type {
   ColnectApplyProgressNotice,
+  ColnectCloseRequest,
+  ColnectCloseResponse,
   ColnectApplyRequest,
   ColnectApplyResponse,
   ColnectExportProgressNotice,
@@ -62,8 +73,8 @@ import type {
 //
 // It carries tasks from the instance's own screens to the background worker, and the outcomes back
 // onto the page: a listing task from the bulk listing workspace (#322/#407), a stamp to match
-// (#423), a Colnect list difference to apply (#689) and, since #690, a request to fetch a Colnect
-// list export. It never touches the instance's data, never reads a token, and runs on no other
+// (#423), a Colnect list difference to apply (#689), a request to fetch a Colnect list export (#690)
+// and, since #729, a Colnect listing to close. It never touches the instance's data, never reads a token, and runs on no other
 // origin.
 
 declare global {
@@ -120,6 +131,7 @@ let lastListingPayload: string | null = null;
 let lastMatchPayload: string | null = null;
 let lastApplyPayload: string | null = null;
 let lastExportPayload: string | null = null;
+let lastClosePayload: string | null = null;
 
 /** Read the element; hand a task the extension has not seen before to the worker. */
 async function pump(): Promise<void> {
@@ -335,6 +347,53 @@ async function pumpExport(): Promise<void> {
   if (!res.ok) reportExport(handoff.requestId, "error", res.error);
 }
 
+// ── The Colnect close handoff (#729) ─────────────────────────────────────────
+// The same two motions on a sixth node. One request and one answer, so there is no progress to carry
+// back — only `running`, and then whether Colnect confirmed the close. The page withdraws the offer on
+// `closed`; this script never does.
+
+const closesHandled = new Set<string>();
+
+function closeElement(): HTMLElement | null {
+  return document.getElementById(CLOSE_ELEMENT_ID);
+}
+
+function reportClose(requestId: string, state: CloseHandoffState, message: string): void {
+  const el = closeElement();
+  if (!el) return; // the collector navigated on; the offer stays as it was, and says so on its screen
+  el.setAttribute(CLOSE_REQUEST_ATTRIBUTE, requestId);
+  el.setAttribute(CLOSE_STATE_ATTRIBUTE, state);
+  el.setAttribute(CLOSE_MESSAGE_ATTRIBUTE, message);
+}
+
+async function pumpClose(): Promise<void> {
+  const el = closeElement();
+  if (!el) return;
+  const raw = el.textContent;
+  if (raw === lastClosePayload) return;
+  lastClosePayload = raw;
+  const handoff = parseCloseHandoff(raw);
+  if (!handoff || closesHandled.has(handoff.requestId)) return;
+  closesHandled.add(handoff.requestId);
+
+  reportClose(handoff.requestId, "running", "Closing the listing on Colnect…");
+
+  let res: ColnectCloseResponse;
+  try {
+    res = (await chrome.runtime.sendMessage({
+      type: "colnect-close",
+      task: handoff.task,
+      requestId: handoff.requestId,
+    } satisfies ColnectCloseRequest)) as ColnectCloseResponse;
+  } catch (e) {
+    // Kept in `closesHandled` for the pumps' reason above: a press mints a new id, which is a retry.
+    reportClose(handoff.requestId, "error", e instanceof Error ? e.message : String(e));
+    return;
+  }
+  if (res.ok) reportClose(handoff.requestId, "closed", describeClosed(handoff.task));
+  else reportClose(handoff.requestId, "error", res.error);
+}
+
 /**
  * Whether this page is still following `requestId` — which is what decides who activates the offer
  * (#412).
@@ -421,6 +480,7 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
   void pumpMatch();
   void pumpApply();
   void pumpExport();
+  void pumpClose();
 
   // The elements are written by a click inside a client-rendered screen, so they appear (and are
   // rewritten for the next offer) long after load. Watching the whole document is the cheap, obvious
@@ -443,6 +503,7 @@ if (!window.__stamporamaAssistantInstanceLoaded) {
       void pumpMatch();
       void pumpApply();
       void pumpExport();
+      void pumpClose();
     });
   }).observe(document.documentElement, {
     childList: true,

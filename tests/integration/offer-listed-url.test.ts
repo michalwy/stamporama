@@ -5,6 +5,7 @@ import { createItem } from "../../src/lib/items";
 import {
   addOfferSet,
   createOffer,
+  getOfferDetail,
   OfferActionBlockedError,
   recordOfferListed,
   setOfferState,
@@ -107,6 +108,9 @@ describe("recording a listing's URL (#412)", () => {
     assert.deepEqual(row.listingDate, today());
     // The address a person clicks and the id the app joins on are written together (#696).
     assert.equal(row.colnectSaleId, url.slice(url.lastIndexOf("/") + 1));
+    // …and the offer's own screen reads the stored id, which is what Close via Assistant names the
+    // listing by (#729).
+    assert.equal((await getOfferDetail(userId, offerId))?.colnectSaleId, row.colnectSaleId);
   });
 
   it("is a no-op the second time — the two deliverers must not collide", async () => {
