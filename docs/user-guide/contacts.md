@@ -213,7 +213,16 @@ The **Description** and **Private note** tabs work the same way, with two additi
 - **Repeating blocks** list an offer item by item. `{#set}…{/set}` repeats its body once per set in
   the offer, and `{#copy}…{/copy}` once per copy — inside a set block, that set's copies; on its own,
   every copy in the offer. Inside a block, the tokens describe *that* set or copy rather than the
-  offer as a whole. The chips insert a block around whatever you have selected.
+  offer as a whole.
+
+  Every block is listed in a **Blocks** row under the token chips; hover a block for what it repeats
+  over and an example, and click it to wrap whatever you have selected. A token that only means
+  something inside a block sits in that block's frame rather than among the others — `{setTitle}`
+  beside `{#set}`, `{listedAs}` and `{variants}` beside `{#unknownVariant}`. The same row appears on
+  every multi-line template, including a [bulk lot's description](offers.md#naming-the-listing).
+
+  Blocks work only in these multi-line texts. A block typed into a title or a photo tile label stays
+  in the text as typed, the way a misspelt token does, so you can see it is not doing anything.
 
 For example:
 
@@ -322,9 +331,9 @@ resolve yet — for instance while some of the variants still have no catalog pr
 its own, as above: a line whose placeholders all came out empty is dropped whole, so the caveat still
 reads properly when there is no variant to name.
 
-Both tokens and the block are for the description and the private note only: put one in a **title**
-and it renders empty, since a title has no room for the caveat and a range there would read as a span
-you are selling.
+Both tokens and the block are for the description and the private note only: put a token in a
+**title** and it renders empty, since a title has no room for the caveat and a range there would read
+as a span you are selling — and the block stays as typed, like every block in a title.
 
 Blank means *no text is generated at all* for that field — unlike the title, there is no built-in
 default.

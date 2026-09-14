@@ -157,9 +157,8 @@ describe("renderListingTemplate — repeating blocks", () => {
     assert.equal(renderListingTemplate("{name}{/set}", twoSets), "Mercury / Venus{/set}");
   });
 
-  it("renders a set block once when a one-line title template uses one", () => {
-    // The title renders over a single anonymous set, so a set block is simply one iteration.
-    assert.equal(renderTitleTemplate("{#set}{name}{/set}", [mercury, venus]), "Mercury / Venus");
+  it("leaves a block literal in a one-line title template, which accepts none (#1268)", () => {
+    assert.equal(renderTitleTemplate("{#set}{name}{/set}", [mercury, venus]), "{#set}Mercury / Venus{/set}");
   });
 });
 
@@ -401,11 +400,12 @@ describe("{#unknownVariant} and its tokens (#619)", () => {
     );
   });
 
-  it("says nothing in a title — empty tokens rather than literal braces, and no block", () => {
+  it("says nothing in a title — empty tokens rather than literal braces, and the block stays literal", () => {
     assert.equal(renderTitleTemplate("{name} {listedAs} {variants}", [umbrella]), "Mercury");
+    // A one-line template accepts no blocks at all (#1268), so the tags show up as typed.
     assert.equal(
       renderTitleTemplate("{name}{#unknownVariant} — variant unknown{/unknownVariant}", [umbrella]),
-      "Mercury"
+      "Mercury{#unknownVariant} — variant unknown{/unknownVariant}"
     );
   });
 });
@@ -433,12 +433,9 @@ describe("templateUsesOfferContext (#415)", () => {
 });
 
 describe("listing token legend", () => {
-  it("offers the title tokens plus the listing-only ones, and every block", () => {
-    assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{setTitle}"));
+  it("offers the title tokens plus {offerUrl}, and every block", () => {
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{offerUrl}"));
     assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{catalog}"));
-    assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{listedAs}"));
-    assert.ok(AVAILABLE_LISTING_TOKENS.some((t) => t.token === "{variants}"));
     assert.deepEqual(
       AVAILABLE_LISTING_BLOCKS.map((b) => `${b.open}${b.close}`),
       [
@@ -450,6 +447,71 @@ describe("listing token legend", () => {
         "{#unknownVariant}{/unknownVariant}",
       ]
     );
+  });
+
+  it("lists the tokens that only mean something inside a block under that block (#1268)", () => {
+    const tokensOf = (open: string) =>
+      AVAILABLE_LISTING_BLOCKS.find((b) => b.open === open)!.tokens.map((t) => t.token);
+    assert.deepEqual(tokensOf("{#set}"), ["{setTitle}"]);
+    assert.deepEqual(tokensOf("{#unknownVariant}"), ["{listedAs}", "{variants}"]);
+    // …and not again among the tokens that work anywhere, so a chip means one thing.
+    const blockTokens = AVAILABLE_LISTING_BLOCKS.flatMap((b) => b.tokens.map((t) => t.token));
+    for (const token of blockTokens) {
+      assert.ok(!AVAILABLE_LISTING_TOKENS.some((t) => t.token === token), `${token} listed twice`);
+    }
+  });
+});
+
+// The block reference and the engine read one vocabulary (#1268): a block that is listed works when
+// typed, a block-shaped tag that is not listed stays literal, and only a multi-line text takes one.
+describe("block reference matches the engine (#1268)", () => {
+  const pieces: TemplateSet[] = [
+    {
+      title: "Complete series",
+      copies: [
+        copy({
+          name: "Mercury",
+          catalogNumbers: [cn("Mi", "12")],
+          condition: "Mint never hinged",
+          conditionAbbr: "MNH",
+          certificate: "Photo certificate",
+          certificateAbbr: "cert.",
+          format: "Block of 4",
+          formatAbbr: "Blk4",
+          unknownVariant: true,
+          listedAs: "Mi 12a",
+          variants: "Mi 12a-c",
+        }),
+      ],
+    },
+  ];
+
+  for (const block of AVAILABLE_LISTING_BLOCKS) {
+    it(`accepts ${block.open}…${block.close} as typed`, () => {
+      const out = renderListingTemplate(`${block.open}x${block.close}`, pieces);
+      assert.equal(out, "x");
+    });
+
+    it(`renders ${block.open}'s example and its own tokens without literal braces`, () => {
+      assert.ok(block.example.startsWith(block.open) && block.example.endsWith(block.close));
+      const example = renderListingTemplate(block.example, pieces);
+      assert.ok(example && !/[{}]/.test(example), `${block.example} → ${example}`);
+      for (const token of block.tokens) {
+        const inside = renderListingTemplate(`${block.open}${token.token}${block.close}`, pieces);
+        assert.ok(inside && !/[{}]/.test(inside), `${token.token} → ${inside}`);
+      }
+    });
+
+    it(`leaves ${block.open} literal in a one-line template`, () => {
+      assert.equal(
+        renderTitleTemplate(`${block.open}{name}${block.close}`, pieces[0].copies),
+        `${block.open}Mercury${block.close}`
+      );
+    });
+  }
+
+  it("keeps a block-shaped tag the reference does not list literal", () => {
+    assert.equal(renderListingTemplate("{#stamp}{name}{/stamp}", pieces), "{#stamp}Mercury{/stamp}");
   });
 });
 

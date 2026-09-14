@@ -8,6 +8,7 @@ import {
   titleFallbackTokens,
   listingFallbackTokens,
   EXAMPLE_OFFER_URL,
+  AVAILABLE_LISTING_BLOCKS,
   type ListingTemplateContext,
   type TitleToken,
 } from "@/lib/offer-title-template";
@@ -43,6 +44,16 @@ const TOKEN_CHIP: React.CSSProperties = {
   color: "var(--color-text-secondary)",
   background: "var(--color-bg-page)",
   cursor: "pointer",
+};
+
+/** A block chip and the tokens that belong to it, framed as one unit. */
+const BLOCK_GROUP: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  padding: "0.125rem",
+  borderRadius: "0.5rem",
+  border: "1px dashed var(--color-border)",
 };
 
 const SMALL_BTN: React.CSSProperties = {
@@ -256,11 +267,10 @@ export function TemplateSyntaxLegend() {
       <code>{"{catalog:Mi,Sc:vendor,area}"}</code>: pick vendors by abbreviation (<code>*</code> =
       all, blank = primary), then which prefixes to show (<code>vendor</code>/<code>v</code>,{" "}
       <code>area</code>/<code>a</code>; an empty flags segment like <code>{"{catalog:Mi:}"}</code>{" "}
-      gives the bare number). In the multi-line templates a block chip wraps your selection and
-      repeats it once per set (or copy) the offer lists — or, with{" "}
-      <code>{"{#conditionLegend}"}</code> / <code>{"{#certificateLegend}"}</code>, once per distinct
-      condition or certificate status the offer uses — how you append a legend such as{" "}
-      <code>{"{conditionAbbr} = {condition}"}</code>.
+      gives the bare number). The multi-line templates also take <strong>blocks</strong>, listed
+      under their tokens: a block chip wraps your selection and repeats it once per set, per copy or
+      per distinct condition the offer uses — hover one for what it repeats over and an example. The
+      tokens beside a block only mean something inside it.
     </p>
   );
 }
@@ -276,9 +286,9 @@ export interface TemplateBuilderProps {
   onChange: (value: string) => void;
   /** Tokens the field offers, rendered as click-to-insert chips. */
   tokens: readonly TitleToken[];
-  /** Repeating blocks (#266) offered as chips that wrap the selection. Omitted for a title. */
-  blocks?: readonly { open: string; close: string; label: string }[];
-  /** Render as a multi-line text (line breaks kept, `{#set}` blocks repeat) rather than one line. */
+  /** Render as a multi-line text (line breaks kept, `{#set}` blocks repeat) rather than one line.
+   * A multi-line field always lists the blocks, from the engine's own vocabulary (#1268) — the only
+   * texts that accept blocks are exactly the ones that show them, so no field can forget to. */
   multiline?: boolean;
   /** Visible rows of a multi-line field — a description is written in paragraphs and wants more
    * room than a two-line private note. Ignored for a one-line template. */
@@ -319,7 +329,6 @@ export function TemplateBuilder({
   value,
   onChange,
   tokens,
-  blocks,
   multiline = false,
   rows = 5,
   placeholder,
@@ -460,19 +469,38 @@ export function TemplateBuilder({
             </button>
           </Tooltip>
         ))}
-        {blocks?.map((b) => (
-          <Tooltip key={b.open} content={`${b.label} — wraps the selection`}>
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => insert(b.open, b.close)}
-              style={{ ...TOKEN_CHIP, color: "var(--color-accent)" }}
-            >
-              {b.open}…{b.close}
-            </button>
-          </Tooltip>
-        ))}
       </div>
+
+      {/* The blocks (#266, #1268), each grouped with the tokens that only mean something inside it,
+          so `{setTitle}` reads as part of `{#set}` rather than as a token that works anywhere. */}
+      {multiline && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.375rem", margin: "-0.25rem 0 0.75rem" }}>
+          <span style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-text-muted)" }}>
+            Blocks
+          </span>
+          {AVAILABLE_LISTING_BLOCKS.map((b) => (
+            <span key={b.open} style={BLOCK_GROUP}>
+              <Tooltip content={`${b.label}. E.g. ${b.example} — wraps the selection`}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => insert(b.open, b.close)}
+                  style={{ ...TOKEN_CHIP, color: "var(--color-accent)" }}
+                >
+                  {b.open}…{b.close}
+                </button>
+              </Tooltip>
+              {b.tokens.map((t) => (
+                <Tooltip key={t.token} content={`${t.label} — e.g. ${t.example}. Only inside ${b.open}…${b.close}`}>
+                  <button type="button" tabIndex={-1} onClick={() => insert(t.token)} style={TOKEN_CHIP}>
+                    {t.token}
+                  </button>
+                </Tooltip>
+              ))}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Live preview against the shared sample copies. */}
       <div
