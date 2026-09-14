@@ -58,6 +58,9 @@ time. If the count is zero, the values are simply saved.
 *Apply a template* on the album list is still there, and is the other thing: it replaces **all** of
 the album's values with a template's.
 
+The two gaps between boxes can also be changed from the **page editor**, beside the sheet they are
+judged on — see below. It is the same pair of values and the same warning about printed cards.
+
 ## The language is the album's own, and it changes the plan
 
 An album is printed in one language. Names, checklist headings and everything else resolve to that
@@ -175,6 +178,14 @@ What you can set:
   leaves it where you put it. It only ever **adds** a row: if what follows is still wider than the page,
   it wraps as usual. The first box of a checklist already starts a row, so it offers nothing. A
   checklist broken into short rows is also narrower, so it may now sit side by side with the next one.
+- **The spacing between boxes**, across a row and between rows. Click the paper outside any block
+  and the sheet's panel has both, in millimetres. They are **this album's own values**, the same two
+  that *Page template…* calls *Between boxes, across* and *Between rows*: they apply to **every sheet
+  of this album** and to no other album, and the template it was made from is not touched. They are
+  typed rather than dragged, and saved when you press Enter or leave the two fields. Changing a gap
+  **re-plans the album** — boxes can move to another row and onto another sheet — and, like *Page
+  template…*, you are first told how many printed cards that match today would stop matching. A
+  printed card stays as printed and reports the difference.
 - **The order of the stamps in a block** — drag one box onto another. That writes this album's own
   order for the whole checklist; *Follow the checklist's order* puts it back.
 - **A note of your own**, set in one of the template's five voices and **filed before or after a

@@ -14,6 +14,7 @@ import {
   DEFAULT_ALBUM_PRESET,
   albumHawidMargins,
   albumTemplateSummary,
+  parseAlbumBoxGaps,
   parseAlbumRenderPreset,
   parseAlbumTemplateInput,
   readAlbumPresetFields,
@@ -156,6 +157,34 @@ describe("parseAlbumRenderPreset", () => {
     const result = parseAlbumRenderPreset(rawDefaults({ marginLeftMm: "150", marginRightMm: "150" }));
     assert.ok(!result.ok);
     assert.match(result.message, /between 0 and 100/);
+  });
+});
+
+// The page editor's two gaps (#836) are the preset's own rule, not a second statement of it.
+describe("parseAlbumBoxGaps", () => {
+  it("reads a comma as a decimal point, the way every millimetre field here does", () => {
+    const result = parseAlbumBoxGaps({ boxGapXMm: "2,5", boxGapYMm: "0" });
+    assert.ok(result.ok, result.ok ? "" : result.message);
+    assert.deepEqual(result.value, { boxGapXMm: 2.5, boxGapYMm: 0 });
+  });
+
+  it("refuses a blank, a negative gap and one past the bound, naming the field", () => {
+    const blank = parseAlbumBoxGaps({ boxGapXMm: "", boxGapYMm: "6" });
+    assert.ok(!blank.ok);
+    assert.match(blank.message, /^Horizontal spacing is required/);
+    const negative = parseAlbumBoxGaps({ boxGapXMm: "1", boxGapYMm: "-1" });
+    assert.ok(!negative.ok);
+    assert.match(negative.message, /^Vertical spacing/);
+    const wide = parseAlbumBoxGaps({ boxGapXMm: "101", boxGapYMm: "6" });
+    assert.ok(!wide.ok);
+    assert.match(wide.message, /between 0 and 100/);
+  });
+
+  it("is what the whole preset parser refuses a gap with", () => {
+    const alone = parseAlbumBoxGaps({ boxGapXMm: "1", boxGapYMm: "100.5" });
+    const whole = parseAlbumRenderPreset(rawDefaults({ boxGapYMm: "100.5" }));
+    assert.ok(!alone.ok && !whole.ok);
+    assert.equal(whole.message, alone.message);
   });
 });
 

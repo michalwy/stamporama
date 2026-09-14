@@ -11,6 +11,7 @@ import {
   asAlbumLabelPosition,
   albumRenderPreset,
   DEFAULT_ALBUM_PRESET,
+  type AlbumBoxGaps,
   type AlbumRenderPreset,
 } from "./album-template-rules";
 import {
@@ -322,6 +323,27 @@ export async function updateAlbumPreset(
   await assertCollectionOwner(ownerId, collectionId);
   // `albumRenderPreset` so a caller holding a whole album row cannot write its id or its name.
   await prisma.album.update({ where: { id: albumId }, data: albumRenderPreset(preset) });
+}
+
+/**
+ * Change the two gaps between an album's boxes, and nothing else (#836) — what the page editor sets.
+ *
+ * Two columns rather than the whole preset through `updateAlbumPreset`: the editor holds these two
+ * numbers only, and a whole write built from what it happened to read would put back any other value
+ * changed under **Page template…** in another tab since. The same album copy, the same rule — the
+ * template is not read and not touched (ADR-0045 §4) — and the same count before it, in the action.
+ */
+export async function updateAlbumBoxGaps(
+  ownerId: string,
+  albumId: string,
+  gaps: AlbumBoxGaps
+): Promise<void> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.album.update({
+    where: { id: albumId },
+    data: { boxGapXMm: gaps.boxGapXMm, boxGapYMm: gaps.boxGapYMm },
+  });
 }
 
 export async function deleteAlbum(ownerId: string, albumId: string): Promise<void> {

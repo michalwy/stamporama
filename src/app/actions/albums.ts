@@ -13,6 +13,7 @@ import {
   deleteAlbum,
   deleteAlbumTextBlock,
   gatherAlbumEntries,
+  getAlbum,
   getAlbumEntries,
   removeAlbumEntry,
   reorderAlbumEntries,
@@ -23,6 +24,7 @@ import {
   setAlbumEntryStampOrder,
   setAlbumRowBreak,
   updateAlbum,
+  updateAlbumBoxGaps,
   updateAlbumPreset,
   updateAlbumTextBlock,
   AlbumNameTakenError,
@@ -39,7 +41,12 @@ import {
   ALBUM_SPACE_MAX_MM,
   ALBUM_SPACE_MIN_MM,
 } from "@/lib/album-corrections";
-import { parseAlbumRenderPreset, readAlbumPresetFields } from "@/lib/album-template-rules";
+import {
+  albumRenderPreset,
+  parseAlbumBoxGaps,
+  parseAlbumRenderPreset,
+  readAlbumPresetFields,
+} from "@/lib/album-template-rules";
 import {
   cancelAlbumReprint,
   closeAlbumContinuation,
@@ -161,17 +168,54 @@ export async function updateAlbumPresetAction(
       return { status: "confirm", diverging };
     }
     await updateAlbumPreset(session.user.id, albumId, parsed.value);
-    return {
-      status: "success",
-      message:
-        diverging === 0
-          ? "Saved to this album. Its live sheets are re-planned under the new values."
-          : `Saved to this album. ${
-              diverging === 1 ? "One printed card now reports" : `${diverging} printed cards now report`
-            } the difference under Printed cards.`,
-    };
+    return { status: "success", message: savedToAlbumMessage(diverging) };
   } catch (err) {
     return toErrorState(err, "Failed to save the album's values. Please try again.");
+  }
+}
+
+function savedToAlbumMessage(diverging: number): string {
+  return diverging === 0
+    ? "Saved to this album. Its live sheets are re-planned under the new values."
+    : `Saved to this album. ${
+        diverging === 1 ? "One printed card now reports" : `${diverging} printed cards now report`
+      } the difference under Printed cards.`;
+}
+
+/**
+ * Change the gaps between this album's boxes from the page editor (#836) — the album's copy of two
+ * of the values **Page template…** edits, and through the same count before the save.
+ *
+ * A gap is not different from a margin where paper is concerned: it moves boxes between rows, so a
+ * printed card set under the old figure stops matching the plan. So the acknowledgement is the one
+ * `updateAlbumPresetAction` enforces, counted over the album's current values with only the two gaps
+ * substituted, and taken again here rather than trusted.
+ */
+export async function updateAlbumBoxGapsAction(
+  albumId: string,
+  formData: FormData,
+  acknowledgedDiverging: number | null
+): Promise<AlbumPresetActionState> {
+  const session = await getSession();
+  const parsed = parseAlbumBoxGaps({
+    boxGapXMm: ((formData.get("boxGapXMm") as string | null) ?? "").trim(),
+    boxGapYMm: ((formData.get("boxGapYMm") as string | null) ?? "").trim(),
+  });
+  if (!parsed.ok) return { status: "error", message: parsed.message };
+  try {
+    const album = await getAlbum(session.user.id, albumId);
+    if (!album) return { status: "error", message: "This album no longer exists." };
+    const diverging = await countAlbumPresetDivergence(session.user.id, albumId, {
+      ...albumRenderPreset(album),
+      ...parsed.value,
+    });
+    if (diverging > 0 && acknowledgedDiverging !== diverging) {
+      return { status: "confirm", diverging };
+    }
+    await updateAlbumBoxGaps(session.user.id, albumId, parsed.value);
+    return { status: "success", message: savedToAlbumMessage(diverging) };
+  } catch (err) {
+    return toErrorState(err, "Failed to save the spacing. Please try again.");
   }
 }
 

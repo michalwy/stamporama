@@ -398,6 +398,36 @@ export function parseAlbumTemplateInput(raw: AlbumTemplateRawInput): AlbumTempla
   return { ok: true, value: { name, ...preset.value } };
 }
 
+/** The two gaps between boxes: across a row, and between rows. */
+export type AlbumBoxGaps = Pick<AlbumRenderPreset, "boxGapXMm" | "boxGapYMm">;
+
+/**
+ * The two box gaps by the preset's own rule (#836). The page editor sets these two and nothing else,
+ * and `parseAlbumRenderPreset` reads them through this very function — so a gap typed beside the
+ * sheet is refused exactly where the template's form would refuse it, and the bounds cannot be
+ * stated twice.
+ */
+export function parseAlbumBoxGaps(raw: {
+  boxGapXMm: string;
+  boxGapYMm: string;
+}): FieldResult<AlbumBoxGaps> {
+  const boxGapXMm = parseHawidMillimetres(
+    raw.boxGapXMm,
+    "Horizontal spacing",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!boxGapXMm.ok) return boxGapXMm;
+  const boxGapYMm = parseHawidMillimetres(
+    raw.boxGapYMm,
+    "Vertical spacing",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!boxGapYMm.ok) return boxGapYMm;
+  return { ok: true, value: { boxGapXMm: boxGapXMm.value, boxGapYMm: boxGapYMm.value } };
+}
+
 /**
  * The preset alone, by the same rules — the template's parser without the name. An album's own
  * values (#1215) go through exactly this, so an album can never be given a figure its template would
@@ -440,10 +470,8 @@ export function parseAlbumRenderPreset(
   const borderInsetMm = mm("borderInsetMm", "Border inset", MIN_MARGIN_MM, MAX_MARGIN_MM);
   if (!borderInsetMm.ok) return borderInsetMm;
 
-  const boxGapXMm = mm("boxGapXMm", "Horizontal spacing", MIN_SPACING_MM, MAX_SPACING_MM);
-  if (!boxGapXMm.ok) return boxGapXMm;
-  const boxGapYMm = mm("boxGapYMm", "Vertical spacing", MIN_SPACING_MM, MAX_SPACING_MM);
-  if (!boxGapYMm.ok) return boxGapYMm;
+  const boxGaps = parseAlbumBoxGaps(raw);
+  if (!boxGaps.ok) return boxGaps;
   const headingSpaceAboveMm = mm(
     "headingSpaceAboveMm",
     "Space above a heading",
@@ -532,8 +560,7 @@ export function parseAlbumRenderPreset(
       borderStyle: borderStyle.value,
       borderWidthMm: borderWidthMm.value,
       borderInsetMm: borderInsetMm.value,
-      boxGapXMm: boxGapXMm.value,
-      boxGapYMm: boxGapYMm.value,
+      ...boxGaps.value,
       headingSpaceAboveMm: headingSpaceAboveMm.value,
       headingSpaceBelowMm: headingSpaceBelowMm.value,
       verticalClearanceMm: verticalClearanceMm.value,
