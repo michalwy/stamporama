@@ -54,6 +54,7 @@ import {
 import { handleRegistrationClick } from "./registration";
 import { resumeColnectApply, runColnectApply } from "./colnect-apply";
 import { runColnectExport } from "./colnect-export";
+import { runColnectClose } from "./colnect-close";
 
 // Background service worker: routes match/confirm requests from the popup to the active profile's
 // instance, and maintains the per-tab toolbar badge showing how many items the page holds.
@@ -455,6 +456,15 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // It answers as soon as it is under way, because Colnect takes its time building a long list.
   if (msg?.type === "colnect-export") {
     runColnectExport(msg.task, msg.requestId, sender.tab)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    return true;
+  }
+
+  // "Close this listing on Colnect" (#729) — a write, and a short one: answered in this message once
+  // Colnect has, because the page withdraws the offer on exactly that answer.
+  if (msg?.type === "colnect-close") {
+    runColnectClose(msg.task)
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
     return true;

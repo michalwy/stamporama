@@ -398,6 +398,24 @@ names none, the id is unknown here, the module only reads — are three differen
   nowhere to go here. That is what a platform locking its currency (#196) is for: the two are agreed
   once, in settings, rather than checked on every listing.
 
+### Closing a Colnect sale (#729)
+
+The way down, and deliberately **not** part of the listing half: nothing is filled and no form is
+driven. An Active Colnect offer's **Close via Assistant** writes a `CloseTask` (`offerId`,
+`collectionId`, the sale code `saleId`, a label) into a sixth handoff node,
+`stamporama-assistant-colnect-close` (`src/core/colnect-close-handoff.ts`), after the collector
+confirms in Stamporama.
+
+- The worker (`src/background/colnect-close.ts`) finds a Colnect tab — an open one first, the same
+  `colnect-tab.ts` the list apply and export use — and has its content script post
+  `/<lang>/sell/close_sale` with `sale_id=<code>` on the collector's own session (ADR-0042).
+- `src/platform/colnect/sale-close.ts` is the only place the request is built and the answer read:
+  `200` + `OK` is closed, `404` is no such sale, anything else is not closed, with Colnect's own
+  sentence quoted where it is a sentence.
+- The answer comes back **in the same message**, not as progress notices — it is one request — and
+  lands on the node as `closed` or `error`. The page withdraws the offer on `closed`; the extension
+  never touches the offer.
+
 ## Find in Stamporama (#529)
 
 The one gesture that is **not** a toolbar click: a selection on any page, right-clicked →

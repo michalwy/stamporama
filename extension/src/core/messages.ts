@@ -26,6 +26,7 @@ import type {
   ExportHandoffState,
   ExportTask,
 } from "./colnect-export-handoff";
+import type { CloseTask } from "./colnect-close-handoff";
 
 // Typed message contracts. The popup asks the content script to extract, and asks the background
 // service worker to match/confirm against the active profile's instance (background fetch is exempt
@@ -372,6 +373,31 @@ export type ColnectExportFetchResponse =
   | { ok: true; fileName: string; text: string }
   | { ok: false; error: string };
 
+// instance content script (on an offer's own screen) → background: "close this listing on Colnect"
+// (#729). Through the worker for the export's reason — the page has no colnect.com tab to ask from —
+// but answered **in one message** rather than by progress notices: it is one request, over in seconds,
+// and what the page does next (withdraw the offer) waits on exactly that answer. `ok: true` means
+// Colnect confirmed the close, and nothing else does.
+export interface ColnectCloseRequest {
+  type: "colnect-close";
+  task: CloseTask;
+  /** The handoff this is, echoed back so the page can tell an answer from a leftover. */
+  requestId: string;
+}
+export type ColnectCloseResponse = { ok: true } | { ok: false; error: string };
+
+// background → content script on a **colnect.com** page: post one close (#729). In the page for the
+// write's reason (`ColnectWriteRequest`): Colnect authenticates it by session cookie alone. The page
+// reports the status and body as they came; `platform/colnect/sale-close.ts` says what they mean, in
+// the worker.
+export interface ColnectCloseSaleRequest {
+  type: "colnect-close-sale";
+  saleId: string;
+}
+export type ColnectCloseSaleResponse =
+  | { ok: true; status: number; body: string }
+  | { ok: false; error: string };
+
 export type BackgroundRequest =
   | MatchRequest
   | ConfirmRequest
@@ -538,6 +564,7 @@ export type BackgroundMessage =
   | OrderImportRequest
   | ColnectApplyRequest
   | ColnectExportRequest
+  | ColnectCloseRequest
   | ListRequest
   | ListingSubmittedNotice
   | ListedHereNotice

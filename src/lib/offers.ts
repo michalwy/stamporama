@@ -3501,6 +3501,10 @@ export interface OfferDetail {
    * language. Seeds the compose dialog's language selector (#297). */
   platformTitleLanguage: string | null;
   url: string | null;
+  /** Colnect's own code for the sale this offer is listed as (#696), or null. What **Close via
+   * Assistant** (#729) names the listing by — never parsed out of {@link url} on the way, since a code
+   * two offers' URLs both name is stored as null for exactly that reason. */
+  colnectSaleId: string | null;
   /** How this listing is sold (#449): `fixed` — a quick buy at a stated asking price — or
    * `auction`, where the figure moves with the bidding and {@link startingPrice} says what it opened
    * at. It decides what the price field is *called* on screen, nothing about the lifecycle. */
@@ -3745,6 +3749,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       collectionId: true,
       platformId: true,
       url: true,
+      colnectSaleId: true,
       listingType: true,
       price: true,
       startingPrice: true,
@@ -4075,6 +4080,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     platformName: offer.platform.name,
     platformTitleLanguage: offer.platform.titleLanguage,
     url: offer.url,
+    colnectSaleId: offer.colnectSaleId,
     listingType: normalizeListingType(offer.listingType),
     price: offer.price.toFixed(2),
     startingPrice: offer.startingPrice?.toFixed(2) ?? null,

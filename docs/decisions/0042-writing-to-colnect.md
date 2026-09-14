@@ -175,6 +175,43 @@ So a run refuses its removals against a snapshot older than seven days
 (`COLNECT_APPLY_MAX_SNAPSHOT_AGE_DAYS`), keeps its additions, and names the import as the way
 through. This is #689's own rule — *removals only from what the report actually saw*.
 
+### Closing a sale runs on the same authority (#729)
+
+**Amended by #729.** An Active Colnect offer's **Close via Assistant** takes its listing down on
+Colnect and then withdraws the offer here:
+
+```
+POST /<lang>/sell/close_sale
+sale_id=<the sale code, Offer.colnectSaleId>
+→ 200 "OK…" closed · 404 no such sale · anything else: not closed
+```
+
+It is added under this decision because it is the same authority exactly — the collector's own
+session cookie, same-origin, from the content script, on a colnect.com page — and the endpoint is as
+undocumented as `POST /item/col`. It was known from the bulk close of this account's own listings on
+2026-07-30, which ran 3,070 of them through it at the rate recorded below.
+
+Three things are deliberate:
+
+- **One request on a confirmation in Stamporama, not a click on Colnect's own button.** #729 first
+  asked for the collector to press Colnect's confirm, the way a listing stops before Save (#408). The
+  seller's sale page sits behind Colnect's anti-bot interstitial and a sign-in, so its markup could not
+  be mapped, and a flow driving a control nobody has seen is a flow that breaks silently. A close is
+  also **reversible** — Colnect's sale page offers to reopen it — which a posted listing is not. The
+  user settled it on 2026-09-14: the confirmation dialog names the listing and states both
+  consequences, and that is the human look.
+- **Only `OK` closes anything.** Colnect answers a page that is not signed in, a paused sale and its
+  interstitial with something other than `OK`, often with a `200`. `platform/colnect/sale-close.ts`
+  reads every one of those as *not closed*, because `closed` is what withdraws the offer, and an offer
+  withdrawn over a listing still selling is exactly the drift this exists to prevent.
+- **The extension closes; the page withdraws.** The withdrawal is the instance's own transition,
+  taken by the screen the collector confirmed on, which stays busy until both have happened. If the
+  withdrawal is refused after Colnect closed the listing, the dialog says so and retries the
+  withdrawal alone.
+
+The sale is named by `Offer.colnectSaleId` (#696) and never by a code parsed from the URL on the way:
+a code two offers' URLs share is stored as null, and a close is the last place to guess which one.
+
 ## Alternatives considered
 
 - **Keep proposing only.** What #686 does. Rejected for the reason #689 exists: the report is
@@ -198,6 +235,7 @@ through. This is #689's own rule — *removals only from what the report actuall
 - `extension/src/platform/colnect/list-write.ts` is the only place that builds this request, and it
   is pure and unit-tested, so what is sent can be asserted without a browser — including, since
   #704, the whole plan from *what Colnect made of the addition* to *what this side holds*.
-  `list-export.ts` is its counterpart for the export request (#690), on the same terms.
+  `list-export.ts` is its counterpart for the export request (#690), and `sale-close.ts` for closing a
+  sale (#729), on the same terms.
 - A Colnect change breaks the run and nothing else. The report, the import and every by-hand fix
   keep working.

@@ -52,7 +52,10 @@ import type {
   ColnectCondQtyRequest,
   ColnectExportFetchRequest,
   ColnectExportFetchResponse,
+  ColnectCloseSaleRequest,
+  ColnectCloseSaleResponse,
 } from "../core/messages";
+import { colnectCloseSaleBody, colnectCloseSalePath } from "../platform/colnect/sale-close";
 import {
   COLNECT_LIST_WRITE_PATH,
   colnectCondQtyBody,
@@ -652,6 +655,17 @@ if (!window.__stamporamaAssistantLoaded) {
     }
   );
 
+  // Closing one of the collector's own sales (#729, ADR-0042). A write, and here rather than in the
+  // worker for the list write's reason: Colnect authenticates it by session cookie alone. The page
+  // reports the status and body as they came; the worker reads them through `sale-close.ts`.
+  chrome.runtime.onMessage.addListener(
+    (msg: ColnectCloseSaleRequest, _sender, sendResponse: (r: ColnectCloseSaleResponse) => void) => {
+      if (msg?.type !== "colnect-close-sale") return;
+      void closeColnectSale(msg.saleId).then(sendResponse);
+      return true;
+    }
+  );
+
   chrome.runtime.onMessage.addListener(
     (msg: ExtractRequest, _sender, sendResponse: (r: ExtractResponse) => void) => {
       if (msg?.type !== "extract") return;
@@ -762,6 +776,28 @@ async function postToColnect(body: string): Promise<ColnectWriteResponse> {
     // Read before answering: a body left unread is the one thing the worker cannot ask for again.
     const text = await res.text().catch(() => "");
     return { ok: true, status: res.status, retryAfter: res.headers.get("retry-after"), body: text };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Close one of the collector's own Colnect sales (#729), on their own session.
+ *
+ * The body and the path come from `platform/colnect/sale-close.ts` — this only carries them — and the
+ * answer goes back as it came. The page reports; the worker decides.
+ */
+async function closeColnectSale(saleId: string): Promise<ColnectCloseSaleResponse> {
+  try {
+    const res = await fetch(colnectCloseSalePath(colnectLangFromPath(location.pathname)), {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: colnectCloseSaleBody(saleId),
+      // The collector's own session, which is the only authority this ever runs under.
+      credentials: "include",
+    });
+    const text = await res.text().catch(() => "");
+    return { ok: true, status: res.status, body: text };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

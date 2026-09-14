@@ -171,3 +171,16 @@ export function usesPlatformConditions(platformModule: string | null): boolean {
 export function supportsAssistantUpdate(platformModule: string | null): boolean {
   return listingModuleRules(platformModule)?.supportsUpdate ?? false;
 }
+
+/**
+ * Whether a live listing on this platform can be **closed** through the Assistant (#729) — the
+ * question **Close via Assistant** asks.
+ *
+ * Colnect alone, and deliberately not a field of {@link ListingModuleRules}: the close is not the
+ * listing half driving a form, it is one request to an endpoint of Colnect's own (ADR-0042), named by
+ * the sale code only Colnect listings carry (#696). A marketplace gaining a listing half gains no
+ * close with it; Allegro's offers are ended on Allegro, and Delcampe's through its own export.
+ */
+export function supportsAssistantClose(platformModule: string | null): boolean {
+  return platformModule === COLNECT_PLATFORM_MODULE;
+}

@@ -28,10 +28,12 @@ import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
+import { CLOSE_ELEMENT_ID, useAssistantClose } from "../assistant-close-handoff";
 import {
   AssistantOutcome,
   ListViaAssistantButton,
   UpdateViaAssistantButton,
+  CloseViaAssistantButton,
 } from "../assistant-listing";
 import { PublishToAllegroButton } from "../allegro/publish-to-allegro";
 import { ComposeSetDialog } from "./compose-set-dialog";
@@ -256,6 +258,50 @@ export function OfferDetailPanel({
     handoff?.state === "generating" ||
     handoff?.state === "loading" ||
     handoff?.state === "running";
+
+  // Closing the listing on Colnect (#729). The dialog is the gesture: nothing is sent until the
+  // collector confirms there, and it stays open, busy, until Colnect has answered and this offer has
+  // been withdrawn — so the one failure worth guarding, a listing closed on Colnect with the offer
+  // still Active here, happens in front of the collector rather than behind them.
+  const [closingListing, setClosingListing] = useState(false);
+  const [closeError, setCloseError] = useState<string | undefined>();
+  const {
+    handoff: closeHandoff,
+    start: startClose,
+    dismiss: dismissClose,
+    nodeRef: closeNodeRef,
+  } = useAssistantClose();
+  const withdrawnFor = useRef<string | null>(null);
+
+  /** Withdraw this offer once Colnect has confirmed the close — the same transition the Withdraw
+   *  confirmation takes, so a close through the Assistant ends in exactly the record a withdrawal by
+   *  hand does. */
+  const withdrawAfterClose = useCallback(() => {
+    setCloseError(undefined);
+    startTransition(async () => {
+      const { setOfferStateAction } = await import("@/app/actions/offers");
+      const result = await setOfferStateAction(offerId, "withdrawn");
+      if (result.status === "success") {
+        setClosingListing(false);
+        dismissClose();
+        invalidateAll(collectionId);
+        toast({ message: "Closed on Colnect — this offer is now withdrawn" });
+      } else {
+        setCloseError(
+          `The listing is closed on Colnect, but this offer could not be withdrawn: ${result.message}`
+        );
+      }
+    });
+  }, [offerId, collectionId, dismissClose, invalidateAll, toast]);
+
+  useEffect(() => {
+    if (closeHandoff?.state !== "closed" || closeHandoff.offerId !== offerId) return;
+    // Once per close: a re-render must not withdraw twice, and a refused withdrawal is retried by
+    // the dialog's own button rather than by the next render.
+    if (withdrawnFor.current === closeHandoff.requestId) return;
+    withdrawnFor.current = closeHandoff.requestId;
+    withdrawAfterClose();
+  }, [closeHandoff, offerId, withdrawAfterClose]);
 
   // The languages this collection lists in (#293), for regenerating the title in one of them (#297).
   const { titleLanguages, defaultLanguage } = useTitleLanguages(collectionId);
@@ -734,6 +780,25 @@ export function OfferDetailPanel({
                 onStart={() => {
                   setActionError(undefined);
                   void startHandoff(offerId, "update");
+                }}
+              />
+            )}
+            {/* The way down (#729): the live listing closed on Colnect and the offer withdrawn here,
+                in one confirmation. Active only, as the issue scopes it — a Colnect sale that is
+                paused there cannot be closed until it is resumed. */}
+            {offer.state === "active" && (
+              <CloseViaAssistantButton
+                platformModule={offer.platformModule}
+                saleId={offer.colnectSaleId}
+                present={assistantPresent}
+                running={closeHandoff?.state === "running"}
+                disabled={isPending}
+                style={ASSISTANT_BTN}
+                onStart={() => {
+                  setActionError(undefined);
+                  setCloseError(undefined);
+                  dismissClose();
+                  setClosingListing(true);
                 }}
               />
             )}
@@ -1289,6 +1354,12 @@ export function OfferDetailPanel({
           {handoff.payload}
         </div>
       )}
+      {/* The close handoff (#729), on a node of its own for the same reason and in the same shape. */}
+      {closeHandoff && (
+        <div ref={closeNodeRef} id={CLOSE_ELEMENT_ID} hidden>
+          {closeHandoff.payload}
+        </div>
+      )}
 
       {/* Activation asks for the listing URL (#399), the same step the bulk listing workspace runs
           (#322) — reached from the quick-advance button and the ⋮ *Activate* entry alike. */}
@@ -1352,6 +1423,39 @@ export function OfferDetailPanel({
                 setConfirm(null);
                 invalidateAll(collectionId);
               } else setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {closingListing && offer.colnectSaleId && (
+        <ConfirmDialog
+          title="Close the listing on Colnect"
+          message="The Assistant closes this listing on Colnect, in your own signed-in Colnect session, and then withdraws this offer. Withdrawn is final here — to sell again, create a new offer. On Colnect the listing can be reopened from its own page. The copies are untouched."
+          actionLabel={closeHandoff?.state === "closed" ? "Withdraw" : "Close and withdraw"}
+          pendingLabel={closeHandoff?.state === "running" ? "Closing on Colnect…" : "Withdrawing…"}
+          variant="destructive"
+          isPending={isPending || closeHandoff?.state === "running"}
+          error={closeHandoff?.state === "error" ? (closeHandoff.message ?? undefined) : closeError}
+          onClose={() => {
+            if (isPending || closeHandoff?.state === "running") return;
+            setClosingListing(false);
+            setCloseError(undefined);
+            dismissClose();
+          }}
+          onConfirm={() => {
+            // Colnect already closed it and only the withdrawal was refused: retry that alone, rather
+            // than asking Colnect to close a listing that is no longer open.
+            if (closeHandoff?.state === "closed") {
+              withdrawAfterClose();
+              return;
+            }
+            setCloseError(undefined);
+            startClose({
+              offerId,
+              collectionId,
+              saleId: offer.colnectSaleId!,
+              label: offer.name ?? offer.label,
             });
           }}
         />
