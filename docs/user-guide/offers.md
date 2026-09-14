@@ -1314,7 +1314,9 @@ the value are in front of you, and read the list below afterwards.
 They are **templates**, in the same `{token}` language a platform's own templates are written in, and
 they preview against **this lot's copies** rather than random samples — so `{count}` shows the number
 this listing will really carry. `{area}`, `{year}`, `{condition}` and `{count}` are the ones a job lot
-is mostly made of; the rest of the vocabulary is there if you want it.
+is mostly made of; the rest of the vocabulary is there if you want it. The description lists the
+[repeating blocks](contacts.md#description-and-private-note) as well — `{#copy}…{/copy}` to write one
+line per copy, a condition legend, and the rest — exactly as a platform's description template does.
 
 Because they are templates, the wording **keeps following the offer**. Strike a copy that sold
 somewhere else and the title re-reads at 99 by itself — which finished text could not do, and which

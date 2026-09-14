@@ -5,7 +5,6 @@ import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
 import {
   AVAILABLE_TITLE_TOKENS,
   AVAILABLE_LISTING_TOKENS,
-  AVAILABLE_LISTING_BLOCKS,
   DEFAULT_TITLE_TEMPLATE,
   type TitleToken,
 } from "@/lib/offer-title-template";
@@ -182,7 +181,6 @@ export function ListingTemplatesDialog({
             value={draft[f.key]}
             onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
             tokens={f.tokens}
-            blocks={f.multiline ? AVAILABLE_LISTING_BLOCKS : undefined}
             multiline={f.multiline}
             rows={f.rows}
             placeholder={f.placeholder}

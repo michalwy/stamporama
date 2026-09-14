@@ -292,20 +292,17 @@ export function templateUsesListedAs(template: string | null | undefined): boole
   return /\{[^{}]*\blistedAs\b[^{}]*\}/i.test(template ?? "");
 }
 
-/** The tokens a **multi-line listing text** may contain (#266/#267) — the title's tokens plus
- * `{setTitle}`, which only names something inside a `{#set}` block (or when the template renders one
- * set's own title); `{listedAs}` / `{variants}` (#619), which say which catalogue entry a piece that
- * was not identified down to its variant is being sold under and which ones it might be; and
- * `{offerUrl}` (#415), which is a fact about the offer rather than its copies: a link on a
- * marketplace page back to the listing's own screen here. None of the four is a title token — a URL
- * is nothing a buyer wants to read in a title, and the variant caveat wants a sentence rather than a
- * fragment of one — so each resolves empty there rather than showing literal braces, exactly as in a
- * preview. */
+/** The tokens a **multi-line listing text** may contain anywhere in it (#266/#267) — the title's
+ * tokens plus `{offerUrl}` (#415), which is a fact about the offer rather than its copies: a link on a
+ * marketplace page back to the listing's own screen here. It is not a title token — a URL is nothing
+ * a buyer wants to read in a title — so it resolves empty there rather than showing literal braces,
+ * exactly as in a preview.
+ *
+ * The listing-only tokens that mean something only **inside a block** are not here but under that
+ * block in {@link AVAILABLE_LISTING_BLOCKS} (#1268): `{setTitle}` under `{#set}`, and `{listedAs}` /
+ * `{variants}` under `{#unknownVariant}`. */
 export const AVAILABLE_LISTING_TOKENS: readonly TitleToken[] = [
   ...AVAILABLE_TITLE_TOKENS,
-  { token: "{setTitle}", label: "Set title", example: "Complete series" },
-  { token: "{listedAs}", label: "Listed as (variant)", example: "Mi·PL 865a" },
-  { token: "{variants}", label: "Possible variants", example: "Mi·PL 865a-c" },
   { token: "{offerUrl}", label: "Offer link", example: EXAMPLE_OFFER_URL },
 ];
 
@@ -396,33 +393,70 @@ export const ALBUM_FOOTER_TOKENS: readonly TitleToken[] = [
   titleToken("{year}"),
 ];
 
-/** The blocks a listing text may use (#266), for the builder's chips: each renders its body once per
- * set / per copy / per distinct dictionary entry in scope — except the last, which repeats nothing
- * and is simply skipped when nothing in scope is an unknown-variant umbrella (#619). */
-export const AVAILABLE_LISTING_BLOCKS: readonly { open: string; close: string; label: string }[] = [
-  { open: "{#set}", close: "{/set}", label: "Repeat once per set in the offer" },
-  { open: "{#copy}", close: "{/copy}", label: "Repeat once per copy (of the enclosing set)" },
-  {
-    open: "{#conditionLegend}",
-    close: "{/conditionLegend}",
-    label: "Repeat once per distinct condition used — a legend of abbreviations",
+/** One block of a listing text as its reference shows it (#1268): the tags that open and close it,
+ * what it repeats over, a one-line example, and the tokens that only mean something inside it. */
+export interface TemplateBlock {
+  open: string;
+  close: string;
+  /** What the block repeats over — or, for the conditional, when it renders at all. */
+  label: string;
+  /** A one-line template using the block, as a collector would type it. */
+  example: string;
+  /** Tokens that only name something inside this block, shown as belonging to it. */
+  tokens: readonly TitleToken[];
+}
+
+/** **The block vocabulary** — the one place both the engine and its reference read (#1268). The
+ * parser accepts exactly these names (`BlockOver` is this record's keys) and the template builder
+ * lists exactly these, so a block cannot work without being listed or be listed without working. It
+ * is #766's single-vocabulary rule applied to blocks: before this the engine kept its own tag list and
+ * the chips a second one, and the lot builder's description quietly showed neither.
+ *
+ * Each renders its body once per set / per copy / per distinct dictionary entry in scope — except
+ * `unknownVariant`, which repeats nothing and is simply skipped when nothing in scope is an
+ * unknown-variant umbrella (#619). Insertion order is the reference's display order. */
+const LISTING_BLOCK_VOCABULARY = {
+  set: {
+    label: "Repeats once per set in the offer",
+    example: "{#set}{setTitle}: {catalog}{/set}",
+    tokens: [{ token: "{setTitle}", label: "Set title", example: "Complete series" }],
   },
-  {
-    open: "{#certificateLegend}",
-    close: "{/certificateLegend}",
-    label: "Repeat once per distinct certificate status used — a legend of abbreviations",
+  copy: {
+    label: "Repeats once per copy — of the enclosing set, or of the whole offer",
+    example: "{#copy}{catalog} {name} — {conditionAbbr}{/copy}",
+    tokens: [],
   },
-  {
-    open: "{#formatLegend}",
-    close: "{/formatLegend}",
-    label: "Repeat once per distinct format used — singles are not listed",
+  conditionLegend: {
+    label: "Repeats once per distinct condition the copies use — a legend of abbreviations",
+    example: "{#conditionLegend}{conditionAbbr} = {condition}{/conditionLegend}",
+    tokens: [],
   },
-  {
-    open: "{#unknownVariant}",
-    close: "{/unknownVariant}",
-    label: "Only when a copy's variant was not identified — narrowed to those copies",
+  certificateLegend: {
+    label: "Repeats once per distinct certificate status the copies use — a legend of abbreviations",
+    example: "{#certificateLegend}{certificateAbbr} = {certificate}{/certificateLegend}",
+    tokens: [],
   },
-];
+  formatLegend: {
+    label: "Repeats once per distinct format the copies use — singles are not listed",
+    example: "{#formatLegend}{formatAbbr} = {format}{/formatLegend}",
+    tokens: [],
+  },
+  unknownVariant: {
+    label: "Only when a copy's variant was not identified — once, narrowed to those copies",
+    example: "{#unknownVariant}One of {variants}, offered as {listedAs}.{/unknownVariant}",
+    tokens: [
+      { token: "{listedAs}", label: "Listed as (variant)", example: "Mi·PL 865a" },
+      { token: "{variants}", label: "Possible variants", example: "Mi·PL 865a-c" },
+    ],
+  },
+} satisfies Record<string, Omit<TemplateBlock, "open" | "close">>;
+
+/** The blocks a listing text may use (#266), in display order — derived from
+ * {@link LISTING_BLOCK_VOCABULARY}, so the tags are spelled the way the parser matches them. Only a
+ * **multi-line** text accepts them; in a one-line template a block tag stays literal. */
+export const AVAILABLE_LISTING_BLOCKS: readonly TemplateBlock[] = (
+  Object.keys(LISTING_BLOCK_VOCABULARY) as BlockOver[]
+).map((name) => ({ open: `{#${name}}`, close: `{/${name}}`, ...LISTING_BLOCK_VOCABULARY[name] }));
 
 /** The fallback template when a platform has none set: catalog, name, year, condition. */
 export const DEFAULT_TITLE_TEMPLATE = "{catalog} {name} {year} {condition}";
@@ -1129,13 +1163,7 @@ interface TemplateScope {
  * is what makes it the engine's only conditional. It is named after the state the rest of the app
  * calls by that name (#238/#239) rather than after what it does, so a collector reading a template
  * meets one word for one thing. */
-type BlockOver =
-  | "set"
-  | "copy"
-  | "conditionLegend"
-  | "certificateLegend"
-  | "formatLegend"
-  | "unknownVariant";
+type BlockOver = keyof typeof LISTING_BLOCK_VOCABULARY;
 
 /** The legend blocks, and which pair of {@link TitleTemplateCopy} fields each iterates. */
 type LegendOver = "conditionLegend" | "certificateLegend" | "formatLegend";
@@ -1145,14 +1173,7 @@ type TemplateNode =
   | { kind: "text"; text: string }
   | { kind: "block"; over: BlockOver; body: TemplateNode[] };
 
-const BLOCK_TAGS: readonly BlockOver[] = [
-  "set",
-  "copy",
-  "conditionLegend",
-  "certificateLegend",
-  "formatLegend",
-  "unknownVariant",
-];
+const BLOCK_TAGS = Object.keys(LISTING_BLOCK_VOCABULARY) as readonly BlockOver[];
 
 const BLOCK_TAG_RE = new RegExp(`\\{(${BLOCK_TAGS.map((t) => `#${t}|/${t}`).join("|")})\\}`, "g");
 
@@ -1281,10 +1302,8 @@ function legendScopes(scope: TemplateScope, over: LegendOver): TemplateScope[] {
  * and `{variants}` inside it describe exactly the pieces the caveat is about, never the identified
  * ones standing beside them in the same listing. That is `legendScopes`' rule, for the same reason.
  *
- * Outside a listing text it renders nothing at all, its tokens' rule exactly: the caveat is a
- * sentence, and there is no room for one in a title. */
+ * It never reaches a title: a one-line template parses no blocks at all (#1268). */
 function unknownVariantScopes(scope: TemplateScope): TemplateScope[] {
-  if (!scope.listingText) return [];
   const sets = scope.sets
     .map((s) => ({ title: s.title, copies: s.copies.filter((c) => c.unknownVariant) }))
     .filter((s) => s.copies.length > 0);
@@ -1394,7 +1413,11 @@ function renderSegments(
 ): TitleSegment[] {
   const tpl = template?.trim() || opts.fallbackTemplate?.trim() || "";
   if (!tpl) return [];
-  const nodes: TemplateNode[] = parseTemplateNodes(tpl) ?? [{ kind: "text", text: tpl }];
+  // Blocks are a **multi-line** construct (#1268): a title, a collage label or an album's heading is
+  // one line over one scope, so a block tag there stays literal like an unknown token — which keeps
+  // "accepts blocks" and "lists blocks" the same set of fields.
+  const parsed = opts.multiline ? parseTemplateNodes(tpl) : null;
+  const nodes: TemplateNode[] = parsed ?? [{ kind: "text", text: tpl }];
   const rendered = renderNodes(nodes, rootScope(sets, opts.context, opts.multiline ?? false));
   const tidied = opts.multiline ? tidyMultiline(rendered) : tidyLine(rendered);
   if (!tidied.includes(FB_OPEN)) return tidied ? [{ text: tidied, fellBack: false }] : [];
