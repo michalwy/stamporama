@@ -13,8 +13,10 @@ import { checklistSlots } from "./lot-builder-rules";
 import { createOffer, OfferActionBlockedError, syncGeneratedTexts } from "./offers";
 import { markListingContentChanged } from "./offer-listing-sync";
 import { formatItemNo } from "./item-number";
+import { sortPhotos, type PhotoSummary } from "./photos";
 import {
   checkSeriesPicks,
+  collapseCandidates,
   compositionOutcome,
   copyMatchesCombination,
   DEFAULT_SERIES_CRITERIA,
@@ -85,6 +87,18 @@ export interface RecombinationFiller {
   offers: RecombinationOfferRef[];
   /** The agreed trade the copy is promised in, if any (#639) — named, never a reason to leave it out. */
   promisedIn: CommittingTrade | null;
+  /** The copy's own photos, front and back first (#1266) — which copy suits the set is judged by
+   *  looking at it. Empty: the copy has none, and the card says so. */
+  photos: PhotoSummary[];
+}
+
+/** Identical candidates for a slot, collapsed into one line (#1266): the same stamp, condition,
+ *  certificate status and format, from the same place. */
+export interface RecombinationCandidateGroup {
+  key: string;
+  /** Into the slot's `fillers`, lowest inventory number first — the first is the copy the collapsed
+   *  line chooses. */
+  itemIds: string[];
 }
 
 export interface RecombinationStampName {
@@ -98,6 +112,8 @@ export interface RecombinationSlotView {
   stamp: RecombinationStampName;
   /** Available copies first. */
   fillers: RecombinationFiller[];
+  /** The same fillers collapsed into identical groups (#1266), available groups first. */
+  candidates: RecombinationCandidateGroup[];
 }
 
 export interface RecombinationSeriesView {
@@ -568,7 +584,12 @@ async function nameSeries(
     }),
     prisma.item.findMany({
       where: { id: { in: [...itemIds] }, collectionId },
-      select: { id: true, itemNo: true, condition: { select: { abbreviation: true, name: true } } },
+      select: {
+        id: true,
+        itemNo: true,
+        condition: { select: { abbreviation: true, name: true } },
+        photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+      },
     }),
     prisma.offer.findMany({
       where: { id: { in: [...offerIds] }, collectionId },
@@ -634,6 +655,9 @@ async function nameSeries(
         : null,
       slots: series.slots.map((slot) => ({
         stamp: stampName(slot.stampId),
+        candidates: collapseCandidates(
+          slot.copies.map((copy) => ({ ...copy, itemNo: itemById.get(copy.itemId)?.itemNo ?? 0 }))
+        ).map((group) => ({ key: group.key, itemIds: group.copies.map((copy) => copy.itemId) })),
         fillers: slot.copies.map((copy) => {
           const item = itemById.get(copy.itemId);
           return {
@@ -646,6 +670,12 @@ async function nameSeries(
               return offer ? [offer] : [];
             }),
             promisedIn: promisedIn.get(copy.itemId) ?? null,
+            photos: (item?.photos ?? [])
+              .map((photo): PhotoSummary => ({
+                ...photo,
+                role: photo.role === "front" || photo.role === "back" || photo.role === "main" ? photo.role : null,
+              }))
+              .sort(sortPhotos),
           };
         }),
       })),

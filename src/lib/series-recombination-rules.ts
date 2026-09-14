@@ -362,6 +362,70 @@ function availableFirst(a: RecombinationCopy, b: RecombinationCopy): number {
   return a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0;
 }
 
+// How a slot's candidates are shown (#1266) -----------------------------------------------------
+
+/** What makes two candidates for one slot interchangeable on the card. */
+export type CandidateIdentity = Pick<
+  RecombinationCopy,
+  "stampId" | "conditionId" | "certificateStatusId" | "formatId" | "offerIds"
+>;
+
+/**
+ * A candidate's identity for collapsing (#1266): the stamp it is **of** (a variant is not its parent),
+ * its condition, certificate status and format, and **where it comes from** — the exact offers holding
+ * it singly, or none for *not offered here yet*. Copies in different offers never share a key, because
+ * which offer changes is part of the choice. JSON over a fixed order, so `null` stays a value.
+ */
+export function candidateKey(copy: CandidateIdentity): string {
+  return JSON.stringify([
+    copy.stampId,
+    copy.conditionId,
+    copy.certificateStatusId,
+    copy.formatId,
+    [...new Set(copy.offerIds)].sort(),
+  ]);
+}
+
+/** Identical candidates, lowest inventory number first. */
+export interface CandidateGroup<T> {
+  key: string;
+  copies: T[];
+}
+
+/**
+ * A slot's candidates collapsed into groups of identical copies (#1266), so fourteen used copies of one
+ * variant in one offer read as one line with a count. Each group lists its copies lowest number first
+ * — the first is the copy a collapsed line chooses. Groups of available copies come first, as the flat
+ * list did, then by their lowest number.
+ */
+export function collapseCandidates<T extends CandidateIdentity & { itemNo: number }>(
+  copies: readonly T[]
+): CandidateGroup<T>[] {
+  const groups = new Map<string, T[]>();
+  for (const copy of copies) {
+    const key = candidateKey(copy);
+    const group = groups.get(key);
+    if (group) group.push(copy);
+    else groups.set(key, [copy]);
+  }
+  return [...groups]
+    .map(([key, group]) => ({ key, copies: [...group].sort((a, b) => a.itemNo - b.itemNo) }))
+    .sort((a, b) => {
+      const aOffered = a.copies[0].offerIds.length > 0 ? 1 : 0;
+      const bOffered = b.copies[0].offerIds.length > 0 ? 1 : 0;
+      return aOffered - bOffered || a.copies[0].itemNo - b.copies[0].itemNo;
+    });
+}
+
+/**
+ * The copy a collapsed line stands for (#1266): the one already chosen, when it is in the group — an
+ * expanded pick survives collapsing — and otherwise the lowest-numbered, which the line names. Picking
+ * a collapsed line chooses exactly this copy, so nothing is chosen invisibly.
+ */
+export function collapsedChoice(lowestFirst: readonly string[], chosen: string | undefined): string {
+  return chosen !== undefined && lowestFirst.includes(chosen) ? chosen : lowestFirst[0];
+}
+
 // How many offers would change ------------------------------------------------------------------
 
 /** How many branches the search may explore once it holds an answer. Far beyond any real series —
