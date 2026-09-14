@@ -5391,7 +5391,7 @@ model Contact {
   //
   // It is **advisory, and never applied on its own**. Nothing seeds it, nothing clamps to it, and no
   // gate refuses a price under it: the collector asks it back with one button beside the price, on
-  // the offer's screen and in the listing wizard's price step (#730). A floor that wrote itself into
+  // the offer's screen. A floor that wrote itself into
   // offers would be indistinguishable from a considered price the moment it had, and the whole point
   // of a floor is that it is the price you fall back to, not the one you meant.
   //

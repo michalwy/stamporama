@@ -139,8 +139,8 @@ export function OfferCatalogValuesDialog({
   // Portalled to the document, the way every dialog that can be opened **from inside another
   // dialog** is: a fixed-position panel inside one of `DialogShell`'s own panels is positioned
   // against that panel — the shell centres itself with a transform, which makes it the containing
-  // block — and clipped by its `overflow: hidden`. The listing wizard (#730) opens this one from its
-  // first step, and the surfaces that opened it before are unaffected: the panel is fixed either way.
+  // block — and clipped by its `overflow: hidden`. Portalled, the panel is fixed against the viewport
+  // wherever it is opened from.
   if (typeof document === "undefined") return null;
 
   return createPortal(

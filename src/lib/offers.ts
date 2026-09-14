@@ -3553,15 +3553,15 @@ export interface OfferDetail {
   suggestedUnpricedSets: number;
   /** The platform's configured opening figure for an auction (#362, narrowed in #449/#553), in the
    * platform's own currency; null where none is set or the platform lists quick buys. It seeded this
-   * offer's starting price at creation and is **not** re-applied anywhere — the listing wizard's
-   * price step (#730) offers it back only while the offer still carries no starting price of its
-   * own, which is the one case where nothing would otherwise answer the question. */
+   * offer's starting price at creation and is **not** re-applied anywhere — the offer's screen
+   * offers it back (#1283) only while the offer still carries no starting price of its own, which is
+   * the one case where nothing would otherwise answer the question. */
   platformDefaultStartingPrice: string | null;
   /** The floor the platform lists at (#731), in the platform's own currency; null where none is set.
    * Unlike {@link platformDefaultStartingPrice} it is offered back on **any** listing type and at
    * any point in an offer's life — it is a standing fact about the platform, not a creation-time
    * seed — and it is purely advisory: nothing here applies it, clamps to it, or refuses a price
-   * under it. The offer's screen and the wizard's price step put it one button away. */
+   * under it. The offer's screen puts it one button away. */
   platformMinimumPrice: string | null;
   sets: OfferDetailSet[];
   /** The sets summed and averaged (#378) — see {@link OfferSetsTotals}. */
@@ -3787,11 +3787,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           maxDescriptionLength: true,
           maxPrivateNoteLength: true,
           platformModule: true,
-          // The platform's own opening figure for an auction (#362/#553). Read here for the listing
-          // wizard's price step (#730) alone: it is a *creation-time* seed everywhere else, and the
-          // wizard is the one surface that asks the pricing question again after the offer exists.
+          // The platform's own opening figure for an auction (#362/#553). Read here for the offer
+          // screen's price suggestions (#1283): it is a *creation-time* seed everywhere else, and
+          // those are the one surface that asks the pricing question again after the offer exists.
           defaultStartingPrice: true,
-          // The floor (#731), read for the same two surfaces — but on every offer here, not only an
+          // The floor (#731), read for the same suggestions — but on every offer here, not only an
           // auction still missing an opening figure: it is asked back by hand, so there is no state
           // in which showing it would undo a decision already made.
           minimumPrice: true,

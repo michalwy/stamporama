@@ -73,8 +73,10 @@ yours to edit on the offer. Leave it empty for houses you open individually.
 There is deliberately no default price for a **quick buy**: its price follows from the goods, which
 is exactly what those two suggestions already answer.
 
-Both are read when the offer is created and never afterwards, so what they filled in stays yours to
-edit on the offer, and changing either here leaves offers already created untouched.
+Both are read when the offer is created, so what they filled in stays yours to edit on the offer, and
+changing either here leaves offers already created untouched. The one place the starting price is
+shown again is an auction whose starting price is empty — cleared, or created before you set one —
+where the offer's screen offers it back beside the price as **platform default**.
 
 Ticking **Platform** also reveals a **Minimum price** — the lowest figure worth listing on this
 platform once its own fees are paid, in the platform's currency. Unlike the starting price above it,
@@ -82,8 +84,7 @@ it applies whatever the listing type is, and it applies for the whole life of an
 only at creation.
 
 It fills in nothing by itself. It is a figure you ask back for: **Use minimum** appears beside the
-price on an offer's own screen and in the [listing wizard](offers.md#the-listing-wizard)'s price
-step, and sets the price to it in one click. Nothing is ever refused for being under it either —
+price on an offer's own screen, and sets the price to it in one click. Nothing is ever refused for being under it either —
 this is a floor you choose to drop to, not one the app holds you to, because clearing a lot at cost
 or giving something away is an ordinary thing to do.
 
