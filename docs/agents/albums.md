@@ -864,6 +864,38 @@ that fits centred, so it costs nothing in the ordinary case. It is the only scro
 application that centres its content on the overflowing axis; there is nothing else to fix here, but
 it is the shape to recognise if another screen ever grows one.
 
+### The box gaps in the page editor (#836)
+
+`boxGapXMm` / `boxGapYMm` are the one pair of preset values settable from the editor, in the sheet's
+own panel (nothing selected). **Only these two, and that is a decision rather than a start**: a gap
+is the one preset number judged by *looking at the page* — page size, faces, point sizes and texts
+are read and typed, and have **Page template…** (#1215) for that. The other thirty-odd numbers do not
+follow them here; if a general editor beside the sheet is ever wanted it is its own issue.
+
+What is worth not re-deriving:
+
+- **The same album copy, through a narrower write.** `updateAlbumBoxGaps` writes the two columns and
+  nothing else, not `updateAlbumPreset` with a preset built from the editor's read — that would put
+  back any value changed under *Page template…* in another tab since. The template is not read and
+  not touched, as in #1215.
+- **The same count before the save.** `updateAlbumBoxGapsAction` counts over the album's current
+  values with the two gaps substituted, answers `confirm` exactly as `updateAlbumPresetAction` does,
+  and a printed card reports the new gap as a `template` divergence. Rows re-fill under a gap, so a
+  card set under the old one no longer matches the plan: there was no reason for a gap to skip it.
+- **One parser.** `parseAlbumBoxGaps` is what `parseAlbumRenderPreset` itself reads the gaps with, so
+  the editor cannot accept a figure the template form would refuse.
+- **In the sheet's panel, not beside the zoom.** The zoom row changes how the sheet is looked at and
+  stores nothing; a gap is stored, re-plans every sheet and may ask about printed cards first.
+- **Typed, never dragged, and no preview.** Every other correction here is a geometric offset the
+  canvas can draw before release. A gap re-fills rows — a box moves up a row or onto the next sheet —
+  which no offset on the current plan depicts, and a mark promising what the drop does not do is
+  what #816 took out of this screen. The client does not plan, so the re-plan on save is the preview.
+- **Saved when focus leaves the pair**, or on Enter — not when it moves between the two fields, which
+  would save half an edit and could raise the printed-cards question mid-typing.
+- A printed sheet shows its own read-only panel, so the fields are not on it; an album with every
+  sheet on paper has them only under *Page template…*, which is the honest place for a change that
+  can only produce divergence.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`
@@ -969,6 +1001,6 @@ What is worth not re-deriving:
   between the question and the answer is asked about again.
 - **Reseeding gives no such warning.** It predates this and was left as it is; the count is this
   issue's, attached to this dialog.
-- **#836 is not absorbed.** It puts the two box gaps in the page editor, judged by looking at the
-  page. Both places write the same two columns on the album; when #836 lands it should go through
-  the same count, or say why a gap is different.
+- **#836 was not absorbed, and landed as the narrower door beside it** — see *The box gaps in the
+  page editor* below. Both places write the same two columns on the album, and #836 goes through
+  the same count: a gap is not different.

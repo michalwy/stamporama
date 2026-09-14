@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ConfirmDialog,
   DialogShell,
   DialogBody,
   DialogActions,
@@ -44,9 +45,11 @@ import {
   setAlbumEntryLayoutAction,
   setAlbumEntryStampOrderAction,
   setAlbumRowBreakAction,
+  updateAlbumBoxGapsAction,
   updateAlbumTextBlockAction,
   type AlbumActionState,
 } from "@/app/actions/albums";
+import { MAX_SPACING_MM, MIN_SPACING_MM } from "@/lib/album-template-rules";
 import {
   AlbumPageCanvas,
   BOX_FLAGS,
@@ -195,6 +198,63 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
   } | null>(null);
   const [addingNote, setAddingNote] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // The album's two box gaps as typed (#836), re-synced whenever the stored figures change — after a
+  // save re-plans, or after **Page template…** changed them in another tab.
+  const [gapX, setGapX] = useState(String(album.boxGapXMm));
+  const [gapY, setGapY] = useState(String(album.boxGapYMm));
+  const storedGaps = `${album.boxGapXMm}|${album.boxGapYMm}`;
+  const [gapsSyncedFrom, setGapsSyncedFrom] = useState(storedGaps);
+  if (gapsSyncedFrom !== storedGaps) {
+    setGapsSyncedFrom(storedGaps);
+    setGapX(String(album.boxGapXMm));
+    setGapY(String(album.boxGapYMm));
+  }
+  /** The server's count of printed cards that match today and would not after this save, waiting on
+   *  the collector — with the figures it was counted for, so what is confirmed is what was counted. */
+  const [gapConfirm, setGapConfirm] = useState<{ diverging: number; x: string; y: string } | null>(
+    null
+  );
+
+  /**
+   * Save the gaps. Like **Page template…** (#1215), the first press sends no acknowledgement, and if
+   * printed cards that match today would stop matching the server answers with how many and writes
+   * nothing until that figure is confirmed. Unchanged figures send nothing at all: leaving the fields
+   * is how a save is made, and leaving them untouched is not a request.
+   */
+  function saveGaps(x: string, y: string, acknowledged: number | null) {
+    const same = (typed: string, stored: number) =>
+      typed.trim() !== "" && Number(typed.trim().replace(",", ".")) === stored;
+    if (acknowledged === null) {
+      // The dialog taking focus blurs the fields, and a save already on its way is already asking.
+      if (isPending || gapConfirm) return;
+      if (same(x, album.boxGapXMm) && same(y, album.boxGapYMm)) return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const form = new FormData();
+      form.set("boxGapXMm", x);
+      form.set("boxGapYMm", y);
+      const result = await updateAlbumBoxGapsAction(album.id, form, acknowledged);
+      if (result.status === "confirm") {
+        setGapConfirm({ diverging: result.diverging, x, y });
+        return;
+      }
+      setGapConfirm(null);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function cancelGaps() {
+    if (isPending) return;
+    setGapConfirm(null);
+    setGapX(String(album.boxGapXMm));
+    setGapY(String(album.boxGapYMm));
+  }
 
   function run(action: () => Promise<AlbumActionState>) {
     setError(null);
@@ -627,6 +687,14 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                 language={album.language}
                 onAddNote={() => setAddingNote(true)}
                 onSaved={() => router.refresh()}
+                gaps={{
+                  x: gapX,
+                  y: gapY,
+                  onChangeX: setGapX,
+                  onChangeY: setGapY,
+                  onSave: () => saveGaps(gapX, gapY, null),
+                  disabled: isPending,
+                }}
               />
             )
           ) : null}
@@ -651,6 +719,24 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
           error={error ?? undefined}
           onClose={() => !isPending && setAddingNote(false)}
           onSubmit={(form) => run(() => addAlbumTextBlockAction(album.id, form))}
+        />
+      )}
+
+      {gapConfirm && (
+        <ConfirmDialog
+          title="Printed cards will report a difference"
+          message={
+            gapConfirm.diverging === 1
+              ? "One printed card that matches this album today will stop matching: it stays exactly as printed, and Printed cards on the album screen will say what differs. Change the spacing anyway?"
+              : `${gapConfirm.diverging} printed cards that match this album today will stop matching: they stay exactly as printed, and Printed cards on the album screen will say what differs on each. Change the spacing anyway?`
+          }
+          actionLabel="Change it anyway"
+          pendingLabel="Saving…"
+          variant="primary"
+          isPending={isPending}
+          error={error ?? undefined}
+          onClose={cancelGaps}
+          onConfirm={() => saveGaps(gapConfirm.x, gapConfirm.y, gapConfirm.diverging)}
         />
       )}
     </div>
@@ -684,12 +770,14 @@ function SheetPanel({
   language,
   onAddNote,
   onSaved,
+  gaps,
 }: {
   sheet: AlbumEditorSheet;
   collectionId: string;
   language: string;
   onAddNote: () => void;
   onSaved: () => void;
+  gaps: BoxGapFieldsProps;
 }) {
   const counts = new Map<string, number>();
   for (const box of sheet.boxes) {
@@ -776,6 +864,8 @@ function SheetPanel({
         </div>
       )}
 
+      <BoxGapFields {...gaps} />
+
       <div>
         <button type="button" onClick={onAddNote} style={BTN}>
           <Icon name="add" size="sm" /> Add a note
@@ -788,6 +878,77 @@ function SheetPanel({
 
       <p style={{ ...MUTED, margin: 0, lineHeight: 1.5 }}>
         Click a box or a heading to correct it.
+      </p>
+    </div>
+  );
+}
+
+interface BoxGapFieldsProps {
+  x: string;
+  y: string;
+  onChangeX: (value: string) => void;
+  onChangeY: (value: string) => void;
+  onSave: () => void;
+  disabled: boolean;
+}
+
+/**
+ * The gaps between boxes, for the whole album (#836).
+ *
+ * **In the sheet's own panel rather than beside the zoom.** The zoom row changes how the sheet is
+ * looked at and stores nothing; this is a stored value of the album's that re-plans every sheet and
+ * can ask about printed cards first, so it sits with the other things said about the page as a whole
+ * — and a click on the paper outside any block is all it takes to get back to it.
+ *
+ * **Typed, never dragged.** Every other correction here has a drag because it is a geometric offset
+ * the canvas can draw before the release. A gap is not: one figure for every box on every sheet, and
+ * changing it re-fills rows — a box moves up a row or down onto the next sheet. A drag would have to
+ * draw a picture the drop does not produce, and a mark that promises something other than what the
+ * drop does is the thing #816 took out of this screen. So the re-plan on saving is the preview.
+ *
+ * **Saved when focus leaves the pair**, or on Enter — not when it moves from one field to the other,
+ * which would save half an edit and could ask about printed cards in the middle of typing it.
+ */
+function BoxGapFields({ x, y, onChangeX, onChangeY, onSave, disabled }: BoxGapFieldsProps) {
+  const field = (
+    id: string,
+    label: string,
+    value: string,
+    onChange: (value: string) => void
+  ) => (
+    <div style={{ flex: 1 }}>
+      <LabelWithError htmlFor={id}>{label}</LabelWithError>
+      <input
+        id={id}
+        type="number"
+        step={ALBUM_CORRECTION_STEP_MM}
+        min={MIN_SPACING_MM}
+        max={MAX_SPACING_MM}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && onSave()}
+        style={INPUT}
+      />
+    </div>
+  );
+
+  return (
+    <div>
+      <PanelHeading>Spacing between boxes</PanelHeading>
+      <div
+        style={{ display: "flex", gap: "0.5rem" }}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onSave();
+        }}
+      >
+        {field("box-gap-x", "Across, mm", x, onChangeX)}
+        {field("box-gap-y", "Between rows, mm", y, onChangeY)}
+      </div>
+      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+        <strong>For every sheet of this album</strong>, not this one only, and for this album alone —
+        the template it came from is not touched. Saving re-plans the pages, so boxes can move to
+        another row or another sheet. A printed card stays as printed and reports the difference.
       </p>
     </div>
   );

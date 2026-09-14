@@ -1,7 +1,12 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { createAlbum, getAlbum, updateAlbumPreset } from "../../src/lib/albums";
+import {
+  createAlbum,
+  getAlbum,
+  updateAlbumBoxGaps,
+  updateAlbumPreset,
+} from "../../src/lib/albums";
 import { albumPlanOverview, planAlbum } from "../../src/lib/album-plan";
 import {
   countAlbumPresetDivergence,
@@ -25,6 +30,12 @@ import {
 // - the count said before a save covers **only printed sheets that match today** — so it is zero for
 //   an album whose cards already report the change, and zero for a change back to the printed values;
 // - a printed card **keeps the preset it was set under** and reports the difference.
+//
+// And the page editor's two box gaps (#836), which write the same copy through a narrower door:
+//
+// - only the two gap columns move — a value changed under *Page template…* since is not put back;
+// - a gap is a layout input: it changes how many sheets the album needs;
+// - it goes through the same count, and a printed card reports it.
 
 const ts = Date.now();
 
@@ -210,6 +221,46 @@ describe("an album's own template values (#1215)", () => {
     assert.equal((await livePages()).pages.length, before);
   });
 
+  it("sets the two box gaps alone, on this album alone (#836)", async () => {
+    // A margin changed under Page template… a moment earlier, which a whole-preset write built from
+    // an older read would put back.
+    await updateAlbumPreset(userId, albumId, withValues({ marginLeftMm: 12 }));
+
+    await updateAlbumBoxGaps(userId, albumId, { boxGapXMm: 4.5, boxGapYMm: 9 });
+
+    const album = await getAlbum(userId, albumId);
+    assert.deepEqual(
+      albumRenderPreset(album!),
+      withValues({ marginLeftMm: 12, boxGapXMm: 4.5, boxGapYMm: 9 })
+    );
+    const template = await prisma.albumTemplate.findUniqueOrThrow({ where: { id: templateId } });
+    assert.deepEqual(
+      albumRenderPreset(template as unknown as AlbumRenderPreset),
+      DEFAULT_ALBUM_PRESET
+    );
+    const sibling = await getAlbum(userId, siblingId);
+    assert.deepEqual(albumRenderPreset(sibling!), DEFAULT_ALBUM_PRESET);
+
+    await updateAlbumPreset(userId, albumId, DEFAULT_ALBUM_PRESET);
+  });
+
+  it("re-plans the pages when a gap changes — boxes leave their rows, and sheets are added (#836)", async () => {
+    const before = (await livePages()).pages.length;
+    assert.equal(before, 2);
+
+    // Two 30 mm boxes 100 mm apart still fit the 190 mm width, so the twelve go two to a row: six
+    // rows 30 mm apart do not fit under the running head and the year on one A4 sheet.
+    await updateAlbumBoxGaps(userId, albumId, { boxGapXMm: 100, boxGapYMm: 30 });
+    const after = (await livePages()).pages.length;
+    assert.ok(after > before, `wider gaps need more sheets (was ${before}, now ${after})`);
+
+    await updateAlbumBoxGaps(userId, albumId, {
+      boxGapXMm: DEFAULT_ALBUM_PRESET.boxGapXMm,
+      boxGapYMm: DEFAULT_ALBUM_PRESET.boxGapYMm,
+    });
+    assert.equal((await livePages()).pages.length, before);
+  });
+
   it("counts only the printed sheets that match today, and a card keeps what it was set under", async () => {
     const overview = await livePages();
     const positions = overview.pages.map((_, i) => i + 1);
@@ -252,5 +303,31 @@ describe("an album's own template values (#1215)", () => {
       (await getAlbumPrintedReport(userId, albumId)).sheets.flatMap((s) => s.divergences),
       []
     );
+  });
+
+  it("counts a gap change against the printed cards, and a card keeps the gap it was set under (#836)", async () => {
+    // Every sheet is on paper from the test above, and every card matches the album again.
+    const gaps = { boxGapXMm: 3, boxGapYMm: DEFAULT_ALBUM_PRESET.boxGapYMm };
+    const current = albumRenderPreset((await getAlbum(userId, albumId))!);
+    assert.equal(await countAlbumPresetDivergence(userId, albumId, { ...current, ...gaps }), 2);
+
+    await updateAlbumBoxGaps(userId, albumId, gaps);
+    const report = (await getAlbumPrintedReport(userId, albumId)).sheets;
+    assert.equal(report.length, 2);
+    for (const sheet of report) {
+      assert.ok(
+        sheet.divergences.some((d) => d.kind === "template"),
+        `every card reports the gap: ${JSON.stringify(sheet.divergences)}`
+      );
+    }
+    const snapshots = await getAlbumPageSnapshots(albumId, report.map((s) => s.id));
+    for (const snapshot of snapshots.values()) {
+      assert.equal(snapshot.preset.boxGapXMm, DEFAULT_ALBUM_PRESET.boxGapXMm);
+    }
+
+    await updateAlbumBoxGaps(userId, albumId, {
+      boxGapXMm: DEFAULT_ALBUM_PRESET.boxGapXMm,
+      boxGapYMm: DEFAULT_ALBUM_PRESET.boxGapYMm,
+    });
   });
 });
