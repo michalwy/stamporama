@@ -188,3 +188,28 @@ export function resolveStampSize(
   if (!best) return null;
   return { ...best.size, source: "inherited", fromStampId: best.entry.stampId };
 }
+
+/**
+ * What writing a measured size onto a stamp does (#1290), given what the stamp states now.
+ *
+ * - `same` — the stamp already states exactly this; there is nothing to write and nothing to ask.
+ * - `write` — the stamp states no size at all, or the collector has already confirmed replacing it.
+ * - `confirm` — the stamp states a size, whole or half, and it differs. A stated size may itself be
+ *   a careful measurement, so it is **never replaced silently**: the collector sees the figure it
+ *   would replace and says so first. Half a size counts as stated — it is still something recorded
+ *   on purpose.
+ *
+ * The rule lives here, and the write reads it on the server, so the confirmation is a gate rather
+ * than a hint a client could skip.
+ */
+export type MeasuredSizeWrite = "write" | "same" | "confirm";
+
+export function measuredSizeWrite(
+  current: StampSizeFields,
+  measured: StampSize,
+  replace: boolean
+): MeasuredSizeWrite {
+  if (current.widthMm === measured.widthMm && current.heightMm === measured.heightMm) return "same";
+  if (current.widthMm === null && current.heightMm === null) return "write";
+  return replace ? "write" : "confirm";
+}

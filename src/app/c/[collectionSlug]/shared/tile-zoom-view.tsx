@@ -10,8 +10,20 @@ import {
   type CSSProperties,
 } from "react";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+// From the viewer module itself rather than `inventory/photo-thumb`, which re-exports it: that module
+// opens this viewer over a copy's photo (#1290), and importing back through it would close a cycle.
+import { ThumbPreview } from "@/app/photo-viewer";
 import { Icon } from "@/app/icons";
+import {
+  annotationFromDrag,
+  snapshotRegion,
+  type Annotation,
+  type AnnotationKind,
+  type SnapshotMark,
+} from "@/lib/annotations";
+import type { Box } from "@/lib/scan-boxes";
+import { AnnotationShapes } from "./annotation-layer";
+import { SnapshotDialog } from "./snapshot-dialog";
 import { useEscapeLayer } from "@/app/escape-stack";
 import type { TileSideView } from "@/lib/scan-tile-view";
 import {
@@ -128,10 +140,30 @@ import { useWatermarkView, type WatermarkStatus } from "./use-watermark-view";
  * rather than replacing it.
  */
 
+/**
+ * One picture the viewer draws. A tile's side is exactly {@link TileSideView}; a plain photo (#1290)
+ * is the same shape with no box, no card behind it, and a `frame` — its upload's own pixels
+ * (`photo-measure-frame.ts`) — standing where the box would. The frame is what a photo is measured
+ * in, as the box is what a tile is: absent, and the measuring tools are absent too.
+ */
+export interface ZoomSide extends TileSideView {
+  frame?: { width: number; height: number } | null;
+}
+
 interface Props {
   collectionId: string;
-  /** Front, back, or a lone back — from `tileSideViews`, never assembled here. */
-  sides: TileSideView[];
+  /** Front, back, or a lone back — from `tileSideViews`, never assembled here — or one photo. */
+  sides: ZoomSide[];
+  /** What the picture is, for the words the viewer uses about it. A tile is the default. */
+  subject?: "tile" | "photo";
+  /**
+   * The size on the bar, or null when there is not one (#1290) — the photo viewer's way of offering
+   * it as the stamp's size, on `onGauge`'s terms: the viewer measures, and what a figure is for is
+   * the caller's business. Always with the scale it was taken at.
+   */
+  onSize?: (reading: { size: StampSize; dpi: number } | null) => void;
+  /** A snapshot was saved (#674) — for a screen that shows the photos it just gained. */
+  onSnapshotSaved?: () => void;
   /** For the alt text, which is the only place a tile's position is named on this side of the
    * dialog. */
   position: number;
@@ -484,7 +516,14 @@ function IdentifiedPieceGrid({
  * same drag, the same two marks in scan pixels, read as opposite corners instead of as the ends of
  * a line. One act rather than *now the width, now the height*, because two separate readings are
  * two chances to measure two different stamps and nothing would notice. */
-type MeasureTool = "off" | "ruler" | "perforation" | "size";
+type MeasureTool = "off" | "ruler" | "perforation" | "size" | AnnotationKind;
+
+/** The two tools that draw a mark rather than take a measurement (#674): a ring and a line. They
+ * take a drag exactly as the ruler does, need no scale and no scan geometry, and leave their mark on
+ * the picture — kept only in a snapshot. */
+function isAnnotationTool(tool: MeasureTool): tool is AnnotationKind {
+  return tool === "ellipse" || tool === "line";
+}
 
 /**
  * What the measuring bar says right now (#598) — the figure, or the reason there is not one.
@@ -507,9 +546,14 @@ function describeReading(args: {
   marks: { a: ScanPoint; b: ScanPoint } | null;
   dpi: number | null;
   teeth: number | null;
+  /** What the picture is called — *tile* or *photo*. */
+  noun: string;
 }): { text: string; muted: boolean; detail?: string; gauge?: number; size?: StampSize } {
-  const { tool, marks, dpi, teeth } = args;
+  const { tool, marks, dpi, teeth, noun } = args;
   if (tool === "off") return { text: "", muted: true };
+  // The marks say nothing numeric, so they need no scale and are not refused for the lack of one.
+  if (tool === "ellipse") return { text: "Drag across a detail to ring it.", muted: true };
+  if (tool === "line") return { text: "Drag to draw a line for reference.", muted: true };
   if (dpi === null) {
     return {
       text: "State the resolution you scan at — a measurement is only as good as it.",
@@ -520,7 +564,7 @@ function describeReading(args: {
     return {
       text:
         tool === "ruler"
-          ? "Drag across the tile to measure it."
+          ? `Drag across the ${noun} to measure it.`
           : tool === "size"
             ? "Drag a box around the stamp, corner to corner."
             : "Drag from the first hole of a run to the last.",
@@ -633,7 +677,11 @@ export function TileZoomView({
   onGauge,
   onTurn,
   turning,
+  subject = "tile",
+  onSize,
+  onSnapshotSaved,
 }: Props) {
+  const noun = subject === "photo" ? "photo" : "tile";
   const [sideKey, setSideKey] = useState(() => sides[0]?.side ?? "front");
   const current = sides.find((s) => s.side === sideKey) ?? sides[0];
   const [natural, setNatural] = useState<Record<string, Natural>>({});
@@ -660,7 +708,9 @@ export function TileZoomView({
    * width and height rather than the other way about — which is the point of standing it up. */
   const drawnBox = current?.box
     ? turnedSize({ width: current.box.w, height: current.box.h }, turn)
-    : null;
+    : // A photo's frame (#1290): its upload's own pixels, which is to a photo what the box is to a
+      // tile — the size the stated scale applies to, whatever derivative is on screen.
+      (current?.frame ?? null);
   const pictureWidth = drawnBox?.width ?? measured?.width ?? 0;
   const pictureHeight = drawnBox?.height ?? measured?.height ?? 0;
   const ready = pictureWidth > 0 && pictureHeight > 0 && size.width > 0;
@@ -676,7 +726,7 @@ export function TileZoomView({
    * resolution the app merely assumed, which is the one thing this tool must never do — so the
    * controls are absent rather than approximate.
    */
-  const canMeasure = Boolean(current?.box);
+  const canMeasure = drawnBox !== null;
 
   const markFitted = useCallback((value: boolean) => {
     fittedRef.current = value;
@@ -790,8 +840,10 @@ export function TileZoomView({
   /** …and what is actually down. Derived rather than corrected after the fact: a side with no box
    * cannot be measured at all, and forcing the choice back to `off` from an effect would let one
    * render happen with a tool down over a side that has no scan geometry. */
-  const tool: MeasureTool = canMeasure ? chosenTool : "off";
+  const tool: MeasureTool = canMeasure || isAnnotationTool(chosenTool) ? chosenTool : "off";
+  /** A tool that takes a drag is down — a measurement or a mark. */
   const measuring = tool !== "off";
+  const annotating = isAnnotationTool(tool);
 
   /** The two marks, in the picture's own **scan** pixels — the coordinate space every number here
    * is taken in, and the reason a reading does not change when the zoom does. */
@@ -800,9 +852,14 @@ export function TileZoomView({
    * frame, where the old marks would lie across somewhere else — so they go, adjusted while rendering
    * rather than in an effect, which would draw them over the turned picture for a frame first. */
   const [marksOn, setMarksOn] = useState<string | null>(current?.photoId ?? null);
+  /** The rings and lines drawn so far (#674), in the same scan pixels as the marks. They stay until
+   * cleared — a detail is usually ringed and then given a line or a measurement beside it — and they
+   * belong to the picture they were drawn on, so they go with it exactly as the marks do. */
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   if (marksOn !== (current?.photoId ?? null)) {
     setMarksOn(current?.photoId ?? null);
     setMarks(null);
+    setAnnotations([]);
   }
 
   /** The stated scale, as typed. Prefilled from the collection and **never written back**: a card
@@ -839,6 +896,7 @@ export function TileZoomView({
   const showSide = useCallback((side: TileSideView["side"]) => {
     setSideKey(side);
     setMarks(null);
+    setAnnotations([]);
   }, []);
 
   useEffect(() => {
@@ -1142,6 +1200,13 @@ export function TileZoomView({
     // under their hand would flicker through every count on the way to the one they meant.
     const line = markedRef.current;
     if (wasMarking && tool === "perforation" && line) void countTeeth(line);
+    // A ring or a line is finished when the drag is, and joins the ones already drawn; the marks
+    // clear so the next drag starts a new one rather than stretching this.
+    if (wasMarking && isAnnotationTool(tool) && line) {
+      const mark = annotationFromDrag(tool, line.a, line.b);
+      if (mark) setAnnotations((drawn) => [...drawn, mark]);
+      setMarks(null);
+    }
   };
 
   const detail = useSheetRegion({
@@ -1161,7 +1226,7 @@ export function TileZoomView({
    * in state: it is a function of the marks, the scale and the tooth count, and a cached copy of it
    * is a copy that can be stale — which for a number quoted as a measurement is not a bug worth
    * risking to save an arithmetic. */
-  const reading = describeReading({ tool, marks, dpi, teeth });
+  const reading = describeReading({ tool, marks, dpi, teeth, noun });
   const gauge = reading.gauge ?? null;
 
   // Hand the figure to whoever asked for it (#740). Above the `current` guard because it is a hook,
@@ -1192,9 +1257,45 @@ export function TileZoomView({
   }, [box, dpi, turn]);
   usePublishSizeProposal("estimated", cropSize, dpi);
 
+  // The size on the bar, for a caller that writes one (#1290) — split like the gauge's, so the viewer
+  // closing takes the figure with it.
+  const sizeWidth = reading.size?.widthMm ?? null;
+  const sizeHeight = reading.size?.heightMm ?? null;
+  useEffect(() => {
+    onSize?.(
+      sizeWidth === null || sizeHeight === null || dpi === null
+        ? null
+        : { size: { widthMm: sizeWidth, heightMm: sizeHeight }, dpi }
+    );
+  }, [dpi, onSize, sizeHeight, sizeWidth]);
+  useEffect(() => () => onSize?.(null), [onSize]);
+
+  /** A snapshot being named before it is saved (#674): what was in view and what was drawn on it,
+   * fixed at the moment the button was pressed so a pan behind the dialog cannot change it. */
+  const [snapshot, setSnapshot] = useState<{ region: Box; marks: SnapshotMark[] } | null>(null);
+
   if (!current) return null;
 
   const atActualSize = ready && Math.abs(view.scale - 1) < 1e-6;
+
+  /** Keep what is on screen (#674). The measurement standing on the bar goes in with the marks, as
+   * the figure the bar shows — scale and all — so a snapshot of a gauge is never a line with a bare
+   * number beside it. Only a real reading: a prompt is not a figure. */
+  const takeSnapshot = () => {
+    if (!ready) return;
+    const region = snapshotRegion(view, { width: pictureWidth, height: pictureHeight }, size);
+    if (!region) return;
+    const kept: SnapshotMark[] = [...annotations];
+    if (marks && !reading.muted && (tool === "ruler" || tool === "perforation" || tool === "size")) {
+      kept.push({
+        kind: tool === "size" ? "box" : "distance",
+        a: marks.a,
+        b: marks.b,
+        label: reading.text,
+      });
+    }
+    setSnapshot({ region, marks: kept });
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -1250,7 +1351,7 @@ export function TileZoomView({
             <ScanToolButton
               icon="measure"
               label="Ruler"
-              hint="Measure between two points of the scan, in millimetres"
+              hint={`Measure between two points of the ${subject === "photo" ? "picture" : "scan"}, in millimetres`}
               active={tool === "ruler"}
               onClick={() => {
                 setChosenTool((t) => (t === "ruler" ? "off" : "ruler"));
@@ -1292,6 +1393,36 @@ export function TileZoomView({
             />
           </>
         )}
+        {/* Marking a detail and keeping it (#674). Not under the measuring gate: a ring says nothing
+            numeric, so it needs no scale and no scan geometry, and a picture that cannot be measured
+            can still have its flaw pointed at. */}
+        <ScanToolButton
+          icon="annotateRing"
+          label="Ring"
+          hint="Drag around a detail to ring it — kept only when you save a snapshot"
+          active={tool === "ellipse"}
+          onClick={() => {
+            setChosenTool((t) => (t === "ellipse" ? "off" : "ellipse"));
+            setMarks(null);
+          }}
+        />
+        <ScanToolButton
+          icon="annotateLine"
+          label="Line"
+          hint="Drag to draw a straight line for reference — kept only when you save a snapshot"
+          active={tool === "line"}
+          onClick={() => {
+            setChosenTool((t) => (t === "line" ? "off" : "line"));
+            setMarks(null);
+          }}
+        />
+        <ScanToolButton
+          icon="snapshot"
+          label="Snapshot"
+          hint={`Keep what is on screen — with your marks and the measurement — as a new photo beside this ${noun}`}
+          disabled={!ready}
+          onClick={takeSnapshot}
+        />
         <span style={{ flex: 1 }} />
         <ScanToolButton icon="zoomOut" label="−" hint="Zoom out (−)" onClick={() => zoomStep(1 / ZOOM_STEP)} />
         {/* The percentage is against the **scan**, exactly as in the cut editor. The dot marks the
@@ -1301,7 +1432,7 @@ export function TileZoomView({
           content={
             detail
               ? "Showing this part at full resolution from the retained card scan"
-              : "Showing the tile's own image"
+              : `Showing the ${noun}'s own image`
           }
         >
         <span
@@ -1321,7 +1452,7 @@ export function TileZoomView({
         <ScanToolButton
           icon="zoomFit"
           label="Fit"
-          hint="The whole tile on screen (0)"
+          hint={`The whole ${noun} on screen (0)`}
           active={fitted}
           onClick={fit}
         />
@@ -1377,7 +1508,7 @@ export function TileZoomView({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/api/collections/${collectionId}/photos/${current.photoId}/full`}
-            alt={`Tile ${position + 1}, ${current.label.toLowerCase()}`}
+            alt={subject === "photo" ? current.label : `Tile ${position + 1}, ${current.label.toLowerCase()}`}
             draggable={false}
             // No `crossOrigin`: the route is same-origin, so the canvas the tooth count reads from
             // is untainted as it stands, and asking for CORS mode on a same-origin authenticated
@@ -1438,17 +1569,24 @@ export function TileZoomView({
               pixels it was placed on through every zoom and pan without a single coordinate being
               recomputed. Marks are held in scan pixels and scaled here — never the other way
               round, which would make the reading a function of the zoom. */}
-          {measuring && marks && ready && (
+          {ready && (annotations.length > 0 || (measuring && marks)) && (
             <svg
               width={pictureWidth * view.scale}
               height={pictureHeight * view.scale}
               style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
             >
+              {/* The rings and lines already drawn (#674), under whatever is being dragged now. */}
+              <AnnotationShapes annotations={annotations} scale={view.scale} />
               {/* Twice, dark under light: a scan is white paper in some places and printing ink in
                   others, and one stroke colour is invisible over one of them. The size tool draws
                   the same two marks as a box, since that is what its two corners describe — a line
                   across a stamp would say nothing about which rectangle is being read. */}
-              {tool === "size" ? (
+              {measuring && marks && (annotating ? (
+                <AnnotationShapes
+                  annotations={[{ kind: tool, a: marks.a, b: marks.b }]}
+                  scale={view.scale}
+                />
+              ) : tool === "size" ? (
                 <>
                   {[
                     { stroke: "rgba(0,0,0,0.65)", width: 3 },
@@ -1499,7 +1637,7 @@ export function TileZoomView({
                 />
               ))}
                 </>
-              )}
+              ))}
             </svg>
           )}
 
@@ -1542,7 +1680,35 @@ export function TileZoomView({
           Deliberately together and deliberately here rather than at upload: a value set weeks
           earlier is inherited by someone who cannot see it, while one beside the result is on view
           exactly when it acts (#573). */}
-      {measuring && (
+      {/* The marks bar (#674) — how many are drawn and the way to take them back, while a marking
+          tool is down or anything is drawn. Said on the bar because a mark is not saved anywhere
+          until a snapshot is, and a collector who closes the viewer should not expect it back. */}
+      {(annotating || annotations.length > 0) && (
+        <div style={TOOL_BAR}>
+          <span style={{ color: "var(--color-text-muted)" }}>
+            {annotations.length === 0
+              ? reading.text
+              : `${annotations.length} ${annotations.length === 1 ? "mark" : "marks"} — kept only in a snapshot`}
+          </span>
+          <span style={{ flex: 1 }} />
+          {annotations.length > 0 && (
+            <>
+              <ScanToolButton
+                label="Undo"
+                hint="Take the last mark off"
+                onClick={() => setAnnotations((drawn) => drawn.slice(0, -1))}
+              />
+              <ScanToolButton
+                label="Clear marks"
+                hint="Take every mark off"
+                onClick={() => setAnnotations([])}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      {measuring && !annotating && (
         <div style={TOOL_BAR}>
           <span
             style={{
@@ -1611,7 +1777,9 @@ export function TileZoomView({
             </label>
           )}
 
-          <Tooltip content="What this card was scanned at. Correcting it here holds for this sitting only — the collection keeps its own setting, in Settings → General.">
+          <Tooltip
+            content={`What this ${subject === "photo" ? "picture" : "card"} was scanned at. Correcting it here holds for this sitting only — the collection keeps its own setting, in Settings → General.`}
+          >
             <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
               <input
                 value={dpiText}
@@ -1716,9 +1884,29 @@ export function TileZoomView({
           <>
             Drag to move · wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms · <kbd>0</kbd> fits
             {sides.length > 1 ? " · the zoom is kept when you switch sides" : ""}
+            {/* Said for a photo, where the tools' absence has a reason worth knowing (#1290): a
+                tile without a box is rare and explained on the purchase screen, while an old photo
+                whose original size was never recorded looks like any other. */}
+            {subject === "photo" && !canMeasure
+              ? " · this photo's original size was not recorded, so it cannot be measured"
+              : ""}
           </>
         )}
       </p>
+
+      {snapshot && (
+        <SnapshotDialog
+          collectionId={collectionId}
+          photoId={current.photoId}
+          region={snapshot.region}
+          marks={snapshot.marks}
+          onClose={() => setSnapshot(null)}
+          onSaved={() => {
+            setSnapshot(null);
+            onSnapshotSaved?.();
+          }}
+        />
+      )}
     </div>
   );
 }

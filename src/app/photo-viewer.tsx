@@ -142,11 +142,16 @@ export function PhotoLightbox({
   index,
   onIndex,
   onClose,
+  actions,
 }: {
   photos: ViewablePhoto[];
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
+  /** Controls for the photo on screen, under its caption — whatever the caller can do with a
+   * picture it knows more about than this overlay does (#1290: measuring it). Clicks inside do not
+   * reach the backdrop. */
+  actions?: (index: number) => React.ReactNode;
 }) {
   const total = photos.length;
   const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
@@ -249,6 +254,11 @@ export function PhotoLightbox({
           </span>
         )}
       </span>
+      {actions && (
+        <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: "0.5rem" }}>
+          {actions(safeIndex)}
+        </div>
+      )}
     </div>,
     document.body
   );

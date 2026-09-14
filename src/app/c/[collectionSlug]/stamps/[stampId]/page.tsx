@@ -7,6 +7,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getStampListItem, getStampRelatives } from "@/lib/stamps";
 import { getIssueListItem } from "@/lib/issues";
+import { listStampCopyPhotos } from "@/lib/photos";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { StampDetailPanel } from "./stamp-detail-panel";
 
@@ -52,9 +53,10 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
   // Another of this owner's collections is somebody else's screen as far as this slug is concerned.
   if (stamp.collectionId !== collection.id) notFound();
 
-  const [areas, relatives] = await Promise.all([
+  const [areas, relatives, copyPhotos] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getStampRelatives(session.user.id, stampId),
+    listStampCopyPhotos(session.user.id, stampId),
   ]);
   // The issue the Variants card writes against (#630), read through the Issues list' own
   // enrichment so the add dialog offers the checklists and the range prompt it offers there.
@@ -82,6 +84,8 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
         relatives={relatives}
         treeIssue={treeIssue}
         areas={areas}
+        scanDpi={collection.scanDpi}
+        copyPhotos={copyPhotos}
       />
     </div>
   );

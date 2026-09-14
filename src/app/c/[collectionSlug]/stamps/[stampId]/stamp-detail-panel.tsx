@@ -33,6 +33,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import type { PhotoSummary } from "@/lib/photos";
 import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-copies-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
 import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-card";
@@ -64,12 +65,18 @@ export function StampDetailPanel({
   relatives,
   treeIssue,
   areas,
+  scanDpi,
+  copyPhotos,
 }: {
   collectionId: string;
   collectionSlug: string;
   baseCurrency: string;
   stamp: StampListItem;
   relatives: StampRelatives;
+  /** The collection's stated scan resolution (#598) — the measuring viewer's prefill (#1290). */
+  scanDpi: number;
+  /** The photos of this stamp's copies (#1290), the first {@link STAMP_COPY_PHOTO_LIMIT} of `total`. */
+  copyPhotos: { photos: PhotoSummary[]; total: number };
   /** The issue the Variants card writes against (#630) — {@link StampRelatives.treeIssueId}
    *  enriched as its list row, or null when this stamp belongs to no issue. */
   treeIssue: IssueListItem | null;
@@ -232,7 +239,34 @@ export function StampDetailPanel({
               count={stamp.photos.length}
               empty={stamp.photos.length === 0}
             >
-              <PhotoStrip collectionId={collectionId} photos={stamp.photos} size="7rem" />
+              <PhotoStrip
+                collectionId={collectionId}
+                photos={stamp.photos}
+                size="7rem"
+                measure={{ scanDpi, stampId: stamp.id }}
+              />
+            </DetailCard>
+
+            {/* The pieces held of this stamp, pictured (#1290) — beside the catalogue's pictures of
+                *a* specimen, so a copy's photo can be measured on the screen where the stamp's size
+                is written. */}
+            <DetailCard
+              title="Copies' photos"
+              count={copyPhotos.total}
+              empty={copyPhotos.total === 0}
+            >
+              <PhotoStrip
+                collectionId={collectionId}
+                photos={copyPhotos.photos}
+                size="7rem"
+                measure={{ scanDpi, stampId: stamp.id }}
+              />
+              {copyPhotos.total > copyPhotos.photos.length && (
+                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                  Showing the first {copyPhotos.photos.length} of {copyPhotos.total} — the rest are on
+                  each copy&rsquo;s own page.
+                </p>
+              )}
             </DetailCard>
 
             <CatalogPricesCard target={{ kind: "stamp", stampId: stamp.id }} />
