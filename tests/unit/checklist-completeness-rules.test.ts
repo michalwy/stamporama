@@ -4,6 +4,7 @@ import {
   computeChecklistCompleteness,
   computeConditionCompleteness,
   computeForSaleSetCompleteness,
+  headlineCompleteness,
   satisfiedMember,
   type CompletenessCount,
   type CompletenessDisposition,
@@ -233,6 +234,34 @@ describe("computeChecklistCompleteness", () => {
       CONDITIONS
     );
     assert.equal(cell(grid, "in_collection", null).completeSets, 1);
+  });
+});
+
+describe("headlineCompleteness", () => {
+  it("is the grid's any-disposition, any-condition cell across every format (#1278)", () => {
+    const grid = computeChecklistCompleteness(
+      ["a", "b", "c"],
+      [
+        // Held only for sale, in a pair and in a condition of its own: a narrower cell would miss
+        // one of the three, and the summary must not.
+        count("a", MNH, 2, { forSale: true }),
+        count("b", USED, 1, { inCollection: true, formatId: PAIR }),
+        count("c", MNH, 3, { inCollection: true }),
+      ],
+      CONDITIONS,
+      [PAIR]
+    );
+    const headline = headlineCompleteness(grid);
+    assert.deepEqual(headline, cell(grid, "any", null));
+    assert.equal(headline.owned, 3);
+    assert.equal(headline.completeSets, 1);
+    assert.equal(cell(grid, "in_collection", null).owned, 2);
+  });
+
+  it("reads nothing held for an empty checklist", () => {
+    const headline = headlineCompleteness(computeChecklistCompleteness([], [], CONDITIONS));
+    assert.equal(headline.owned, 0);
+    assert.equal(headline.completeSets, 0);
   });
 });
 

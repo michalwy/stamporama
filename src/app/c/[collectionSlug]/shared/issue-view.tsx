@@ -67,8 +67,11 @@ export function buildStampTree(members: StampNodeData[]): StampTreeNodeData[] {
 
 /**
  * The control that does the narrowing: one chip per checklist of the issue, each toggled on its own
- * (#772). Rendered **only** when an issue carries more than one — with a single checklist there is
- * nothing to choose between, and the row keeps its plain `12/14` badge.
+ * (#772). Its callers render it **only** when an issue carries more than one — with a single checklist
+ * there is nothing to choose between, and the row keeps its plain `12/14` badge. The one exception is
+ * the issue page while its Checklists card has narrowed the tree to an issue's only checklist
+ * (#1278): a narrowing always keeps the control that undoes it in sight, so the guard here is only
+ * against having no chip to draw.
  *
  * It was a `MultiSelectFilter` (#425) until #772, and the count is what settled the swap. That
  * control's whole economy is **counting values rather than listing them**, so its resting label read
@@ -106,7 +109,7 @@ export function ChecklistTreeFilter({
   selected: string[];
   onChange: (ids: string[]) => void;
 }) {
-  if (checklists.length <= 1) return null;
+  if (checklists.length === 0) return null;
   return (
     // Wraps rather than overflows: this row sits in a header of its own with nothing beside it, so a
     // second line costs nothing, and an issue with more checklists than fit is the one case where a

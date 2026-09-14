@@ -338,3 +338,20 @@ export function computeChecklistCompleteness(
     })),
   };
 }
+
+/**
+ * The one cell a checklist is summed up by where its grid has no room (#1278): **any disposition,
+ * any condition, every format** — the grid's own top-left corner, so a summary and the grid it
+ * stands for can never read two different numbers. It answers *do I hold the series at all*;
+ * the sharper questions stay in the grid.
+ */
+export function headlineCompleteness(grid: ChecklistCompletenessGrid): CompletenessRow {
+  return (
+    grid.rows.find((r) => r.disposition === "any" && r.conditionId === null) ?? {
+      disposition: "any",
+      conditionId: null,
+      owned: 0,
+      completeSets: 0,
+    }
+  );
+}
