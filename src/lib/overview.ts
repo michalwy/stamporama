@@ -19,6 +19,7 @@ import {
   type GrowthMonth,
   type PurchaseRecoupTally,
 } from "./overview-rules";
+import { buildValueHistory, type ValueHistory } from "./value-history-rules";
 
 /**
  * The Overview screen's two reads (#649–#651; decided in #397): a financial and a progress
@@ -211,6 +212,63 @@ async function purchaseRecoup(
     summarizePurchaseReturn(copies, proceedsByPurchase.get(purchaseId)!.total, baseCurrency)
   );
   return classifyPurchaseReturns(returns);
+}
+
+// ── Value over time (#653) ───────────────────────────────────────────────────
+
+/**
+ * The value-over-time chart's series: the daily snapshots #652 recorded, read as stored and never
+ * re-valued (ADR-0053). Every recorded day is returned — the chart's span is the collection's whole
+ * history — with each top-level area's subtree value beside it for the split.
+ */
+export async function getOverviewValueHistory(
+  ownerId: string,
+  collectionId: string
+): Promise<ValueHistory> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  const [rows, rootAreas] = await Promise.all([
+    prisma.collectionValueSnapshot.findMany({
+      where: { collectionId },
+      orderBy: { day: "asc" },
+      select: {
+        day: true,
+        baseCurrency: true,
+        catalogueValue: true,
+        acquisitionCost: true,
+        marketValue: true,
+        marketValuedCount: true,
+        copiesHeld: true,
+        catalogueUnpricedCount: true,
+        catalogueUnconvertibleCount: true,
+        costPendingCount: true,
+        costNoneCount: true,
+        areas: {
+          where: { collectionArea: { parentId: null } },
+          select: { collectionAreaId: true, catalogueValue: true },
+        },
+      },
+    }),
+    prisma.collectionArea.findMany({
+      where: { collectionId, parentId: null },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  return buildValueHistory(
+    rows.map((row) => ({
+      ...row,
+      catalogueValue: row.catalogueValue.toFixed(2),
+      acquisitionCost: row.acquisitionCost.toFixed(2),
+      marketValue: row.marketValue.toFixed(2),
+      areas: row.areas.map((area) => ({
+        collectionAreaId: area.collectionAreaId,
+        catalogueValue: area.catalogueValue.toFixed(2),
+      })),
+    })),
+    baseCurrency,
+    rootAreas.map((area) => ({ areaId: area.id, name: area.name }))
+  );
 }
 
 // ── Progress (#651) ──────────────────────────────────────────────────────────
