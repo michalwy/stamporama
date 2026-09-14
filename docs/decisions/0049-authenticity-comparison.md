@@ -8,6 +8,12 @@ Accepted, not yet implemented. Designed 2026-09-08 with the collector, in a desi
 (the stored crop turned once the scan is swept), the viewer mapping its turned picture back onto the
 box through `src/lib/tile-turn.ts`, and an uploaded photo's turn written to its bytes on Save.
 
+**§4 and §5 are in** (#1004, #1005): `ReferenceCompareDialog` over two plain photos, aligned by two
+landmarks per picture in `src/lib/reference-align.ts` (the applied scale shown only for that
+alignment, never for one by hand), composited by opacity, curtain, `difference` and flip, and opened
+from the tile dialog's shortlist, the identification picker's stamp rows and *Identify variant*,
+with the stamp and everything beneath it on offer (`src/lib/reference-candidates.ts`).
+
 The work is tracked in #1000 (the seeded `Forgery` subtype and its migration), #1001
 (`Photo.sourceUrl`), #1002 (the subtype filter on the copies list), #1003 (a picture in the
 identify-variant dialog), #1004 (the two-photo comparison view), #1005 (reaching the references from

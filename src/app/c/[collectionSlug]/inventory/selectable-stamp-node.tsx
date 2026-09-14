@@ -33,6 +33,7 @@ export function SelectableStampNode({
   narrowed,
   contextIds,
   marked,
+  onCompare,
 }: {
   treeNode: StampTreeNodeData;
   depth: number;
@@ -69,6 +70,9 @@ export function SelectableStampNode({
    *  (#531) or the search (#631). Dimmed: they are the numbering the match hangs under, not part
    *  of what was asked for. One faded state, not two. */
   contextIds?: Set<string>;
+  /** Open the reference comparison on this stamp (#1005) — offered only where a piece is being
+   *  identified, since there is nothing to compare a reference *with* anywhere else. */
+  onCompare?: (node: StampNodeData) => void;
 }) {
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
@@ -241,6 +245,28 @@ export function SelectableStampNode({
                     </button>
                   </Tooltip>
                 )}
+
+                {/* The piece beside this stamp's references and its variants' (#1005). On the row
+                    rather than only on the shortlist, because most pieces are identified straight
+                    from this tree and the doubt arises while reading it. A button of its own, never
+                    the row's press: the row identifies. */}
+                {onCompare && (
+                  <Tooltip
+                    content="Compare the piece with this stamp's reference photos and those of every stamp under it — forgeries included"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCompare(node);
+                      }}
+                      style={{ ...CREATE_LINK_STYLE, padding: "0.15rem 0.45rem" }}
+                    >
+                      <Icon name="compare" size="xs" /> compare
+                    </button>
+                  </Tooltip>
+                )}
               </div>
 
               <StampDetailLine collectionId={collectionId} node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
@@ -264,6 +290,7 @@ export function SelectableStampNode({
             narrowed={narrowed}
             contextIds={contextIds}
             marked={marked}
+            onCompare={onCompare}
           />
         ))}
     </>

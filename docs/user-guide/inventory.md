@@ -1560,6 +1560,11 @@ actually is, resolve it:
 2. Pick the specific variant from the list — only the variants of that copy's own stamp
    are offered, so you can only refine to a *more specific* variant, never re-point the
    copy to an unrelated stamp.
+
+   To lay the copy against the reference photos of its stamp and of the variants and forgeries
+   under it, use **Compare with references…** above the list — it opens on the variant you have
+   picked, if any. See [Comparing a piece with a reference](purchases.md#comparing-a-piece-with-a-reference).
+
 3. Optionally add a **reason** (for example, what let you tell the variants apart).
 4. Click **Identify variant**. The copy is re-pointed to the chosen variant, the
    *unknown variant* flag clears, and the change is recorded in the copy's refinement

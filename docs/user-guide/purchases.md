@@ -996,6 +996,56 @@ nothing, and one is still to be identified. A tile set aside keeps its picture a
 its own coloured edge, because it is still work — only not work for right now. The label underneath
 still gives the copy number, which is what you read when you want the detail rather than the glance.
 
+#### Comparing a piece with a reference
+
+A variant — or a forgery — is often told apart by laying the piece against a picture of the real
+thing. [Reference photos](collections.md#recording-a-forgery) hang on the stamps themselves: a
+genuine reference on the stamp, a forgery's on the forgery stamp beneath it. **Compare** puts the
+piece in your tweezers beside them, without leaving the identification.
+
+It opens from three places, whichever you are looking at when the doubt arises:
+
+- the **compare** button beside a stamp on the tile's **It could be** list;
+- **compare** on a stamp's row in the browse popup, while you are identifying a tile (or adding to its
+  list);
+- **Compare with references…** in [Identify variant](inventory.md#identifying-a-variant), for a copy
+  you already hold.
+
+On the right is every reference of that stamp **and of every stamp under it** — its variants and its
+forgeries — laid out as the tree has them, each labelled by its numbers and its subtype chip. Click
+any picture to compare with it instead; <kbd>[</kbd> and <kbd>]</kbd> step to the previous and next.
+With a run of tiles ticked, or a copy with a front and a back, the buttons at the top choose which
+picture of yours is on the left.
+
+**Align first.** In **Landmarks** the two pictures sit side by side. Click a point on yours — the
+corner of a frame line, the tip of a letter — then the same point on the reference, and do it again
+somewhere far from the first. Once both pictures carry their two landmarks the reference is laid
+exactly over yours, and the line above the pictures says how much it had to be enlarged or reduced:
+*the reference is drawn at ×1.034*. That figure is **measured, not set**, and it is what to look at:
+a photographic forgery is often printed a few percent larger or smaller than the real stamp. It
+compares the two pictures' own pixels, so compare it between references rather than reading it as a
+size. Drag a landmark to move it, drag elsewhere to move the picture, and zoom with the wheel to place
+them precisely. Your landmarks stay when you switch to another reference, so each new one needs only
+its own two — and a reference you have already aligned is aligned again as soon as you pick it.
+
+Then choose how to look at the pair:
+
+- **Opacity** — the reference over yours, see-through; the slider sets how much of each shows.
+- **Curtain** — yours on the left of a line, the reference on the right; drag the line across.
+- **Difference** — where the two agree the picture goes dark, and whatever differs lights up.
+- **Flip** — one picture at a time in the same place; press <kbd>T</kbd> to flip.
+
+**By hand, when the landmarks cannot be found** — a blurry auction photo often has none worth
+clicking. **Move by hand** lets you drag the reference into place, the degree buttons take out a skew,
+and **Smaller** / **Larger** adjust its size. An alignment made this way is marked *aligned by hand*
+and shows **no** figure: a size you adjusted by eye is not a measurement. **Undo by hand** goes back to
+the landmarks.
+
+The tool is deliberately sensitive — it shows every difference, including ones that turn out to be
+the lighting or the camera — and it never gives a verdict. What you decide is the identification
+itself: identify the piece as the forgery stamp, or as the genuine one. Nothing in the comparison is
+stored.
+
 #### Pieces you cannot identify from the picture
 
 Some variants are not settled on a screen at all. A watermark needs the tray or the lamp, two shades

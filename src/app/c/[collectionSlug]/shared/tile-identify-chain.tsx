@@ -26,6 +26,11 @@ import {
   type PendingSelection,
 } from "./intake-condition-dialog";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
+import {
+  ReferenceCompareDialog,
+  piecePictures,
+  type ReferenceSubject,
+} from "./reference-compare-dialog";
 import type { ScanTileData } from "@/lib/scan-sheets";
 import type { ArrivingCopy } from "@/lib/want-rules";
 import type { IdentifyHistoryAnswers } from "@/lib/tile-identify-history";
@@ -430,6 +435,10 @@ export function TileIdentifyChainDialogs({
    * it, so the answers already given there — a condition read off the piece, a location — are still
    * there when the stamps are settled. */
   const [editingStamps, setEditingStamps] = useState(false);
+  /** The stamp whose references the piece is being compared with (#1005), opened from a row of the
+   * picker. Over the picker rather than instead of it, so closing the comparison is back at the tree
+   * with the row still where it was. */
+  const [comparing, setComparing] = useState<ReferenceSubject | null>(null);
 
   /** The piece's stamps as they stand: the list when there is one, and otherwise the stamp picked. */
   const currentDrafts = (): PieceStampDraft[] =>
@@ -521,7 +530,18 @@ export function TileIdentifyChainDialogs({
           // nothing to attach its images to. Omitted rather than refused: the picker only draws the
           // "add this whole set" buttons when it is given somewhere to send them, so entering from
           // a tile simply never offers the answer that could not work.
+          // The piece beside a stamp's references and its variants' (#1005), from the row itself.
+          onCompare={setComparing}
           onClose={resetTileIntake}
+        />
+      )}
+      {tileStep === "picker" && tileIntake.length > 0 && comparing && (
+        <ReferenceCompareDialog
+          collectionId={collectionId}
+          pictures={piecePictures(tileIntake)}
+          subjects={[comparing]}
+          initialStampId={comparing.stampId}
+          onClose={() => setComparing(null)}
         />
       )}
 

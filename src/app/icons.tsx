@@ -113,6 +113,7 @@ import {
   ShoppingCart,
   SquareDashedMousePointer,
   SquarePlus,
+  SquareSplitHorizontal,
   Stamp,
   Star,
   StickyNote,
@@ -362,6 +363,9 @@ const GLYPHS = {
    * same judgement. `range` shares this glyph and means something else entirely (a declared range
    * re-derived) — the map is meanings to pictures, not the other way round. */
   measure: Ruler,
+  /** Lays the stamp in hand beside a reference and over it (#1004/#1005). Not `splitColumns`, which
+   * cuts a box in two: this puts two pictures together. */
+  compare: SquareSplitHorizontal,
 
   /** Fills a bid box with a figure the row already knows — a ceiling, upwards. */
   bidCeiling: ArrowUpToLine,
