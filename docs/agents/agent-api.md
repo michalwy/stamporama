@@ -782,7 +782,7 @@ auction at whatever the goods are worth (#553), and outranks the other two **on 
 
 **Collapsing them into one number is what would make an agent price a stamp confidently and
 wrongly**, which is the same argument `offers.md` makes for drawing the three figures in a fixed
-order on the wizard's price step. And `suggested` never travels without `suggestedValuedSets` and
+order under the price on the offer's screen. And `suggested` never travels without `suggestedValuedSets` and
 `suggestedUnpricedSets`, which partition the listing — `valuation.md`'s standing rule.
 
 **`get_offer` is the verb #711 does not name and `list_offers` is the other one**, and both are here

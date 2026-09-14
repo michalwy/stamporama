@@ -111,14 +111,15 @@ export interface ContactData extends ContactRoles {
   titleLanguage: string | null;
   /** Fallback **starting price** for a new auction on this platform (#362, narrowed in #449), a 2-dp
    * string in the platform's own currency, or null. It outranks the suggestions read off the goods
-   * (#553) — a lot is opened below its worth to attract bids — and is read at offer creation only,
-   * never seeded onto anything. Kept only while {@link defaultListingType} is
+   * (#553) — a lot is opened below its worth to attract bids — and seeds an offer at creation only;
+   * afterwards it is merely offered back, on an auction still carrying no starting price of its own
+   * (#1283). Kept only while {@link defaultListingType} is
    * `auction`; a quick buy has no such figure. Only meaningful for the `platform` role. */
   defaultStartingPrice: string | null;
   /** The floor this platform lists at (#731), a 2-dp string in the platform's own currency, or null
    * when it states none — the normal case. **Advisory only**: nothing seeds it onto an offer, nothing
    * clamps a price to it, and no gate refuses a price under it. It is offered back beside the price
-   * on the offer's screen and in the listing wizard's price step, one button away. Unlike
+   * on the offer's screen, one button away. Unlike
    * {@link defaultStartingPrice} it is kept whatever {@link defaultListingType} says — a floor is a
    * floor on whatever figure the seller states. Only meaningful for the `platform` role. */
   minimumPrice: string | null;

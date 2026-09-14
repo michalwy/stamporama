@@ -127,7 +127,6 @@ import {
   Upload,
   FileUp,
   Users,
-  Wand2,
   X,
   Zap,
   ZoomIn,
@@ -334,8 +333,6 @@ const GLYPHS = {
   publish: ShoppingCart,
   /** The Assistant extension does this part (#253). */
   assistant: Zap,
-  /** The guided walk from an assembled offer to a live listing (#730). */
-  wizard: Wand2,
   /** Puts the copies into an offer that already exists. */
   addToOffer: Tag,
   /** Starts a new offer from them. */
