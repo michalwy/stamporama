@@ -7,7 +7,7 @@ import {
   DialogBody,
   DialogFooter,
   DialogSecondaryButton,
-  ErrorBubble,
+  DialogError,
 } from "@/app/dialog-shell";
 import type { LinkableSale, WorklistOrder } from "@/lib/allegro-worklist";
 import { linkAllegroOrderToSaleAction } from "@/app/actions/allegro";
@@ -94,7 +94,7 @@ export function LinkSaleDialog({
           number onto it — nothing else about the sale is touched.
         </p>
 
-        {error && <ErrorBubble>{error}</ErrorBubble>}
+        {error && <DialogError style={{ marginBottom: "0.75rem" }}>{error}</DialogError>}
 
         {isLoading ? (
           <p style={{ color: MUTED, fontSize: "0.875rem" }}>Loading…</p>

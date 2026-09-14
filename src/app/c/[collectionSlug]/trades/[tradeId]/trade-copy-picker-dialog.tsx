@@ -7,7 +7,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -335,15 +334,14 @@ export function TradeCopyPickerDialog({
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter error={error}>
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>
-        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
             Listing a copy here is a plan, not a claim on it.
           </span>
-          <ErrorBubble>{error}</ErrorBubble>
           <DialogPrimaryButton
             type="button"
             onClick={submit}

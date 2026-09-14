@@ -8,7 +8,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -401,24 +400,21 @@ export function AttachCopiesDialog({
         </div>
       )}
 
-      <DialogFooter>
+      <DialogFooter error={error}>
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>
-        <div style={{ position: "relative", display: "flex", gap: "0.5rem" }}>
-          <ErrorBubble>{error}</ErrorBubble>
-          <DialogPrimaryButton
-            type="button"
-            onClick={submit}
-            disabled={isPending || selectedIds.length === 0 || (needsConfirm && !confirmRelink)}
-          >
-            {isPending
-              ? "Attaching…"
-              : selectedIds.length > 1
-                ? `Attach ${selectedIds.length} copies${hiddenNote}`
-                : `Attach copy${hiddenNote}`}
-          </DialogPrimaryButton>
-        </div>
+        <DialogPrimaryButton
+          type="button"
+          onClick={submit}
+          disabled={isPending || selectedIds.length === 0 || (needsConfirm && !confirmRelink)}
+        >
+          {isPending
+            ? "Attaching…"
+            : selectedIds.length > 1
+              ? `Attach ${selectedIds.length} copies${hiddenNote}`
+              : `Attach copy${hiddenNote}`}
+        </DialogPrimaryButton>
       </DialogFooter>
     </DialogShell>,
     document.body

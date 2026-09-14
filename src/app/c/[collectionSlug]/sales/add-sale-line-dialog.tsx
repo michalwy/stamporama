@@ -7,7 +7,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import type { SellableOffer } from "@/lib/sales";
 import type { SaleLineRaw } from "@/app/actions/sales";
@@ -541,8 +540,7 @@ export function AddSaleLineDialog({
         </div>
       </div>
 
-      <DialogFooter>
-        {error && <ErrorBubble>{error}</ErrorBubble>}
+      <DialogFooter error={error}>
         {/* Why the submit is dead, as a **control** rather than a label (#1080). A disabled button
             gets no click and no hover, so the count cannot ride on the button itself — and a bare
             count is the half of option (a) the issue objects to, leaving the collector with a

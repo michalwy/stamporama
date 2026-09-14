@@ -14,7 +14,7 @@ import {
 } from "@/lib/lot-builder-criteria";
 import type { DuplicatePolicy, SeriesPreference } from "@/lib/lot-builder-rules";
 import { Icon } from "@/app/icons";
-import { DialogPrimaryButton, DialogSecondaryButton, ErrorBubble } from "@/app/dialog-shell";
+import { DialogPrimaryButton, DialogSecondaryButton, DialogError } from "@/app/dialog-shell";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
@@ -758,7 +758,7 @@ export function LotBuilderPanel({
         >
           {error && (
             <div style={{ padding: "1rem 1.25rem 0" }}>
-              <ErrorBubble>{error}</ErrorBubble>
+              <DialogError>{error}</DialogError>
             </div>
           )}
 

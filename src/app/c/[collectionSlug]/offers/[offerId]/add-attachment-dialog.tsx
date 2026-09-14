@@ -6,7 +6,7 @@ import {
   DialogBody,
   DialogActions,
   DialogSecondaryButton,
-  ErrorBubble,
+  DialogError,
 } from "@/app/dialog-shell";
 import { useOfferCopies } from "../use-offers-query";
 import type { ItemListItem } from "@/lib/items";
@@ -583,7 +583,7 @@ export function AddAttachmentDialog({
               </DialogSecondaryButton>
               {uploading > 0 && <span style={{ ...NOTE, fontSize: "0.75rem" }}>Uploading {uploading}…</span>}
             </div>
-            {uploadError && <ErrorBubble>{uploadError}</ErrorBubble>}
+            {uploadError && <DialogError>{uploadError}</DialogError>}
           </div>
         )}
 

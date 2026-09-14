@@ -10,7 +10,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog";
 import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
@@ -421,8 +420,7 @@ export function RecordOrderSaleDialog({
           </>
         )}
       </DialogBody>
-      <DialogFooter>
-        {failure && <ErrorBubble>{failure}</ErrorBubble>}
+      <DialogFooter error={failure}>
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>

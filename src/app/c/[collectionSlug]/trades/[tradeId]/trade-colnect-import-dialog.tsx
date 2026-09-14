@@ -7,7 +7,7 @@ import {
   DialogBody,
   DialogActions,
   DialogSecondaryButton,
-  ErrorBubble,
+  DialogError,
 } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
@@ -738,7 +738,7 @@ export function TradeColnectImportDialog({
           </>
         )}
         {(error ?? readFailure) && (
-          <ErrorBubble>{error ?? readFailure?.message}</ErrorBubble>
+          <DialogError style={{ marginTop: "0.75rem" }}>{error ?? readFailure?.message}</DialogError>
         )}
       </DialogBody>
       <DialogActions
