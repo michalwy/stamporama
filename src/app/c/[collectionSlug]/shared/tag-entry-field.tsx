@@ -169,7 +169,6 @@ export function TagEntryField({
   // of the row would throw away what the collector has typed so far.
   if (entries === undefined && initialTags !== undefined) setEntries(initialTags);
   const [text, setText] = useState("");
-  const [focused, setFocused] = useState(false);
 
   // What a Save carries: the chips plus whatever is still in the text field, so a last name typed
   // with no space after it is not lost to the Save button.
@@ -259,14 +258,12 @@ export function TagEntryField({
 
   return (
     <div>
+      {/* Styled exactly as the dialog's other text fields, at rest and with focus (#1212): the
+          border is theirs and never changes, and the focus ring is the browser's, drawn by
+          `.tag-entry-box` in globals.css because an inline style cannot say `:has(:focus-visible)`. */}
       <div
-        style={{
-          ...BOX_STYLE,
-          borderColor: focused ? "var(--color-accent)" : BOX_STYLE.borderColor,
-          opacity: disabled ? 0.6 : 1,
-        }}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        className="tag-entry-box"
+        style={{ ...BOX_STYLE, opacity: disabled ? 0.6 : 1 }}
         onClick={(e) => {
           // A click on the box's empty space lands in the text field, as it would in one input.
           if (e.target === e.currentTarget && inputId) document.getElementById(inputId)?.focus();
