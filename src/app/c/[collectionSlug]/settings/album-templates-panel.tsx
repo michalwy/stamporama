@@ -57,8 +57,8 @@ import { AlbumTemplatePreviewPanel } from "./album-template-preview";
 // Thirty-odd numbers, none of which showed what it did until an album was generated and a PDF
 // produced. The preview is the answer, and where it sits is most of whether it works: a page behind
 // a tab is a page nobody looks at *while typing*, which is the only moment it is worth anything.
-// So the dialog is a two-column workbench — the fields scroll, the sheet stays put — and it is wider
-// than every other dialog in the application because its right-hand column is a piece of A4.
+// So the dialog is a two-column workbench — the fields scroll, the sheet stays put — and it is among
+// the widest dialogs in the application because its right-hand column is a piece of A4.
 //
 // The preview panel owns the reading and the redrawing; everything this file does for it is hold a
 // `ref` to the form and count changes. That is deliberate: the fields stay **uncontrolled** and the
@@ -99,14 +99,30 @@ const SECTION_STYLE: React.CSSProperties = {
   margin: "1.5rem 0 0.75rem",
 };
 
-/** Wider than anything else in the application, and for the reason #815 widened the page editor:
- *  the right-hand column is a piece of A4 at about 40%, and the three-column field grid beside it
- *  still has to be legible. 52rem, which this dialog was before the preview, leaves the sheet at
- *  postage-stamp size — which is the one thing a preview of a printed page must not be. */
-export const ALBUM_PRESET_DIALOG_WIDTH = "76rem";
+/** The fields' share of the dialog's width, and the one figure in it that is a floor rather than a
+ *  cap: the ~800 px the three-column grid had at 52rem, before the preview (#795). **Every rem the
+ *  dialog has past this goes to the sheet** (#978) — the grid does not loosen as the window grows,
+ *  because the thing asked to be bigger is the page, not the form. Below it, the fields give way
+ *  only once the sheet is down to `PREVIEW_MIN_WIDTH`, which is the column #795 shipped. */
+const FIELDS_WIDTH = "49.5rem";
+const PREVIEW_MIN_WIDTH = "22rem";
+/** A4 at about 76%: the most a 92rem dialog leaves once the fields have their 49.5rem. */
+const PREVIEW_MAX_WIDTH = "38rem";
 
-/** The preview panel's own scroll height is written against this, so the two stay one figure. */
-export const ALBUM_PRESET_DIALOG_HEIGHT = "min(85vh, 52rem)";
+/** Among the widest dialogs in the application, for #815's reason: the right-hand column is a piece
+ *  of A4, and a preview of a printed page at postage-stamp size is the one thing it must not be.
+ *  `FIELDS_WIDTH` + the 1.5rem gap + `PREVIEW_MAX_WIDTH` + the body's 3rem of padding is exactly the
+ *  92rem cap, so on a large monitor the sheet is at its widest and nothing is left over. Under the
+ *  cap the dialog is 96vw and the **preview** gives up the difference, not the fields: a 1440 px
+ *  window draws the sheet at about 32rem, and a 1280 px one is back to about #795's 22rem. */
+export const ALBUM_PRESET_DIALOG_WIDTH = "min(96vw, 92rem)";
+
+/** Viewport-relative, and through `min()`, so the panel stays fixed and scrolls inside rather than
+ *  resizing (#838's trap). The first term is `DialogShell`'s own `maxHeight`: any smaller factor of
+ *  `vh` would be clamped by the shell on a short window while the preview, which is written against
+ *  this figure, still believed the larger one — and its sheet would run under the footer. The 70rem
+ *  ceiling is where a sheet at `PREVIEW_MAX_WIDTH` fits the preview's scroll area whole. */
+export const ALBUM_PRESET_DIALOG_HEIGHT = "min(100vh - 4rem, 70rem)";
 
 const GRID_STYLE: React.CSSProperties = {
   display: "grid",
@@ -336,7 +352,7 @@ export function AlbumPresetForm({
           it fires per keystroke on a text field and once on a select or a checkbox — which is what
           the preview wants, and why `onInput` is not also attached: both would bump twice a
           keystroke and re-render this whole form for nothing. */}
-      <div style={{ flex: 1, minWidth: 0 }} onChange={bump}>
+      <div style={{ flex: `0 1 ${FIELDS_WIDTH}`, minWidth: 0 }} onChange={bump}>
         {name !== null && (
           <div>
             <LabelWithError htmlFor="f-album-name">Name</LabelWithError>
@@ -591,12 +607,22 @@ export function AlbumPresetForm({
       {/* Sticky, so the page stays in view while the fields under the pointer scroll past it. The
           collector is changing a number *because of* what is on this sheet; a preview that had to be
           scrolled back to would be one he stops consulting. */}
-      <div style={{ width: "22rem", flexShrink: 0, position: "sticky", top: 0 }}>
+      {/* Grows from nothing into whatever the fields leave, between #795's column and A4 at ~76%. */}
+      <div
+        style={{
+          flex: "1 1 0",
+          minWidth: PREVIEW_MIN_WIDTH,
+          maxWidth: PREVIEW_MAX_WIDTH,
+          position: "sticky",
+          top: 0,
+        }}
+      >
         <AlbumTemplatePreviewPanel
           collectionId={collectionId}
           formRef={formRef}
           revision={revision}
           albumId={previewAlbumId}
+          dialogHeight={ALBUM_PRESET_DIALOG_HEIGHT}
         />
       </div>
     </div>

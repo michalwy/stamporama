@@ -98,6 +98,10 @@ interface AlbumTemplatePreviewPanelProps {
    *  nothing else: there is no sample to offer and no other album to point at, because the values
    *  in the form belong to this one. Absent — the template dialog — the source is chosen. */
   albumId?: string;
+  /** The dialog's own `height`, which the sheets' scroll area is written against. Passed rather than
+   *  imported, so the dialog's size stays one figure without this module importing the one that
+   *  imports it. */
+  dialogHeight: string;
 }
 
 export function AlbumTemplatePreviewPanel({
@@ -105,6 +109,7 @@ export function AlbumTemplatePreviewPanel({
   formRef,
   revision,
   albumId,
+  dialogHeight,
 }: AlbumTemplatePreviewPanelProps) {
   const [chosen, setChosen] = useState<AlbumPreviewSource>({ kind: "sample" });
   const source: AlbumPreviewSource = albumId ? { kind: "album", albumId } : chosen;
@@ -234,11 +239,10 @@ export function AlbumTemplatePreviewPanel({
           minWidth: 0,
           // The sheets scroll here rather than in the dialog: the form beside this is long, and a
           // preview that scrolled away while a margin was being typed would be a preview of nothing.
-          // The dialog is `min(85vh, 52rem)` tall; this is what is left of it under the source
-          // picker and above the notes. Written against the dialog's own height rather than the
-          // viewport's, or on a tall window the sheet runs past the bottom of the panel it is
-          // stuck to.
-          maxHeight: "calc(min(85vh, 52rem) - 15rem)",
+          // This is what is left of the dialog's height under the source picker and above the notes.
+          // Written against the dialog's own height rather than the viewport's, or on a tall window
+          // the sheet runs past the bottom of the panel it is stuck to.
+          maxHeight: `calc(${dialogHeight} - 15rem)`,
           overflowY: "auto",
           // Faded while a newer sheet is being planned, rather than replaced by a spinner: what is on
           // screen is still a true page, just of the preset as it was a moment ago.
