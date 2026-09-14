@@ -491,6 +491,43 @@ describe("series from singles (#1210)", () => {
     assert.ok(await listedWith(setId, { ...DEFAULT_SERIES_CRITERIA, subtypeIds: ["none", variantSubtypeId] }));
   });
 
+  it("collapses identical candidates from one offer and names each copy's photos (#1266)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    const alike = [await copy(ids[0]), await copy(ids[0]), await copy(ids[0])];
+    const elsewhere = await copy(ids[0]);
+    await offer(alike.map((itemId) => [itemId]));
+    await offer([[elsewhere]]);
+    await copy(ids[1]);
+    const photo = await prisma.photo.create({
+      data: {
+        itemId: alike[1],
+        role: "front",
+        storageKey: `test/recombine-${ts}-front`,
+        mime: "image/jpeg",
+        width: 100,
+        height: 100,
+        sizeBytes: 1000,
+      },
+    });
+
+    const series = await listed(setId);
+    assert.ok(series);
+    const itemNos = await prisma.item.findMany({ where: { id: { in: [...alike, elsewhere] } }, select: { id: true, itemNo: true } });
+    const byNo = [...alike].sort(
+      (a, b) => itemNos.find((row) => row.id === a)!.itemNo - itemNos.find((row) => row.id === b)!.itemNo
+    );
+    assert.deepEqual(
+      series.slots[0].candidates.map((group) => group.itemIds),
+      [byNo, [elsewhere]],
+      "the three singles of one offer are one line, lowest number first; the other offer's copy is its own"
+    );
+    assert.equal(series.slots[0].fillers.length, 4, "the flat list still holds every copy");
+    const photos = new Map(series.slots[0].fillers.map((filler) => [filler.itemId, filler.photos]));
+    assert.deepEqual(photos.get(alike[1])?.map((p) => p.id), [photo.id]);
+    assert.deepEqual(photos.get(alike[0]), [], "a copy with no photo says so with an empty list");
+  });
+
   it("refuses a platform that is not one of the collection's", async () => {
     await assert.rejects(findSeriesRecombinations(userId, collectionId, partnerId));
   });

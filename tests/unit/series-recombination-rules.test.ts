@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import type { OfferState } from "../../src/lib/offer-rules";
 import type { LotChecklist } from "../../src/lib/lot-builder-rules";
 import {
+  candidateKey,
   checkSeriesPicks,
+  collapseCandidates,
+  collapsedChoice,
   combinationKey,
   combinationOf,
   compositionOutcome,
@@ -472,5 +475,74 @@ describe("combination helpers (#1265)", () => {
     });
     assert.deepEqual(parseSeriesCriteria(new URLSearchParams(seriesCriteriaParams(criteria))), criteria);
     assert.deepEqual(seriesCriteriaParams(DEFAULT_SERIES_CRITERIA), []);
+  });
+});
+
+describe("collapseCandidates (#1266)", () => {
+  type Numbered = RecombinationCopy & { itemNo: number };
+  const numbered = (copy: RecombinationCopy, itemNo: number): Numbered => ({ ...copy, itemNo });
+
+  it("collapses fourteen identical copies in one offer into one group, lowest number first", () => {
+    const copies = Array.from({ length: 14 }, (_, i) => numbered(offered(`c${i}`, "s1", ["o1"]), 100 - i));
+    const groups = collapseCandidates(copies);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].copies.length, 14);
+    assert.deepEqual(
+      groups[0].copies.map((copy) => copy.itemNo),
+      Array.from({ length: 14 }, (_, i) => 87 + i),
+      "the first is the lowest-numbered copy, the one a collapsed line chooses"
+    );
+  });
+
+  it("never collapses copies from different offers, or offered with not offered yet", () => {
+    const groups = collapseCandidates([
+      numbered(offered("a", "s1", ["o1"]), 1),
+      numbered(offered("b", "s1", ["o2"]), 2),
+      numbered(offered("c", "s1", ["o1", "o2"]), 3),
+      numbered(available("d", "s1"), 4),
+      numbered(available("e", "s1"), 5),
+    ]);
+    assert.deepEqual(
+      groups.map((group) => group.copies.map((copy) => copy.itemId)),
+      [["d", "e"], ["a"], ["b"], ["c"]],
+      "available first, then by lowest number; each offer, and each pair of offers, is its own source"
+    );
+  });
+
+  it("treats the offers a copy names as a set, in any order", () => {
+    assert.equal(
+      candidateKey(offered("a", "s1", ["o2", "o1"])),
+      candidateKey(offered("b", "s1", ["o1", "o2", "o1"]))
+    );
+  });
+
+  it("keeps apart copies that differ in stamp, condition, certificate or format", () => {
+    const base = offered("base", "s1", ["o1"]);
+    const variants: RecombinationCopy[] = [
+      { ...offered("variant", "v1", ["o1"]), variantChain: ["v1", "s1"] },
+      offered("used", "s1", ["o1"], { conditionId: "used" }),
+      offered("cert", "s1", ["o1"], { certificateStatusId: "cert" }),
+      offered("pair", "s1", ["o1"], { formatId: "pair" }),
+    ];
+    const groups = collapseCandidates([base, ...variants].map((copy, i) => numbered(copy, i + 1)));
+    assert.equal(groups.length, 5, "no two of these are identical");
+    assert.notEqual(
+      candidateKey(offered("x", "s1", ["o1"], { certificateStatusId: null })),
+      candidateKey(offered("x", "s1", ["o1"], { certificateStatusId: "null" })),
+      "no certificate is a value, not a string that spells it"
+    );
+  });
+});
+
+describe("collapsedChoice (#1266)", () => {
+  const group = ["low", "mid", "high"];
+
+  it("chooses the lowest-numbered copy when nothing in the group is chosen yet", () => {
+    assert.equal(collapsedChoice(group, undefined), "low");
+    assert.equal(collapsedChoice(group, "elsewhere"), "low");
+  });
+
+  it("keeps a copy chosen after expanding, so collapsing again does not change the choice", () => {
+    assert.equal(collapsedChoice(group, "high"), "high");
   });
 });

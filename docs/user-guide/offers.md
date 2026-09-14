@@ -1421,6 +1421,17 @@ checklist's own order. Beside each stamp is **every copy that could fill its pla
 its condition, and either *not offered here yet* or the single offer holding it — its number, its
 name and its state, each a link. A copy that is a variant of the listed stamp says which variant.
 
+**Every copy shows its photo**, beside its line, because which copy suits the set — centring, colour,
+cancel, freshness — is judged by looking at it. Rest the pointer on a photo to see it larger, or click
+it to open it full size; neither changes which copy is chosen. A copy without a photo says *No photo*.
+
+**Identical copies share one line.** Copies of the same stamp (a variant counts as its own stamp here),
+in the same condition, certificate status and format, **and from the same place** — the same single
+offer, or all *not offered here yet* — are collapsed into one line with a count: fourteen used copies
+alone in one offer read as one line marked **×14**. Copies in different offers are never collapsed
+together, because which offer changes is part of the choice. **Show all** opens the line into its
+copies, and **collapse** folds them back.
+
 A copy **promised in an agreed trade** still fills its place and is chipped **Promised · #N**, as on the Copies list.
 It is not left out: a draft competes for nothing, but an offer holding it cannot go live while the
 trade stands.
@@ -1438,13 +1449,19 @@ composing the series offer afterwards.
 
 - **Choose the copies.** Only the card's own copies are offered — never a copy of another card's
   condition, certificate or format. Where only one copy can fill a stamp's place, it is taken as is. Where
-  several can, each has a radio button and **you pick** — nothing is chosen for you, because the app
-  does not rank conditions. The button stays disabled until every place has a copy.
+  several can, each line has a radio button and **you pick** — nothing is chosen for you, because the app
+  does not rank conditions. Picking a **collapsed line** chooses one named copy, the one with the
+  **lowest number**, and the line says so; open it with **Show all** to choose a different one — the
+  line then says the copy was chosen from the group. The button stays disabled until every place has a
+  copy.
+- **See the set.** Each stamp's row starts with the photo of the copy chosen for it (*Not chosen* until
+  you pick), so the column down the card's left edge is the set you are putting together.
 - **Check the outcome.** The dialog says what is about to happen: a new **Preparing** offer on the
   platform holding the series as **one set**, and every single offer that loses a set — whether it
   keeps other sets or, left with nothing, is **withdrawn**, and whether it is **live** (Active or
   Paused).
-- **Compose.** The new offer opens. For every chosen copy that came from a single offer, only **its
+- **Compose.** The new offer opens, holding exactly the copies you chose — from a collapsed line or
+  an opened one alike. For every chosen copy that came from a single offer, only **its
   own one-copy set** is taken out of that offer; the offer's other sets stay where they are. An offer
   left with no sets is withdrawn.
 

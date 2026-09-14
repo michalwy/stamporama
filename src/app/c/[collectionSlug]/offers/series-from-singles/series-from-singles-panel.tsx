@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useId, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type {
@@ -10,6 +10,7 @@ import type {
   RecombinationStampName,
 } from "@/lib/series-recombination";
 import {
+  collapsedChoice,
   compositionOutcome,
   parseSeriesCriteria,
   SERIES_FILTER_PARAMS,
@@ -23,6 +24,7 @@ import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/share
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import {
   DialogActions,
@@ -48,6 +50,16 @@ import { useInvalidateOffers, useSeriesFromSingles } from "../use-offers-query";
 // format, named in its heading, so one checklist can be two cards. The *Copies* band steers it — four
 // filters narrowing the candidates and a mixing switch per axis — and all of it lives in the URL
 // beside the platform, spelled as the Copies list spells its filters.
+//
+// A slot's candidates are **collapsed** when identical (#1266) — same stamp, condition, certificate,
+// format and source, the rule being `collapseCandidates` on the server — into one line with a count
+// that chooses the lowest-numbered copy and names it, and expands to pick another. Every candidate
+// shows its photo, and each slot's row leads with the photo of the copy chosen for it, so the column
+// down the card's left edge is the set being assembled.
+
+/** The chosen copy's photo leading a slot's row, and a candidate's beside its line (#1266). */
+const CHOSEN_PHOTO = "4.5rem";
+const CANDIDATE_PHOTO = "2.75rem";
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -78,10 +90,24 @@ const SERIES_HEADING: React.CSSProperties = {
 
 const SLOT_ROW: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(10rem, 16rem) 1fr",
+  gridTemplateColumns: `${CHOSEN_PHOTO} minmax(10rem, 16rem) 1fr`,
+  alignItems: "start",
   gap: "0.75rem",
   padding: "0.5rem 0.75rem",
   fontSize: "0.8125rem",
+};
+
+const TEXT_BUTTON: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+  padding: 0,
+  border: "none",
+  background: "none",
+  font: "inherit",
+  fontSize: "0.75rem",
+  color: "var(--color-accent)",
+  cursor: "pointer",
 };
 
 const LINK: React.CSSProperties = { color: "var(--color-accent)", textDecoration: "none" };
@@ -306,8 +332,19 @@ function SeriesCard({
   platformName: string;
   criteriaQuery: string;
 }) {
+  const cardId = useId();
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [composing, setComposing] = useState(false);
+  // Which groups of identical candidates are open, by slot and group (#1266). Collapsed by default:
+  // the flood of identical lines is what collapsing exists to stop.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleExpanded = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   // A slot with one copy is taken as is. A choice survives a refetch only while its copy is still
   // listed for the slot, so the card never composes out of a copy it no longer shows.
   const picks = useMemo(() => {
@@ -353,40 +390,83 @@ function SeriesCard({
       </div>
       {series.slots.map((slot, index) => {
         const choosing = slot.fillers.length > 1;
+        const stampId = slot.stamp.stampId;
+        const pick = picks[stampId];
+        const fillerById = new Map(slot.fillers.map((filler) => [filler.itemId, filler]));
+        const choose = (itemId: string) => setChosen((prev) => ({ ...prev, [stampId]: itemId }));
+        // Keyed by the card, not the checklist: two cards of one checklist must not share a radio group.
+        const radioName = `${series.key}:${stampId}`;
+        const line = (filler: RecombinationFiller, collapsed?: CollapsedLine) => (
+          <CandidateLine
+            key={collapsed ? `group:${collapsed.groupKey}` : filler.itemId}
+            inputId={`${cardId}-${stampId}-${collapsed ? `g${collapsed.groupKey}` : filler.itemId}`}
+            radio={
+              choosing
+                ? {
+                    name: radioName,
+                    checked: collapsed ? collapsed.itemIds.includes(pick ?? "") : pick === filler.itemId,
+                    onChoose: () => choose(filler.itemId),
+                  }
+                : null
+            }
+            filler={filler}
+            collapsed={collapsed}
+            collectionId={collectionId}
+            collectionSlug={collectionSlug}
+          />
+        );
         return (
           <div
-            key={slot.stamp.stampId}
+            key={stampId}
             style={{ ...SLOT_ROW, borderTop: index === 0 ? undefined : "1px solid var(--color-border)" }}
           >
+            {/* The copy this slot will hold, so the set reads down the card as a whole (#1266). */}
+            {pick && fillerById.get(pick) ? (
+              <CopyPhoto collectionId={collectionId} filler={fillerById.get(pick)!} size={CHOSEN_PHOTO} />
+            ) : (
+              <PhotoPlaceholder size={CHOSEN_PHOTO} text="Not chosen" />
+            )}
             <StampName stamp={slot.stamp} />
             <div
               role={choosing ? "radiogroup" : undefined}
               aria-label={choosing ? `Copy for ${slot.stamp.catalogNumber ?? slot.stamp.name ?? "this stamp"}` : undefined}
               style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}
             >
-              {slot.fillers.map((filler) =>
-                choosing ? (
-                  <label
-                    key={filler.itemId}
-                    style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
-                  >
-                    <input
-                      type="radio"
-                      // Keyed by the card, not the checklist: two cards of one checklist must not
-                      // share a radio group.
-                      name={`${series.key}:${slot.stamp.stampId}`}
-                      checked={picks[slot.stamp.stampId] === filler.itemId}
-                      onChange={() =>
-                        setChosen((prev) => ({ ...prev, [slot.stamp.stampId]: filler.itemId }))
-                      }
-                      style={{ margin: 0 }}
-                    />
-                    <FillerLine filler={filler} collectionSlug={collectionSlug} />
-                  </label>
-                ) : (
-                  <FillerLine key={filler.itemId} filler={filler} collectionSlug={collectionSlug} />
-                )
-              )}
+              {slot.candidates.map((group, groupIndex) => {
+                const members = group.itemIds.flatMap((itemId) => fillerById.get(itemId) ?? []);
+                if (members.length === 0) return null;
+                if (members.length === 1) return line(members[0]);
+                const expansionKey = `${stampId}:${group.key}`;
+                if (!expanded.has(expansionKey)) {
+                  const choice = fillerById.get(collapsedChoice(group.itemIds, pick));
+                  if (!choice) return null;
+                  return line(choice, {
+                    groupKey: String(groupIndex),
+                    itemIds: group.itemIds,
+                    count: members.length,
+                    lowest: choice.itemId === group.itemIds[0],
+                    onExpand: () => toggleExpanded(expansionKey),
+                  });
+                }
+                return (
+                  <div key={group.key} style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                    <button type="button" onClick={() => toggleExpanded(expansionKey)} style={TEXT_BUTTON}>
+                      <Icon name="collapse" size="xs" /> {members.length} identical copies — collapse
+                    </button>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.375rem",
+                        paddingLeft: "0.75rem",
+                        borderLeft: "2px solid var(--color-border)",
+                      }}
+                    >
+                      {members.map((filler) => line(filler))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -565,6 +645,123 @@ function StampName({ stamp }: { stamp: RecombinationStampName }) {
       ) : null}
       <span style={{ color: "var(--color-text-secondary)" }}>{stamp.name ?? ""}</span>
     </span>
+  );
+}
+
+/** A group of identical candidates drawn as one line (#1266). */
+interface CollapsedLine {
+  groupKey: string;
+  /** Lowest number first. */
+  itemIds: readonly string[];
+  count: number;
+  /** Whether the copy the line stands for is the group's lowest-numbered one. */
+  lowest: boolean;
+  onExpand: () => void;
+}
+
+/**
+ * One candidate for a slot: its radio where there is a choice, its photo, and what it is. The photo sits
+ * outside the label, so enlarging it — hover, or a click for the lightbox — never changes the choice.
+ * A collapsed line stands for one named copy and says how many identical ones it holds.
+ */
+function CandidateLine({
+  inputId,
+  radio,
+  filler,
+  collapsed,
+  collectionId,
+  collectionSlug,
+}: {
+  inputId: string;
+  radio: { name: string; checked: boolean; onChoose: () => void } | null;
+  filler: RecombinationFiller;
+  collapsed?: CollapsedLine;
+  collectionId: string;
+  collectionSlug: string;
+}) {
+  const body = (
+    <>
+      <FillerLine filler={filler} collectionSlug={collectionSlug} />
+      {collapsed ? (
+        <span style={NOTE}>
+          {collapsed.lowest
+            ? `the lowest number of ${collapsed.count} identical copies`
+            : `chosen from ${collapsed.count} identical copies`}
+        </span>
+      ) : null}
+    </>
+  );
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      {radio ? (
+        <input
+          id={inputId}
+          type="radio"
+          name={radio.name}
+          checked={radio.checked}
+          onChange={radio.onChoose}
+          style={{ margin: 0 }}
+        />
+      ) : null}
+      <CopyPhoto collectionId={collectionId} filler={filler} size={CANDIDATE_PHOTO} />
+      {collapsed ? (
+        <span style={{ ...ROW_CHIP, fontVariantNumeric: "tabular-nums" }}>×{collapsed.count}</span>
+      ) : null}
+      {radio ? (
+        <label
+          htmlFor={inputId}
+          style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", cursor: "pointer", minWidth: 0 }}
+        >
+          {body}
+        </label>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", minWidth: 0 }}>{body}</div>
+      )}
+      {collapsed ? (
+        <button type="button" onClick={collapsed.onExpand} style={{ ...TEXT_BUTTON, marginLeft: "auto" }}>
+          <Icon name="expand" size="xs" /> Show all {collapsed.count}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** A copy's own photo (#1266) — the shared row thumbnail, so hovering enlarges it and a click opens
+ *  the lightbox — or, where the copy has none, a frame that says so. */
+function CopyPhoto({
+  collectionId,
+  filler,
+  size,
+}: {
+  collectionId: string;
+  filler: RecombinationFiller;
+  size: string;
+}) {
+  if (filler.photos.length === 0) return <PhotoPlaceholder size={size} text="No photo" />;
+  return <PhotoThumb collectionId={collectionId} photos={filler.photos} size={size} plain />;
+}
+
+function PhotoPlaceholder({ size, text }: { size: string; text: string }) {
+  return (
+    <div
+      style={{
+        flexShrink: 0,
+        width: size,
+        height: size,
+        borderRadius: "0.375rem",
+        border: "1px dashed var(--color-border)",
+        background: "var(--color-bg-page)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        fontSize: "0.625rem",
+        lineHeight: 1.2,
+        color: "var(--color-text-muted)",
+      }}
+    >
+      {text}
+    </div>
   );
 }
 
