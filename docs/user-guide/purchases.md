@@ -606,8 +606,40 @@ line says so while that is the case.
 
 **Nothing is written down.** A measurement is a reading you take and use; it is not saved on the
 copy or the stamp. What you concluded from it belongs on the stamp you identify the piece as, or in
-the note of a piece you set aside. A tile with no cut box behind it — nothing in the ordinary scan
-flow — has no tools at all, because there is then no way to know what its pixels measure.
+the note of a piece you set aside — or in a [snapshot](#marking-a-detail-and-keeping-a-snapshot),
+where the line and its figure are drawn into a photo. A tile with no cut box behind it — nothing in
+the ordinary scan flow — has no tools at all, because there is then no way to know what its pixels
+measure.
+
+The same tools are on a copy's photos after identification, from the copy's and the stamp's own
+pages — see [Measuring and marking a photo](detail-pages.md#measuring-and-marking-a-photo).
+
+#### Marking a detail and keeping a snapshot
+
+A plate flaw, a retouch or a broken letter is easier to find again — and to show someone — when it
+is marked and kept, not just looked at. Three buttons in the viewer's toolbar do that.
+
+**Ring** — drag across a detail to draw a ring around it. **Line** — drag to draw a straight line
+for reference, say along a frame line that is not quite straight. Neither says anything numeric, so
+neither needs the scan resolution; use the **Ruler** when you want a figure. Marks stay on the
+picture while you add more — a bar under the viewer counts them, with **Undo** for the last one and
+**Clear marks** for all of them. They belong to the side they were drawn on, like measuring marks.
+
+**Snapshot** keeps what is on screen as a new photo: the part of the picture in view at the zoom you
+chose, with your rings and lines drawn into it, and — if a ruler, size or perforation reading is
+standing — that line or box with its figure and the resolution it was taken at. Give it a title
+(*Detail* if you do not) and press **Save as photo**. The picture itself is never changed.
+
+**Where the snapshot goes** is whoever owns the picture you took it on:
+
+- On a tile you are still identifying, it is kept **with the tile**, and moves to the copy together
+  with the front and the back when the tile is identified.
+- On a tile that has already become a copy, or on a copy's photo, it goes to **the copy's** photos.
+- On a stamp's own photo, it goes to **the stamp's** photos.
+
+It is always an extra photo, never the front or the back. On a tile whose card scan is still kept,
+the snapshot is cut from the scan itself, so it is as sharp as the deepest zoom you can reach.
+Marks themselves are not saved anywhere — close the viewer without a snapshot and they are gone.
 
 #### Looking for a watermark
 

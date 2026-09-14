@@ -87,7 +87,8 @@ Offers. Only Details is always there; the rest appear when the copy has them.
   opens. See
   [covers and other pieces carrying several stamps](inventory.md#covers-fragments-and-other-pieces-carrying-several-stamps).
 - **Photos** — the full gallery, not just the first photo. Click any thumbnail to view it
-  full-size.
+  full-size. Under the enlarged photo, **Measure and mark** opens it in the same viewer a scan tile
+  has — see [Measuring and marking a photo](#measuring-and-marking-a-photo) below.
 - **Catalog prices** — the cross-catalog averages for the copy's stamp, with **Full breakdown**
   opening the same per-edition dialog the row menu opens.
 - **Notes** — the copy's own text.
@@ -103,8 +104,8 @@ Offers. Only Details is always there; the rest appear when the copy has them.
 
 ## The stamp page
 
-*Left column:* Details, Attributes, Issues, Photos, Catalog prices, Variants. *Right column:*
-Wants, Copies, Offers. Only Details is always there.
+*Left column:* Details, Attributes, Issues, Photos, Copies' photos, Catalog prices, Variants.
+*Right column:* Wants, Copies, Offers. Only Details is always there.
 
 - **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
@@ -127,7 +128,13 @@ Wants, Copies, Offers. Only Details is always there.
 - **Issues** — which issues the stamp belongs to, and which of each issue's
   [checklists](collections.md#checklists) count it. *Optional* means the issue holds it but no set
   counts it.
-- **Photos** — the stamp's catalog photos, full gallery.
+- **Photos** — the stamp's catalog photos, full gallery. **Measure and mark** under an enlarged
+  photo opens the measuring viewer, as on a copy.
+- **Copies' photos** — the photos of the copies you hold of this stamp, each titled with the copy it
+  belongs to (*Copy 00012 · Front*), so a piece can be measured on the page where the stamp's size
+  is set. Only copies still in the collection whose stamp this is — a cover carrying it among
+  others is a picture of the cover. At most the first 60 are shown, and the card says so when there
+  are more.
 - **Catalog prices** — averages inline, full per-edition breakdown behind the button.
 - **Variants** — the base stamp this one hangs under, and the variants hanging under it. Each is a
   link to its own page. This is also where a variant tree is **built**: a line at the top says where
@@ -155,6 +162,33 @@ Wants, Copies, Offers. Only Details is always there.
   lives on the want list. See
   [On the stamp's and the copy's own pages](wants.md#on-the-stamps-and-the-copys-own-pages).
 - **Offers** — every offer holding a copy of this stamp.
+
+## Measuring and marking a photo
+
+A stamp you did not measure while identifying it can still be measured from its picture. On the copy
+page and the stamp page, open any photo full-size and press **Measure and mark** under it. The photo
+opens in the same viewer a [scan tile](purchases.md#measuring-on-the-scan) has: zoom, the **Ruler**,
+**Size** and **Perforation** tools, the **Watermark** view, and the
+[**Ring**, **Line** and **Snapshot**](purchases.md#marking-a-detail-and-keeping-a-snapshot) buttons.
+
+The rules are the scan's rules:
+
+- **Every figure is shown with the resolution it was taken at**, and that resolution is filled in
+  from **Settings → General → Scanner resolution**. If this picture came off a different scanner, or
+  was photographed rather than scanned, correct the figure on the measuring bar — it holds while you
+  are looking and does not change the collection's setting.
+- **The measurement is taken on the picture as you uploaded it**, even though what is kept on the
+  server is a smaller copy of a very large upload. The scale stays exact; below **1:1** you are only
+  placing the marks less precisely, and the viewer says so.
+- **Some older photos cannot be measured.** A large photo uploaded before Stamporama recorded
+  original sizes may have been shrunk by an amount nothing remembers, so the measuring tools are not
+  offered on it and the line under the viewer says why. Ring, Line and Snapshot still work.
+
+**Set as the stamp's size.** With the **Size** tool, drag a box around the stamp; its width and
+height appear under the viewer with **Set as the stamp's size**. If the stamp states no size yet, it
+is written straight away. If it already states one — whole or only half — you are shown that size and
+asked before it is replaced, since it may itself have been measured carefully. On a copy carrying
+several stamps the figure is measured but not offered, because the piece is a copy of none of them.
 
 ## The issue page
 

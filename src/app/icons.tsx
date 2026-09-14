@@ -44,10 +44,12 @@ import {
   Bell,
   Boxes,
   Calendar,
+  Camera,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Circle,
   CircleSlash,
   Coins,
   Columns2,
@@ -363,6 +365,14 @@ const GLYPHS = {
   /** Lays the stamp in hand beside a reference and over it (#1004/#1005). Not `splitColumns`, which
    * cuts a box in two: this puts two pictures together. */
   compare: SquareSplitHorizontal,
+  // Marking up a detail and keeping it (#674). Two marks that say nothing numeric — the ruler above
+  // is the one that measures — and the act of keeping what is on screen as a photo.
+  /** A ring drawn around a detail. */
+  annotateRing: Circle,
+  /** A straight line drawn for reference. */
+  annotateLine: Minus,
+  /** The view on screen, marks and all, kept as a new photo. */
+  snapshot: Camera,
 
   /** Fills a bid box with a figure the row already knows — a ceiling, upwards. */
   bidCeiling: ArrowUpToLine,

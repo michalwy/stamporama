@@ -10,12 +10,15 @@ import {
   type PhotoVariant,
 } from "./storage";
 import {
+  FULL_MAX_EDGE,
   MAX_UPLOAD_BYTES,
   isAcceptedMime,
   processImage,
   turnImage,
   UnsupportedImageError,
 } from "./photos/process";
+import { photoMeasureFrame, type MeasureFrame, type PhotoPixels } from "./photo-measure-frame";
+import { formatItemNo } from "./item-number";
 import { asQuarterTurn, isSideways } from "./tile-turn";
 import {
   PHOTO_SOURCE_MAX_LENGTH,
@@ -85,6 +88,23 @@ export interface PhotoSummary {
   role: PhotoRole;
   title: string | null;
   sortOrder: number;
+  /** The frame the photo is measured in (#1290) — its upload's own pixels — or null when that cannot
+   * be known, which leaves the measuring tools absent. Only the readers whose screens open the
+   * measuring viewer fill it; absent everywhere else. See `photo-measure-frame.ts`. */
+  measureFrame?: MeasureFrame | null;
+}
+
+/** The columns {@link measureFrameOf} reads, for a select that already picks a summary's four. */
+export const PHOTO_FRAME_SELECT = {
+  width: true,
+  height: true,
+  originalWidth: true,
+  originalHeight: true,
+} as const;
+
+/** A summary's measuring frame from its row, at this pipeline's cap. */
+export function measureFrameOf(row: PhotoPixels): MeasureFrame | null {
+  return photoMeasureFrame(row, FULL_MAX_EDGE);
 }
 
 /** A photo as the stamp edit dialog seeds its editor (#1001): the summary plus where the picture
@@ -972,4 +992,64 @@ export async function gcStaleUploads(now: number = Date.now()): Promise<number> 
     where: { id: { in: stale.map((u) => u.id) } },
   });
   return count;
+}
+
+/** How many of a stamp's copies' photos its own screen shows at most (#1290). A stamp held many times
+ * over would otherwise draw hundreds of thumbnails into one strip; the card says how many there are. */
+export const STAMP_COPY_PHOTO_LIMIT = 60;
+
+/**
+ * The photos of a stamp's copies, for the stamp's own screen (#1290) — the pictures of *the* pieces
+ * held, beside the stamp's catalogue pictures of *a* specimen, so a copy's photo can be measured
+ * where the stamp's size is written.
+ *
+ * Copies still in the collection, whose leading stamp is this one (a cover carrying it among others
+ * is a picture of the cover), in copy-number order, front before back. Each is titled with the copy
+ * it belongs to and carried as an extra, so the strip names the piece rather than badging a dozen
+ * *Front*s it cannot tell apart.
+ */
+export async function listStampCopyPhotos(
+  ownerId: string,
+  stampId: string
+): Promise<{ photos: PhotoSummary[]; total: number }> {
+  const collectionId = await resolveStampCollection(stampId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const where = { item: { stampId, collectionId, disposedAt: null } };
+  const [total, rows] = await Promise.all([
+    prisma.photo.count({ where }),
+    prisma.photo.findMany({
+      where,
+      select: {
+        id: true,
+        role: true,
+        title: true,
+        sortOrder: true,
+        ...PHOTO_FRAME_SELECT,
+        item: { select: { itemNo: true } },
+      },
+      orderBy: [{ item: { itemNo: "asc" } }, { sortOrder: "asc" }],
+    }),
+  ]);
+  const photos = rows
+    .sort(
+      (a, b) =>
+        (a.item?.itemNo ?? 0) - (b.item?.itemNo ?? 0) ||
+        sortPhotos(
+          { role: normalizeRole(a.role), sortOrder: a.sortOrder },
+          { role: normalizeRole(b.role), sortOrder: b.sortOrder }
+        )
+    )
+    .slice(0, STAMP_COPY_PHOTO_LIMIT)
+    .map((p) => {
+      const role = normalizeRole(p.role);
+      const what = role === "front" ? "Front" : role === "back" ? "Back" : (p.title ?? "Photo");
+      return {
+        id: p.id,
+        role: null,
+        title: `Copy ${formatItemNo(p.item?.itemNo ?? 0)} · ${what}`,
+        sortOrder: p.sortOrder,
+        measureFrame: measureFrameOf(p),
+      } satisfies PhotoSummary;
+    });
+  return { photos, total };
 }

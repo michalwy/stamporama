@@ -102,6 +102,7 @@ export function CopyDetailPanel({
   areas,
   locations,
   sale,
+  scanDpi,
 }: {
   collectionId: string;
   collectionSlug: string;
@@ -110,6 +111,8 @@ export function CopyDetailPanel({
   areas: CollectionAreaData[];
   locations: LocationData[];
   sale: ItemSaleRecord | null;
+  /** The collection's stated scan resolution (#598) — the measuring viewer's prefill (#1290). */
+  scanDpi: number;
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
   const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
@@ -392,7 +395,15 @@ export function CopyDetailPanel({
             </DetailCard>
 
             <DetailCard title="Photos" count={item.photos.length} empty={item.photos.length === 0}>
-              <PhotoStrip collectionId={collectionId} photos={item.photos} size="7rem" />
+              {/* Measured after identification (#1290). A size read off the piece is its stamp's —
+                  and a piece carrying several stamps is a copy of none of them, so it measures but
+                  writes no size. */}
+              <PhotoStrip
+                collectionId={collectionId}
+                photos={item.photos}
+                size="7rem"
+                measure={{ scanDpi, stampId: item.multiStamp ? null : item.stampId }}
+              />
             </DetailCard>
 
             <CatalogPricesCard target={{ kind: "stamp", stampId: item.stampId }} />

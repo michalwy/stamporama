@@ -10,6 +10,7 @@ import {
   type ViewablePhoto,
 } from "@/app/photo-viewer";
 import { Icon } from "@/app/icons";
+import { PhotoMeasureDialog, type PhotoMeasureContext } from "./photo-measure-dialog";
 
 // The hover preview and the overlay themselves live in `@/app/photo-viewer`, which knows nothing
 // about collections (#666). Re-exported from here because every caller in the app reaches them
@@ -231,13 +232,18 @@ export function PhotoStrip({
   collectionId,
   photos,
   size = "4.5rem",
+  measure,
 }: {
   collectionId: string;
   photos: PhotoSummary[];
   /** Edge length of each (square) thumbnail. */
   size?: string;
+  /** Offer the measuring viewer from the lightbox (#1290) — the detail screens of a copy and a
+   * stamp, where a picture of the piece is looked at closely and its stamp's size is written. */
+  measure?: PhotoMeasureContext;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [measuringIndex, setMeasuringIndex] = useState<number | null>(null);
   if (photos.length === 0) return null;
   return (
     <div style={{ display: "flex", gap: "0.375rem", overflowX: "auto", paddingBottom: "0.125rem" }}>
@@ -310,6 +316,23 @@ export function PhotoStrip({
           index={Math.min(lightboxIndex, photos.length - 1)}
           onIndex={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
+          onMeasure={
+            measure
+              ? (i) => {
+                  setLightboxIndex(null);
+                  setMeasuringIndex(i);
+                }
+              : undefined
+          }
+        />
+      )}
+      {measure && measuringIndex !== null && photos[measuringIndex] && (
+        <PhotoMeasureDialog
+          collectionId={collectionId}
+          photo={photos[measuringIndex]}
+          label={roleLabel(photos[measuringIndex])}
+          context={measure}
+          onClose={() => setMeasuringIndex(null)}
         />
       )}
     </div>
@@ -337,12 +360,15 @@ export function PhotoLightbox({
   index,
   onIndex,
   onClose,
+  onMeasure,
 }: {
   collectionId: string;
   photos: PhotoSummary[];
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
+  /** Open the photo on screen in the measuring viewer (#1290). Absent where a screen does not offer it. */
+  onMeasure?: (index: number) => void;
 }) {
   return (
     <PhotoLightboxView
@@ -350,6 +376,31 @@ export function PhotoLightbox({
       index={index}
       onIndex={onIndex}
       onClose={onClose}
+      actions={
+        onMeasure
+          ? (i) => (
+              <button
+                type="button"
+                onClick={() => onMeasure(i)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  padding: "0.375rem 0.75rem",
+                  borderRadius: "999px",
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  background: "rgba(0,0,0,0.45)",
+                  color: "#fff",
+                  font: "inherit",
+                  fontSize: "0.8125rem",
+                  cursor: "pointer",
+                }}
+              >
+                <Icon name="measure" size="sm" /> Measure and mark
+              </button>
+            )
+          : undefined
+      }
     />
   );
 }

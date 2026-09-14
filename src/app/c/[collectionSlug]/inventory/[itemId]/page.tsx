@@ -75,6 +75,7 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
         areas={areas}
         locations={locations}
         sale={sale}
+        scanDpi={collection.scanDpi}
       />
     </div>
   );

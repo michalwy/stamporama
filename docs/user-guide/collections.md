@@ -712,6 +712,12 @@ Both offers quote the resolution they were taken at, because a measurement is on
 scale it was converted through — correct it on the measuring bar before taking the figure if the
 card was scanned at something other than the collection's setting.
 
+A stamp you did not measure while identifying it can still be measured afterwards, on a photo of a
+copy: **Measure and mark** under an enlarged photo on the copy's or the stamp's page, then the
+**Size** tool, then **Set as the stamp's size**. A stamp that already states a size is not changed
+until you have seen that size and confirmed replacing it. See
+[Measuring and marking a photo](detail-pages.md#measuring-and-marking-a-photo).
+
 **A stamp that states no size borrows one when something needs to draw it.** For laying out an album
 page, a stamp with no size of its own uses the nearest stamp of the same checklist that has one, in
 catalog order — a series is printed on one press at one size, so this is right far more often than it
