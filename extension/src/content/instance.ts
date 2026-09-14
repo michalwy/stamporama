@@ -45,6 +45,7 @@ import {
   CLOSE_MESSAGE_ATTRIBUTE,
   CLOSE_REQUEST_ATTRIBUTE,
   CLOSE_STATE_ATTRIBUTE,
+  describeCloseFailure,
   describeClosed,
   parseCloseHandoff,
   type CloseHandoffState,
@@ -387,7 +388,13 @@ async function pumpClose(): Promise<void> {
     } satisfies ColnectCloseRequest)) as ColnectCloseResponse;
   } catch (e) {
     // Kept in `closesHandled` for the pumps' reason above: a press mints a new id, which is a retry.
-    reportClose(handoff.requestId, "error", e instanceof Error ? e.message : String(e));
+    // Usually an Assistant updated or reloaded since this page was: reloading the page is what helps.
+    const why = e instanceof Error ? e.message : String(e);
+    reportClose(
+      handoff.requestId,
+      "error",
+      describeCloseFailure(`The Assistant could not be reached from this page (${why}), so nothing was closed. Reload this page first`)
+    );
     return;
   }
   if (res.ok) reportClose(handoff.requestId, "closed", describeClosed(handoff.task));

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseCloseHandoff } from "./colnect-close-handoff";
+import { CLOSE_NEXT_STEP, describeCloseFailure, parseCloseHandoff } from "./colnect-close-handoff";
 
 // The close handoff leads to a write on Colnect (#729), so a task that does not name its sale must
 // read as no task at all rather than as a close of something.
@@ -40,5 +40,20 @@ describe("parseCloseHandoff (#729)", () => {
       JSON.stringify({ v: 1, requestId: "r1", task: { ...task, label: undefined } })
     );
     assert.equal(parsed?.task.label, "this offer");
+  });
+});
+
+// #1292: a failed close says what happened and what to do next, never only the step that broke.
+describe("describeCloseFailure (#1292)", () => {
+  it("follows what went wrong with the way on, as one sentence each", () => {
+    assert.equal(
+      describeCloseFailure("Colnect answered HTTP 403: Forbidden."),
+      `Colnect answered HTTP 403: Forbidden. ${CLOSE_NEXT_STEP}`
+    );
+    assert.equal(describeCloseFailure("No page  "), `No page. ${CLOSE_NEXT_STEP}`);
+  });
+
+  it("still says the listing was not closed when there is no reason to quote", () => {
+    assert.equal(describeCloseFailure(" "), `The listing was not closed. ${CLOSE_NEXT_STEP}`);
   });
 });
