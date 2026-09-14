@@ -88,3 +88,18 @@ export function parseCloseHandoff(raw: string | null | undefined): CloseHandoff 
 export function describeClosed(task: CloseTask): string {
   return `Closed ${task.label} on Colnect.`;
 }
+
+/** What the collector can do after a close that did not happen. The same whatever broke, because so is
+ *  their position: the offer is still Active here, and either another try or closing the listing on
+ *  Colnect by hand gets them out. */
+export const CLOSE_NEXT_STEP =
+  "This offer is still active. Try again, or close the listing on Colnect by hand and then withdraw this offer.";
+
+/**
+ * The sentence for a close that did not happen (#1292): what went wrong, then {@link CLOSE_NEXT_STEP}.
+ * A failure that named only the step that broke left the collector with a diagnosis and no way on.
+ */
+export function describeCloseFailure(what: string): string {
+  const sentence = what.trim().replace(/[\s.]+$/, "");
+  return sentence ? `${sentence}. ${CLOSE_NEXT_STEP}` : `The listing was not closed. ${CLOSE_NEXT_STEP}`;
+}

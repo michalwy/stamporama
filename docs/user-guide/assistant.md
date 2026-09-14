@@ -492,6 +492,9 @@ does. Nothing is typed or clicked on Colnect's page.
 - **Only Colnect's own confirmation counts.** If Colnect answers anything else — you are not signed in,
   the sale is paused there, it has no listing by that code — the dialog shows why and **the offer
   stays Active**. Resume a sale paused on Colnect, or sign in, and try again.
+- **If the close cannot be done at all** — the Assistant cannot reach a Colnect page, or loses it
+  midway — the dialog says what happened and **the offer stays Active**. Try again, or close the
+  listing on Colnect yourself and then withdraw the offer here.
 - **A closed listing can be reopened on Colnect**, from its own page. The offer here cannot: Withdrawn
   is final, and selling again means a new offer.
 - **If Colnect closed it but the offer could not be withdrawn**, the dialog says that too, and its

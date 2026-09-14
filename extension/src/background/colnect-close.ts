@@ -1,4 +1,4 @@
-import type { CloseTask } from "../core/colnect-close-handoff";
+import { describeCloseFailure, type CloseTask } from "../core/colnect-close-handoff";
 import type {
   ColnectCloseResponse,
   ColnectCloseSaleRequest,
@@ -25,13 +25,18 @@ function message(e: unknown): string {
 /** Close one sale and say how it went. Never throws: every branch is an answer the page can show. */
 export async function runColnectClose(task: CloseTask): Promise<ColnectCloseResponse> {
   if (inFlight.has(task.saleId)) {
-    return { ok: false, error: "This listing is already being closed on Colnect." };
+    return { ok: false, error: "This listing is already being closed on Colnect. Wait for that to finish." };
   }
   inFlight.add(task.saleId);
+  // Every refusal below says what happened and then what to do (#1292) — the collector reads these in
+  // the dialog, where the internal step that broke is no help on its own.
+  const failed = (what: string): ColnectCloseResponse => ({ ok: false, error: describeCloseFailure(what) });
   try {
     const tabId = await colnectTab();
     if (tabId === null) {
-      return { ok: false, error: "No Colnect page could be opened to close the listing from." };
+      return failed(
+        "The Assistant could not open a Colnect page in this browser to close the listing from, so nothing was closed"
+      );
     }
 
     let sent: ColnectCloseSaleResponse;
@@ -41,10 +46,16 @@ export async function runColnectClose(task: CloseTask): Promise<ColnectCloseResp
         saleId: task.saleId,
       } satisfies ColnectCloseSaleRequest)) as ColnectCloseSaleResponse;
     } catch (e) {
-      return { ok: false, error: `Lost the Colnect page before the listing was closed: ${message(e)}.` };
+      return failed(
+        `The Assistant lost touch with the Colnect page before Colnect confirmed the close (${message(e)})`
+      );
     }
     if (!sent?.ok) {
-      return { ok: false, error: sent?.error ?? "The Colnect page answered nothing." };
+      return failed(
+        sent?.error
+          ? `The Colnect page could not reach Colnect (${sent.error}), so nothing was closed`
+          : "The Colnect page did not answer, so Colnect never confirmed the close"
+      );
     }
 
     const outcome = readColnectCloseSaleAnswer(sent.status, sent.body);
@@ -52,15 +63,16 @@ export async function runColnectClose(task: CloseTask): Promise<ColnectCloseResp
       case "closed":
         return { ok: true };
       case "missing":
+        // Not the shared way on: trying again cannot find a sale Colnect does not have.
         return {
           ok: false,
-          error: `Colnect has no listing ${task.saleId} on this account, so nothing was closed. Check the offer's listing URL.`,
+          error: `Colnect has no listing ${task.saleId} on this account, so nothing was closed and this offer is still active. Check the offer's listing URL; if the listing is already gone from Colnect, withdraw this offer.`,
         };
       case "refused":
-        return { ok: false, error: outcome.reason };
+        return failed(outcome.reason);
     }
   } catch (e) {
-    return { ok: false, error: `The listing was not closed: ${message(e)}.` };
+    return failed(`The listing was not closed (${message(e)})`);
   } finally {
     inFlight.delete(task.saleId);
   }
