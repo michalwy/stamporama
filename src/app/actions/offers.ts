@@ -54,6 +54,9 @@ import { resolvePurchaseContact } from "@/lib/contacts";
 import { commitLotProposal, type MissingPinnedCopy } from "@/lib/lot-builder";
 import { composeSeriesOffer, type ComposeSeriesResult } from "@/lib/series-recombination";
 import { parseSeriesCombination, parseSeriesCriteria } from "@/lib/series-recombination-rules";
+import { commitOfferGeneration, type OfferGeneratorResult } from "@/lib/offer-generator";
+import { parseGeneratorRequest, parsePlanFingerprint } from "@/lib/offer-generator-rules";
+import { readItemFilters } from "@/app/api/collections/[collectionId]/items/item-filters";
 import {
   parseLotBuilderRequest,
   toLotRecipe,
@@ -265,6 +268,41 @@ export async function composeSeriesOfferAction(
     return { status: "success", ...result };
   } catch (e) {
     return fail(e, "Failed to compose the series. Please try again.");
+  }
+}
+
+export type GenerateOffersActionState =
+  | ({ status: "success" } & OfferGeneratorResult)
+  | { status: "error"; message: string };
+
+/**
+ * Confirm a bulk offer pass previewed on the Copies list (#1287).
+ *
+ * Takes the preview's **query string** and the plan it showed. The domain re-reads the copies and
+ * re-plans from the query (#717), and refuses — by name, writing nothing — when the fresh plan is not
+ * the one shown.
+ */
+export async function generateOffersAction(
+  collectionId: string,
+  query: string,
+  shown: unknown
+): Promise<GenerateOffersActionState> {
+  const session = await getSession();
+  const request = parseGeneratorRequest(new URLSearchParams(query));
+  const expected = parsePlanFingerprint(shown);
+  if (!request || !expected) {
+    return { status: "error", message: "The preview could not be read. Close it and generate again." };
+  }
+  try {
+    const result = await commitOfferGeneration(
+      session.user.id,
+      collectionId,
+      { ...request, filters: readItemFilters(new URLSearchParams(request.filters)) },
+      expected
+    );
+    return { status: "success", ...result };
+  } catch (e) {
+    return fail(e, "Failed to generate the offers. Please try again.");
   }
 }
 

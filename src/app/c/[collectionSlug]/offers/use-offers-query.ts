@@ -27,6 +27,7 @@ import type { LotPoolSummary, LotProposal } from "@/lib/lot-builder";
 import { lotBuilderSearchParams, type LotBuilderRequest } from "@/lib/lot-builder-criteria";
 import type { LotBuilderPresetData } from "@/lib/lot-builder-presets";
 import type { SeriesRecombinationResult } from "@/lib/series-recombination";
+import type { OfferGeneratorPreview } from "@/lib/offer-generator";
 
 interface OffersPage {
   items: OfferListItem[];
@@ -538,6 +539,22 @@ export function useSeriesFromSingles(collectionId: string, platformId: string, c
     enabled: !!platformId,
     // Offers and copies move while the screen sits open in another tab.
     refetchOnWindowFocus: true,
+  });
+}
+
+/** The preview of a bulk offer pass from the Copies list (#1287). `query` is
+ *  `generatorRequestParams`' output, so the key and the request cannot spell the choices differently.
+ *  Not re-asked on focus: what the collector confirms is compared with a fresh plan on the server
+ *  (#717), and a preview that changed under the cursor would make that comparison meaningless. */
+export function useOfferGeneratorPreview(collectionId: string, query: string) {
+  return useQuery<OfferGeneratorPreview>({
+    queryKey: ["offers", collectionId, "generator", query] as const,
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/offers/generator?${query}`);
+      if (!res.ok) throw new Error("Failed to plan the offers");
+      return res.json();
+    },
+    refetchOnWindowFocus: false,
   });
 }
 
