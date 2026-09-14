@@ -149,6 +149,26 @@ Three things about that answer are worth knowing before you act on one:
 - **Ask about one grade at a time.** A lot that is half mint and half used cannot be answered in one
   question, and two answers do not add up — a flat lot fee is charged once, not twice.
 
+**It can also read the auctions you are already following**, which is what lets it tell a listing in
+this morning's mail from one it told you about yesterday. It can list your open lots — when each
+closes, what the auction stands at, what you bid, your ceiling, and whether you are leading or
+outbid — and say what those lots can cost you, which are the *Committed* and *At ceiling* figures
+above your lots list. And it can take a batch of Allegro links or offer numbers and tell you for each
+whether you already track it, which lot it is, and how it ended if you have closed it. The figures
+come out of the same code your lots screen uses, so it cannot give you a different number from the
+one you would see there.
+
+- **It only looks.** It does not add a listing to your watchlist, bid, change a ceiling or close a
+  lot — a listing it tells you is new stays untracked until you add it. A **read only** token can
+  ask all of this.
+- **A price is as fresh as your last check.** Bids are refreshed by hand, so each lot says when its
+  price was last looked at; an old check means an old price.
+- **Lots you have closed are not on the list**, but it still recognises their listings and says how
+  they ended.
+- **It recognises an Allegro offer number, not a house's lot number.** A listing at another auction
+  house is recognised by the address saved on its lot, never by `Lot 42`, which means something
+  different in every house's catalogue.
+
 **Everything it writes is on a screen you already know, and is undone there.**
 
 **Which is exactly why *read only* is the setting to start from.** A listing drafted at the wrong

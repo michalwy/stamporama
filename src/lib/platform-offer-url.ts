@@ -12,7 +12,8 @@
  * Pure and free of Prisma on purpose: {@link offerUrlMatchClauses} produces the `OR` arm a query
  * drops in, and {@link urlNamesPlatformOffer} is the same rule answered in memory, which is what the
  * sync uses once it already holds the offers it is matching against. Two readings of one rule, in
- * one file, so they cannot drift.
+ * one file, so they cannot drift — and since #1036 a third, {@link platformOfferIdFromUrl}, which
+ * asks it backwards: not *does this stored address name that id* but *which id does this link name*.
  */
 
 /** The `OR` arms that match a `url` column against `platformOfferId`, at the address's boundaries. */
@@ -39,4 +40,25 @@ export function urlNamesPlatformOffer(url: string | null | undefined, platformOf
     url.includes(`-${platformOfferId}?`) ||
     url.includes(`offerId=${platformOfferId}`)
   );
+}
+
+/**
+ * The offer id a link names, read at **the same boundaries** the two functions above match a stored
+ * address on (#1036) — so a link an agent holds resolves to exactly the id a stored lot would be
+ * found under, and never to a digit run the matching rule would not recognise.
+ *
+ * `offerId=` is read first: a product page's slug ends in an identifier of its own, which may happen
+ * to end in digits, while the parameter is the offer by name. Otherwise the digits that end the path,
+ * after a `/` or a `-`. The query and the fragment are dropped before the path is read, because a
+ * link out of a mail carries tracking parameters that no stored address does.
+ *
+ * Null when the link names no id at those boundaries — which is an answer the caller reports, not
+ * something to guess past.
+ */
+export function platformOfferIdFromUrl(url: string): string | null {
+  const address = url.trim().split("#")[0];
+  const parameter = /[?&]offerId=(\d+)(?:&|$)/.exec(address);
+  if (parameter) return parameter[1];
+  const tail = /[/-](\d+)\/?$/.exec(address.split("?")[0]);
+  return tail ? tail[1] : null;
 }

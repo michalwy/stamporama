@@ -5,12 +5,15 @@
 Accepted, and the whole track is implemented: #706 (the foundation), #707 (token scopes), #708 (the
 collection vocabulary, which put the registry's first operation in it), #710 (collection reads),
 #711 (offers, short of publishing) and #712 (wants, checklists and trades, short of sending). The
-registry carries **twenty-six** operations, eight of which write — the twenty-sixth being #1168's
-`recommend_bid`, the first operation on this surface that is a **query about something the
-collection does not hold**, and a read for all that. *The registry carries twenty-five operations*
-is quoted rather than deleted: it was true from #712 until #1168 and will go on arriving in anything
-copied from it. Two gaps filed against the track afterwards are still open — #1036 (auction reads)
-and #1037 (resolving foreign catalog-number strings). The MCP wrapper over this same registry is #709, landed — **how** it is built, and why it
+registry carries **thirty** operations, eight of which write — among them #1168's `recommend_bid`,
+the first operation on this surface that is a **query about something the collection does not
+hold**, and a read for all that. *The registry carries twenty-five operations* and *the registry
+carries twenty-six operations* are quoted rather than deleted: the first was true from #712 until
+#1168 and the second from #1168 until #1037, and both will go on arriving in anything copied from
+them. *Two gaps filed against the track afterwards are still open — #1036 (auction reads) and #1037
+(resolving foreign catalog-number strings)* is quoted for the same reason: both have landed, #1037
+adding `resolve_catalog_numbers` and #1036 three auction reads, and #1036's are read-only by the
+collector's decision rather than by accident (`docs/agents/agent-api.md`). The MCP wrapper over this same registry is #709, landed — **how** it is built, and why it
 takes no dependency, is [ADR-0051](0051-hand-rolled-mcp-transport.md).
 
 It rests on #253 (`AssistantToken`) and on `src/lib/route-auth.ts`, and it adds **no table and no
@@ -188,8 +191,8 @@ drift; prose that copies does.
 - **This issue ships no operation, so the published document has an empty `paths` object.** That was
   valid OpenAPI 3.1 and the honest state of the surface when #706 landed. **It is no longer the
   state**: #708 added `get_collection_vocabulary`, so the first operation arrived before #710; #710
-  added six reads over the collection, #711 six offer verbs, #712 twelve more and #1168 one, and the
-  document now carries twenty-six. The consequence is left as written, dated to this ADR's own
+  added six reads over the collection, #711 six offer verbs, #712 twelve more, #1168 one, #1037 one
+  and #1036 three, and the document now carries thirty (*twenty-six* until #1037). The consequence is left as written, dated to this ADR's own
   issue, with the correction beside it — and *#710 has since added six reads over the collection* is
   what that correction said until #712, and *the document now carries twenty-five* until #1168,
   both quoted for the same reason.
