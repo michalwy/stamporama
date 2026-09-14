@@ -44,6 +44,10 @@ describe("readColnectCloseSaleAnswer (#729)", () => {
     assert.deepEqual(readColnectCloseSaleAnswer(200, "  OK\n"), { status: "closed" });
   });
 
+  it("takes a body that starts with OK as closed — Colnect answered a real close with OKKO (#1292)", () => {
+    assert.deepEqual(readColnectCloseSaleAnswer(200, "OKKO"), { status: "closed" });
+  });
+
   it("reads 404 as no such sale", () => {
     assert.deepEqual(readColnectCloseSaleAnswer(404, "<html>Not found</html>"), { status: "missing" });
   });
@@ -54,8 +58,8 @@ describe("readColnectCloseSaleAnswer (#729)", () => {
     assert.equal(page.status, "refused");
     assert.match((page as { reason: string }).reason, /signed in/);
 
-    const word = readColnectCloseSaleAnswer(200, "OKAY");
-    assert.equal(word.status, "refused");
+    const lower = readColnectCloseSaleAnswer(200, "ok");
+    assert.equal(lower.status, "refused");
 
     const empty = readColnectCloseSaleAnswer(200, "");
     assert.equal(empty.status, "refused");

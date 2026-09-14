@@ -72,7 +72,10 @@ const QUOTABLE_LENGTH = 200;
 /** Read Colnect's answer to one close. */
 export function readColnectCloseSaleAnswer(status: number, body: string): ColnectCloseSaleOutcome {
   const text = body.trim();
-  if (status === 200 && /^OK\b/.test(text)) return { status: "closed" };
+  // A body *starting* with `OK`, as the bulk close recorded it — not `OK` as a word. A real close of
+  // one listing answered `OKKO` (#1292), and reading that as a refusal left an offer Active over a
+  // listing Colnect had already taken down.
+  if (status === 200 && text.startsWith("OK")) return { status: "closed" };
   if (status === 404) return { status: "missing" };
 
   const quotable = text.length > 0 && text.length <= QUOTABLE_LENGTH && !/^</.test(text);

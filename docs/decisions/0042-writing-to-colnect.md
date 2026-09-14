@@ -203,7 +203,10 @@ Three things are deliberate:
 - **Only `OK` closes anything.** Colnect answers a page that is not signed in, a paused sale and its
   interstitial with something other than `OK`, often with a `200`. `platform/colnect/sale-close.ts`
   reads every one of those as *not closed*, because `closed` is what withdraws the offer, and an offer
-  withdrawn over a listing still selling is exactly the drift this exists to prevent.
+  withdrawn over a listing still selling is exactly the drift this exists to prevent. *`OK`* means a
+  body **starting** with those two letters, not the word alone: the first real close through the
+  Assistant was answered `OKKO` and had closed the listing (#1292, 2026-09-15), so a stricter reading
+  fails the other way — a listing down on Colnect with its offer still Active here.
 - **The extension closes; the page withdraws.** The withdrawal is the instance's own transition,
   taken by the screen the collector confirmed on, which stays busy until both have happened. If the
   withdrawal is refused after Colnect closed the listing, the dialog says so and retries the
