@@ -201,6 +201,18 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   display: none !important;
 }
 
+/* The tags field in the edit dialogs (#1192) is a box of chips around a borderless text input, and
+   it must not be told apart from the plain inputs beside it (#1212). Those have no focus style of
+   their own — the browser draws its focus ring — so the box draws that same ring while its input
+   has focus, with the browsers' own two declarations: Chromium and Safari read the second, Firefox
+   drops it as unknown and keeps the first. An accent border here read as *this field wants
+   attention* on a field that is optional. A chip's `×` is a button with a ring of its own, so it
+   is deliberately not what lights the box. */
+.tag-entry-box:has(input:focus-visible) {
+  outline: 1px auto;
+  outline: -webkit-focus-ring-color auto 1px;
+}
+
 /* One-shot highlight applied to a row/card right after it is added (#158), so the user can
    confirm the action landed without scanning the list. Fades from a warm tint back to the
    surface colour. Suppressed under reduced-motion, where the tint simply isn't shown. */
