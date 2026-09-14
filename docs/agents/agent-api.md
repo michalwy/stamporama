@@ -8,16 +8,19 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
-track has landed**, #1037 with it; both wrappers exist and the registry carries **twenty-seven
+track has landed**, #1036 last; both wrappers exist and the registry carries **thirty
 operations** — #708's vocabulary read, #710's six reads over the collection, #711's six offer verbs,
-#712's two want reads, checklist gap and nine trade verbs, #1168's bid recommendation, and #1037's
-catalog-number resolver. Two counts are quoted rather than deleted, because each was true when it
-was written: *the registry carries twenty-five operations* (from #712 until #1168) and *the registry
-carries twenty-six operations* (from #1168 until #1037).
+#712's two want reads, checklist gap and nine trade verbs, #1036's three auction reads, #1168's bid
+recommendation, and #1037's catalog-number resolver. Three counts are quoted rather than deleted,
+because each was true when it was written: *the registry carries twenty-five operations* (from #712
+until #1168), *the registry carries twenty-six operations* (from #1168 until #1037) and *the
+registry carries twenty-seven operations* (from #1037 until #1036).
 
-**Eight of them write**, which is the change #712 made to this page and which neither #1168 nor
-#1037 moved: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
-nothing. Two earlier sentences are
+**Eight of them write**, which is the change #712 made to this page and which neither #1168, #1037
+nor #1036 moved: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
+nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
+set rather than a fact about what they happen to do (*Following the auctions already tracked*,
+below). Two earlier sentences are
 quoted rather than deleted, because each was true when it was written and will go on arriving in
 anything copied from it: *the registry carries seven operations … **Nothing in it writes**, which
 several statements below still rest on* (#706 through #710), and *the registry carries thirteen
@@ -35,6 +38,11 @@ the step *in front of* all four: an agent that has been handed `Mi 123a` cannot 
 anything until that string is a stamp id. `search_collection` is the same step asked with a phrase;
 `resolve_catalog_numbers` is it asked with a number, over a batch, and answered with a verdict
 instead of a result list. See *Resolving a number an agent was handed* below.
+
+**#1036 added no fifth workflow either.** Its three reads are the part of the fourth that is about
+the collection after all: before asking whether a new lot is worth bidding, the agent needs to know
+whether the collector already follows it and how much is already riding on the lots they do follow.
+See *Following the auctions already tracked* below.
 
 ## It is beside the screen API, never over it
 
@@ -112,6 +120,7 @@ src/lib/agent-api/
   want-reads.ts     the want and checklist-gap responses and their projections (#712)
   trade-reads.ts    the trade, line and balance responses and their projections (#712)
   bid-reads.ts      the bid-recommendation response and its projections (#1168)
+  auction-reads.ts  the watchlist, exposure and tracked-listing responses (#1036)
   catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
@@ -127,10 +136,11 @@ src/lib/agent-api/
     wants.ts        the two want reads and the checklist gap (#712)     ← server-side
     trades.ts       the nine trade verbs (#712)                         ← server-side
     bids.ts         recommend_bid (#1168)                                ← server-side
+    auctions.ts     the three auction reads (#1036)                      ← server-side
 ```
 
-**`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts` and
-`catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+**`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
+`auction-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1229,14 +1239,113 @@ with the refusal naming `search_collection`.
 ### What it deliberately is not
 
 **It creates nothing.** No lot, no sale, no `AuctionLotLine` — *this workflow exists precisely
-because none of that has happened yet*. There is no operation that reads existing lots and their
+because none of that has happened yet*. *There is no operation that reads existing lots and their
 recommendations either; exposing the auctions area to the agent is #1036 and is a separate and
-larger question. And nothing here changes how the lot screen computes its own figures — it now
+larger question* — quoted, because #1036 has since landed, narrowed by the collector to three reads
+that state no recommendation (*Following the auctions already tracked*, below). And nothing here
+changes how the lot screen computes its own figures — it now
 computes them through two functions that were lifted out of it, and the figures are the same ones.
+
+## Following the auctions already tracked
+
+**Three operations, and all three read** (#1036). The agent's first consumer reads a daily mail of
+new Allegro listings, and until #1036 it could not tell a listing it reported yesterday from a new
+one, could not say where the collector's open bids stood, and recommended the tenth lot as readily
+as the first because it did not know what was already committed.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_auction_watchlist` | no | the open lots: closing time, the auction's bid, the collector's bid and ceiling, leading or outbid |
+| `summarize_auction_exposure` | no | what those lots can cost — *Committed* and *At ceiling*, in the base currency |
+| `find_tracked_auction_lots` | no | links or offer numbers in; *tracked*, *not tracked* or *unrecognized*, and which lot, out |
+
+**Everything here is `src/lib/` exposed rather than reinvented, and for these three that is the
+requirement rather than the habit.** The issue says an agent and the screen must not be able to
+disagree, so they are `listAuctionLots` + `countAuctionLots`, `auctionLotExposure` and
+`findLotsForListings` whole — the reads the lots list, its exposure bar and the Assistant's chip on a
+listing page (#575) are drawn from. `auction-reads.ts` names their answers for a model and computes
+no amount; the one thing it evaluates is `lotHasSignal`, the toolbar's own predicate over the row's
+own figures. `tests/integration/agent-api-auctions.test.ts` compares each answer with its screen's
+read **and** with the fixture's figures worked by hand, because two paths through one broken rule
+still agree.
+
+**Its fixture keeps every exposure count distinct, and that was found rather than planned.** With one
+uncapped lot and one outpriced one, crossing the two counts over in the projection left every
+assertion green; a fifth lot was added so the swap turns the suite red, which it now does.
+
+### Read only, and the boundary is a third one
+
+**No lot is created, and nothing is bid, edited or closed** (the collector, 2026-09-10: *the agent
+only reads from Stamporama — it does not create auctions automatically, at least at this stage*).
+Adding a listing to the watchlist stays the collector's decision in the app, after reading the
+report. It is kept the way the other two boundaries are — by absence, checked twice:
+`tests/integration/agent-api-auctions.test.ts` requires every operation under `/auctions` to be a
+`GET` declaring `writes: false` and fails on a write-shaped auction **name** anywhere in the
+registry, and `tests/unit/agent-api-operation-boundary.test.ts` fails on an operation module
+**importing** any of the writers in `auctions.ts`.
+
+**That import map is `AUCTION_WRITES`, beside `FORBIDDEN` and not inside it**, for the reason
+`getOfferListingKit` and `deleteTrade` were left off `FORBIDDEN`. That map is *the acts that go
+public or reach somebody else*; writing a lot reaches nobody, and is forbidden only because the
+collector decided the agent reads. A list that means two things is one a later reader cannot add to
+correctly, so the new one has a plain rule — *anything in `auctions.ts` that writes* — and checks that
+every name on it is still a real export, so a renamed writer cannot leave a row guarding nothing.
+`captureAuctionLot` is on it although its dry run is a read, because an import cannot say which way
+it will be called.
+
+### One watchlist, and it is the screen's default
+
+The list and the exposure both read the lots screen **with nothing narrowed**: open lots, soonest
+closing first (#504). So the two describe one set of lots, and the exposure matches the bar the
+collector sees on opening the screen. **No filter is published**, on the argument this page makes
+for leaving a trade line's manual value out: `/api/v1` only grows, so a parameter left out is
+reversible next week and one published is not, and nothing in the workflow needed one. A closed lot
+is filed rather than followed; its outcome is what `find_tracked_auction_lots` reports when its
+listing turns up again.
+
+**A row states the three amounts apart** — the auction's `currentBid` (an observation, dated by
+`checkedAt`), the collector's `myBid` (a proxy maximum, a commitment) and `ceiling` (a private
+valuation, already all-in) — which is `auctions.md`'s rule that the three are constantly confused and
+must not be merged. `ceilingBid` is the screen's `bidRoom`. `ended` says the closing time has passed
+with nothing recorded, and there `standing` is where the bidding was last seen rather than a result —
+the screen's *Won?* with its question mark. `overCeiling: false` survives and an unrecorded
+comparison is absent, which is the row's own three states.
+
+**The exposure counts travel with the totals, zeros included** (`valuation.md`): `uncappedLots`
+reads the totals low, `outpricedLots` is correctly costed at nothing (#600), and
+`unconvertibleLots` is left out rather than added at par.
+
+### Already tracked is the Assistant's lookup, answered for every listing
+
+`findLotsForListings` is what the extension asks on a listing page, so an agent and the chip cannot
+disagree about whether a listing is watched. Two things were added around it, and neither is a
+second matching rule:
+
+- **A link is read at the matching rule's own boundaries.** `platformOfferIdFromUrl` sits in
+  `platform-offer-url.ts` beside the two readings it inverts — `offerId=` first, then the digits
+  ending the path after a `/` or `-`, the query and fragment dropped — so a link resolves to exactly
+  the id a stored address would be found under. The unit suite checks that property directly.
+- **Every listing is answered, in order.** The domain lookup leaves a miss out, which is right for a
+  chip that draws nothing. An agent reading a batch cannot tell a listing left out from one never
+  asked about, so a miss is `not_tracked`, and a string with no offer number in it is `unrecognized`
+  — nothing was looked up, which is a different answer from *no*.
+
+**A house's catalogue position is not an offer number and is never matched** — #575's rule
+unchanged: a stored `lotNo` is read as an offer number only on the collection's Allegro platform. So
+the operation answers the Allegro mail it was built for, and a house listing only through the address
+stored on its lot. Widening that would be a platform-scoped lot-number rule, which is a product
+decision rather than a parameter. **The batch cap is `AUCTION_LOT_LISTING_LOOKUP_LIMIT`, refused
+above it**, because the domain lookup slices there silently and a listing past the cut would come
+back `not_tracked` — a confident answer to a question nothing asked.
+
+**One wrinkle of the parameter surface is stated on the operation rather than fixed**: a `string[]`
+query parameter is split on commas (#706), so a link with a comma in its query string splits in two.
+The parameter tells the agent to send a link without its query string, where the offer number never
+is.
 
 ## What is deliberately absent
 
-**Absence, not a flag.** Two boundaries in this track are enforced by there being no operation, and
+**Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and
 they must stay that way — a switch is something that can be flipped, and an operation that does not
 exist cannot be.
 
@@ -1250,8 +1359,13 @@ exist cannot be.
   lifecycle, record what actually arrived, close a trade, or claim a Colnect list is in step.
   **Since #712 this is checked rather than asserted**, by the same pair of tests failing on
   different things — see *Working on trades* above.
+- **The agent never writes to the auction watchlist** (#1036). It reads the open lots, what they can
+  cost and whether a listing is tracked; it does not create a lot or a sale, bid, set a ceiling,
+  describe, close or settle anything. The same pair of tests keeps it — see *Following the auctions
+  already tracked* above.
 
-Do not add a publish-shaped or send-shaped operation to the registry, whatever it is called.
+Do not add a publish-shaped, send-shaped or auction-writing operation to the registry, whatever it
+is called. *Two boundaries* was this section's count until #1036 and is quoted rather than deleted.
 
 ### The two boundaries are not the same shape
 
@@ -1475,17 +1589,19 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries twenty-six operations.** It was empty on #706, which shipped none; #708
+**The document carries thirty operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
 `list_wants`, `match_wants`, `find_checklist_gaps`, `list_trades`, `create_trade`, `get_trade`,
 `list_trade_lines`, `get_trade_balance`, `add_trade_give_lines`, `serve_trade_requirement`,
-`add_trade_receive_lines` and `remove_trade_line`; #1168 added `recommend_bid`. Five earlier
-sentences are quoted rather than deleted because each stood in several files and will go on arriving
-in anything copied from them: *#706 ships no domain operation, so `paths` is `{}` — valid OpenAPI
-3.1, and the honest state of the surface until #710*, *the document carries one operation*, *the
-document carries seven operations*, *the document carries thirteen operations*, and *the document
-carries twenty-five operations*. What is unchanged is that `build([])` is still the right way to ask what an
+`add_trade_receive_lines` and `remove_trade_line`; #1168 added `recommend_bid`; #1037 added
+`resolve_catalog_numbers`; #1036 added `list_auction_watchlist`, `summarize_auction_exposure` and
+`find_tracked_auction_lots`. Six earlier sentences are quoted rather than deleted because each stood
+in several files and will go on arriving in anything copied from them: *#706 ships no domain
+operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
+*the document carries one operation*, *the document carries seven operations*, *the document carries
+thirteen operations*, *the document carries twenty-five operations*, and *the document carries
+twenty-six operations* — which #1037 left standing here although it made the count twenty-seven. What is unchanged is that `build([])` is still the right way to ask what an
 empty document looks like — that is a question about the generator, and `tests/unit/agent-api-openapi.test.ts`
 asks it of a fixture list rather than of the registry.

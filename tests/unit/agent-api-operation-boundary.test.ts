@@ -237,3 +237,79 @@ describe("the agent API's operation modules (#711, #712)", () => {
     }
   });
 });
+
+/**
+ * The domain functions that write to the **auction watchlist** (#1036), and what each one does.
+ *
+ * **A third boundary, and deliberately a map of its own rather than more rows in {@link FORBIDDEN}.**
+ * That map is *the acts that go public or reach somebody else*, and none of these does either: they
+ * write a sale, a lot, a bid, a line or a settlement inside Stamporama. They are forbidden here for a
+ * different reason — the collector decided on 2026-09-10 that *the agent only reads from Stamporama —
+ * it does not create auctions automatically, at least at this stage* — and a list that means two
+ * things is one a later reader cannot add to correctly.
+ *
+ * So the rule for adding a row is plain: **anything in `auctions.ts` that writes**. `listAuctionLots`,
+ * `auctionLotExposure`, `countAuctionLots` and `findLotsForListings` are the reads #1036 exposes; a
+ * `captureAuctionLot` dry run is a read in practice and is still here, because the same function
+ * with `dryRun: false` creates the lot and an import cannot say which it will be called with.
+ */
+const AUCTION_WRITES = new Map<string, string>([
+  ["createAuctionSale", "creates a sale"],
+  ["updateAuctionSale", "edits a sale's terms"],
+  ["setAuctionSaleStatus", "opens or closes a sale"],
+  ["deleteAuctionSale", "deletes a sale"],
+  ["createAuctionLot", "adds a lot to the watchlist"],
+  ["captureAuctionLot", "adds a listing to the watchlist, or refreshes its bid (#355)"],
+  ["updateAuctionLot", "edits a lot"],
+  ["setAuctionLotBid", "records what the auction stands at"],
+  ["touchAuctionLotChecked", "stamps a bid as freshly checked"],
+  ["setAuctionLotMyBid", "records a bid the collector placed"],
+  ["setAuctionLotMaxBid", "sets the collector's ceiling"],
+  ["recordAuctionLotTransition", "closes, cancels or reopens a lot, recording its result"],
+  ["createAuctionLotLine", "describes what a lot holds"],
+  ["updateAuctionLotLine", "edits what a lot holds"],
+  ["deleteAuctionLotLine", "removes a line from a lot"],
+  ["deleteAuctionLot", "deletes a lot"],
+  ["settleAuctionSale", "transcribes a won parcel into a purchase (#28)"],
+]);
+
+describe("the agent API's operation modules (#1036)", () => {
+  it("reach no domain function that writes to the auction watchlist", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        const why = AUCTION_WRITES.get(name);
+        if (why) {
+          breaches.push(
+            `${path.relative(ROOT, file)} imports \`${name}\` from "${from}" — it ${why}`
+          );
+        }
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `The agent only reads auctions: no lot, sale, bid or line is created or changed through it (#1036).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("would notice one, because the walk sees the reads the auction module does import", () => {
+    // The same control as above, for this map: an empty set of breaches means something only if the
+    // walk demonstrably reads `operations/auctions.ts` and sees its domain imports.
+    const fixture = path.join(AGENT_API, "operations/auctions.ts");
+    const names = importedBindings(fixture).map((binding) => binding.name);
+    for (const read of ["listAuctionLots", "auctionLotExposure", "findLotsForListings"]) {
+      assert.ok(names.includes(read), `the walk did not see \`${read}\` in operations/auctions.ts`);
+    }
+    // And every name on the map is a real export of `auctions.ts`, so a renamed writer cannot leave
+    // a row here guarding nothing.
+    const domain = readFileSync(path.join(ROOT, "src/lib/auctions.ts"), "utf8");
+    for (const name of AUCTION_WRITES.keys()) {
+      assert.match(
+        domain,
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of src/lib/auctions.ts any more`
+      );
+    }
+  });
+});

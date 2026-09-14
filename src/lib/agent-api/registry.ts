@@ -1,13 +1,14 @@
 // The operation registry (#706) — the single list every wrapper reads.
 //
-// **It carries the vocabulary read, the collection reads, the offer verbs, the trade verbs and the
-// bid recommendation.** #706 built the foundation and shipped none; #708 added
+// **It carries the vocabulary read, the collection reads, the offer verbs, the trade verbs, the
+// auction reads and the bid recommendation.** #706 built the foundation and shipped none; #708 added
 // `get_collection_vocabulary`, which is the operation every later one leans on — it is what lets an
 // agent send `"MNH"` instead of a cuid; #710 added the six reads over the collection; #711 added the
 // six offer verbs, the **first three writes on this surface**; #712 added the two want reads, the
 // checklist gap and the nine trade verbs — twelve operations, five of which write — taking the array
 // to twenty-five; #1168 added `recommend_bid`, taking it to twenty-six; #1037 added
-// `resolve_catalog_numbers`, taking it to **twenty-seven**. Each one is an entry here
+// `resolve_catalog_numbers`, taking it to twenty-seven; #1036 added the three auction reads, taking
+// it to **thirty**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -21,15 +22,17 @@
 // drafting a listing and drafting one before pricing and wording it — then the exchange workflow in
 // **its** order, which is the one #712's *Done when* describes: what am I looking for, what does
 // this counterparty have that answers it, what is this set still missing, then the trade itself,
-// built one side at a time and read back as a verdict. **`recommend_bid` is last because it is the
+// built one side at a time and read back as a verdict — then the auctions already followed (#1036),
+// in the order a morning's mail is read against them: what is open, what it can cost, and whether a
+// listing in the mail is one of them. **`recommend_bid` is last because it is the
 // one operation that is not about the collection at all** (#1168): it answers *is this auction worth
 // looking at*, about a lot nothing here records, and an agent reaches it having decided to ask a
 // question the four workflows above cannot. It is what the generated document lists them in and what
 // a model reads down.
 //
-// **Nothing here publishes to a marketplace and nothing here reaches a counterparty, and both are
-// enforced by there being no such entry** (#711, #712; `agent-api.md`, *What is deliberately
-// absent*). It is not a flag: a switch is something that can be flipped, and an operation that does
+// **Nothing here publishes to a marketplace, nothing here reaches a counterparty and nothing here
+// writes to the auction watchlist, and all three are enforced by there being no such entry** (#711,
+// #712, #1036; `agent-api.md`, *What is deliberately absent*). It is not a flag: a switch is something that can be flipped, and an operation that does
 // not exist cannot be. Four tests keep it that way, in two pairs that fail on different things —
 // `tests/integration/agent-api-offers.test.ts` and `tests/integration/agent-api-trades.test.ts` fail
 // on a publish-shaped or send-shaped **name** in this array, and
@@ -69,6 +72,11 @@ import {
   matchWantsOperation,
 } from "./operations/wants";
 import { recommendBidOperation } from "./operations/bids";
+import {
+  findTrackedAuctionLotsOperation,
+  listAuctionWatchlistOperation,
+  summarizeAuctionExposureOperation,
+} from "./operations/auctions";
 import {
   addTradeGiveLinesOperation,
   addTradeReceiveLinesOperation,
@@ -111,6 +119,9 @@ export const OPERATIONS: readonly Operation[] = [
   serveTradeRequirementOperation,
   addTradeReceiveLinesOperation,
   removeTradeLineOperation,
+  listAuctionWatchlistOperation,
+  summarizeAuctionExposureOperation,
+  findTrackedAuctionLotsOperation,
   recommendBidOperation,
 ];
 
