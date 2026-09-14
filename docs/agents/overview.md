@@ -50,7 +50,26 @@ built by #649–#651).
   state — so it is recorded as it happens by #652's daily snapshots
   (`value-snapshots.ts`, [ADR-0053](../decisions/0053-daily-collection-value-snapshots.md)), taken
   from this screen's own Value reads at their own scopes so a snapshot and the tile read the same
-  day cannot disagree. The chart over them is #653 and is not part of this screen yet.
+  day cannot disagree. The chart over them is #653, below.
+
+- **Value over time reads stored rows only** (#653; ADR-0053). `getOverviewValueHistory`
+  (`overview.ts`) returns every recorded snapshot row as written — never re-valued — through its own
+  `overview/value-history` route and query, so the chart loads and fails apart from the tiles. The
+  series rules are pure in `src/lib/value-history-rules.ts`: a **missing day breaks the line**
+  (`splitIntoRuns`, nothing interpolated, a lone point drawn as a dot); **fewer than two days is a
+  waiting state**, not an empty frame; days recorded under **another base currency are counted
+  apart** and not plotted, since re-converting them at today's rate would be today's claim.
+  The chart is catalogue value and acquisition cost on one zero-based axis — catalogue value is the
+  Holdings tile's headline, and market value stays off it rather than being mixed in.
+  - **The area split is lines, never stacked bands** — settled with the collector on #653, against
+    the issue body's "stackable". An area row is its subtree and a stamp filed in two areas counts
+    under both (ADR-0053 §3), so bands would claim a sum that does not hold. The split is over
+    **top-level areas** that held a non-zero value on some day; a root with no row on a day (created
+    later) breaks its own line there.
+  - **The chart is the one element that is not a tile and not a link**: no list screen holds a
+    history to link into. Its split toggle is local state rather than URL state — a view of one
+    card, not a filter of rows. **Plain SVG, no charting library** — a few polylines, a hover guide
+    and a ResizeObserver width do not warrant a dependency (and so no ADR).
 
 - **Tiles are `RowLink` cards** (#557's overlay): the whole tile navigates, and an inner link —
   the exposure line to `/auctions`, a coverage row to its area — is lifted with `ROW_LINK_ABOVE`.

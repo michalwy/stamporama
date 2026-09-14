@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { OverviewProgress, OverviewValue } from "@/lib/overview";
+import type { ValueHistory } from "@/lib/value-history-rules";
 
 /**
  * The Overview screen's two section reads (#649). Each section is its own query — and its own
@@ -26,6 +27,19 @@ export function useOverviewProgress(collectionId: string) {
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/overview/progress`);
       if (!res.ok) throw new Error("Failed to load the collection's progress figures");
+      return res.json();
+    },
+  });
+}
+
+/** The value-over-time chart's series (#653) — a third query under the same root, so the chart loads
+ * and fails apart from the tiles above it. */
+export function useOverviewValueHistory(collectionId: string) {
+  return useQuery<ValueHistory>({
+    queryKey: ["overview", collectionId, "value-history"] as const,
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/overview/value-history`);
+      if (!res.ok) throw new Error("Failed to load the collection's value history");
       return res.json();
     },
   });

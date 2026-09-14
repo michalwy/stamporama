@@ -5,9 +5,10 @@ import type { CSSProperties, ReactNode } from "react";
 import type { OverviewProgress, OverviewValue } from "@/lib/overview";
 import { RowLink, ROW_LINK_ABOVE } from "./shared/row-link";
 import { useOverviewProgress, useOverviewValue } from "./use-overview-query";
+import { ValueHistoryChart } from "./value-history-chart";
 
 /**
- * The Overview screen (#649–#651; decided in #397): a financial and progress picture of the
+ * The Overview screen (#649–#651, #653; decided in #397): a financial and progress picture of the
  * collection on one screen. Two sections — **Value** (what it is worth, what it cost, what it
  * returned) and **Progress** (coverage, growth, gaps) — each a grid of tiles, and **every tile is
  * a link** into the list screen that holds the underlying rows with the filter applied: the
@@ -456,6 +457,7 @@ export function OverviewPanel({
         ) : (
           <SectionSkeleton />
         )}
+        <ValueHistoryChart collectionId={collectionId} />
       </section>
       <section style={SECTION_STYLE}>
         <h3 style={SECTION_LABEL}>Progress</h3>

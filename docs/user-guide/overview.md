@@ -28,6 +28,27 @@ Figures are stated in the collection's base currency. A row that cannot be count
 copy, an amount in a currency with no exchange rate, a cost still pending in an open lot — is
 **counted apart and said so** on the tile, never silently dropped.
 
+### Value over time
+
+Below the Value tiles, a chart draws the **catalogue value of your holdings** and **what you paid
+for them** on the same axes, one point per day — the space between the two lines is the surplus.
+Move the pointer across the chart to read any day's figures: the value, the cost, the surplus, how
+many copies were held and anything that could not be counted that day. Without the pointer, the
+most recent day is shown.
+
+- **Where the figures come from.** Stamporama records the collection's value once a day while it
+  is running. A past day is shown exactly as it was recorded — later price or rate changes do not
+  rewrite it.
+- **Gaps.** A day the app was not running has no point, and the line breaks there instead of
+  joining across the missing days.
+- **Split by area.** Turn on *Split by area* to add one line per top-level area, each covering the
+  area and everything under it. The area lines are not stacked and need not add up to the total: a
+  stamp filed in two areas counts under both. Areas that have never held any value are left out.
+- **Still collecting data.** A new collection — or one that has just started recording — shows a
+  waiting note until two days are in.
+- **A change of base currency.** Days recorded under a different base currency cannot share the
+  axis with today's, so they are not drawn; the chart says how many were left out.
+
 ## Progress
 
 - **Coverage by area** — checklist completeness rolled up per top-level collection area,
@@ -42,5 +63,5 @@ copy, an amount in a currency with no exchange rate, a cost still pending in an 
   the size of the gap. A want whose satisfying copy is already ordered or in transit is counted
   as *on the way*. Opens the Want list.
 
-The Overview shows the collection as it stands right now. History — the value of the holdings
-over time — is a separate feature and not part of this screen yet.
+The tiles show the collection as it stands right now; the value-over-time chart is the one place on
+the screen that looks back.
