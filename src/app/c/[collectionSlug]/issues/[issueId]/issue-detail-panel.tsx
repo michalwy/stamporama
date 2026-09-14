@@ -3,12 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import type { IssueListItem, StampNodeData, IssueChecklistTotals } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueCompleteness, ChecklistCompleteness } from "@/lib/checklist-completeness";
 import {
   COMPLETENESS_DISPOSITIONS,
   COMPLETENESS_DISPOSITION_LABEL,
+  headlineCompleteness,
 } from "@/lib/checklist-completeness-rules";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import {
@@ -50,7 +52,13 @@ import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
-import { PRICE_MAIN, PRICE_CONVERTED } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import {
+  PRICE_MAIN,
+  PRICE_CONVERTED,
+  SET_COMPLETENESS_CHIP,
+  SET_COMPLETENESS_CHIP_COMPLETE,
+} from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { ChecklistsDialog } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-copies-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
@@ -74,6 +82,11 @@ import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 // narrowed by checklist (#531) — for the reason #630 gives about the variant tree: those are the
 // relationships between an issue's stamps, not fields of the issue. The issue's own fields had no
 // way in at all, which meant a wrong year noticed on this screen was a trip back to the list.
+//
+// The **Checklists** card (#1278) is the same rule once more: it lists what the issue is collected
+// as, and **Manage…** opens the Issues row's own checklist editor over this issue — one editor, two
+// ways in. What the card itself does is read and narrow: a checklist clicked is the stamp tree's
+// checklist filter set to it.
 
 const CELL: React.CSSProperties = {
   padding: "0.3rem 0.6rem",
@@ -120,7 +133,13 @@ export function IssueDetailPanel({
   // the most room. Local state for the same reason: the filter is per issue, and this page's copy
   // follows the list's rule rather than inventing a second one.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  // A checklist deleted in the editor leaves this page's filter holding its id; read through the
+  // issue's current checklists so a narrowing to something that no longer exists is no narrowing.
+  const activeChecklistIds = treeChecklistIds.filter((id) =>
+    issue.checklists.some((c) => c.id === id)
+  );
   const router = useRouter();
+  const queryClient = useQueryClient();
   // Manual ordering (#549), the same mode the list row's tree carries. This page's members are a
   // server prop, so a saved reorder asks the route for fresh data; the optimistic order the hook
   // holds is what the tree is drawn from until it arrives.
@@ -148,11 +167,22 @@ export function IssueDetailPanel({
     router.refresh();
     void invalidateStampsAndIssues(collectionId);
   }
+  // The checklist editor (#1278), the Issues row's own. It writes as it goes and only says when it
+  // closes, so closing is when everything this page draws from checklists is re-read: the card, the
+  // tree filter's chips and the Completeness cards come with the route, and the catalog-value cards
+  // hold their own queries.
+  const [managingChecklists, setManagingChecklists] = useState(false);
+  function onChecklistsClosed() {
+    setManagingChecklists(false);
+    router.refresh();
+    void invalidateStampsAndIssues(collectionId);
+    void queryClient.invalidateQueries({ queryKey: ["checklistPriceDetails", collectionId] });
+  }
   // Dropped while reordering: a drag inside a narrowed tree would move a stamp past a sibling
   // that was never on screen, and the server refuses a partial group.
   const { tree, contextIds } = filterStampTreeByChecklists(
     buildStampTree(treeReorder.members),
-    treeReorder.active ? [] : treeChecklistIds
+    treeReorder.active ? [] : activeChecklistIds
   );
 
   return (
@@ -214,6 +244,16 @@ export function IssueDetailPanel({
               </FieldGrid>
             </DetailCard>
 
+            {/* Above the tree it narrows, so a checklist clicked shows its effect right under it. */}
+            <ChecklistsCard
+              issue={issue}
+              completeness={completeness}
+              selected={activeChecklistIds}
+              filterDisabled={treeReorder.active}
+              onSelect={setTreeChecklistIds}
+              onManage={() => setManagingChecklists(true)}
+            />
+
             <DetailCard
               title="Stamps"
               count={members.length || null}
@@ -221,10 +261,13 @@ export function IssueDetailPanel({
               // is a different thing and stays: the control that emptied it lives in this header.
               empty={members.length === 0}
               actions={
-                issue.checklists.length > 1 && !treeReorder.active ? (
+                // Also for a single checklist once the Checklists card has narrowed to it (#1278):
+                // a narrowed tree keeps the control that undoes it in its own header.
+                (issue.checklists.length > 1 || activeChecklistIds.length > 0) &&
+                !treeReorder.active ? (
                   <ChecklistTreeFilter
                     checklists={issue.checklists}
-                    selected={treeChecklistIds}
+                    selected={activeChecklistIds}
                     onChange={setTreeChecklistIds}
                   />
                 ) : undefined
@@ -295,8 +338,8 @@ export function IssueDetailPanel({
           <DetailColumn>
             {/* One card per checklist — and none at all for an issue that carries no checklist
                 (#536): there is then no set to be complete against, and a card saying so was a
-                heading over a sentence. The way to add one is the issue's own ⋮ menu, which is
-                where checklists are managed from anyway. */}
+                heading over a sentence. The way to add one is the Checklists card (#1278), which
+                says so itself. */}
             {completeness.checklists.map((checklist) => (
               <DetailCard
                 key={checklist.checklistId}
@@ -352,7 +395,181 @@ export function IssueDetailPanel({
           }
         />
       )}
+
+      {/* The Issues row's own checklist editor (#531), opened over this one issue (#1278). */}
+      {managingChecklists && (
+        <ChecklistsDialog
+          scope={{
+            collectionId,
+            issueId: issue.id,
+            issueLabel: issue.name ?? (issue.year ? String(issue.year) : "(unnamed issue)"),
+            vendorMap,
+            primaryVendorId,
+          }}
+          onClose={onChecklistsClosed}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * The issue's checklists, in their own order (#1278) — what it is collected as, which the page
+ * otherwise only implied through one Completeness card per set.
+ *
+ * Every figure is read off a source another surface already shows, never computed again: the stamp
+ * count and the catalog value are the `IssueChecklistTotals` the Issues list's badge draws, and
+ * the completeness is the Completeness card's own grid, summed up by its any × any cell. So the card,
+ * the badge and the grid cannot disagree about one checklist.
+ *
+ * A row clicked **is** the tree's checklist filter set to that checklist alone — clicked again, it
+ * clears. Replacing rather than adding is the difference from the chips: *show me what Basic holds*
+ * is one click here, and combining sets stays the chips' job.
+ *
+ * Empty is the exception `DetailCard` names: an issue with no checklist keeps the card, because its
+ * **Manage…** is the way to create the first one.
+ */
+function ChecklistsCard({
+  issue,
+  completeness,
+  selected,
+  filterDisabled,
+  onSelect,
+  onManage,
+}: {
+  issue: IssueListItem;
+  completeness: IssueCompleteness;
+  selected: string[];
+  /** While the tree is being reordered, which drops any narrowing. */
+  filterDisabled: boolean;
+  onSelect: (ids: string[]) => void;
+  onManage: () => void;
+}) {
+  const checklists = issue.checklists;
+  return (
+    <DetailCard
+      title="Checklists"
+      count={checklists.length || null}
+      actions={
+        <Tooltip content="Add, rename, reorder or delete this issue's checklists, and choose the stamps on each.">
+          <button type="button" style={DETAIL_BUTTON} onClick={onManage}>
+            <Icon name="list" size="sm" /> Manage…
+          </button>
+        </Tooltip>
+      }
+    >
+      {checklists.length === 0 ? (
+        <EmptyNote>
+          This issue has no checklist yet, so nothing on it is a set to collect. Use Manage… to
+          create one.
+        </EmptyNote>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {checklists.map((c) => {
+            const grid = completeness.checklists.find((g) => g.checklistId === c.id);
+            const active = selected.length === 1 && selected[0] === c.id;
+            return (
+              <ChecklistsCardRow
+                key={c.id}
+                checklist={c}
+                grid={grid}
+                active={active}
+                disabled={filterDisabled}
+                onClick={() => onSelect(active ? [] : [c.id])}
+              />
+            );
+          })}
+        </div>
+      )}
+    </DetailCard>
+  );
+}
+
+function ChecklistsCardRow({
+  checklist,
+  grid,
+  active,
+  disabled,
+  onClick,
+}: {
+  checklist: IssueChecklistTotals;
+  grid: ChecklistCompleteness | undefined;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const headline = grid ? headlineCompleteness(grid) : null;
+  const complete = headline !== null && checklist.stampCount > 0 && headline.owned === checklist.stampCount;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.625rem",
+        padding: "0.375rem 0.5rem",
+        borderTop: "1px solid var(--color-border)",
+        background: active ? "var(--color-accent-soft)" : undefined,
+      }}
+    >
+      <Tooltip
+        content={
+          disabled
+            ? "The tree is being reordered, which shows every stamp."
+            : active
+              ? "Show every stamp in the tree again."
+              : `Show only the stamps on ${checklist.name} in the tree below.`
+        }
+        style={{ flex: 1, minWidth: 0 }}
+      >
+        <button
+          type="button"
+          aria-pressed={active}
+          disabled={disabled}
+          onClick={onClick}
+          style={{
+            display: "block",
+            width: "100%",
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            textAlign: "left",
+            fontSize: "0.875rem",
+            fontWeight: active ? 600 : 500,
+            color: active ? "var(--color-accent)" : "var(--color-text-primary)",
+            cursor: disabled ? "default" : "pointer",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {checklist.name}
+        </button>
+      </Tooltip>
+      <span
+        style={{
+          fontSize: "0.75rem",
+          color: "var(--color-text-muted)",
+          fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {checklist.stampCount} stamp{checklist.stampCount !== 1 ? "s" : ""}
+      </span>
+      {headline && (
+        <Tooltip
+          content={`${headline.owned} of ${checklist.stampCount} stamps held, in any disposition and condition · ${
+            headline.completeSets
+          } complete ${headline.completeSets === 1 ? "set" : "sets"}. The Completeness card breaks it down.`}
+        >
+          <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
+            {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
+            {headline.owned}/{checklist.stampCount}
+            {headline.completeSets > 0 && ` ×${headline.completeSets}`}
+          </span>
+        </Tooltip>
+      )}
+      <ChecklistValue checklist={checklist} />
+    </div>
   );
 }
 

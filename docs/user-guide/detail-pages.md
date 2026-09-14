@@ -158,8 +158,8 @@ Wants, Copies, Offers. Only Details is always there.
 
 ## The issue page
 
-*Left column:* Details, Stamps, Catalog value. *Right column:* Completeness, Copies, Offers.
-Only Details is always there.
+*Left column:* Details, Checklists, Stamps, Catalog value. *Right column:* Completeness, Copies,
+Offers. Details and Checklists are always there.
 
 - **Identity** — the issue number, name and year, the declared catalog range, and the
   required/total stamp count. At the end of the line, **Edit** opens the issue dialog — the same one
@@ -168,6 +168,15 @@ Only Details is always there.
   inside the issue, which carry their own.
 - **Details** — area, year, stamp counts, and the catalog value of the required stamps with how
   many of them are actually priced.
+- **Checklists** — every [checklist](collections.md#checklists) the issue carries, in the order
+  you arranged them: its name, how many stamps are on it, how many of those you hold (in any
+  disposition and condition, with **×** and the number of complete sets once there is one) and its
+  catalog value. The figures are the ones the Issues list's checklist badge and the Completeness
+  card show, so they always agree. **Click a checklist** to narrow the Stamps tree below to it;
+  click it again to see every stamp. **Manage…** opens the checklist editor — the same one the
+  Issues list opens from the issue's **⋮ → Checklists…** — and the page picks up whatever you
+  changed as soon as you close it. An issue with no checklist says so, and **Manage…** is where you
+  create the first one.
 - **Completeness** — the breakdown described below.
 - **Catalog value** — averages across catalogs for the stamps on one
   [checklist](collections.md#checklists), full breakdown behind the button. An issue collected more
@@ -176,8 +185,8 @@ Only Details is always there.
   own page, with **its own photo on its own line**. There is no separate gallery on this screen:
   a strip of thumbnails away from the tree would leave you matching pictures to catalog numbers by
   eye, which is the work the tree is already doing for you. When the issue carries more than one
-  checklist, the card header holds a **Checklist** filter that narrows the tree to the set you
-  pick — a parent whose variant matched stays as dimmed context, so a variant never loses the
+  checklist — or you have picked its only one on the Checklists card — the card header holds a
+  **Checklist** filter that narrows the tree to the set you pick — a parent whose variant matched stays as dimmed context, so a variant never loses the
   number it is read under.
 - **Copies** — every copy you hold from any stamp in the issue.
 - **Offers** — every offer holding a copy from this issue.
@@ -226,7 +235,7 @@ shape.
 There is **one card per [checklist](collections.md#checklists)** the issue carries, each titled
 after it — an issue collected basic and specialized shows both, side by side. An issue with no
 checklist at all has no set to be complete against, so it has no Completeness card either; add a
-checklist from the issue's **⋮ → Checklists…** and the card appears.
+checklist from the **Checklists** card's **Manage…** and the card appears.
 
 Each card also carries **Add missing to want list…**. It opens a dialog that creates one open
 entry on your [want list](wants.md) for every stamp on that checklist you do not hold and do not

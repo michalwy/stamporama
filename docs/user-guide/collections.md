@@ -491,7 +491,7 @@ Each checklist has its own completeness and its own catalog value, and its own *
 
 ### Managing an issue's checklists
 
-Open **Checklists…** from the issue's **⋮** menu. From there you can:
+Open **Checklists…** from the issue's **⋮** menu, or **Manage…** on the **Checklists** card of the issue's own detail page — both open the same editor. From there you can:
 
 - **Add** a checklist and give it a name (*Basic set*, *Imperforate*, *With tabs*).
 - **Choose stamps…** — tick the stamps the set is made of. The whole issue's stamp tree is listed, each row carrying the same catalog-number chips the issue's own rows do — `Mi·PL 200` rather than a bare `200`, so a stamp listed in three catalogs reads as three labelled numbers instead of three anonymous ones. Anything left unticked is an extra the issue holds but no set counts.
@@ -534,14 +534,14 @@ Click the picked chips off again to get the whole tree back; nothing picked mean
 
 The same filter sits in the **stamp picker** — the browser you reach from a purchase order's intake or an auction lot's composition — above each expanded issue's tree. When it empties the tree, the row says so rather than looking like an empty issue.
 
-An issue with a single checklist gets no filter: there is nothing to choose between.
+An issue with a single checklist gets no filter: there is nothing to choose between. The one exception is the issue's detail page after you click that checklist on its **Checklists** card — the filter then appears with it picked, so the way back to the whole tree stays in sight.
 
 ### What the issue row shows
 
 - **One checklist** — the row is unchanged: `12/14` (stamps on the checklist over stamps in the issue) and the set's catalog-value total beside it.
 - **Several** — the badge reads `3 checklists`; hover it to see each name, its size and its total. The row deliberately does not grow a line per set.
 
-The issue's own **detail page** is where several checklists get room: one completeness grid and one catalog-value card each.
+The issue's own **detail page** is where several checklists get room: a **Checklists** card listing them all — click one to narrow the stamp tree to it, or **Manage…** to open the same editor as the row's **⋮ → Checklists…** — and one completeness grid and one catalog-value card each. See [The issue page](detail-pages.md#the-issue-page).
 
 ### Elsewhere
 
