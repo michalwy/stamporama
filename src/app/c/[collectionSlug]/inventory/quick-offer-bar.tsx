@@ -37,6 +37,8 @@ export function QuickOfferBar({
   created,
   error,
   isPending,
+  onGenerate,
+  generateScope,
   onExit,
 }: {
   /** The collection's platform contacts — the same list the create dialog offers. */
@@ -50,6 +52,10 @@ export function QuickOfferBar({
   /** A create that failed, reported here because there is no dialog to report into. */
   error?: string;
   isPending: boolean;
+  /** Open the bulk pass over the ticked copies in view, or over the whole filtered list (#1287). */
+  onGenerate: () => void;
+  /** What that pass would run over, for the button's hint. */
+  generateScope: string;
   onExit: () => void;
 }) {
   const platform = platforms.find((p) => p.id === platformId) ?? null;
@@ -137,6 +143,33 @@ export function QuickOfferBar({
             {created} offer{created === 1 ? "" : "s"} created
           </span>
         )}
+        {/* The same platform and status, over many copies at once (#1287): complete sets or singles,
+            previewed before anything is written. */}
+        <Tooltip
+          content={
+            blocked ??
+            `Plan offers on ${platform?.name} for ${generateScope} — every complete set, or every single — and see them all before anything is created.`
+          }
+        >
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={!!blocked || isPending}
+            style={{
+              padding: "0.375rem 0.75rem",
+              border: "1px solid var(--color-accent)",
+              borderRadius: "0.375rem",
+              background: "var(--color-bg-elevated)",
+              color: "var(--color-accent)",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              cursor: blocked || isPending ? "not-allowed" : "pointer",
+              opacity: blocked || isPending ? 0.6 : 1,
+            }}
+          >
+            Generate offers…
+          </button>
+        </Tooltip>
         <button
           type="button"
           onClick={onExit}

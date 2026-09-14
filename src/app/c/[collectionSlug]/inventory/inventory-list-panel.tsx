@@ -58,7 +58,9 @@ import {
 } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import { QuickOfferBar } from "./quick-offer-bar";
+import { OfferGeneratorDialog, type OfferGeneratorInput } from "./offer-generator-dialog";
 import {
+  itemFilterParams,
   useInventoryItemsInfinite,
   useCopyGroupsInfinite,
   useLocationGroupsInfinite,
@@ -134,7 +136,15 @@ type DialogState =
   | { kind: "quickPrice"; item: ItemListItem }
   // Location and disposition over the whole selection (#682) — the bulk bar's own dialog, and the
   // only one here that acts on copies rather than on a copy.
-  | { kind: "bulkEdit"; items: ItemListItem[] };
+  | { kind: "bulkEdit"; items: ItemListItem[] }
+  // Quick offer mode's platform and status over many copies at once (#1287).
+  | {
+      kind: "generateOffers";
+      platformId: string;
+      platformName: string;
+      state: OfferState;
+      input: OfferGeneratorInput;
+    };
 
 
 /** Can this copy go into an offer? For sale, in hand and still held — the offer composition
@@ -1407,6 +1417,26 @@ export function InventoryListPanel({
                     created={quickCreated}
                     error={quickError}
                     isPending={isPending}
+                    generateScope={
+                      selectedInView.length > 0
+                        ? `the ${selectedInView.length} ticked cop${selectedInView.length === 1 ? "y" : "ies"} in view`
+                        : "every copy the list's filters show"
+                    }
+                    onGenerate={() => {
+                      if (!quickPlatform) return;
+                      setDialog({
+                        kind: "generateOffers",
+                        platformId: quickPlatform.id,
+                        platformName: quickPlatform.name,
+                        state: quickState,
+                        // What the collector can see (#1021): the ticked rows in view when there are
+                        // any, else the list's filters — never a copy a filter hides.
+                        input:
+                          selectedInView.length > 0
+                            ? { kind: "ticked", itemIds: selectedInView.map((c) => c.id) }
+                            : { kind: "filtered", filters: itemFilterParams(filters).toString() },
+                      });
+                    }}
                     onExit={() => setQuickOffer(false)}
                   />
                 )}
@@ -2338,6 +2368,31 @@ export function InventoryListPanel({
           initialPackaging={dialog.kind === "addToNewOffer" ? dialog.packaging : undefined}
           onClose={closeDialog}
           onDone={handleSuccess}
+        />
+      )}
+
+      {dialog.kind === "generateOffers" && (
+        <OfferGeneratorDialog
+          collectionId={collectionId}
+          platformId={dialog.platformId}
+          platformName={dialog.platformName}
+          state={dialog.state}
+          input={dialog.input}
+          onClose={() => setDialog({ kind: "none" })}
+          onDone={({ createdOffers, changedOffers }) => {
+            setDialog({ kind: "none" });
+            rememberPlatform(dialog.platformId);
+            setQuickCreated((n) => n + createdOffers);
+            invalidateOffers(collectionId);
+            invalidateList(collectionId);
+            // What has been listed is unticked, as after every other bulk act on this list.
+            clearSelection();
+            toast({
+              message:
+                `${createdOffers} offer${createdOffers === 1 ? "" : "s"} created` +
+                (changedOffers > 0 ? `, ${changedOffers} existing offer${changedOffers === 1 ? "" : "s"} added to` : ""),
+            });
+          }}
         />
       )}
 

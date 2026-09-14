@@ -193,7 +193,7 @@ export const inventoryKeys = {
 /** The copy-set half of the query string — everything that decides *which* copies, and nothing
  * about ordering or pagination. Shared by the flat list and the duplicate groups (#372), which
  * narrow the same set and must never disagree about it. */
-function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
+export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.conditionIds && filters.conditionIds.length > 0)
     params.set("conditionIds", filters.conditionIds.join(","));

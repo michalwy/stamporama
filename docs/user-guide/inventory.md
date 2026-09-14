@@ -1165,6 +1165,52 @@ Press **Done** (or the button at the top again) to leave. Two things to know:
   something is listed on it, and that choice belongs in the create form. The bar says so, and the
   ordinary dialog stays in effect until you pick a platform that has one.
 
+#### Generating offers in bulk
+
+After a large intake, clicking through every set and every loose stamp is still a lot of clicks.
+**Generate offers…** in the quick offer bar makes all of those offers in one pass, on the bar's
+platform and in its status, and shows you every one of them before anything is created.
+
+It works on **what you can see**: the copies you have ticked in view, or — when nothing is ticked —
+every copy the list's filters show. A copy a filter hides is never used.
+
+Two choices:
+
+- **What to list.**
+  - **Complete sets** — every [checklist](collections.md#checklists) the copies complete becomes a set holding one
+    copy of each of its stamps. A set is always one condition, one certificate status and one format:
+    a checklist that could only be completed by mixing them forms no set. A variant fills its
+    parent's place when the parent itself is missing, and a checklist of a single stamp is not a set.
+    Where one copy could complete two checklists, the checklist that comes first on the issue gets it.
+  - **Singles** — every copy **left over** once the complete sets are taken out becomes a set of its
+    own. A copy that belongs in a complete set is never offered as a single, so it does not matter
+    which of the two you run first. A cover or other piece with several stamps is always an offer of
+    its own.
+- **How to pack identical sets.**
+  - **Multi-quantity** — identical sets (the same stamps, in the same condition, certificate status
+    and format) share one offer, with one set per copy of the set. If an offer on that platform —
+    Preparing, Ready, Active or Paused — already lists exactly those stamps in those conditions, the
+    sets are **added to it** instead of making a second one. With several such offers the
+    lowest-numbered is proposed, and you can pick another. An Active or Paused offer that receives
+    sets is marked as [changed after listing](offers.md#keeping-platforms-in-sync--needs-action), so it turns up in *Needs action*. An offer in
+    **active bidding** never receives sets: a new offer is made instead, and the preview says why.
+  - **Separate offers** — every set becomes a new offer of its own, even where a similar offer exists.
+
+The preview lists every offer: what it holds, the copy numbers in each set, and whether it is a
+**new offer** or **added to #N** (with how many sets that offer will then have). Above the list it
+counts the copies it left out and why — already offered on the platform, not for sale, not in hand,
+set aside from the platform, in an offer in active bidding, or no longer held — and how many copies
+the other mode would list.
+
+The new offers are created exactly as quick offer mode creates them: no asking price, no listing URL,
+titles and descriptions from the platform's templates. That is also why *Ready* and *Active* only work
+where the platform supplies a starting price of its own; otherwise the preview tells you to start the
+offers as *Preparing*.
+
+Confirming creates **all of the offers or none of them**. If anything changed since the preview — a
+copy sold or went onto another offer, or an offer due to receive sets changed status — nothing is
+created and the message names the copy or the offer. Look at the preview again and confirm once more.
+
 ## Bulk editing the selection
 
 **Bulk edit…** in the selection bar changes **where the picked copies are kept**, **what they are

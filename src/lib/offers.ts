@@ -10,7 +10,7 @@ import {
   type ItemListItem,
 } from "./items";
 import type { HoldingsSummary } from "./valuation";
-import { collidingItemIdsByOffer } from "./offer-collision-rules";
+import { collidingItemIdsByOffer, type OfferMemberCopy } from "./offer-collision-rules";
 import {
   aggregateOfferAsking,
   type OfferPlatformTotal,
@@ -139,6 +139,7 @@ import {
   readOfferCommitments,
 } from "./trade-reservations";
 import { describeCommittedCopies, type CommittedCopy } from "./trade-reservation-rules";
+import type { PlanDrift } from "./offer-generator-rules";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
 // An `Offer` is a listing on one platform that **owns its composition directly**: it holds N
@@ -1580,7 +1581,7 @@ export interface StampConditionCollision {
 
 /** The offer states a collision is reported against (#513) — every *live* one, so a duplicate is
  * caught while both listings are still drafts rather than after one is posted. */
-const COLLIDING_STATES = ["preparing", "ready", "active", "paused"] as const;
+export const COLLIDING_STATES = ["preparing", "ready", "active", "paused"] as const;
 
 /**
  * The raw read behind every stamp × condition warning: which live offers duplicate which of
@@ -1606,9 +1607,34 @@ async function collidingItemIds(
   });
   if (candidates.length === 0) return new Map();
 
+  const members = await loadCollisionMembers(
+    collectionId,
+    candidates.map((c) => c.stampId),
+    opts
+  );
+  if (members.length === 0) return new Map();
+
+  return collidingItemIdsByOffer(
+    candidates.map((c) => ({ itemId: c.id, stampId: c.stampId, conditionId: c.conditionId })),
+    members
+  );
+}
+
+/**
+ * The members {@link collidingItemIdsByOffer} compares a composition against: **every** copy of every
+ * set of a live offer that holds one of `stampIds` (#732 — a set is compared whole, never through the
+ * members it happens to share). Exported for the offer generator (#1287), which asks the same question
+ * of hundreds of compositions at once and must ask it of the same members.
+ */
+export async function loadCollisionMembers(
+  collectionId: string,
+  stampIds: readonly string[],
+  opts: { platformId?: string; excludeOfferId?: string } = {}
+): Promise<OfferMemberCopy[]> {
+  if (stampIds.length === 0) return [];
   const candidateSets = await prisma.offerSetItem.findMany({
     where: {
-      item: { stampId: { in: [...new Set(candidates.map((c) => c.stampId))] } },
+      item: { stampId: { in: [...new Set(stampIds)] } },
       offerSet: {
         offer: {
           collectionId,
@@ -1621,7 +1647,7 @@ async function collidingItemIds(
     select: { offerSetId: true },
     distinct: ["offerSetId"],
   });
-  if (candidateSets.length === 0) return new Map();
+  if (candidateSets.length === 0) return [];
 
   const memberships = await prisma.offerSetItem.findMany({
     where: { offerSetId: { in: candidateSets.map((s) => s.offerSetId) } },
@@ -1632,17 +1658,13 @@ async function collidingItemIds(
       item: { select: { stampId: true, conditionId: true } },
     },
   });
-
-  return collidingItemIdsByOffer(
-    candidates.map((c) => ({ itemId: c.id, stampId: c.stampId, conditionId: c.conditionId })),
-    memberships.map((m) => ({
-      offerId: m.offerSet.offerId,
-      offerSetId: m.offerSetId,
-      itemId: m.itemId,
-      stampId: m.item.stampId,
-      conditionId: m.item.conditionId,
-    }))
-  );
+  return memberships.map((m) => ({
+    offerId: m.offerSet.offerId,
+    offerSetId: m.offerSetId,
+    itemId: m.itemId,
+    stampId: m.item.stampId,
+    conditionId: m.item.conditionId,
+  }));
 }
 
 /**
@@ -4696,6 +4718,42 @@ export async function createOffer(
     inTransaction?: (tx: Prisma.TransactionClient, offerId: string) => Promise<void>;
   } = {}
 ): Promise<string> {
+  const prepared = await prepareOfferCreation(ownerId, collectionId, input, opts);
+  const offerId = await prisma.$transaction(async (tx) => {
+    const id = await writeOfferCreation(tx, prepared);
+    await opts.inTransaction?.(tx, id);
+    return id;
+  });
+  await finishOfferCreation(ownerId, offerId, prepared);
+  return offerId;
+}
+
+/** Everything {@link createOffer} decides and renders before it writes — split out so a caller making
+ *  many offers in **one** transaction (#1287) creates each exactly as `createOffer` does. */
+interface PreparedOfferCreation {
+  collectionId: string;
+  input: OfferInput;
+  platform: Awaited<ReturnType<typeof assertPlatform>>;
+  currency: string;
+  pricing: ReturnType<typeof resolveOfferPricing>;
+  seedComposition: { title: string | null; itemIds: string[] }[];
+  texts: GeneratedListingTexts;
+  photoConfig: Awaited<ReturnType<typeof seedPhotoConfig>>;
+  colnectSaleId: string | null;
+}
+
+async function prepareOfferCreation(
+  ownerId: string,
+  collectionId: string,
+  input: OfferInput,
+  opts: {
+    seedItemIds?: string[];
+    seedPerCopy?: boolean;
+    /** The seed as several sets, each sold together (#1287) — the shape a multi-quantity offer of a
+     *  series has. Takes precedence over `seedItemIds`. */
+    seedSets?: string[][];
+  }
+): Promise<PreparedOfferCreation> {
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await assertPlatform(collectionId, input.platformId);
   const currency = await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency);
@@ -4716,10 +4774,11 @@ export async function createOffer(
 
   // Seed copies for the quick-start / add-to-offer create path (#189/#241): validate addability up
   // front, then write the first set inside the transaction. A chosen live status can then be honoured.
-  const seedIds = opts.seedItemIds?.length
-    ? await assertAddableCopies(collectionId, opts.seedItemIds)
+  const requestedSeed = opts.seedSets ? opts.seedSets.flat() : opts.seedItemIds;
+  const seedIds = requestedSeed?.length
+    ? await assertAddableCopies(collectionId, requestedSeed)
     : [];
-  if (opts.seedItemIds?.length && seedIds.length === 0) {
+  if (requestedSeed?.length && seedIds.length === 0) {
     throw new OfferActionBlockedError("empty", "That copy can't be listed — it may have already sold.");
   }
   // A live status (ready / active) requires the offer to actually list something (#246). Reject it
@@ -4757,10 +4816,15 @@ export async function createOffer(
   // How the seed is packaged (#372): one set holding everything (a series sold together), or —
   // `seedPerCopy` — one single-copy set each, the quantity listing a stock of duplicates has to be
   // on a platform that refuses a second offer for the same stamp in the same condition.
-  const seedComposition = opts.seedPerCopy
-    ? seedIds.map((itemId) => ({ title: null, itemIds: [itemId] }))
-    : [{ title: null, itemIds: seedIds }];
-  const { name, description, privateNote } = await generateListingTexts(
+  const addable = new Set(seedIds);
+  const seedComposition = opts.seedSets
+    ? opts.seedSets
+        .map((set) => ({ title: null, itemIds: set.filter((itemId) => addable.has(itemId)) }))
+        .filter((set) => set.itemIds.length > 0)
+    : opts.seedPerCopy
+      ? seedIds.map((itemId) => ({ title: null, itemIds: [itemId] }))
+      : [{ title: null, itemIds: seedIds }];
+  const texts = await generateListingTexts(
     ownerId,
     collectionId,
     seedComposition,
@@ -4780,58 +4844,72 @@ export async function createOffer(
   // created for a listing that is already up. Resolved before the transaction so a code another
   // offer holds refuses the creation by name rather than as a constraint violation.
   const colnectSaleId = await resolveColnectSaleId(collectionId, null, input.url);
-  const offerId = await prisma.$transaction(async (tx) => {
-    const offer = await tx.offer.create({
-      data: {
-        collectionId,
-        // Inside the transaction, so a rolled-back creation returns the number too (#416).
-        offerNo: await allocateOfferNumber(tx, collectionId),
-        platformId: input.platformId,
-        name,
-        description,
-        privateNote,
-        // The format the description is written in (#319), seeded from the platform for the same
-        // reason the photo configuration is: this listing's text was composed for that field.
-        descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
-        ...photoConfig,
-        url: input.url,
-        colnectSaleId,
-        // The whole pricing decision, resolved once above (#449): format, live price, and the
-        // auction-only opening figure + check date.
-        ...pricing,
-        // An auction's closing time (#490), dropped on a quick buy exactly as the opening figure is:
-        // a fixed-price listing has no ending of its own, so a date here would be about a format
-        // this listing is not in.
-        endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
-        currency,
-        listingDate: input.listingDate,
-        // Set the target state directly (creation states the real-world status; the step-through
-        // graph governs later manual changes). Guarded above against terminal / set-less-live.
-        state: targetState,
-      },
-      select: { id: true },
-    });
-    // The seed is the new offer's first set(s) (#306); their copies start derived (catalog order).
-    for (const [index, set] of seedComposition.entries()) {
-      if (set.itemIds.length === 0) continue;
-      await tx.offerSet.create({
-        data: {
-          offerId: offer.id,
-          sortOrder: index,
-          items: { create: set.itemIds.map((itemId) => ({ itemId })) },
-        },
-      });
-    }
-    await opts.inTransaction?.(tx, offer.id);
-    return offer.id;
+  return { collectionId, input, platform, currency, pricing, seedComposition, texts, photoConfig, colnectSaleId };
+}
+
+/** The offer row and its seed, inside the caller's transaction. */
+async function writeOfferCreation(
+  tx: Prisma.TransactionClient,
+  prepared: PreparedOfferCreation
+): Promise<string> {
+  const { collectionId, input, platform, currency, pricing, seedComposition, texts, photoConfig, colnectSaleId } =
+    prepared;
+  const offer = await tx.offer.create({
+    data: {
+      collectionId,
+      // Inside the transaction, so a rolled-back creation returns the number too (#416).
+      offerNo: await allocateOfferNumber(tx, collectionId),
+      platformId: input.platformId,
+      name: texts.name,
+      description: texts.description,
+      privateNote: texts.privateNote,
+      // The format the description is written in (#319), seeded from the platform for the same
+      // reason the photo configuration is: this listing's text was composed for that field.
+      descriptionFormat: normalizeDescriptionFormat(platform.descriptionFormat),
+      ...photoConfig,
+      url: input.url,
+      colnectSaleId,
+      // The whole pricing decision, resolved once above (#449): format, live price, and the
+      // auction-only opening figure + check date.
+      ...pricing,
+      // An auction's closing time (#490), dropped on a quick buy exactly as the opening figure is:
+      // a fixed-price listing has no ending of its own, so a date here would be about a format
+      // this listing is not in.
+      endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
+      currency,
+      listingDate: input.listingDate,
+      // Set the target state directly (creation states the real-world status; the step-through
+      // graph governs later manual changes). Guarded above against terminal / set-less-live.
+      state: input.state,
+    },
+    select: { id: true },
   });
-  await syncOfferContextTexts(ownerId, offerId, platform);
+  // The seed is the new offer's first set(s) (#306); their copies start derived (catalog order).
+  for (const [index, set] of seedComposition.entries()) {
+    if (set.itemIds.length === 0) continue;
+    await tx.offerSet.create({
+      data: {
+        offerId: offer.id,
+        sortOrder: index,
+        items: { create: set.itemIds.map((itemId) => ({ itemId })) },
+      },
+    });
+  }
+  return offer.id;
+}
+
+/** What follows a committed creation: the texts that need the offer's id, and the category backfills. */
+async function finishOfferCreation(
+  ownerId: string,
+  offerId: string,
+  prepared: PreparedOfferCreation
+): Promise<void> {
+  await syncOfferContextTexts(ownerId, offerId, prepared.platform);
   // An offer created **with** copies never passes through `addOfferSet`, so the category backfill
   // (#494) is repeated here for the same reason the texts are: the composition exists from the first
   // moment and the offer would otherwise sit with a blank Allegro card until something was added.
   await backfillAllegroCategory(ownerId, offerId);
   await backfillDelcampeCategory(offerId); // #609, the same question on the marketplace next door
-  return offerId;
 }
 
 /** Render the listing texts once more, now that the offer has an id (#415). A no-op for every
@@ -5850,6 +5928,182 @@ export async function addItemsToOfferSet(
   await backfillAllegroCategory(ownerId, ref.offerId); // #494, as in addOfferSet
   await backfillDelcampeCategory(ref.offerId); // #609, as in addOfferSet
   return addable.length;
+}
+
+// ── Generating offers in bulk (#1287) ────────────────────────────────────────
+
+/**
+ * Why an offer on `platformId` could not be created in `state` the way quick offer mode creates one —
+ * no price, no URL (#537) — or null when it could. The refusals `createOffer` raises before writing
+ * anything, asked ahead so a bulk pass says so in its preview rather than on confirming.
+ */
+export async function quickOfferCreationBlock(
+  ownerId: string,
+  collectionId: string,
+  platformId: string,
+  state: OfferState
+): Promise<string | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const platform = await assertPlatform(collectionId, platformId);
+  if (!platform.platformCurrency) {
+    return "This platform has no currency yet. List one offer on it through the ordinary form first — that is where its currency is set.";
+  }
+  const pricing = resolveOfferPricing({}, "0.00", platform);
+  const missing = missingPriceField(pricing.listingType, state, pricing.price, pricing.startingPrice);
+  return missing
+    ? `An offer can't start ${OFFER_STATE_LABEL_LOWER[state]} with no ${missing}, and these offers are created without one. Start them as Preparing instead.`
+    : null;
+}
+
+const OFFER_STATE_LABEL_LOWER: Record<OfferState, string> = {
+  preparing: "preparing",
+  ready: "ready",
+  active: "active",
+  paused: "paused",
+  sold: "sold",
+  withdrawn: "withdrawn",
+};
+
+/** A generated pass refused because a copy or an offer is no longer where its plan put it (#717). The
+ *  caller names it; this module only knows which. */
+export class GenerationChangedError extends OfferActionBlockedError {
+  readonly drift: PlanDrift;
+  constructor(drift: PlanDrift) {
+    super("not-eligible", "The copies or offers changed since the preview.");
+    this.drift = drift;
+  }
+}
+
+export interface GeneratedOffersInput {
+  platformId: string;
+  state: OfferState;
+  /** One entry per new offer: its sets, each a list of copies sold together. */
+  newOffers: string[][][];
+  /** Sets added to existing offers, one entry per offer, with the offer as the plan read it. */
+  additions: { offerId: string; state: OfferState; setCount: number; sets: string[][] }[];
+}
+
+/**
+ * Write a generated pass (#1287) — **all of it or none of it**, in one transaction.
+ *
+ * Every new offer is created exactly as quick offer mode creates one (`createOfferAction` with a
+ * platform and a status and nothing else): no price, no URL, texts generated from the platform's
+ * templates. Every added set is added exactly as `addOfferSet` adds one — its title from the platform's
+ * template, at the end of the offer's order — and a listed offer receiving sets is flagged as changed
+ * after listing (#542).
+ *
+ * The plan was checked against a fresh read before this is called; inside the transaction it is asked
+ * once more — no copy sold or gone onto an offer on the platform or under bid, no receiving offer
+ * changed state, set count or bidding — so a change landing between the read and the write rolls the
+ * whole pass back. A copy that cannot be listed at all refuses rather than leaving a hole.
+ */
+export async function writeGeneratedOffers(
+  ownerId: string,
+  collectionId: string,
+  input: GeneratedOffersInput
+): Promise<{ createdOfferIds: string[]; changedOfferIds: string[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const itemIds = [...input.newOffers.flat(2), ...input.additions.flatMap((addition) => addition.sets.flat())];
+  const addable = new Set(await assertAddableCopies(collectionId, itemIds));
+  const lost = itemIds.find((itemId) => !addable.has(itemId));
+  if (lost) throw new GenerationChangedError({ kind: "copy", itemId: lost });
+
+  const platform = await assertPlatform(collectionId, input.platformId);
+  const additions: (GeneratedOffersInput["additions"][number] & { titles: (string | null)[] })[] = [];
+  for (const addition of input.additions) {
+    const ref = await assertOfferOwner(ownerId, addition.offerId);
+    if (ref.collectionId !== collectionId || ref.platformId !== input.platformId || ref.state !== addition.state) {
+      throw new GenerationChangedError({ kind: "offer", offerId: addition.offerId });
+    }
+    await assertNotCommittedElsewhere(collectionId, ref.state, addition.sets.flat()); // #639
+    const titles: (string | null)[] = [];
+    for (const set of addition.sets) {
+      titles.push(await generateConfiguredTitle(ownerId, collectionId, set, platform.titleTemplate, platform.titleLanguage));
+    }
+    additions.push({ ...addition, titles });
+  }
+
+  const prepared: PreparedOfferCreation[] = [];
+  for (const sets of input.newOffers) {
+    prepared.push(
+      await prepareOfferCreation(
+        ownerId,
+        collectionId,
+        // What `readOfferInput` makes of quick offer mode's form: a platform, a status, nothing else.
+        { platformId: input.platformId, url: null, price: "0.00", startingPrice: null, endsAt: null, currency: "", listingDate: null, state: input.state },
+        { seedSets: sets }
+      )
+    );
+  }
+
+  const createdOfferIds = await prisma.$transaction(
+    async (tx) => {
+      if (additions.length > 0) {
+        const rows = await tx.offer.findMany({
+          where: { id: { in: additions.map((addition) => addition.offerId) } },
+          select: { id: true, state: true, inActiveBidding: true, _count: { select: { sets: true } } },
+        });
+        for (const addition of additions) {
+          const row = rows.find((r) => r.id === addition.offerId);
+          if (
+            !row ||
+            row.state !== addition.state ||
+            row._count.sets !== addition.setCount ||
+            (row.state === "active" && row.inActiveBidding)
+          ) {
+            throw new GenerationChangedError({ kind: "offer", offerId: addition.offerId });
+          }
+        }
+      }
+      const taken = await tx.offerSetItem.findFirst({
+        where: {
+          itemId: { in: itemIds },
+          offerSet: {
+            offer: {
+              OR: [
+                { platformId: input.platformId, state: { notIn: [...CLOSED_OFFER_STATES] } },
+                { state: "active", inActiveBidding: true },
+              ],
+            },
+          },
+        },
+        select: { itemId: true },
+      });
+      const sold = taken ?? (await tx.saleLineItem.findFirst({ where: { itemId: { in: itemIds } }, select: { itemId: true } }));
+      if (sold) throw new GenerationChangedError({ kind: "copy", itemId: sold.itemId });
+
+      const created: string[] = [];
+      for (const offer of prepared) created.push(await writeOfferCreation(tx, offer));
+      for (const addition of additions) {
+        const last = await tx.offerSet.aggregate({ where: { offerId: addition.offerId }, _max: { sortOrder: true } });
+        const first = (last._max.sortOrder ?? -1) + 1;
+        for (const [index, set] of addition.sets.entries()) {
+          await tx.offerSet.create({
+            data: {
+              offerId: addition.offerId,
+              title: addition.titles[index],
+              sortOrder: first + index,
+              items: { create: set.map((itemId) => ({ itemId })) },
+            },
+          });
+        }
+      }
+      await markListingContentChanged(additions.map((addition) => addition.offerId), tx); // #542
+      return created;
+    },
+    // A pass over a large intake is hundreds of offers; the default five seconds is not a bound on it.
+    { timeout: 120_000, maxWait: 10_000 }
+  );
+
+  for (const [index, offerId] of createdOfferIds.entries()) {
+    await finishOfferCreation(ownerId, offerId, prepared[index]);
+  }
+  for (const { offerId } of additions) {
+    await syncGeneratedTexts(ownerId, offerId); // #380/#365, as in addOfferSet
+    await backfillAllegroCategory(ownerId, offerId); // #494, as in addOfferSet
+    await backfillDelcampeCategory(offerId); // #609, as in addOfferSet
+  }
+  return { createdOfferIds, changedOfferIds: additions.map((addition) => addition.offerId) };
 }
 
 /** Reorder an offer's sets (#306). `setIds` must be a **full permutation** of the offer's current
