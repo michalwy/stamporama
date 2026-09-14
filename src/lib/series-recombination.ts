@@ -327,10 +327,11 @@ export interface ComposeSeriesResult {
   offerId: string;
   /** How many copies the new offer's one set holds. */
   copies: number;
-  /** Single offers left with nothing in them, and withdrawn. */
+  /** Single offers never listed and left with nothing in them, and withdrawn. */
   withdrawnOffers: number;
-  /** Of those, how many were live — their listings have to be taken down on the platform. */
-  withdrawnLiveOffers: number;
+  /** Live single offers left with nothing in them: still in their state, flagged as changed after
+   *  listing, their listings to be taken down on the platform before the collector withdraws them. */
+  emptiedLiveOffers: number;
   /** Live single offers that lost a set and kept others, now flagged as changed after listing. */
   changedLiveOffers: number;
 }
@@ -349,9 +350,11 @@ export interface ComposeSeriesResult {
  *   checklist's order — a series is one sellable unit (ADR-0013 §2), as the lot builder commits;
  * - for every chosen copy that was offered singly, **its one-copy set is taken out** of each offer
  *   holding it that way; the offers' other sets stay;
- * - an offer left with **no sets is withdrawn**;
- * - a **live** offer that lost a set and kept others is flagged as changed after listing (#542). A
- *   withdrawn one is not: a closed listing is history, and the flag only reads on a listed state.
+ * - an offer **never listed** and left with no sets is withdrawn;
+ * - a **live** offer that lost a set is flagged as changed after listing (#542) — **emptied or not**.
+ *   An emptied live offer stays Active or Paused (#1277): withdrawing it would close the only record
+ *   of a listing still up on the platform, so it waits in *Needs action* for the collector to take the
+ *   listing down and withdraw it himself.
  *
  * Inside the transaction the removed sets are asked again — still one copy, still in an open offer,
  * still not under bid, never sold through — and the withdrawn offers are withdrawn only while they
@@ -470,16 +473,17 @@ export async function composeSeriesOffer(
     }
   );
 
-  // The offers that kept something list fewer sets now; texts still following a template say so,
-  // exactly as after a set is removed by hand. A withdrawn offer's texts are a record and stay.
+  // The offers not withdrawn list fewer sets now — an emptied live one none; texts still following a
+  // template say so, exactly as after a set is removed by hand. A withdrawn offer's texts are a record
+  // and stay.
   for (const id of keptIds) await syncGeneratedTexts(ownerId, id);
 
   return {
     offerId,
     copies: itemIds.length,
     withdrawnOffers: withdrawnIds.length,
-    withdrawnLiveOffers: outcome.filter((change) => change.withdrawn && change.live).length,
-    changedLiveOffers: outcome.filter((change) => !change.withdrawn && change.live).length,
+    emptiedLiveOffers: outcome.filter((change) => change.emptied && change.live).length,
+    changedLiveOffers: outcome.filter((change) => !change.emptied && change.live).length,
   };
 }
 

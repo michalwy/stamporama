@@ -10,6 +10,7 @@ import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   OfferStateChip,
+  EmptiedListingChip,
   NeedsActionChip,
   InActiveBiddingChip,
   ListingOutOfDateChip,
@@ -57,6 +58,7 @@ import {
   requiresSets,
   type ManualOfferTarget,
 } from "@/lib/offer-rules";
+import { isEmptiedListing, isListedState } from "@/lib/offer-listing-drift";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import { isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { hasListingModule } from "@/lib/platform-modules";
@@ -547,8 +549,10 @@ export function OfferDetailPanel({
       ? [{ key: "sell", label: "Sell", icon: "sell", onSelect: () => setSelling(true) } as RowAction]
       : []),
     // Only while the flag is up (#542): an entry offering to clear something that is not set is an
-    // entry that says the flag exists on every offer that has never carried one.
-    ...(offer.listingOutOfDate
+    // entry that says the flag exists on every offer that has never carried one. Not on a listed offer
+    // with no sets (#1277): its listing can only come down, so the server refuses and withdrawing is
+    // the way off the flag.
+    ...(offer.listingOutOfDate && !(isListedState(offer.state) && offer.sets.length === 0)
       ? [
           {
             key: "mark-listing-synced",
@@ -808,6 +812,8 @@ export function OfferDetailPanel({
                 listing that is wrong costs a sale, not a double one. The menu carries the way off
                 it, so the chip states the problem and nothing more. */}
             {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
+            {/* Nothing is left in a listing that was up (#1277) — the same chip the row carries. */}
+            {isEmptiedListing(offer.state, offer.sets.length) && <EmptiedListingChip state={offer.state} />}
             {/* An auction says how to read the price beside it (#449); "in bidding" (#215) says
                 somebody has actually bid. Two different facts, so two chips. */}
             <ListingTypeChip listingType={offer.listingType} />

@@ -3,9 +3,30 @@ import assert from "node:assert/strict";
 import {
   LISTED_OFFER_STATES,
   headerChangeIsDrift,
+  isEmptiedListing,
   isListedState,
 } from "../../src/lib/offer-listing-drift";
 import { OFFER_STATES, type OfferState } from "../../src/lib/offer-rules";
+
+describe("isEmptiedListing (#1277)", () => {
+  it("marks a listed offer with no sets — its listing can only come down", () => {
+    assert.equal(isEmptiedListing("active", 0), true);
+    assert.equal(isEmptiedListing("paused", 0), true);
+  });
+
+  it("marks a withdrawn offer with no sets, so one emptied before the fix can be found", () => {
+    assert.equal(isEmptiedListing("withdrawn", 0), true);
+  });
+
+  it("leaves an offer never posted alone — being empty is how one is put together", () => {
+    assert.equal(isEmptiedListing("preparing", 0), false);
+    assert.equal(isEmptiedListing("ready", 0), false);
+  });
+
+  it("leaves any offer that still holds a set alone", () => {
+    for (const state of OFFER_STATES) assert.equal(isEmptiedListing(state, 1), false, state);
+  });
+});
 
 describe("isListedState", () => {
   it("counts the two states in which a listing is up on the platform", () => {

@@ -561,7 +561,9 @@ export interface CompositionOfferChange {
   /** One per chosen copy the offer holds singly — an offer never lists a copy twice. */
   setsLost: number;
   setsLeft: number;
-  /** Nothing is left in it, so it is withdrawn. */
+  /** Nothing is left in it. */
+  emptied: boolean;
+  /** Emptied and never listed, so it is withdrawn. A live offer emptied stays in its state (#1277). */
   withdrawn: boolean;
   /** Active or Paused: its listing on the platform has to be updated or taken down by hand. */
   live: boolean;
@@ -572,8 +574,13 @@ export interface CompositionOfferChange {
  * sees before committing, and what the commit carries out.
  *
  * Every chosen copy takes its one-copy set out of **each** offer holding it singly; the offer's other
- * sets stay. An offer left with no sets is withdrawn (decided with the user on 2026-09-13). An
- * available copy changes nothing.
+ * sets stay. An available copy changes nothing.
+ *
+ * An offer left with no sets is withdrawn **only if it was never listed** (Preparing or Ready). A
+ * **live** one stays Active or Paused, empty, flagged as changed after listing like any live offer
+ * that lost a set (#1277, decided with the user on 2026-09-14, correcting #1211): withdrawing it
+ * closed the one record of a listing still up on the platform, and the collector withdraws it himself
+ * once it has been taken down there.
  */
 export function compositionOutcome(
   chosen: readonly Pick<RecombinationCopy, "offerIds">[],
@@ -586,12 +593,14 @@ export function compositionOutcome(
   return [...lost].map(([offerId, setsLost]) => {
     const offer = offers.get(offerId);
     const setsLeft = Math.max(0, (offer?.setCount ?? setsLost) - setsLost);
+    const live = offer !== undefined && isLiveForRecombination(offer.state);
     return {
       offerId,
       setsLost,
       setsLeft,
-      withdrawn: setsLeft === 0,
-      live: offer !== undefined && isLiveForRecombination(offer.state),
+      emptied: setsLeft === 0,
+      withdrawn: setsLeft === 0 && !live,
+      live,
     };
   });
 }

@@ -303,20 +303,24 @@ describe("compositionOutcome (#1211)", () => {
   const offers = (entries: Record<string, [OfferState, number]>) =>
     new Map(Object.entries(entries).map(([id, [state, setCount]]) => [id, { state, setCount }]));
 
-  it("withdraws a single offer the composition empties, and says whether it was live", () => {
+  it("withdraws an emptied offer that was never listed, and keeps an emptied live one (#1277)", () => {
     const outcome = compositionOutcome(
-      [{ offerIds: ["o1"] }, { offerIds: ["o2"] }, { offerIds: [] }],
-      offers({ o1: ["active", 1], o2: ["preparing", 1] })
+      [{ offerIds: ["o1"] }, { offerIds: ["o2"] }, { offerIds: ["o3"] }, { offerIds: ["o4"] }, { offerIds: [] }],
+      offers({ o1: ["active", 1], o2: ["preparing", 1], o3: ["paused", 1], o4: ["ready", 1] })
     );
     assert.deepEqual(outcome, [
-      { offerId: "o1", setsLost: 1, setsLeft: 0, withdrawn: true, live: true },
-      { offerId: "o2", setsLost: 1, setsLeft: 0, withdrawn: true, live: false },
+      { offerId: "o1", setsLost: 1, setsLeft: 0, emptied: true, withdrawn: false, live: true },
+      { offerId: "o2", setsLost: 1, setsLeft: 0, emptied: true, withdrawn: true, live: false },
+      { offerId: "o3", setsLost: 1, setsLeft: 0, emptied: true, withdrawn: false, live: true },
+      { offerId: "o4", setsLost: 1, setsLeft: 0, emptied: true, withdrawn: true, live: false },
     ]);
   });
 
   it("keeps an offer that still holds other sets", () => {
     const outcome = compositionOutcome([{ offerIds: ["o1"] }], offers({ o1: ["paused", 3] }));
-    assert.deepEqual(outcome, [{ offerId: "o1", setsLost: 1, setsLeft: 2, withdrawn: false, live: true }]);
+    assert.deepEqual(outcome, [
+      { offerId: "o1", setsLost: 1, setsLeft: 2, emptied: false, withdrawn: false, live: true },
+    ]);
   });
 
   it("counts one set per chosen copy an offer holds singly", () => {
@@ -324,7 +328,9 @@ describe("compositionOutcome (#1211)", () => {
       [{ offerIds: ["o1"] }, { offerIds: ["o1"] }],
       offers({ o1: ["ready", 2] })
     );
-    assert.deepEqual(outcome, [{ offerId: "o1", setsLost: 2, setsLeft: 0, withdrawn: true, live: false }]);
+    assert.deepEqual(outcome, [
+      { offerId: "o1", setsLost: 2, setsLeft: 0, emptied: true, withdrawn: true, live: false },
+    ]);
   });
 
   it("changes every offer a chosen copy is single in", () => {
@@ -333,7 +339,7 @@ describe("compositionOutcome (#1211)", () => {
       offers({ o1: ["active", 1], o2: ["preparing", 2] })
     );
     assert.deepEqual(
-      outcome.map((change) => [change.offerId, change.withdrawn]),
+      outcome.map((change) => [change.offerId, change.emptied]),
       [
         ["o1", true],
         ["o2", false],

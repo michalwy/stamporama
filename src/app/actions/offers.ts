@@ -976,6 +976,8 @@ export async function acknowledgeOfferBiddingNoticeAction(
  * Idempotent: an offer carrying no flag is left alone rather than refused, so the Assistant's report
  * arriving twice, or after the collector has already cleared it by hand, is a no-op.
  */
+// Refused on a listed offer with no sets (#1277): the Assistant's report is then answered with an
+// error it ignores, and the flag stays — which is the point.
 export async function markOfferListingSyncedAction(
   offerId: string
 ): Promise<OfferActionState> {

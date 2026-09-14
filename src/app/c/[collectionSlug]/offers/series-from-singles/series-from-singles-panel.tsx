@@ -19,6 +19,7 @@ import {
   type CompositionOfferChange,
 } from "@/lib/series-recombination-rules";
 import { formatItemNo } from "@/lib/item-number";
+import { OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { Icon } from "@/app/icons";
 import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
@@ -624,12 +625,16 @@ function OutcomeLine({
       <span style={{ color: "var(--color-text-primary)" }}>{offer.label}</span>
       <OfferStateChip state={offer.state} />
       <span style={NOTE}>
-        {change.withdrawn ? `loses ${lost} and is withdrawn — nothing is left in it` : `loses ${lost}, keeps ${left}`}
+        {change.withdrawn
+          ? `loses ${lost} and is withdrawn — nothing is left in it`
+          : change.emptied
+            ? `loses ${lost} — nothing is left in it`
+            : `loses ${lost}, keeps ${left}`}
       </span>
       {change.live ? (
         <span style={{ ...NOTE, color: "var(--color-warning)" }}>
-          {change.withdrawn
-            ? `Live: take the listing down on ${platformName}.`
+          {change.emptied
+            ? `Live: stays ${OFFER_STATE_LABEL[offer.state]}, empty, and appears in Needs action — take the listing down on ${platformName}, then withdraw the offer.`
             : `Live: flagged as changed — update the listing on ${platformName}.`}
         </span>
       ) : null}
