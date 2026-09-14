@@ -222,10 +222,19 @@ change a number and see it.
   would refuse to store. The name is the one field it stands in for: a template being written has no
   name yet, and the running head prints the **album's** name anyway — the same stand-in
   `ALBUM_PREVIEW_CONTEXT` already gives the four text builders.
-- **Beside the fields, not behind a tab**, and the dialog is 76 rem for it — wider than anything else
-  in the application, for #815's reason: the right-hand column is a piece of A4. A preview behind a
-  tab is one nobody looks at *while typing*, which is the only moment it is worth anything. The
-  fields keep the ~800 px they had at 52 rem.
+- **Beside the fields, not behind a tab**, for #815's reason: the right-hand column is a piece of A4.
+  A preview behind a tab is one nobody looks at *while typing*, which is the only moment it is worth
+  anything.
+- **The fields are a floor and every rem past it is the sheet's** (#978). #795 shipped a 76 rem
+  dialog with a fixed 22 rem sheet; #978 raised it to `min(96vw, 92rem)` × `min(100vh - 4rem, 70rem)`
+  on the user's *bigger*. The fields keep the ~800 px (49.5 rem) they had at 52 rem, and the preview
+  column grows from 22 rem to 38 rem (A4 at ~76%) into whatever is left — so a narrower window takes
+  its width out of the sheet, never out of the three-column grid. At the 70 rem ceiling a sheet at
+  38 rem fits the preview's scroll area whole. The height's first term is **`DialogShell`'s own
+  `maxHeight`** rather than a smaller `vh` factor: the shell clamps to it on a short window, and the
+  preview's scroll area is computed from the figure passed in, so any other term would disagree with
+  the panel on exactly the laptop the change had to fit. The two-sheet limit and the zoom rule did
+  not move — a bigger window, not a different preview.
 - **The fields stay uncontrolled.** The preview reads the same `FormData` the save reads, so there is
   no second copy of the preset that could disagree with what a save would store. The dialog only
   counts changes — from the fields' own `onChange` *and* from the four text builders, which are React
