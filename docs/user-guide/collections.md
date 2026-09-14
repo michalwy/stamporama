@@ -633,6 +633,8 @@ Because **Forgery** is a distinct entry rather than a variant, the genuine stamp
 
 The verdict is the identification itself. A copy you have decided is a forgery is simply moved onto the forgery stamp, which records the change with a date and a note the way any variant identification does. There is nothing else to fill in — no authenticity field, no examination log — and deciding a copy is *ordinary* leaves no trace, because a copy sitting under the genuine stamp already says so.
 
+To help decide, add **reference photos** to the stamps: a picture of a genuine copy on the genuine stamp, a picture of a known forgery on the forgery stamp, each with its [source](#stamp-photos) noted. While identifying — a card-scan tile, or **Identify variant** on a copy — **compare** lays your piece over any of them; see [Comparing a piece with a reference](purchases.md#comparing-a-piece-with-a-reference).
+
 A forgery is ordinary stock from there on. It can be valued, stored, put in an album and deliberately sold as a forgery.
 
 **Forgery** is an ordinary row like every other subtype — rename it, reorder it, or delete it if you never record forgeries. Nothing in the app looks for it by name.

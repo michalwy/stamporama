@@ -155,6 +155,7 @@ export function StampPickerBrowser({
   onPickIssue,
   issueRun,
   marked,
+  onCompare,
   aside,
   asideWidth,
   onClose,
@@ -188,6 +189,12 @@ export function StampPickerBrowser({
    * against a list elsewhere on screen and pressing the same stamp twice to be sure.
    */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
+  /**
+   * Open the reference comparison on a stamp row (#1005) — given only by an identification that has a
+   * piece to compare, which is also what puts the piece beside this picker. The caller owns the
+   * comparison; the picker only says which stamp, and on which issue its tree is read.
+   */
+  onCompare?: (stamp: { stampId: string; issueId: string }) => void;
   onClose: () => void;
 }) {
   // Area + year come from the shared per-collection store (#143), so the picker
@@ -473,6 +480,7 @@ export function StampPickerBrowser({
               spanningChecklists={spanningChecklists}
               onNewChecklist={setChecklistsFor}
               marked={marked}
+              onCompare={onCompare}
               onNewIssue={(a) => openCreate({ kind: "issue", areaId: a })}
               onNewStamp={(issue) => openCreate({ kind: "stamp", issue })}
               onNewVariant={(issue, parent) => openCreate({ kind: "stamp", issue, parent })}
@@ -605,6 +613,7 @@ function IssueBrowser({
   spanningChecklists,
   onNewChecklist,
   marked,
+  onCompare,
   onNewIssue,
   onNewStamp,
   onNewVariant,
@@ -636,6 +645,8 @@ function IssueBrowser({
   onNewChecklist: (issue: IssueListItem) => void;
   /** Stamps already taken by the caller, marked on their rows (#607). */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
+  /** Open the reference comparison on a stamp (#1005). */
+  onCompare?: (stamp: { stampId: string; issueId: string }) => void;
   onNewIssue: (areaId: string | null) => void;
   onNewStamp: (issue: IssueListItem) => void;
   onNewVariant: (issue: IssueListItem, parent: StampNodeData) => void;
@@ -737,6 +748,7 @@ function IssueBrowser({
               search={search}
               onPick={handlePick}
               marked={marked}
+              onCompare={onCompare}
               issueRun={
                 issueRun
                   ? {
@@ -806,6 +818,7 @@ function PickIssueRow({
   onPickIssue,
   issueRun,
   marked,
+  onCompare,
   onNewStamp,
   onNewVariant,
   onNewVariantRange,
@@ -836,6 +849,8 @@ function PickIssueRow({
   };
   /** Stamps already taken by the caller, marked on their rows (#607). */
   marked?: { stampIds: ReadonlySet<string>; label: string; hint: string };
+  /** Open the reference comparison on a stamp (#1005). */
+  onCompare?: (stamp: { stampId: string; issueId: string }) => void;
   onNewStamp: () => void;
   onNewVariant: (parent: StampNodeData) => void;
   onNewVariantRange: (parent: StampNodeData) => void;
@@ -1133,6 +1148,11 @@ function PickIssueRow({
                   if (parent) onNewVariantRange(parent);
                 }}
                 marked={marked}
+                onCompare={
+                  onCompare
+                    ? (node) => onCompare({ stampId: node.stampId, issueId: issue.id })
+                    : undefined
+                }
                 narrowed={!!matchedStampIds}
               />
             ))

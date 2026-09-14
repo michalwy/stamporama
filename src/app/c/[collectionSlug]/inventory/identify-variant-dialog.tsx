@@ -14,6 +14,11 @@ import { useIssueMembers, useItemVariantHistory } from "./use-inventory-query";
 import { VariantHistoryList } from "./variant-history-list";
 import { SelectableStampTree } from "./selectable-stamp-tree";
 import { PhotoStrip } from "./photo-thumb";
+import { Icon } from "@/app/icons";
+import {
+  ReferenceCompareDialog,
+  copyPictures,
+} from "@/app/c/[collectionSlug]/shared/reference-compare-dialog";
 
 /** Edge of each picture in the dialog (#1003). Two of them side by side fill the dialog's width,
  * which is as large as a front and a back can be drawn here without the dialog growing. */
@@ -72,6 +77,8 @@ export function IdentifyVariantDialog({
   onSubmit,
 }: IdentifyVariantDialogProps) {
   const [selectedId, setSelectedId] = useState("");
+  /** Whether the reference comparison is open over this dialog (#1005). */
+  const [comparing, setComparing] = useState(false);
 
   const { data: members = [], isLoading: membersLoading } = useIssueMembers(
     collectionId,
@@ -104,8 +111,12 @@ export function IdentifyVariantDialog({
   }
 
   const actionLabel = isPending ? "Identifying…" : "Identify variant";
+  /** The copy's front and back laid beside the references of its stamp and everything under it
+   * (#1004/#1005) — only with a picture to compare and a tree to read the references from. */
+  const canCompare = pictures.length > 0 && item.issueId != null;
 
   return (
+    <>
     <DialogShell title="Identify variant" onClose={onClose} minHeight="26rem" maxWidth="34rem">
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
@@ -131,7 +142,27 @@ export function IdentifyVariantDialog({
 
           {/* Variant picker — descendants of the current stamp only */}
           <div style={{ marginBottom: "1.25rem" }}>
-            <div style={SECTION_LABEL}>Variant</div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
+              <div style={SECTION_LABEL}>Variant</div>
+              {canCompare && (
+                <button
+                  type="button"
+                  onClick={() => setComparing(true)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    fontSize: "0.8125rem",
+                    color: "var(--color-action-primary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {/* Opens on the variant picked, when one is, so the doubt about a row is one
+                      press from its references. */}
+                  <Icon name="compare" size="sm" /> Compare with references…
+                </button>
+              )}
+            </div>
             {item.issueId == null ? (
               <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
                 This copy&apos;s stamp is not part of an issue, so its variants can&apos;t be
@@ -182,6 +213,16 @@ export function IdentifyVariantDialog({
         />
       </form>
     </DialogShell>
+    {comparing && item.issueId && (
+      <ReferenceCompareDialog
+        collectionId={collectionId}
+        pictures={copyPictures(pictures)}
+        subjects={[{ stampId: item.stampId, issueId: item.issueId }]}
+        initialStampId={selectedId || item.stampId}
+        onClose={() => setComparing(false)}
+      />
+    )}
+    </>
   );
 }
 

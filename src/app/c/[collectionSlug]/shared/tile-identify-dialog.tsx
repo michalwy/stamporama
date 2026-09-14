@@ -36,6 +36,11 @@ import {
 import { tilePhotoRoles, describeFreeSlots, type TilePhotoRole } from "@/lib/tile-photo-roles";
 import { perforationMatches, type PerforationMatch } from "@/lib/perforation";
 import { StampPickerBrowser } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
+import {
+  ReferenceCompareDialog,
+  piecePictures,
+  type ReferenceSubject,
+} from "./reference-compare-dialog";
 import { orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { useIssueMembers } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
@@ -407,6 +412,14 @@ export function TileIdentifyDialog({
    * a shortlist built on a screen that had put the piece away would be built from memory. */
   const [addingCandidate, setAddingCandidate] = useState(false);
 
+  /** The comparison with a reference, when one is open (#1004/#1005) — from a shortlisted stamp, with
+   * every shortlisted stamp's references on offer, or from a row of the picker over this dialog, with
+   * that stamp's. Nothing is written from it; closing it is back where it was opened. */
+  const [comparing, setComparing] = useState<{
+    subjects: ReferenceSubject[];
+    initialStampId: string;
+  } | null>(null);
+
   /**
    * The gauge the viewer is reading right now (#740), or null when it is reading nothing.
    *
@@ -773,6 +786,19 @@ export function TileIdentifyDialog({
                 run(() => removeTileCandidateAction(ids, stampId), false, true)
               }
               onIdentifyAs={(pick) => onIdentifyAs(pick, pieces)}
+              // Only with a picture to compare: a swept back-only tile can have none left.
+              onCompare={
+                hasPictures
+                  ? (stampId) =>
+                      setComparing({
+                        subjects: merged.map((m) => ({
+                          stampId: m.candidate.stampId,
+                          issueId: m.candidate.issueId,
+                        })),
+                        initialStampId: stampId,
+                      })
+                  : undefined
+              }
             />
           )}
           {/* What has just been identified (#757) — under the shortlist, because the shortlist is
@@ -1001,7 +1027,22 @@ export function TileIdentifyDialog({
         // about the run, which is the saving — five pieces narrowed to the same pair is one trip to
         // the colour key rather than five.
         onPick={(picked) => run(() => addTileCandidateAction(ids, picked.stampId), false, true)}
+        onCompare={
+          hasPictures
+            ? (stamp) => setComparing({ subjects: [stamp], initialStampId: stamp.stampId })
+            : undefined
+        }
         onClose={() => setAddingCandidate(false)}
+      />
+    )}
+
+    {comparing && (
+      <ReferenceCompareDialog
+        collectionId={collectionId}
+        pictures={piecePictures(pieces)}
+        subjects={comparing.subjects}
+        initialStampId={comparing.initialStampId}
+        onClose={() => setComparing(null)}
       />
     )}
 
@@ -1332,6 +1373,7 @@ function CandidateShortlist({
   onAdd,
   onRemove,
   onIdentifyAs,
+  onCompare,
 }: {
   collectionId: string;
   areas: CollectionAreaData[];
@@ -1355,6 +1397,9 @@ function CandidateShortlist({
   onAdd: () => void;
   onRemove: (stampId: string) => void;
   onIdentifyAs: (pick: TileStampPick) => void;
+  /** Open the reference comparison on a possibility (#1005); absent where there is no picture of the
+   * piece to compare. */
+  onCompare?: (stampId: string) => void;
 }) {
   const parent = sharedVariantParent(candidates.map((c) => c.candidate));
   // One derivation for the whole list, not one per row: the vendor maps come off a shared query and
@@ -1474,6 +1519,8 @@ function CandidateShortlist({
           disabled={disabled}
           onRemove={() => onRemove(c.stampId)}
           onIdentifyAs={onIdentifyAs}
+          // A stamp on no issue has no tree to read its references from.
+          onCompare={onCompare && c.issueId ? () => onCompare(c.stampId) : undefined}
         />
       ))}
 
@@ -1519,6 +1566,7 @@ function CandidateRow({
   disabled,
   onRemove,
   onIdentifyAs,
+  onCompare,
 }: {
   collectionId: string;
   candidate: TileCandidate;
@@ -1536,6 +1584,7 @@ function CandidateRow({
   disabled: boolean;
   onRemove: () => void;
   onIdentifyAs: (pick: TileStampPick) => void;
+  onCompare?: () => void;
 }) {
   const { data: members = [] } = useIssueMembers(
     collectionId,
@@ -1625,6 +1674,28 @@ function CandidateRow({
           )}
         </button>
       </Tooltip>
+      {/* The piece beside this possibility's references and its children's (#1005) — the forgeries
+          among them. Its own button, like ruling out: the row's press identifies. */}
+      {onCompare && (
+        <Tooltip content="Compare the piece with this stamp's reference photos and those of every stamp under it">
+          <button
+            type="button"
+            onClick={onCompare}
+            aria-label={`Compare with the references of ${label}`}
+            style={{
+              padding: "0 0.5rem",
+              height: "100%",
+              borderRadius: "0.375rem",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg-elevated)",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+            }}
+          >
+            <Icon name="compare" size="sm" />
+          </button>
+        </Tooltip>
+      )}
       {/* Ruling one out is the ordinary progress of the work parking exists for, so it costs
           exactly what adding it did — and it is a button of its own rather than a menu, there
           being one thing to do to a possibility that is no longer one. */}
