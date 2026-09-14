@@ -7,7 +7,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
   LabelWithError,
 } from "@/app/dialog-shell";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
@@ -153,16 +152,13 @@ export function MoveIssueAreaDialog({
             )}
           </div>
         </DialogBody>
-        <DialogFooter>
+        <DialogFooter error={error}>
           <DialogSecondaryButton onClick={onClose} disabled={isPending}>
             Cancel
           </DialogSecondaryButton>
-          <div style={{ position: "relative" }}>
-            <ErrorBubble>{error}</ErrorBubble>
-            <DialogPrimaryButton type="submit" disabled={!canMove}>
-              {isPending ? "Moving…" : "Move"}
-            </DialogPrimaryButton>
-          </div>
+          <DialogPrimaryButton type="submit" disabled={!canMove}>
+            {isPending ? "Moving…" : "Move"}
+          </DialogPrimaryButton>
         </DialogFooter>
       </form>
     </DialogShell>

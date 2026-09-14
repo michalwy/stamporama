@@ -7,7 +7,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -447,12 +446,11 @@ export function ComposeSetDialog({
         />
       )}
 
-      <DialogFooter>
+      <DialogFooter error={error}>
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>
-        <div style={{ position: "relative", display: "flex", gap: "0.5rem" }}>
-          <ErrorBubble>{error}</ErrorBubble>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
           {/* Single copy → one plain Add. Several → two ways to add them: as a quantity of
               separate single-copy sets, or as one set sold together (a series). */}
           {multi ? (

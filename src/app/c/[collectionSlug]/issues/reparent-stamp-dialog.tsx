@@ -7,7 +7,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
   LabelWithError,
 } from "@/app/dialog-shell";
 import { buildStampTree, type StampTreeNodeData } from "@/app/c/[collectionSlug]/shared/issue-view";
@@ -152,16 +151,13 @@ export function ReparentStampDialog({
             )}
           </div>
         </DialogBody>
-        <DialogFooter>
+        <DialogFooter error={error}>
           <DialogSecondaryButton onClick={onClose} disabled={isPending}>
             Cancel
           </DialogSecondaryButton>
-          <div style={{ position: "relative" }}>
-            <ErrorBubble>{error}</ErrorBubble>
-            <DialogPrimaryButton type="submit" disabled={!changed || isPending}>
-              {isPending ? "Reassigning…" : "Reassign"}
-            </DialogPrimaryButton>
-          </div>
+          <DialogPrimaryButton type="submit" disabled={!changed || isPending}>
+            {isPending ? "Reassigning…" : "Reassign"}
+          </DialogPrimaryButton>
         </DialogFooter>
       </form>
     </DialogShell>

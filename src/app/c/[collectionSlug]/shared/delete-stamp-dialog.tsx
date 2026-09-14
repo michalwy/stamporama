@@ -8,7 +8,6 @@ import {
   DialogSecondaryButton,
   DialogDestructiveButton,
   ConfirmDialog,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 
 interface DeleteStampDialogProps {
@@ -122,12 +121,11 @@ export function DeleteStampDialog({
           . How would you like to proceed?
         </p>
       </DialogBody>
-      <DialogFooter>
+      <DialogFooter error={error}>
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>
-        <div style={{ display: "flex", gap: "0.5rem", position: "relative" }}>
-          <ErrorBubble>{error}</ErrorBubble>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
           <DialogDestructiveButton
             onClick={() => onConfirm("reparent")}
             disabled={isPending}

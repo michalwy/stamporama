@@ -7,7 +7,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import type { ItemListItem } from "@/lib/items";
 import type { ComposeTargetOffer, ComposeTargetSet } from "@/lib/offers";
@@ -554,7 +553,7 @@ export function AddToOfferDialog({
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter error={error}>
         {/* How several copies are packaged (#373). One control rather than two submit buttons: it
             governs the create path below as well, whose own submit lives inside the offer form.
             Appending into an existing set has no packaging to choose — the copies go into that
@@ -598,12 +597,9 @@ export function AddToOfferDialog({
         <DialogSecondaryButton onClick={() => setCreating(true)} disabled={isPending}>
           <Icon name="add" size="sm" /> Create new offer
         </DialogSecondaryButton>
-        <div style={{ position: "relative", display: "flex", gap: "0.5rem" }}>
-          <ErrorBubble>{error}</ErrorBubble>
-          <DialogPrimaryButton type="button" onClick={submit} disabled={isPending || !selected}>
-            {isPending ? "Adding…" : "Add to offer"}
-          </DialogPrimaryButton>
-        </div>
+        <DialogPrimaryButton type="button" onClick={submit} disabled={isPending || !selected}>
+          {isPending ? "Adding…" : "Add to offer"}
+        </DialogPrimaryButton>
       </DialogFooter>
     </DialogShell>
     )}

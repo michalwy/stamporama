@@ -8,7 +8,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { AreaCatalogEntry } from "@/lib/areas";
@@ -457,19 +456,16 @@ export function QuickPriceDialog({
             </>
           )}
         </DialogBody>
-        <DialogFooter>
+        <DialogFooter error={error}>
           {/* Cancel stays enabled while no amount is entered — only saving is gated by
               `canSave`; disabling both (via DialogActions' single `disabled`) would trap the
               user in the dialog until they typed a value. */}
           <DialogSecondaryButton onClick={onClose} disabled={isPending}>
             Cancel
           </DialogSecondaryButton>
-          <div style={{ position: "relative" }}>
-            <ErrorBubble>{error}</ErrorBubble>
-            <DialogPrimaryButton type="submit" disabled={!canSave}>
-              {isPending ? "Saving…" : "Save"}
-            </DialogPrimaryButton>
-          </div>
+          <DialogPrimaryButton type="submit" disabled={!canSave}>
+            {isPending ? "Saving…" : "Save"}
+          </DialogPrimaryButton>
         </DialogFooter>
       </form>
     </DialogShell>,

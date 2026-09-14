@@ -8,7 +8,6 @@ import {
   DialogBody,
   DialogFooter,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import type { SaleLineRaw } from "@/app/actions/sales";
 import { useSellableOffers, useSalesInfinite, useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
@@ -241,8 +240,7 @@ export function SellOfferFlowDialog({
           </>
         )}
       </DialogBody>
-      <DialogFooter>
-        {error && <ErrorBubble>{error}</ErrorBubble>}
+      <DialogFooter error={error}>
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>

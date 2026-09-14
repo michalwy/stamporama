@@ -15,7 +15,6 @@ import {
   DialogActions,
   DialogBody,
   DialogShell,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -241,7 +240,7 @@ export function LotPresetBar({
             onAction={save}
             disabled={isPending || !name.trim()}
             cancelDisabled={isPending}
-            error={<ErrorBubble>{error}</ErrorBubble>}
+            error={error}
           />
         </DialogShell>
       )}
@@ -258,7 +257,7 @@ export function LotPresetBar({
           }
           actionLabel="Delete"
           isPending={isPending}
-          error={<ErrorBubble>{error}</ErrorBubble>}
+          error={error}
           onConfirm={() => remove(dialog.preset)}
           onClose={close}
         />

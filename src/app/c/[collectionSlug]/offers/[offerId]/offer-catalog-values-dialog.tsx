@@ -9,7 +9,6 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -569,24 +568,21 @@ function CatalogValuesGrid({
           </tbody>
         </table>
       </DialogBody>
-      <DialogFooter>
+      <DialogFooter error={error}>
         <DialogSecondaryButton onClick={onClose} disabled={isSaving}>
           Cancel
         </DialogSecondaryButton>
-        <div style={{ position: "relative" }}>
-          <ErrorBubble>{error}</ErrorBubble>
-          <DialogPrimaryButton
-            ref={saveRef}
-            type="submit"
-            disabled={isSaving || changed.length === 0}
-          >
-            {isSaving
-              ? "Saving…"
-              : changed.length === 0
-                ? "Save"
-                : `Save ${changed.length} ${changed.length === 1 ? "stamp" : "stamps"}`}
-          </DialogPrimaryButton>
-        </div>
+        <DialogPrimaryButton
+          ref={saveRef}
+          type="submit"
+          disabled={isSaving || changed.length === 0}
+        >
+          {isSaving
+            ? "Saving…"
+            : changed.length === 0
+              ? "Save"
+              : `Save ${changed.length} ${changed.length === 1 ? "stamp" : "stamps"}`}
+        </DialogPrimaryButton>
       </DialogFooter>
     </form>
   );

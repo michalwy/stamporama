@@ -8,7 +8,7 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  ErrorBubble,
+  DialogError,
 } from "@/app/dialog-shell";
 import type { ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -244,7 +244,7 @@ export function ChooseSetDialog({
           </p>
         )}
 
-        {error && <ErrorBubble>{error}</ErrorBubble>}
+        {error && <DialogError style={{ marginTop: "0.75rem" }}>{error}</DialogError>}
       </DialogBody>
 
       <DialogFooter>

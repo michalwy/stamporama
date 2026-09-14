@@ -6,7 +6,6 @@ import {
   DialogShell,
   DialogFooter,
   DialogSecondaryButton,
-  ErrorBubble,
 } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -437,13 +436,12 @@ export function TradeCandidatesDialog({
         )}
       </div>
 
-      <DialogFooter>
-        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <DialogFooter error={error}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
             Swapping stays inside this list, so no figure on the trade moves. Held back here, and
             here only — the copy stays available to every other trade.
           </span>
-          <ErrorBubble>{error}</ErrorBubble>
           <DialogSecondaryButton onClick={onClose} disabled={isPending}>
             Done
           </DialogSecondaryButton>

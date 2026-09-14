@@ -230,20 +230,35 @@ export function DialogBody({ children }: { children: ReactNode }) {
   );
 }
 
-export function DialogFooter({ children }: { children: ReactNode }) {
+/**
+ * The dialog's footer: its buttons, and — above them — why the last action failed (#1293).
+ *
+ * The failure is a row **of the footer** rather than a bubble floating over the button it belongs to:
+ * a bubble cannot wrap without covering the body above it, and one that does not wrap ran off the
+ * dialog's edge and was cut off at exactly the moment its sentence was the one worth reading. Every
+ * dialog that reports a failure passes it here (or through `DialogActions`), so they all show it
+ * the same way.
+ */
+export function DialogFooter({ children, error }: { children: ReactNode; error?: ReactNode }) {
   return (
     <div
       style={{
         flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "flex-end",
-        gap: "0.75rem",
         padding: "1rem 1.5rem",
         borderTop: "1px solid var(--color-border)",
       }}
     >
-      {children}
+      {error ? <DialogError style={{ marginBottom: "0.75rem" }}>{error}</DialogError> : null}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: "0.75rem",
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -427,7 +442,7 @@ export function DialogActions({
   // was a bare `margin-right: auto` and its content sat in the same run as the buttons.
   const ActionButton = variant === "destructive" ? DialogDestructiveButton : DialogPrimaryButton;
   return (
-    <DialogFooter>
+    <DialogFooter error={error}>
       {leading != null && (
         <div
           style={{
@@ -445,17 +460,14 @@ export function DialogActions({
         <DialogSecondaryButton onClick={onCancel} disabled={cancelDisabled ?? disabled}>
           {cancelLabel}
         </DialogSecondaryButton>
-        <div style={{ position: "relative" }}>
-          <ErrorBubble>{error}</ErrorBubble>
-          <ActionButton
-            ref={actionRef}
-            type={onAction ? "button" : "submit"}
-            onClick={onAction}
-            disabled={disabled}
-          >
-            {actionLabel}
-          </ActionButton>
-        </div>
+        <ActionButton
+          ref={actionRef}
+          type={onAction ? "button" : "submit"}
+          onClick={onAction}
+          disabled={disabled}
+        >
+          {actionLabel}
+        </ActionButton>
       </div>
     </DialogFooter>
   );
@@ -545,27 +557,33 @@ export function ConfirmDialog({
   );
 }
 
-export function ErrorBubble({ children }: { children?: ReactNode }) {
+/**
+ * A failure, as a block in the layout where it stands (#1293) — it wraps to the width it is given and
+ * covers nothing. In a footer, pass the message to `DialogFooter`/`DialogActions` rather than placing
+ * this by hand; inside a body, render it where the failure belongs.
+ */
+export function DialogError({
+  children,
+  style,
+}: {
+  children?: ReactNode;
+  style?: React.CSSProperties;
+}) {
   if (!children) return null;
   return (
     <div
+      role="alert"
       style={{
-        position: "absolute",
-        bottom: "100%",
-        right: 0,
-        marginBottom: "0.5rem",
-        padding: "0.25rem 0.5rem",
-        background: "var(--color-bg-elevated)",
+        padding: "0.375rem 0.625rem",
+        background: "var(--color-error-soft)",
         border: "1px solid var(--color-error-border)",
         borderRadius: "0.375rem",
         color: "var(--color-error)",
-        fontSize: "0.75rem",
+        fontSize: "0.8125rem",
         fontWeight: 500,
-        whiteSpace: "nowrap",
-        maxWidth: "16rem",
-        boxShadow: "0 2px 8px rgb(0 0 0 / 0.1)",
-        pointerEvents: "none",
-        zIndex: 1,
+        lineHeight: 1.45,
+        overflowWrap: "anywhere",
+        ...style,
       }}
     >
       {children}
