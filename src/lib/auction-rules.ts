@@ -116,7 +116,7 @@ export function isAuctionSaleStatus(value: string): value is AuctionSaleStatus {
  * - `fresh` — checked recently enough for how soon it closes.
  * - `stale` — the observation is old relative to the time left.
  * - `unchecked` — never checked at all, so there is no observation to trust.
- * - `closed` — `endsAt` has passed while the lot is still `watching`: the outcome is what is
+ * - `closed` — `endsAt` has passed while the lot is still `open`: the outcome is what is
  *   missing now, not the bid. It ranks above `stale` because it is the only one that will never
  *   fix itself.
  */
