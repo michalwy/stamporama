@@ -227,14 +227,15 @@ async function handle(
 }
 
 async function captureLot(
-  lot: Parameters<typeof callCapture>[1],
+  module: string,
+  lot: Parameters<typeof callCapture>[2],
   dryRun: boolean
 ): Promise<CaptureSaveResponse> {
   const profile = await getActiveProfile();
   if (!profile) {
     return { ok: false, error: "No active profile. Set one in the extension options." };
   }
-  return callCapture(profile, lot, dryRun);
+  return callCapture(profile, module, lot, dryRun);
 }
 
 /**
@@ -359,7 +360,7 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // handoff, nothing about a marketplace page says which collection it belongs to — so it is answered
   // here rather than in `handle`, which is shaped around the matcher's own two calls.
   if (msg?.type === "capture-save") {
-    captureLot(msg.lot, msg.dryRun)
+    captureLot(msg.module, msg.lot, msg.dryRun)
       .then(sendResponse)
       .catch((e) =>
         sendResponse({

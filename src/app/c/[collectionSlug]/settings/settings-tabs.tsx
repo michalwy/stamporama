@@ -26,6 +26,7 @@ import { AllegroCategoriesPanel } from "./allegro-categories-panel";
 import { DelcampePlatformPanel } from "./delcampe-platform-panel";
 import { DelcampeProfilesPanel } from "./delcampe-profiles-panel";
 import { DelcampeCategoriesPanel } from "./delcampe-categories-panel";
+import { PhilasearchPlatformPanel } from "./philasearch-platform-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
@@ -118,6 +119,8 @@ interface SettingsTabsProps {
   delcampePlatformId: string | null;
   delcampeListingProfiles: DelcampeListingProfileList;
   delcampeLearnedCategories: DelcampeLearnedCategoryList;
+  /** Which platform is Philasearch (#742) — the setting a lot captured from its pages rides on. */
+  philasearchPlatformId: string | null;
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
@@ -180,6 +183,8 @@ const TABS = [
   // Beside Allegro, and asking the same first question: which platform is this marketplace. Its own
   // tab rather than a section of Allegro's — they are two marketplaces, set up in two sittings.
   { key: "delcampe", label: "Delcampe" },
+  // The same first question once more (#742), for a marketplace this collection only bids on.
+  { key: "philasearch", label: "Philasearch" },
   { key: "assistant", label: "Assistant" },
 ] as const;
 
@@ -235,6 +240,7 @@ export function SettingsTabs({
   delcampePlatformId,
   delcampeListingProfiles,
   delcampeLearnedCategories,
+  philasearchPlatformId,
   platformContacts,
   initialAssistantTokens,
   itemNoPad,
@@ -271,6 +277,7 @@ export function SettingsTabs({
     rawTab === "colnect" ||
     rawTab === "allegro" ||
     rawTab === "delcampe" ||
+    rawTab === "philasearch" ||
     rawTab === "assistant"
       ? rawTab
       : "general";
@@ -613,6 +620,17 @@ export function SettingsTabs({
               to say how current Delcampe's own category list is. */}
           <h2 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Categories</h2>
           <DelcampeCategoriesPanel list={delcampeLearnedCategories} />
+        </section>
+      )}
+      {activeTab === "philasearch" && (
+        <section>
+          {/* The whole tab (#742): a marketplace this collection only bids on needs nothing else. */}
+          <h2 style={sectionHeadingStyle}>Philasearch platform</h2>
+          <PhilasearchPlatformPanel
+            collectionId={collectionId}
+            platforms={platformContacts}
+            selectedId={philasearchPlatformId}
+          />
         </section>
       )}
       {activeTab === "assistant" && (

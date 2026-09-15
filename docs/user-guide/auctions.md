@@ -89,6 +89,11 @@ listing again refreshes its bid rather than making a second lot.
 It needs one setting first — **Settings → Allegro**, naming which of your platforms *is* Allegro —
 and it never reads the lot's contents: what a lot holds is still entered here, on the lot itself.
 
+On **Philasearch** the same click reads a house's lot: the house as the seller, the house's sale as
+the parcel, its lot number, closing time, opening figure and — once you have bid — your own bid. See
+[Capturing a Philasearch lot](assistant.md#capturing-a-philasearch-lot); it needs **Settings →
+Philasearch** set first.
+
 Going the other way, an auction you are already tracking shows a card in the corner of the Allegro
 page [naming its lot](assistant.md#auctions-you-are-already-bidding-on) and linking back to it — so
 you can see your ceiling before you bid, and tell at a glance whether the icon would capture a new

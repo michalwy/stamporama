@@ -24,4 +24,9 @@ export interface CaptureOutcome {
   platformName: string;
   /** What the lot carried before a refresh, so the window can say whether the price moved. */
   previousBid: string | null;
+  /** The collector's own bid the lot carried before a refresh (#742). */
+  previousMyBid: string | null;
+  /** Which figures a refresh writes (#742): a standing bid where the marketplace states one, the
+   *  collector's own where it states that. Empty on `created`, and on a refresh with nothing to say. */
+  refreshes: ("currentBid" | "myBid")[];
 }

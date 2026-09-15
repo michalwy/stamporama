@@ -121,7 +121,7 @@
           <input id="title" type="text" autocomplete="off" />
         </div>
         <div class="field">
-          <label for="lotNo">Lot no<span class="hint">the marketplace's own number for this listing</span></label>
+          <label for="lotNo">Lot no<span class="hint">the number the listing is quoted by</span></label>
           <input id="lotNo" type="text" autocomplete="off" />
         </div>
         <div class="field">
@@ -133,9 +133,13 @@
           <input id="endsAt" type="datetime-local" step="1" />
         </div>
         <div class="pair">
-          <div class="field">
+          <div class="field" id="currentBidField">
             <label for="currentBid">Current bid<span class="hint" id="bidHint"></span></label>
             <input id="currentBid" type="text" inputmode="decimal" autocomplete="off" />
+          </div>
+          <div class="field" id="myBidField" hidden>
+            <label for="myBid">My bid<span class="hint" id="myBidHint"></span></label>
+            <input id="myBid" type="text" inputmode="decimal" autocomplete="off" />
           </div>
           <div class="field">
             <label for="startingPrice">Opening price</label>

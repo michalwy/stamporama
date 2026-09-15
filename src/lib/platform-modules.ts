@@ -44,6 +44,74 @@ export const ALLEGRO_PLATFORM_MODULE = "allegro";
 export const DELCAMPE_PLATFORM_MODULE = "delcampe";
 
 /**
+ * The same, for Philasearch (#742).
+ *
+ * Like Allegro's before its listing half, a marker for **capture alone**: it names the platform an
+ * auction lot captured from a philasearch.com page belongs to. Philasearch lists houses' sales, so the
+ * lot's seller is the house and the platform is Philasearch — the split ADR-0021 was drawn around.
+ */
+export const PHILASEARCH_PLATFORM_MODULE = "philasearch";
+
+/**
+ * How one marketplace's captured lots are recognised, refreshed and grouped (#742).
+ *
+ * The capture path (#355) was written for Allegro, where a listing is a lot on a marketplace basket:
+ * the offer number is the lot's number, the page states the price the auction stands at, and the
+ * parcel is whatever the seller has open. An aggregator of auction houses answers all three the
+ * other way — the lot number is the house's, the page shows the collector's own written bid and never
+ * a standing one, and the parcel is the house's sale, which the page names. So the three are stated
+ * per module, and the capture asks only what the entry claims — the listing rules' own arrangement.
+ */
+export interface CaptureModuleRules {
+  /** The marketplace by name, for the refusal that says it is not set up. */
+  name: string;
+  /** Where the collector names which platform this is. */
+  settingsLocation: string;
+  /**
+   * Whether the lot's own number **is** the listing's id. True on Allegro, whose offer number is the
+   * only number a listing has, so a lot typed in by hand with just that number is recognised. False
+   * on Philasearch, where it is the house's `Lot 1` — present in every sale there is, and no identity.
+   */
+  lotNoIsListingId: boolean;
+  /** Whether the page states the price the lot stands at, so a re-capture re-records `currentBid`. */
+  observesCurrentBid: boolean;
+  /** Whether the page states the collector's own bid, so a capture writes `myBid` when it does. */
+  readsMyBid: boolean;
+  /**
+   * Whether the parcel is **the sale the page names** rather than the seller's open basket (#352). A
+   * house's 66th and 67th auctions are two settlements, and a lot from the 67th must not join a 66th
+   * still waiting for its invoice — so the open sale is matched on its name, and a new one is named
+   * after the page.
+   */
+  parcelIsNamedSale: boolean;
+}
+
+const CAPTURE_MODULE_RULES: Record<string, CaptureModuleRules> = {
+  [ALLEGRO_PLATFORM_MODULE]: {
+    name: "Allegro",
+    settingsLocation: "Settings → Allegro",
+    lotNoIsListingId: true,
+    observesCurrentBid: true,
+    readsMyBid: false,
+    parcelIsNamedSale: false,
+  },
+  [PHILASEARCH_PLATFORM_MODULE]: {
+    name: "Philasearch",
+    settingsLocation: "Settings → Philasearch",
+    lotNoIsListingId: false,
+    observesCurrentBid: false,
+    readsMyBid: true,
+    parcelIsNamedSale: true,
+  },
+};
+
+/** The capture rules of `module`, or null when nothing here captures lots from it. */
+export function captureModuleRules(module: string | null | undefined): CaptureModuleRules | null {
+  if (!module) return null;
+  return CAPTURE_MODULE_RULES[module] ?? null;
+}
+
+/**
  * What one module's sale form asks of an offer before it can be filled (#493).
  *
  * The listing preconditions (#406) were written while Colnect was the only module that could list,

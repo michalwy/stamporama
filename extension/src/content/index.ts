@@ -590,7 +590,13 @@ if (!window.__stamporamaAssistantLoaded) {
         const result = module.capture.capture(document, location.href);
         sendResponse(
           result.ok
-            ? { ok: true, moduleId: module.id, moduleName: module.name, lot: result.lot }
+            ? {
+                ok: true,
+                moduleId: module.id,
+                moduleName: module.name,
+                lot: result.lot,
+                figures: module.capture.figures,
+              }
             : { ok: false, error: result.message, reason: result.reason, message: result.message }
         );
       } catch (e) {

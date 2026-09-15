@@ -190,6 +190,10 @@ export function captureAllegroLot(doc: Document, url: string): CaptureResult {
     endsAt: endingDate,
     startingPrice: bidderCount ? null : amount,
     currentBid: bidderCount ? amount : null,
+    // Allegro shows a bidder nothing of their own bid in the page's data, and a marketplace basket
+    // has no sale name of its own — the parcel is the seller's open sale (#352).
+    myBid: null,
+    saleName: null,
     currency,
     bidderCount,
   };

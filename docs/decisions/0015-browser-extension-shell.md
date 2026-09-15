@@ -81,6 +81,13 @@ that answer is a `Contact` of a collection the marketplace knows nothing about. 
 Allegro is one setting on its own Settings tab (`Contact.platformModule`, the same marker #406 uses),
 because it is the one fact a listing page cannot state.
 
+**A second capture module, and the captured shape grows two fields (#742).** Philasearch carries
+capture alone as Allegro once did. Its pages state the collector's **own** bid and the **name of the
+house's sale**, so the captured shape gains `myBid` and `saleName`, each null wherever a page does not
+say; the capture half declares which bids its pages state (`figures`), so the window offers only
+those fields; and the save names the `module`, because how a marketplace's lots are recognised,
+refreshed and grouped is now a per-module rule on the server (ADR-0021 §8, amended).
+
 **Bearer token auth (`AssistantToken`).** A per-collection token authenticates the extension. It is
 stored only as a SHA-256 hash, authorizes as the collection's owner for that one collection, and is
 accepted by the matcher endpoints alongside a session via `resolveCollectionOwner` (session wins;

@@ -4,6 +4,8 @@ import {
   ALLEGRO_PLATFORM_MODULE,
   COLNECT_PLATFORM_MODULE,
   DELCAMPE_PLATFORM_MODULE,
+  PHILASEARCH_PLATFORM_MODULE,
+  captureModuleRules,
   hasListingModule,
   listingModuleRules,
   supportsAssistantClose,
@@ -53,5 +55,38 @@ describe("supportsAssistantClose (#729)", () => {
     assert.equal(supportsAssistantClose(ALLEGRO_PLATFORM_MODULE), false);
     assert.equal(supportsAssistantClose(DELCAMPE_PLATFORM_MODULE), false);
     assert.equal(supportsAssistantClose(null), false);
+  });
+});
+
+describe("captureModuleRules (#742)", () => {
+  it("keeps Allegro's capture exactly as #355 wrote it", () => {
+    const rules = captureModuleRules(ALLEGRO_PLATFORM_MODULE);
+    assert.ok(rules);
+    assert.equal(rules.lotNoIsListingId, true);
+    assert.equal(rules.observesCurrentBid, true);
+    assert.equal(rules.readsMyBid, false);
+    assert.equal(rules.parcelIsNamedSale, false);
+    assert.equal(rules.settingsLocation, "Settings → Allegro");
+  });
+
+  it("answers every one of the three the other way for a house aggregator", () => {
+    // The house's `Lot 1` is in every sale; the page shows the collector's own written bid and never a
+    // standing one; and the parcel is the house's sale the page names.
+    const rules = captureModuleRules(PHILASEARCH_PLATFORM_MODULE);
+    assert.ok(rules);
+    assert.equal(rules.lotNoIsListingId, false);
+    assert.equal(rules.observesCurrentBid, false);
+    assert.equal(rules.readsMyBid, true);
+    assert.equal(rules.parcelIsNamedSale, true);
+    assert.equal(rules.settingsLocation, "Settings → Philasearch");
+  });
+
+  it("answers null for a marketplace nothing here captures from", () => {
+    // Colnect and Delcampe are modules of their own and capture nothing; an absent module is not
+    // silently Allegro either.
+    assert.equal(captureModuleRules(COLNECT_PLATFORM_MODULE), null);
+    assert.equal(captureModuleRules(DELCAMPE_PLATFORM_MODULE), null);
+    assert.equal(captureModuleRules(null), null);
+    assert.equal(captureModuleRules(""), null);
   });
 });

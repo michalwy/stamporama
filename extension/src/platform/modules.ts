@@ -2,6 +2,7 @@ import { registerPlatformModule } from "./registry";
 import { colnectModule } from "./colnect";
 import { allegroModule } from "./allegro";
 import { delcampeModule } from "./delcampe";
+import { philasearchModule } from "./philasearch";
 
 // Single place listing the platform modules the extension ships. Importing this module registers
 // them (registration is idempotent by id), so both the content script and the popup — separate
@@ -9,5 +10,6 @@ import { delcampeModule } from "./delcampe";
 registerPlatformModule(colnectModule);
 registerPlatformModule(allegroModule);
 registerPlatformModule(delcampeModule);
+registerPlatformModule(philasearchModule);
 
 export { findCaptureModuleForUrl, findModuleForUrl, findOrdersModuleForUrl } from "./registry";

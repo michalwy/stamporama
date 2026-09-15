@@ -10,8 +10,10 @@ import type {
   CaptureSaveRequest,
   CaptureSaveResponse,
 } from "../core/messages";
-import type { CapturedLot } from "../platform/capture";
+import type { CapturedLot, PlatformCapture } from "../platform/capture";
 import type { CaptureOutcome } from "../core/capture";
+
+type CaptureFigures = PlatformCapture["figures"];
 
 // The **capture window** (#355): one auction listing, read off the page it is on, reviewed, and
 // written into the watchlist.
@@ -38,8 +40,12 @@ const lotNoEl = $<HTMLInputElement>("lotNo");
 const sellerEl = $<HTMLInputElement>("seller");
 const endsAtEl = $<HTMLInputElement>("endsAt");
 const endsAtHint = $("endsAtHint");
+const bidField = $("currentBidField");
 const bidEl = $<HTMLInputElement>("currentBid");
 const bidHint = $("bidHint");
+const myBidField = $("myBidField");
+const myBidEl = $<HTMLInputElement>("myBid");
+const myBidHint = $("myBidHint");
 const startEl = $<HTMLInputElement>("startingPrice");
 const planEl = $("plan");
 const planHead = $("planHead");
@@ -52,6 +58,9 @@ let profile: Profile | null = null;
 /** The lot as the page stated it. The form edits a copy; this is kept only for the offer id and the
  *  URL, which are the listing's identity and are not the collector's to retype. */
 let captured: CapturedLot | null = null;
+/** The module that read the page (#742) — sent with every save, since the instance's answer to
+ *  which platform, which parcel and which lot all depends on which marketplace this is. */
+let capturedModule: string | null = null;
 let busy = false;
 /** Bumped on every preview, so a slower one cannot overwrite a newer answer. */
 let previewGeneration = 0;
@@ -141,6 +150,7 @@ function localInputToIso(value: string): string {
 
 async function readPage(): Promise<void> {
   captured = null;
+  capturedModule = null;
   formEl.hidden = true;
   hidePlan();
   setStatus("");
@@ -165,28 +175,39 @@ async function readPage(): Promise<void> {
       return;
     }
     captured = res.lot;
-    fillForm(res.lot, res.moduleName);
+    capturedModule = res.moduleId;
+    fillForm(res.lot, res.moduleName, res.figures);
   } catch (e) {
     sourceEl.textContent = e instanceof Error ? e.message : String(e);
   }
   syncButtons();
 }
 
-function fillForm(lot: CapturedLot, moduleName: string): void {
+function fillForm(lot: CapturedLot, moduleName: string, figures: CaptureFigures): void {
   sourceEl.textContent = `${moduleName} · ${lot.url}`;
   titleEl.value = lot.title ?? "";
   lotNoEl.value = lot.lotNo ?? "";
   sellerEl.value = lot.sellerName ?? "";
   endsAtEl.value = isoToLocalInput(lot.endsAt);
   bidEl.value = lot.currentBid ?? "";
+  myBidEl.value = lot.myBid ?? "";
   startEl.value = lot.startingPrice ?? "";
   endsAtHint.textContent = "";
+  // Only the bids this marketplace's pages state (#742). An empty *Current bid* on a house's lot would
+  // read as a figure the Assistant failed to find, when the house simply never shows one.
+  bidField.hidden = !figures.currentBid;
+  myBidField.hidden = !figures.myBid;
   // Why the figure landed where it did. Without this, a lot nobody has bid on looks like a lot whose
   // bid the Assistant failed to read.
   bidHint.textContent = lot.currency
     ? lot.bidderCount
       ? `${lot.currency} · ${lot.bidderCount} bidding`
       : `${lot.currency} · no bids yet`
+    : "";
+  myBidHint.textContent = lot.currency
+    ? lot.myBid
+      ? `${lot.currency} · as placed`
+      : `${lot.currency} · not bid yet`
     : "";
   formEl.hidden = false;
   void preview();
@@ -203,17 +224,31 @@ function showPlan(result: CaptureOutcome): void {
   planEl.hidden = false;
   planEl.className = `plan ${refreshed ? "refresh" : "new"}`;
   planHead.textContent = refreshed
-    ? "Already watched — the bid will be refreshed"
+    ? refreshHeadline(result)
     : result.saleCreated
       ? `New parcel: ${result.saleName}`
       : `Joins the open parcel: ${result.saleName}`;
   const parts = [`${result.platformName} · ${result.saleCurrency}`];
   if (refreshed) {
-    parts.push(result.previousBid ? `currently recorded at ${result.previousBid}` : "no bid recorded yet");
+    if (result.refreshes.includes("currentBid")) {
+      parts.push(result.previousBid ? `currently recorded at ${result.previousBid}` : "no bid recorded yet");
+    }
+    if (result.refreshes.includes("myBid")) {
+      parts.push(result.previousMyBid ? `your bid recorded at ${result.previousMyBid}` : "no bid of yours recorded yet");
+    }
+    if (result.refreshes.length === 0) parts.push(result.saleName);
   } else {
     parts.push(result.sellerCreated ? `new seller: ${result.sellerName}` : `seller: ${result.sellerName}`);
   }
   planLine.textContent = parts.join(" · ");
+}
+
+/** What re-capturing a watched lot does, in the words of what it writes (#742): Allegro's standing
+ *  bid, a house lot's bid of the collector's own, or — a house lot not bid on yet — nothing at all. */
+function refreshHeadline(result: CaptureOutcome): string {
+  if (result.refreshes.includes("currentBid")) return "Already watched — the bid will be refreshed";
+  if (result.refreshes.includes("myBid")) return "Already watched — your bid will be updated";
+  return "Already watched — nothing on this page changes the lot";
 }
 
 function showBlocked(error: string): void {
@@ -226,9 +261,9 @@ function showBlocked(error: string): void {
 /** Ask the instance what a save would do. Re-asked whenever the seller changes, because the seller is
  *  what decides the parcel — and the answer is the whole reason to look before saving. */
 async function preview(): Promise<void> {
-  if (!captured || !profile) return;
+  if (!captured || !capturedModule || !profile) return;
   const generation = ++previewGeneration;
-  const res = await send({ type: "capture-save", lot: currentLot(), dryRun: true });
+  const res = await send({ type: "capture-save", module: capturedModule, lot: currentLot(), dryRun: true });
   if (generation !== previewGeneration) return;
   if (res.ok) showPlan(res.result);
   else showBlocked(res.error);
@@ -245,6 +280,7 @@ function currentLot(): CapturedLot {
     sellerName: sellerEl.value.trim() || null,
     endsAt: localInputToIso(endsAtEl.value) || lot.endsAt,
     currentBid: bidEl.value.trim() || null,
+    myBid: myBidEl.value.trim() || null,
     startingPrice: startEl.value.trim() || null,
   };
 }
@@ -275,12 +311,12 @@ formEl.addEventListener("submit", (e) => {
  * the corrections that were typed into it.
  */
 async function save(): Promise<void> {
-  if (!captured || !profile || busy) return;
+  if (!captured || !capturedModule || !profile || busy) return;
   busy = true;
   syncButtons();
   setStatus("Saving…");
 
-  const res = await send({ type: "capture-save", lot: currentLot(), dryRun: false });
+  const res = await send({ type: "capture-save", module: capturedModule, lot: currentLot(), dryRun: false });
   busy = false;
   if (!res.ok) {
     setStatus(res.error, "err");
@@ -292,7 +328,7 @@ async function save(): Promise<void> {
   showPlan(res.result);
   setStatus(
     res.result.outcome === "refreshed"
-      ? `Bid refreshed on the lot in ${res.result.saleName}.`
+      ? `Lot in ${res.result.saleName} brought up to date.`
       : `Lot added to ${res.result.saleName}. Describe what it holds in Stamporama.`,
     "ok"
   );
@@ -305,6 +341,7 @@ async function save(): Promise<void> {
 
 recheckBtn.addEventListener("click", () => void readPage());
 sellerEl.addEventListener("change", () => void preview());
+myBidEl.addEventListener("change", () => void preview());
 
 // Escape closes the window, exactly as it does in the match window: this has no address bar and no
 // close keystroke of its own worth reaching for, and it is opened from a listing the collector is
