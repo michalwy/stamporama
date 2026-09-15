@@ -17,10 +17,7 @@ import {
 import type { CollectionAreaData, AreaCatalogEntry } from "@/lib/areas";
 import type { CatalogNameFlat } from "@/lib/catalog";
 import { effectivePrimaryVendorId, effectiveVendorsForArea } from "@/lib/area-vendor";
-import {
-  resolveEffectiveCatalogPrefix,
-  type AreaInheritedValues,
-} from "@/lib/area-inheritance";
+import { resolveEffectiveCatalogPrefix } from "@/lib/area-inheritance";
 import {
   AddAreaDialog,
   AREA_FORM_STYLE,
@@ -56,7 +53,7 @@ interface AreasPanelProps {
 type DialogState =
   | { kind: "none" }
   | { kind: "add-area"; defaultParentId?: string }
-  | ({ kind: "edit-area"; area: CollectionAreaData } & AreaInheritedValues)
+  | { kind: "edit-area"; area: CollectionAreaData }
   | { kind: "delete-area"; area: CollectionAreaData }
   | { kind: "format-factors"; area: CollectionAreaData };
 
@@ -181,12 +178,6 @@ export function AreasPanel({
 
   const flatTree = useMemo(() => buildFlatTree(initialAreas), [initialAreas]);
 
-  const nodeByAreaId = useMemo(() => {
-    const m = new Map<string, TreeNode>();
-    for (const node of flatTree) m.set(node.area.id, node);
-    return m;
-  }, [flatTree]);
-
   // Ids of areas that have at least one child (only these get an expand/collapse toggle).
   const parentIds = useMemo(() => {
     const set = new Set<string>();
@@ -277,24 +268,6 @@ export function AreasPanel({
       setActionState(result);
       if (result.status === "success") router.refresh();
     });
-  }
-
-  function inheritedValuesFor(parentId: string | undefined | null): AreaInheritedValues {
-    if (!parentId) {
-      return {
-        inheritedPrimaryId: null,
-        inheritedPrimaryVendorId: null,
-        inheritedCatalogPrefix: null,
-        inheritedPrefixes: [],
-      };
-    }
-    const node = nodeByAreaId.get(parentId);
-    return {
-      inheritedPrimaryId: node?.effectivePrimaryCatalogNameId ?? null,
-      inheritedPrimaryVendorId: node?.effectivePrimaryVendorId ?? null,
-      inheritedCatalogPrefix: node?.effectiveCatalogPrefix ?? null,
-      inheritedPrefixes: node?.effectivePrefixEntries ?? [],
-    };
   }
 
   function openDialog(d: DialogState) {
@@ -682,8 +655,7 @@ export function AreasPanel({
                       key: "edit",
                       label: "Edit",
                       icon: "edit",
-                      onSelect: () =>
-                        openDialog({ kind: "edit-area", area, ...inheritedValuesFor(area.parentId) }),
+                      onSelect: () => openDialog({ kind: "edit-area", area }),
                     },
                     {
                       key: "format-multipliers",
@@ -755,10 +727,6 @@ export function AreasPanel({
                 defaultCatalogEntries={dialog.area.catalogEntries}
                 defaultVendorEntries={dialog.area.vendorEntries}
                 defaultAssignable={dialog.area.assignable}
-                inheritedPrimaryId={dialog.inheritedPrimaryId}
-                inheritedPrimaryVendorId={dialog.inheritedPrimaryVendorId}
-                inheritedCatalogPrefix={dialog.inheritedCatalogPrefix}
-                inheritedPrefixes={dialog.inheritedPrefixes}
                 areas={initialAreas}
                 currentAreaId={dialog.area.id}
                 catalogNames={catalogNames}

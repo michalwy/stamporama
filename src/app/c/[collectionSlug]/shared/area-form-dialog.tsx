@@ -12,7 +12,7 @@ import {
   type AreaActionState,
 } from "@/app/actions/areas";
 import type { CollectionAreaData, AreaCatalogEntry, AreaVendorEntry } from "@/lib/areas";
-import { resolveInheritedAreaValues, type AreaInheritedValues } from "@/lib/area-inheritance";
+import { resolveInheritedAreaValues } from "@/lib/area-inheritance";
 import { languageLabel } from "@/lib/languages";
 import {
   fillTranslationValues,
@@ -133,12 +133,8 @@ interface CollectionAreaFormProps {
   defaultCatalogEntries?: AreaCatalogEntry[];
   defaultVendorEntries?: AreaVendorEntry[];
   defaultAssignable?: boolean;
-  inheritedPrimaryId: string | null;
-  /** What the parent chain already answers, so every field on this form can show its inherited
-   * value as a placeholder rather than copying it in (#377's idiom, #675). */
-  inheritedPrimaryVendorId: string | null;
-  inheritedCatalogPrefix: string | null;
-  inheritedPrefixes: AreaCatalogEntry[];
+  /** Every area in the collection — the parent picker's tree, and the chain the inherited
+   *  placeholders are resolved off. */
   areas: CollectionAreaData[];
   currentAreaId?: string;
   catalogNames: CatalogNameFlat[];
@@ -166,10 +162,6 @@ export function CollectionAreaForm({
   defaultCatalogEntries,
   defaultVendorEntries,
   defaultAssignable = true,
-  inheritedPrimaryId,
-  inheritedPrimaryVendorId,
-  inheritedCatalogPrefix,
-  inheritedPrefixes,
   areas,
   currentAreaId,
   catalogNames,
@@ -198,6 +190,13 @@ export function CollectionAreaForm({
   const selectableTree = useMemo(() => buildAreaTree(selectableAreas), [selectableAreas]);
 
   const [parentId, setParentId] = useState(defaultParentId ?? "");
+
+  // What the parent chain already answers, so every field on this form can show its inherited value
+  // as a placeholder rather than copying it in (#377's idiom, #675). Resolved off the parent chosen
+  // in the picker, not the one the dialog opened on (#954): a placeholder claims "this is what you
+  // inherit", and one left over from the previous parent is believed.
+  const { inheritedPrimaryId, inheritedPrimaryVendorId, inheritedCatalogPrefix, inheritedPrefixes } =
+    useMemo(() => resolveInheritedAreaValues(areas, parentId), [areas, parentId]);
 
   // Name and title name (#210) are edited together: the title name mirrors the name while the two
   // are equal (the common case — every area's title defaults to its own name), and stops mirroring
@@ -754,13 +753,6 @@ export function AddAreaDialog({
   // dialog must not close on Esc / backdrop click.
   const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
 
-  // Resolved once, from the parent the dialog opened on — the same reading the management panel
-  // took, and the reason it lives in `@/lib/area-inheritance` rather than in either opener.
-  const inherited: AreaInheritedValues = useMemo(
-    () => resolveInheritedAreaValues(areas, defaultParentId),
-    [areas, defaultParentId]
-  );
-
   function handleClose() {
     if (isPending) return;
     setNestedDialogOpen(false);
@@ -786,10 +778,6 @@ export function AddAreaDialog({
         <DialogBody>
           <CollectionAreaForm
             defaultParentId={defaultParentId}
-            inheritedPrimaryId={inherited.inheritedPrimaryId}
-            inheritedPrimaryVendorId={inherited.inheritedPrimaryVendorId}
-            inheritedCatalogPrefix={inherited.inheritedCatalogPrefix}
-            inheritedPrefixes={inherited.inheritedPrefixes}
             areas={areas}
             catalogNames={catalogNames}
             catalogVendors={catalogVendors}

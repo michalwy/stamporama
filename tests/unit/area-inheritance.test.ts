@@ -8,9 +8,9 @@ import {
 } from "../../src/lib/area-inheritance";
 
 // What a new area inherits from the parent it is created under (#776). The quick-add in the area
-// filter facet and the areas management screen now resolve this the same way, through this module —
-// the reason it is worth a test of its own is that the two openers reach it from different data:
-// the management panel from a tree it has already walked, the facet from nothing but the area list.
+// filter facet and the areas management screen resolve this the same way, through this module — and
+// since #954 the area form resolves it itself, off whichever parent its picker currently holds, so
+// every change of parent in the dialog is another call here.
 
 function area(
   id: string,
