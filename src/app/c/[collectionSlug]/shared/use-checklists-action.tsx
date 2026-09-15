@@ -293,7 +293,7 @@ export function ChecklistsDialog({
                         },
                         {
                           key: "apply-size-preset",
-                          label: "Apply size preset…",
+                          label: "Apply size…",
                           icon: "sizePreset",
                           onSelect: () => setApplyingPreset(checklist),
                         },

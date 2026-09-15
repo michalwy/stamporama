@@ -81,8 +81,10 @@ export class StampSizePresetPairTakenError extends Error {
  * that call for a form; this makes it for every other door into the module.
  */
 export class StampSizePresetFigureError extends Error {
-  constructor(field: "width" | "height") {
-    super(`The preset's ${field} must be a figure in millimetres between ${MIN_SIZE_MM} and ${MAX_SIZE_MM}.`);
+  /** `ofPreset` is false for a typed size applied without one (#1291), which has no preset to name. */
+  constructor(field: "width" | "height", ofPreset = true) {
+    const subject = ofPreset ? `The preset's ${field}` : `The ${field}`;
+    super(`${subject} must be a figure in millimetres between ${MIN_SIZE_MM} and ${MAX_SIZE_MM}.`);
     this.name = "StampSizePresetFigureError";
   }
 }
@@ -101,9 +103,9 @@ function formatPair(pair: StampSizePresetPair): string {
  * one saved from anywhere else comes through here. A figure the form refuses must not be a figure
  * this accepts, or the rule would depend on which screen the collector was standing on.
  */
-function normalizeFigure(mm: number, field: "width" | "height"): number {
-  if (!Number.isFinite(mm)) throw new StampSizePresetFigureError(field);
-  if (mm < MIN_SIZE_MM || mm > MAX_SIZE_MM) throw new StampSizePresetFigureError(field);
+function normalizeFigure(mm: number, field: "width" | "height", ofPreset = true): number {
+  if (!Number.isFinite(mm)) throw new StampSizePresetFigureError(field, ofPreset);
+  if (mm < MIN_SIZE_MM || mm > MAX_SIZE_MM) throw new StampSizePresetFigureError(field, ofPreset);
   return roundSizeMm(mm);
 }
 
@@ -111,10 +113,10 @@ function normalizeFigure(mm: number, field: "width" | "height"): number {
  *  in is what makes the value shown in the picker byte-for-byte the value that lands on the stamp:
  *  a figure carrying more precision, stored and quietly truncated by `Decimal(5, 1)`, would come
  *  back different from the one the collector accepted. */
-function normalizePair(input: StampSizePresetPair): StampSizePresetPair {
+function normalizePair(input: StampSizePresetPair, ofPreset = true): StampSizePresetPair {
   return {
-    widthMm: normalizeFigure(input.widthMm, "width"),
-    heightMm: normalizeFigure(input.heightMm, "height"),
+    widthMm: normalizeFigure(input.widthMm, "width", ofPreset),
+    heightMm: normalizeFigure(input.heightMm, "height", ofPreset),
   };
 }
 
@@ -344,14 +346,23 @@ export type StampSizePresetSubject =
   | { kind: "checklist"; checklistId: string }
   | { kind: "stamps"; stampIds: string[] };
 
-export interface ApplyStampSizePresetInput {
-  presetId: string;
+/** What an apply does with its pair, whichever way the pair was named. */
+interface ApplyStampSizeOptions {
   subject: StampSizePresetSubject;
   /** Whether stamps that already state a figure are written over. **Defaults to false**, and the
    *  dialog's checkbox is unchecked (ADR-0048 §6). */
   overwriteStated?: boolean;
   /** Count and report, write nothing. What the dialog calls before the collector commits. */
   preview?: boolean;
+}
+
+export interface ApplyStampSizePresetInput extends ApplyStampSizeOptions {
+  presetId: string;
+}
+
+/** A width × height typed into the apply dialog rather than chosen as a preset (#1291). */
+export interface ApplyStampSizeInput extends ApplyStampSizeOptions, StampSizePresetPair {
+  collectionId: string;
 }
 
 /**
@@ -494,7 +505,36 @@ export async function applyStampSizePreset(
     select: PRESET_SELECT,
   });
   const { widthMm, heightMm } = presetData(preset);
+  return applyPairToSubject(collectionId, { widthMm, heightMm }, input);
+}
 
+/**
+ * Writes a typed width × height onto a subject's stamps, or reports what it would write — the same
+ * apply as {@link applyStampSizePreset} for a size that occurs in one series and nowhere else, which
+ * the collector should not have to save as a preset just to use once (#1291).
+ *
+ * **It is the same write, not a second one.** The subject, the subtree, the skip-by-default and the
+ * counts all come from the one function below; the only thing that differs is where the two figures
+ * came from. The figures pass the preset's own gate — bounds, then rounding to `SIZE_DECIMALS` — so
+ * a pair typed here lands on the stamp exactly as the same pair saved as a preset would.
+ *
+ * **Nothing is saved as a preset on the way.** Keeping the typed pair was not asked for, and a preset
+ * nobody named would sit in the picker offering a size from one series to every other.
+ */
+export async function applyStampSize(
+  ownerId: string,
+  input: ApplyStampSizeInput
+): Promise<StampSizePresetApplyResult> {
+  await assertCollectionOwner(ownerId, input.collectionId);
+  const pair = normalizePair({ widthMm: input.widthMm, heightMm: input.heightMm }, false);
+  return applyPairToSubject(input.collectionId, pair, input);
+}
+
+async function applyPairToSubject(
+  collectionId: string,
+  { widthMm, heightMm }: StampSizePresetPair,
+  input: ApplyStampSizeOptions
+): Promise<StampSizePresetApplyResult> {
   const roots = await resolveSubjectRoots(collectionId, input.subject);
   const stampIds = await expandSubtree(collectionId, roots);
 
