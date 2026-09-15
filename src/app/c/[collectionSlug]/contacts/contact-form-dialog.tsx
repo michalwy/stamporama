@@ -623,8 +623,8 @@ export function ContactFormDialog({
                   />
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
                     In the platform&apos;s currency — the lowest figure worth listing here once its
-                    fees are paid. It fills nothing on its own: a <strong>Use minimum</strong> button
-                    beside an offer&apos;s price applies it when you want it.
+                    fees are paid. It fills nothing on its own: click <strong>min</strong> beside an
+                    offer&apos;s price to apply it when you want it.
                   </p>
                 </div>
 
