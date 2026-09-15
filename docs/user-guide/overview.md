@@ -23,7 +23,8 @@ the place where the detail lives. A tile with nothing behind it yet says what wo
   cost basis. It is every sale's own [profit and loss](sales.md#profit-and-loss) added up, so it
   counts the same copies the sale screens do: a sold copy with its cost pending, no cost recorded, no
   exchange rate or a share that cannot be split is left out of both the proceeds and the cost, and
-  counted on the tile. Opens the Sales list.
+  counted on the tile. Opens the [profit and loss screen](sales.md#the-profit-and-loss-screen),
+  which shows where the figure comes from.
 - **Purchase ROI** — how many purchase orders have already earned their cost back through sales,
   and how many are still outstanding. Opens the Purchases list.
 

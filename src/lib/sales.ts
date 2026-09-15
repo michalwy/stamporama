@@ -19,6 +19,7 @@ import {
   type SaleProfitLine,
   type UnitProfit,
 } from "./sale-profit";
+import { dateRangeBounds, type DateRange } from "./profit-and-loss-rules";
 import { sortSetItems } from "./offer-set-order";
 import {
   allocateEntityNumber,
@@ -2122,9 +2123,48 @@ export async function realizedProfit(
   collectionId: string,
   baseCurrency: string
 ): Promise<ProfitFigures> {
+  const rows = await listSaleProfitRows(collectionId, baseCurrency);
+  return sumProfitFigures(rows.map((row) => row.profit));
+}
+
+/** One sale and its own profit figure — a row of the profit and loss screen (#1305). */
+export interface SaleProfitRow {
+  id: string;
+  saleNo: number;
+  soldAt: Date;
+  platformId: string;
+  platformName: string;
+  buyerName: string | null;
+  /** The figure the sale's own screen shows (`SaleDetail.profit`), by the same `profitOfSales`. */
+  profit: ProfitFigures;
+}
+
+/**
+ * Every sale's own profit figure over a range of sale dates, newest first — the one read behind the
+ * Overview's realized figure and the profit and loss screen (#1305), so the two cannot disagree over
+ * the same scope. `page` narrows to one page of that order; catalogue weights are then loaded for
+ * that page alone.
+ *
+ * Ownership is the caller's to assert.
+ */
+export async function listSaleProfitRows(
+  collectionId: string,
+  baseCurrency: string,
+  range: DateRange = { from: null, to: null },
+  page?: { skip: number; take: number }
+): Promise<SaleProfitRow[]> {
+  const bounds = dateRangeBounds(range);
   const sales = await prisma.sale.findMany({
-    where: { collectionId },
+    where: { collectionId, ...(bounds.gte || bounds.lt ? { soldAt: bounds } : {}) },
+    orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }, { id: "asc" }],
+    ...(page ? { skip: page.skip, take: page.take } : {}),
     select: {
+      id: true,
+      saleNo: true,
+      soldAt: true,
+      platformId: true,
+      platform: { select: { name: true } },
+      buyer: { select: { name: true } },
       ...SALE_AMOUNTS_SELECT,
       lines: { select: { id: true, price: true, items: { select: SALE_PROFIT_COPY_SELECT } } },
     },
@@ -2139,7 +2179,19 @@ export async function realizedProfit(
       };
     })
   );
-  return sumProfitFigures(profits);
+  return sales.map((sale, i) => {
+    // The sale's figure without its per-unit breakdown, which only the sale screen draws.
+    const { copyCount, countedCount, leftOut, proceeds, cost, profit } = profits[i];
+    return {
+      id: sale.id,
+      saleNo: sale.saleNo,
+      soldAt: sale.soldAt,
+      platformId: sale.platformId,
+      platformName: sale.platform.name,
+      buyerName: sale.buyer?.name ?? null,
+      profit: { copyCount, countedCount, leftOut, proceeds, cost, profit },
+    };
+  });
 }
 
 /** How one copy left the collection — the sale it went out on, from the copy's own side (#517). */

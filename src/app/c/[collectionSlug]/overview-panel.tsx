@@ -234,7 +234,7 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
         )}
       </Tile>
 
-      <Tile href={`${base}/sales`} label="Realized profit and loss">
+      <Tile href={`${base}/sales/profit-and-loss`} label="Realized profit and loss">
         {realized.saleCount === 0 ? (
           <TileEmpty>Record a sale to see what the collection has returned.</TileEmpty>
         ) : (
