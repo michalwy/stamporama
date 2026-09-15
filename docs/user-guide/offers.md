@@ -183,24 +183,27 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    the [listing profile](delcampe.md#on-an-offer) its upload row is built from — the shipping model,
    the renewal setting and the bid step it will state.
 
-Next to the asking price the header shows a **suggested price** — the **average catalog value per
-set** (converted to the **offer's currency**), since an offer's price is per one set a buyer takes.
-**Use** applies it in one click — as the asking price on a quick buy, and as the **starting** price on
-an auction, for the reason [below](#auction-or-quick-buy). It's a starting point;
-price as you see fit.
+The asking price sits on one line with the two figures you weigh it against, in the order
+**min · suggested · price** — for example *min 0.05 · suggested 0.60 · no price yet*:
+
+- **min** is the platform's [minimum price](contacts.md) — the lowest figure that platform is worth
+  listing on once its fees are paid.
+- **suggested** is the **average catalog value per set** (converted to the **offer's currency**),
+  since an offer's price is per one set a buyer takes. It's a starting point; price as you see fit.
+
+**Click either figure** to set the price to it — the asking price on a quick buy, and the
+**starting** price on an auction, since that is the figure you state while the price beside it is
+wherever the bidding has got to (see [below](#auction-or-quick-buy)). Hovering one says what it is
+and what clicking does. A figure that already is your price is shown plain, and a figure that does not
+exist — no minimum set for the platform, or nothing to suggest from — is simply left out of the line.
+The minimum comes first on purpose: it is the price you fall back to, not the one being recommended,
+and it stays available even when the suggestion is already higher.
 
 On an auction that has no starting price yet, and on a platform with a
-[default starting price](contacts.md), the platform's own opening figure sits under it as
+[default starting price](contacts.md), the platform's own opening figure sits under the price line as
 **platform default**, and its **Use** fills the starting price with it. It is offered only while the
 starting price is empty: the default already filled that field when the offer was created, so once
 it holds a figure — the default's or your own — there is nothing left for it to answer.
-
-Under it, where the platform has a [minimum price](contacts.md) set, sits that floor — the lowest
-figure that platform is worth listing on once its fees are paid. **Use minimum** applies it in one
-click, to the asking price on a quick buy and to the **starting** price on an auction, since that is
-the figure you state while the price above it is wherever the bidding has got to. It reads *minimum*
-rather than *suggested* on purpose: it is the price you fall back to, not the one being recommended,
-so it appears below the suggestion and stays available even when the suggestion is already higher.
 Nothing is ever refused for being under it.
 
 When the offer's currency differs from your collection's base currency, the asking price also shows

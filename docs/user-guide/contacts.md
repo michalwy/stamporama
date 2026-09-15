@@ -83,12 +83,12 @@ platform once its own fees are paid, in the platform's currency. Unlike the star
 it applies whatever the listing type is, and it applies for the whole life of an offer rather than
 only at creation.
 
-It fills in nothing by itself. It is a figure you ask back for: **Use minimum** appears beside the
-price on an offer's own screen, and sets the price to it in one click. Nothing is ever refused for being under it either —
+It fills in nothing by itself. It is a figure you ask back for: it appears as **min** on the price
+line of an offer's own screen, and clicking it sets the price to it. Nothing is ever refused for being under it either —
 this is a floor you choose to drop to, not one the app holds you to, because clearing a lot at cost
 or giving something away is an ordinary thing to do.
 
-It is shown even when the suggested price above it is already higher, since a cheap common you mean
+It is shown even when the suggested price beside it is already higher, since a cheap common you mean
 to list at the floor is exactly what it was added for. Leave it empty for platforms with no such
 figure.
 

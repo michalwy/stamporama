@@ -123,8 +123,8 @@ const ASSISTANT_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** The quick-apply chip beside a figure the app is offering back — the catalog-value suggestion and
- * the platform's floor (#731). One shape, because they are one control asked twice. */
+/** The quick-apply chip beside the platform's opening figure (#362/#553). The catalog-value
+ * suggestion and the platform's floor (#731) are links on the price line instead (#1295). */
 const USE_BTN: React.CSSProperties = {
   fontSize: "0.6875rem",
   fontWeight: 600,
@@ -135,6 +135,64 @@ const USE_BTN: React.CSSProperties = {
   background: "var(--color-accent-soft)",
   cursor: "pointer",
 };
+
+const PRICE_LINE_SEPARATOR: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-text-muted)" };
+
+/** A figure the price is weighed against, on the price line (#1295): a short label, so three numbers
+ * in a row are not told apart by position alone, and the figure as a link that applies it. A figure
+ * that already *is* the stated price is drawn plain, since clicking it would change nothing. */
+function PriceFigureLink({
+  label,
+  figure,
+  about,
+  target,
+  applied,
+  disabled,
+  onApply,
+}: {
+  label: string;
+  figure: string;
+  /** What the figure is, for the hover hint. */
+  about: string;
+  /** The field it writes, as the hint names it: "price", or an auction's "starting price". */
+  target: string;
+  applied: boolean;
+  disabled: boolean;
+  onApply: () => void;
+}) {
+  const text = (
+    <>
+      <span style={{ color: "var(--color-text-muted)" }}>{label}</span> {figure}
+    </>
+  );
+  return (
+    <Tooltip
+      content={applied ? `${about} — already the ${target}` : `${about} — click to set the ${target} to it`}
+      align="end"
+    >
+      {applied ? (
+        <span style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}>{text}</span>
+      ) : (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onApply}
+          style={{
+            padding: 0,
+            background: "none",
+            border: "none",
+            fontSize: "0.75rem",
+            color: "var(--color-accent)",
+            cursor: "pointer",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {text}
+        </button>
+      )}
+    </Tooltip>
+  );
+}
 
 const QUICK_ADVANCE_BTN: React.CSSProperties = {
   display: "inline-flex",
@@ -373,6 +431,7 @@ export function OfferDetailPanel({
   // figure, its floor (#731) — is applied to, and compared against to decide whether applying it
   // would change anything.
   const askingPriceField = isAuctionListing(offer.listingType) ? "startingPrice" : "price";
+  const askingPriceNoun = isAuctionListing(offer.listingType) ? "starting price" : "price";
   const askingPrice = isAuctionListing(offer.listingType)
     ? offer.startingPrice
     : offer.price === "0.00"
@@ -891,37 +950,77 @@ export function OfferDetailPanel({
             onSave={(v) => patch("url", v)}
           />
 
-          {/* The price + its suggestion, stacked on the right so the two read as one unit. What the
-              figure is *called* follows the listing type (#449) — an auction's is where the bidding
-              stands, not something the seller asked for — but it is one field either way, and
-              editing it in place is how a bid is refreshed (#351's pattern: committing stamps the
-              check date shown below it). */}
+          {/* The price and the figures it is weighed against, stacked on the right so they read as
+              one unit. What the figure is *called* follows the listing type (#449) — an auction's is
+              where the bidding stands, not something the seller asked for — but it is one field
+              either way, and editing it in place is how a bid is refreshed (#351's pattern:
+              committing stamps the check date shown below it). */}
           <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.15rem" }}>
-            <span style={{ fontSize: "0.9375rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-              <Tooltip content={priceLabel(offer.listingType)} align="end">
-                <InlineText
-                  value={offer.price === "0.00" ? "" : offer.price}
-                  placeholder={isAuctionListing(offer.listingType) ? "Record a bid" : "Set price"}
-                  display={
-                    offer.price === "0.00" ? (
-                      <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem", cursor: "text" }}>
-                        {/* An unbid auction is not *unpriced* — it is up at its opening figure with
-                            nobody having bid, which is a different and perfectly normal thing (#449). */}
-                        {isAuctionListing(offer.listingType) ? "No bids yet" : "No price yet"}
-                      </span>
-                    ) : (
-                      <span style={{ cursor: "text" }}>{offer.price} {offer.currency}</span>
-                    )
-                  }
-                  editable={editable}
-                  isPending={isPending}
-                  inputType="amount"
-                  suffix={offer.currency}
-                  // A price is retyped whole, never amended in the middle (#329).
-                  selectOnEdit
-                  onSave={(v) => patch("price", v)}
-                />
-              </Tooltip>
+            {/* One line, weakest claim first (#1295): the platform's floor (#731), the catalog value
+                (#230), then the price itself — three numbers compared at a glance rather than a row
+                each. A figure that does not exist is left out, never drawn empty or as 0.00 (#1184).
+                Clicking either one writes the figure the seller **states** (`askingPriceField`),
+                never an auction's current price, which would be recording a bid nobody placed. */}
+            <span style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", flexWrap: "wrap", gap: "0.375rem", fontVariantNumeric: "tabular-nums" }}>
+              {editable && offer.platformMinimumPrice && offer.platformMinimumPrice !== "0.00" && (
+                <>
+                  <PriceFigureLink
+                    label="min"
+                    figure={offer.platformMinimumPrice}
+                    about={`The lowest ${offer.platformName} is worth listing on, set on the platform`}
+                    target={askingPriceNoun}
+                    applied={askingPrice === offer.platformMinimumPrice}
+                    disabled={isPending}
+                    onApply={() => patch(askingPriceField, offer.platformMinimumPrice!)}
+                  />
+                  <span style={PRICE_LINE_SEPARATOR}>·</span>
+                </>
+              )}
+              {editable && offer.suggestedPrice && offer.suggestedPrice !== "0.00" && (
+                <>
+                  <PriceFigureLink
+                    label="suggested"
+                    figure={offer.suggestedPrice}
+                    about="Average catalog value per set, in this offer's currency"
+                    target={askingPriceNoun}
+                    applied={askingPrice === offer.suggestedPrice}
+                    disabled={isPending}
+                    onApply={() => patch(askingPriceField, offer.suggestedPrice!)}
+                  />
+                  {offer.suggestedUnpricedSets > 0 && (
+                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      ({offer.suggestedUnpricedSets} set{offer.suggestedUnpricedSets === 1 ? "" : "s"} unpriced)
+                    </span>
+                  )}
+                  <span style={PRICE_LINE_SEPARATOR}>·</span>
+                </>
+              )}
+              <span style={{ fontSize: "0.9375rem", fontWeight: 600 }}>
+                <Tooltip content={priceLabel(offer.listingType)} align="end">
+                  <InlineText
+                    value={offer.price === "0.00" ? "" : offer.price}
+                    placeholder={isAuctionListing(offer.listingType) ? "Record a bid" : "Set price"}
+                    display={
+                      offer.price === "0.00" ? (
+                        <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.8125rem", cursor: "text" }}>
+                          {/* An unbid auction is not *unpriced* — it is up at its opening figure with
+                              nobody having bid, which is a different and perfectly normal thing (#449). */}
+                          {isAuctionListing(offer.listingType) ? "no bids yet" : "no price yet"}
+                        </span>
+                      ) : (
+                        <span style={{ cursor: "text" }}>{offer.price} {offer.currency}</span>
+                      )
+                    }
+                    editable={editable}
+                    isPending={isPending}
+                    inputType="amount"
+                    suffix={offer.currency}
+                    // A price is retyped whole, never amended in the middle (#329).
+                    selectOnEdit
+                    onSave={(v) => patch("price", v)}
+                  />
+                </Tooltip>
+              </span>
             </span>
             {/* An auction's two extra facts (#449), both muted under the live figure: what it opened
                 at — a record, nothing is computed from it — and when the figure was last confirmed
@@ -995,29 +1094,6 @@ export function OfferDetailPanel({
                 </span>
               </Tooltip>
             )}
-            {/* The catalog value is what you would *ask* for the stamps, which on an auction is what
-                it opens at: **Use** writes the stated figure, never the current one, which would be
-                recording a bid nobody placed. */}
-            {editable && offer.suggestedPrice && (
-              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                <Tooltip content="Average catalog value per set, in this offer's currency" align="end">
-                  <span>
-                    <Icon name="suggestion" size="sm" /> suggested {offer.suggestedPrice} {offer.currency}
-                    {offer.suggestedUnpricedSets > 0 && ` · ${offer.suggestedUnpricedSets} set${offer.suggestedUnpricedSets === 1 ? "" : "s"} unpriced`}
-                  </span>
-                </Tooltip>
-                {askingPrice !== offer.suggestedPrice && (
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => patch(askingPriceField, offer.suggestedPrice!)}
-                    style={USE_BTN}
-                  >
-                    Use
-                  </button>
-                )}
-              </span>
-            )}
             {/* The platform's own opening figure (#362/#553), offered back only on an auction that
                 still has no starting price. It is a *creation-time* seed, so on an offer that
                 already carries one, showing it again would be inviting the collector to undo a
@@ -1046,38 +1122,6 @@ export function OfferDetailPanel({
                   </button>
                 </span>
               )}
-            {/* The platform's floor (#731), under the suggestion because that is its standing: the
-                catalog value says what these stamps are worth, this says only what the platform's
-                fees make worth posting. It is shown whether or not the suggestion above already
-                clears it — a floor you are choosing to drop to is exactly the case it exists for —
-                but never *as* the recommendation, which is why it sits last and reads "minimum".
-
-                It writes the figure the seller **states**: the asking price on a quick buy, the
-                starting price on an auction, where the price above is wherever the bidding has got
-                to and is not the collector's to floor. */}
-            {editable && offer.platformMinimumPrice && (
-              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                <Tooltip
-                  content={`The lowest ${offer.platformName} is worth listing on, set on the platform`}
-                  align="end"
-                >
-                  <span>
-                    <Icon name="suggestion" size="sm" /> minimum {offer.platformMinimumPrice}{" "}
-                    {offer.currency}
-                  </span>
-                </Tooltip>
-                {askingPrice !== offer.platformMinimumPrice && (
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => patch(askingPriceField, offer.platformMinimumPrice!)}
-                    style={USE_BTN}
-                  >
-                    Use minimum
-                  </button>
-                )}
-              </span>
-            )}
           </div>
         </div>
 
