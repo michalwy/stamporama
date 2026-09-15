@@ -214,6 +214,10 @@ The columns were therefore replaced, one commit later, by `blocksPerBand` and `b
   sideways**, and no block continues into a neighbour.
 - A paired band too tall for an empty page is **unpaired** and its blocks tried singly, so pairing can
   never make a page worse.
+- Blocks sharing a band **line their mounts up** (#779): the first rows start under the tallest
+  heading and their mounts are centred on one line. Counted off the same sources — every
+  `PAGE_VSPACE` inside a `PAGE_COLUMN_START` pair moves a mount to that position — and part of each
+  block's measured height, so the band is packed with it.
 
 A block only joins a band if it fits *without wrapping*: a block that would have to wrap to be paired
 is a block the pairing has made worse.

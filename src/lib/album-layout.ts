@@ -517,8 +517,12 @@ interface MeasuredBlock<T extends AlbumBoxSpec> {
   leadMm: number;
   /** The collector's extra space **after** the block, charged on its last sheet only. */
   trailingMm: number;
+  /** Space between the heading and the first row that the **band** adds, so blocks sharing it line
+   *  their mounts up (#779). Zero for a block alone in its band — see {@link alignBandMounts}. */
+  alignMm: number;
   rows: MeasuredRow<T>[];
-  /** The total this block occupies: its lead, its heading, all of its rows and its trailing space. */
+  /** The total this block occupies: its lead, its heading, its alignment, all of its rows and its
+   *  trailing space. */
   heightMm: number;
 }
 
@@ -582,6 +586,66 @@ function measureHeading(
   };
 }
 
+/** The space the layout leaves above a block before any correction: with a heading, the template's
+ *  "space above a heading"; without one, the ordinary row gap, so two unheaded blocks do not run
+ *  together. */
+function automaticLeadMm(heading: MeasuredHeading, preset: AlbumRenderPreset): number {
+  return heading.lines.length ? preset.headingSpaceAboveMm : preset.boxGapYMm;
+}
+
+/**
+ * Line up the mounts of the blocks sharing a band (#779): the first rows start under the tallest
+ * heading among them, and their mounts are centred on one line, as the mounts inside a row already
+ * are.
+ *
+ * **Counted and looked at before it was built.** The collector's AlbumEasy sources carry ten
+ * `PAGE_VSPACE` inside a `PAGE_COLUMN_START` pair, and every one moves a mount down, never up. On
+ * the six whose printed PDF exists — `PL-1933` three times, `PL-1947`, `PL-1948`, `PL-1952 PRL` —
+ * the result is the same: the two mounts' **centres** are level. `PL-1933.txt:32` is 3 mm beside a
+ * mount 6 mm taller, `:51` 1.5 mm beside 3 mm, `:67` 1 mm beside 2 mm. The heading half is
+ * `PL-1950.txt:25`: two mounts of one size, 4 mm under the one-line heading beside a heading that
+ * wraps. Two pairs match neither half (`PL-1946.txt:93`, `PL-1950.txt:108`) and have no PDF to look
+ * at; they are what the block's own *space before* is still for.
+ *
+ * Measured from the **automatic** lead, not the corrected one, so a correction stays a delta on top
+ * of the aligned layout: 5 mm more before one block moves that block 5 mm, rather than dragging its
+ * neighbour's mounts down with it.
+ *
+ * Only blocks with boxes take part. A note beside a checklist has no mount to line up, and pushing
+ * the checklist's boxes below the note's text would spend paper on nothing.
+ *
+ * The space is **part of the block's height**, so the band is measured with it and a band it makes
+ * too tall moves whole or unpairs exactly as any other would. A block placed alone — including one
+ * a band gave up on — is measured afresh and has none.
+ */
+function alignBandMounts<T extends AlbumBoxSpec>(
+  blocks: MeasuredBlock<T>[],
+  preset: AlbumRenderPreset,
+): MeasuredBlock<T>[] {
+  const above = preset.labelPosition === "above";
+  const anchors = blocks.map((block) => {
+    const first = block.rows[0];
+    if (!first) return null;
+    return {
+      rowsTopMm: automaticLeadMm(block.heading, preset) + block.heading.costMm,
+      centreMm: (above ? first.labelHeightMm : 0) + first.boxHeightMm / 2,
+    };
+  });
+  const present = anchors.filter((a) => a !== null);
+  if (present.length < 2) return blocks;
+  const rowsTopMm = Math.max(...present.map((a) => a.rowsTopMm));
+  const centreMm = Math.max(...present.map((a) => a.centreMm));
+  return blocks.map((block, i) => {
+    const anchor = anchors[i];
+    if (!anchor) return block;
+    const alignMm = roundSizeMm(
+      rowsTopMm - anchor.rowsTopMm + (centreMm - anchor.centreMm),
+    );
+    if (alignMm <= 0) return block;
+    return { ...block, alignMm, heightMm: roundSizeMm(block.heightMm + alignMm) };
+  });
+}
+
 /** The role a block's text is set in — a checklist heading unless the collector said otherwise. */
 function blockRole(block: AlbumBlockSpec): AlbumTextRole {
   return block.role ?? "heading";
@@ -595,15 +659,11 @@ function measureBlock<T extends AlbumBoxSpec>(
 ): MeasuredBlock<T> {
   const role = blockRole(block);
   const heading = measureHeading(block.heading, widthMm, preset, metrics, role);
-  // With a heading, the collector's own "space above a heading"; without one, the ordinary row gap,
-  // so two unheaded blocks do not run together. The correction rides on that lead rather than beside
-  // it, and floors at zero: `PAGE_VSPACE` closes gaps in his sources and never overlaps blocks.
+  // The correction rides on the automatic lead rather than beside it, and floors at zero:
+  // `PAGE_VSPACE` closes gaps in his sources and never overlaps blocks.
   const leadMm = Math.max(
     0,
-    roundSizeMm(
-      (heading.lines.length ? preset.headingSpaceAboveMm : preset.boxGapYMm) +
-        (block.spaceBeforeMm ?? 0),
-    ),
+    roundSizeMm(automaticLeadMm(heading, preset) + (block.spaceBeforeMm ?? 0)),
   );
   const trailingMm = Math.max(0, roundSizeMm(block.spaceAfterMm ?? 0));
 
@@ -660,6 +720,7 @@ function measureBlock<T extends AlbumBoxSpec>(
     heading,
     leadMm,
     trailingMm,
+    alignMm: 0,
     rows,
     heightMm: roundSizeMm(
       leadMm +
@@ -759,8 +820,9 @@ function measureBand<T extends AlbumBoxSpec>(
         naturalBlockWidthMm(block, preset.boxGapXMm) <= widthMm + FIT_EPSILON,
     );
     if (!fits) continue;
-    const measured = slice.map((block) =>
-      measureBlock(block, widthMm, preset, metrics),
+    const measured = alignBandMounts(
+      slice.map((block) => measureBlock(block, widthMm, preset, metrics)),
+      preset,
     );
     return {
       blocks: measured,
@@ -1272,6 +1334,9 @@ function placeBlock<T extends AlbumBoxSpec>(
     });
     page.penMm = roundSizeMm(page.penMm + heading.costMm);
   }
+  // The band's alignment (#779) sits under the heading of the block's first sheet. Only a paired
+  // block has any, and a paired block is placed whole.
+  if (fromRow === 0) page.penMm = roundSizeMm(page.penMm + measured.alignMm);
 
   const firstBoxIndex = measured.rows
     .slice(0, fromRow)
