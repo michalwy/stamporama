@@ -1,6 +1,6 @@
 import type { ExtractedAttributes, ExtractedItem } from "../platform/types";
 import type { ListingFillOutcome, ListingTask } from "../platform/listing";
-import type { CapturedLot, CaptureRefusal } from "../platform/capture";
+import type { CapturedLot, CaptureRefusal, PlatformCapture } from "../platform/capture";
 import type {
   AttributeProposal,
   BackfillProposal,
@@ -80,7 +80,14 @@ export interface CaptureRequest {
   type: "capture";
 }
 export type CaptureResponse =
-  | { ok: true; moduleId: string; moduleName: string; lot: CapturedLot }
+  | {
+      ok: true;
+      moduleId: string;
+      moduleName: string;
+      lot: CapturedLot;
+      /** Which bids the page can state (#742) — the window shows those fields and no others. */
+      figures: PlatformCapture["figures"];
+    }
   | ({ ok: false; error: string } & Partial<CaptureRefusal>);
 
 // capture window → background service worker: write the lot to the active profile's instance (#355).
@@ -89,6 +96,10 @@ export type CaptureResponse =
 // seller is new here, whether this listing is already watched — and writes nothing.
 export interface CaptureSaveRequest {
   type: "capture-save";
+  /** The module that read the page (#742). The instance needs it for the one fact the page cannot
+   *  state — which of the collection's platforms this marketplace is — and for how that
+   *  marketplace's lots are recognised and grouped. */
+  module: string;
   lot: CapturedLot;
   dryRun: boolean;
 }

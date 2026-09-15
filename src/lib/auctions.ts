@@ -36,7 +36,7 @@ import { createLeadingEntriesTx } from "./item-stamps";
 import { parseEntityNoSearch } from "./quick-jump";
 import { resolvePurchaseContact } from "./contacts";
 import { getModulePlatform } from "./module-platform";
-import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
+import { ALLEGRO_PLATFORM_MODULE, captureModuleRules } from "./platform-modules";
 import {
   auctionLotName,
   deriveAuctionLotLabel,
@@ -1984,6 +1984,12 @@ export async function createAuctionLot(
  *  produce one, and nothing in this shape is Allegro's. */
 export interface AuctionLotCaptureInput {
   /**
+   * The Assistant module that read the page (#742) — `allegro`, `philasearch`. It names the one fact
+   * a page cannot state, which of the collection's platforms this marketplace is, and it selects how
+   * that marketplace's lots are recognised and grouped (`captureModuleRules`).
+   */
+  module: string;
+  /**
    * The marketplace's own id for the listing — the one thing that survives a slug change, a
    * redirect, or the collector having stored the URL in a different shape. It is what makes a
    * re-capture a **refresh** instead of a duplicate.
@@ -2003,8 +2009,15 @@ export interface AuctionLotCaptureInput {
    *  cost (#351). */
   startingPrice: string | null;
   /** What it stands at — an observation, so writing it stamps `checkedAt`. Null while no bid has
-   *  been placed: a lot nobody has bid on costs nothing, whatever it opens at. */
+   *  been placed: a lot nobody has bid on costs nothing, whatever it opens at. Written only by a
+   *  module whose pages state it. */
   currentBid: string | null;
+  /** The collector's own bid, where the page states it (#742) — a proxy maximum, so it is `myBid`
+   *  and never `currentBid`. Written only by a module whose pages state it. */
+  myBid: string | null;
+  /** The sale the page names (#742). On a module whose parcel is the named sale it decides which
+   *  open sale the lot joins, and names a new one. */
+  saleName: string | null;
 }
 
 /** What a capture did, or — on a dry run — what it would do. Both halves are stated in the same
@@ -2027,6 +2040,12 @@ export interface AuctionLotCaptureResult {
   platformName: string;
   /** What the lot carried before a refresh, so the window can say whether the price moved. */
   previousBid: string | null;
+  /** The collector's own bid the lot carried before a refresh (#742). */
+  previousMyBid: string | null;
+  /** Which figures a refresh writes (#742) — the standing bid where the marketplace states one, the
+   *  collector's own where the page states that. Empty on `created`, and on a refresh of a house lot
+   *  the collector has not bid on, where nothing on the page is news. */
+  refreshes: ("currentBid" | "myBid")[];
 }
 
 /**
@@ -2049,13 +2068,24 @@ export interface AuctionLotCaptureResult {
  * Both, rather than the better one, because a lot added by hand carries whichever of the two the
  * collector happened to type — the number off the listing, or the link to it — and either is enough
  * to recognise that this auction is already being watched.
+ *
+ * The `lotNo` half holds only where the lot's number **is** the listing's id (#742). On Philasearch it
+ * is the house's `Lot 1`, which every sale has, so only the address — ending in the site's own
+ * `9081-A66-9850` — says which lot this is.
  */
-async function findCapturedLot(collectionId: string, platformId: string, platformOfferId: string) {
+async function findCapturedLot(
+  collectionId: string,
+  platformId: string,
+  platformOfferId: string,
+  lotNoIsListingId: boolean
+) {
   return prisma.auctionLot.findFirst({
     where: {
       auctionSale: { collectionId },
       OR: [
-        { lotNo: platformOfferId, auctionSale: { collectionId, platformId } },
+        ...(lotNoIsListingId
+          ? [{ lotNo: platformOfferId, auctionSale: { collectionId, platformId } }]
+          : []),
         ...offerUrlMatchClauses(platformOfferId),
       ],
     },
@@ -2063,6 +2093,7 @@ async function findCapturedLot(collectionId: string, platformId: string, platfor
     select: {
       id: true,
       currentBid: true,
+      myBid: true,
       purchaseLotId: true,
       auctionSale: { select: { id: true, name: true, currency: true } },
     },
@@ -2086,25 +2117,47 @@ export async function captureAuctionLot(
   await assertCollectionOwner(ownerId, collectionId);
   const dryRun = opts.dryRun ?? true;
 
-  // The one fact a listing page cannot state: which of this collection's platforms Allegro is. It
-  // is a setting rather than a question the capture asks, so an unset one is a refusal pointing at
-  // the tab that answers it (#355).
-  const platform = await getModulePlatform(collectionId, ALLEGRO_PLATFORM_MODULE);
-  if (!platform) {
+  // How this marketplace's lots are recognised, refreshed and grouped (#742). A module nothing here
+  // knows is refused rather than read as Allegro: its lot numbers and its figures may mean anything.
+  const rules = captureModuleRules(input.module);
+  if (!rules) {
     throw new AuctionActionBlockedError(
       "no-platform-module",
-      "No platform in this collection is marked as Allegro. Set one under Settings → Allegro, then capture again."
+      "This instance does not capture lots from that marketplace yet. Update Stamporama, then capture again."
     );
   }
 
-  const existing = await findCapturedLot(collectionId, platform.id, input.platformOfferId);
+  // The one fact a listing page cannot state: which of this collection's platforms the marketplace
+  // is. It is a setting rather than a question the capture asks, so an unset one is a refusal
+  // pointing at the tab that answers it (#355).
+  const platform = await getModulePlatform(collectionId, input.module);
+  if (!platform) {
+    throw new AuctionActionBlockedError(
+      "no-platform-module",
+      `No platform in this collection is marked as ${rules.name}. Set one under ${rules.settingsLocation}, then capture again.`
+    );
+  }
+
+  const existing = await findCapturedLot(
+    collectionId,
+    platform.id,
+    input.platformOfferId,
+    rules.lotNoIsListingId
+  );
   if (existing) {
     assertLotEditable(existing);
-    const previousBid = money(existing.currentBid);
-    // Only the bid and its timestamp. A capture is an observation of a price, not a re-import of the
-    // listing: the title, the closing time and everything the collector has since typed onto the lot
-    // are theirs, and a refresh that overwrote them would punish keeping the watchlist tidy.
-    if (!dryRun) await setAuctionLotBid(ownerId, existing.id, input.currentBid);
+    // Only the bids the page states, and nothing else. A capture is an observation, not a re-import
+    // of the listing: the title, the closing time and everything the collector has since typed onto
+    // the lot are theirs, and a refresh that overwrote them would punish keeping the watchlist tidy.
+    // A house lot's page shows the collector's own bid once they have placed one (#742); before that
+    // it shows nothing a refresh could write, and clearing a bid typed in by hand would be a loss.
+    const refreshes: AuctionLotCaptureResult["refreshes"] = [];
+    if (rules.observesCurrentBid) refreshes.push("currentBid");
+    if (rules.readsMyBid && input.myBid !== null) refreshes.push("myBid");
+    if (!dryRun) {
+      if (rules.observesCurrentBid) await setAuctionLotBid(ownerId, existing.id, input.currentBid);
+      if (refreshes.includes("myBid")) await setAuctionLotMyBid(ownerId, existing.id, input.myBid);
+    }
     return {
       outcome: "refreshed",
       lotId: existing.id,
@@ -2116,8 +2169,71 @@ export async function captureAuctionLot(
       sellerName: input.sellerName ?? "",
       sellerCreated: false,
       platformName: platform.name,
-      previousBid,
+      previousBid: money(existing.currentBid),
+      previousMyBid: money(existing.myBid),
+      refreshes,
     };
+  }
+
+  // The figures a new lot carries: only the ones this marketplace's pages state (#742).
+  const lotFigures = {
+    currentBid: rules.observesCurrentBid ? input.currentBid : null,
+    myBid: rules.readsMyBid ? input.myBid : null,
+  };
+
+  // On an aggregator the parcel is **the house's sale the page names** (#742), not whatever the seller
+  // has open: a 67th auction's lot must not join a 66th still waiting for its invoice. An open sale on
+  // this platform by that name is the parcel, and its seller is the lot's seller — the name already
+  // says which house, and asking the page again would split one sale over two spellings of the house
+  // the moment the collector had filed it under their own.
+  if (rules.parcelIsNamedSale) {
+    const saleName = input.saleName?.trim() ?? "";
+    if (!saleName) {
+      throw new AuctionActionBlockedError(
+        "no-sale",
+        "This lot's page names no sale. Reload the lot and capture again."
+      );
+    }
+    const named = await prisma.auctionSale.findFirst({
+      where: {
+        collectionId,
+        platformId: platform.id,
+        status: "open",
+        name: { equals: saleName, mode: "insensitive" },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, currency: true, seller: { select: { id: true, name: true } } },
+    });
+    if (named) {
+      const lotId = dryRun
+        ? null
+        : await createAuctionLot(ownerId, collectionId, {
+            auctionSaleId: named.id,
+            lotNo: input.lotNo,
+            url: input.url,
+            title: input.title,
+            endsAt: input.endsAt,
+            startingPrice: input.startingPrice,
+            ...lotFigures,
+            maxBid: null,
+            notes: null,
+          });
+      return {
+        outcome: "created",
+        lotId,
+        saleId: named.id,
+        saleName: named.name,
+        saleCurrency: named.currency,
+        saleCreated: false,
+        sellerId: named.seller.id,
+        sellerName: named.seller.name,
+        sellerCreated: false,
+        platformName: platform.name,
+        previousBid: null,
+        previousMyBid: null,
+        refreshes: [],
+      };
+    }
   }
 
   const sellerName = input.sellerName?.trim() ?? "";
@@ -2142,16 +2258,23 @@ export async function captureAuctionLot(
     throw new AuctionActionBlockedError("no-seller", "That seller could not be resolved.");
   }
 
-  const open = sellerId
-    ? await findOpenAuctionSale(ownerId, collectionId, sellerId, platform.id)
-    : null;
+  // A named sale was looked for above and there is none open, so this lot starts it; only a
+  // marketplace basket joins whatever the seller already has open (#352).
+  const open =
+    sellerId && !rules.parcelIsNamedSale
+      ? await findOpenAuctionSale(ownerId, collectionId, sellerId, platform.id)
+      : null;
+  const newSaleName = rules.parcelIsNamedSale ? input.saleName!.trim() : null;
 
   if (dryRun) {
     return {
       outcome: "created",
       lotId: null,
       saleId: open?.id ?? null,
-      saleName: open?.name ?? deriveAuctionSaleName(existingSeller?.name ?? sellerName, platform.name),
+      saleName:
+        open?.name ??
+        newSaleName ??
+        deriveAuctionSaleName(existingSeller?.name ?? sellerName, platform.name),
       saleCurrency:
         open?.currency ?? (await resolveNewSaleCurrency(collectionId, sellerId, platform.id)),
       saleCreated: !open,
@@ -2160,6 +2283,8 @@ export async function captureAuctionLot(
       sellerCreated: !existingSeller,
       platformName: platform.name,
       previousBid: null,
+      previousMyBid: null,
+      refreshes: [],
     };
   }
 
@@ -2168,7 +2293,9 @@ export async function captureAuctionLot(
     (await createAuctionSale(ownerId, collectionId, {
       sellerId: sellerId!,
       platformId: platform.id,
-      name: null,
+      // A house's sale is named after the house's own (`Christoph Gärtner 66th Auction`), which is
+      // also what the next lot from it is matched on; a basket takes the derived name.
+      name: newSaleName,
       url: null,
       // A marketplace basket has no closing date of its own; the first lot's is a harmless seed the
       // sale's own screen edits, exactly as the add-lot dialog seeds it (#352).
@@ -2186,8 +2313,7 @@ export async function captureAuctionLot(
     title: input.title,
     endsAt: input.endsAt,
     startingPrice: input.startingPrice,
-    currentBid: input.currentBid,
-    myBid: null,
+    ...lotFigures,
     maxBid: null,
     notes: null,
   });
@@ -2208,6 +2334,8 @@ export async function captureAuctionLot(
     sellerCreated: !existingSeller,
     platformName: platform.name,
     previousBid: null,
+    previousMyBid: null,
+    refreshes: [],
   };
 }
 

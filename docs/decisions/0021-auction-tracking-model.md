@@ -351,6 +351,29 @@ Four rules that fall out of the model above rather than out of the extension:
   nothing else, since everything else on the lot is what the collector has since typed. That makes
   the extension the fastest expression of §5's manual refresh, not an exception to it.
 
+**Amended by #742 — a second capture path, from Philasearch.** An aggregator of auction houses
+answers three of the rules above the other way, so each is now stated per marketplace
+(`captureModuleRules` in `src/lib/platform-modules.ts`) rather than assumed:
+
+- **Identity is the listing's address alone.** A Philasearch lot's number is the house's `Lot 1`,
+  present in every sale, so the `lotNo` half of the re-capture match does not apply there; the lot is
+  recognised by the site's own id (`9081-A66-9850`) ending its stored URL.
+- **The figures are the opening bid and the collector's own bid.** Houses take written bids, so the
+  page states no standing bid at all — only *Minimum bid* (→ `startingPrice`) and, once the collector
+  has bid, *Your current bid*. The latter is a proxy maximum, so it is written to `myBid`, never
+  `currentBid`, and `checkedAt` is untouched. A re-capture updates `myBid` when the page shows one and
+  otherwise writes nothing.
+- **The parcel is the sale the page names.** A house's sale is one settlement (the definition this ADR
+  opens with), and a house runs one after another, so §9's "the seller's open sale" would put a 67th
+  auction's lot into a 66th still awaiting its invoice. The open sale is matched by **name** on the
+  Philasearch platform, and its seller is taken from it — the name already says which house, and the
+  page's spelling of the house must not split one sale in two. With none open, the lot starts a sale
+  named after the page's. The collector chose name matching over #352's seller matching on
+  2026-09-15.
+
+The platform is a setting as before, on **Settings → Philasearch**. After-auction sales are refused as
+fixed-price offers are.
+
 There is no scraping and no scheduled bid refreshing. Both are fragile dependencies on markup and
 terms of service we do not control, and they would be a separate architectural decision, not a
 detail of this one.

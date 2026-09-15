@@ -9,6 +9,7 @@ import {
   listAuctionLots,
 } from "../../src/lib/auctions";
 import { setAllegroPlatform } from "../../src/lib/allegro";
+import { setPhilasearchPlatform } from "../../src/lib/philasearch";
 
 // Capturing a lot from a marketplace page (#355; ADR-0021 §8). What is worth a real database here is
 // everything the extension deliberately does **not** decide: which platform the page belongs to,
@@ -28,6 +29,7 @@ describe("auction lot capture (#355)", () => {
   /** One listing as the Allegro module reads it. */
   function listing(overrides: Partial<Parameters<typeof captureAuctionLot>[2]> = {}) {
     return {
+      module: "allegro",
       platformOfferId: "18795065609",
       url: "https://allegro.pl/oferta/18795065609",
       title: "Fi 348-357, Wyzwolenie 10 miast",
@@ -36,6 +38,8 @@ describe("auction lot capture (#355)", () => {
       endsAt: hourFromNow(),
       startingPrice: null,
       currentBid: "107.00",
+      myBid: null,
+      saleName: null,
       ...overrides,
     };
   }
@@ -338,5 +342,224 @@ describe("finding the lots behind marketplace listings (#575)", () => {
 
   it("never reads a house sale's lot number as an offer number", async () => {
     assert.deepEqual(await findLotsForListings(userId, collectionId, ["42"]), []);
+  });
+});
+
+// ── Capturing a house's lot from Philasearch (#742) ──────────────────────────
+//
+// The same function, asked by an aggregator of auction houses, where every one of #355's three
+// assumptions runs the other way: the lot number is the house's and identifies nothing, the page
+// shows the collector's own written bid and never a standing one, and the parcel is the house's sale
+// the page names — so a 67th auction's lot never joins a 66th still waiting for its invoice.
+
+describe("auction lot capture from Philasearch (#742)", () => {
+  let philasearchId: string;
+
+  const inAWeek = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  /** One lot as the Philasearch module reads it. */
+  function houseLot(overrides: Partial<Parameters<typeof captureAuctionLot>[2]> = {}) {
+    return {
+      module: "philasearch",
+      platformOfferId: "9081-A66-9850",
+      url: "https://www.philasearch.com/en/cat/13320_9081/lot/9081-A66-9850",
+      title: "Poland — 1918/2005, mint and used collection",
+      lotNo: "9850",
+      sellerName: "Gärtner Christoph Auktionshaus",
+      saleName: "Christoph Gärtner 66th Auction",
+      endsAt: inAWeek(),
+      startingPrice: "150.00",
+      currentBid: null,
+      myBid: "150.00",
+      ...overrides,
+    };
+  }
+
+  before(async () => {
+    philasearchId = (
+      await prisma.contact.create({ data: { collectionId, name: "Philasearch", platform: true } })
+    ).id;
+  });
+
+  it("refuses while no platform is marked as Philasearch, naming where to set it", async () => {
+    await assert.rejects(
+      () => captureAuctionLot(userId, collectionId, houseLot(), { dryRun: true }),
+      (e: unknown) =>
+        e instanceof AuctionActionBlockedError &&
+        e.reason === "no-platform-module" &&
+        /Settings → Philasearch/.test(e.message)
+    );
+  });
+
+  it("refuses a module nothing here captures from, rather than reading it as Allegro", async () => {
+    await assert.rejects(
+      () => captureAuctionLot(userId, collectionId, houseLot({ module: "colnect" }), { dryRun: true }),
+      (e: unknown) => e instanceof AuctionActionBlockedError && e.reason === "no-platform-module"
+    );
+  });
+
+  it("previews a new sale named after the house's own", async () => {
+    await setPhilasearchPlatform(userId, collectionId, philasearchId);
+
+    const preview = await captureAuctionLot(userId, collectionId, houseLot(), { dryRun: true });
+    assert.equal(preview.outcome, "created");
+    assert.equal(preview.saleCreated, true);
+    assert.equal(preview.saleName, "Christoph Gärtner 66th Auction");
+    assert.equal(preview.platformName, "Philasearch");
+    assert.equal(
+      await prisma.auctionSale.count({ where: { collectionId, platformId: philasearchId } }),
+      0
+    );
+  });
+
+  it("writes the opening figure and the collector's own bid, and no standing bid", async () => {
+    const result = await captureAuctionLot(userId, collectionId, houseLot(), { dryRun: false });
+    assert.equal(result.outcome, "created");
+    assert.equal(result.saleCreated, true);
+    assert.equal(result.sellerCreated, true);
+
+    const lot = await prisma.auctionLot.findUniqueOrThrow({
+      where: { id: result.lotId! },
+      include: { auctionSale: { include: { seller: true } } },
+    });
+    assert.equal(lot.lotNo, "9850");
+    assert.equal(lot.startingPrice?.toString(), "150");
+    assert.equal(lot.myBid?.toString(), "150");
+    assert.equal(lot.currentBid, null);
+    // No observation of a price was made, so nothing is dated as one.
+    assert.equal(lot.checkedAt, null);
+    assert.equal(lot.auctionSale.name, "Christoph Gärtner 66th Auction");
+    assert.equal(lot.auctionSale.platformId, philasearchId);
+    assert.equal(lot.auctionSale.seller.name, "Gärtner Christoph Auktionshaus");
+  });
+
+  it("joins the sale by its name, whichever way the page spells the house", async () => {
+    const sale = await prisma.auctionSale.findFirstOrThrow({
+      where: { collectionId, platformId: philasearchId },
+      include: { seller: true },
+    });
+
+    const result = await captureAuctionLot(
+      userId,
+      collectionId,
+      houseLot({
+        platformOfferId: "9081-A66-9851",
+        url: "https://www.philasearch.com/en/cat/13320_9081/lot/9081-A66-9851",
+        lotNo: "9851",
+        // The same house under its registered name — one sale must not split over two spellings.
+        sellerName: "Auktionhaus Christoph Gärtner GmbH & Co KG",
+        myBid: null,
+      }),
+      { dryRun: false }
+    );
+    assert.equal(result.outcome, "created");
+    assert.equal(result.saleCreated, false);
+    assert.equal(result.saleId, sale.id);
+    assert.equal(result.sellerCreated, false);
+    assert.equal(result.sellerName, sale.seller.name);
+    assert.equal(
+      await prisma.contact.count({
+        where: { collectionId, name: "Auktionhaus Christoph Gärtner GmbH & Co KG" },
+      }),
+      0
+    );
+  });
+
+  it("starts the house's next sale rather than joining the one still open", async () => {
+    const preview = await captureAuctionLot(
+      userId,
+      collectionId,
+      houseLot({
+        platformOfferId: "9081-A67-12",
+        url: "https://www.philasearch.com/en/cat/13400_9081/lot/9081-A67-12",
+        lotNo: "12",
+        saleName: "Christoph Gärtner 67th Auction",
+      }),
+      { dryRun: true }
+    );
+    assert.equal(preview.outcome, "created");
+    assert.equal(preview.saleCreated, true);
+    assert.equal(preview.saleName, "Christoph Gärtner 67th Auction");
+    // The house is known by now, so only the sale is new.
+    assert.equal(preview.sellerCreated, false);
+  });
+
+  it("updates the collector's own bid on a re-capture, and touches nothing else", async () => {
+    const before = await prisma.auctionLot.findFirstOrThrow({ where: { lotNo: "9850", auctionSale: { collectionId } } });
+
+    const result = await captureAuctionLot(
+      userId,
+      collectionId,
+      houseLot({ title: "retitled on the page", myBid: "180.00" }),
+      { dryRun: false }
+    );
+    assert.equal(result.outcome, "refreshed");
+    assert.equal(result.lotId, before.id);
+    assert.deepEqual(result.refreshes, ["myBid"]);
+    assert.equal(result.previousMyBid, "150.00");
+
+    const after = await prisma.auctionLot.findUniqueOrThrow({ where: { id: before.id } });
+    assert.equal(after.myBid?.toString(), "180");
+    assert.equal(after.currentBid, null);
+    assert.equal(after.checkedAt, null);
+    assert.equal(after.title, before.title, "the title is the collector's");
+  });
+
+  it("leaves a bid alone when the page shows none of the collector's", async () => {
+    const result = await captureAuctionLot(userId, collectionId, houseLot({ myBid: null }), {
+      dryRun: false,
+    });
+    assert.equal(result.outcome, "refreshed");
+    assert.deepEqual(result.refreshes, []);
+    const lot = await prisma.auctionLot.findUniqueOrThrow({ where: { id: result.lotId! } });
+    assert.equal(lot.myBid?.toString(), "180");
+  });
+
+  it("recognises a lot by its address alone, never by its lot number field", async () => {
+    // On Philasearch `lotNo` holds the house's number, so Allegro's "the lot number is the listing"
+    // half does not apply: a lot on this platform whose number field happens to read like the site's
+    // id, with no address naming it, is not the listing being captured.
+    const sale = await prisma.auctionSale.findFirstOrThrow({
+      where: { collectionId, platformId: philasearchId },
+    });
+    await prisma.auctionLot.create({
+      data: {
+        auctionSaleId: sale.id,
+        auctionLotNo: 9101,
+        lotNo: "35-A389-4242",
+        endsAt: inAWeek(),
+      },
+    });
+
+    const preview = await captureAuctionLot(
+      userId,
+      collectionId,
+      houseLot({
+        platformOfferId: "35-A389-4242",
+        url: "https://www.philasearch.com/en/cat/13251_35/lot/35-A389-4242",
+        lotNo: "4242",
+        sellerName: "Heinrich Köhler Auktionen",
+        saleName: "Heinrich Köhler 389th Auction",
+      }),
+      { dryRun: true }
+    );
+    assert.equal(preview.outcome, "created");
+  });
+
+  it("refuses a lot page that names no sale", async () => {
+    await assert.rejects(
+      () =>
+        captureAuctionLot(
+          userId,
+          collectionId,
+          houseLot({
+            platformOfferId: "35-A389-1001",
+            url: "https://www.philasearch.com/en/cat/13251_35/lot/35-A389-1001",
+            saleName: null,
+          }),
+          { dryRun: true }
+        ),
+      (e: unknown) => e instanceof AuctionActionBlockedError && e.reason === "no-sale"
+    );
   });
 });

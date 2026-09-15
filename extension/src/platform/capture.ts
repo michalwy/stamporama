@@ -47,8 +47,21 @@ export interface CapturedLot {
    *  cost: a lot nobody has bid on costs nothing whatever it opens at. */
   startingPrice: string | null;
   /** What it stands at, once somebody has bid. Null and `startingPrice` set are the same page in its
-   *  two states, and the pair is never both. */
+   *  two states, and the pair is never both. Always null from a marketplace that states no standing
+   *  bid — see {@link PlatformCapture.figures}. */
   currentBid: string | null;
+  /**
+   * The bid the **collector** has placed, where the page states it (#742). Philasearch takes written
+   * bids for the houses it lists and shows the bidder their own — a proxy maximum, which is exactly
+   * what a lot's `myBid` is, and never a price the lot stands at. Null wherever the page does not say.
+   */
+  myBid: string | null;
+  /**
+   * The sale this lot is offered in, as the page names it (#742) — `Christoph Gärtner 66th Auction`.
+   * On an auction aggregator that sale **is** the parcel: one settlement with one house. Null on a
+   * marketplace, where the parcel is the seller's open basket and has no name of its own.
+   */
+  saleName: string | null;
   /** The currency the figures are printed in, for the window to show beside them. The lot's own
    *  currency is the sale's (#350) and is not decided here. */
   currency: string | null;
@@ -94,4 +107,13 @@ export interface PlatformCapture {
    * invented closing time. Throws only on unexpected DOM.
    */
   capture(doc: Document, url: string): CaptureResult;
+  /**
+   * Which of a lot's bids this marketplace's pages state at all (#742), so the capture window offers
+   * the fields the page can fill and not the ones it never will.
+   *
+   * Allegro prints the price an auction stands at and nothing about the viewer's own bid; Philasearch
+   * takes written bids for the houses it lists, so it prints the viewer's own bid and never a standing
+   * one. A field the page cannot state left on screen reads as a figure the Assistant failed to find.
+   */
+  figures: { currentBid: boolean; myBid: boolean };
 }

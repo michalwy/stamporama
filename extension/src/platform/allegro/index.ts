@@ -24,6 +24,8 @@ export const allegroModule: PlatformModule = {
     isListingUrl: matchesAllegroListingUrl,
     listingId: allegroOfferId,
     capture: captureAllegroLot,
+    // The price an auction stands at is on the page; the viewer's own bid is not (#742).
+    figures: { currentBid: true, myBid: false },
   },
   listing: allegroListing,
 };

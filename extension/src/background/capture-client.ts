@@ -19,6 +19,7 @@ export type CaptureCallResult =
  */
 export async function callCapture(
   profile: Profile,
+  module: string,
   lot: CapturedLot,
   dryRun: boolean
 ): Promise<CaptureCallResult> {
@@ -28,7 +29,7 @@ export async function callCapture(
     res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${profile.token}` },
-      body: JSON.stringify({ ...lot, dryRun }),
+      body: JSON.stringify({ ...lot, module, dryRun }),
     });
   } catch {
     return { ok: false, error: "Could not reach the instance. Is it running?" };

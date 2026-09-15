@@ -2,8 +2,8 @@
 
 The Assistant is a Chrome extension that connects marketplace pages to your collection while you
 browse. On a Colnect list page it tells you which stamps you already have, which need a decision, and
-writes the Colnect links back into Stamporama. On an **Allegro auction** it captures the lot you are
-bidding on into your [watchlist](auctions.md). On your own **Delcampe sold orders** and your own
+writes the Colnect links back into Stamporama. On an **Allegro auction** or a **Philasearch lot** it
+captures the lot you are bidding on into your [watchlist](auctions.md). On your own **Delcampe sold orders** and your own
 **Colnect transactions** it tells you which of them you have already written down, and records the
 ones you have not. It is also the only part of Stamporama that ever **writes** to Colnect: it can
 apply a [list difference](colnect-lists.md#applying-a-difference-on-colnect) for you, one throttled
@@ -131,6 +131,34 @@ set, the capture window says so and saves nothing.
 That select is about a marketplace you *buy* on, and it is all the capture needs. Connecting the
 Allegro account you *sell* from is a separate, optional step on the same tab — see
 [Allegro](allegro.md).
+
+## Capturing a Philasearch lot
+
+The same toolbar click works on a single lot's page on **philasearch.com**, in English or in German.
+Philasearch lists the sales of auction houses, and that changes what the window can read:
+
+- **The seller is the house** and the platform is Philasearch. The house's name is proposed from the
+  page and can be corrected before saving.
+- **The parcel is the house's sale**, named as the page names it — *Christoph Gärtner 66th Auction*.
+  A lot joins your open sale of that name on Philasearch, and starts it when there is none. A lot
+  from the house's next auction therefore starts a new sale, even while the previous one is still
+  waiting for its invoice.
+- **Lot no is the house's own lot number**, as printed in its catalogue.
+- **Opening price** is the lot's *Minimum bid* (or *Opening bid*, where the house prints an estimate
+  as well).
+- **My bid** is the bid you have placed on Philasearch, once you have placed one. Houses take written
+  bids, so the page never shows what a lot currently stands at — there is no *Current bid* field for a
+  Philasearch lot.
+
+Capturing a lot you are already watching updates **your bid** from the page and touches nothing else.
+A lot you have not bid on yet has nothing new to record, and the window says so. The lot is
+recognised by Philasearch's own address for it, not by its lot number — *Lot 1* is in every sale
+there is.
+
+**After-auction sales** are refused, in as many words: those lots are no longer being bid on.
+
+Before the first capture, name **which of your platforms is Philasearch** under **Settings →
+Philasearch**.
 
 ## Find in Stamporama — asking about anything you can select
 

@@ -7,8 +7,9 @@ import {
   parseAuctionAmount,
   parseAuctionInstant,
 } from "@/lib/auction-rules";
+import { ALLEGRO_PLATFORM_MODULE } from "@/lib/platform-modules";
 
-// Capture a watched auction from the marketplace page it is listed on (#355).
+// Capture a watched auction from the marketplace page it is listed on (#355, #742).
 //
 // Session **or** Assistant token (`resolveCollectionOwner`), like the matcher and the listing kit:
 // the extension reaches us cross-site from allegro.pl, where the session cookie is not sent. A
@@ -26,6 +27,7 @@ import {
 
 interface CaptureBody {
   dryRun?: unknown;
+  module?: unknown;
   platformOfferId?: unknown;
   url?: unknown;
   title?: unknown;
@@ -34,6 +36,8 @@ interface CaptureBody {
   endsAt?: unknown;
   startingPrice?: unknown;
   currentBid?: unknown;
+  myBid?: unknown;
+  saleName?: unknown;
 }
 
 function str(value: unknown): string {
@@ -66,12 +70,16 @@ export async function POST(
   if (!startingPrice.ok) return NextResponse.json({ error: startingPrice.message }, { status: 400 });
   const currentBid = parseAuctionAmount(str(body.currentBid), "Current bid");
   if (!currentBid.ok) return NextResponse.json({ error: currentBid.message }, { status: 400 });
+  const myBid = parseAuctionAmount(str(body.myBid), "My bid");
+  if (!myBid.ok) return NextResponse.json({ error: myBid.message }, { status: 400 });
 
   try {
     const result = await captureAuctionLot(
       ownerId,
       collectionId,
       {
+        // An Assistant built before #742 names no module, and Allegro was the only one it had.
+        module: str(body.module).trim() || ALLEGRO_PLATFORM_MODULE,
         platformOfferId,
         url,
         title: normalizeAuctionText(str(body.title)),
@@ -80,6 +88,8 @@ export async function POST(
         endsAt,
         startingPrice: startingPrice.value,
         currentBid: currentBid.value,
+        myBid: myBid.value,
+        saleName: normalizeAuctionText(str(body.saleName)),
       },
       { dryRun: body.dryRun === true }
     );

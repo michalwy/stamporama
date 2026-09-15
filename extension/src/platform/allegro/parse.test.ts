@@ -123,6 +123,8 @@ describe("captureAllegroLot", () => {
       endsAt: "2026-08-06T17:08:00Z",
       startingPrice: null,
       currentBid: "107.00",
+      myBid: null,
+      saleName: null,
       currency: "PLN",
       bidderCount: 6,
     });
