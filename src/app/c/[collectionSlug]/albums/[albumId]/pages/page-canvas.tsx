@@ -13,6 +13,11 @@ import {
   type AlbumCarry,
   type AlbumDropMark,
 } from "@/lib/album-drag";
+import {
+  isBoxSelected,
+  toggleBoxSelection,
+  type AlbumEditorSelection,
+} from "@/lib/album-selection";
 
 // The sheet, drawn (#769).
 //
@@ -113,11 +118,10 @@ export function boxFlag(box: AlbumEditorBox): AlbumBoxFlag | null {
 export const BOX_FLAGS = FLAG;
 
 /** What is selected on the canvas. A box is named by the pair that identifies **one box** — the
- *  entry and the stamp — because a box is a slot and one stamp can have two of them (ADR-0047 §2). */
-export type CanvasSelection =
-  | { kind: "box"; entryId: string; stampId: string }
-  | { kind: "block"; id: string }
-  | null;
+ *  entry and the stamp — because a box is a slot and one stamp can have two of them (ADR-0047 §2).
+ *  Several boxes are selected by shift-clicking, to give them one size (#1309); the rules are in
+ *  `album-selection.ts`. */
+export type CanvasSelection = AlbumEditorSelection;
 
 /** A drag in progress, as millimetres already moved. Applied as an offset to what is drawn and to
  *  nothing else; the server re-plans when it ends. */
@@ -561,10 +565,10 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
             : null;
         const widthMm = Math.max(1, box.widthMm + (sizing?.dxMm ?? 0));
         const heightMm = Math.max(1, box.heightMm + (sizing?.dyMm ?? 0));
-        const chosen =
-          selection?.kind === "box" &&
-          selection.stampId === box.stampId &&
-          selection.entryId === box.entryId;
+        const chosen = isBoxSelected(selection, box);
+        /** The one box selected, which alone carries the handles: a size handle or a row-break tab
+         *  on each of several boxes would promise a gesture for all of them that moves one. */
+        const alone = chosen && selection?.kind === "box";
         const flag = boxFlag(box);
         const lifted =
           carry?.kind === "box" && carry.blockId === blockId && carry.stampId === box.stampId;
@@ -601,6 +605,15 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
               }}
               onPointerDown={(e) => {
                 e.stopPropagation();
+                // Shift (or the platform's command key) adds the box to what is selected, or takes
+                // it off (#1309), and picks nothing up: a group is selected to be given one size,
+                // and a press that also lifted the box would reorder it on the way.
+                if (!readOnly && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+                  onSelect(
+                    toggleBoxSelection(selection, { entryId: box.entryId, stampId: box.stampId })
+                  );
+                  return;
+                }
                 onSelect({ kind: "box", entryId: box.entryId, stampId: box.stampId });
                 if (!readOnly) setCarry({ kind: "box", blockId, stampId: box.stampId });
               }}
@@ -664,7 +677,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
                 pointerEvents="none"
               />
             )}
-            {chosen && !readOnly && (
+            {alone && !readOnly && (
               // The size handle. Dragging it writes the number the panel shows, and typing that
               // number moves this rectangle — neither is the real interface with the other a
               // fallback.
@@ -678,7 +691,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
                 onPointerDown={(e) => startDrag(e, "size", blockId, box.stampId)}
               />
             )}
-            {box.rowBreakable && box.rowBreakBefore && !chosen && (
+            {box.rowBreakable && box.rowBreakBefore && !alone && (
               // **A row starts here by hand** (#1214): a bracket round the box's top-left corner,
               // outside it. Not a bar beside the box — that is the reorder kit's insertion mark and
               // would read as *something will be put here* — and not a ring, which says *selected*
@@ -691,7 +704,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
                 pointerEvents="none"
               />
             )}
-            {chosen && !readOnly && box.rowBreakable && (
+            {alone && !readOnly && box.rowBreakable && (
               // The row-break tab, on the corner opposite the size handle: filled when a new row
               // starts at this box, hollow when it does not, and a click turns it over. Offered only
               // where a break could mean anything — never on a block's first box, which already

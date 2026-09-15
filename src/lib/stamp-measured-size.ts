@@ -1,6 +1,13 @@
 import "server-only";
 import { prisma } from "./db";
 import {
+  listStampCopyPhotos,
+  measureFrameOf,
+  PHOTO_FRAME_SELECT,
+  sortPhotos,
+  type PhotoSummary,
+} from "./photos";
+import {
   MAX_SIZE_MM,
   MIN_SIZE_MM,
   measuredSizeWrite,
@@ -62,4 +69,68 @@ export async function writeMeasuredStampSize(
     await tx.stamp.update({ where: { id: stampId }, data: size });
     return { status: "saved", size };
   });
+}
+
+/**
+ * What the page editor offers for setting one stamp's size from a box (#1309): the size it states,
+ * the scale its photos are read at, and the photos a size can be measured on.
+ *
+ * The photos are the ones the stamp's own screen offers the tools on (#1290) — its own pictures, then
+ * its copies' — and only those whose frame is known: a picture with no measuring frame opens in the
+ * viewer without tools, and a box's panel offering it for measuring would promise a scale nobody can
+ * state. `unmeasurable` counts the rest, so the panel can say *why* nothing is offered rather than
+ * reading as a stamp with no photo.
+ */
+export interface StampSizeSources {
+  size: StampSizeFields;
+  scanDpi: number;
+  photos: PhotoSummary[];
+  unmeasurable: number;
+}
+
+export async function getStampSizeSources(
+  ownerId: string,
+  stampId: string
+): Promise<StampSizeSources> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: {
+      widthMm: true,
+      heightMm: true,
+      collection: { select: { ownerId: true, scanDpi: true } },
+      photos: {
+        select: { id: true, role: true, title: true, sortOrder: true, ...PHOTO_FRAME_SELECT },
+      },
+    },
+  });
+  if (!stamp || stamp.collection.ownerId !== ownerId) {
+    throw new StampMeasuredSizeError("Stamp not found.");
+  }
+  const own: PhotoSummary[] = stamp.photos
+    .map((p) => ({
+      id: p.id,
+      role: (p.role === "main" || p.role === "front" || p.role === "back" ? p.role : null) as
+        | "main"
+        | "front"
+        | "back"
+        | null,
+      title: p.title,
+      sortOrder: p.sortOrder,
+      measureFrame: measureFrameOf(p),
+    }))
+    .sort(sortPhotos);
+  const copies = await listStampCopyPhotos(ownerId, stampId);
+  const all = [...own, ...copies.photos];
+  const photos = all.filter((p) => p.measureFrame);
+  return {
+    size: {
+      widthMm: stamp.widthMm === null ? null : stamp.widthMm.toNumber(),
+      heightMm: stamp.heightMm === null ? null : stamp.heightMm.toNumber(),
+    },
+    scanDpi: stamp.collection.scanDpi,
+    photos,
+    // Copies past the strip's cap are not looked at, and are not counted here either: this says why
+    // nothing listed can be measured, not how many pictures exist.
+    unmeasurable: all.length - photos.length,
+  };
 }

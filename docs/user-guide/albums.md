@@ -248,6 +248,35 @@ and on which sheets, so a gap on a sheet you are not looking at is found before 
 **1:1 on a screen proves nothing about the card.** A viewer applies its own zoom and the print
 dialog applies another; the ruler check below is the only one that counts.
 
+### Setting a stamp's size from the page
+
+A box marked **sized from a neighbour** or **no size at all** can be settled without leaving the
+editor. Select the box and its panel has **The stamp's size**: what the stamp states now, and two ways
+to give it one.
+
+- **Measure on a photo.** The stamp's own photos and its copies' photos are shown as small pictures;
+  click one and it opens in the same viewer as on the stamp's and the copy's pages, with the same
+  tools, the scale beside the reading and the two fields to correct the figures before **Set as the
+  stamp's size**. A stamp with no photo — or with photos stored without the size they were taken at,
+  so no scale can be known — offers no measuring, and the panel says which.
+- **From a preset, or typed.** **Fill from a preset** fills the width and height, or type them, then
+  **Set as the stamp's size**.
+
+Either way the size is **the stamp's**, not this box's: it is written onto the stamp, so every album
+and every other screen takes it, and the pages are re-planned straight away — the box is then drawn
+from the stamp's own figure and its flag goes. It is not the same thing as *Corrected by* under it,
+which is millimetres on this album's box only. If the stamp already states a different size you are
+shown it and asked before it is replaced.
+
+**For a whole series at once**, click a checklist's heading and use **Apply size to this block…**, or
+**shift-click** several boxes (on a Mac, ⌘-click works too) and use **Apply size…** in the panel. Both
+open the same dialog as *Apply size…* on the Issues list: a preset or typed figures, how many of the
+stamps already state a size before anything is written, and **Overwrite those too** unticked every
+time. Their variants and child stamps are sized with them. A block means the stamps it has **on this
+sheet**. Measuring is for one stamp at a time, so a group is not offered it.
+
+A printed card is read-only, so none of this is offered on one.
+
 ### A printed card opens read-only
 
 The editor works on sheets that are still a plan. A card you have marked printed opens showing

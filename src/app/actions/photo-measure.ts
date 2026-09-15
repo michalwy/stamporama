@@ -8,13 +8,19 @@ import { parseSnapshotRequest } from "@/lib/annotations";
 import { saveAnnotatedSnapshot, type SnapshotOwner } from "@/lib/photo-snapshot";
 import { PhotoAuthError, PhotoValidationError } from "@/lib/photos";
 import {
+  getStampSizeSources,
   StampMeasuredSizeError,
   writeMeasuredStampSize,
   type MeasuredSizeWriteResult,
+  type StampSizeSources,
 } from "@/lib/stamp-measured-size";
 
 // The two writes the viewer makes (#674, #1290): a marked-up detail kept as a photo, and a size
 // measured on a picture written onto its stamp. Everything else the viewer does is looking.
+//
+// The size write is also the page editor's for one box (#1309), whether the figures were measured,
+// filled from a preset or typed: the gate — a stated size is never replaced silently — is the same
+// whichever way they were arrived at, and there is no *measured* flag to tell them apart (#763).
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -61,5 +67,24 @@ export async function setMeasuredStampSizeAction(
   } catch (err) {
     if (err instanceof StampMeasuredSizeError) return { status: "error", message: err.message };
     return { status: "error", message: "Failed to save the size. Please try again." };
+  }
+}
+
+export type StampSizeSourcesActionState =
+  | { status: "success"; sources: StampSizeSources }
+  | { status: "error"; message: string };
+
+/** What the page editor's box panel needs to set a stamp's size (#1309). */
+export async function getStampSizeSourcesAction(
+  stampId: string
+): Promise<StampSizeSourcesActionState> {
+  const session = await getSession();
+  try {
+    return { status: "success", sources: await getStampSizeSources(session.user.id, stampId) };
+  } catch (err) {
+    if (err instanceof StampMeasuredSizeError || err instanceof PhotoAuthError) {
+      return { status: "error", message: err.message };
+    }
+    return { status: "error", message: "Failed to read the stamp's size. Please try again." };
   }
 }
