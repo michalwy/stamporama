@@ -795,7 +795,9 @@ issue's row in the Issues list, or on a checklist's row in that issue's **Checkl
 2. Read the counts before anything is written: *17 stamps have no size and will get 25 × 30 mm. 3
    stamps already state a size and will be left as they are.* A stamp stating only a width or only a
    height counts as stating a size, and the sentence says how many of those there are.
-3. Press **Apply to 17 stamps**. A note says what was written.
+3. Press **Apply to 17 stamps**, or press Enter. A note says what was written. Enter applies the
+   dialog as it stands: it never ticks **Overwrite those too**, it does nothing while the button is
+   unavailable, and inside the open preset list it chooses a preset rather than applying.
 
 What it reaches, and what it leaves alone:
 
@@ -806,8 +808,8 @@ What it reaches, and what it leaves alone:
 - **A stamp that already states a size is skipped.** Tick **Overwrite those too** to replace them as
   well — for a series whose earlier figure was wrong. The box is **unticked every time the dialog
   opens**, and the counts and the button change as you tick it. Overwriting cannot be undone.
-- **Cancel writes nothing.** Nor does typing a size or choosing a preset: only the **Apply** button
-  writes.
+- **Cancel writes nothing.** Nor does typing a size or choosing a preset: only the **Apply** button,
+  or Enter, writes.
 - **The size is copied.** Correcting or deleting a preset later leaves these stamps as they are.
 - **A typed size is written exactly as a preset's is** — the same stamps, the same counts, the same
   rounding to a tenth. The only difference is where the figures came from.
