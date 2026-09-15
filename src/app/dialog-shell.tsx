@@ -4,7 +4,6 @@ import {
   useEffect,
   useId,
   useRef,
-  type ButtonHTMLAttributes,
   type ComponentPropsWithRef,
   type ReactNode,
   type Ref,
@@ -317,11 +316,13 @@ export function DialogPrimaryButton({
   );
 }
 
+/** Takes a `ref` for the primary's reason: the intake step puts its cursor on the button that opens
+ *  an umbrella's variant grid (#1317). */
 export function DialogSecondaryButton({
   type = "button",
   style,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ComponentPropsWithRef<"button">) {
   return (
     <button
       type={type}

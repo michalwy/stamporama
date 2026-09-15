@@ -238,6 +238,14 @@ export interface IntakeConditionDialogProps {
   /** The copy a re-identified scan tile already became (#1207) — the piece on screen, so left out
    * of the held copies it is compared with. Absent on every intake that creates a copy. */
   correctedCopyId?: string;
+  /**
+   * Offer an **umbrella's** variant price grid in place of its one catalogue value (#1317) — the
+   * scan-tile chain only. The catalogue page open at an umbrella prices each variant rather than the
+   * umbrella, so one field for the umbrella's own figure is the wrong question there; the grid is
+   * #618's, narrowed to this step's condition, certificate and format (#633) and started at the
+   * umbrella (#679). A stamp without variants keeps the field either way.
+   */
+  priceVariantsInGrid?: boolean;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -264,6 +272,7 @@ function IntakeConditionDialog({
   carriedStamps,
   onEditStamps,
   correctedCopyId,
+  priceVariantsInGrid,
   onBack,
   onClose,
   onSubmit,
@@ -402,6 +411,12 @@ function IntakeConditionDialog({
     conditions.find((c) => c.id === conditionId)?.abbreviation,
     certificateStatuses.find((c) => c.id === certId)?.abbreviation,
   ]
+    .filter(Boolean)
+    .join(" · ");
+  // …and what an umbrella's variant grid is narrowed to (#1317), which **does** carry the format:
+  // the grid fixes all three axes of the piece in hand, where the one figure above lands on the
+  // single whatever the format.
+  const variantGridLabel = [subjectLabel, formats.find((f) => f.id === formatId)?.abbreviation]
     .filter(Boolean)
     .join(" · ");
 
@@ -696,6 +711,9 @@ function IntakeConditionDialog({
               columns={singleStamp && formats.length > 0 ? 3 : 2}
               disabled={isPending || savingPrice}
               onChange={handleCatalogValueChange}
+              variantGrid={
+                priceVariantsInGrid ? { formatId, subjectLabel: variantGridLabel } : undefined
+              }
             />
           )}
 

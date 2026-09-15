@@ -75,9 +75,13 @@ puts the rolled-up figure back on screen.
 - **A stamp** — the **Price variants** button on the worklist below, on an offer's *Items*
   card, or on a listing blocker naming an unpriced variant. Opening it over any stamp of a
   tree shows the **whole tree**, since that is what the value is read from.
+- **A card-scan tile** — identifying a tile as a stamp that has variants of its own, the
+  **Price variants…** button in place of the catalog value field. See
+  [Pricing an umbrella's variants](purchases.md#pricing-an-umbrellas-variants-while-identifying).
 
-Opened **from an offer** — the *Items* card or a listing blocker — the grid is narrowed
-to the copy being listed: its condition alone, at its certificate and its format. Those two
+Opened **from an offer** — the *Items* card or a listing blocker — or **from a card-scan
+tile**, the grid is narrowed to the copy in hand: its condition alone, at its certificate and its
+format. Those two
 controls are gone, and a line above the grid names what it is scoped to; the catalog edition
 is still yours to choose. It is one cell per row, because that is the one cell the listing is
 blocked on.

@@ -1533,6 +1533,14 @@ export interface QuickCatalogPriceContext {
    * stays unpriced until either a factor or an explicit price exists.
    */
   displayFormat: { formatId: string; abbreviation: string; factor: number | null } | null;
+  /**
+   * True when the stamp has variants of its own — an umbrella (ADR-0010 §3), whose value is the
+   * lowest of theirs (#238). The rule is `isUnknownVariantStamp`, the one the variant price grid
+   * locks a row on (#627), so a surface that asks here and a grid opened afterwards agree about
+   * which stamp is an umbrella. Scan-tile identification reads it to offer that grid in place of
+   * one figure for the umbrella itself (#1317).
+   */
+  isUmbrella: boolean;
 }
 
 /** Resolve the catalogs the quick-price editor can write to for a stamp: every catalog **effective**
@@ -1666,8 +1674,13 @@ export async function getQuickCatalogPriceContext(
   const targetEditionIds = new Set(targets.map((t) => t.editionId));
 
   const areaName = await resolvePrimaryAreaName(stampId);
+  const variantFlags = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: { variants: { select: VARIANT_FLAG_SELECT } },
+  });
 
   return {
+    isUmbrella: variantFlags ? isUnknownVariantStamp(variantFlags) : false,
     catalogs: targets.map((t) => ({
       catalogNameId: t.catalogNameId,
       catalogLabel: t.catalogLabel,

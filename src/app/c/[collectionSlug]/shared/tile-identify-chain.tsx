@@ -582,6 +582,10 @@ export function TileIdentifyChainDialogs({
           // through the picker. Null on every other route in, which is what keeps this an action and
           // not a default.
           prefill={tileCorrection ? tileCorrection.prefill : (tileRepeat ?? undefined)}
+          // An umbrella's catalogue page lists a price per variant, and this is the moment it is
+          // open (#1317) — so the one figure gives way to the variant grid. Here and not on the
+          // purchase screen's intake, which has no piece in hand to identify.
+          priceVariantsInGrid
           // The one question #586 left to identification. Only the order's **open** lots, since a
           // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
           // refusal.

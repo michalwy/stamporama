@@ -1384,6 +1384,26 @@ long after identification.
 The value is saved when you confirm the step. If saving it fails, nothing else happens either and
 the message says why — a figure you read off the catalogue is not dropped quietly.
 
+#### Pricing an umbrella's variants while identifying
+
+Identify a card-scan tile as a stamp that has **variants of its own** — an umbrella, typically
+because the picture cannot tell you which variant it is — and the catalogue in front of you lists a
+price for each variant rather than one for the stamp. So instead of the single field, the step shows
+a **Price variants…** button.
+
+- It opens the [variant price grid](variant-prices.md) for that stamp and every variant under it,
+  on your primary catalogue's latest edition, **narrowed to the condition, certificate and format**
+  you have chosen in the step. Pick a condition first; the button waits for one.
+- The grid behaves as it does everywhere: the cursor starts in the first cell, **Tab** moves down
+  the column, **Enter** saves the cell and closes the grid. The umbrella's own row shows what its
+  variants roll up to and is read-only.
+- **Prices are saved as you enter them**, on their own. Going back or cancelling the identification
+  afterwards does not undo them — a catalogue price is a fact about the stamp, not about this tile.
+- Change the condition, certificate or format and open the grid again: it is narrowed to the new
+  choice.
+- The same applies when several tiles are identified as one stamp. A stamp without variants keeps
+  the single field, and a run of tiles identified as a set keeps its own values column.
+
 The copies are
 linked to the lot and marked **Ordered** — purchased but
 not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
