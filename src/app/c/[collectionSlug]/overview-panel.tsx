@@ -239,19 +239,29 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
           <TileEmpty>Record a sale to see what the collection has returned.</TileEmpty>
         ) : (
           <>
-            <div style={{ ...HEADLINE_STYLE, ...signedStyle(Number(realized.profit)) }}>
-              {signed(realized.profit)} {ccy}
-            </div>
-            <div style={LINE_STYLE}>
-              Proceeds {realized.proceeds} {ccy} over {realized.soldCount} sold{" "}
-              {realized.soldCount === 1 ? "copy" : "copies"} · cost{" "}
-              {realized.soldCost.totalCostBasis} {ccy}
-            </div>
+            {realized.profit == null ? (
+              <div style={LINE_STYLE}>
+                Cannot be computed yet — no sold copy has both its proceeds and its cost known.
+              </div>
+            ) : (
+              <>
+                <div style={{ ...HEADLINE_STYLE, ...signedStyle(Number(realized.profit)) }}>
+                  {signed(realized.profit)} {ccy}
+                </div>
+                <div style={LINE_STYLE}>
+                  Proceeds {realized.proceeds} {ccy} · cost {realized.cost} {ccy} over{" "}
+                  {realized.countedCount === realized.copyCount
+                    ? `${realized.copyCount} sold ${realized.copyCount === 1 ? "copy" : "copies"}`
+                    : `${realized.countedCount} of ${realized.copyCount} sold copies`}
+                </div>
+              </>
+            )}
             <ValueCaveats
               parts={[
-                count(realized.unresolvedCount, "sold shares unresolved"),
-                count(realized.soldCost.pendingCount, "cost pending"),
-                count(realized.soldCost.noneCount, "no cost recorded"),
+                count(realized.leftOut.noRate, "with no exchange rate"),
+                count(realized.leftOut.costPending, "cost pending"),
+                count(realized.leftOut.noCost, "no cost recorded"),
+                count(realized.leftOut.unsplittable, "sold shares unsplittable"),
               ]}
             />
           </>

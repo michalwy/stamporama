@@ -153,6 +153,10 @@ unit-tested without Prisma; the server (#166/#168) assembles inputs and surfaces
 4. Per copy: **P/L = net proceeds (base) − `Item.costBasis` (base)**. A `null` cost-basis
    (lot still open / channel wrote no cost) yields a `null` P/L — reporting treats that as *not
    yet computable*, never phantom profit (consistent with `resolveCostBasis`, ADR-0009).
+   *Surfaced by #168* (`sale-profit.ts`): such a copy — and one on a sale with no frozen rate, or
+   whose share of a unit cannot be split — is left out of both proceeds and cost and counted by
+   reason; a sale's figure covers the copies it could count, and the Overview's realized figure is
+   those sale figures summed.
 
 Because shipping lands in the base currency, a sale's **net proceeds** is a base-currency figure
 `(gross + handling − commission) × rate − shippingBase`; for a single-currency collection this

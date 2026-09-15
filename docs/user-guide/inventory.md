@@ -353,6 +353,23 @@ A frozen cost-basis is **not** recomputed automatically if you later edit catalo
 or re-point the copy to another variant — to change it, reopen the lot, correct the copies,
 and close it again.
 
+### What a sold copy earned
+
+Once a copy has [sold](sales.md), the **Sale** card on its [copy page](detail-pages.md#the-copy-page)
+shows three figures, all in your base currency:
+
+- **Net proceeds** — what the copy brought in after commission, buyer handling and your shipping, at
+  the sale's frozen exchange rate. A copy sold as part of a set is labelled **Share of net
+  proceeds**: the set's net is divided between its copies in proportion to their catalog prices.
+- **Cost basis** — what the copy cost you.
+- **Profit / loss** — the share minus the cost basis.
+
+A figure that cannot be worked out says so instead of showing a number: **No exchange rate** when
+no rate to your base currency is known for the sale, **Cannot be split** when a copy in the same set
+has no catalog price, **Pending** or **None recorded** for the cost basis — and then the profit reads
+**Cannot be computed**. Hover any of them for the reason. See [profit and
+loss](sales.md#profit-and-loss) for how the sale itself adds up.
+
 ### Going to a copy's purchase
 
 A copy bought through a [purchase order](purchases.md) carries a **Go to purchase** entry in its

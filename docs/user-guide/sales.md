@@ -172,8 +172,37 @@ changing the platform's currency later leaves existing sales untouched.
   [keeping platforms in sync](offers.md) on the Offers page.
 
 The shared amounts are split across the sold units in proportion to their sale prices, and each
-unit's net is converted to your base currency at the frozen rate — this feeds per-item
-profit/loss (surfaced with the profit/loss views).
+unit's net is converted to your base currency at the frozen rate — this is what
+[profit and loss](#profit-and-loss) is measured from.
+
+## Profit and loss
+
+Under **Net proceeds**, the **Amounts** section shows what the sold copies **cost** you — their
+[cost-basis](inventory.md#cost-basis), in your base currency — and the **profit or loss**: the net
+proceeds minus that cost, green for a profit and red for a loss. Each sold unit's card shows its
+own **profit** under its net, too: the unit's net against the cost of the copies in it.
+
+A profit is only stated where it can actually be worked out. A copy is **left out** — never
+counted as costing nothing — when:
+
+- **its cost is pending** — it belongs to a purchase lot that is still open;
+- **it has no cost recorded** — you added it by hand, or it came through no purchase lot;
+- **there is no exchange rate** — the sale, or the shipping you paid, is in another currency and no
+  rate to your base currency is known for the sale date; then none of the sale's copies can be
+  counted;
+- **its share cannot be split** — its own cost is known, but it went in the same unit as a copy
+  that is left out, and the unit's net cannot be divided between them because a copy on it has no
+  catalog price.
+
+On a sale where only some copies are left out, the figure is marked **incomplete**: the cost and
+profit cover the copies that could be counted, and a note says how many of how many that is,
+what their proceeds were, and why the rest were left out. Where nothing can be counted, the row
+reads **cannot be computed** and the note says why. A sold unit shows its profit only when every
+copy on it counts; otherwise it reads **profit —**, and hovering it says which copies are missing
+what.
+
+Added up over every sale, these are the figures the [Overview](overview.md)'s **Realized profit and
+loss** tile shows. A copy [traded away](trades.md) is not a sale and has no profit here.
 
 ## Fulfillment status
 
@@ -257,7 +286,7 @@ corrected in one place and every sale it ever carried follows.
 The detail screen doubles as a **packing list**. Each sold set is a collapsible card (expanded
 by default — deliberately unlike the lot and set cards on the [purchase](purchases.md), [offer](offers.md)
 and [auction sale](auctions.md) screens, because a packing list is there to be read, not scanned)
-whose header shows the set, its copy count, price, and net. Expanding it shows the
+whose header shows the set, its copy count, price, net and [profit](#profit-and-loss). Expanding it shows the
 exact physical copies that left — as full inventory rows with catalog number, condition, and
 **location**, so you can pull each piece to pack it. It works like a purchase order:
 

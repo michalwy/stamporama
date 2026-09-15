@@ -450,6 +450,66 @@ export function CopyDetailPanel({
                   <Field label={sale.lineItemCount > 1 ? `Line price (${sale.lineItemCount} copies)` : "Line price"}>
                     {sale.linePrice} {sale.currency}
                   </Field>
+                  {/* What this piece earned (#168). A copy sold in a set takes the share the sale splits
+                      the set's net into; each figure that cannot be had says why rather than "0". */}
+                  <Field label={sale.lineItemCount > 1 ? "Share of net proceeds" : "Net proceeds"}>
+                    {sale.profit.share != null ? (
+                      `${sale.profit.share} ${sale.baseCurrency}`
+                    ) : (
+                      <MissingFigure
+                        label={sale.profit.shareGap === "no-rate" ? "No exchange rate" : "Cannot be split"}
+                        reason={
+                          sale.profit.shareGap === "no-rate"
+                            ? `No exchange rate to ${sale.baseCurrency} is known for this sale or its shipping`
+                            : "A copy sold in this set has no catalogue price, so the set's net cannot be split between its copies"
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label="Cost basis">
+                    {sale.profit.cost.state === "known" ? (
+                      `${sale.profit.cost.amount} ${sale.baseCurrency}`
+                    ) : sale.profit.cost.state === "pending" ? (
+                      <MissingFigure
+                        label="Pending"
+                        reason="The purchase lot is still open — the cost per copy is not settled yet"
+                      />
+                    ) : (
+                      <MissingFigure
+                        label="None recorded"
+                        reason="This copy carries no cost basis — it was added by hand or came through no purchase lot"
+                      />
+                    )}
+                  </Field>
+                  <Field label="Profit / loss">
+                    {sale.profit.profit != null ? (
+                      <span
+                        style={{
+                          fontVariantNumeric: "tabular-nums",
+                          color:
+                            Number(sale.profit.profit) > 0
+                              ? "var(--color-success)"
+                              : Number(sale.profit.profit) < 0
+                                ? "var(--color-error)"
+                                : undefined,
+                        }}
+                      >
+                        {Number(sale.profit.profit) < 0
+                          ? `−${Math.abs(Number(sale.profit.profit)).toFixed(2)}`
+                          : `+${Number(sale.profit.profit).toFixed(2)}`}{" "}
+                        {sale.baseCurrency}
+                      </span>
+                    ) : (
+                      <MissingFigure
+                        label="Cannot be computed"
+                        reason={
+                          sale.profit.share == null
+                            ? "The copy's share of the net is not known"
+                            : "The copy's cost basis is not known"
+                        }
+                      />
+                    )}
+                  </Field>
                   <Field label="Through offer">{sale.offerNo != null ? `#${sale.offerNo}` : null}</Field>
                   <Field label="Packed">{sale.packed ? "Yes" : "Not yet"}</Field>
                 </FieldGrid>
@@ -505,5 +565,14 @@ export function CopyDetailPanel({
         />
       )}
     </>
+  );
+}
+
+/** A money figure that does not exist, named with why (#168) — muted, never a zero. */
+function MissingFigure({ label, reason }: { label: string; reason: string }) {
+  return (
+    <Tooltip content={reason}>
+      <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
+    </Tooltip>
   );
 }

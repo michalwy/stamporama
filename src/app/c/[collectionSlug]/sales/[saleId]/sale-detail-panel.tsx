@@ -11,6 +11,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetail } from "@/lib/sales";
+import { describeLeftOut, type ProfitFigures } from "@/lib/sale-profit";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
 import type { ShippingMethodData } from "@/lib/shipping-methods";
@@ -646,6 +647,11 @@ export function SaleDetailPanel({
               <div style={BASE_CELL} />
             </>
           )}
+
+          {/* Profit and loss (#168): the net against what the sold copies cost. */}
+          {sale.lines.length > 0 && (
+            <ProfitRows profit={sale.profit} baseCurrency={sale.baseCurrency} showBase={showBase} />
+          )}
         </div>
       </div>
 
@@ -998,6 +1004,90 @@ const BASE_CELL: React.CSSProperties = {
 /** The muted "≈ X BASE" text for a base-currency column cell (#208), or null when none applies. */
 function baseEqText(value: string | null | undefined, currency: string): string | null {
   return value ? `≈ ${value} ${currency}` : null;
+}
+
+const PROFIT_NOTE: React.CSSProperties = {
+  gridColumn: "1 / -1",
+  margin: "0.125rem 0 0.25rem",
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+};
+
+/** The cost and profit rows under the net (#168), in the net's own column. A profit that cannot be
+ * computed says why instead of showing a figure; one over only some of the copies says how many it
+ * left out, and why. */
+function ProfitRows({
+  profit,
+  baseCurrency,
+  showBase,
+}: {
+  profit: ProfitFigures;
+  baseCurrency: string;
+  showBase: boolean;
+}) {
+  // The net sits in the base column when the sale is in another currency; its cost and profit
+  // follow it there, so the three read down one column.
+  function amount(content: React.ReactNode, style: React.CSSProperties = {}) {
+    return showBase ? (
+      <>
+        <div style={ORIG_CELL} />
+        <div style={{ ...BASE_CELL, fontSize: "0.8125rem", color: "var(--color-text-primary)", ...style }}>
+          {content}
+        </div>
+      </>
+    ) : (
+      <>
+        <div style={{ ...ORIG_CELL, ...style }}>
+          <span style={{ paddingRight: VALUE_INSET }}>{content}</span>
+        </div>
+        <div style={BASE_CELL} />
+      </>
+    );
+  }
+  const reasons = describeLeftOut(profit.leftOut).join(", ");
+
+  if (profit.profit == null) {
+    return (
+      <>
+        <div style={ROW_LABEL}>Profit / loss</div>
+        {amount("cannot be computed", { color: "var(--color-text-muted)" })}
+        <p style={PROFIT_NOTE}>
+          {profit.leftOut.noRate > 0
+            ? `No exchange rate to ${baseCurrency} is known for this sale or its shipping, so none of its copies has a figure in ${baseCurrency}.`
+            : `None of the ${profit.copyCount} sold ${profit.copyCount === 1 ? "copy" : "copies"} can be counted: ${reasons}.`}
+        </p>
+      </>
+    );
+  }
+
+  const n = Number(profit.profit);
+  const incomplete = profit.countedCount < profit.copyCount;
+  return (
+    <>
+      <div style={ROW_LABEL}>{incomplete ? "− Cost of the counted copies" : "− Cost of copies sold"}</div>
+      {amount(`${profit.cost} ${baseCurrency}`)}
+      <div style={{ ...ROW_LABEL, fontWeight: 600, color: "var(--color-text-primary)" }}>
+        {incomplete ? "Profit / loss (incomplete)" : "Profit / loss"}
+      </div>
+      {amount(`${signedAmount(profit.profit)} ${baseCurrency}`, {
+        fontSize: "0.875rem",
+        fontWeight: 600,
+        color: n > 0 ? "var(--color-success)" : n < 0 ? "var(--color-error)" : "var(--color-text-primary)",
+      })}
+      {incomplete && (
+        <p style={PROFIT_NOTE}>
+          Counted over {profit.countedCount} of {profit.copyCount} copies, whose proceeds are{" "}
+          {profit.proceeds} {baseCurrency}. Left out: {reasons}.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** `+` printed on a surplus, a typographic `−` on a loss. */
+function signedAmount(amount: string): string {
+  const n = Number(amount);
+  return n < 0 ? `−${Math.abs(n).toFixed(2)}` : `+${n.toFixed(2)}`;
 }
 
 function EditableAmountRow({
