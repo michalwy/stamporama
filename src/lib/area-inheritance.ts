@@ -6,9 +6,10 @@ import { effectivePrimaryVendorId, effectiveVendorsForArea } from "./area-vendor
  * field's inherited value as a placeholder rather than copying it in (#377's idiom, #675).
  *
  * Pulled out of the areas panel for #776: the same dialog now opens from the area filter facet,
- * where there is no management tree to read the values off. Pure, so both openers derive them the
+ * where there is no management tree to read the values off. Pure, so every opener derives them the
  * one way — a quick-add that resolved inheritance differently would create areas that look
- * identical in the tree and number their stamps differently.
+ * identical in the tree and number their stamps differently. Since #954 the form itself resolves
+ * them, off the parent currently chosen in its picker, so no opener passes them in at all.
  */
 export interface AreaInheritedValues {
   inheritedPrimaryId: string | null;
