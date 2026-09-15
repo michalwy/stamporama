@@ -97,6 +97,7 @@ import {
   Pause,
   Percent,
   Pencil,
+  PencilRuler,
   Play,
   Plus,
   Printer,
@@ -125,6 +126,7 @@ import {
   Trash2,
   TriangleAlert,
   Truck,
+  Type,
   Undo2,
   Upload,
   FileUp,
@@ -371,6 +373,11 @@ const GLYPHS = {
   annotateRing: Circle,
   /** A straight line drawn for reference. */
   annotateLine: Minus,
+  /** A line with graduations and its length, kept on the picture (#1300). Not `measure`, which takes
+   * a reading and leaves nothing behind. */
+  annotateRuler: PencilRuler,
+  /** A note placed on the picture (#1300). */
+  annotateText: Type,
   /** The view on screen, marks and all, kept as a new photo. */
   snapshot: Camera,
 

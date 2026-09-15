@@ -213,3 +213,20 @@ export function measuredSizeWrite(
   if (current.widthMm === null && current.heightMm === null) return "write";
   return replace ? "write" : "confirm";
 }
+
+/**
+ * A measured size as the collector left it after correcting it by hand (#1299), or null while either
+ * field is not a size.
+ *
+ * The ends of a ruler are hard to put exactly on a stamp's edges, so the figure a measurement gives is
+ * often a fraction off one the collector knows. Both fields are prefilled with the measurement and
+ * read here with {@link parseSizeMm}'s grammar — a comma or a full stop, a tenth of a millimetre — and
+ * **both** must hold a figure: a blank is a real answer on the stamp form, but setting a size from a
+ * measurement is setting the whole of it, and half a size is not something a measurement produced.
+ */
+export function parseCorrectedSize(widthText: string, heightText: string): StampSize | null {
+  const width = parseSizeMm(widthText);
+  const height = parseSizeMm(heightText);
+  if (!width.ok || !height.ok || width.mm === null || height.mm === null) return null;
+  return { widthMm: width.mm, heightMm: height.mm };
+}

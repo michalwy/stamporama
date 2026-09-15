@@ -617,18 +617,38 @@ pages — see [Measuring and marking a photo](detail-pages.md#measuring-and-mark
 #### Marking a detail and keeping a snapshot
 
 A plate flaw, a retouch or a broken letter is easier to find again — and to show someone — when it
-is marked and kept, not just looked at. Three buttons in the viewer's toolbar do that.
+is marked and kept, not just looked at. The marking buttons in the viewer's toolbar do that.
 
 **Ring** — drag across a detail to draw a ring around it. **Line** — drag to draw a straight line
 for reference, say along a frame line that is not quite straight. Neither says anything numeric, so
-neither needs the scan resolution; use the **Ruler** when you want a figure. Marks stay on the
-picture while you add more — a bar under the viewer counts them, with **Undo** for the last one and
-**Clear marks** for all of them. They belong to the side they were drawn on, like measuring marks.
+neither needs the scan resolution.
+
+**Ruler mark** — drag along what you want to measure, and the line stays on the picture with
+graduations and its length: *2.50 mm at 1200 dpi*. It is how a snapshot shows *this gap is 2.5 mm*,
+where the **Ruler** only gives a reading while you look. Draw as many as you like. The graduations
+are as fine as the zoom leaves room for — tenths of a millimetre close up, half and whole
+millimetres further out — with a longer tick on the round figures. Its length is taken at the
+resolution on the measuring bar when you draw it, and stays with it; like the Ruler, it is not
+offered on a picture that cannot be measured.
+
+**Text** — click where the note goes and type it; **Enter** keeps it, **Esc** drops it. Click a note
+with the Text tool to change it; clear its text, or press **Remove note**, to take it off.
+
+Marks stay on the picture while you add more — a bar under the viewer counts them. **Undo** takes
+back the last change — a mark drawn, a note typed, changed or removed, or **Clear marks**, which takes
+them all off. They belong to the side they were drawn on, like measuring marks.
+
+**How marks look.** The same bar sets the **colour** of every mark, notes included — white, black,
+red, yellow, green or blue, each drawn over a thin contrasting edge so it shows on paper and ink
+alike — the **thickness** of every line, and the **size** of notes and of a ruler mark's figure.
+Changing any of them restyles the marks already drawn, and the viewer remembers your choice the next
+time it opens. The same colour and thickness are used for the Ruler, Size and Perforation lines.
 
 **Snapshot** keeps what is on screen as a new photo: the part of the picture in view at the zoom you
-chose, with your rings and lines drawn into it, and — if a ruler, size or perforation reading is
-standing — that line or box with its figure and the resolution it was taken at. Give it a title
-(*Detail* if you do not) and press **Save as photo**. The picture itself is never changed.
+chose, with your marks drawn into it exactly as you see them — colour, thickness, graduations,
+lengths and notes — and, if a ruler, size or perforation reading is standing, that line or box with
+its figure and the resolution it was taken at. Give it a title (*Detail* if you do not) and press
+**Save as photo**. The picture itself is never changed.
 
 **Where the snapshot goes** is whoever owns the picture you took it on:
 

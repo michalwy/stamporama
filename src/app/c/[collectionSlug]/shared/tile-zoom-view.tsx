@@ -15,14 +15,24 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ThumbPreview } from "@/app/photo-viewer";
 import { Icon } from "@/app/icons";
 import {
+  ANNOTATION_COLOURS,
+  ANNOTATION_FONT_FAMILY,
+  MAX_TEXT_MARK,
+  NO_MARKS,
   annotationFromDrag,
+  changeMarks,
   snapshotRegion,
-  type Annotation,
+  textMarkAt,
+  undoMarks,
   type AnnotationKind,
+  type AnnotationStyle,
+  type MarksHistory,
   type SnapshotMark,
 } from "@/lib/annotations";
 import type { Box } from "@/lib/scan-boxes";
 import { AnnotationShapes } from "./annotation-layer";
+import { AnnotationStyleControls } from "./annotation-style-controls";
+import { useAnnotationStyle } from "./use-annotation-style";
 import { SnapshotDialog } from "./snapshot-dialog";
 import { useEscapeLayer } from "@/app/escape-stack";
 import type { TileSideView } from "@/lib/scan-tile-view";
@@ -518,11 +528,25 @@ function IdentifiedPieceGrid({
  * two chances to measure two different stamps and nothing would notice. */
 type MeasureTool = "off" | "ruler" | "perforation" | "size" | AnnotationKind;
 
-/** The two tools that draw a mark rather than take a measurement (#674): a ring and a line. They
- * take a drag exactly as the ruler does, need no scale and no scan geometry, and leave their mark on
- * the picture — kept only in a snapshot. */
+/** The tools that draw a mark rather than take a measurement (#674, #1300): a ring, a line, a ruler
+ * mark and a note. They leave their mark on the picture — kept only in a snapshot. A ring and a line
+ * need no scale and no scan geometry; a note is placed by a click rather than a drag. */
 function isAnnotationTool(tool: MeasureTool): tool is AnnotationKind {
-  return tool === "ellipse" || tool === "line";
+  return tool === "ellipse" || tool === "line" || tool === "rulerMark" || tool === "text";
+}
+
+/** The tools whose result is a length (#598, #1300) — the ruler mark is one of them, so it follows the
+ * ruler's rule: absent where the picture's scale cannot be stated. */
+function needsScale(tool: MeasureTool): boolean {
+  return tool === "ruler" || tool === "perforation" || tool === "size" || tool === "rulerMark";
+}
+
+/** A note being typed or edited (#1300): a new one where the picture was clicked (`index` null), or the
+ * note at `index` opened again. */
+interface TextEdit {
+  index: number | null;
+  at: ScanPoint;
+  text: string;
 }
 
 /**
@@ -554,6 +578,9 @@ function describeReading(args: {
   // The marks say nothing numeric, so they need no scale and are not refused for the lack of one.
   if (tool === "ellipse") return { text: "Drag across a detail to ring it.", muted: true };
   if (tool === "line") return { text: "Drag to draw a line for reference.", muted: true };
+  if (tool === "text") {
+    return { text: "Click where the note goes and type — click a note to edit it.", muted: true };
+  }
   if (dpi === null) {
     return {
       text: "State the resolution you scan at — a measurement is only as good as it.",
@@ -565,6 +592,8 @@ function describeReading(args: {
       text:
         tool === "ruler"
           ? `Drag across the ${noun} to measure it.`
+          : tool === "rulerMark"
+            ? "Drag along what to measure — the line stays on the picture with its graduations."
           : tool === "size"
             ? "Drag a box around the stamp, corner to corner."
             : "Drag from the first hole of a run to the last.",
@@ -594,7 +623,7 @@ function describeReading(args: {
       detail: `${Math.round(w)} × ${Math.round(h)} scan px`,
     };
   }
-  if (tool === "ruler") {
+  if (tool === "ruler" || tool === "rulerMark") {
     return {
       text: `${formatMillimetres(mm)} mm at ${dpi} dpi`,
       muted: false,
@@ -840,7 +869,7 @@ export function TileZoomView({
   /** …and what is actually down. Derived rather than corrected after the fact: a side with no box
    * cannot be measured at all, and forcing the choice back to `off` from an effect would let one
    * render happen with a tool down over a side that has no scan geometry. */
-  const tool: MeasureTool = canMeasure || isAnnotationTool(chosenTool) ? chosenTool : "off";
+  const tool: MeasureTool = canMeasure || !needsScale(chosenTool) ? chosenTool : "off";
   /** A tool that takes a drag is down — a measurement or a mark. */
   const measuring = tool !== "off";
   const annotating = isAnnotationTool(tool);
@@ -852,15 +881,61 @@ export function TileZoomView({
    * frame, where the old marks would lie across somewhere else — so they go, adjusted while rendering
    * rather than in an effect, which would draw them over the turned picture for a frame first. */
   const [marksOn, setMarksOn] = useState<string | null>(current?.photoId ?? null);
-  /** The rings and lines drawn so far (#674), in the same scan pixels as the marks. They stay until
-   * cleared — a detail is usually ringed and then given a line or a measurement beside it — and they
-   * belong to the picture they were drawn on, so they go with it exactly as the marks do. */
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  /** The marks drawn so far (#674, #1300), in the same scan pixels as the measuring marks, with every
+   * change to them kept for **Undo**. They stay until cleared — a detail is usually ringed and then
+   * given a line or a note beside it — and they belong to the picture they were drawn on, so they go
+   * with it exactly as the measuring marks do. */
+  const [history, setHistory] = useState<MarksHistory>(NO_MARKS);
+  const annotations = history.marks;
+  /** A note being typed (#1300). Held in a ref beside the state: it is finished from a blur, a key and a
+   * click, which can arrive in one turn, and only the first of them may keep it. */
+  const [editing, setEditing] = useState<TextEdit | null>(null);
+  const editingRef = useRef<TextEdit | null>(null);
   if (marksOn !== (current?.photoId ?? null)) {
     setMarksOn(current?.photoId ?? null);
     setMarks(null);
-    setAnnotations([]);
+    setHistory(NO_MARKS);
+    setEditing(null);
   }
+  // …and the note's ref with it, once the new picture is in: a blur arriving from the old picture's
+  // field must find nothing to keep.
+  const photoOnScreen = current?.photoId ?? null;
+  useEffect(() => {
+    editingRef.current = null;
+  }, [photoOnScreen]);
+
+  /** How marks are drawn (#1300) — one style for all of them, remembered for the next sitting. */
+  const [annotationStyle, setAnnotationStyle] = useAnnotationStyle();
+
+  const editNote = useCallback((next: TextEdit | null) => {
+    editingRef.current = next;
+    setEditing(next);
+  }, []);
+
+  /** Finish the note being typed: keep it (an emptied note is removed), or drop the edit. */
+  const finishNote = useCallback(
+    (keep: boolean) => {
+      const edit = editingRef.current;
+      if (!edit) return;
+      editNote(null);
+      if (!keep) return;
+      const text = edit.text.trim().slice(0, MAX_TEXT_MARK);
+      setHistory((h) => {
+        if (edit.index === null) {
+          return text ? changeMarks(h, [...h.marks, { kind: "text", at: edit.at, text }]) : h;
+        }
+        const note = h.marks[edit.index];
+        if (!note || note.kind !== "text" || note.text === text) return h;
+        return changeMarks(
+          h,
+          text
+            ? h.marks.map((m, i) => (i === edit.index ? { ...note, text } : m))
+            : h.marks.filter((_, i) => i !== edit.index)
+        );
+      });
+    },
+    [editNote]
+  );
 
   /** The stated scale, as typed. Prefilled from the collection and **never written back**: a card
    * scanned at 600 measured once is a fact about that card, not a new assumption for every later
@@ -893,15 +968,30 @@ export function TileZoomView({
    * different pieces of card, so carrying a line across the flip would draw a measurement of
    * somewhere else over a picture of somewhere else. The zoom is kept, deliberately (#585); only
    * the marks are not. */
-  const showSide = useCallback((side: TileSideView["side"]) => {
-    setSideKey(side);
+  const showSide = useCallback(
+    (side: TileSideView["side"]) => {
+      setSideKey(side);
+      setMarks(null);
+      setHistory(NO_MARKS);
+      editNote(null);
+    },
+    [editNote]
+  );
+
+  /** Put a tool down, or take it up again. A note being typed is kept first — reaching for the next
+   * tool is how a note is usually finished. */
+  const chooseTool = (next: MeasureTool) => {
+    finishNote(true);
+    setChosenTool((t) => (t === next ? "off" : next));
     setMarks(null);
-    setAnnotations([]);
-  }, []);
+  };
 
   useEffect(() => {
     if (!measuring) return;
     const down = (e: KeyboardEvent) => {
+      // A space typed into a note is a space, not the hand.
+      const target = e.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
       if (e.key === " ") setSpaceHeld(true);
     };
     const up = (e: KeyboardEvent) => {
@@ -930,6 +1020,8 @@ export function TileZoomView({
     }
     setChosenTool("off");
   }, measuring);
+  // A note being typed is the topmost thing of all: Escape drops the edit, and the tool stays down.
+  useEscapeLayer(() => finishNote(false), editing !== null);
 
   /** A viewport point as a mark, clamped to the picture: a drag that leaves the tile would
    * otherwise measure to a point of card that is not on it. */
@@ -1156,6 +1248,24 @@ export function TileZoomView({
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (!ready) return;
+    // A click away from a note being typed keeps it, and does nothing else: a second click places
+    // the next one. Doing both in one would read the marks before the kept note is among them.
+    if (editingRef.current) {
+      finishNote(true);
+      return;
+    }
+    if (e.button === 0 && !handDrag && tool === "text") {
+      const at = markAt(e.clientX, e.clientY);
+      if (!at) return;
+      const hit = textMarkAt(annotations, at, annotationStyle.fontSize, view.scale);
+      const note = hit === null ? null : annotations[hit];
+      editNote(
+        note && note.kind === "text"
+          ? { index: hit, at: note.at, text: note.text }
+          : { index: null, at, text: "" }
+      );
+      return;
+    }
     if (e.button === 0 && !handDrag) {
       const at = markAt(e.clientX, e.clientY);
       if (!at) return;
@@ -1200,11 +1310,12 @@ export function TileZoomView({
     // under their hand would flicker through every count on the way to the one they meant.
     const line = markedRef.current;
     if (wasMarking && tool === "perforation" && line) void countTeeth(line);
-    // A ring or a line is finished when the drag is, and joins the ones already drawn; the marks
-    // clear so the next drag starts a new one rather than stretching this.
-    if (wasMarking && isAnnotationTool(tool) && line) {
-      const mark = annotationFromDrag(tool, line.a, line.b);
-      if (mark) setAnnotations((drawn) => [...drawn, mark]);
+    // A ring, a line or a ruler mark is finished when the drag is, and joins the ones already
+    // drawn; the marks clear so the next drag starts a new one rather than stretching this. A ruler
+    // mark takes the scale on the bar with it — the one it was drawn at.
+    if (wasMarking && isAnnotationTool(tool) && tool !== "text" && line) {
+      const mark = annotationFromDrag(tool, line.a, line.b, dpi);
+      if (mark) setHistory((h) => changeMarks(h, [...h.marks, mark]));
       setMarks(null);
     }
   };
@@ -1272,7 +1383,12 @@ export function TileZoomView({
 
   /** A snapshot being named before it is saved (#674): what was in view and what was drawn on it,
    * fixed at the moment the button was pressed so a pan behind the dialog cannot change it. */
-  const [snapshot, setSnapshot] = useState<{ region: Box; marks: SnapshotMark[] } | null>(null);
+  const [snapshot, setSnapshot] = useState<{
+    region: Box;
+    marks: SnapshotMark[];
+    style: AnnotationStyle;
+    viewScale: number;
+  } | null>(null);
 
   if (!current) return null;
 
@@ -1294,7 +1410,7 @@ export function TileZoomView({
         label: reading.text,
       });
     }
-    setSnapshot({ region, marks: kept });
+    setSnapshot({ region, marks: kept, style: annotationStyle, viewScale: view.scale });
   };
 
   return (
@@ -1353,10 +1469,7 @@ export function TileZoomView({
               label="Ruler"
               hint={`Measure between two points of the ${subject === "photo" ? "picture" : "scan"}, in millimetres`}
               active={tool === "ruler"}
-              onClick={() => {
-                setChosenTool((t) => (t === "ruler" ? "off" : "ruler"));
-                setMarks(null);
-              }}
+              onClick={() => chooseTool("ruler")}
             />
             {/* The size tool (#763) — the ruler's second axis. Beside it rather than folded into
                 it because they answer different questions and a tool that quietly changed what a
@@ -1367,19 +1480,13 @@ export function TileZoomView({
               label="Size"
               hint="Drag a box around the stamp — its width and height in millimetres, offered to the stamp's size when a stamp form is open beside this"
               active={tool === "size"}
-              onClick={() => {
-                setChosenTool((t) => (t === "size" ? "off" : "size"));
-                setMarks(null);
-              }}
+              onClick={() => chooseTool("size")}
             />
             <ScanToolButton
               label="Perforation"
               hint="Mark the first and last hole of a run — the teeth between them are counted for you, and you can correct the count"
               active={tool === "perforation"}
-              onClick={() => {
-                setChosenTool((t) => (t === "perforation" ? "off" : "perforation"));
-                setMarks(null);
-              }}
+              onClick={() => chooseTool("perforation")}
             />
             {/* The third tool (#625) — under the same gate, since it too is about the scan's own
                 geometry, and beside the other two because it answers the same kind of question at
@@ -1401,20 +1508,33 @@ export function TileZoomView({
           label="Ring"
           hint="Drag around a detail to ring it — kept only when you save a snapshot"
           active={tool === "ellipse"}
-          onClick={() => {
-            setChosenTool((t) => (t === "ellipse" ? "off" : "ellipse"));
-            setMarks(null);
-          }}
+          onClick={() => chooseTool("ellipse")}
         />
         <ScanToolButton
           icon="annotateLine"
           label="Line"
           hint="Drag to draw a straight line for reference — kept only when you save a snapshot"
           active={tool === "line"}
-          onClick={() => {
-            setChosenTool((t) => (t === "line" ? "off" : "line"));
-            setMarks(null);
-          }}
+          onClick={() => chooseTool("line")}
+        />
+        {/* The ruler mark (#1300): the ruler's line kept on the picture, graduations and figure and
+            all. Under the ruler's gate, since its figure is a length — a ring or a note keeps
+            working where there is no scale, and this is simply not offered. */}
+        {canMeasure && (
+          <ScanToolButton
+            icon="annotateRuler"
+            label="Ruler mark"
+            hint="Drag to draw a line with graduations and its length in millimetres — it stays on the picture, and in a snapshot"
+            active={tool === "rulerMark"}
+            onClick={() => chooseTool("rulerMark")}
+          />
+        )}
+        <ScanToolButton
+          icon="annotateText"
+          label="Text"
+          hint="Click to place a note and type it — click a note again to change it"
+          active={tool === "text"}
+          onClick={() => chooseTool("text")}
         />
         <ScanToolButton
           icon="snapshot"
@@ -1483,7 +1603,7 @@ export function TileZoomView({
           borderRadius: "0.375rem",
           border: "1px solid var(--color-border)",
           background: "var(--color-bg-subtle)",
-          cursor: panning ? "grabbing" : handDrag ? "grab" : "crosshair",
+          cursor: panning ? "grabbing" : handDrag ? "grab" : tool === "text" ? "text" : "crosshair",
           userSelect: "none",
           touchAction: "none",
         }}
@@ -1575,70 +1695,58 @@ export function TileZoomView({
               height={pictureHeight * view.scale}
               style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
             >
-              {/* The rings and lines already drawn (#674), under whatever is being dragged now. */}
-              <AnnotationShapes annotations={annotations} scale={view.scale} />
-              {/* Twice, dark under light: a scan is white paper in some places and printing ink in
-                  others, and one stroke colour is invisible over one of them. The size tool draws
-                  the same two marks as a box, since that is what its two corners describe — a line
-                  across a stamp would say nothing about which rectangle is being read. */}
-              {measuring && marks && (annotating ? (
-                <AnnotationShapes
-                  annotations={[{ kind: tool, a: marks.a, b: marks.b }]}
-                  scale={view.scale}
-                />
-              ) : tool === "size" ? (
-                <>
-                  {[
-                    { stroke: "rgba(0,0,0,0.65)", width: 3 },
-                    { stroke: "#fff", width: 1 },
-                  ].map((s) => (
-                    <rect
-                      key={s.stroke}
-                      x={Math.min(marks.a.x, marks.b.x) * view.scale}
-                      y={Math.min(marks.a.y, marks.b.y) * view.scale}
-                      width={Math.abs(marks.b.x - marks.a.x) * view.scale}
-                      height={Math.abs(marks.b.y - marks.a.y) * view.scale}
-                      fill="none"
-                      stroke={s.stroke}
-                      strokeWidth={s.width}
-                    />
-                  ))}
-                </>
-              ) : (
-                <>
-              <line
-                x1={marks.a.x * view.scale}
-                y1={marks.a.y * view.scale}
-                x2={marks.b.x * view.scale}
-                y2={marks.b.y * view.scale}
-                stroke="rgba(0,0,0,0.65)"
-                strokeWidth={3}
+              {/* The marks already drawn (#674, #1300), under whatever is being dragged now — less the
+                  note being typed, which the field below stands in for. Then the drag itself, through
+                  the same layer and the same style: a ruler, a size box or a perforation run is
+                  drawn as it will be burnt into a snapshot, so what is on screen is what is kept. */}
+              <AnnotationShapes
+                marks={editing?.index != null ? annotations.filter((_, i) => i !== editing.index) : annotations}
+                scale={view.scale}
+                style={annotationStyle}
               />
-              <line
-                x1={marks.a.x * view.scale}
-                y1={marks.a.y * view.scale}
-                x2={marks.b.x * view.scale}
-                y2={marks.b.y * view.scale}
-                stroke="#fff"
-                strokeWidth={1}
-              />
-              {[marks.a, marks.b].map((p, i) => (
-                <circle
-                  key={i}
-                  cx={p.x * view.scale}
-                  cy={p.y * view.scale}
-                  r={4}
-                  fill="none"
-                  stroke="#fff"
-                  strokeWidth={1.5}
-                  // A ring rather than a dot: the thing being aimed at is the centre of a
-                  // perforation hole, and a filled marker covers exactly what is being aimed at.
-                  paintOrder="stroke"
-                />
-              ))}
-                </>
-              ))}
+              {measuring && marks && tool !== "text" && (
+                <AnnotationShapes marks={[dragMark(tool, marks, dpi)]} scale={view.scale} style={annotationStyle} />
+              )}
             </svg>
+          )}
+
+          {/* The note being typed (#1300), where it will be set: the field wears the note's own size,
+              face and colour, so typing it is placing it. */}
+          {editing && ready && (
+            <input
+              autoFocus
+              value={editing.text}
+              maxLength={MAX_TEXT_MARK}
+              size={Math.max(editing.text.length + 1, 8)}
+              aria-label="Note on the picture"
+              placeholder="Note"
+              onChange={(e) => {
+                const held = editingRef.current;
+                if (held) editNote({ ...held, text: e.target.value });
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  finishNote(true);
+                }
+              }}
+              onBlur={() => finishNote(true)}
+              style={{
+                position: "absolute",
+                left: editing.at.x * view.scale,
+                top: editing.at.y * view.scale,
+                margin: 0,
+                padding: 0,
+                border: "none",
+                outline: `1px dashed ${noteColour(annotationStyle).colour}`,
+                background: "rgba(17, 17, 17, 0.35)",
+                color: noteColour(annotationStyle).colour,
+                font: `600 ${annotationStyle.fontSize}px ${ANNOTATION_FONT_FAMILY}`,
+                lineHeight: 1.25,
+                userSelect: "text",
+              }}
+            />
           )}
 
           {/* The reading at the end of the line, where the hand already is — so a run is adjusted
@@ -1647,7 +1755,7 @@ export function TileZoomView({
               belongs to the line, and the bar keeps it too along with the scale and the fields. Only
               a real figure gets one; the prompts ("drag from the first hole…") are the bar's job and
               would be a label following the pointer to say nothing. */}
-          {measuring && marks && ready && !reading.muted && (
+          {measuring && marks && ready && !reading.muted && tool !== "rulerMark" && (
             <span
               style={{
                 position: "absolute",
@@ -1683,32 +1791,56 @@ export function TileZoomView({
       {/* The marks bar (#674) — how many are drawn and the way to take them back, while a marking
           tool is down or anything is drawn. Said on the bar because a mark is not saved anywhere
           until a snapshot is, and a collector who closes the viewer should not expect it back. */}
-      {(annotating || annotations.length > 0) && (
+      {(annotating || annotations.length > 0 || editing) && (
         <div style={TOOL_BAR}>
           <span style={{ color: "var(--color-text-muted)" }}>
-            {annotations.length === 0
-              ? reading.text
-              : `${annotations.length} ${annotations.length === 1 ? "mark" : "marks"} — kept only in a snapshot`}
+            {editing
+              ? "Type the note — Enter keeps it, Esc drops the change"
+              : annotations.length > 0
+                ? `${annotations.length} ${annotations.length === 1 ? "mark" : "marks"} — kept only in a snapshot`
+                : tool === "rulerMark"
+                  ? "Ruler marks stay on the picture — kept only in a snapshot"
+                  : reading.text}
           </span>
+          {/* One style for every mark (#1300) — changing it restyles what is already drawn. */}
+          <AnnotationStyleControls style={annotationStyle} onChange={setAnnotationStyle} />
           <span style={{ flex: 1 }} />
+          {editing?.index != null && (
+            <ScanToolButton
+              label="Remove note"
+              hint="Take this note off the picture"
+              onClick={() => {
+                const held = editingRef.current;
+                if (!held) return;
+                editingRef.current = { ...held, text: "" };
+                finishNote(true);
+              }}
+            />
+          )}
+          {history.past.length > 0 && (
+            <ScanToolButton
+              label="Undo"
+              hint="Take back the last change — a mark drawn, a note typed, changed or removed, or Clear"
+              onClick={() => {
+                editNote(null);
+                setHistory(undoMarks);
+              }}
+            />
+          )}
           {annotations.length > 0 && (
-            <>
-              <ScanToolButton
-                label="Undo"
-                hint="Take the last mark off"
-                onClick={() => setAnnotations((drawn) => drawn.slice(0, -1))}
-              />
-              <ScanToolButton
-                label="Clear marks"
-                hint="Take every mark off"
-                onClick={() => setAnnotations([])}
-              />
-            </>
+            <ScanToolButton
+              label="Clear marks"
+              hint="Take every mark off — Undo brings them back"
+              onClick={() => {
+                editNote(null);
+                setHistory((h) => changeMarks(h, []));
+              }}
+            />
           )}
         </div>
       )}
 
-      {measuring && !annotating && (
+      {measuring && (!annotating || tool === "rulerMark") && (
         <div style={TOOL_BAR}>
           <span
             style={{
@@ -1872,7 +2004,7 @@ export function TileZoomView({
       >
         {measuring ? (
           <>
-            Drag to mark · hold <kbd>space</kbd> or the middle button to move · <kbd>Esc</kbd> clears
+            {tool === "text" ? "Click to place a note, or on a note to change it" : "Drag to mark"} · hold <kbd>space</kbd> or the middle button to move · <kbd>Esc</kbd> clears
             {/* Said only when it is true, and it is the accuracy warning rather than a tip: the
                 reading is taken on the scan's own pixels either way, but below 1:1 a mark is placed
                 to within more than one of them, and a gauge separates 11½ from 12 by under 4%. */}
@@ -1900,6 +2032,8 @@ export function TileZoomView({
           photoId={current.photoId}
           region={snapshot.region}
           marks={snapshot.marks}
+          style={snapshot.style}
+          viewScale={snapshot.viewScale}
           onClose={() => setSnapshot(null)}
           onSaved={() => {
             setSnapshot(null);
@@ -1909,6 +2043,29 @@ export function TileZoomView({
       )}
     </div>
   );
+}
+
+/** The palette entry a style names — the colour a note is typed in. */
+function noteColour(style: AnnotationStyle) {
+  return ANNOTATION_COLOURS.find((c) => c.id === style.colour) ?? ANNOTATION_COLOURS[0];
+}
+
+/**
+ * The mark a drag in progress draws (#1300), in the shapes a snapshot keeps: a ring, a line or a ruler
+ * mark as it will be, the size tool's box, and the ruler's or the perforation run's line with its rings.
+ * The figure is left off — the viewer sets it in the page beside the line — except on a ruler mark,
+ * whose figure is part of the mark.
+ */
+function dragMark(
+  tool: MeasureTool,
+  marks: { a: ScanPoint; b: ScanPoint },
+  dpi: number | null
+): SnapshotMark {
+  const { a, b } = marks;
+  if (tool === "ellipse" || tool === "line") return { kind: tool, a, b };
+  if (tool === "rulerMark") return dpi === null ? { kind: "line", a, b } : { kind: "rulerMark", a, b, dpi };
+  if (tool === "size") return { kind: "box", a, b, label: "" };
+  return { kind: "distance", a, b, label: "" };
 }
 
 /**

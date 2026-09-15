@@ -14,6 +14,7 @@ import {
   stageUpload,
 } from "../../src/lib/photos";
 import { saveAnnotatedSnapshot } from "../../src/lib/photo-snapshot";
+import { DEFAULT_ANNOTATION_STYLE } from "../../src/lib/annotations";
 import { writeMeasuredStampSize, StampMeasuredSizeError } from "../../src/lib/stamp-measured-size";
 import { getStorage, sheetVariantKey, variantKey } from "../../src/lib/storage";
 import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
@@ -31,6 +32,9 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 
 const W = 3000;
 const H = 1500;
+/** Thick enough that a stroke survives the JPEG as a readable colour. Snapshots here are taken as if
+ * at half zoom, so one screen pixel is 1250 / 1500 / 0.5 ≈ 1.67 snapshot pixels. */
+const STYLE = { ...DEFAULT_ANNOTATION_STYLE, thickness: 3 };
 
 async function halvedPicture(): Promise<Buffer> {
   const green = await sharp({
@@ -142,6 +146,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       region: { x: W / 2, y: 0, w: W / 2, h: H },
       marks: [{ kind: "ellipse", a: { x: 1600, y: 100 }, b: { x: 2000, y: 500 } }],
       title: "Plate flaw",
+      style: STYLE,
+      viewScale: 0.5,
     });
     assert.equal(owner, "item");
 
@@ -174,6 +180,48 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
     assert.deepEqual([front.width, front.height], [2500, 1250]);
   });
 
+  it("draws the marks in the chosen colour and thickness, ruler graduations and notes included (#1300)", async () => {
+    // The red half, blue marks: a ruler mark along y = 1200 and a note near the top-left corner.
+    const { photoId } = await saveAnnotatedSnapshot(userId, collectionId, {
+      photoId: frontPhotoId,
+      region: { x: 0, y: 0, w: W / 2, h: H },
+      marks: [
+        { kind: "rulerMark", a: { x: 100, y: 1200 }, b: { x: 1400, y: 1200 }, dpi: 1200 },
+        { kind: "text", at: { x: 200, y: 200 }, text: "Flaw" },
+      ],
+      title: "Ruler",
+      style: { colour: "blue", thickness: 5, fontSize: 32 },
+      viewScale: 0.5,
+    });
+    const row = await prisma.photo.findUniqueOrThrow({ where: { id: photoId } });
+    const px = await pixels(row);
+    const scale = px.info.width / (W / 2);
+    const blue = ([r, , b]: [number, number, number]) => b > 150 && r < 120;
+
+    // The line itself.
+    const onLine = colourAt(px, Math.round(750 * scale), Math.round(1200 * scale));
+    assert.ok(blue(onLine), `the line is blue (got ${onLine})`);
+
+    // At half zoom 1200 dpi is ~23.6 screen px per mm, so the graduations are every 0.5 mm with a long
+    // tick on every millimetre. 15 screen-ish pixels off the line, a long tick is there and a short one
+    // is not — at 1 mm from the end there is blue, at 1.25 mm the picture.
+    const pxPerMm = 1200 / 25.4;
+    const off = Math.round(1200 * scale) - 15;
+    const major = colourAt(px, Math.round((100 + pxPerMm) * scale), off);
+    assert.ok(blue(major), `a long graduation at 1 mm (got ${major})`);
+    const between = colourAt(px, Math.round((100 + 1.25 * pxPerMm) * scale), off);
+    assert.ok(between[0] > 150 && between[2] < 120, `no graduation at 1.25 mm (got ${between})`);
+
+    // The note is set in the same colour, from its top-left corner.
+    let noteBlue = 0;
+    for (let y = Math.round(200 * scale); y < Math.round(200 * scale) + 60; y++) {
+      for (let x = Math.round(200 * scale); x < Math.round(200 * scale) + 140; x++) {
+        if (blue(colourAt(px, x, y))) noteBlue++;
+      }
+    }
+    assert.ok(noteBlue > 100, `the note is drawn in blue (got ${noteBlue} blue pixels)`);
+  });
+
   it("maps a region across the downscale rather than onto the derivative's own pixels", async () => {
     // A region straddling the red/green boundary at x = 1500 of the upload, which sits at the
     // snapshot's midpoint. Read one-to-one on the 2500-px derivative instead, the same numbers put the
@@ -183,6 +231,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       region: { x: 1000, y: 0, w: 1000, h: 1000 },
       marks: [],
       title: "Straddle",
+      style: STYLE,
+      viewScale: 0.5,
     });
     const px = await pixels(await prisma.photo.findUniqueOrThrow({ where: { id: photoId } }));
     const [r40, g40] = colourAt(px, Math.round(px.info.width * 0.4), 50);
@@ -270,6 +320,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       region: { x: 0, y: 0, w: W / 2, h: H },
       marks: [],
       title: "Detail",
+      style: STYLE,
+      viewScale: 0.5,
     });
     assert.equal(owner, "tile");
     const row = await prisma.photo.findUniqueOrThrow({ where: { id: photoId } });
@@ -288,6 +340,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       region: { x: 0, y: 0, w: W / 2, h: H },
       marks: [],
       title: "Detail",
+      style: STYLE,
+      viewScale: 0.5,
     });
     const row = await prisma.photo.findUniqueOrThrow({ where: { id: photoId } });
     assert.equal(row.tileId, tileId);
@@ -302,6 +356,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
         region: { x: 0, y: 0, w: 100, h: 100 },
         marks: [],
         title: "Detail",
+        style: STYLE,
+        viewScale: 0.5,
       }),
       PhotoAuthError
     );
@@ -311,6 +367,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
         region: { x: W + 10, y: 0, w: 100, h: 100 },
         marks: [],
         title: "Detail",
+        style: STYLE,
+        viewScale: 0.5,
       })
     );
   });

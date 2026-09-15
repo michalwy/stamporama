@@ -6,6 +6,7 @@ import {
   NO_STAMP_SIZE,
   formatSizeMm,
   formatStampSize,
+  parseCorrectedSize,
   parseSizeMm,
   resolveStampSize,
   roundSizeMm,
@@ -171,5 +172,19 @@ describe("resolveStampSize", () => {
 
   it("has no answer for an empty checklist", () => {
     assert.equal(resolveStampSize([], "a"), null);
+  });
+});
+
+describe("parseCorrectedSize (#1299)", () => {
+  it("reads a measured size as corrected, with either decimal separator", () => {
+    assert.deepEqual(parseCorrectedSize("21,5", "26"), { widthMm: 21.5, heightMm: 26 });
+    assert.deepEqual(parseCorrectedSize("21.5", " 25.96 "), { widthMm: 21.5, heightMm: 26 });
+  });
+
+  it("has no size while either field is blank or unreadable", () => {
+    assert.equal(parseCorrectedSize("", "26"), null);
+    assert.equal(parseCorrectedSize("21.5", "  "), null);
+    assert.equal(parseCorrectedSize("21.5.1", "26"), null);
+    assert.equal(parseCorrectedSize("21.5", String(MAX_SIZE_MM + 1)), null);
   });
 });
