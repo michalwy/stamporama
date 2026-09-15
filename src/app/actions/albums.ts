@@ -13,9 +13,11 @@ import {
   deleteAlbum,
   deleteAlbumTextBlock,
   gatherAlbumEntries,
+  dismissAlbumNameSuggestion,
   getAlbum,
   getAlbumEntries,
   removeAlbumEntry,
+  renameAlbum,
   reorderAlbumEntries,
   reorderAlbumTextBlocks,
   reseedAlbumFromTemplate,
@@ -51,6 +53,7 @@ import {
   cancelAlbumReprint,
   closeAlbumContinuation,
   countAlbumPresetDivergence,
+  countAlbumRenameDivergence,
   describeAlbumUnprint,
   markAlbumPagesPrinted,
   openAlbumContinuation,
@@ -58,6 +61,7 @@ import {
   unprintAlbumPage,
   AlbumPrintError,
 } from "@/lib/album-printing";
+import { albumPlanContext } from "@/lib/album-plan";
 
 // Server actions for albums (#767), `actions/hawid-stock.ts`'s shape: `FormData` in, a state out,
 // every rule in the library beneath.
@@ -216,6 +220,67 @@ export async function updateAlbumBoxGapsAction(
     return { status: "success", message: savedToAlbumMessage(diverging) };
   } catch (err) {
     return toErrorState(err, "Failed to save the spacing. Please try again.");
+  }
+}
+
+/**
+ * Take the name the album is offered (#1311): the area's name in the album's language, in place of
+ * the default-language name it still carries.
+ *
+ * **The offer is established here, not taken from the screen.** `suggestion` is what the collector
+ * saw; if the album is no longer offered exactly that — a translation changed in another tab, the
+ * album renamed since — nothing is written. And the count comes first, as for **Page template…**
+ * (#1215): the name is printed at the top of every card, so printed cards that match today and would
+ * stop matching are counted and confirmed before the rename, and counted again here rather than
+ * trusted.
+ */
+export async function acceptAlbumNameSuggestionAction(
+  albumId: string,
+  suggestion: string,
+  acknowledgedDiverging: number | null
+): Promise<AlbumPresetActionState> {
+  const session = await getSession();
+  try {
+    const context = await albumPlanContext(session.user.id, albumId);
+    if (!context) return { status: "error", message: "This album no longer exists." };
+    const offered = context.nameState.suggestion;
+    if (!offered || offered !== suggestion.trim()) {
+      return {
+        status: "error",
+        message: "This album is no longer offered that name. Reload to see where it stands.",
+      };
+    }
+    const diverging = await countAlbumRenameDivergence(session.user.id, albumId, offered);
+    if (diverging > 0 && acknowledgedDiverging !== diverging) {
+      return { status: "confirm", diverging };
+    }
+    await renameAlbum(session.user.id, albumId, offered);
+    return {
+      status: "success",
+      message:
+        diverging === 0
+          ? `Renamed to ${offered}.`
+          : `Renamed to ${offered}. ${
+              diverging === 1 ? "One printed card now reports" : `${diverging} printed cards now report`
+            } the difference under Printed cards.`,
+    };
+  } catch (err) {
+    return toErrorState(err, "Failed to rename the album. Please try again.");
+  }
+}
+
+/** Keep the album's name and stop offering this translation of it (#1311). A different translation,
+ *  written later, is offered again. */
+export async function dismissAlbumNameSuggestionAction(
+  albumId: string,
+  suggestion: string
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await dismissAlbumNameSuggestion(session.user.id, albumId, suggestion);
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Failed to keep the name. Please try again.");
   }
 }
 

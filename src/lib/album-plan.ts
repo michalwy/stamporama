@@ -35,7 +35,9 @@ import {
   type TitleTemplateCopy,
 } from "./offer-title-template";
 import { albumTextMetrics } from "./album-metrics";
-import { languageLabel } from "./languages";
+import { languageLabel, normalizeLanguage } from "./languages";
+import { resolveChecklistName } from "./checklist-name";
+import { albumNameState, type AlbumNameState } from "./album-name";
 import { getAlbumPrintedIndex, type AlbumPrintedIndex } from "./album-printed-pages";
 import { albumPlanFingerprint } from "./album-print-rules";
 import type { AlbumComparablePage } from "./album-divergence";
@@ -138,7 +140,14 @@ export interface AlbumPlanResult {
    *  (#765). Deliberate on the rule's part, and worth saying out loud on the screen rather than
    *  leaving a page of pocket-mounted definitives to be puzzled over. */
   emptyStock: boolean;
+  /** The area's name in the album's language, offered in place of the default-language name the
+   *  album still carries (#1311). Null when there is nothing to offer. */
+  nameSuggestion: string | null;
 }
+
+/** What a caller may substitute when asking *what would this album look like* — the preset (#795,
+ *  #1215) or the name (#1311). Nothing is written; see {@link albumPlanContext}. */
+export type AlbumPlanOverride = Partial<AlbumRenderPreset> & { name?: string };
 
 const PLAN_STAMP_SELECT = {
   ...TITLE_COPY_STAMP_SELECT,
@@ -186,11 +195,12 @@ function primaryNumber(
  * clearances and the live stock (#765), and the texts render in the album's language (#755). The
  * geometry happens after all of it, once, in `album-layout.ts`.
  *
- * `presetOverride` answers *what would this album look like under that preset* and has two callers:
- * the live preview beside a template or an album's own values (#795, #1215), and the count of
- * printed sheets a change to an album's own values would make diverge (#1215). Nothing is written
- * and the album keeps the values it holds; see the note where it is substituted for why it has to be
- * substituted there and not later.
+ * `override` answers *what would this album look like under that preset, or that name* and has three
+ * callers: the live preview beside a template or an album's own values (#795, #1215), the count of
+ * printed sheets a change to an album's own values would make diverge (#1215), and the same count
+ * before an album takes the name it was offered (#1311). Nothing is written and the album keeps the
+ * values it holds; see the note where it is substituted for why it has to be substituted there and
+ * not later.
  */
 export interface AlbumPlanContext {
   album: AlbumData;
@@ -199,6 +209,15 @@ export interface AlbumPlanContext {
   textBlocks: AlbumTextBlockData[];
   printed: AlbumPrintedIndex;
   emptyStock: boolean;
+  /** The album's language as texts resolve in it — **null when it is the collection's default**, where
+   *  nothing can fall back. */
+  language: string | null;
+  /** Whether the album's name is still the area's default-language name, and what to do about it
+   *  (#1308, #1311). */
+  nameState: AlbumNameState;
+  /** What the running head fell back on — the area's name, when the album is still named after it in
+   *  the default language (#1308). Empty otherwise, and for a name the collector wrote. */
+  titleGaps: TitleFallback[];
   /** The boxes of `stampIds`, sized through the whole entry's checklist. */
   boxesFor(entry: AlbumEntryData, stampIds: readonly string[]): AlbumBoxData[];
   /** The entry's checklist heading, rendered in the album's language. */
@@ -218,8 +237,15 @@ export interface AlbumPlanContext {
    * which is what makes the flag on the page and the gap in the panel the same claim. And no
    * fallback template is passed: a blank album text is a real value (#766) and renders blank, so it
    * can fall back on nothing.
+   *
+   * `entry` is the checklist a heading is rendered for, whose `{checklistName}` can fall back too
+   * (#1308); `{albumName}` reports the running head's gap wherever a text prints it.
    */
-  textGaps(template: string, stampIds: readonly string[]): TitleFallback[];
+  textGaps(
+    template: string,
+    stampIds: readonly string[],
+    entry?: AlbumEntryData | null
+  ): TitleFallback[];
   /** Name each page of a laid-out plan and render its footer into the band reserved for it. */
   finish(plan: AlbumPlan<AlbumBoxData>): AlbumPlanPage[];
 }
@@ -227,32 +253,47 @@ export interface AlbumPlanContext {
 export async function albumPlanContext(
   ownerId: string,
   albumId: string,
-  presetOverride: AlbumRenderPreset | null = null
+  override: AlbumPlanOverride | null = null
 ): Promise<AlbumPlanContext | null> {
   const row = await getAlbum(ownerId, albumId);
   if (!row) return null;
   // The album's own values, unless a caller is asking *what would this album look like under that
-  // preset* — the preview (#795, #1215) and the divergence count before a save (#1215). It is
+  // preset* — the preview (#795, #1215) and the divergence count before a save (#1215) — or under
+  // that name, the count before taking the one it was offered (#1311). It is
   // read-only in the strongest sense: the override never reaches a write, the album keeps the values
   // it holds (#308's rule, #766), and the next read of this album is unaffected. It is substituted **here**,
   // before anything is resolved, because the clearances are read once into `margins` below and the
   // texts are read through this object — a caller swapping the preset afterwards would get the new
   // faces with the old box heights, which is precisely the confident wrong answer a preview must
   // never produce.
-  const album: AlbumData = presetOverride ? { ...row, ...presetOverride } : row;
+  const album: AlbumData = override ? { ...row, ...override } : row;
   const [entries, textBlocks] = await Promise.all([
     getAlbumEntries(ownerId, albumId),
     getAlbumTextBlocks(ownerId, albumId),
   ]);
 
-  const [stock, areas, issuePrefixes, toCopy, printed] = await Promise.all([
+  const [stock, areas, issuePrefixes, toCopy, printed, collection] = await Promise.all([
     getHawidStrips(ownerId, album.collectionId),
     getCollectionAreas(ownerId, album.collectionId),
     loadIssuePrefixMap(album.collectionId),
     makeTitleCopyMapper(ownerId, album.collectionId, album.language),
     getAlbumPrintedIndex(albumId),
+    prisma.collection.findUnique({
+      where: { id: album.collectionId },
+      select: { defaultLanguage: true },
+    }),
   ]);
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
+  // The language texts resolve in, normalised exactly as `makeTitleCopyMapper` normalises it: the
+  // collection's own default is no language at all, because its words already live in the entities'
+  // own columns and nothing written in it can have fallen back (#298).
+  const albumLanguage = normalizeLanguage(album.language);
+  const language =
+    albumLanguage && albumLanguage !== normalizeLanguage(collection?.defaultLanguage)
+      ? albumLanguage
+      : null;
+  const nameState = albumNameState(areas, album, language);
+  const checklistNameOf = (entry: AlbumEntryData) => resolveChecklistName(entry, language);
 
   const stampIds = [...new Set(entries.flatMap((e) => e.stampIds))];
   const rows = stampIds.length
@@ -371,20 +412,36 @@ export async function albumPlanContext(
     textBlocks,
     printed,
     emptyStock: stock.length === 0,
+    language,
+    nameState,
+    // The running head is the album's name itself rather than a template, so its gap is the name's.
+    titleGaps: album.printTitle && nameState.gap ? [nameState.gap] : [],
     boxesFor,
     checklistHeading: (entry) =>
       renderAlbumText(album.checklistTemplate, copiesOf([entry]), {
         albumName: album.name,
-        checklistName: entry.checklistName,
+        // In the album's language (#1308): the checklist's own translation, else its issue's while it
+        // is still named after the issue.
+        checklistName: checklistNameOf(entry).value,
       }),
     chapterHeading: (forEntries) =>
       renderAlbumText(album.chapterTemplate, copiesOf(forEntries), { albumName: album.name }),
-    textGaps: (template, stampIds) => {
+    textGaps: (template, stampIds, entry = null) => {
       if (!template.trim()) return [];
       const copies = stampIds
         .map((id) => copyById.get(id))
         .filter((c): c is TitleTemplateCopy => !!c);
-      return templateFallbacks(template, [{ title: null, copies }]);
+      const checklistName = entry ? checklistNameOf(entry) : null;
+      // The values as well as the rows: a container token reports only what it actually rendered, so
+      // a walk without them would see `{checklistName}` render empty and flag nothing.
+      return templateFallbacks(template, [{ title: null, copies }], null, {
+        albumName: album.name,
+        checklistName: checklistName?.value ?? null,
+        fallbacks: {
+          albumName: nameState.gap,
+          checklistName: entry ? checklistNameOf(entry).fallback : null,
+        },
+      });
     },
     finish: (plan) =>
       plan.pages.map((page) => {
@@ -560,7 +617,14 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
   }
 
   const pages = context.finish(planAlbumPages(chapters, album, album.name, albumTextMetrics));
-  return { album, entries, pages, printed, emptyStock: context.emptyStock };
+  return {
+    album,
+    entries,
+    pages,
+    printed,
+    emptyStock: context.emptyStock,
+    nameSuggestion: context.nameState.suggestion,
+  };
 }
 
 /**

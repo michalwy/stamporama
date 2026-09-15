@@ -432,6 +432,26 @@ area would have to be *argued* not to fire. #797 also lifted the whole form to c
 the posted field names stayed `name`, `collectionAreaId`, `language`, `templateId`, so
 `actions/albums.ts` never learned about any of it.
 
+### An existing album is offered the translated name, never given it (#1311)
+
+`albumNameState` (`album-name.ts`) reads #797's rule the other way round: an album whose name is
+**still** `areaOwnTitleName(areas, area, null)` — the default-language name #797 suggested — is either
+a **gap** (the area has no name in the album's language: the running head is flagged, #1308) or a
+**suggestion** (it has one, and it differs). Anything else is the collector's name and gets neither.
+
+- **Offered, not applied.** #797's "a name is never silently replaced" stands. The album screen and the
+  page editor show `album-name-suggestion.tsx`; accepting goes through
+  `acceptAlbumNameSuggestionAction`, which **re-establishes the offer on the server** and refuses a
+  name the album is no longer offered.
+- **The count before the rename is #1215's**: `countAlbumRenameDivergence` is two printed reports,
+  the second under `albumPlanContext`'s override with the new name (`AlbumPlanOverride` now carries a
+  name beside the preset). The running head is on every card, so a rename diverges every card that
+  printed a title; `countNewlyDivergingSheets` still leaves out a card already out of date.
+- **A dismissal stores the offered name** (`Album.dismissedNameSuggestion`), not a flag. The same
+  translation stays away; a different one is a new offer without anything having to clear the flag.
+- Resolved in the album's **effective** language — null for the collection's default, exactly as
+  `makeTitleCopyMapper` normalises it — so an album in the default language is never offered anything.
+
 ## The PDF (#768, ADR-0046)
 
 `src/lib/album-pdf.ts` draws the plan and **decides nothing**. Three kinds of arithmetic and no
@@ -872,6 +892,33 @@ safe center` falls back to start alignment exactly when centring would overflow 
 that fits centred, so it costs nothing in the ordinary case. It is the only scroll container in the
 application that centres its content on the overflowing axis; there is nothing else to fix here, but
 it is the shape to recognise if another screen ever grows one.
+
+### Untranslated texts: the flag was built, and nothing it could see was printed (#1308)
+
+#769 shipped the fallback flag through `templateFallbacks`, and it worked — for **entity tokens on a
+copy**. The default album texts are `{year}`, `{year}, {issueDate}. {checklistName}`, `{catalog::}`
+and `{pageRange}`, and the running head is `Album.name`: the only words a default sheet prints were
+a **container fact** and a plain column, neither of which can report a fallback. So on the
+collector's albums the flag had nothing to say, which is indistinguishable from a flag that is not
+there. Count what the templates actually print before trusting a feature that inspects them.
+
+- **`{checklistName}` is translated** (`checklist-name.ts`): the checklist's own translation
+  (`ChecklistTranslation`, a `TranslatableEntity` now), else — while its name is still its issue's
+  name, which `ensureIssueChecklist` makes it — the **issue's** translation, else a gap against the
+  issue (following it) or the checklist (named by hand). The issue first because it is the
+  translation that also reaches listings; the checklist's own wins so nothing typed is ignored.
+- **Container facts report through the context**: `ListingTemplateContext.fallbacks` carries the rows
+  for `{albumName}` / `{checklistName}`, and `resolvePlaceholder` reports them through the same walk as
+  any token — so a group that resolved to an earlier alternative flags nothing. `textGaps` has to pass
+  the **values** too: a token that renders empty reports nothing, and a walk without the values is
+  exactly that (the first cut shipped it, and the integration test caught it).
+- **The running head is flagged as the area's gap** (`AlbumPlanContext.titleGaps`), only while the
+  name is still the area's default-language name — filling it offers the rename (#1311), it does not
+  perform one. **Notes are not flagged**: they print the collector's words verbatim and cannot fall
+  back.
+- **The album-wide figure** (`AlbumEditorData.untranslated`) draws every live sheet through `liveSheet`
+  without pictures and counts placed texts, so the number and the dotted outlines are one claim.
+  Printed cards are left out: a translation filled in later is their divergence, not their gap.
 
 ### The box gaps in the page editor (#836)
 

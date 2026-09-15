@@ -32,6 +32,7 @@ import { languageLabel } from "@/lib/languages";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { AlbumNameSuggestion } from "./album-name-suggestion";
 
 // One album (#767): what it prints, in what order, and how that falls onto sheets.
 //
@@ -111,6 +112,8 @@ interface AlbumScreenProps {
   entries: AlbumEntryData[];
   initialOverview: AlbumPlanOverview;
   printedReport: AlbumPrintedReport;
+  /** The area's name in the album's language, offered in place of the default-language name (#1311). */
+  nameSuggestion: string | null;
 }
 
 export function AlbumScreen({
@@ -119,6 +122,7 @@ export function AlbumScreen({
   entries,
   initialOverview,
   printedReport,
+  nameSuggestion,
 }: AlbumScreenProps) {
   const router = useRouter();
   // Local ordering for optimistic drag-and-drop, re-synced from the server on refresh — the hawid
@@ -331,6 +335,14 @@ export function AlbumScreen({
       >
         {album.name}
       </h2>
+      {nameSuggestion && (
+        <AlbumNameSuggestion
+          albumId={album.id}
+          name={album.name}
+          suggestion={nameSuggestion}
+          language={album.language}
+        />
+      )}
       <div
         style={{
           display: "flex",

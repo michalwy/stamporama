@@ -73,7 +73,7 @@ import type { AlbumData, AlbumEntryData, AlbumTextBlockData } from "./albums";
  */
 export type AlbumSheetSource = Pick<
   AlbumPlanContext,
-  "album" | "entries" | "textBlocks" | "textGaps"
+  "album" | "entries" | "textBlocks" | "textGaps" | "titleGaps"
 >;
 
 /** How a run of text is set, resolved once here so the canvas and the PDF put ink in the same place. */
@@ -211,6 +211,24 @@ export interface AlbumEditorData {
   sheet: AlbumEditorSheet | null;
   /** True when the collection has described no hawid stock, which makes **every** box a pocket. */
   emptyStock: boolean;
+  /** The texts across **every live sheet** that would print in the default language (#1308) — so a
+   *  gap on a sheet not in view is found before printing, not after. A text printed on four sheets is
+   *  four texts: each is a line on a card. */
+  untranslated: { texts: number; sheets: number[] };
+  /** The area's name in the album's language, offered in place of the default-language name (#1311). */
+  nameSuggestion: string | null;
+}
+
+/** How many of a sheet's texts fell back, counting each placed text once. */
+function untranslatedTexts(sheet: AlbumEditorSheet): number {
+  const texts = [
+    sheet.title,
+    sheet.chapter,
+    sheet.footer,
+    ...sheet.headings,
+    ...sheet.boxes.map((b) => b.label),
+  ];
+  return texts.filter((t) => t !== null && t.gaps.length > 0).length;
 }
 
 /** The face a role is set in, with everything a renderer needs to place its ink. */
@@ -319,6 +337,7 @@ export function liveSheet(
             : context.textGaps(
                 album.checklistTemplate,
                 slice.map((b) => b.box.stampId),
+                entry,
               ),
         ),
       );
@@ -409,13 +428,15 @@ export function liveSheet(
     readOnly: false,
     preset: album,
     content: layout.content,
-    title: layout.title ? editorText(layout.title, album, []) : null,
+    // The running head is the album's name, and falls back only as the name does (#1308).
+    title: layout.title ? editorText(layout.title, album, context.titleGaps) : null,
     chapter: layout.chapter ? editorText(layout.chapter, album, chapterGaps) : null,
     headings,
     footer: page.footer ? editorText(page.footer, album, footerGaps) : null,
     boxes,
     blocks,
     gaps: dedupeGaps([
+      ...(layout.title ? context.titleGaps : []),
       ...chapterGaps,
       ...headings.flatMap((h) => h.gaps),
       ...boxes.flatMap((b) => b.label?.gaps ?? []),
@@ -578,6 +599,18 @@ export async function getAlbumEditorData(
     }
   }
 
+  // Every live sheet, drawn without its pictures, for the one figure the screen shows about the whole
+  // album. A printed card is left out: what is on it is on it, and it reports a translation filled in
+  // since as a divergence of its own (#778).
+  const untranslated = { texts: 0, sheets: [] as number[] };
+  plan.pages.forEach((page, i) => {
+    const drawn = liveSheet(page, i + 1, context, () => null);
+    const count = drawn ? untranslatedTexts(drawn) : 0;
+    if (count === 0) return;
+    untranslated.texts += count;
+    untranslated.sheets.push(i + 1);
+  });
+
   return {
     album: context.album,
     entries: context.entries,
@@ -585,6 +618,8 @@ export async function getAlbumEditorData(
     sheets,
     sheet,
     emptyStock: plan.emptyStock,
+    untranslated,
+    nameSuggestion: plan.nameSuggestion,
   };
 }
 

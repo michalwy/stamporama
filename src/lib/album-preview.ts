@@ -111,6 +111,7 @@ function sampleSheetSource(preset: AlbumRenderPreset): AlbumSheetSource {
     // it has no language either, and every sample copy is resolved in none — which is also why it
     // reports no translation gaps.
     language: "",
+    dismissedNameSuggestion: null,
   };
   return {
     album,
@@ -118,6 +119,7 @@ function sampleSheetSource(preset: AlbumRenderPreset): AlbumSheetSource {
     textBlocks: [],
     // A sample resolves in no language, so nothing can have fallen back to a default one (#298).
     textGaps: () => [],
+    titleGaps: [],
   };
 }
 

@@ -1099,6 +1099,10 @@ model Album {
   // footer names the binder rather than the stamps on the sheet.
   collectionAreaId String
   name             String
+  // The area's translated name this album was offered and turned down (#1311). An album named after
+  // its area in the default language is offered the area's name in the album's language once one
+  // exists; turning it down stores that name, so the offer stays away until the translation changes.
+  dismissedNameSuggestion String?
 
   // **An album is printed in one language, and it is the album's own** (#755). Not the render's:
   // headings are longer in some languages, longer headings wrap, and wrapping changes where a block
@@ -5733,10 +5737,26 @@ model Checklist {
   stamps     ChecklistStamp[]
   /** The album entries that print this checklist (#767). */
   albumEntries AlbumEntry[]
+  /** Per-language names, for an album printing `{checklistName}` in its own language (#1308). */
+  translations ChecklistTranslation[]
 
   @@index([collectionId])
   @@index([issueId, sortOrder])
   @@map("checklist")
+}
+
+// A checklist's name in another language (#1308), the `IssueTranslation` shape. A checklist still
+// named after its issue follows the issue's translation instead (`checklist-name.ts`), so a row here
+// is the collector saying this checklist differently — or naming one he named himself.
+model ChecklistTranslation {
+  checklistId String
+  language    String
+  name        String?
+
+  checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@id([checklistId, language])
+  @@map("checklist_translation")
 }
 
 // Membership **is** required-ness (#531). The old per-membership boolean expressed exactly this,

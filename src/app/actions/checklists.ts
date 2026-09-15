@@ -18,6 +18,7 @@ import {
   type SpanningChecklistSummary,
 } from "@/lib/checklists";
 import type { RunChecklist } from "@/lib/issue-run";
+import type { TranslationValueMap } from "@/lib/translations";
 
 // Server actions for the checklists editor (#531). Scoped to one issue, because that is the only
 // place a checklist is edited from — ADR-0020 §7's rule, and the reason none of these take an
@@ -65,11 +66,12 @@ export async function listSpanningChecklistsAction(
 export async function createChecklistAction(
   collectionId: string,
   issueId: string,
-  name: string
+  name: string,
+  translations?: TranslationValueMap
 ): Promise<ChecklistActionState> {
   const session = await getSession();
   try {
-    await createChecklist(session.user.id, collectionId, { issueId, name });
+    await createChecklist(session.user.id, collectionId, { issueId, name, translations });
     return { status: "success" };
   } catch (err) {
     return {
@@ -81,11 +83,12 @@ export async function createChecklistAction(
 
 export async function renameChecklistAction(
   checklistId: string,
-  name: string
+  name: string,
+  translations?: TranslationValueMap
 ): Promise<ChecklistActionState> {
   const session = await getSession();
   try {
-    await renameChecklist(session.user.id, checklistId, name);
+    await renameChecklist(session.user.id, checklistId, name, translations);
     return { status: "success" };
   } catch (err) {
     return {

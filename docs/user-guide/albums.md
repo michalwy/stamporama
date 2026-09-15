@@ -34,6 +34,21 @@ texts — are an [album template](collections.md#album-templates) in Settings, a
 
 The album gathers its entries straight away.
 
+### When the area gets a name in the album's language later
+
+An album made before its area had a name in the album's language is called by the area's plain
+name, and that is what prints at the top of every page. Once you write the
+[title name translation](contacts.md#title-names-per-language), the album **offers** it — on the
+album screen and in the page editor: *Use the name in Polish: Polska?* It never renames itself.
+
+- **Use …** renames the album. If cards you have already printed carry the old name at the top, you
+  are told how many first, and they stay exactly as printed; *Printed cards* then says what differs.
+- **Keep …** leaves the name alone and stops offering that translation. Change the area's
+  translation again and the new one is offered.
+
+Only an album still called by the area's plain name is offered anything. A name you typed yourself
+is yours.
+
 ## The album's own page template
 
 **Page template…**, at the top of an album's screen, opens every value the album took from its
@@ -75,9 +90,15 @@ rather than being chosen when you print.
 Changing it re-plans the album. Pages you have already printed stay in the language they were
 printed in.
 
+A **checklist heading** prints the checklist's name. A checklist named after its issue — which is
+how an issue's first checklist is named — uses the **issue's** translation, so an issue translated
+for your listings is already translated here. A checklist you named yourself (*Imperforate*, *With
+tabs*) has its own translations, next to its name in the checklist's **Rename** dialog. If you give a
+checklist named after its issue a translation of its own, that one is used.
+
 An album in a language you sell nothing in is still a language you are using, so it gets its own
 column in every dialog that translates text — area title names, condition and certificate names,
-issue and stamp names, subtypes, formats. Nothing has to be switched on for that: the languages on
+issue, checklist and stamp names, subtypes, formats. Nothing has to be switched on for that: the languages on
 offer are the ones your platforms and your albums use, minus your
 [default language](collections.md#default-language). Delete the last album in a language and its
 column goes away again; whatever you had typed for it stays where it was, ready if the language comes
@@ -212,8 +233,17 @@ The canvas also marks, in colour, the three things that are worth catching **bef
 into the printer and are worth nothing after: a box **sized from a neighbour** rather than measured,
 an **oversize** box that needs a pocket, and a box with **no size at all**. Beside them it lists any
 word on the sheet that would print in the collection's default language because the album's own
-translation is missing — click the dotted underline on the canvas, or fill it in the panel, and it
-is saved on the stamp or issue itself straight away.
+translation is missing — click the dotted outline on the canvas, or fill it in the panel, and it
+is saved on the stamp, issue, checklist or area itself straight away.
+
+That covers every text a sheet prints: the running head, the year, checklist headings, box labels
+and the footer. The running head is marked while the album is still called by its area's plain name
+and the area has no name in the album's language; filling that in does not rename the album, it
+offers the new name (see [above](#when-the-area-gets-a-name-in-the-albums-language-later)). Your own
+notes are not marked — they print exactly what you wrote.
+
+Above the sheets, the editor says **how many texts across the whole album** would print untranslated
+and on which sheets, so a gap on a sheet you are not looking at is found before printing.
 
 **1:1 on a screen proves nothing about the card.** A viewer applies its own zoom and the print
 dialog applies another; the ruler check below is the only one that counts.

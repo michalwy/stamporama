@@ -39,6 +39,7 @@ export default async function AlbumDetailPage({ params }: AlbumPageProps) {
       entries={plan.entries}
       initialOverview={albumPlanOverview(plan)}
       printedReport={printedReport}
+      nameSuggestion={plan.nameSuggestion}
     />
   );
 }

@@ -434,7 +434,9 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
         strokeDasharray="2 2"
       />
 
-      {sheet.title && drawText(sheet.title, "title", 0, false)}
+      {/* The running head is the album's name, and is flagged when that name is still the area's
+          default-language one with nothing in the album's language to replace it (#1308). */}
+      {sheet.title && drawText(sheet.title, "title", 0, sheet.title.gaps.length > 0)}
       {sheet.chapter &&
         drawText(sheet.chapter, "chapter", 0, sheet.chapter.gaps.length > 0)}
       {sheet.footer && drawText(sheet.footer, "footer", 0, sheet.footer.gaps.length > 0)}
