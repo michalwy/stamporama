@@ -201,6 +201,36 @@ reads **cannot be computed** and the note says why. A sold unit shows its profit
 copy on it counts; otherwise it reads **profit —**, and hovering it says which copies are missing
 what.
 
+### The profit and loss screen
+
+Click the **Realized profit and loss** tile on the [Overview](overview.md) to open the **Profit and
+loss** screen. It shows where that figure comes from. Everything on it is in your base currency.
+
+- **Dates** — pick a **From** and a **To** date to look at part of the collection's history; either
+  end can be left open. **All dates** clears both. A sale counts on the day it was sold, and a
+  write-off on the day it was recorded.
+- **Totals** — three figures: the **sales** profit or loss (with the proceeds, the cost and the
+  number of sales), the **write-offs**, and the **result**: the sales profit less the write-offs.
+- **By period** — the same figures for each **Month** or each **Year** that had a sale or a
+  write-off, oldest first, with a total at the bottom.
+- **By platform** — the sales figures for each platform. Write-offs have no platform, so they are
+  their own line, and the result under them is the same result as in the totals.
+- **By sale** — every sale in the range, newest first: its date, number, platform and buyer, and its
+  net proceeds, cost and profit. These are the very figures the sale's own screen shows. Click a row
+  to open the sale.
+
+**Write-offs** are the copies you marked as no longer held — lost, damaged or otherwise gone. They
+brought in nothing, so what they cost is a loss, and leaving them out would make the result look
+better than it is. A copy that was sold and then marked gone counts only with its sale.
+
+The rules for copies that cannot be counted are the ones [above](#profit-and-loss): a copy is left
+out — never counted as costing nothing — and every line that left one out says how many and why. A
+written-off copy whose cost is still pending, or has none recorded, adds nothing to the loss and is
+counted apart the same way. A line where nothing at all could be counted shows **—** instead of a
+figure.
+
+With **All dates**, the sales figures are exactly the ones on the Overview tile.
+
 Added up over every sale, these are the figures the [Overview](overview.md)'s **Realized profit and
 loss** tile shows. A copy [traded away](trades.md) is not a sale and has no profit here.
 

@@ -14,6 +14,14 @@ built by #649–#651).
   figure is computed over the target's **default scope** (holdings over `excludeGone`, exposure
   over the watchlist's open lots, asking over `state=active` exactly).
 
+  **One tile opens a screen that is not a list**: *Realized profit and loss* opens
+  `/sales/profit-and-loss` (#1305), because no list holds a profit — the Sales list was deliberately
+  left without a profit column (#168), and the collector chose a dedicated screen over adding one
+  (2026-09-15). It sits under Sales rather than a `/reports` tree, and is reached from the tile, not
+  the sidebar. The agreement the rule above protects still holds, by construction rather than by a
+  shared URL filter: the screen's default scope is every sale, and both it and the tile read
+  `listSaleProfitRows` (`sales.ts`).
+
 - **Aggregate here, detail elsewhere** (#397). The two reads — `getOverviewValue` /
   `getOverviewProgress` in `src/lib/overview.ts`, one API route each under
   `overview/value|progress` so each section loads and skeletons on its own — are compositions of
@@ -39,7 +47,9 @@ built by #649–#651).
   2026-09-15: one rule, and a copy that cannot be counted — no rate, cost pending, no cost, an
   unsplittable share — is left out of **both** sides and counted by why on the tile. Purchase ROI
   (`realizedProceedsByGroup`) still attributes proceeds without the no-rate exclusion; it answers a
-  per-order question and was not part of #168.
+  per-order question and was not part of #168. Since #1305 `realizedProfit` sums
+  `listSaleProfitRows`, the per-sale read the profit and loss screen lists, so the tile and that
+  screen's all-dates total are one read.
 
 - **Honest gaps, everywhere** (#650/#651). Unpriced and unconvertible rows are counted apart on
   the tiles, never silently dropped — `offer-summary.ts`'s own separation. Catalogue value and
