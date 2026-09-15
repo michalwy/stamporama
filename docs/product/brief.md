@@ -40,7 +40,10 @@ Each physical copy a collector owns is a separate item (no quantity field — se
    watchlist with a fork at the end** (ADR-0021): lots being bid on, each resolved as won or lost.
    A won settlement is transcribed into a purchase; a lost lot's final price is what feeds price
    history. Market data is a by-product of bidding, not a register to populate.
-7. **Integrations** — Collnect, Delcampe
+7. **Integrations** — Collnect, Delcampe. A collection can also be handed to an AI assistant over
+   MCP (and the same operations over `/api/v1`), through a read-only or read-and-write token scoped
+   to that one collection; it never publishes to a marketplace and never reaches a counterparty —
+   those are absent, not switched off (ADR-0050).
 
 ## Deployment
 
