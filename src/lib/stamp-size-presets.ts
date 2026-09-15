@@ -60,7 +60,7 @@ export interface StampSizePresetData extends StampSizePresetPair {
 /**
  * Raised on `@@unique([collectionId, widthMm, heightMm])`.
  *
- * Its own error rather than a generic failed save — `HawidStripHeightTakenError`'s convention, and
+ * Its own error rather than a generic failed save — `HawidStripTakenError`'s convention, and
  * for the same reason one model up: the **numbers are the identity** (ADR-0048 §3), so a second
  * preset stating the same pair is not a save that went wrong, it is the pair the collector was
  * reaching for already being on the list. The message says so.

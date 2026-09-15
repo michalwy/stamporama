@@ -756,16 +756,20 @@ model HawidStrip {
   // How long a strip is as sold — 210 mm is the usual. The cutting list (#770) counts pieces
   // against it; the box rule uses it only to rule out a box wider than any strip could be cut from.
   stockLengthMm Float
-  // What the collector calls it — `Hawid 264` — optional, because a height is already an identity.
+  // What the collector calls it — `Hawid 264`. Optional while a packet number is the only one of its
+  // kind in the drawer; the other half of the row's identity once it is not (#796).
   label        String?
   sortOrder    Int
   createdAt    DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
-  // Two packets that take the same stamp height are one strip: a duplicate would be a row the rule
-  // could never reach for. Reported as its own error rather than as a failed save.
-  @@unique([collectionId, heightMm])
+  // Uniqueness on (collectionId, heightMm, label) is enforced by a raw `UNIQUE ... NULLS NOT
+  // DISTINCT` index (see migration `20260915120000_hawid_strip_label_identity`), which Prisma cannot
+  // express — so no @@unique here. Two products can share a packet number and differ only in border
+  // (#796), and the label is how every surface tells them apart; a second row with the same packet
+  // number and the same label — or with no label either — would print as the same line. Reported
+  // as its own error rather than as a failed save. Requires PostgreSQL 15+.
   @@index([collectionId])
   @@map("hawid_strip")
 }

@@ -26,7 +26,8 @@
 //
 // So a strip carries both figures, and each does one job:
 //
-// - `heightMm` is the packet number — the identity of the row, and the tallest stamp it takes.
+// - `heightMm` is the packet number — the tallest stamp it takes, and with the label the identity of
+//   the row: two products can share a packet number and differ only in border (#796).
 // - `totalHeightMm` is the strip's own outer height, border included: what a ruler laid against it
 //   reads. The stamp plus the template's vertical clearance must fit **inside this**, and the box is
 //   **drawn at it**, because this is the piece that ends up on the card.

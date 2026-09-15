@@ -237,7 +237,7 @@ describe("albumCutDemand", () => {
   });
 
   it("keeps one height at two stock lengths as two things to buy", () => {
-    // Live stock is unique on height per collection, so this only arises across a printed card whose
+    // Live stock is unique on height and label per collection, so this only arises across a printed card whose
     // strip was **copied** into its snapshot (ADR-0047 §1) and a drawer since restocked at a
     // different length. They are two different things to buy however equal their heights.
     const demand = albumCutDemand([
@@ -249,6 +249,52 @@ describe("albumCutDemand", () => {
       [
         [29, 210, 1],
         [29, 250, 1],
+      ]
+    );
+  });
+
+  it("keeps two products of one packet number apart by their label", () => {
+    // Two mounts both marked 26 mm can be 30 mm and 31 mm tall (#796). The label is the only thing a
+    // cutting line has to tell them apart by, so one row for both would send the collector to the
+    // drawer with a single figure covering two different packets.
+    const hawid = strip(26, 210, "Hawid 264");
+    const lindner = strip(26, 210, "Lindner");
+    const cut = albumSheetCuts(
+      sheet([
+        cutBox(38, lindner, { heightMm: 31 }),
+        cutBox(38, hawid, { heightMm: 30 }),
+        cutBox(38, lindner, { heightMm: 31 }),
+      ])
+    );
+    assert.deepEqual(
+      cut.cuts.map((c) => [c.strip.label, c.widthMm, c.count]),
+      [
+        ["Lindner", 38, 2],
+        ["Hawid 264", 38, 1],
+      ]
+    );
+    const demand = albumCutDemand([cut]);
+    assert.deepEqual(
+      demand.byStrip.map((d) => [d.strip.heightMm, d.strip.label, d.pieces]),
+      [
+        [26, "Hawid 264", 1],
+        [26, "Lindner", 2],
+      ]
+    );
+  });
+
+  it("reads a strip as held only under the label it was cut under", () => {
+    // A printed card copied its strip's label; a drawer holding that packet number only under another
+    // name is not holding *that* strip, and picking one of the 26 mm rows for it would be a guess.
+    const demand = albumCutDemand(
+      [albumSheetCuts(sheet([cutBox(38, strip(26, 210, "Hawid 264")), cutBox(38, strip(26, 210, "Lindner"))]))],
+      [strip(26, 210, "Hawid 264"), strip(26, 210, "Lindner 2")]
+    );
+    assert.deepEqual(
+      demand.byStrip.map((d) => [d.strip.label, d.inStock]),
+      [
+        ["Hawid 264", true],
+        ["Lindner", false],
       ]
     );
   });

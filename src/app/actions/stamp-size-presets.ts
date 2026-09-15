@@ -103,7 +103,7 @@ function parseForm(
 
 /** A duplicate pair and an impossible figure both say their own sentence. The pair is the identity
  *  (ADR-0048 §3), so a collision is *the pair you were reaching for is already on the list* rather
- *  than a failure — `HawidStripHeightTakenError`'s convention, one model up. */
+ *  than a failure — `HawidStripTakenError`'s convention, one model up. */
 function toErrorState(err: unknown, fallback: string): StampSizePresetActionState {
   if (err instanceof StampSizePresetPairTakenError || err instanceof StampSizePresetFigureError) {
     return { status: "error", message: err.message };

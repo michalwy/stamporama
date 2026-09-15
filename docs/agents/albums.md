@@ -90,6 +90,31 @@ packet number: the arithmetic that ran before #793, unchanged, until the collect
 Guessing it would invent the one number the module exists to keep honest, so the dictionary says
 `outer height not measured` on the row instead.
 
+**A strip is its packet number and its label (#796).** Once a strip carried two figures the packet
+number stopped identifying a product: the border differs by product line, so two mounts both marked
+26 mm can be 30 mm and 31 mm tall, and the old one-row-per-height key turned the second away. The key
+is `(collectionId, heightMm, label)`, a hand-written `NULLS NOT DISTINCT` index — Prisma cannot say
+it, so the schema carries no `@@unique`. Why these, and not the other two the issue weighed:
+
+- **Not the outer height.** `(heightMm, totalHeightMm)` lets in a row that differs by a tenth of a
+  millimetre of border, which is likelier a typo than a second product — and both rows would still
+  read `26 mm` on a cutting line.
+- **Not nothing.** Dropping the key lets an accidental double entry through silently, and two
+  identical names on a cutting list are a trip to the drawer with no way to choose.
+- **The label, because it is what every surface names a strip by** — `hawidStripLabel`, the cutting
+  list, the editor, a box's description. The rule the collector meets is therefore one they can read:
+  a second 26 mm strip is welcome under a different label, and a second with the same label, or with
+  none, is refused by `HawidStripTakenError`, whose message says to label it. An unlabelled strip
+  beside a labelled one of the same number is allowed: `26 mm` and `26 mm (Hawid 264)` are different
+  lines. Labels are compared as typed (trimmed), not case-folded.
+- **The cutting list groups by the same key**, plus stock length for snapshots (`stripKey`). By
+  height alone it would add two products into one figure. The consequence worth knowing: a label
+  renamed after a card was printed makes that card's strip read *not in your stock any more*. That
+  is the identity applied, not a defect — guessing which row the old name became is exactly the
+  remapping the list refuses.
+
+The selection rule is untouched: of two equally short strips the earlier row still wins.
+
 `src/lib/hawid.ts` is the rule, and it is **pure**: no Prisma, no rendering. Four surfaces will draw
 from it — the page plan (#767), the PDF (#768), the editor canvas (#769) and the cutting list (#770)
 — and the only way four surfaces agree on a millimetre is that none of them does the arithmetic.

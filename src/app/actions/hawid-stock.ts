@@ -10,7 +10,7 @@ import {
   deleteHawidStrip,
   reorderHawidStrips,
   getHawidStrips,
-  HawidStripHeightTakenError,
+  HawidStripTakenError,
   type HawidStripData,
 } from "@/lib/hawid-stock";
 import { parseHawidStripInput } from "@/lib/hawid";
@@ -39,10 +39,10 @@ function readForm(formData: FormData) {
   });
 }
 
-/** A duplicate packet height is reported in its own words — a row that can never be chosen is worth
- *  a sentence, not a "please try again". */
+/** A strip already in the stock under the same packet number and label is reported in its own words
+ *  — the collector needs to be told to add a label, not to "please try again". */
 function toErrorState(err: unknown, fallback: string): HawidStripActionState {
-  if (err instanceof HawidStripHeightTakenError) {
+  if (err instanceof HawidStripTakenError) {
     return { status: "error", message: err.message };
   }
   return { status: "error", message: fallback };
