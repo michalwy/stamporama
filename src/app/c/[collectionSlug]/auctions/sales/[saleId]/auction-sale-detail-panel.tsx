@@ -368,7 +368,7 @@ export function AuctionSaleDetailPanel({
         <Field
           label="Bids"
           value={`${summary.bidTotal} ${sale.currency}`}
-          hint={`Over the ${summary.payableCount} lot${summary.payableCount === 1 ? "" : "s"} you would pay for — watching and won.`}
+          hint={`Over the ${summary.payableCount} lot${summary.payableCount === 1 ? "" : "s"} you would pay for — open and won.`}
           base={inBase(summary.bidTotal)}
         />
         <Field

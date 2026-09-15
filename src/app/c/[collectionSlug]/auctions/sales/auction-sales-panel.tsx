@@ -34,7 +34,7 @@ interface AuctionSalesPanelProps {
  * The sale list — one row per settlement, for paying for parcels rather than for browsing.
  *
  * It leads with the **all-in total**: what leaves the bank account for this parcel, premium and
- * shipping included, over the lots that are actually payable (`watching` + `won`). A lot that was
+ * shipping included, over the lots that are actually payable (`pending` + `won`). A lot that was
  * lost costs nothing, so counting it here could only distort the figure the collector is deciding
  * against.
  */

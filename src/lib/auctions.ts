@@ -1381,7 +1381,7 @@ export interface AuctionSaleListItem {
   premiumFixed: string | null;
   /** The purchase this sale settled into (#28), or null while it is still being bid. */
   purchaseId: string | null;
-  /** Parcel totals over the payable (`watching` + `won`) lots, shipping added once. */
+  /** Parcel totals over the payable (`pending` + `won`) lots, shipping added once. */
   summary: AuctionSaleSummary;
   createdAt: Date;
 }
@@ -3175,7 +3175,7 @@ function settlementOutcome(lot: {
  * because the invoice is the authority, and a house that ships a lot separately is a fact about the
  * parcel, not an error to refuse.
  *
- * Refused while any lot is still `watching` — the parcel's outcome is not known yet, and the rollup
+ * Refused while any lot is still `pending` — the parcel's outcome is not known yet, and the rollup
  * this is transcribed from is still costing those lots as payable.
  */
 export async function settleAuctionSale(
