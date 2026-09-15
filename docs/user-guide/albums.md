@@ -144,6 +144,12 @@ what your own pages do a few times per page. It is a ceiling set on the template
 page is never divided into fixed columns, nothing runs off the side of one, and a checklist that
 would have to squeeze simply takes the next band on its own.
 
+Checklists sharing a band have their stamps **lined up** for you: the boxes start under the taller of
+the two headings, and a shorter box is centred on the taller one beside it — the few millimetres you
+used to add by hand so that two stamps on one card sit level. The space is part of the page, so it
+counts when deciding what fits. If a pair still needs nudging, *space before* a block moves just that
+block.
+
 Each sheet also flags what needs a look before you print it:
 
 - **N in a pocket** — no strip in your hawid stock is tall enough for those, so they are drawn at

@@ -1266,3 +1266,131 @@ describe("planAlbumPages and a row broken by hand (#1214)", () => {
     assert.ok(paired.headings[1].xMm > paired.headings[0].xMm);
   });
 });
+
+/**
+ * Blocks sharing a band line their mounts up (#779).
+ *
+ * Read off the collector's own pages: every `PAGE_VSPACE` inside a `PAGE_COLUMN_START` pair moves a
+ * mount down so that the two mounts' centres are level, and under a heading that wraps beside one
+ * that does not, the boxes start under the taller. With the stand-in measurer a 12 pt heading line
+ * is 6 mm and costs 11 with the 5 mm under it; content starts at y = 23 and the lead above a heading
+ * is 8, so a one-line heading's boxes start at 42 and a two-line heading's at 48.
+ */
+describe("planAlbumPages and blocks sharing a band (#779)", () => {
+  /** 100 characters in words of four: two lines in a 90 mm share at 1.2 mm a character. */
+  const wrapping = Array.from({ length: 20 }, () => "wwww").join(" ");
+  const centre = (b: { yMm: number; heightMm: number }) => b.yMm + b.heightMm / 2;
+
+  it("starts the boxes under the taller heading when one wraps and the other does not", () => {
+    const [page] = live(
+      planAlbumPages(
+        [chapter("y", "", [block("a", "A", [box(30, 36)]), block("b", wrapping, [box(30, 36)])])],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(page.headings[0].yMm, page.headings[1].yMm, "the headings still share a top");
+    assert.equal(page.headings[1].lines.length, 2);
+    assert.equal(page.boxes[1].yMm, 48);
+    assert.equal(page.boxes[0].yMm, 48, "not at 42, under its own one-line heading");
+  });
+
+  it("centres a shorter mount on the taller one beside it", () => {
+    const [page] = live(
+      planAlbumPages(
+        [chapter("y", "", [block("a", "A", [box(30, 36)]), block("b", "B", [box(30, 30)])])],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(page.boxes[0].yMm, 42, "the taller mount stays where it was");
+    assert.equal(page.boxes[1].yMm, 45);
+    assert.equal(centre(page.boxes[0]), centre(page.boxes[1]));
+  });
+
+  it("does both at once, and the band is as tall as the aligned block", () => {
+    // A: short heading, 36 mm mount. B: wrapped heading, 30 mm mount. The boxes start under B's
+    // heading at 48 and B's mount is centred on A's, 3 mm lower. A is then 8 + 11 + 6 + 36 = 61 mm,
+    // so the full-width block after the band has its heading at 23 + 61 + 8 = 92 — at 86 the band
+    // would have been measured without the space it prints.
+    const [page] = live(
+      planAlbumPages(
+        [
+          chapter("y", "", [
+            block("a", "A", [box(30, 36)]),
+            block("b", wrapping, [box(30, 30)]),
+            block("c", "C", [box(190, 30)]),
+          ]),
+        ],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(page.boxes[0].yMm, 48);
+    assert.equal(page.boxes[1].yMm, 51);
+    assert.equal(centre(page.boxes[0]), centre(page.boxes[1]));
+    assert.equal(page.headings[2].yMm, 92);
+  });
+
+  it("keeps the collector's space before a block a delta on top of the alignment", () => {
+    const plan = (over: Partial<AlbumBlockSpec>) =>
+      live(
+        planAlbumPages(
+          [
+            chapter("y", "", [
+              block("a", "A", [box(30, 36)]),
+              { ...block("b", "B", [box(30, 30)]), ...over },
+            ]),
+          ],
+          preset(),
+          "Album",
+          metrics
+        ).pages
+      )[0];
+    const plain = plan({});
+    const moved = plan({ spaceBeforeMm: 5 });
+    assert.equal(moved.headings[1].yMm, plain.headings[1].yMm + 5);
+    assert.equal(moved.boxes[1].yMm, plain.boxes[1].yMm + 5);
+    assert.equal(moved.boxes[0].yMm, plain.boxes[0].yMm, "the neighbour is not dragged down with it");
+  });
+
+  it("does not push a checklist's boxes under a note beside it", () => {
+    const note: AlbumBlockSpec = {
+      entryId: "n",
+      heading: wrapping,
+      boxes: [],
+      printedPageIds: null,
+      kind: "text",
+    };
+    const [page] = live(
+      planAlbumPages(
+        [chapter("y", "", [block("a", "A", [box(30, 36)]), note])],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(page.blocks.length, 2);
+    assert.equal(page.headings[0].yMm, page.headings[1].yMm, "the note shares the band");
+    assert.equal(page.boxes[0].yMm, 42);
+  });
+
+  it("adds nothing to a block alone in its band", () => {
+    const [page] = live(
+      planAlbumPages(
+        [chapter("y", "", [block("a", "A", [box(30, 36)]), block("b", wrapping, [box(30, 30)])])],
+        preset({ blocksPerBand: 1 }),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(page.boxes[0].yMm, 42);
+    // B: A's block ends at 42 + 36 = 78, B's lead is 8, and at the full 190 mm its heading is one
+    // line again and costs 11.
+    assert.equal(page.headings[1].lines.length, 1);
+    assert.equal(page.boxes[1].yMm, 78 + 8 + 11);
+  });
+});

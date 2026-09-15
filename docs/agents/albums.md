@@ -56,11 +56,10 @@ there. When an issue and the sources could disagree — page geometry, headings,
 - **`PAGE_BREAK` — 0.** AlbumEasy paginates by hand, so his 198 `PAGE_START(` *are* the breaks. The
   forced break and the forced no-break have no corpus either.
 
-One thing the count turned up that #769 did **not** build, recorded so the next person does not have
-to find it again: several of those `PAGE_VSPACE` sit **between a heading and its boxes**, inside a
-`PAGE_COLUMN_START` pair — `PAGE_VSPACE(9.0)` after a heading that wrapped to two lines, lining its
-mounts up with the one-line heading beside it. That is a third space correction, and #769's issue
-lists only *before* and *after* a block, so it was left out deliberately rather than missed.
+One thing the count turned up that #769 did **not** build: several of those `PAGE_VSPACE` sit
+**between a heading and its boxes**, inside a `PAGE_COLUMN_START` pair. #779 took it up and it became
+a layout rule rather than a third correction — see *Blocks sharing a band line their mounts up*
+below, including how the first count of it came out wrong.
 
 Note that the defaults in `DEFAULT_ALBUM_PRESET` (#766) and the packing rules in `album-layout.ts`
 (#767) are all measured from these files, and each says which line it came from. Anything added later
@@ -372,6 +371,43 @@ So: consecutive blocks share a band when each one's **natural width** (its boxes
 fits the share it would get, up to the ceiling. The ceiling is a ceiling, not a target. Nothing ever
 overflows sideways, no block continues into a neighbour, and a paired band that will not fit an empty
 page is **unpaired** rather than allowed to make the page worse.
+
+### Blocks sharing a band line their mounts up (#779)
+
+The first rows of the blocks in a band start **under the tallest heading among them**, and their
+mounts are **centred on one line** — the rule a row already applies to its own mounts, one level up.
+`alignBandMounts` in `album-layout.ts`; the space it adds is `MeasuredBlock.alignMm`.
+
+**The issue asked for a third space correction and suggested the rule might replace it; the sources
+answered, and not the way the issue expected.** #769's note, and #779 after it, read these
+`PAGE_VSPACE` as *space under the shorter heading*, counted six, and inferred an align-to-the-tallest-
+heading rule. Recounted:
+
+- **Ten, not six.** The first count ran a pipeline over file names, and `PL-1952 PRL.txt` has a space
+  in it — the same trap the recount fell into on its first try. It also missed three in `PL-1933.txt`
+  that have no heading inside the pair at all (the headings there are a pair of their own above).
+- **The job is mostly the mounts, not the headings.** On every page whose printed PDF exists —
+  `PL-1933` three times, `PL-1947`, `PL-1948`, `PL-1952 PRL` — the two mounts' **centres** are level.
+  `PL-1933.txt:32/51/67` are 3, 1.5 and 1 mm beside mounts 6, 3 and 2 mm taller: exactly half. In
+  `PL-1948` both headings wrap to two lines and the shorter mount still drops 5 mm.
+- **The heading half is real but rarer**: `PL-1950.txt:25`, two mounts of one size, 4 mm under a
+  one-line heading beside one that wraps; `:33` is both halves at once (9 mm).
+- **Two match neither** — `PL-1946.txt:93` (7 mm where the rule gives 4) and `PL-1950.txt:108` (7 where
+  it gives 3). Neither has a PDF. They are left to the block's own *space before*; the user chose the
+  rule without a third correction (2026-09-15).
+
+What is worth not re-deriving:
+
+- **Measured from the automatic lead, not the corrected one.** A correction stays a delta on top of
+  the aligned layout: 5 mm more before one block moves that block, and does not drag its neighbour's
+  mounts down with it.
+- **Part of the block's height, and so of the band's.** "It goes into the plan, not the drawing": a
+  band the alignment makes too tall moves whole or unpairs like any other, and a block placed alone —
+  including one a band gave up on — is measured afresh with none.
+- **Only blocks with boxes take part.** A note beside a checklist has no mount to line up, and pushing
+  the checklist's boxes under the note's text spends paper on nothing.
+- **A printed card does not report it.** The divergence report compares facts, not coordinates (the
+  same reason a row break set later is not reported); a card reprinted afterwards comes out aligned.
 
 ### Text measurement is a port, and the client may not have one
 
