@@ -370,7 +370,8 @@ A printed card's cuts are read from what was stored when it was printed, not fro
 stands now, so they are the sizes on that card whatever has changed since. If a strip a card was cut
 from is **not in your stock any more** the line says so rather than quietly moving to the nearest
 height you do own — what was cut is what was cut, and a substituted figure would be a cut nobody
-made.
+made. A strip is known by its stamp height *and* its label, so one you have relabelled since the card
+was printed reads as not in your stock too.
 
 ## Printed cards
 

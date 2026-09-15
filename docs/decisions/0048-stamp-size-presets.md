@@ -99,8 +99,10 @@ in Settings → Albums.
 reads `25 × 30 mm · Germania`, or plain `25 × 30 mm` when there is none.
 
 This is `HawidStrip`'s shape exactly (`@@unique([collectionId, heightMm])`, `label String?`, "a
-height is already an identity") and it is right here for a second reason that strip did not have:
-**decision 5 saves a preset from the middle of a measurement.** A required name would put a text
+height is already an identity") — as it stood when this was decided; #796 has since widened the
+strip's key to its packet number *and* label, because two hawid products can share a packet number
+and differ only in border, which a preset's pair has no counterpart to — and it is right here for a
+second reason that strip did not have: **decision 5 saves a preset from the middle of a measurement.** A required name would put a text
 field between finishing a measurement and keeping it, which is the moment the whole feature exists
 to make cheap. Two presets with the same pair are one preset; the app reports the collision as its
 own error rather than as a failed save, `HawidStrip`'s convention.

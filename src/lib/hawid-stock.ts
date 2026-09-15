@@ -32,14 +32,19 @@ async function resolveStripCollection(stripId: string): Promise<string> {
   return strip.collectionId;
 }
 
-/** Raised on `@@unique([collectionId, heightMm])`, which is the *packet* height (#793). Its own
- *  error rather than a generic failed save (`RefCardTemplateNameTakenError`'s rule, #569): the rule
- *  picks the shortest strip that fits, so a second packet taking the same stamp height is a row that
- *  could never be reached for — worth saying out loud. */
-export class HawidStripHeightTakenError extends Error {
-  constructor(heightMm: number) {
-    super(`A ${heightMm} mm strip is already in the stock.`);
-    this.name = "HawidStripHeightTakenError";
+/** Raised on the `(collectionId, heightMm, label)` index, `NULLS NOT DISTINCT` (#796). Its own error
+ *  rather than a generic failed save (`RefCardTemplateNameTakenError`'s rule, #569), and it says what
+ *  to do: two products may share a packet number — their borders differ (#793) — but every surface
+ *  names a strip as `26 mm (Hawid 264)`, so two rows with the same packet number and the same label,
+ *  or no label at all, would be the same line on a cutting list. */
+export class HawidStripTakenError extends Error {
+  constructor(heightMm: number, label: string | null) {
+    super(
+      label
+        ? `A ${heightMm} mm strip labelled "${label}" is already in the stock. Give this one a label that tells the two apart.`
+        : `A ${heightMm} mm strip with no label is already in the stock. Give this one a label that tells the two apart.`
+    );
+    this.name = "HawidStripTakenError";
   }
 }
 
@@ -71,9 +76,9 @@ export async function getHawidStrips(
   });
 }
 
-function rethrowHeightClash(err: unknown, heightMm: number): never {
+function rethrowStripClash(err: unknown, data: HawidStripInput): never {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-    throw new HawidStripHeightTakenError(heightMm);
+    throw new HawidStripTakenError(data.heightMm, data.label);
   }
   throw err;
 }
@@ -94,7 +99,7 @@ export async function createHawidStrip(
       data: { collectionId, ...data, sortOrder: last ? last.sortOrder + 1 : 0 },
     });
   } catch (err) {
-    rethrowHeightClash(err, data.heightMm);
+    rethrowStripClash(err, data);
   }
 }
 
@@ -108,7 +113,7 @@ export async function updateHawidStrip(
   try {
     await prisma.hawidStrip.update({ where: { id: stripId }, data });
   } catch (err) {
-    rethrowHeightClash(err, data.heightMm);
+    rethrowStripClash(err, data);
   }
 }
 

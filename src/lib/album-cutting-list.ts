@@ -159,7 +159,7 @@ export interface AlbumCutSheet {
 /** What one strip height owes, over however many sheets were counted. */
 export interface AlbumStripDemand {
   strip: AlbumCutStrip;
-  /** Whether the drawer still holds this strip — this height at this stock length.
+  /** Whether the drawer still holds this strip — this height at this stock length, under this label.
    *
    *  Only ever false for a printed card, and that is the whole point of it. A printed box's strip is
    *  **copied** into its snapshot rather than referenced (ADR-0047 §1), so a card can name a 29 mm
@@ -232,13 +232,17 @@ function roundMm(mm: number): number {
   return Math.round(mm * 10) / 10;
 }
 
-/** A strip's identity for grouping: its height **and** its stock length.
+/** A strip's identity for grouping: its height, its stock length **and** its label.
  *
- *  Height alone would be enough for live stock — `HawidStrip` is unique per collection on height —
- *  but a printed card carries a *copy* of the strip it was cut from, and a drawer restocked at a
- *  different length is two different things to buy however equal their heights. */
+ *  Height and label are live stock's own identity (#796): two products can share a packet number and
+ *  differ only in border, and the label is the only thing on a cutting line that tells them apart —
+ *  grouping by height alone would add a 30 mm and a 31 mm mount into one shopping figure. Stock
+ *  length is on top because a printed card carries a *copy* of the strip it was cut from, and a
+ *  drawer restocked at a different length is two different things to buy however equal their
+ *  heights. So a label renamed since a card was printed is, to this list, a strip no longer held:
+ *  the name is the identity, and a guess at which row it became would be a remapping. */
 function stripKey(strip: AlbumCutStrip): string {
-  return `${roundMm(strip.heightMm)}x${roundMm(strip.stockLengthMm)}`;
+  return `${roundMm(strip.heightMm)}x${roundMm(strip.stockLengthMm)}:${strip.label?.trim() ?? ""}`;
 }
 
 /**
@@ -378,7 +382,10 @@ export function albumCutDemand(
     .sort(
       (a, b) =>
         a.strip.heightMm - b.strip.heightMm ||
-        a.strip.stockLengthMm - b.strip.stockLengthMm
+        a.strip.stockLengthMm - b.strip.stockLengthMm ||
+        // Two products of one packet number (#796), unlabelled first — stable whatever order the
+        // sheets were counted in, which is what the height ordering above is for too.
+        (a.strip.label ?? "").localeCompare(b.strip.label ?? "")
     );
 
   return { byStrip, sheetCount: sheets.length, boxCount, uncutCount };

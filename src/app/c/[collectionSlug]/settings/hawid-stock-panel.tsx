@@ -153,8 +153,8 @@ function StripForm({ strip, isPending }: { strip?: HawidStripData; isPending: bo
           style={INPUT_STYLE}
         />
         <span style={HINT_STYLE}>
-          What you call this one. The height is already the identity — the label is for the packet
-          you reach for.
+          What you call this one — the packet you reach for. Two strips with the same stamp height
+          need different labels, because the label is how a cutting list tells them apart.
         </span>
       </div>
     </div>

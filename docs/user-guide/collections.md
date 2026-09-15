@@ -961,8 +961,14 @@ before this field existed all start out that way, so pages keep the sizes they h
 them in.
 
 Drag the rows to set the order. It matters in one place: where two strips are equally short, the one
-nearer the top is used. Stamp heights are unique — a second packet taking the same stamp could never
-be picked.
+nearer the top is used.
+
+**Two packets with the same stamp height can both be in the stock** — two brands of 26 mm mount
+whose borders differ, say — **as long as their labels differ.** The label is what tells them apart
+on a cutting list, where a strip reads *26 mm (Hawid 264)*. A second strip with the same stamp height
+and the same label, or a second one with no label, is refused with a note saying so: give it a label
+of its own, such as the product number on the packet. One unlabelled strip beside labelled ones of
+the same height is fine.
 
 **An empty stock is a real state, not an error.** Until you add a strip, every box is planned as a
 pocket. That is what an undescribed drawer honestly comes to; the alternative would be pages quietly
