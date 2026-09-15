@@ -313,7 +313,7 @@ The selection **survives filtering**. Search, change the area or the year, or na
 
 The selection is **cleared when you leave the Issues list** for another screen. A stamp that is deleted drops out of it by itself. While **Reorder** is on the checkboxes are put away; the ticks stay.
 
-The selection is what bulk actions on stamps act on — see [Applying a preset to stamps you select](#applying-a-preset-to-stamps-you-select).
+The selection is what bulk actions on stamps act on — see [Applying a size to stamps you select](#applying-a-size-to-stamps-you-select).
 
 #### Filing a stamp under a different one
 
@@ -781,12 +781,16 @@ accepted it as this stamp's size.
 
 When you add a range of stamps to an issue with **Add stamp range…**, the dialog has a **Size** control with the same filterable list: choose a preset and every stamp it creates is born with that size. See [Adding a stamp range to an existing issue](#adding-a-stamp-range-to-an-existing-issue).
 
-#### Applying a preset to an issue or a checklist
+#### Applying a size to an issue or a checklist
 
-For a series already entered — forty overprints of one design — open **⋮ → Apply size preset…** on
-the issue's row in the Issues list, or on a checklist's row in that issue's **Checklists…** editor.
+For a series already entered — forty overprints of one design — open **⋮ → Apply size…** on the
+issue's row in the Issues list, or on a checklist's row in that issue's **Checklists…** editor.
 
-1. Choose the preset, with the same filterable list.
+1. Type the **Width (mm)** and **Height (mm)**, or press **Fill from a preset** to fill both from the
+   same filterable list. A size that occurs in this one series and nowhere else needs no preset:
+   type it and apply it. Nothing is saved as a preset — typing a size here never adds one to the
+   list. Change either figure after filling them from a preset and it is the figures you typed that
+   are written.
 2. Read the counts before anything is written: *17 stamps have no size and will get 25 × 30 mm. 3
    stamps already state a size and will be left as they are.* A stamp stating only a width or only a
    height counts as stating a size, and the sentence says how many of those there are.
@@ -801,17 +805,20 @@ What it reaches, and what it leaves alone:
 - **A stamp that already states a size is skipped.** Tick **Overwrite those too** to replace them as
   well — for a series whose earlier figure was wrong. The box is **unticked every time the dialog
   opens**, and the counts and the button change as you tick it. Overwriting cannot be undone.
-- **Cancel writes nothing.** Nor does choosing a preset: only the **Apply** button writes.
-- **The size is copied.** Correcting or deleting the preset later leaves these stamps as they are.
+- **Cancel writes nothing.** Nor does typing a size or choosing a preset: only the **Apply** button
+  writes.
+- **The size is copied.** Correcting or deleting a preset later leaves these stamps as they are.
+- **A typed size is written exactly as a preset's is** — the same stamps, the same counts, the same
+  rounding to a tenth. The only difference is where the figures came from.
 - There is no way to *clear* sizes in bulk; a size is cleared on the stamp itself.
 
-#### Applying a preset to stamps you select
+#### Applying a size to stamps you select
 
-Some stamps share a size without sharing an issue or a checklist — a handful from two issues printed on the same press. [Select them on the Issues list](#selecting-stamps-across-the-tree), then press **Apply size preset…** on the selection bar.
+Some stamps share a size without sharing an issue or a checklist — a handful from two issues printed on the same press. [Select them on the Issues list](#selecting-stamps-across-the-tree), then press **Apply size…** on the selection bar.
 
-It is the same dialog as from an issue's row, with the same counts, the same **Overwrite those too** box — unticked every time — and the same button naming how many stamps will be written. Everything under **What it reaches** above holds, and the counts are over **the stamps you ticked and everything they carry**: tick `309` and its variants are counted and written with it, which is the number the bar already showed you.
+It is the same dialog as from an issue's row — type the size or fill it from a preset — with the same counts, the same **Overwrite those too** box — unticked every time — and the same button naming how many stamps will be written. Everything under **What it reaches** above holds, and the counts are over **the stamps you ticked and everything they carry**: tick `309` and its variants are counted and written with it, which is the number the bar already showed you.
 
-Only the ticked stamps **in view** are included — ticks a filter is hiding are left out, and the button is not on the bar while none are in view. After the preset is applied the selection is cleared.
+Only the ticked stamps **in view** are included — ticks a filter is hiding are left out, and the button is not on the bar while none are in view. After the size is applied the selection is cleared.
 
 ### Attributes on the lists
 

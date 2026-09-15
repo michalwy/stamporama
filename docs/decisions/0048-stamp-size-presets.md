@@ -121,6 +121,13 @@ One write module takes `{ presetId, subject }` where the subject is an issue, a 
 explicit list of stamp ids, resolves it to stamp ids, and writes. The four entry points differ only in
 how they name the subject.
 
+**A typed pair takes the same write** (#1291, 2026-09-14). A size that occurs in one series and
+nowhere else would otherwise need a preset created only to be applied once, so the apply dialog also
+accepts a width × height typed into it, from the same three entry points. Everything about the write —
+the subject, decision 6's preview and skip, decision 7's subtree — is unchanged and shared; only where
+the two figures came from differs. No preset is created as a side effect, and decision 1 holds: the
+pair is copied either way.
+
 **The stamp-range dialog does not go through that write, as built in #807.** It names stamps that do
 not exist yet, so everything the write exists to do — skip a stated size (decision 6), descend a
 subtree (decision 7), count for a preview — has nothing to act on, and what is left is copying the

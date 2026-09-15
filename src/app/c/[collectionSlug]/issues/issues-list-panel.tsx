@@ -674,7 +674,7 @@ export function IssuesListPanel({
                     {/* The fourth way of naming the stamps a preset is written onto (#809): stamps
                         that share a size without sharing an issue or a checklist. The same dialog,
                         preview and default as from an issue row; only the subject differs. */}
-                    <Tooltip content="Write a size preset's width and height onto the selected stamps and everything they carry. The dialog counts them before anything is written.">
+                    <Tooltip content="Write a width and height — typed, or from a size preset — onto the selected stamps and everything they carry. The dialog counts them before anything is written.">
                       <button
                         type="button"
                         onClick={() => setApplyPresetOpen(true)}
@@ -688,7 +688,7 @@ export function IssuesListPanel({
                           padding: "0.375rem 0.75rem",
                         }}
                       >
-                        <Icon name="sizePreset" size="sm" /> Apply size preset…
+                        <Icon name="sizePreset" size="sm" /> Apply size…
                       </button>
                     </Tooltip>
                   </div>

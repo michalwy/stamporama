@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
+  applyStampSize,
   applyStampSizePreset,
   createStampSizePreset,
   deleteStampSizePreset,
@@ -67,11 +68,12 @@ function parseFigure(
  *  tab's save button (#805), which sits inside the stamp form and cannot submit a form of its own. */
 function parseFigureText(
   text: string | null,
-  field: "widthMm" | "heightMm"
+  field: "widthMm" | "heightMm",
+  whyRequired = "a preset states both figures"
 ): { ok: true; mm: number } | { ok: false; message: string } {
   const raw = (text ?? "").trim();
   const label = STAMP_SIZE_LABELS[field].field;
-  if (!raw) return { ok: false, message: `${label} is required — a preset states both figures.` };
+  if (!raw) return { ok: false, message: `${label} is required — ${whyRequired}.` };
   const parsed = parseSizeMm(raw);
   // `parseSizeMm` answers `null` for a blank, which the check above has already ruled out. Both
   // branches are the same refusal here, and neither may fall through to a stored figure.
@@ -222,52 +224,86 @@ export type StampSizePresetApplyActionState =
   | { status: "error"; message: string };
 
 /**
+ * Where the apply dialog's pair comes from: a preset chosen with the picker (#806), or a width and
+ * height typed into the dialog (#1291). The typed figures travel as the text in the fields, not as
+ * numbers the client parsed, so `parseSizeMm` is applied here where it cannot be skipped —
+ * `saveStampSizePresetFromFieldsAction`'s arrangement.
+ */
+export type StampSizeApplySource =
+  | { kind: "preset"; presetId: string }
+  | { kind: "typed"; collectionId: string; widthText: string; heightText: string };
+
+type ApplyOutcome =
+  | { ok: true; result: StampSizePresetApplyResult }
+  | { ok: false; message: string };
+
+/** One apply, whichever source named the pair. A typed figure the grammar refuses is the field's own
+ *  sentence, never a stored *no size*; every other failure is the caller's generic message. */
+async function runApply(
+  ownerId: string,
+  source: StampSizeApplySource,
+  options: { subject: StampSizePresetSubject; overwriteStated?: boolean; preview?: boolean }
+): Promise<ApplyOutcome> {
+  if (source.kind === "preset") {
+    return { ok: true, result: await applyStampSizePreset(ownerId, { presetId: source.presetId, ...options }) };
+  }
+  const why = "both figures are needed to apply a size";
+  const width = parseFigureText(source.widthText, "widthMm", why);
+  if (!width.ok) return width;
+  const height = parseFigureText(source.heightText, "heightMm", why);
+  if (!height.ok) return height;
+  const result = await applyStampSize(ownerId, {
+    collectionId: source.collectionId,
+    widthMm: width.mm,
+    heightMm: height.mm,
+    ...options,
+  });
+  return { ok: true, result };
+}
+
+/**
  * The apply dialog's counts (#806; ADR-0048 §6), written nowhere.
  *
- * A separate action from {@link applyStampSizePresetAction} rather than a flag on it, so that a
- * preview can never become a write by a caller passing the wrong boolean: the only thing this can
- * call is the module with `preview: true`.
+ * A separate action from {@link applyStampSizeAction} rather than a flag on it, so that a preview can
+ * never become a write by a caller passing the wrong boolean: the only thing this can call is the
+ * module with `preview: true`.
  */
-export async function previewStampSizePresetAction(
-  presetId: string,
+export async function previewStampSizeApplyAction(
+  source: StampSizeApplySource,
   subject: StampSizePresetSubject
 ): Promise<StampSizePresetApplyActionState> {
   const session = await getSession();
   try {
-    const result = await applyStampSizePreset(session.user.id, {
-      presetId,
-      subject,
-      preview: true,
-    });
-    return { status: "success", result };
-  } catch {
+    const outcome = await runApply(session.user.id, source, { subject, preview: true });
+    if (!outcome.ok) return { status: "error", message: outcome.message };
+    return { status: "success", result: outcome.result };
+  } catch (err) {
+    if (err instanceof StampSizePresetFigureError) return { status: "error", message: err.message };
     return { status: "error", message: "Could not count the stamps. Please try again." };
   }
 }
 
 /**
- * Writes a preset's pair onto a subject's stamps (#806). `overwriteStated` is a required argument
- * here, not an optional one, so every caller states the decision it is taking — the module's own
- * default stays *skip*, and ADR-0048 §6 is why.
+ * Writes a preset's pair, or a typed one, onto a subject's stamps (#806, #1291). `overwriteStated` is
+ * a required argument here, not an optional one, so every caller states the decision it is taking —
+ * the module's own default stays *skip*, and ADR-0048 §6 is why.
  *
  * The returned counts are the **write's**, recounted at the moment of writing, and they are what the
  * caller reports: a preview taken a moment earlier is what the collector agreed to, but the toast
  * says what actually happened.
  */
-export async function applyStampSizePresetAction(
-  presetId: string,
+export async function applyStampSizeAction(
+  source: StampSizeApplySource,
   subject: StampSizePresetSubject,
   overwriteStated: boolean
 ): Promise<StampSizePresetApplyActionState> {
   const session = await getSession();
   try {
-    const result = await applyStampSizePreset(session.user.id, {
-      presetId,
-      subject,
-      overwriteStated,
-    });
-    return { status: "success", result };
-  } catch {
-    return { status: "error", message: "Failed to apply the preset. Please try again." };
+    const outcome = await runApply(session.user.id, source, { subject, overwriteStated });
+    if (!outcome.ok) return { status: "error", message: outcome.message };
+    return { status: "success", result: outcome.result };
+  } catch (err) {
+    if (err instanceof StampSizePresetFigureError) return { status: "error", message: err.message };
+    return { status: "error", message: "Failed to apply the size. Please try again." };
   }
 }

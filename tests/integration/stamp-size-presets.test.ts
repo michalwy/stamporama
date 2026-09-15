@@ -2,6 +2,7 @@ import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import {
+  applyStampSize,
   applyStampSizePreset,
   createStampSizePreset,
   deleteStampSizePreset,
@@ -592,6 +593,100 @@ describe("stamp size presets (#803)", () => {
         assert.deepEqual(await sizeOf(outsider), { widthMm: null, heightMm: null }, label);
       }
     }
+  });
+
+  // --- a typed size, no preset (#1291) -----------------------------------------------------------
+
+  it("applies a typed size through the same preview, box and subtree as a preset, on every subject (#1291)", async () => {
+    // #1291's *Done when*: the preview count equals the written count, the unchecked box touches no
+    // stated size, and no preset exists afterwards that did not exist before. Every subject the
+    // dialog is opened on — the issue row, the checklist editor, the tree selection — with the box
+    // clear and ticked, over the same mix of whole and half-stated sizes as #806's test.
+    const mix = async () => {
+      await clearSizes();
+      await prisma.stamp.update({ where: { id: a }, data: { widthMm: 22, heightMm: 26 } });
+      await prisma.stamp.update({ where: { id: flawChild }, data: { widthMm: 19, heightMm: null } });
+    };
+    // A preset in the collection that the typed size must neither use nor add to.
+    await createStampSizePreset(userId, collectionId, { widthMm: 25, heightMm: 30 });
+    const presetsBefore = await getStampSizePresets(userId, collectionId);
+
+    for (const subject of [
+      { kind: "issue", issueId },
+      { kind: "checklist", checklistId },
+      { kind: "stamps", stampIds: [base, ap, second] },
+    ] as const) {
+      for (const overwriteStated of [false, true]) {
+        await mix();
+        const label = `${subject.kind}, overwrite ${overwriteStated}`;
+        const typed = { collectionId, widthMm: 24.5, heightMm: 28, subject };
+
+        const preview = await applyStampSize(userId, { ...typed, preview: true });
+        assert.equal(preview.written, 0, label);
+        const { willWrite } = describeStampSizePresetApply(preview, overwriteStated);
+        assert.ok(willWrite > 0, label);
+
+        const written = await applyStampSize(userId, { ...typed, overwriteStated });
+        assert.equal(written.written, willWrite, label);
+        assert.equal(written.total, preview.total, label);
+
+        const sized = await prisma.stamp.findMany({
+          where: { collectionId, widthMm: 24.5, heightMm: 28 },
+          select: { id: true },
+        });
+        assert.equal(sized.length, willWrite, label);
+        if (!overwriteStated) {
+          assert.deepEqual(await sizeOf(a), { widthMm: 22, heightMm: 26 }, label);
+          assert.deepEqual(await sizeOf(flawChild), { widthMm: 19, heightMm: null }, label);
+        }
+        assert.deepEqual(await sizeOf(outsider), { widthMm: null, heightMm: null }, label);
+      }
+    }
+
+    assert.deepEqual(await getStampSizePresets(userId, collectionId), presetsBefore);
+  });
+
+  it("counts a typed size exactly as it counts the same pair saved as a preset (#1291)", async () => {
+    // "A typed size is written exactly as an applied preset's size is written": the same subject
+    // gives the same counts, and figures carrying more than a tenth land rounded the way a preset's
+    // are — `25.04 × 29.96` is stored as the `25 × 30` a preset of those figures would hold.
+    await prisma.stamp.update({ where: { id: a }, data: { widthMm: 22, heightMm: null } });
+    const { id: presetId } = await createStampSizePreset(userId, collectionId, {
+      widthMm: 25.04,
+      heightMm: 29.96,
+    });
+    const subject = { kind: "issue" as const, issueId };
+    const byPreset = await applyStampSizePreset(userId, { presetId, subject, preview: true });
+    const byTyped = await applyStampSize(userId, {
+      collectionId,
+      widthMm: 25.04,
+      heightMm: 29.96,
+      subject,
+      preview: true,
+    });
+    assert.deepEqual({ ...byTyped }, { ...byPreset });
+
+    await applyStampSize(userId, { collectionId, widthMm: 25.04, heightMm: 29.96, subject });
+    assert.deepEqual(await sizeOf(apa), { widthMm: 25, heightMm: 30 });
+  });
+
+  it("refuses a typed figure out of bounds, or somebody else's collection, and writes nothing (#1291)", async () => {
+    const subject = { kind: "issue" as const, issueId };
+    await assert.rejects(
+      () => applyStampSize(userId, { collectionId, widthMm: 0.5, heightMm: 30, subject }),
+      (err: unknown) => {
+        assert.ok(err instanceof StampSizePresetFigureError, `got ${String(err)}`);
+        // No preset is involved, so the sentence does not name one.
+        assert.match(err.message, /^The width must be a figure in millimetres/);
+        return true;
+      }
+    );
+    await assert.rejects(
+      () => applyStampSize(otherUserId, { collectionId, widthMm: 25, heightMm: 30, subject }),
+      /access denied/
+    );
+    assert.deepEqual(await sizeOf(base), { widthMm: null, heightMm: null });
+    assert.deepEqual(await getStampSizePresets(userId, collectionId), []);
   });
 
   it("leaves no reference behind: deleting the preset does not touch the stamps", async () => {
