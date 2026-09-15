@@ -578,7 +578,9 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
             : null;
         return (
           <g key={`b${i}`} opacity={lifted ? 0.4 : undefined}>
-            {box.photoId && (
+            {/* The sheet's own preset decides, as it does for the PDF: the album's for a live sheet,
+                the card's for a printed one — a card set without photos draws none (#1307). */}
+            {box.photoId && preset.printPhotos && (
               <image
                 href={photoThumbUrl(collectionId, box.photoId)}
                 x={box.xMm}

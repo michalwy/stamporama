@@ -73,8 +73,9 @@ time. If the count is zero, the values are simply saved.
 *Apply a template* on the album list is still there, and is the other thing: it replaces **all** of
 the album's values with a template's.
 
-The two gaps between boxes can also be changed from the **page editor**, beside the sheet they are
-judged on — see below. It is the same pair of values and the same warning about printed cards.
+The two gaps between boxes, and whether stamp photos are printed, can also be changed from the **page
+editor**, beside the sheet they are judged on — see below. They are the same values and come with the
+same warning about printed cards.
 
 ## The language is the album's own, and it changes the plan
 
@@ -213,6 +214,11 @@ What you can set:
   **re-plans the album** — boxes can move to another row and onto another sheet — and, like *Page
   template…*, you are first told how many printed cards that match today would stop matching. A
   printed card stays as printed and reports the difference.
+- **Whether stamp photos are printed.** In the same panel, *Print stamp photos in the boxes* shows or
+  hides the pictures on every sheet of this album — on screen at once, and in the PDF. It is the same
+  value as in *Page template…*, for this album only; how strongly the pictures print stays there. As
+  with the spacing, you are first told how many printed cards that match today would stop matching,
+  and a printed card stays as printed.
 - **The order of the stamps in a block** — drag one box onto another. That writes this album's own
   order for the whole checklist; *Follow the checklist's order* puts it back.
 - **A note of your own**, set in one of the template's five voices and **filed before or after a
@@ -332,8 +338,9 @@ sheet's catalog range in the footer.
 A box also prints the picture of its stamp where there is one — the stamp's own image, or failing
 that a photo of your copy. It is **fitted, never cropped**: a stamp of a different shape from its
 box sits inside it with white around it, because a picture stretched or trimmed to fill a
-size-true box would be telling you the wrong thing about the object's proportions. The template
-decides whether pictures are printed at all and how strongly.
+size-true box would be telling you the wrong thing about the object's proportions. The album's
+template values decide whether pictures are printed at all and how strongly; whether they are
+printed can also be switched from the page editor.
 
 The fonts travel inside the file, so a Polish, Czech or German page prints identically on any
 machine and on any printer, and the file you keep today prints the same in ten years.

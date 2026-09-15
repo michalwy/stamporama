@@ -387,6 +387,22 @@ export async function updateAlbumBoxGaps(
   });
 }
 
+/**
+ * Whether an album's boxes print their stamp photos, and nothing else (#1307) — the switch in the page
+ * editor. One column for #836's reason: a whole-preset write built from the editor's read would put
+ * back any value changed under **Page template…** since. The opacity is not here; it stays a template
+ * value. The template is not read and not touched, and the count comes first, in the action.
+ */
+export async function updateAlbumPrintPhotos(
+  ownerId: string,
+  albumId: string,
+  printPhotos: boolean
+): Promise<void> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.album.update({ where: { id: albumId }, data: { printPhotos } });
+}
+
 export async function deleteAlbum(ownerId: string, albumId: string): Promise<void> {
   const collectionId = await resolveAlbumCollection(albumId);
   await assertCollectionOwner(ownerId, collectionId);

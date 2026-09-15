@@ -6,6 +6,7 @@ import {
   getAlbum,
   updateAlbumBoxGaps,
   updateAlbumPreset,
+  updateAlbumPrintPhotos,
 } from "../../src/lib/albums";
 import { albumPlanOverview, planAlbum } from "../../src/lib/album-plan";
 import {
@@ -36,6 +37,12 @@ import {
 // - only the two gap columns move — a value changed under *Page template…* since is not put back;
 // - a gap is a layout input: it changes how many sheets the album needs;
 // - it goes through the same count, and a printed card reports it.
+//
+// And the page editor's photo switch (#1307), a third door onto the same copy:
+//
+// - only `printPhotos` moves, and neither the template nor the other album does;
+// - it is the printed setting, so it goes through the same count and a card keeps the value it was
+//   set under.
 
 const ts = Date.now();
 
@@ -329,5 +336,66 @@ describe("an album's own template values (#1215)", () => {
       boxGapXMm: DEFAULT_ALBUM_PRESET.boxGapXMm,
       boxGapYMm: DEFAULT_ALBUM_PRESET.boxGapYMm,
     });
+  });
+
+  it("switches photos alone, on this album alone (#1307)", async () => {
+    // A margin changed under Page template… a moment earlier, which a whole-preset write would undo.
+    await updateAlbumPreset(userId, albumId, withValues({ marginLeftMm: 12 }));
+
+    await updateAlbumPrintPhotos(userId, albumId, false);
+
+    const album = await getAlbum(userId, albumId);
+    assert.deepEqual(
+      albumRenderPreset(album!),
+      withValues({ marginLeftMm: 12, printPhotos: false })
+    );
+    const template = await prisma.albumTemplate.findUniqueOrThrow({ where: { id: templateId } });
+    assert.equal(template.printPhotos, DEFAULT_ALBUM_PRESET.printPhotos);
+    assert.deepEqual(
+      albumRenderPreset(template as unknown as AlbumRenderPreset),
+      DEFAULT_ALBUM_PRESET
+    );
+    const sibling = await getAlbum(userId, siblingId);
+    assert.deepEqual(albumRenderPreset(sibling!), DEFAULT_ALBUM_PRESET);
+
+    await updateAlbumPreset(userId, albumId, DEFAULT_ALBUM_PRESET);
+  });
+
+  it("counts a photo switch against the printed cards, and a card keeps what it was set under (#1307)", async () => {
+    // Every sheet is on paper from the tests above, and every card matches the album again.
+    assert.deepEqual(
+      (await getAlbumPrintedReport(userId, albumId)).sheets.flatMap((s) => s.divergences),
+      []
+    );
+    const current = albumRenderPreset((await getAlbum(userId, albumId))!);
+    assert.equal(current.printPhotos, true);
+    assert.equal(
+      await countAlbumPresetDivergence(userId, albumId, { ...current, printPhotos: false }),
+      2
+    );
+
+    await updateAlbumPrintPhotos(userId, albumId, false);
+    const report = (await getAlbumPrintedReport(userId, albumId)).sheets;
+    assert.equal(report.length, 2);
+    for (const sheet of report) {
+      assert.ok(
+        sheet.divergences.some((d) => d.kind === "template"),
+        `every card reports the switch: ${JSON.stringify(sheet.divergences)}`
+      );
+    }
+    const snapshots = await getAlbumPageSnapshots(albumId, report.map((s) => s.id));
+    for (const snapshot of snapshots.values()) assert.equal(snapshot.preset.printPhotos, true);
+
+    // Switched back, the cards match again and nothing is counted.
+    const hidden = albumRenderPreset((await getAlbum(userId, albumId))!);
+    assert.equal(
+      await countAlbumPresetDivergence(userId, albumId, { ...hidden, printPhotos: true }),
+      0
+    );
+    await updateAlbumPrintPhotos(userId, albumId, true);
+    assert.deepEqual(
+      (await getAlbumPrintedReport(userId, albumId)).sheets.flatMap((s) => s.divergences),
+      []
+    );
   });
 });

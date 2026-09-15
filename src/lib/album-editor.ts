@@ -133,8 +133,9 @@ export interface AlbumEditorBox extends AlbumRect {
    *  toggle and the panel the checkbox only where this is true, so neither promises a break that
    *  the layout would ignore. */
   rowBreakable: boolean;
-  /** The picture the mount prints, by `Photo.id`. On a printed sheet this is the picture the **card**
-   *  printed, not the one the stamp has now — which is what makes a photo arriving afterwards a
+  /** The picture the mount has, by `Photo.id` — drawn only when the sheet's preset prints photos, so
+   *  the page editor can switch them without a re-plan (#1307). On a printed sheet this is the
+   *  picture the **card** had, not the one the stamp has now — which is what makes a photo arriving afterwards a
    *  divergence to report rather than a silent substitution. */
   photoId: string | null;
 }
@@ -372,7 +373,10 @@ export function liveSheet(
         // Indexed into the **block's own** boxes, not the sheet's: the second sheet of a split
         // checklist opens on a box that is not the block's first, and a break there is real.
         rowBreakable: !!entry && block.firstBoxIndex + n > 0,
-        photoId: album.printPhotos ? photoIdFor(box.stampId) : null,
+        // Shipped whether or not the album prints photos, and drawn by the canvas only when the
+        // sheet's preset says so: the page editor switches photos on and off (#1307) and the canvas
+        // follows at once, before the save's re-plan comes back.
+        photoId: photoIdFor(box.stampId),
       });
     }
 
