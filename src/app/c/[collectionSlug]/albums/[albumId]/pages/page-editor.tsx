@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ConfirmDialog,
   DialogShell,
@@ -51,6 +52,34 @@ import {
 } from "@/app/actions/albums";
 import { MAX_SPACING_MM, MIN_SPACING_MM } from "@/lib/album-template-rules";
 import { languageLabel } from "@/lib/languages";
+import {
+  blockBoxesOnSheet,
+  selectedBoxRefs,
+  sizeSubjectStampIds,
+  type AlbumBoxRef,
+} from "@/lib/album-selection";
+import {
+  formatSizeMm,
+  formatStampSize,
+  parseCorrectedSize,
+  parseSizeMm,
+  type StampSize,
+  type StampSizeFields,
+} from "@/lib/stamp-size";
+import {
+  getStampSizeSourcesAction,
+  setMeasuredStampSizeAction,
+} from "@/app/actions/photo-measure";
+import type { PhotoSummary } from "@/lib/photos";
+import { useToast } from "@/app/toast-provider";
+import { ApplySizePresetDialog } from "@/app/c/[collectionSlug]/shared/apply-size-preset-dialog";
+import { StampSizePresetPicker } from "@/app/c/[collectionSlug]/shared/stamp-size-preset-picker";
+import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { PhotoMeasureDialog } from "@/app/c/[collectionSlug]/inventory/photo-measure-dialog";
+import {
+  photoThumbUrl,
+  THUMB_OBJECT_FIT,
+} from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import {
   AlbumPageCanvas,
   BOX_FLAGS,
@@ -199,6 +228,8 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     at: { left: number; bottom: number };
   } | null>(null);
   const [addingNote, setAddingNote] = useState(false);
+  /** A size being given to several stamps at once (#1309) — a block's, or the boxes selected. */
+  const [sizeGroup, setSizeGroup] = useState<{ stampIds: string[]; label: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // The album's two box gaps as typed (#836), re-synced whenever the stored figures change — after a
@@ -282,12 +313,18 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     return `/c/${collectionSlug}/albums/${album.id}/pages?${params.toString()}`;
   }
 
+  /** The selected boxes that are on the sheet. A re-plan can move one off it, so what the panel
+   *  describes is what is still here — and a group down to one box is described as that box. */
+  const selectedBoxes: AlbumEditorBox[] = sheet
+    ? selectedBoxRefs(selection).flatMap((ref) => {
+        const box = sheet.boxes.find(
+          (b) => b.stampId === ref.stampId && b.entryId === ref.entryId
+        );
+        return box ? [box] : [];
+      })
+    : [];
   const selectedBox: AlbumEditorBox | null =
-    sheet && selection?.kind === "box"
-      ? (sheet.boxes.find(
-          (b) => b.stampId === selection.stampId && b.entryId === selection.entryId
-        ) ?? null)
-      : null;
+    selectedBoxes.length === 1 ? selectedBoxes[0] : null;
   const selectedBlock: AlbumEditorBlock | null =
     sheet && selection?.kind === "block"
       ? (sheet.blocks.find((b) => b.id === selection.id) ?? null)
@@ -661,9 +698,21 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                 sheet={sheet}
                 albumHref={`/c/${collectionSlug}/albums/${album.id}`}
               />
+            ) : selectedBoxes.length > 1 ? (
+              <BoxesPanel
+                boxes={selectedBoxes}
+                onApplySize={() =>
+                  setSizeGroup({
+                    stampIds: sizeSubjectStampIds(selectedBoxes),
+                    label: `${selectedBoxes.length} selected boxes`,
+                  })
+                }
+                onClear={() => setSelection(null)}
+              />
             ) : selectedBox ? (
               <BoxPanel
                 box={selectedBox}
+                collectionId={album.collectionId}
                 disabled={isPending}
                 onPreview={(dx, dy) =>
                   setPreview(
@@ -711,6 +760,22 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                 }
                 onClearBoxes={() => run(() => clearAlbumBoxAdjustmentsAction(selectedBlock.id))}
                 onDelete={() => run(() => deleteAlbumTextBlockAction(selectedBlock.id))}
+                onApplySize={
+                  selectedBlock.kind === "entry"
+                    ? () => {
+                        const boxes = blockBoxesOnSheet<AlbumBoxRef>(
+                          sheet.blocks,
+                          sheet.boxes,
+                          selectedBlock.id
+                        );
+                        if (boxes.length === 0) return;
+                        setSizeGroup({
+                          stampIds: sizeSubjectStampIds(boxes),
+                          label: selectedBlock.name,
+                        });
+                      }
+                    : undefined
+                }
                 anchors={anchorChoices}
                 onMove={(by) => {
                   const order = data.entries.map((e) => e.id);
@@ -751,6 +816,21 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
           anchor={gapPopover.at}
           onSaved={() => router.refresh()}
           onClose={() => setGapPopover(null)}
+        />
+      )}
+
+      {sizeGroup && (
+        // #806's dialog, unchanged (#1309): the same preview of stamps without a size and stamps
+        // that state one, the same unchecked overwrite box, the same variant subtree. The subject is
+        // the stamps the boxes hold, each once. Applying re-plans the pages.
+        <ApplySizePresetDialog
+          scope={{
+            collectionId: album.collectionId,
+            subject: { kind: "stamps", stampIds: sizeGroup.stampIds },
+            subjectLabel: sizeGroup.label,
+            onApplied: () => router.refresh(),
+          }}
+          onClose={() => setSizeGroup(null)}
         />
       )}
 
@@ -919,7 +999,8 @@ function SheetPanel({
       </div>
 
       <p style={{ ...MUTED, margin: 0, lineHeight: 1.5 }}>
-        Click a box or a heading to correct it.
+        Click a box or a heading to correct it. Shift-click boxes to select several and give them
+        one size.
       </p>
     </div>
   );
@@ -1063,6 +1144,7 @@ function PrintedSheetPanel({
  *  it. */
 function BoxPanel({
   box,
+  collectionId,
   disabled,
   onPreview,
   onCommit,
@@ -1070,6 +1152,7 @@ function BoxPanel({
   onSelectBlock,
 }: {
   box: AlbumEditorBox;
+  collectionId: string;
   disabled: boolean;
   onPreview: (dxMm: number, dyMm: number) => void;
   onCommit: (widthDeltaMm: number, heightDeltaMm: number) => void;
@@ -1121,6 +1204,9 @@ function BoxPanel({
           </div>
         </div>
       )}
+
+      {/* Keyed on the stamp, so a draft typed for one stamp is never offered to the next. */}
+      <StampSizeSection key={box.stampId} collectionId={collectionId} box={box} />
 
       <div>
         <PanelHeading>Corrected by</PanelHeading>
@@ -1213,6 +1299,339 @@ function BoxPanel({
   );
 }
 
+/**
+ * The size **of the stamp** a box holds, set from the box (#1309).
+ *
+ * Not a correction to the box — that is *Corrected by* below it, #769's millimetres on this album's
+ * slot. This is the stamp's own width and height (#763), so it reaches every album and every other
+ * screen, and the page re-plans at once: a box that was sized from a neighbour is then sized from the
+ * stamp, and loses its flag.
+ *
+ * ## Two ways, one write
+ *
+ * - **Measured on a photo**, in the viewer the copy and stamp pages open (#1290) — the same tools, the
+ *   same correction before setting (#1299), the same scale rules (#598). It is not a second measuring
+ *   tool, so it is not built here: a photo is clicked and that dialog opens.
+ * - **From a preset or typed**, with the same picker the stamp form and the apply dialog use (#805).
+ *
+ * Both go through `writeMeasuredStampSize`, whose gate is the whole of *replacing a size asks first*:
+ * a stamp stating a different size comes back as `confirm`, and nothing is written until the
+ * collector has seen what it states and said so. Only this stamp is written — a group, and the
+ * variant subtree with it, is the apply dialog's, from a block or several boxes.
+ *
+ * ## Measuring needs a photo whose scale can be known
+ *
+ * The photos offered are the stamp's own and its copies' that have a measuring frame. Where there are
+ * none, the panel says which of the two reasons it is — no photo at all, or photos stored without the
+ * size they were taken at — because *nothing to measure* reads the same as a feature that is missing.
+ */
+function StampSizeSection({ collectionId, box }: { collectionId: string; box: AlbumEditorBox }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const queryKey = ["album-box-size-sources", box.stampId];
+  const sources = useQuery({
+    queryKey,
+    staleTime: 0,
+    queryFn: async () => {
+      const state = await getStampSizeSourcesAction(box.stampId);
+      if (state.status === "error") throw new Error(state.message);
+      return state.sources;
+    },
+  });
+  const [width, setWidth] = useState("");
+  const [height, setHeight] = useState("");
+  const [presetId, setPresetId] = useState<string | null>(null);
+  const [measuring, setMeasuring] = useState<PhotoSummary | null>(null);
+  const [confirm, setConfirm] = useState<{ size: StampSize; current: StampSizeFields } | null>(
+    null
+  );
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  const typed = parseCorrectedSize(width, height);
+
+  function refreshAfterWrite() {
+    void queryClient.invalidateQueries({ queryKey });
+    router.refresh();
+  }
+
+  function write(size: StampSize, replace: boolean) {
+    setError(undefined);
+    startTransition(async () => {
+      const state = await setMeasuredStampSizeAction(
+        box.stampId,
+        size.widthMm,
+        size.heightMm,
+        replace
+      );
+      if (state.status === "error") {
+        setError(state.message);
+        return;
+      }
+      if (state.status === "confirm") {
+        setConfirm({ size: state.size, current: state.current });
+        return;
+      }
+      setConfirm(null);
+      if (state.status === "same") {
+        toast({ message: `The stamp already states ${formatStampSize(state.size)}`, tone: "info" });
+        return;
+      }
+      toast({ message: `Stamp size set to ${formatStampSize(state.size)}` });
+      setWidth("");
+      setHeight("");
+      setPresetId(null);
+      refreshAfterWrite();
+    });
+  }
+
+  const stated = sources.data ? formatStampSize(sources.data.size) : null;
+  const where = box.catalogNumber || "this stamp";
+
+  return (
+    <div>
+      <PanelHeading>The stamp&apos;s size</PanelHeading>
+      <p style={{ fontSize: "0.8125rem", margin: 0, lineHeight: 1.5 }}>
+        {sources.isError ? (
+          <span style={{ color: "var(--color-error)" }}>
+            {sources.error instanceof Error ? sources.error.message : "Could not read the stamp."}
+          </span>
+        ) : !sources.data ? (
+          <span style={MUTED}>Reading the stamp…</span>
+        ) : stated ? (
+          <>
+            {where} states <strong>{stated}</strong>.
+          </>
+        ) : box.sizeSource === "inherited" ? (
+          <>
+            {where} states no size; this box borrows{" "}
+            {box.sizeFromCatalogNumber ? `${box.sizeFromCatalogNumber}'s` : "a neighbour's"}.
+          </>
+        ) : (
+          <>{where} states no size, and nothing on its checklist does.</>
+        )}
+      </p>
+
+      {sources.data && (
+        <div style={{ marginTop: "0.625rem" }}>
+          <div style={{ ...MUTED, fontSize: "0.75rem", marginBottom: "0.375rem" }}>
+            Measure on a photo
+          </div>
+          {sources.data.photos.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
+              {sources.data.photos.map((photo) => (
+                <Tooltip key={photo.id} content={`Measure on ${photoLabel(photo)}`}>
+                  <button
+                    type="button"
+                    onClick={() => setMeasuring(photo)}
+                    aria-label={`Measure on ${photoLabel(photo)}`}
+                    style={{
+                      width: "3.25rem",
+                      height: "3.25rem",
+                      padding: 0,
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "0.375rem",
+                      overflow: "hidden",
+                      background: "var(--color-bg-page)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoThumbUrl(collectionId, photo.id)}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: THUMB_OBJECT_FIT,
+                        display: "block",
+                      }}
+                    />
+                  </button>
+                </Tooltip>
+              ))}
+            </div>
+          ) : (
+            <p style={{ ...MUTED, margin: 0, lineHeight: 1.5 }}>
+              {sources.data.unmeasurable > 0
+                ? "Not offered: this stamp's photos, and its copies', were stored without the size they were taken at, so no scale can be known for them."
+                : "Not offered: neither this stamp nor any copy of it has a photo to measure on."}{" "}
+              Give it a size from a preset or type one below.
+            </p>
+          )}
+        </div>
+      )}
+
+      <form
+        style={{ marginTop: "0.75rem" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (typed && !pending) write(typed, false);
+        }}
+      >
+        <div style={{ ...MUTED, fontSize: "0.75rem", marginBottom: "0.375rem" }}>
+          Or from a preset, or typed
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
+          {(
+            [
+              ["stamp-size-width", "Width, mm", width, setWidth],
+              ["stamp-size-height", "Height, mm", height, setHeight],
+            ] as const
+          ).map(([id, label, value, set]) => {
+            const unreadable = value.trim() !== "" && !parseSizeMm(value).ok;
+            return (
+              <div key={id} style={{ flex: 1 }}>
+                <LabelWithError htmlFor={id}>{label}</LabelWithError>
+                <input
+                  id={id}
+                  type="text"
+                  inputMode="decimal"
+                  value={value}
+                  disabled={pending}
+                  onChange={(e) => {
+                    set(e.target.value);
+                    // Editing a figure after a pick lets the preset go, as in the apply dialog.
+                    setPresetId(null);
+                  }}
+                  aria-invalid={unreadable || undefined}
+                  {...NO_AUTOFILL}
+                  style={{
+                    ...INPUT,
+                    ...(unreadable ? { borderColor: "var(--color-error)" } : null),
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+          <StampSizePresetPicker
+            collectionId={collectionId}
+            selectedId={presetId}
+            triggerLabel="Fill from a preset"
+            width="11rem"
+            disabled={pending}
+            onPick={(p) => {
+              setPresetId(p.id);
+              setWidth(formatSizeMm(p.widthMm));
+              setHeight(formatSizeMm(p.heightMm));
+            }}
+          />
+          <button type="submit" disabled={pending || !typed} style={BTN}>
+            {pending ? "Saving…" : "Set as the stamp's size"}
+          </button>
+        </div>
+        {error && !confirm && (
+          <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", margin: "0.375rem 0 0" }}>
+            {error}
+          </p>
+        )}
+      </form>
+      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+        Written onto <strong>the stamp</strong>, not this box, so every album and every other screen
+        takes it, and the pages are re-planned. A size it already states is replaced only once you
+        say so. For a whole series, select its heading or shift-click several boxes.
+      </p>
+
+      {measuring && sources.data && (
+        <PhotoMeasureDialog
+          collectionId={collectionId}
+          photo={measuring}
+          label={`${where} · ${photoLabel(measuring)}`}
+          context={{ scanDpi: sources.data.scanDpi, stampId: box.stampId }}
+          onClose={() => {
+            setMeasuring(null);
+            // The dialog refreshes the page itself after a write; the stated figure above is read
+            // through its own query, so it is read again too.
+            void queryClient.invalidateQueries({ queryKey });
+          }}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          title="Replace the stamp's size?"
+          message={
+            <>
+              {where} states <strong>{formatStampSize(confirm.current)}</strong> now. Replace it
+              with <strong>{formatStampSize(confirm.size)}</strong>?
+            </>
+          }
+          actionLabel="Replace"
+          pendingLabel="Replacing…"
+          variant="primary"
+          isPending={pending}
+          error={error}
+          onConfirm={() => write(confirm.size, true)}
+          onClose={() => !pending && setConfirm(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A photo named the way its strip names it: the slot, else its title. */
+function photoLabel(photo: PhotoSummary): string {
+  if (photo.role === "front") return "Front";
+  if (photo.role === "back") return "Back";
+  if (photo.role === "main") return "Main";
+  return photo.title || "Photo";
+}
+
+/** Several boxes, selected together to be given one size (#1309). */
+function BoxesPanel({
+  boxes,
+  onApplySize,
+  onClear,
+}: {
+  boxes: AlbumEditorBox[];
+  onApplySize: () => void;
+  onClear: () => void;
+}) {
+  const stamps = sizeSubjectStampIds(boxes).length;
+  const inherited = boxes.filter((b) => b.sizeSource === "inherited").length;
+  const unsized = boxes.filter((b) => b.sizeSource === null).length;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <div>
+        <PanelHeading>{boxes.length} boxes</PanelHeading>
+        <div style={{ fontSize: "0.9375rem", fontWeight: 600, lineHeight: 1.35 }}>
+          {boxes.map((b) => b.catalogNumber || "(no number)").join(", ")}
+        </div>
+        <p style={{ ...MUTED, margin: "0.25rem 0 0", lineHeight: 1.5 }}>
+          {stamps === boxes.length
+            ? `${stamps} stamps`
+            : `${stamps} stamps — a stamp on two checklists has a box on each`}
+          {inherited > 0 ? ` · ${inherited} sized from a neighbour` : ""}
+          {unsized > 0 ? ` · ${unsized} with no size` : ""}
+        </p>
+      </div>
+
+      <div>
+        <PanelHeading>The stamps&apos; size</PanelHeading>
+        <button type="button" onClick={onApplySize} style={BTN}>
+          <Icon name="sizePreset" size="sm" /> Apply size…
+        </button>
+        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+          One size, from a preset or typed, for these stamps and their variants — written onto the
+          stamps, so every album takes it. You see how many already state a size before anything is
+          written, and those are left alone unless you say otherwise. Measuring is one stamp at a
+          time: select a single box for that.
+        </p>
+      </div>
+
+      <p style={{ ...MUTED, margin: 0, lineHeight: 1.5 }}>
+        Shift-click a box to add it or take it off.
+      </p>
+      <button type="button" onClick={onClear} style={BTN}>
+        Clear the selection
+      </button>
+    </div>
+  );
+}
+
 /** One block: the space around it, where a page may break above it, and — for a note — its words. */
 function BlockPanel({
   block,
@@ -1222,6 +1641,7 @@ function BlockPanel({
   onClearStampOrder,
   onClearBoxes,
   onDelete,
+  onApplySize,
   anchors,
   onMove,
 }: {
@@ -1234,6 +1654,8 @@ function BlockPanel({
   onClearStampOrder: () => void;
   onClearBoxes: () => void;
   onDelete: () => void;
+  /** Opens the apply dialog over the stamps this block has on the sheet (#1309). Absent for a note. */
+  onApplySize?: () => void;
   /** Every checklist in the album, for a note's anchor. */
   anchors: { id: string; name: string }[];
   /** One step earlier or later in the album's own block order. The keyboard route to what dragging a
@@ -1446,6 +1868,21 @@ function BlockPanel({
       <button type="button" onClick={save} disabled={disabled} style={BTN}>
         Save these numbers
       </button>
+
+      {block.kind === "entry" && onApplySize && block.boxCount > 0 && (
+        <div>
+          <PanelHeading>The stamps&apos; size</PanelHeading>
+          <button type="button" onClick={onApplySize} disabled={disabled} style={BTN}>
+            <Icon name="sizePreset" size="sm" /> Apply size to this block…
+          </button>
+          <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+            One size, from a preset or typed, for{" "}
+            {block.boxCount === 1 ? "the stamp" : `the ${block.boxCount} stamps`} this checklist has
+            on this sheet — and their variants. Written onto the stamps, so every album takes it.
+            Stamps that already state a size are left alone unless you say otherwise.
+          </p>
+        </div>
+      )}
 
       {block.kind === "entry" && onMove && (
         <div>

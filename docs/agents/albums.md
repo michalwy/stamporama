@@ -918,6 +918,38 @@ that fits centred, so it costs nothing in the ordinary case. It is the only scro
 application that centres its content on the overflowing axis; there is nothing else to fix here, but
 it is the shape to recognise if another screen ever grows one.
 
+### A stamp's size, set from a box (#1309)
+
+The editor flagged inherited and missing sizes (#763) and could not settle one. `StampSizeSection` in
+`page-editor.tsx` now does, for one box, and a block's heading or a shift-click selection does it for a
+group. **Nothing new decides a size**; what is worth not re-deriving is which existing piece each half
+is and why:
+
+- **The size is the stamp's, never a box correction.** It goes to `Stamp.widthMm` / `heightMm` and so
+  reaches every album; #769's `album_box_adjustment` is untouched and stays a separate panel section.
+  The write is followed by `router.refresh()`, which *is* the re-plan — the client does not plan, so
+  there is no preview of the new page to draw.
+- **One box writes one stamp, through `writeMeasuredStampSize`** — measured, preset or typed alike.
+  Its `confirm` gate is *replacing a size asks first* (#1290), and there is no *measured* flag to tell
+  the three apart (#763). The variant subtree is deliberately **not** written here: that is the apply
+  dialog's rule (ADR-0048 §7), and it is reached from a group.
+- **Measuring opens `PhotoMeasureDialog`, not a copy of it.** The photos come from
+  `getStampSizeSources` (`stamp-measured-size.ts`): the stamp's own, then `listStampCopyPhotos`, and
+  only those with a `measureFrame` — a photo whose scale cannot be known would open with no tools, so
+  offering it as *measure on this* would be the panel promising a scale. `unmeasurable` counts the rest
+  so the panel can say which reason it is (no photo, or no frame).
+- **A group is #806's dialog with a `{ kind: "stamps" }` subject**, so the preview, the unchecked
+  overwrite box, the subtree and *the written count matches the preview* are that dialog's and its
+  integration suite's, not re-proved here. A block means **its boxes on this sheet**
+  (`blockBoxesOnSheet`, the canvas's cursor walk), read literally from the issue's *a checklist's
+  stamps on the page* — a checklist split across sheets gives each sheet's part, not the checklist.
+- **A selection is a list of slots, a write is a set of stamps.** `album-selection.ts` (pure, unit
+  tested) keeps `box` for exactly one and `boxes` for two or more, so the handles, the row-break tab
+  and measuring stay single-box without every reader counting; `sizeSubjectStampIds` collapses a
+  stamp's two boxes (two checklists of one issue, ADR-0047 §2) to one write. Shift-click selects and
+  lifts nothing, or the press would start a reorder. A printed sheet ignores the modifier and shows
+  its read-only panel, so nothing here is offered on paper.
+
 ### Untranslated texts: the flag was built, and nothing it could see was printed (#1308)
 
 #769 shipped the fallback flag through `templateFallbacks`, and it worked — for **entity tokens on a

@@ -15,7 +15,11 @@ import {
 } from "../../src/lib/photos";
 import { saveAnnotatedSnapshot } from "../../src/lib/photo-snapshot";
 import { DEFAULT_ANNOTATION_STYLE } from "../../src/lib/annotations";
-import { writeMeasuredStampSize, StampMeasuredSizeError } from "../../src/lib/stamp-measured-size";
+import {
+  getStampSizeSources,
+  writeMeasuredStampSize,
+  StampMeasuredSizeError,
+} from "../../src/lib/stamp-measured-size";
 import { getStorage, sheetVariantKey, variantKey } from "../../src/lib/storage";
 import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
 
@@ -417,5 +421,34 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       StampMeasuredSizeError
     );
     assert.deepEqual(await sizeOf(), [22, 26]);
+  });
+
+  it("gives the page editor's box the stated size, the scale and the photos a size can be measured on (#1309)", async () => {
+    const sources = await getStampSizeSources(userId, stampId);
+    assert.deepEqual(sources.size, { widthMm: 22, heightMm: 26 });
+    assert.equal(sources.scanDpi, 1200);
+    const front = sources.photos.find((p) => p.id === frontPhotoId);
+    assert.ok(front, "a copy's photo is offered, as the stamp's own screen offers it");
+    assert.deepEqual(front.measureFrame, { width: W, height: H });
+    assert.ok(
+      sources.photos.every((p) => p.measureFrame),
+      "nothing is offered for measuring whose scale cannot be known"
+    );
+    // The stamp's own photos (a snapshot taken on the stamp above is one) and its copies'.
+    const { total: copyTotal } = await listStampCopyPhotos(userId, stampId);
+    const ownTotal = await prisma.photo.count({ where: { stampId } });
+    assert.equal(sources.photos.length + sources.unmeasurable, ownTotal + copyTotal);
+
+    // A stamp with no photo at all offers none, and says there is nothing unmeasurable either — the
+    // panel's two reasons are told apart by that count.
+    const bare = await prisma.stamp.create({
+      data: { collectionId, name: "Bare", primaryCatalogSortKey: catalogSortKeyOf("2") },
+    });
+    const none = await getStampSizeSources(userId, bare.id);
+    assert.deepEqual(none.photos, []);
+    assert.equal(none.unmeasurable, 0);
+    assert.deepEqual(none.size, { widthMm: null, heightMm: null });
+
+    await assert.rejects(getStampSizeSources(otherUserId, stampId), StampMeasuredSizeError);
   });
 });
