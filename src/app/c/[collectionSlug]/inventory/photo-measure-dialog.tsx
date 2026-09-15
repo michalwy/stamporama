@@ -6,7 +6,14 @@ import { ConfirmDialog, DialogShell } from "@/app/dialog-shell";
 import { useToast } from "@/app/toast-provider";
 import { setMeasuredStampSizeAction } from "@/app/actions/photo-measure";
 import type { PhotoSummary } from "@/lib/photos";
-import { formatStampSize, type StampSize, type StampSizeFields } from "@/lib/stamp-size";
+import {
+  formatSizeMm,
+  formatStampSize,
+  parseCorrectedSize,
+  parseSizeMm,
+  type StampSize,
+  type StampSizeFields,
+} from "@/lib/stamp-size";
 import { TileZoomView } from "@/app/c/[collectionSlug]/shared/tile-zoom-view";
 import { ScanToolButton } from "@/app/c/[collectionSlug]/shared/scan-tool-button";
 
@@ -35,6 +42,12 @@ export interface PhotoMeasureContext {
  * The one thing this adds is the write the issue asks for: a size read off the picture can be set as
  * the stamp's, and a size the stamp already states is replaced only once the collector has seen it
  * and said so. The server asks the question; this dialog only relays it.
+ *
+ * **The figures can be corrected before they are set** (#1299). A ruler's ends are hard to put exactly
+ * on a stamp's edges, and the collector often knows the true size to the tenth; so the width and the
+ * height are fields prefilled with the measurement, with the measurement and its scale left standing
+ * beside them to read a correction against. What is written is the corrected size, and it is still a
+ * size taken at that scale — the correction refines the measurement rather than replacing it (#763).
  */
 export function PhotoMeasureDialog({
   collectionId,
@@ -52,6 +65,23 @@ export function PhotoMeasureDialog({
   const router = useRouter();
   const { toast } = useToast();
   const [reading, setReading] = useState<{ size: StampSize; dpi: number } | null>(null);
+  /** The width and height as they stand in the fields (#1299), and the measurement they were filled
+   * from. A new measurement refills them — adjusted while rendering, so the fields never show one
+   * frame of the previous figures beside the new reading. */
+  const readingKey = reading ? `${reading.size.widthMm}×${reading.size.heightMm}@${reading.dpi}` : null;
+  const [fields, setFields] = useState<{ key: string | null; width: string; height: string }>({
+    key: null,
+    width: "",
+    height: "",
+  });
+  if (fields.key !== readingKey) {
+    setFields({
+      key: readingKey,
+      width: reading ? formatSizeMm(reading.size.widthMm) : "",
+      height: reading ? formatSizeMm(reading.size.heightMm) : "",
+    });
+  }
+  const corrected = parseCorrectedSize(fields.width, fields.height);
   const [confirm, setConfirm] = useState<{
     size: StampSize;
     dpi: number;
@@ -146,16 +176,37 @@ export function PhotoMeasureDialog({
               fontSize: "0.8125rem",
             }}
           >
-            <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-              {formatStampSize(reading.size)} at {reading.dpi} dpi
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ color: "var(--color-text-muted)" }}>Measured </span>
+              <strong>{formatStampSize(reading.size)}</strong> at {reading.dpi} dpi
             </span>
             <span style={{ flex: 1 }} />
+            {/* The correction (#1299): the measured figures, editable, beside the measurement they
+                came from — so a changed tenth is always read against what the picture said. */}
+            <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <SizeField
+                value={fields.width}
+                label="Width in millimetres"
+                onChange={(width) => setFields((f) => ({ ...f, width }))}
+              />
+              <span style={{ color: "var(--color-text-muted)" }}>×</span>
+              <SizeField
+                value={fields.height}
+                label="Height in millimetres"
+                onChange={(height) => setFields((f) => ({ ...f, height }))}
+              />
+              <span style={{ color: "var(--color-text-muted)" }}>mm</span>
+            </label>
             {error && <span style={{ color: "var(--color-error)" }}>{error}</span>}
             <ScanToolButton
               label={pending ? "Saving…" : "Set as the stamp's size"}
-              hint="Write this width and height onto the stamp — if it already states a size, you are asked before it is replaced"
-              disabled={pending}
-              onClick={() => writeSize(reading, false)}
+              hint={
+                corrected
+                  ? "Write this width and height onto the stamp — if it already states a size, you are asked before it is replaced"
+                  : "Give both a width and a height, in millimetres"
+              }
+              disabled={pending || !corrected}
+              onClick={() => corrected && writeSize({ size: corrected, dpi: reading.dpi }, false)}
             />
           </div>
         )}
@@ -183,5 +234,40 @@ export function PhotoMeasureDialog({
         />
       )}
     </>
+  );
+}
+
+/** One of the two size fields (#1299) — a comma or a full stop, as every number field here (#233). */
+function SizeField({
+  value,
+  label,
+  onChange,
+}: {
+  value: string;
+  label: string;
+  onChange: (value: string) => void;
+}) {
+  const parsed = parseSizeMm(value);
+  // Blank is marked too: a size set from a measurement is the whole of it.
+  const bad = !parsed.ok || parsed.mm === null;
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      inputMode="decimal"
+      aria-label={label}
+      style={{
+        width: "4rem",
+        padding: "0.25rem 0.375rem",
+        border: `1px solid ${bad ? "var(--color-error-border)" : "var(--color-border-strong)"}`,
+        borderRadius: "0.375rem",
+        fontFamily: "inherit",
+        fontSize: "0.8125rem",
+        color: "var(--color-text-primary)",
+        background: "var(--color-bg-page)",
+        textAlign: "right",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    />
   );
 }

@@ -182,11 +182,16 @@ The rules are the scan's rules:
   placing the marks less precisely, and the viewer says so.
 - **Some older photos cannot be measured.** A large photo uploaded before Stamporama recorded
   original sizes may have been shrunk by an amount nothing remembers, so the measuring tools are not
-  offered on it and the line under the viewer says why. Ring, Line and Snapshot still work.
+  offered on it and the line under the viewer says why. Ring, Line, Text and Snapshot still work;
+  the Ruler mark, which carries a length, does not.
 
 **Set as the stamp's size.** With the **Size** tool, drag a box around the stamp; its width and
-height appear under the viewer with **Set as the stamp's size**. If the stamp states no size yet, it
-is written straight away. If it already states one — whole or only half — you are shown that size and
+height appear under the viewer with **Set as the stamp's size**. The ends of a box are hard to put
+exactly on a stamp's edges, so the width and height stand in two fields, filled in with what was
+measured, which you can correct before setting them — `21,5` and `21.5` both work. The measured
+figure and its resolution stay beside the fields, so a correction is read against what the picture
+said, and a new measurement fills the fields again. What is set is the size as the fields hold it. If
+the stamp states no size yet, it is written straight away. If it already states one — whole or only half — you are shown that size and
 asked before it is replaced, since it may itself have been measured carefully. On a copy carrying
 several stamps the figure is measured but not offered, because the piece is a copy of none of them.
 

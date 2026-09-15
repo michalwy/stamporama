@@ -1,12 +1,24 @@
-// Marking up a detail and keeping it as a photo (#674) — the shapes, the rectangle a snapshot takes,
-// and the drawing that is burnt into it. Pure: no DOM, no React, no `sharp`, no Prisma.
+// Marking up a detail and keeping it as a photo (#674, #1300) — the shapes, how they are styled, the
+// rectangle a snapshot takes, and the drawing that is burnt into it. Pure: no DOM, no React, no
+// `sharp`, no Prisma.
 //
 // ## One drawing, two surfaces
 //
 // A mark is drawn twice — live, over the picture in the viewer, and once more into the snapshot the
-// server writes. Both read the same shapes in the same frame (the picture's own pixels: a tile's box
-// on the card, a photo's upload), so what the collector marked is what lands in the photo rather
-// than an approximation of it redone somewhere else. The server's half is {@link snapshotOverlaySvg}.
+// server writes. Both go through {@link markPrimitives}: the same shapes in the same frame (the
+// picture's own pixels: a tile's box on the card, a photo's upload), turned into the same strokes and
+// the same type. The viewer renders those primitives as React SVG; the server renders them as an SVG
+// string ({@link snapshotOverlaySvg}). A snapshot therefore shows what was on screen rather than an
+// approximation of it redone somewhere else (#1300's rule).
+//
+// ## Sizes are the screen's
+//
+// A stroke's thickness, a tick's length and a font size are stated in **screen** pixels — what the
+// collector chose them by, and what they look like while drawing. Placing a mark is a matter of the
+// picture's pixels; styling it is a matter of the screen's. The snapshot keeps both: its request
+// carries the zoom it was taken at (`viewScale`), so every screen pixel becomes the number of output
+// pixels that one screen pixel covered. A 2 px line on a snapshot of a whole card rendered at twice
+// the screen's resolution is a 4 px line — the same line.
 //
 // ## Nothing here is stored as a mark
 //
@@ -17,18 +29,32 @@
 // viewer growing drawing code of its own.
 
 import type { Box } from "./scan-boxes";
-import type { ScanPoint } from "./scan-measure";
+import {
+  MAX_SCAN_DPI,
+  MIN_SCAN_DPI,
+  formatMillimetresAt,
+  scanPixelsToMm,
+  type ScanPoint,
+} from "./scan-measure";
 import { toSheetPoint, type Viewport, type ViewportSize } from "./scan-viewport";
 
-/** A mark the collector drew to point at something: a ring around a detail, or a straight line for
- * reference. Neither says anything numeric — the ruler is the tool that does. */
-export type AnnotationKind = "ellipse" | "line";
+/**
+ * A mark the collector drew on the picture.
+ *
+ * - **ellipse** and **line** point at something and say nothing numeric (#674).
+ * - **rulerMark** is a line with graduations and its length in millimetres (#1300). It carries the
+ *   scale it was drawn at, so its figure is never shown without one and a later correction of the
+ *   scale field does not silently re-measure a mark already on the picture.
+ * - **text** is a note, its top-left corner where it was placed (#1300).
+ */
+export type Annotation =
+  | { kind: "ellipse" | "line"; a: ScanPoint; b: ScanPoint }
+  | { kind: "rulerMark"; a: ScanPoint; b: ScanPoint; dpi: number }
+  | { kind: "text"; at: ScanPoint; text: string };
 
-export interface Annotation {
-  kind: AnnotationKind;
-  a: ScanPoint;
-  b: ScanPoint;
-}
+export type AnnotationKind = Annotation["kind"];
+/** The marks drawn by dragging from one end to the other. */
+export type DragAnnotationKind = "ellipse" | "line" | "rulerMark";
 
 /**
  * Everything a snapshot draws: the annotations, plus the measurement standing on the viewer when it
@@ -36,26 +62,102 @@ export interface Annotation {
  * the viewer showed for it.
  *
  * The figure travels as **text**, already formatted by the viewer — and so already carrying the
- * scale it was taken at (`formatMillimetresAt` / `formatGaugeAt`). A snapshot that re-derived it
- * would be a second place a millimetre could be computed, and a photo carrying a number without its
- * dpi is exactly what the measuring stack refuses to produce.
+ * scale it was taken at (`formatMillimetresAt` / `formatGaugeAt`). A gauge depends on a tooth count
+ * the server never sees, and a photo carrying a number without its dpi is exactly what the measuring
+ * stack refuses to produce. The live viewer draws the same marks with an empty label, since its
+ * figure is set in the page beside the line.
  */
 export type SnapshotMark =
   | Annotation
   | { kind: "distance" | "box"; a: ScanPoint; b: ScanPoint; label: string };
 
-export interface SnapshotRequest {
-  photoId: string;
-  /** The part of the picture to keep, in the picture's own frame. */
-  region: Box;
-  marks: SnapshotMark[];
-  title: string;
+// ── Style (#1300) ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The colours a mark can be. A short set of strong ones rather than a picker: a mark has to stand out
+ * on a stamp, which is paper in one place and ink in the next, and a few well-chosen colours do that
+ * reliably where an arbitrary one often does not.
+ *
+ * Every mark is drawn over a **halo** — a wider stroke in a contrasting colour underneath — so even
+ * the colour nearest the stamp's own stays readable: dark under the light colours, light under black.
+ *
+ * Not semantic tokens, and deliberately: these colours are drawn *on a picture*, in pixels a snapshot
+ * keeps, and must be the same in either theme — the watermark chips' exception (#625), for the same
+ * reason.
+ */
+export const ANNOTATION_COLOURS = [
+  { id: "white", label: "White", colour: "#ffffff", halo: "rgba(0,0,0,0.65)" },
+  { id: "black", label: "Black", colour: "#111111", halo: "rgba(255,255,255,0.8)" },
+  { id: "red", label: "Red", colour: "#ff3b30", halo: "rgba(0,0,0,0.65)" },
+  { id: "yellow", label: "Yellow", colour: "#ffd60a", halo: "rgba(0,0,0,0.65)" },
+  { id: "green", label: "Green", colour: "#30d158", halo: "rgba(0,0,0,0.65)" },
+  { id: "blue", label: "Blue", colour: "#0a84ff", halo: "rgba(255,255,255,0.8)" },
+] as const;
+
+export type AnnotationColour = (typeof ANNOTATION_COLOURS)[number]["id"];
+
+/** How thick a mark's line is, in screen pixels — a few steps, for every mark but text. */
+export const ANNOTATION_THICKNESSES = [1, 2, 3, 5] as const;
+/** How large a text mark is set, in screen pixels — a few steps. The ruler mark's figure uses it too,
+ * so everything written on the picture is one size. */
+export const ANNOTATION_FONT_SIZES = [12, 16, 24, 32] as const;
+
+export interface AnnotationStyle {
+  colour: AnnotationColour;
+  thickness: number;
+  fontSize: number;
 }
+
+/** What marks look like until the collector says otherwise — #674's white hairline on a dark halo. */
+export const DEFAULT_ANNOTATION_STYLE: AnnotationStyle = { colour: "white", thickness: 1, fontSize: 16 };
+
+/**
+ * A style as it arrives in a snapshot request: every field one of the steps, or null. The server
+ * draws only what the viewer could have drawn.
+ */
+export function parseAnnotationStyle(raw: unknown): AnnotationStyle | null {
+  if (!isRecord(raw)) return null;
+  const { colour, thickness, fontSize } = raw;
+  if (!ANNOTATION_COLOURS.some((c) => c.id === colour)) return null;
+  if (!(ANNOTATION_THICKNESSES as readonly unknown[]).includes(thickness)) return null;
+  if (!(ANNOTATION_FONT_SIZES as readonly unknown[]).includes(fontSize)) return null;
+  return { colour: colour as AnnotationColour, thickness: thickness as number, fontSize: fontSize as number };
+}
+
+/**
+ * The style remembered from the last sitting (#1300), read forgivingly: whatever field is missing or no
+ * longer one of the steps falls back to the default on its own, so a stale entry costs one setting
+ * rather than all three.
+ */
+export function readStoredAnnotationStyle(raw: string | null): AnnotationStyle {
+  let stored: unknown = null;
+  try {
+    stored = raw ? JSON.parse(raw) : null;
+  } catch {
+    stored = null;
+  }
+  const record = isRecord(stored) ? stored : {};
+  const pick = <T>(value: unknown, allowed: readonly T[], fallback: T): T =>
+    allowed.includes(value as T) ? (value as T) : fallback;
+  return {
+    colour: pick(record.colour, ANNOTATION_COLOURS.map((c) => c.id), DEFAULT_ANNOTATION_STYLE.colour),
+    thickness: pick(record.thickness, ANNOTATION_THICKNESSES, DEFAULT_ANNOTATION_STYLE.thickness),
+    fontSize: pick(record.fontSize, ANNOTATION_FONT_SIZES, DEFAULT_ANNOTATION_STYLE.fontSize),
+  };
+}
+
+function paletteOf(style: AnnotationStyle) {
+  return ANNOTATION_COLOURS.find((c) => c.id === style.colour) ?? ANNOTATION_COLOURS[0];
+}
+
+// ── Limits ──────────────────────────────────────────────────────────────────────────────────────
 
 /** What a snapshot is called when the collector does not say. */
 export const DEFAULT_SNAPSHOT_TITLE = "Detail";
 export const MAX_SNAPSHOT_TITLE = 120;
 export const MAX_SNAPSHOT_LABEL = 120;
+/** A note is a few words pointing at something, not a paragraph. */
+export const MAX_TEXT_MARK = 120;
 /** Far above anything drawn by hand; it bounds what one request can make the server render. */
 export const MAX_SNAPSHOT_MARKS = 100;
 /** A snapshot is at least this large on its longest edge. A detail zoomed deep into is a few dozen
@@ -64,16 +166,331 @@ export const MAX_SNAPSHOT_MARKS = 100;
 export const MIN_SNAPSHOT_EDGE = 800;
 /** Below this on either edge a region is a slip of the hand rather than a detail. */
 export const MIN_SNAPSHOT_REGION = 4;
+/** The zooms a viewer can be at, with room on both sides — `scan-viewport.ts` clamps well inside. */
+const MIN_VIEW_SCALE = 1e-4;
+const MAX_VIEW_SCALE = 1e3;
+/** How many steps of undo a sitting keeps. */
+export const MAX_MARK_HISTORY = 100;
+
+// ── Drawing marks ───────────────────────────────────────────────────────────────────────────────
 
 /**
- * An annotation from the two ends of a drag, or null when the drag drew nothing: a ring needs a
- * width **and** a height, and a line needs a length. A click that never became a drag is not a mark.
+ * A mark from the two ends of a drag, or null when the drag drew nothing: a ring needs a width
+ * **and** a height, and a line needs a length. A click that never became a drag is not a mark. A
+ * ruler mark also needs a stated scale — without one it has no figure, and it is not drawn.
  */
-export function annotationFromDrag(kind: AnnotationKind, a: ScanPoint, b: ScanPoint): Annotation | null {
+export function annotationFromDrag(
+  kind: DragAnnotationKind,
+  a: ScanPoint,
+  b: ScanPoint,
+  dpi: number | null = null
+): Annotation | null {
   const w = Math.abs(b.x - a.x);
   const h = Math.abs(b.y - a.y);
-  if (kind === "ellipse" ? w <= 0 || h <= 0 : Math.hypot(w, h) <= 0) return null;
+  if (kind === "ellipse") return w > 0 && h > 0 ? { kind, a, b } : null;
+  if (Math.hypot(w, h) <= 0) return null;
+  if (kind === "rulerMark") return dpi === null ? null : { kind, a, b, dpi };
   return { kind, a, b };
+}
+
+/**
+ * The marks on the picture with the way back through every change to them (#1300): a mark drawn, a
+ * note typed, edited or removed, and **Clear** — each one step of **Undo**.
+ */
+export interface MarksHistory {
+  marks: Annotation[];
+  past: Annotation[][];
+}
+
+export const NO_MARKS: MarksHistory = { marks: [], past: [] };
+
+/** The marks after a change, with what they were before it kept for Undo. No change, no step. */
+export function changeMarks(history: MarksHistory, next: Annotation[]): MarksHistory {
+  if (next === history.marks) return history;
+  if (next.length === 0 && history.marks.length === 0) return history;
+  return { marks: next, past: [...history.past, history.marks].slice(-MAX_MARK_HISTORY) };
+}
+
+export function undoMarks(history: MarksHistory): MarksHistory {
+  if (history.past.length === 0) return history;
+  return { marks: history.past[history.past.length - 1], past: history.past.slice(0, -1) };
+}
+
+/**
+ * The rectangle a note covers on the picture, in picture pixels — what a click with the text tool
+ * hits to open a note for editing. An estimate from the number of characters, generous by a little,
+ * since there are no font metrics here; the note is set from its top-left corner.
+ */
+export function textMarkBox(
+  mark: { at: ScanPoint; text: string },
+  fontSize: number,
+  viewScale: number
+): Box {
+  const scale = viewScale > 0 ? viewScale : 1;
+  return {
+    x: mark.at.x,
+    y: mark.at.y,
+    w: (Math.max(mark.text.length, 1) * fontSize * TEXT_WIDTH_EM + fontSize * 0.5) / scale,
+    h: (fontSize * TEXT_LINE_EM) / scale,
+  };
+}
+
+/** The topmost note under a picture point, or null — the last drawn wins, as it is drawn on top. */
+export function textMarkAt(
+  marks: readonly Annotation[],
+  point: ScanPoint,
+  fontSize: number,
+  viewScale: number
+): number | null {
+  for (let i = marks.length - 1; i >= 0; i--) {
+    const mark = marks[i];
+    if (mark.kind !== "text") continue;
+    const box = textMarkBox(mark, fontSize, viewScale);
+    if (point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h) {
+      return i;
+    }
+  }
+  return null;
+}
+
+// ── Primitives: what both surfaces draw ─────────────────────────────────────────────────────────
+
+/** One thing to draw, in output pixels. Strokes carry their own colour and width; so does type. */
+export type Primitive =
+  | { type: "line"; x1: number; y1: number; x2: number; y2: number; stroke: string; width: number }
+  | { type: "ellipse"; cx: number; cy: number; rx: number; ry: number; stroke: string; width: number }
+  | { type: "rect"; x: number; y: number; w: number; h: number; stroke: string; width: number }
+  | { type: "circle"; cx: number; cy: number; r: number; stroke: string; width: number }
+  | {
+      type: "text";
+      x: number;
+      y: number;
+      text: string;
+      size: number;
+      fill: string;
+      /** A halo under the glyphs, drawn as a stroke of the same text first. */
+      halo: string | null;
+      haloWidth: number;
+      anchor: "start" | "middle" | "end";
+      weight: number;
+    }
+  | { type: "plate"; x: number; y: number; w: number; h: number; r: number; fill: string };
+
+/**
+ * Where marks land and at what size.
+ *
+ * - `origin` and `scale` place a picture point: output = (point − origin) × scale.
+ * - `screen` is how many output pixels one screen pixel covers — 1 in the viewer, and the ratio of
+ *   the snapshot's resolution to the screen's in a snapshot.
+ */
+export interface MarkPlacement {
+  origin: ScanPoint;
+  scale: number;
+  screen: number;
+}
+
+/** Font the marks' type is set in — the collage labels' stack (#312), which the image ships the faces
+ * for (`Dockerfile`), so the server renders the same glyphs on every deployment. The viewer asks for
+ * the same stack, so the note on screen is the note in the photo. */
+export const ANNOTATION_FONT_FAMILY = "DejaVu Sans, Verdana, Arial, Helvetica, sans-serif";
+
+/** An average glyph's advance as a share of the font size — an estimate, and a generous one. */
+const TEXT_WIDTH_EM = 0.62;
+const TEXT_LINE_EM = 1.25;
+/** How far apart a ruler mark's finest graduations may come on screen before a coarser step is used. */
+const MIN_TICK_SPACING = 6;
+/** Graduation steps in millimetres, finest first, each with the step its longer ticks fall on. */
+const TICK_STEPS = [
+  { minor: 0.1, major: 0.5 },
+  { minor: 0.5, major: 1 },
+  { minor: 1, major: 5 },
+  { minor: 5, major: 10 },
+  { minor: 10, major: 50 },
+] as const;
+/** Beyond this many graduations a mark is drawn with its ends only — a line across a whole sheet at
+ * a zoom that shows it, not something to set a thousand ticks along. */
+const MAX_TICKS = 2000;
+
+/**
+ * The graduations a ruler mark carries at a zoom, in millimetres from its first end — the finest
+ * step that still leaves {@link MIN_TICK_SPACING} screen pixels between ticks, and which of them are
+ * the longer ones. The ends themselves are not graduations: they are drawn as the mark's end caps.
+ */
+export function rulerTicks(
+  lengthMm: number,
+  screenPxPerMm: number
+): { minor: number; ticks: { mm: number; major: boolean }[] } {
+  const step = TICK_STEPS.find((s) => s.minor * screenPxPerMm >= MIN_TICK_SPACING) ?? TICK_STEPS[TICK_STEPS.length - 1];
+  const count = Math.floor(lengthMm / step.minor + 1e-9);
+  if (!(count > 0) || count > MAX_TICKS) return { minor: step.minor, ticks: [] };
+  const ticks: { mm: number; major: boolean }[] = [];
+  const perMajor = Math.round(step.major / step.minor);
+  for (let i = 1; i <= count; i++) {
+    const mm = i * step.minor;
+    // The far end is its own cap; a graduation a hair before it would draw over the cap.
+    if (lengthMm - mm < step.minor * 0.25) break;
+    ticks.push({ mm: roundTo(mm, 6), major: i % perMajor === 0 });
+  }
+  return { minor: step.minor, ticks };
+}
+
+/**
+ * One mark as primitives, in drawing order: every halo first, then every stroke on top, then type —
+ * so a graduation's halo never cuts across the line it sits on.
+ */
+export function markPrimitives(
+  mark: SnapshotMark,
+  place: MarkPlacement,
+  style: AnnotationStyle
+): Primitive[] {
+  const { colour, halo } = paletteOf(style);
+  const s = place.screen;
+  const at = (p: ScanPoint) => ({
+    x: (p.x - place.origin.x) * place.scale,
+    y: (p.y - place.origin.y) * place.scale,
+  });
+  const width = style.thickness * s;
+  const haloWidth = width + 2 * s;
+
+  type Shape =
+    | { type: "line"; x1: number; y1: number; x2: number; y2: number }
+    | { type: "ellipse"; cx: number; cy: number; rx: number; ry: number }
+    | { type: "rect"; x: number; y: number; w: number; h: number }
+    | { type: "circle"; cx: number; cy: number; r: number };
+  const shapes: Shape[] = [];
+  const type: Primitive[] = [];
+
+  if (mark.kind === "text") {
+    const p = at(mark.at);
+    const size = style.fontSize * s;
+    type.push(textPrimitive(mark.text, p.x, p.y + size * 0.8, size, colour, halo, "start", 600));
+    return type;
+  }
+
+  const a = at(mark.a);
+  const b = at(mark.b);
+  if (mark.kind === "ellipse") {
+    shapes.push({
+      type: "ellipse",
+      cx: (a.x + b.x) / 2,
+      cy: (a.y + b.y) / 2,
+      rx: Math.abs(b.x - a.x) / 2,
+      ry: Math.abs(b.y - a.y) / 2,
+    });
+  } else if (mark.kind === "box") {
+    shapes.push({
+      type: "rect",
+      x: Math.min(a.x, b.x),
+      y: Math.min(a.y, b.y),
+      w: Math.abs(b.x - a.x),
+      h: Math.abs(b.y - a.y),
+    });
+  } else {
+    shapes.push({ type: "line", x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+  }
+
+  if (mark.kind === "distance") {
+    // Rings rather than dots: the thing aimed at is the centre of a perforation hole.
+    const r = (3 + style.thickness) * s;
+    shapes.push({ type: "circle", cx: a.x, cy: a.y, r }, { type: "circle", cx: b.x, cy: b.y, r });
+  }
+
+  if (mark.kind === "rulerMark") {
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len > 0) {
+      const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+      // The side the figure is set on: upwards, or to the right for an upright line.
+      let n = { x: -u.y, y: u.x };
+      if (n.y > 1e-9 || (Math.abs(n.y) <= 1e-9 && n.x < 0)) n = { x: -n.x, y: -n.y };
+      const minorHalf = (3 + style.thickness) * s;
+      const majorHalf = (6 + style.thickness * 1.5) * s;
+      const tick = (p: { x: number; y: number }, half: number) =>
+        shapes.push({
+          type: "line",
+          x1: p.x - n.x * half,
+          y1: p.y - n.y * half,
+          x2: p.x + n.x * half,
+          y2: p.y + n.y * half,
+        });
+      tick(a, majorHalf);
+      tick(b, majorHalf);
+
+      const pictureLength = Math.hypot(mark.b.x - mark.a.x, mark.b.y - mark.a.y);
+      const lengthMm = scanPixelsToMm(pictureLength, mark.dpi);
+      const pxPerMm = len / lengthMm;
+      for (const t of rulerTicks(lengthMm, pxPerMm / s).ticks) {
+        tick({ x: a.x + u.x * t.mm * pxPerMm, y: a.y + u.y * t.mm * pxPerMm }, t.major ? majorHalf : minorHalf);
+      }
+
+      const size = style.fontSize * s;
+      const offset = majorHalf + 4 * s;
+      const mid = { x: (a.x + b.x) / 2 + n.x * offset, y: (a.y + b.y) / 2 + n.y * offset };
+      const sideways = Math.abs(n.x) >= 0.7;
+      type.push(
+        textPrimitive(
+          formatMillimetresAt(lengthMm, mark.dpi),
+          mid.x,
+          sideways ? mid.y + size * 0.35 : mid.y - size * 0.2,
+          size,
+          colour,
+          halo,
+          sideways ? (n.x > 0 ? "start" : "end") : "middle",
+          600
+        )
+      );
+    }
+  }
+
+  if ((mark.kind === "distance" || mark.kind === "box") && mark.label) {
+    // The viewer's reading plate, set above the line's far end as the viewer sets it: 12 px type in a
+    // dark plate, 0.75 rem clear of the point. Its own colours rather than the mark's — it is the
+    // viewer's figure, and it must read over paper and ink alike whatever colour the line is.
+    const size = 12 * s;
+    const padX = 6 * s;
+    const padY = 2 * s;
+    const w = mark.label.length * size * TEXT_WIDTH_EM + padX * 2;
+    const h = size * 1.2 + padY * 2;
+    const x = b.x - w / 2;
+    const y = b.y - h - 12 * s;
+    type.push(
+      { type: "plate", x, y, w, h, r: 4 * s, fill: "rgba(17,17,17,0.85)" },
+      textPrimitive(mark.label, x + w / 2, y + padY + size * 0.95, size, "#ffffff", null, "middle", 600)
+    );
+  }
+
+  return [
+    ...shapes.map((shape) => ({ ...shape, stroke: halo, width: haloWidth }) as Primitive),
+    ...shapes.map((shape) => ({ ...shape, stroke: colour, width }) as Primitive),
+    ...type,
+  ];
+}
+
+function textPrimitive(
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  fill: string,
+  halo: string | null,
+  anchor: "start" | "middle" | "end",
+  weight: number
+): Primitive {
+  return { type: "text", x, y, text, size, fill, halo, haloWidth: Math.max(2, size * 0.18), anchor, weight };
+}
+
+// ── The snapshot ────────────────────────────────────────────────────────────────────────────────
+
+export interface SnapshotRequest {
+  photoId: string;
+  /** The part of the picture to keep, in the picture's own frame. */
+  region: Box;
+  marks: SnapshotMark[];
+  title: string;
+  /** How the marks were styled on screen when the snapshot was taken (#1300). */
+  style: AnnotationStyle;
+  /** Screen pixels per picture pixel when it was taken — what turns the style's screen pixels into
+   * the snapshot's (#1300). */
+  viewScale: number;
 }
 
 /**
@@ -104,7 +521,7 @@ export function snapshotRegion(
  */
 export function parseSnapshotRequest(raw: unknown): SnapshotRequest | null {
   if (!isRecord(raw)) return null;
-  const { photoId, region, marks, title } = raw;
+  const { photoId, region, marks, title, style, viewScale } = raw;
   if (typeof photoId !== "string" || photoId.length === 0 || photoId.length > 64) return null;
 
   if (!isRecord(region)) return null;
@@ -135,20 +552,40 @@ export function parseSnapshotRequest(raw: unknown): SnapshotRequest | null {
     if (trimmed) name = trimmed;
   }
 
+  const parsedStyle = parseAnnotationStyle(style);
+  if (!parsedStyle) return null;
+  if (typeof viewScale !== "number" || !Number.isFinite(viewScale)) return null;
+  if (viewScale < MIN_VIEW_SCALE || viewScale > MAX_VIEW_SCALE) return null;
+
   return {
     photoId,
     region: box as Box,
     marks: parsed,
     title: name,
+    style: parsedStyle,
+    viewScale,
   };
 }
 
 function parseMark(raw: unknown): SnapshotMark | null {
   if (!isRecord(raw)) return null;
+  if (raw.kind === "text") {
+    const at = parsePoint(raw.at);
+    if (!at || typeof raw.text !== "string") return null;
+    const text = raw.text.trim();
+    if (!text || text.length > MAX_TEXT_MARK) return null;
+    return { kind: "text", at, text };
+  }
   const a = parsePoint(raw.a);
   const b = parsePoint(raw.b);
   if (!a || !b) return null;
   if (raw.kind === "ellipse" || raw.kind === "line") return { kind: raw.kind, a, b };
+  if (raw.kind === "rulerMark") {
+    // A ruler mark never travels without the scale it was drawn at, so never without its figure's.
+    const { dpi } = raw;
+    if (!isWhole(dpi) || dpi < MIN_SCAN_DPI || dpi > MAX_SCAN_DPI) return null;
+    return { kind: "rulerMark", a, b, dpi };
+  }
   if (raw.kind === "distance" || raw.kind === "box") {
     if (typeof raw.label !== "string") return null;
     const label = raw.label.trim();
@@ -186,96 +623,63 @@ export function snapshotOutputSize(
 }
 
 /**
- * The marks as one SVG the size of the snapshot, to composite over the cropped picture.
- *
- * Every shape is drawn twice, dark under light — the viewer's own rule, for the viewer's reason: a
- * stamp is white paper in some places and printing ink in others, and a single stroke colour vanishes
- * over one of them. Strokes and type scale with the output rather than staying at screen pixels, so
- * the marks read the same on a 800 px snapshot as on a 2500 px one.
- *
- * A figure sits in a dark plate above the end of its line (or above the box's lower corner), where the
- * viewer puts it, nudged inside the picture when that would cut it off.
+ * The marks as one SVG the size of the snapshot, to composite over the cropped picture — the same
+ * primitives the viewer drew, placed in the region and sized by how many snapshot pixels each screen
+ * pixel covered. A reading's plate is nudged inside the picture when it would be cut off.
  */
 export function snapshotOverlaySvg(
   marks: readonly SnapshotMark[],
   region: Box,
-  out: { width: number; height: number }
+  out: { width: number; height: number },
+  style: AnnotationStyle,
+  viewScale: number
 ): string {
-  const sx = out.width / region.w;
-  const sy = out.height / region.h;
-  const px = (p: ScanPoint) => ({ x: round((p.x - region.x) * sx), y: round((p.y - region.y) * sy) });
-  const unit = Math.max(1, round(Math.max(out.width, out.height) / 600));
-  const dark = `stroke="rgba(0,0,0,0.65)" stroke-width="${round(unit * 3)}"`;
-  const light = `stroke="#ffffff" stroke-width="${unit}"`;
-  const fontSize = Math.max(11, Math.round(Math.max(out.width, out.height) / 45));
-
-  const parts: string[] = [];
-  const labels: string[] = [];
-  for (const mark of marks) {
-    const a = px(mark.a);
-    const b = px(mark.b);
-    if (mark.kind === "ellipse" || mark.kind === "box") {
-      const x = Math.min(a.x, b.x);
-      const y = Math.min(a.y, b.y);
-      const w = round(Math.abs(b.x - a.x));
-      const h = round(Math.abs(b.y - a.y));
-      if (mark.kind === "ellipse") {
-        const cx = round(x + w / 2);
-        const cy = round(y + h / 2);
-        const shape = `cx="${cx}" cy="${cy}" rx="${round(w / 2)}" ry="${round(h / 2)}" fill="none"`;
-        parts.push(`<ellipse ${shape} ${dark}/>`, `<ellipse ${shape} ${light}/>`);
-      } else {
-        const shape = `x="${x}" y="${y}" width="${w}" height="${h}" fill="none"`;
-        parts.push(`<rect ${shape} ${dark}/>`, `<rect ${shape} ${light}/>`);
-      }
-    } else {
-      const shape = `x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"`;
-      parts.push(`<line ${shape} ${dark}/>`, `<line ${shape} ${light}/>`);
-      if (mark.kind === "distance") {
-        // Rings rather than dots, as on screen: the thing aimed at is the centre of a hole.
-        for (const p of [a, b]) {
-          parts.push(
-            `<circle cx="${p.x}" cy="${p.y}" r="${round(unit * 4)}" fill="none" ${dark}/>`,
-            `<circle cx="${p.x}" cy="${p.y}" r="${round(unit * 4)}" fill="none" ${light}/>`
-          );
-        }
-      }
-    }
-    if (mark.kind === "distance" || mark.kind === "box") {
-      labels.push(labelPlate(mark.label, b, fontSize, out));
-    }
-  }
-
+  const scale = out.width / region.w;
+  const place: MarkPlacement = { origin: { x: region.x, y: region.y }, scale, screen: scale / viewScale };
+  const parts = marks.flatMap((mark) => clampPlates(markPrimitives(mark, place, style), out).map(primitiveSvg));
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${out.width}" height="${out.height}">` +
     parts.join("") +
-    labels.join("") +
     `</svg>`
   );
 }
 
-/** Font the snapshot figure is set in — the collage labels' stack (#312), which the image ships the
- * faces for (`Dockerfile`), so the server renders the same glyphs on every deployment. */
-const SNAPSHOT_FONT_FAMILY = "DejaVu Sans, Verdana, Arial, Helvetica, sans-serif";
+/** A plate and the figure set in it moved together, so the plate is inside the picture. */
+function clampPlates(primitives: Primitive[], out: { width: number; height: number }): Primitive[] {
+  const result = [...primitives];
+  for (let i = 0; i < result.length; i++) {
+    const plate = result[i];
+    if (plate.type !== "plate") continue;
+    const dx = clamp(plate.x, 0, Math.max(0, out.width - plate.w)) - plate.x;
+    const dy = clamp(plate.y, 0, Math.max(0, out.height - plate.h)) - plate.y;
+    result[i] = { ...plate, x: plate.x + dx, y: plate.y + dy };
+    const label = result[i + 1];
+    if (label?.type === "text") result[i + 1] = { ...label, x: label.x + dx, y: label.y + dy };
+  }
+  return result;
+}
 
-function labelPlate(
-  text: string,
-  at: { x: number; y: number },
-  fontSize: number,
-  out: { width: number; height: number }
-): string {
-  const padX = round(fontSize * 0.4);
-  const padY = round(fontSize * 0.25);
-  // An estimate rather than a measurement — there is no font metrics on this side — and a generous
-  // one: a plate slightly wide is a margin, a plate too narrow cuts the figure.
-  const width = round(text.length * fontSize * 0.62 + padX * 2);
-  const height = round(fontSize * 1.2 + padY * 2);
-  const x = round(clamp(at.x - width / 2, 0, Math.max(0, out.width - width)));
-  const y = round(clamp(at.y - height - fontSize * 0.75, 0, Math.max(0, out.height - height)));
-  return (
-    `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${round(fontSize * 0.25)}" fill="rgba(17,17,17,0.85)"/>` +
-    `<text x="${round(x + width / 2)}" y="${round(y + padY + fontSize * 0.95)}" font-family="${SNAPSHOT_FONT_FAMILY}" font-size="${fontSize}" font-weight="600" fill="#ffffff" text-anchor="middle">${escapeXml(text)}</text>`
-  );
+function primitiveSvg(p: Primitive): string {
+  switch (p.type) {
+    case "line":
+      return `<line x1="${round(p.x1)}" y1="${round(p.y1)}" x2="${round(p.x2)}" y2="${round(p.y2)}" stroke="${p.stroke}" stroke-width="${round(p.width)}" stroke-linecap="round"/>`;
+    case "ellipse":
+      return `<ellipse cx="${round(p.cx)}" cy="${round(p.cy)}" rx="${round(p.rx)}" ry="${round(p.ry)}" fill="none" stroke="${p.stroke}" stroke-width="${round(p.width)}"/>`;
+    case "rect":
+      return `<rect x="${round(p.x)}" y="${round(p.y)}" width="${round(p.w)}" height="${round(p.h)}" fill="none" stroke="${p.stroke}" stroke-width="${round(p.width)}"/>`;
+    case "circle":
+      return `<circle cx="${round(p.cx)}" cy="${round(p.cy)}" r="${round(p.r)}" fill="none" stroke="${p.stroke}" stroke-width="${round(p.width)}"/>`;
+    case "plate":
+      return `<rect x="${round(p.x)}" y="${round(p.y)}" width="${round(p.w)}" height="${round(p.h)}" rx="${round(p.r)}" fill="${p.fill}"/>`;
+    case "text": {
+      const common = `x="${round(p.x)}" y="${round(p.y)}" font-family="${ANNOTATION_FONT_FAMILY}" font-size="${round(p.size)}" font-weight="${p.weight}" text-anchor="${p.anchor}"`;
+      const text = escapeXml(p.text);
+      const halo = p.halo
+        ? `<text ${common} fill="none" stroke="${p.halo}" stroke-width="${round(p.haloWidth)}" stroke-linejoin="round">${text}</text>`
+        : "";
+      return `${halo}<text ${common} fill="${p.fill}">${text}</text>`;
+    }
+  }
 }
 
 function escapeXml(text: string): string {
@@ -296,6 +700,11 @@ function isWhole(value: unknown): value is number {
 
 function round(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function roundTo(value: number, decimals: number): number {
+  const f = 10 ** decimals;
+  return Math.round(value * f) / f;
 }
 
 function clamp(n: number, lo: number, hi: number): number {

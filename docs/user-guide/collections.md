@@ -714,8 +714,9 @@ card was scanned at something other than the collection's setting.
 
 A stamp you did not measure while identifying it can still be measured afterwards, on a photo of a
 copy: **Measure and mark** under an enlarged photo on the copy's or the stamp's page, then the
-**Size** tool, then **Set as the stamp's size**. A stamp that already states a size is not changed
-until you have seen that size and confirmed replacing it. See
+**Size** tool, correct the width and height if the box landed a fraction off, then **Set as the
+stamp's size**. A stamp that already states a size is not changed until you have seen that size and
+confirmed replacing it. See
 [Measuring and marking a photo](detail-pages.md#measuring-and-marking-a-photo).
 
 **A stamp that states no size borrows one when something needs to draw it.** For laying out an album

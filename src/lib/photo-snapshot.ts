@@ -139,7 +139,13 @@ export async function saveAnnotatedSnapshot(
   const composed = await sharp(resized.data, {
     raw: { width: resized.info.width, height: resized.info.height, channels: resized.info.channels },
   })
-    .composite([{ input: Buffer.from(snapshotOverlaySvg(request.marks, region, out)), left: 0, top: 0 }])
+    .composite([
+      {
+        input: Buffer.from(snapshotOverlaySvg(request.marks, region, out, request.style, request.viewScale)),
+        left: 0,
+        top: 0,
+      },
+    ])
     .jpeg({ quality: 95 })
     .toBuffer();
 
