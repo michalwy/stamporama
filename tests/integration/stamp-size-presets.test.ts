@@ -11,6 +11,7 @@ import {
   reorderStampSizePresets,
   StampSizePresetFigureError,
   StampSizePresetPairTakenError,
+  type StampSizePresetSubject,
 } from "../../src/lib/stamp-size-presets";
 import { describeStampSizePresetApply } from "../../src/lib/stamp-size-preset-rules";
 import { getStampSelectionSubtrees } from "../../src/lib/stamp-selection";
@@ -611,11 +612,12 @@ describe("stamp size presets (#803)", () => {
     await createStampSizePreset(userId, collectionId, { widthMm: 25, heightMm: 30 });
     const presetsBefore = await getStampSizePresets(userId, collectionId);
 
-    for (const subject of [
+    const subjects: StampSizePresetSubject[] = [
       { kind: "issue", issueId },
       { kind: "checklist", checklistId },
       { kind: "stamps", stampIds: [base, ap, second] },
-    ] as const) {
+    ];
+    for (const subject of subjects) {
       for (const overwriteStated of [false, true]) {
         await mix();
         const label = `${subject.kind}, overwrite ${overwriteStated}`;
