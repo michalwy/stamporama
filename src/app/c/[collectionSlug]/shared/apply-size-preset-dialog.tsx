@@ -56,6 +56,15 @@ import { StampSizePresetPicker } from "./stamp-size-preset-picker";
 // `preview: true`, so the number in the dialog and the rows the write reaches cannot drift apart; the
 // toast afterwards reports the write's own recount, not the preview's.
 //
+// ## Enter applies, as the dialog stands (#1303)
+//
+// The body and the footer are one `<form>` and **Apply** is its submit button, so Enter confirms
+// the dialog exactly as a click would. It goes through the same disabled button, so while nothing is
+// chosen, the figures are incomplete or the counts are not in, Enter does nothing — a disabled
+// default button blocks implicit submission. It never ticks the overwrite box: that stays the second,
+// deliberate decision above. The preset picker's list is portalled outside the form and takes Enter
+// for itself, so Enter there picks a preset and applies nothing.
+//
 // There is **no bulk clear** (ADR-0048, *Deliberately left out*): no preset means *no size*, and a
 // size is cleared on the stamp.
 
@@ -99,6 +108,14 @@ function sourceKey(source: StampSizeApplySource | null): string | null {
 }
 
 const SIZE_FIELDS = ["widthMm", "heightMm"] as const;
+
+const FORM_STYLE: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  flex: 1,
+  minHeight: 0,
+  overflow: "hidden",
+};
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -208,144 +225,151 @@ export function ApplySizePresetDialog({
       onClose={close}
       dismissable={!pickerOpen && !isPending}
     >
-      <DialogBody>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <p style={muted}>
-            Writes a width and height onto every stamp here — its variants and child stamps too, at
-            any depth. Type the figures, or fill them from a preset. They are copied: correcting a
-            preset later does not change these stamps. A stamp that already states a size is left
-            alone unless you say otherwise below.
-          </p>
+      <form
+        style={FORM_STYLE}
+        onSubmit={(e) => {
+          e.preventDefault();
+          apply();
+        }}
+      >
+        <DialogBody>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <p style={muted}>
+              Writes a width and height onto every stamp here — its variants and child stamps too, at
+              any depth. Type the figures, or fill them from a preset. They are copied: correcting a
+              preset later does not change these stamps. A stamp that already states a size is left
+              alone unless you say otherwise below.
+            </p>
 
-          <div
-            style={{ display: "flex", alignItems: "flex-end", gap: "0.75rem 1rem", flexWrap: "wrap" }}
-          >
-            {SIZE_FIELDS.map((field) => {
-              const text = fields[field];
-              const unreadable = text.trim() !== "" && !parseSizeMm(text).ok;
-              return (
-                <div key={field} style={{ width: "9rem" }}>
-                  <LabelWithError htmlFor={`f-apply-size-${field}`}>
-                    {STAMP_SIZE_LABELS[field].field}
-                  </LabelWithError>
-                  <input
-                    id={`f-apply-size-${field}`}
-                    type="text"
-                    inputMode="decimal"
-                    disabled={isPending}
-                    value={text}
-                    onChange={(e) => setField(field, e.target.value)}
-                    placeholder={STAMP_SIZE_LABELS[field].example}
-                    aria-invalid={unreadable || undefined}
-                    {...NO_AUTOFILL}
-                    style={{
-                      ...INPUT_STYLE,
-                      ...(unreadable ? { borderColor: "var(--color-error)" } : null),
-                    }}
-                  />
-                </div>
-              );
-            })}
-            <StampSizePresetPicker
-              collectionId={collectionId}
-              selectedId={preset?.id ?? null}
-              triggerLabel="Fill from a preset"
-              width="14rem"
-              disabled={isPending}
-              onOpenChange={setPickerOpen}
-              onPick={(p) => {
-                setPreset(p);
-                setFields({ widthMm: formatSizeMm(p.widthMm), heightMm: formatSizeMm(p.heightMm) });
-                setError(undefined);
-              }}
-            />
-          </div>
-
-          {started && (
             <div
-              style={{
-                padding: "0.75rem 0.875rem",
-                border: "1px solid var(--color-border)",
-                borderRadius: "0.5rem",
-                background: "var(--color-bg-page)",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-                fontSize: "0.875rem",
-                color: "var(--color-text-primary)",
-              }}
+              style={{ display: "flex", alignItems: "flex-end", gap: "0.75rem 1rem", flexWrap: "wrap" }}
             >
-              {!source ? (
-                <p style={muted}>
-                  Millimetres, to a tenth — both a width and a height, like 21.5 and 25.
-                </p>
-              ) : preview.isError ? (
-                <p style={{ ...muted, color: "var(--color-error)" }}>
-                  {preview.error instanceof Error
-                    ? preview.error.message
-                    : "Could not count the stamps."}
-                </p>
-              ) : !counts || !description ? (
-                <p style={muted}>Counting the stamps…</p>
-              ) : (
-                <>
-                  {description.lines.map((line) => (
-                    <p key={line} style={{ margin: 0, lineHeight: 1.5 }}>
-                      {line}
-                    </p>
-                  ))}
-                  {counts.total > 0 && (
-                    <p style={muted}>
-                      {counts.total === 1 ? "1 stamp" : `${counts.total} stamps`} in all, variants
-                      and child stamps included.
-                    </p>
-                  )}
-                  {counts.withStatedSize > 0 && (
-                    <label
+              {SIZE_FIELDS.map((field) => {
+                const text = fields[field];
+                const unreadable = text.trim() !== "" && !parseSizeMm(text).ok;
+                return (
+                  <div key={field} style={{ width: "9rem" }}>
+                    <LabelWithError htmlFor={`f-apply-size-${field}`}>
+                      {STAMP_SIZE_LABELS[field].field}
+                    </LabelWithError>
+                    <input
+                      id={`f-apply-size-${field}`}
+                      type="text"
+                      inputMode="decimal"
+                      disabled={isPending}
+                      value={text}
+                      onChange={(e) => setField(field, e.target.value)}
+                      placeholder={STAMP_SIZE_LABELS[field].example}
+                      aria-invalid={unreadable || undefined}
+                      {...NO_AUTOFILL}
                       style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: "0.5rem",
-                        marginTop: "0.25rem",
-                        cursor: isPending ? "default" : "pointer",
+                        ...INPUT_STYLE,
+                        ...(unreadable ? { borderColor: "var(--color-error)" } : null),
                       }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={overwriteStated}
-                        disabled={isPending}
-                        onChange={(e) => setOverwriteStated(e.target.checked)}
-                        style={{ marginTop: "0.2rem" }}
-                      />
-                      <span>
-                        Overwrite those too
-                        <span style={{ display: "block", ...muted }}>
-                          Replaces sizes that were measured or typed on those stamps. It cannot be
-                          undone.
-                        </span>
-                      </span>
-                    </label>
-                  )}
-                </>
-              )}
+                    />
+                  </div>
+                );
+              })}
+              <StampSizePresetPicker
+                collectionId={collectionId}
+                selectedId={preset?.id ?? null}
+                triggerLabel="Fill from a preset"
+                width="14rem"
+                disabled={isPending}
+                onOpenChange={setPickerOpen}
+                onPick={(p) => {
+                  setPreset(p);
+                  setFields({ widthMm: formatSizeMm(p.widthMm), heightMm: formatSizeMm(p.heightMm) });
+                  setError(undefined);
+                }}
+              />
             </div>
-          )}
-        </div>
-      </DialogBody>
-      <DialogActions
-        actionLabel={
-          isPending
-            ? "Applying…"
-            : willWrite > 0
-              ? `Apply to ${willWrite === 1 ? "1 stamp" : `${willWrite} stamps`}`
-              : "Apply"
-        }
-        onAction={apply}
-        onCancel={close}
-        disabled={isPending || !source || !counts || willWrite === 0 || preview.isError}
-        cancelDisabled={isPending}
-        error={error}
-      />
+
+            {started && (
+              <div
+                style={{
+                  padding: "0.75rem 0.875rem",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
+                  background: "var(--color-bg-page)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
+                  fontSize: "0.875rem",
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                {!source ? (
+                  <p style={muted}>
+                    Millimetres, to a tenth — both a width and a height, like 21.5 and 25.
+                  </p>
+                ) : preview.isError ? (
+                  <p style={{ ...muted, color: "var(--color-error)" }}>
+                    {preview.error instanceof Error
+                      ? preview.error.message
+                      : "Could not count the stamps."}
+                  </p>
+                ) : !counts || !description ? (
+                  <p style={muted}>Counting the stamps…</p>
+                ) : (
+                  <>
+                    {description.lines.map((line) => (
+                      <p key={line} style={{ margin: 0, lineHeight: 1.5 }}>
+                        {line}
+                      </p>
+                    ))}
+                    {counts.total > 0 && (
+                      <p style={muted}>
+                        {counts.total === 1 ? "1 stamp" : `${counts.total} stamps`} in all, variants
+                        and child stamps included.
+                      </p>
+                    )}
+                    {counts.withStatedSize > 0 && (
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: "0.5rem",
+                          marginTop: "0.25rem",
+                          cursor: isPending ? "default" : "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={overwriteStated}
+                          disabled={isPending}
+                          onChange={(e) => setOverwriteStated(e.target.checked)}
+                          style={{ marginTop: "0.2rem" }}
+                        />
+                        <span>
+                          Overwrite those too
+                          <span style={{ display: "block", ...muted }}>
+                            Replaces sizes that were measured or typed on those stamps. It cannot be
+                            undone.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogBody>
+        <DialogActions
+          actionLabel={
+            isPending
+              ? "Applying…"
+              : willWrite > 0
+                ? `Apply to ${willWrite === 1 ? "1 stamp" : `${willWrite} stamps`}`
+                : "Apply"
+          }
+          onCancel={close}
+          disabled={isPending || !source || !counts || willWrite === 0 || preview.isError}
+          cancelDisabled={isPending}
+          error={error}
+        />
+      </form>
     </DialogShell>
   );
 }
