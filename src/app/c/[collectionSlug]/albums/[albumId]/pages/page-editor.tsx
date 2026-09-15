@@ -47,6 +47,7 @@ import {
   setAlbumEntryStampOrderAction,
   setAlbumRowBreakAction,
   updateAlbumBoxGapsAction,
+  updateAlbumPrintPhotosAction,
   updateAlbumTextBlockAction,
   type AlbumActionState,
 } from "@/app/actions/albums";
@@ -249,6 +250,25 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     null
   );
 
+  // Whether the album prints its stamp photos (#1307), as the switch shows it. Set the moment the
+  // switch is clicked so the canvas follows at once, and re-synced from the stored value after a
+  // save re-plans, or after **Page template…** changed it in another tab.
+  const [photosShown, setPhotosShown] = useState(album.printPhotos);
+  const [photosSyncedFrom, setPhotosSyncedFrom] = useState(album.printPhotos);
+  if (photosSyncedFrom !== album.printPhotos) {
+    setPhotosSyncedFrom(album.printPhotos);
+    setPhotosShown(album.printPhotos);
+  }
+  const [photoConfirm, setPhotoConfirm] = useState<{ diverging: number; on: boolean } | null>(
+    null
+  );
+  /** The sheet as drawn: a live one under the switch's state rather than the stored value, which is
+   *  the only difference. A printed card keeps the preset it was set under. */
+  const drawnSheet =
+    sheet && !sheet.readOnly && sheet.preset.printPhotos !== photosShown
+      ? { ...sheet, preset: { ...sheet.preset, printPhotos: photosShown } }
+      : sheet;
+
   /**
    * Save the gaps. Like **Page template…** (#1215), the first press sends no acknowledgement, and if
    * printed cards that match today would stop matching the server answers with how many and writes
@@ -287,6 +307,37 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     setGapConfirm(null);
     setGapX(String(album.boxGapXMm));
     setGapY(String(album.boxGapYMm));
+  }
+
+  /**
+   * Show or hide the album's stamp photos (#1307). The canvas takes the new state at once; the save
+   * asks about printed cards exactly as the gaps do, and a cancelled or refused save puts the switch
+   * and the canvas back to what is stored.
+   */
+  function savePhotos(on: boolean, acknowledged: number | null) {
+    if (acknowledged === null && (isPending || photoConfirm)) return;
+    setError(null);
+    setPhotosShown(on);
+    startTransition(async () => {
+      const result = await updateAlbumPrintPhotosAction(album.id, on, acknowledged);
+      if (result.status === "confirm") {
+        setPhotoConfirm({ diverging: result.diverging, on });
+        return;
+      }
+      setPhotoConfirm(null);
+      if (result.status === "error") {
+        setPhotosShown(album.printPhotos);
+        setError(result.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function cancelPhotos() {
+    if (isPending) return;
+    setPhotoConfirm(null);
+    setPhotosShown(album.printPhotos);
   }
 
   function run(action: () => Promise<AlbumActionState>) {
@@ -649,9 +700,9 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
             justifyContent: "safe center",
           }}
         >
-          {sheet ? (
+          {drawnSheet ? (
             <AlbumPageCanvas
-              sheet={sheet}
+              sheet={drawnSheet}
               collectionId={album.collectionId}
               zoom={zoom}
               selection={selection}
@@ -660,7 +711,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               onDrag={setPreview}
               onDragEnd={(d) => {
                 if (d.kind === "space" || d.kind === "spaceAfter") {
-                  const block = sheet.blocks.find((b) => b.id === d.blockId);
+                  const block = drawnSheet.blocks.find((b) => b.id === d.blockId);
                   if (!block?.correction) return;
                   commitSpace(
                     block,
@@ -670,7 +721,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                   );
                   return;
                 }
-                const box = sheet.boxes.find(
+                const box = drawnSheet.boxes.find(
                   (b) => b.stampId === d.stampId && b.entryId === d.blockId
                 );
                 if (!box) return;
@@ -802,6 +853,11 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                   onSave: () => saveGaps(gapX, gapY, null),
                   disabled: isPending,
                 }}
+                photos={{
+                  on: photosShown,
+                  onChange: (on) => savePhotos(on, null),
+                  disabled: isPending,
+                }}
               />
             )
           ) : null}
@@ -861,6 +917,24 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
           onConfirm={() => saveGaps(gapConfirm.x, gapConfirm.y, gapConfirm.diverging)}
         />
       )}
+
+      {photoConfirm && (
+        <ConfirmDialog
+          title="Printed cards will report a difference"
+          message={`${
+            photoConfirm.diverging === 1
+              ? "One printed card that matches this album today will stop matching: it stays exactly as printed, and Printed cards on the album screen will say what differs."
+              : `${photoConfirm.diverging} printed cards that match this album today will stop matching: they stay exactly as printed, and Printed cards on the album screen will say what differs on each.`
+          } ${photoConfirm.on ? "Print stamp photos anyway?" : "Hide stamp photos anyway?"}`}
+          actionLabel={photoConfirm.on ? "Print them anyway" : "Hide them anyway"}
+          pendingLabel="Saving…"
+          variant="primary"
+          isPending={isPending}
+          error={error ?? undefined}
+          onClose={cancelPhotos}
+          onConfirm={() => savePhotos(photoConfirm.on, photoConfirm.diverging)}
+        />
+      )}
     </div>
   );
 }
@@ -893,6 +967,7 @@ function SheetPanel({
   onAddNote,
   onSaved,
   gaps,
+  photos,
 }: {
   sheet: AlbumEditorSheet;
   collectionId: string;
@@ -900,6 +975,7 @@ function SheetPanel({
   onAddNote: () => void;
   onSaved: () => void;
   gaps: BoxGapFieldsProps;
+  photos: PhotoSwitchProps;
 }) {
   const counts = new Map<string, number>();
   for (const box of sheet.boxes) {
@@ -988,6 +1064,8 @@ function SheetPanel({
 
       <BoxGapFields {...gaps} />
 
+      <PhotoSwitch {...photos} />
+
       <div>
         <button type="button" onClick={onAddNote} style={BTN}>
           <Icon name="add" size="sm" /> Add a note
@@ -1072,6 +1150,52 @@ function BoxGapFields({ x, y, onChangeX, onChangeY, onSave, disabled }: BoxGapFi
         <strong>For every sheet of this album</strong>, not this one only, and for this album alone —
         the template it came from is not touched. Saving re-plans the pages, so boxes can move to
         another row or another sheet. A printed card stays as printed and reports the difference.
+      </p>
+    </div>
+  );
+}
+
+interface PhotoSwitchProps {
+  on: boolean;
+  onChange: (on: boolean) => void;
+  disabled: boolean;
+}
+
+/**
+ * Whether the album's boxes print their stamp photos (#1307).
+ *
+ * **The printed setting, not a view.** It is the album's own `printPhotos`, the value **Page
+ * template…** edits and the PDF reads, so what the canvas shows is what the printer gets. It sits
+ * beside the gaps for #836's reason: it is judged by looking at the page. Only on or off — how
+ * strongly a photo prints stays under **Page template…**, with the other thirty-odd values.
+ *
+ * Saved on the click, where a gap waits for focus to leave: a switch has no half-typed state.
+ */
+function PhotoSwitch({ on, onChange, disabled }: PhotoSwitchProps) {
+  return (
+    <div>
+      <PanelHeading>Stamp photos</PanelHeading>
+      <label
+        style={{
+          display: "flex",
+          gap: "0.5rem",
+          alignItems: "center",
+          fontSize: "0.8125rem",
+          cursor: disabled ? "default" : "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={on}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        Print stamp photos in the boxes
+      </label>
+      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+        <strong>On every sheet of this album</strong> and in its PDF, and for this album alone — the
+        template it came from is not touched. How strongly they print is under Page template…. A
+        printed card stays as printed and reports the difference.
       </p>
     </div>
   );

@@ -1045,6 +1045,28 @@ What is worth not re-deriving:
   sheet on paper has them only under *Page template…*, which is the honest place for a change that
   can only produce divergence.
 
+### Stamp photos from the page editor (#1307)
+
+`printPhotos` is the second preset value the sheet's panel sets, for #836's reason: whether a page
+prints its photos is judged by looking at it. **It is the printed setting, not a view** — the PDF
+reads the same column — and **only on or off**: `photoOpacityPercent` stays under *Page template…*.
+
+- **The same door as the gaps.** `updateAlbumPrintPhotos` writes one column and
+  `updateAlbumPrintPhotosAction` counts over the album's current values with that one substituted,
+  answering `confirm` as #836 does. A card reports the switch as a `template` divergence and keeps
+  the value it was set under.
+- **The canvas follows at once, which moved the gate.** `liveSheet` used to ship `photoId` only when
+  the album printed photos, so switching them on had nothing to draw until the re-plan came back. It
+  now ships the id always, and `page-canvas.tsx` draws it only when **the sheet's preset** prints
+  photos — the editor hands the canvas its sheet with the switch's state in the preset, and puts it
+  back when a save is cancelled or refused. The template preview (#795) is gated the same way, by the
+  preset being edited.
+- **A printed card is gated by its own preset**, as the PDF already was. Before this a card set
+  without photos was drawn on screen with them, because the snapshot records the picture each mount
+  had whether or not it printed — a small disagreement between the screen and the paper that moving
+  the gate closed.
+- **Saved on the click**, where a gap waits for focus to leave: a switch has no half-typed state.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`

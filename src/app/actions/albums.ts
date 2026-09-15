@@ -28,6 +28,7 @@ import {
   updateAlbum,
   updateAlbumBoxGaps,
   updateAlbumPreset,
+  updateAlbumPrintPhotos,
   updateAlbumTextBlock,
   AlbumNameTakenError,
   type AlbumBlockLayoutInput,
@@ -220,6 +221,37 @@ export async function updateAlbumBoxGapsAction(
     return { status: "success", message: savedToAlbumMessage(diverging) };
   } catch (err) {
     return toErrorState(err, "Failed to save the spacing. Please try again.");
+  }
+}
+
+/**
+ * Show or hide this album's stamp photos from the page editor (#1307) — the album's copy of the one
+ * value, and the printed setting rather than a screen-only view: the PDF reads the same column.
+ *
+ * Through #836's count. A card set with photos does not match a plan that prints none, so the
+ * acknowledgement is `updateAlbumPresetAction`'s, counted over the album's current values with only
+ * this one substituted, and taken again here rather than trusted.
+ */
+export async function updateAlbumPrintPhotosAction(
+  albumId: string,
+  printPhotos: boolean,
+  acknowledgedDiverging: number | null
+): Promise<AlbumPresetActionState> {
+  const session = await getSession();
+  try {
+    const album = await getAlbum(session.user.id, albumId);
+    if (!album) return { status: "error", message: "This album no longer exists." };
+    const diverging = await countAlbumPresetDivergence(session.user.id, albumId, {
+      ...albumRenderPreset(album),
+      printPhotos,
+    });
+    if (diverging > 0 && acknowledgedDiverging !== diverging) {
+      return { status: "confirm", diverging };
+    }
+    await updateAlbumPrintPhotos(session.user.id, albumId, printPhotos);
+    return { status: "success", message: savedToAlbumMessage(diverging) };
+  } catch (err) {
+    return toErrorState(err, "Failed to save the photo setting. Please try again.");
   }
 }
 
