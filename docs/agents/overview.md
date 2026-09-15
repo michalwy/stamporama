@@ -18,9 +18,8 @@ built by #649–#651).
   `getOverviewProgress` in `src/lib/overview.ts`, one API route each under
   `overview/value|progress` so each section loads and skeletons on its own — are compositions of
   reads that already exist (`getHoldingsValuation`, `offersSummary`, `auctionLotExposure`,
-  `realizedProceedsForItems`, `summarizePurchaseReturn`, `listIssueGroupCompleteness`,
-  `wantCatalogRange` via `openWantGapSummary`), never re-derived arithmetic. Per-item and
-  per-sale P/L remains #168. The tile arithmetic that is new (growth series, checklist tally,
+  `realizedProfit`, `summarizePurchaseReturn`, `listIssueGroupCompleteness`,
+  `wantCatalogRange` via `openWantGapSummary`), never re-derived arithmetic. The tile arithmetic that is new (growth series, checklist tally,
   area rollup, purchase classification) is pure in `src/lib/overview-rules.ts`, unit-tested
   without Prisma.
 
@@ -30,6 +29,17 @@ built by #649–#651).
   N+1 #650 forbids; #174's shape). The single-item-set read now delegates to it, so the
   whole-line-carried rule (`attributeLineToPurchase`) is judged per group and cannot drift
   between the two.
+
+- **Realized profit is the sale screens added up** (#168). `realizedProfit` (`sales.ts`) runs
+  every sale through the same `profitOfSales` the sale screen reads and sums the figures with
+  `sumProfitFigures` (`sale-profit.ts`), so the tile and the screens agree by construction — which is
+  why the tile's figure moved when #168 landed. Before it, the tile took **every** sold copy's
+  proceeds and subtracted only the **known** costs, so a copy with its cost pending counted as pure
+  profit and a sale with no exchange rate was read at a rate of 1. Settled with the collector on
+  2026-09-15: one rule, and a copy that cannot be counted — no rate, cost pending, no cost, an
+  unsplittable share — is left out of **both** sides and counted by why on the tile. Purchase ROI
+  (`realizedProceedsByGroup`) still attributes proceeds without the no-rate exclusion; it answers a
+  per-order question and was not part of #168.
 
 - **Honest gaps, everywhere** (#650/#651). Unpriced and unconvertible rows are counted apart on
   the tiles, never silently dropped — `offer-summary.ts`'s own separation. Catalogue value and

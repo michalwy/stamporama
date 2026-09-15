@@ -2,10 +2,10 @@ import "server-only";
 import { prisma } from "./db";
 import { getHoldingsValuation, listIssueGroupCompleteness } from "./items";
 import type { HoldingsSummary } from "./valuation";
-import { aggregateCostBasis, type CostBasisTotal } from "./cost-basis";
 import { offersSummary } from "./offers";
 import { auctionLotExposure } from "./auctions";
-import { realizedProceedsByGroup, realizedProceedsForItems } from "./sales";
+import { realizedProceedsByGroup, realizedProfit } from "./sales";
+import type { ProfitFigures } from "./sale-profit";
 import { summarizePurchaseReturn, type PurchaseReturnCopy } from "./purchase-return";
 import { openWantGapSummary, type OpenWantGapSummary } from "./wants";
 import { readCollectionAreas } from "./areas";
@@ -75,20 +75,11 @@ export interface OverviewValue {
       unconvertibleCount: number;
     };
   };
-  /** Realized P/L over recorded sales: net proceeds (handling, commission, my shipping and the
-   * frozen FX already inside, `sale-allocation.ts`) against the sold copies' cost basis. */
-  realized: {
-    proceeds: string;
-    /** `proceeds − known cost of the sold copies`. The pending/none cost counts ride beside it in
-     * {@link soldCost} — a profit over a cost that is not settled says so, it does not guess. */
-    profit: string;
-    saleCount: number;
-    soldCount: number;
-    /** Sold copies whose share of a mixed sale line could not be split (ADR-0012 §6.3) — they are
-     * in `soldCount` and contribute nothing to `proceeds`; unknown is not zero. */
-    unresolvedCount: number;
-    soldCost: CostBasisTotal;
-  };
+  /** Realized P/L over recorded sales (#168): every sale's own profit figure — net proceeds
+   * (handling, commission, my shipping and the frozen FX already inside) against the cost basis of
+   * the copies it could count — added up. Copies with no rate, a pending or missing cost, or an
+   * unsplittable share are left out of both sides and counted by why; unknown is not zero. */
+  realized: ProfitFigures & { saleCount: number };
   /** Which purchases have returned their cost (#559's per-order figure, classified across every
    * measured order at once). */
   purchases: PurchaseRecoupTally;
@@ -107,7 +98,7 @@ export async function getOverviewValue(
     offersSummary(ownerId, collectionId, { states: ["active"] }),
     // The watchlist's own default scope (open lots), for the same entry-point reason.
     auctionLotExposure(ownerId, collectionId, {}),
-    realizedOverSoldCopies(collectionId, baseCurrency),
+    realizedProfit(collectionId, baseCurrency),
     purchaseRecoup(collectionId, baseCurrency),
     prisma.sale.count({ where: { collectionId } }),
   ]);
@@ -133,36 +124,6 @@ export async function getOverviewValue(
     },
     realized: { ...realized, saleCount },
     purchases,
-  };
-}
-
-/** Net proceeds and cost basis over every copy that left on a sale — one allocation pass over the
- * touched sales, one cost aggregation over the sold copies. */
-async function realizedOverSoldCopies(collectionId: string, baseCurrency: string) {
-  const sold = await prisma.item.findMany({
-    where: { collectionId, saleLineItems: { some: {} } },
-    select: { id: true, costBasis: true, lotId: true, lot: { select: { status: true } } },
-  });
-  const proceeds = await realizedProceedsForItems(
-    collectionId,
-    sold.map((s) => s.id)
-  );
-  const soldCost = aggregateCostBasis(
-    sold.map((s) => ({
-      costBasis: s.costBasis == null ? null : s.costBasis.toFixed(2),
-      lotId: s.lotId,
-      lotStatus: s.lot?.status ?? null,
-    })),
-    baseCurrency
-  );
-  const proceedsCents = Math.round(proceeds.total * 100);
-  const costCents = Math.round(Number(soldCost.totalCostBasis) * 100);
-  return {
-    proceeds: (proceedsCents / 100).toFixed(2),
-    profit: ((proceedsCents - costCents) / 100).toFixed(2),
-    soldCount: sold.length,
-    unresolvedCount: proceeds.unresolved.size,
-    soldCost,
   };
 }
 

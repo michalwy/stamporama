@@ -6,7 +6,19 @@ import { type OfferState, isOfferState } from "./offer-rules";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { isSellableOfferState } from "./sale-rules";
-import { distributeSaleShared, type SaleLineInput } from "./sale-allocation";
+import { distributeSaleShared, type SaleLineInput, type SaleLineNet } from "./sale-allocation";
+import {
+  computeCopySaleProfit,
+  computeSaleProfit,
+  copiesNeedingWeights,
+  saleRateMissing,
+  sumProfitFigures,
+  type CopySaleProfit,
+  type ProfitFigures,
+  type SaleProfit,
+  type SaleProfitLine,
+  type UnitProfit,
+} from "./sale-profit";
 import { sortSetItems } from "./offer-set-order";
 import {
   allocateEntityNumber,
@@ -1282,6 +1294,129 @@ function shippingToBase(
   return Number(shippingCost) * Number(shippingFxRateToBase);
 }
 
+/** The columns of a sale its line nets are resolved from. */
+const SALE_AMOUNTS_SELECT = {
+  currency: true,
+  fxRateToBase: true,
+  buyerHandling: true,
+  buyerPaidTotal: true,
+  commission: true,
+  shippingCost: true,
+  shippingCurrency: true,
+  shippingFxRateToBase: true,
+} as const;
+
+interface SaleAmountsRow {
+  currency: string;
+  fxRateToBase: Prisma.Decimal | null;
+  buyerHandling: Prisma.Decimal | null;
+  buyerPaidTotal: Prisma.Decimal | null;
+  commission: Prisma.Decimal | null;
+  shippingCost: Prisma.Decimal | null;
+  shippingCurrency: string | null;
+  shippingFxRateToBase: Prisma.Decimal | null;
+  lines: { id: string; price: Prisma.Decimal }[];
+}
+
+/**
+ * A sale's line nets (ADR-0012 §6, `distributeSaleShared`), resolved once for every read that needs
+ * them — the sale screen, the realized figures, purchase ROI and the copy page — so no two of them can
+ * arrive at a different net for the same line.
+ *
+ * The shared amounts are distributed by line price, so a sale with nothing but zero-priced lines
+ * cannot be allocated (#163): each line then stands at its own price until it can.
+ */
+function resolveSaleNets(sale: SaleAmountsRow, baseCurrency: string) {
+  const gross = sale.lines.reduce((s, l) => s + Number(l.price), 0);
+  // Resolve the buyer-side anchor first: total-anchored handling is derived from gross (#205).
+  const { handling, totalBelowGross } = resolveBuyerHandling(
+    sale.buyerHandling,
+    sale.buyerPaidTotal,
+    gross
+  );
+  // Shipping is my cost in my own currency, converted straight to base (#206).
+  const shippingBase = shippingToBase(
+    sale.shippingCost,
+    sale.shippingCurrency,
+    sale.shippingFxRateToBase,
+    baseCurrency
+  );
+  const shared = {
+    buyerHandling: handling,
+    shippingBase,
+    commission: num(sale.commission),
+    fxRateToBase: sale.fxRateToBase == null ? null : Number(sale.fxRateToBase),
+  };
+  const lineInputs: SaleLineInput[] = sale.lines.map((l) => ({ id: l.id, price: Number(l.price) }));
+  const nets = gross > 0 ? distributeSaleShared(shared, lineInputs) : [];
+  const netById = new Map<string, SaleLineNet>(nets.map((n) => [n.id, n]));
+  return {
+    gross,
+    handling,
+    totalBelowGross,
+    shippingBase,
+    shared,
+    netOf: (lineId: string): SaleLineNet | undefined => netById.get(lineId),
+    netBaseOf: (line: { id: string; price: Prisma.Decimal }): number =>
+      netById.get(line.id)?.netBase ?? Number(line.price),
+    /** No base figure exists for this sale (#168) — see `saleRateMissing`. */
+    rateMissing: saleRateMissing({ ...sale, baseCurrency }),
+  };
+}
+
+/** A sold copy's cost-basis inputs, as every profit read loads them. */
+const SALE_PROFIT_COPY_SELECT = {
+  itemId: true,
+  item: { select: { costBasis: true, lotId: true, lot: { select: { status: true } } } },
+} as const;
+
+interface SaleProfitCopyRow {
+  itemId: string;
+  item: { costBasis: Prisma.Decimal | null; lotId: string | null; lot: { status: string } | null };
+}
+
+interface SaleProfitSaleInput {
+  rateMissing: boolean;
+  lines: { id: string; netBase: number; items: SaleProfitCopyRow[] }[];
+}
+
+function toProfitLines(
+  sale: SaleProfitSaleInput,
+  weightOf: (itemId: string) => number | null
+): SaleProfitLine[] {
+  return sale.lines.map((line) => ({
+    id: line.id,
+    netBase: line.netBase,
+    copies: line.items.map((row) => ({
+      id: row.itemId,
+      costBasis: row.item.costBasis == null ? null : row.item.costBasis.toFixed(2),
+      lotId: row.item.lotId,
+      lotStatus: row.item.lot?.status ?? null,
+      catalogPrice: weightOf(row.itemId),
+    })),
+  }));
+}
+
+/** Profit on each of several sales (#168), with one catalogue-weight lookup across all of them —
+ * and only for the copies on a partly countable unit, the one case that splits a net. */
+async function profitOfSales(
+  collectionId: string,
+  sales: SaleProfitSaleInput[]
+): Promise<SaleProfit[]> {
+  const needed = new Set(
+    sales.flatMap((sale) =>
+      sale.rateMissing ? [] : copiesNeedingWeights(toProfitLines(sale, () => null))
+    )
+  );
+  const weights = await valuateItemsByIds(collectionId, [...needed]);
+  return sales.map((sale) =>
+    computeSaleProfit(
+      toProfitLines(sale, (id) => weights.get(id)?.baseAmount ?? null),
+      sale.rateMissing
+    )
+  );
+}
+
 function toSaleListItem(
   row: {
     id: string;
@@ -1461,6 +1596,8 @@ export interface SaleDetailLine {
   netTx: string;
   /** …and converted to the base currency at the frozen FX rate. */
   netBase: string;
+  /** The unit's profit (#168): its net against the cost of every copy in it, or no figure and why. */
+  profit: UnitProfit;
 }
 
 /** What the sale screen knows about its buyer link (#699) without asking `sale-share.ts` for it.
@@ -1532,6 +1669,9 @@ export interface SaleDetail {
   grossProceeds: string;
   /** Base-currency net (#206): buyer-side proceeds converted to base, minus shipping (base). */
   netProceeds: string;
+  /** Profit and loss over the sold copies (#168): the counted copies' proceeds and cost, and the
+   * copies left out, by why. The Overview's realized figure is these added up. */
+  profit: ProfitFigures;
   /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
   status: string;
   /** True when the sale has at least one copy and every copy is packed (#192) — drives the
@@ -1608,51 +1748,42 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
               items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
             },
           },
-          items: { select: { packed: true, item: { select: STAMP_LABEL_SELECT } } },
+          items: {
+            select: {
+              packed: true,
+              itemId: true,
+              item: { select: { ...STAMP_LABEL_SELECT, ...SALE_PROFIT_COPY_SELECT.item.select } },
+            },
+          },
         },
       },
     },
   });
   if (!sale || sale.collection.ownerId !== ownerId) return null;
 
-  const gross = sale.lines.reduce((s, l) => s + Number(l.price), 0);
-  // Resolve the buyer-side anchor first: total-anchored handling is derived from gross (#205).
-  const { handling: effHandling, totalBelowGross } = resolveBuyerHandling(
-    sale.buyerHandling,
-    sale.buyerPaidTotal,
-    gross
-  );
   const baseCurrency = sale.collection.baseCurrency;
-  // Shipping is my cost in my own currency, converted straight to base (#206).
-  const shippingBase = shippingToBase(
-    sale.shippingCost,
-    sale.shippingCurrency,
-    sale.shippingFxRateToBase,
-    baseCurrency
-  );
+  const resolved = resolveSaleNets(sale, baseCurrency);
+  const { gross, shippingBase, shared, totalBelowGross } = resolved;
+  const effHandling = resolved.handling;
   const shippingRateMissing =
     sale.shippingCost != null &&
     sale.shippingCurrency != null &&
     sale.shippingCurrency !== baseCurrency &&
     sale.shippingFxRateToBase == null;
-  const shared = {
-    buyerHandling: effHandling,
-    shippingBase,
-    commission: num(sale.commission),
-    fxRateToBase: sale.fxRateToBase == null ? null : Number(sale.fxRateToBase),
-  };
-  const lineInputs: SaleLineInput[] = sale.lines.map((l) => ({ id: l.id, price: Number(l.price) }));
-  // The shared amounts are distributed proportionally to line price, so there must be at least
-  // one positive-priced line to distribute across. A sale still being built (no lines yet, or
-  // only zero-priced lines) can't be allocated — show each line's own price as its net until it can.
-  const canDistribute = lineInputs.reduce((s, l) => s + l.price, 0) > 0;
-  const nets = canDistribute ? distributeSaleShared(shared, lineInputs) : [];
-  const netById = new Map(nets.map((n) => [n.id, n]));
+
+  const [profit] = await profitOfSales(sale.collectionId, [
+    {
+      rateMissing: resolved.rateMissing,
+      lines: sale.lines.map((l) => ({ id: l.id, netBase: resolved.netBaseOf(l), items: l.items })),
+    },
+  ]);
+  const { units, ...profitFigures } = profit;
+  const unitById = new Map(units.map((u) => [u.lineId, u]));
 
   const labeller = await makeOfferLabeller(sale.collectionId);
   const lines: SaleDetailLine[] = sale.lines.map((l) => {
     const setLbl = labeller.set(l.offerSet);
-    const net = netById.get(l.id);
+    const net = resolved.netOf(l.id);
     return {
       id: l.id,
       offerSetId: l.offerSetId,
@@ -1669,6 +1800,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       itemLabels: l.items.map((li) => labeller.copy(li.item.stamp)),
       netTx: (net?.netTx ?? Number(l.price)).toFixed(2),
       netBase: (net?.netBase ?? Number(l.price)).toFixed(2),
+      profit: unitById.get(l.id)!,
     };
   });
 
@@ -1718,6 +1850,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     commission: money(sale.commission),
     grossProceeds: gross.toFixed(2),
     netProceeds: net.toFixed(2),
+    profit: profitFigures,
     status: sale.status,
     allItemsPacked: allItemsPacked,
     unpackedItemCount,
@@ -1928,14 +2061,7 @@ export async function realizedProceedsByGroup(
   const sales = await prisma.sale.findMany({
     where: { collectionId, lines: { some: { items: { some: { itemId: { in: itemIds } } } } } },
     select: {
-      currency: true,
-      fxRateToBase: true,
-      buyerHandling: true,
-      buyerPaidTotal: true,
-      commission: true,
-      shippingCost: true,
-      shippingCurrency: true,
-      shippingFxRateToBase: true,
+      ...SALE_AMOUNTS_SELECT,
       collection: { select: { baseCurrency: true } },
       lines: { select: { id: true, price: true, items: { select: { itemId: true } } } },
     },
@@ -1951,29 +2077,8 @@ export async function realizedProceedsByGroup(
 
   // Accumulated in whole cents: a sum of 2-dp shares is exact there and drifts in floats.
   for (const sale of sales) {
-    const gross = sale.lines.reduce((sum, l) => sum + Number(l.price), 0);
-    const { handling } = resolveBuyerHandling(sale.buyerHandling, sale.buyerPaidTotal, gross);
-    const shippingBase = shippingToBase(
-      sale.shippingCost,
-      sale.shippingCurrency,
-      sale.shippingFxRateToBase,
-      sale.collection.baseCurrency
-    );
-    const lineInputs: SaleLineInput[] = sale.lines.map((l) => ({
-      id: l.id,
-      price: Number(l.price),
-    }));
-    // Same guard the detail screen applies (#163): the shared amounts are distributed by line
-    // price, so a sale with nothing but zero-priced lines cannot be allocated and each line stands
-    // at its own price — which is zero, and brings the order nothing until it is priced.
-    const canDistribute = gross > 0;
-    const nets = canDistribute ? distributeSaleShared({
-      buyerHandling: handling,
-      shippingBase,
-      commission: num(sale.commission),
-      fxRateToBase: sale.fxRateToBase == null ? null : Number(sale.fxRateToBase),
-    }, lineInputs) : [];
-    const netById = new Map(nets.map((n) => [n.id, n.netBase]));
+    // The sale screen's own nets — a zero-priced sale's lines stand at their price, which is zero.
+    const { netBaseOf } = resolveSaleNets(sale, sale.collection.baseCurrency);
 
     for (const line of sale.lines) {
       const lineItems = line.items.map((i) => ({
@@ -1989,7 +2094,7 @@ export async function realizedProceedsByGroup(
       }
       for (const group of groups) {
         const attributed = attributeLineToPurchase(
-          netById.get(line.id) ?? Number(line.price),
+          netBaseOf(line),
           lineItems,
           (itemId) => groupOf.get(itemId) === group
         );
@@ -2002,6 +2107,39 @@ export async function realizedProceedsByGroup(
   }
   for (const [group, cents] of totalsCents) result.get(group)!.total = cents / 100;
   return result;
+}
+
+// ── Realized profit (#168) ─────────────────────────────────────────────────────
+
+/**
+ * Profit and loss over every sale in the collection — the Overview's realized figure. It is each
+ * sale's own figure (the one its screen shows, `profitOfSales`) added up by `sumProfitFigures`, so
+ * the tile and the sale screens agree by construction rather than by two calculations kept in step.
+ *
+ * Ownership is the caller's to assert.
+ */
+export async function realizedProfit(
+  collectionId: string,
+  baseCurrency: string
+): Promise<ProfitFigures> {
+  const sales = await prisma.sale.findMany({
+    where: { collectionId },
+    select: {
+      ...SALE_AMOUNTS_SELECT,
+      lines: { select: { id: true, price: true, items: { select: SALE_PROFIT_COPY_SELECT } } },
+    },
+  });
+  const profits = await profitOfSales(
+    collectionId,
+    sales.map((sale) => {
+      const resolved = resolveSaleNets(sale, baseCurrency);
+      return {
+        rateMissing: resolved.rateMissing,
+        lines: sale.lines.map((l) => ({ id: l.id, netBase: resolved.netBaseOf(l), items: l.items })),
+      };
+    })
+  );
+  return sumProfitFigures(profits);
 }
 
 /** How one copy left the collection — the sale it went out on, from the copy's own side (#517). */
@@ -2023,6 +2161,10 @@ export interface ItemSaleRecord {
   /** The number of the offer the copy left through, or null when the offer is since deleted. */
   offerNo: number | null;
   offerId: string | null;
+  baseCurrency: string;
+  /** What this copy earned (#168): its share of the unit's net, its cost basis and the difference —
+   * each stated as missing, with why, rather than as zero. */
+  profit: CopySaleProfit;
 }
 
 /**
@@ -2040,20 +2182,25 @@ export async function getItemSaleRecord(
       packed: true,
       saleLine: {
         select: {
+          id: true,
           price: true,
           offerId: true,
           offer: { select: { offerNo: true } },
           _count: { select: { items: true } },
+          items: { select: SALE_PROFIT_COPY_SELECT },
           sale: {
             select: {
               id: true,
               saleNo: true,
               soldAt: true,
               status: true,
-              currency: true,
-              collection: { select: { ownerId: true } },
+              ...SALE_AMOUNTS_SELECT,
+              collectionId: true,
+              collection: { select: { ownerId: true, baseCurrency: true } },
               platform: { select: { name: true } },
               buyer: { select: { name: true } },
+              // Every line's price, since the shared amounts are apportioned across all of them.
+              lines: { select: { id: true, price: true } },
             },
           },
         },
@@ -2065,6 +2212,24 @@ export async function getItemSaleRecord(
   if (sale.collection.ownerId !== ownerId) {
     throw new Error("Copy not found or access denied.");
   }
+
+  const baseCurrency = sale.collection.baseCurrency;
+  const resolved = resolveSaleNets(sale, baseCurrency);
+  const line = row.saleLine;
+  // A unit of one takes its whole net; a unit of several is split by catalogue weight, whatever
+  // its copies' cost states, because the question here is what this one piece fetched.
+  const weights =
+    line.items.length > 1 && !resolved.rateMissing
+      ? await valuateItemsByIds(sale.collectionId, line.items.map((i) => i.itemId))
+      : new Map<string, { baseAmount: number | null }>();
+  const [profitLine] = toProfitLines(
+    {
+      rateMissing: resolved.rateMissing,
+      lines: [{ id: line.id, netBase: resolved.netBaseOf(line), items: line.items }],
+    },
+    (id) => weights.get(id)?.baseAmount ?? null
+  );
+
   return {
     saleId: sale.id,
     saleNo: sale.saleNo,
@@ -2078,5 +2243,7 @@ export async function getItemSaleRecord(
     packed: row.packed,
     offerNo: row.saleLine.offer?.offerNo ?? null,
     offerId: row.saleLine.offerId,
+    baseCurrency,
+    profit: computeCopySaleProfit(profitLine, itemId, resolved.rateMissing),
   };
 }

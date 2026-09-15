@@ -7,6 +7,7 @@ import type { LocationData } from "@/lib/locations";
 import type { SaleCopyItem } from "@/lib/sales";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetailLine } from "@/lib/sales";
+import { describeLeftOut, type UnitProfit } from "@/lib/sale-profit";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -862,6 +863,39 @@ function EditableLinePrice({
   );
 }
 
+/** A sold unit's profit (#168) under its net: the figure when every copy on it counts, otherwise a
+ * dash that says which copies are missing what. */
+function UnitProfitLine({ profit, baseCurrency }: { profit: UnitProfit; baseCurrency: string }) {
+  if (profit.profit != null) {
+    const n = Number(profit.profit);
+    return (
+      <Tooltip content={`Net against the ${profit.cost} ${baseCurrency} its copies cost`} align="end">
+        <span
+          style={{
+            fontSize: "0.75rem",
+            fontVariantNumeric: "tabular-nums",
+            color: n > 0 ? "var(--color-success)" : n < 0 ? "var(--color-error)" : "var(--color-text-muted)",
+          }}
+        >
+          profit {n < 0 ? `−${Math.abs(n).toFixed(2)}` : `+${n.toFixed(2)}`} {baseCurrency}
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip
+      content={
+        profit.leftOut.noRate > 0
+          ? `No profit: no exchange rate to ${baseCurrency} is known for this sale or its shipping`
+          : `No profit: of this unit's copies, ${describeLeftOut(profit.leftOut).join(", ")}`
+      }
+      align="end"
+    >
+      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>profit —</span>
+    </Tooltip>
+  );
+}
+
 function SoldUnitCard({
   currency,
   line,
@@ -981,6 +1015,7 @@ function SoldUnitCard({
           <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
             net {line.netBase} {ctx.baseCurrency}
           </div>
+          <UnitProfitLine profit={line.profit} baseCurrency={ctx.baseCurrency} />
         </div>
         <span onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
           <RowActionsMenu actions={actions} ariaLabel="Sold unit actions" />

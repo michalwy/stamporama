@@ -99,7 +99,9 @@ Offers. Only Details is always there; the rest appear when the copy has them.
   [On the stamp's and the copy's own pages](wants.md#on-the-stamps-and-the-copys-own-pages).
 - **Purchase** — the purchase order the copy came from, when it came from one.
 - **Sale** — when the copy has been sold: the sale, its date and status, the platform, the buyer,
-  the line price, the offer it went out through, and whether it has been packed.
+  the line price, the copy's share of the net proceeds, its cost basis and the profit or loss on it
+  (see [what a sold copy earned](inventory.md#what-a-sold-copy-earned)), the offer it went out
+  through, and whether it has been packed.
 - **Offers** — every offer that holds this copy, across all platforms and all states.
 
 ## The stamp page
