@@ -267,6 +267,11 @@ export interface ListingTemplateContext {
    *  and it is the only thing a checklist spanning several issues (#767) can say about itself at
    *  all. */
   checklistName?: string | null;
+  /** The rows `albumName` / `checklistName` would be translated on, where they rendered in the default
+   *  language because the album's language has no name for them (#1308). A container fact cannot
+   *  report through a copy's `fallbacks`, so it reports here — and through the same placeholder walk,
+   *  so a token that lost a fallback group to an earlier alternative flags nothing. */
+  fallbacks?: Partial<Record<"albumName" | "checklistName", TitleFallback | null>>;
   /** The page's identity — `PL 303-309`, from `formatCatalogRange` (#400) over the stamps actually
    *  on the page — for `{pageRange}` in a footer. Resolved per page by the plan (#767), which is
    *  the only caller that knows what fell onto which sheet. */
@@ -1060,7 +1065,18 @@ function resolvePlaceholder(
 ): ResolvedPlaceholder {
   const parts = inner.split("|").map((p) => p.trim());
   const resolved = (value: string, spec: string): ResolvedPlaceholder => {
-    const fallbacks = value ? tokenFallbacks(spec, copies) : [];
+    const token = spec.split(":")[0].trim().toLowerCase();
+    const contextFallback =
+      token === "albumname"
+        ? context.fallbacks?.albumName
+        : token === "checklistname"
+          ? context.fallbacks?.checklistName
+          : null;
+    const fallbacks = !value
+      ? []
+      : contextFallback
+        ? [contextFallback]
+        : tokenFallbacks(spec, copies);
     return { value, spec, fellBack: fallbacks.length > 0, fallbacks };
   };
   if (parts.length === 1) {
@@ -1574,7 +1590,10 @@ export function titleFallbackKey(fallback: TitleFallback): string {
 export function templateFallbacks(
   template: string | null | undefined,
   sets: readonly TemplateSet[],
-  fallbackTemplate: string | null = null
+  fallbackTemplate: string | null = null,
+  /** The container facts in scope — an album heading's checklist, whose name can fall back too
+   *  (#1308). */
+  context: ListingTemplateContext = NO_CONTEXT
 ): TitleFallback[] {
   const tpl = template?.trim() || fallbackTemplate?.trim() || "";
   if (!tpl) return [];
@@ -1582,7 +1601,7 @@ export function templateFallbacks(
   const out: TitleFallback[] = [];
   const seen = new Set<string>();
   for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
-    const { fallbacks } = resolvePlaceholder(m[1], scope.copies, scope.setTitle);
+    const { fallbacks } = resolvePlaceholder(m[1], scope.copies, scope.setTitle, context);
     for (const f of fallbacks) {
       const key = titleFallbackKey(f);
       if (seen.has(key)) continue;

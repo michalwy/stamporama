@@ -1,6 +1,7 @@
 import type { CollectionAreaData } from "./areas";
 import { areaOwnTitleName } from "./area-vendor";
 import { normalizeLanguage } from "./languages";
+import type { TitleFallback } from "./offer-title-template";
 
 // The name a new album is offered before the collector types one (#797). Pure — no React, no
 // Prisma — so the create dialog and any later caller share one rule, and the two decisions in it are
@@ -33,4 +34,61 @@ export function suggestAlbumName(
 ): string {
   if (!areaId) return "";
   return areaOwnTitleName(areas, areaId, normalizeLanguage(language))?.trim() ?? "";
+}
+
+/** What an existing album's name says about its language (#1308, #1311). */
+export interface AlbumNameState {
+  /** The running head prints the area's default-language name because the area has none in the
+   *  album's language — the row that would fix it. Null otherwise. */
+  gap: TitleFallback | null;
+  /** The area's name in the album's language, offered in place of the default-language one the album
+   *  still carries. Null when there is nothing to offer, or when this very name was turned down. */
+  suggestion: string | null;
+}
+
+const NOTHING: AlbumNameState = { gap: null, suggestion: null };
+
+/**
+ * Whether an album's name is **still the fallback** #797 suggested at creation — the area's own name
+ * in the default language — and what to do about it.
+ *
+ * `language` is the album's language as the plan resolves it: **null when it is the collection's
+ * default**, where no name can have fallen back. `suggestAlbumName` is the rule this one reads the
+ * other way round, so both go through {@link areaOwnTitleName}: the area's own name, no roll-up.
+ *
+ * - **A name the collector wrote gets nothing.** Only a name equal to the area's default-language name
+ *   is the fallback; anything else is his, and #797's rule that a name is never replaced stands.
+ * - **No translation yet: a gap**, on the area's `titleName`, because that is what a translation
+ *   would be written on. Filling it does not rename the album — it produces the suggestion below.
+ * - **A translation that differs: a suggestion**, unless it is exactly the one that was turned down.
+ *   A translation that reads the same as the default is not a fallback and offers nothing.
+ */
+export function albumNameState(
+  areas: CollectionAreaData[],
+  album: { name: string; collectionAreaId: string; dismissedNameSuggestion: string | null },
+  language: string | null
+): AlbumNameState {
+  if (!language) return NOTHING;
+  const area = areas.find((a) => a.id === album.collectionAreaId);
+  if (!area) return NOTHING;
+  const name = album.name.trim();
+  const fallbackName = areaOwnTitleName(areas, area.id, null)?.trim();
+  if (!fallbackName || name !== fallbackName) return NOTHING;
+
+  if (!area.titleNameByLanguage[language]?.trim()) {
+    return {
+      gap: {
+        field: "albumName",
+        entityType: "area",
+        entityId: area.id,
+        entityField: "titleName",
+        defaultValue: name,
+      },
+      suggestion: null,
+    };
+  }
+  const translated = areaOwnTitleName(areas, area.id, language)?.trim() ?? "";
+  if (!translated || translated === name) return NOTHING;
+  if (translated === album.dismissedNameSuggestion?.trim()) return NOTHING;
+  return { gap: null, suggestion: translated };
 }

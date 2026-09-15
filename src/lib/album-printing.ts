@@ -9,6 +9,7 @@ import {
   planAlbum,
   type AlbumBoxData,
   type AlbumPlanContext,
+  type AlbumPlanOverride,
   type AlbumPlanPage,
 } from "./album-plan";
 import { planAlbumPages, type AlbumBlockSpec, type AlbumPlacedBox } from "./album-layout";
@@ -507,10 +508,11 @@ export async function getAlbumPrintedReport(
   ownerId: string,
   albumId: string,
   /** The report the album *would* give under these values, for the count shown before an album's
-   *  own template values are saved (#1215). Nothing is written; see `albumPlanContext`. */
-  presetOverride: AlbumRenderPreset | null = null
+   *  own template values are saved (#1215) or before it takes the name it was offered (#1311).
+   *  Nothing is written; see `albumPlanContext`. */
+  override: AlbumPlanOverride | null = null
 ): Promise<AlbumPrintedReport> {
-  const context = await albumPlanContext(ownerId, albumId, presetOverride);
+  const context = await albumPlanContext(ownerId, albumId, override);
   if (!context) throw new AlbumPrintError("Album not found.");
   const { printed, entries } = context;
   if (printed.pages.size === 0) return { sheets: [] };
@@ -610,6 +612,23 @@ export async function countAlbumPresetDivergence(
   const [now, after] = await Promise.all([
     getAlbumPrintedReport(ownerId, albumId),
     getAlbumPrintedReport(ownerId, albumId, preset),
+  ]);
+  return countNewlyDivergingSheets(now.sheets, after.sheets);
+}
+
+/**
+ * How many printed sheets that match today would report a difference if the album were called
+ * `name` (#1311) — the running head, and a footer that prints `{albumName}`. The same two reports and
+ * the same rule as {@link countAlbumPresetDivergence}: a name is not different.
+ */
+export async function countAlbumRenameDivergence(
+  ownerId: string,
+  albumId: string,
+  name: string
+): Promise<number> {
+  const [now, after] = await Promise.all([
+    getAlbumPrintedReport(ownerId, albumId),
+    getAlbumPrintedReport(ownerId, albumId, { name }),
   ]);
   return countNewlyDivergingSheets(now.sheets, after.sheets);
 }

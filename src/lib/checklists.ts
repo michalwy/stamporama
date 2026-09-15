@@ -3,6 +3,11 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { DEFAULT_CHECKLIST } from "./checklist-vocabulary";
 import type { RunChecklist } from "./issue-run";
+import {
+  syncEntityTranslations,
+  translationsByLanguage,
+  type TranslationValueMap,
+} from "./translations";
 
 // Checklists (#531; ADR-0031) — a named list of stamps that counts as one complete unit. The
 // storage and read paths; everything about *how complete* one is lives in `issue-completeness.ts`.
@@ -39,6 +44,9 @@ export interface ChecklistData {
   id: string;
   issueId: string | null;
   name: string;
+  /** The name in other languages, language → name (#1308) — what an album printing `{checklistName}`
+   *  in its own language reads. */
+  nameByLanguage: Record<string, string>;
   sortOrder: number;
   /** Stamps on the checklist — the set completeness, the price total and the range are all read
    *  against — **in the order the set reads** (#764), which an album page then prints as a row. */
@@ -49,9 +57,31 @@ const CHECKLIST_SELECT = {
   id: true,
   issueId: true,
   name: true,
+  translations: { select: { language: true, name: true } },
   sortOrder: true,
   stamps: { select: { stampId: true, sortOrder: true } },
 } as const;
+
+/** A checklist's translation rows, written the way every translatable entity writes them (#1308). */
+async function syncChecklistTranslations(
+  tx: Prisma.TransactionClient,
+  checklistId: string,
+  values: TranslationValueMap | undefined
+): Promise<void> {
+  await syncEntityTranslations(values, {
+    upsert: async (language, fields) => {
+      const name = fields.name ?? null;
+      await tx.checklistTranslation.upsert({
+        where: { checklistId_language: { checklistId, language } },
+        create: { checklistId, language, name },
+        update: { name },
+      });
+    },
+    remove: async (language) => {
+      await tx.checklistTranslation.deleteMany({ where: { checklistId, language } });
+    },
+  });
+}
 
 /**
  * The order the set reads in (#764): `sortOrder`, the stamp id behind it so rows written in one
@@ -79,6 +109,7 @@ function toChecklistData(row: {
   id: string;
   issueId: string | null;
   name: string;
+  translations: { language: string; name: string | null }[];
   sortOrder: number;
   stamps: { stampId: string; sortOrder: number }[];
 }): ChecklistData {
@@ -86,6 +117,7 @@ function toChecklistData(row: {
     id: row.id,
     issueId: row.issueId,
     name: row.name,
+    nameByLanguage: translationsByLanguage(row.translations, (t) => t.name),
     sortOrder: row.sortOrder,
     stampIds: orderedChecklistStampIds(row.stamps),
   };
@@ -304,7 +336,7 @@ export function defaultChecklistName(issueName: string | null): string {
 export async function createChecklist(
   ownerId: string,
   collectionId: string,
-  input: { issueId: string | null; name: string }
+  input: { issueId: string | null; name: string; translations?: TranslationValueMap }
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const name = input.name.trim();
@@ -321,28 +353,37 @@ export async function createChecklist(
     orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   });
-  const created = await prisma.checklist.create({
-    data: {
-      collectionId,
-      issueId: input.issueId,
-      name,
-      sortOrder: (last?.sortOrder ?? -1) + 1,
-    },
-    select: { id: true },
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.checklist.create({
+      data: {
+        collectionId,
+        issueId: input.issueId,
+        name,
+        sortOrder: (last?.sortOrder ?? -1) + 1,
+      },
+      select: { id: true },
+    });
+    await syncChecklistTranslations(tx, created.id, input.translations);
+    return created.id;
   });
-  return created.id;
 }
 
+/** Rename a checklist, and write its translations when the form carried them (#1308). Languages the
+ *  form did not carry are left as they are. */
 export async function renameChecklist(
   ownerId: string,
   checklistId: string,
-  name: string
+  name: string,
+  translations?: TranslationValueMap
 ): Promise<void> {
   const collectionId = await resolveChecklistCollection(checklistId);
   await assertCollectionOwner(ownerId, collectionId);
   const trimmed = name.trim();
   if (!trimmed) throw new Error("A checklist needs a name.");
-  await prisma.checklist.update({ where: { id: checklistId }, data: { name: trimmed } });
+  await prisma.$transaction(async (tx) => {
+    await tx.checklist.update({ where: { id: checklistId }, data: { name: trimmed } });
+    await syncChecklistTranslations(tx, checklistId, translations);
+  });
 }
 
 export async function deleteChecklist(ownerId: string, checklistId: string): Promise<void> {

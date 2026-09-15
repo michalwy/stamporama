@@ -50,6 +50,7 @@ import {
   type AlbumActionState,
 } from "@/app/actions/albums";
 import { MAX_SPACING_MM, MIN_SPACING_MM } from "@/lib/album-template-rules";
+import { languageLabel } from "@/lib/languages";
 import {
   AlbumPageCanvas,
   BOX_FLAGS,
@@ -57,6 +58,7 @@ import {
   type CanvasDrag,
   type CanvasSelection,
 } from "./page-canvas";
+import { AlbumNameSuggestion } from "../album-name-suggestion";
 
 // The page editor (#769): where the collector overrules the automatic layout.
 //
@@ -501,6 +503,46 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
         >
           This collection has no hawid stock, so every box below is a pocket. Add the strips you own
           in Settings → Albums and the boxes will be cut from them.
+        </p>
+      )}
+      {data.nameSuggestion && (
+        <AlbumNameSuggestion
+          albumId={album.id}
+          name={album.name}
+          suggestion={data.nameSuggestion}
+          language={album.language}
+        />
+      )}
+      {data.untranslated.texts > 0 && (
+        // The whole album, not only the sheet in view (#1308): a gap on another sheet is otherwise
+        // found with the card in hand. Each sheet is a link, and the sheet's own panel lists what to
+        // translate.
+        <p
+          style={{
+            ...MUTED,
+            marginBottom: "1rem",
+            padding: "0.5rem 1rem",
+            border: "1px solid var(--color-warning-border)",
+            background: "var(--color-warning-soft)",
+            borderRadius: "0.5rem",
+            lineHeight: 1.6,
+          }}
+        >
+          {data.untranslated.texts === 1
+            ? "1 text in this album"
+            : `${data.untranslated.texts} texts in this album`}{" "}
+          would print in the collection&apos;s default language, not in{" "}
+          {languageLabel(album.language)}, on{" "}
+          {data.untranslated.sheets.length === 1 ? "sheet" : "sheets"}{" "}
+          {data.untranslated.sheets.map((position, i) => (
+            <span key={position}>
+              {i > 0 ? ", " : ""}
+              <Link href={sheetHref(position)} style={{ color: "var(--color-text-primary)" }}>
+                {data.sheets[position - 1]?.range || position}
+              </Link>
+            </span>
+          ))}
+          . Each is marked with a dotted outline on its sheet.
         </p>
       )}
 

@@ -57,6 +57,16 @@ async function loadEntity(
       });
       return row && { collectionId: row.collectionId, current: { ...row.translations[0] } };
     }
+    case "checklist": {
+      const row = await prisma.checklist.findUnique({
+        where: { id: entityId },
+        select: {
+          collectionId: true,
+          translations: { where: { language }, select: { name: true } },
+        },
+      });
+      return row && { collectionId: row.collectionId, current: { ...row.translations[0] } };
+    }
     case "condition": {
       const row = await prisma.stampCondition.findUnique({
         where: { id: entityId },
@@ -151,6 +161,22 @@ function handlers(entityType: TranslatableEntity, entityId: string) {
         },
         remove: async (language: string) => {
           await prisma.issueTranslation.deleteMany({ where: { issueId: entityId, language } });
+        },
+      };
+    case "checklist":
+      return {
+        upsert: async (language: string, fields: Record<string, string | null>) => {
+          const name = fields.name ?? null;
+          await prisma.checklistTranslation.upsert({
+            where: { checklistId_language: { checklistId: entityId, language } },
+            create: { checklistId: entityId, language, name },
+            update: { name },
+          });
+        },
+        remove: async (language: string) => {
+          await prisma.checklistTranslation.deleteMany({
+            where: { checklistId: entityId, language },
+          });
         },
       };
     case "condition":

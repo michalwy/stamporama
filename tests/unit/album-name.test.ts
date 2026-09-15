@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { CollectionAreaData } from "../../src/lib/areas";
-import { suggestAlbumName } from "../../src/lib/album-name";
+import { albumNameState, suggestAlbumName } from "../../src/lib/album-name";
 import { areaOwnTitleName, buildAreaTitleMap } from "../../src/lib/area-vendor";
 
 function area(over: Partial<CollectionAreaData> & { id: string; name: string }): CollectionAreaData {
@@ -101,5 +101,93 @@ describe("areaOwnTitleName", () => {
   it("treats a whitespace-only title name as none and keeps the area's own name", () => {
     const blank = [area({ id: "a", name: "Bavaria", titleName: "   " })];
     assert.equal(areaOwnTitleName(blank, "a", null), "Bavaria");
+  });
+});
+
+// An existing album's name, read the other way round from `suggestAlbumName` (#1308, #1311): is it
+// still the fallback the create dialog offered, and is there anything better to offer now?
+describe("albumNameState", () => {
+  const album = (name: string, over: { areaId?: string; dismissed?: string | null } = {}) => ({
+    name,
+    collectionAreaId: over.areaId ?? "dr",
+    dismissedNameSuggestion: over.dismissed ?? null,
+  });
+
+  it("offers the area's translated name to an album still called by the default one", () => {
+    assert.deepEqual(albumNameState(areas, album("Deutsches Reich"), "pl"), {
+      gap: null,
+      suggestion: "Rzesza Niemiecka",
+    });
+  });
+
+  it("offers nothing to a name the collector wrote", () => {
+    assert.deepEqual(albumNameState(areas, album("Mein Reich"), "pl"), {
+      gap: null,
+      suggestion: null,
+    });
+  });
+
+  it("offers nothing once the album carries the translated name", () => {
+    assert.deepEqual(albumNameState(areas, album("Rzesza Niemiecka"), "pl"), {
+      gap: null,
+      suggestion: null,
+    });
+  });
+
+  it("reports a gap on the area where no translation exists yet, and offers nothing", () => {
+    const state = albumNameState(areas, album("Deutsches Reich"), "cs");
+    assert.equal(state.suggestion, null);
+    assert.deepEqual(state.gap, {
+      field: "albumName",
+      entityType: "area",
+      entityId: "dr",
+      entityField: "titleName",
+      defaultValue: "Deutsches Reich",
+    });
+  });
+
+  it("says nothing in the collection's default language, where nothing falls back", () => {
+    assert.deepEqual(albumNameState(areas, album("Deutsches Reich"), null), {
+      gap: null,
+      suggestion: null,
+    });
+  });
+
+  it("does not roll up: a grouping level is compared by its own name, as #797 suggested it", () => {
+    const translated = [
+      reich,
+      { ...weimar, titleNameByLanguage: { pl: "Republika Weimarska" } },
+    ];
+    assert.equal(
+      albumNameState(translated, album("Weimarer Republik", { areaId: "wr" }), "pl").suggestion,
+      "Republika Weimarska"
+    );
+    // Named after the parent it would have rolled up to: not the fallback of *this* area.
+    assert.deepEqual(
+      albumNameState(translated, album("Deutsches Reich", { areaId: "wr" }), "pl"),
+      { gap: null, suggestion: null }
+    );
+  });
+
+  it("keeps a dismissed offer away until the translation changes", () => {
+    assert.equal(
+      albumNameState(areas, album("Deutsches Reich", { dismissed: "Rzesza Niemiecka" }), "pl")
+        .suggestion,
+      null
+    );
+    const renamed = [{ ...reich, titleNameByLanguage: { pl: "Rzesza" } }, weimar];
+    assert.equal(
+      albumNameState(renamed, album("Deutsches Reich", { dismissed: "Rzesza Niemiecka" }), "pl")
+        .suggestion,
+      "Rzesza"
+    );
+  });
+
+  it("offers nothing where the translation reads the same as the default", () => {
+    const same = [{ ...reich, titleNameByLanguage: { pl: "Deutsches Reich" } }, weimar];
+    assert.deepEqual(albumNameState(same, album("Deutsches Reich"), "pl"), {
+      gap: null,
+      suggestion: null,
+    });
   });
 });

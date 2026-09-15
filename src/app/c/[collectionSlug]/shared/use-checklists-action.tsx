@@ -41,6 +41,16 @@ import { NO_AUTOFILL } from "./no-autofill";
 import { ApplySizePresetDialog } from "./apply-size-preset-dialog";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import {
+  fillTranslationValues,
+  type TranslationField,
+  type TranslationValues,
+} from "./translations-dialog";
+import { TranslationsField } from "./translations-field";
+import { useTitleLanguages } from "./use-title-languages";
+import { parseTranslationValues } from "@/lib/translations";
+
+const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
 
 // The checklists of one issue, edited from that issue's row (#531; ADR-0031). The anchor is never a
 // field: the screen this was opened from already answered "which issue", which is ADR-0020 §7's
@@ -175,6 +185,25 @@ export function ChecklistsDialog({
   // uncontrolled, as the issue form's does — the value is read off the form on submit.
   const [nameText, setNameText] = useState("");
 
+  // The name in other languages (#1308), staged in this form and saved with it, as the issue form
+  // stages its own. An album printing `{checklistName}` in its language reads these; a checklist
+  // still named after its issue follows the issue's translation until it is given one here.
+  const { titleLanguages } = useTitleLanguages(collectionId);
+  const [translations, setTranslations] = useState<TranslationValues>({});
+  const [translationsOpen, setTranslationsOpen] = useState(false);
+
+  function startEditingName(next: Editing & { kind: "add" | "rename" }) {
+    setNameText(next.kind === "rename" ? next.checklist.name : "");
+    setTranslations(
+      fillTranslationValues(
+        titleLanguages,
+        NAME_TRANSLATION_FIELDS,
+        next.kind === "rename" ? { name: next.checklist.nameByLanguage } : undefined
+      )
+    );
+    setEditing(next);
+  }
+
   // Two checklists of one issue with the same name are indistinguishable everywhere they are
   // listed — the badge tooltip, the filter, the stamp form's boxes, the price-details entries.
   // Advisory rather than blocking, following #178's rule for duplicate issue names: the collector
@@ -192,17 +221,19 @@ export function ChecklistsDialog({
 
   function submitName(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const name = ((new FormData(e.currentTarget).get("name") as string | null) ?? "").trim();
+    const formData = new FormData(e.currentTarget);
+    const name = ((formData.get("name") as string | null) ?? "").trim();
     if (!name) {
       setError("A checklist needs a name.");
       return;
     }
+    const staged = parseTranslationValues(formData, ["name"]);
     const current = editing;
     run(
       () =>
         current?.kind === "rename"
-          ? renameChecklistAction(current.checklist.id, name)
-          : createChecklistAction(collectionId, issueId, name),
+          ? renameChecklistAction(current.checklist.id, name, staged)
+          : createChecklistAction(collectionId, issueId, name, staged),
       () => setEditing(null)
     );
   }
@@ -301,10 +332,7 @@ export function ChecklistsDialog({
                           key: "rename",
                           label: "Rename…",
                           icon: "edit",
-                          onSelect: () => {
-                            setNameText(checklist.name);
-                            setEditing({ kind: "rename", checklist });
-                          },
+                          onSelect: () => startEditingName({ kind: "rename", checklist }),
                         },
                         {
                           key: "delete",
@@ -325,10 +353,7 @@ export function ChecklistsDialog({
 
           <button
             type="button"
-            onClick={() => {
-              setNameText("");
-              setEditing({ kind: "add" });
-            }}
+            onClick={() => startEditingName({ kind: "add" })}
             disabled={isPending}
             style={{
               marginTop: "1rem",
@@ -361,57 +386,73 @@ export function ChecklistsDialog({
               setError(undefined);
             }
           }}
+          dismissable={!translationsOpen}
         >
           <form style={FORM_STYLE} onSubmit={submitName}>
             <DialogBody>
               <LabelWithError htmlFor="cl-name">Name</LabelWithError>
-              <div style={{ position: "relative" }}>
-                <input
-                  id="cl-name"
-                  name="name"
-                  type="text"
-                  autoFocus
-                  defaultValue={editing.kind === "rename" ? editing.checklist.name : ""}
-                  disabled={isPending}
-                  placeholder="e.g. Basic set, Imperforate, With tabs"
-                  style={{ ...INPUT_STYLE, paddingRight: duplicateName ? "2rem" : undefined }}
-                  onChange={(e) => setNameText(e.target.value)}
-                  {...NO_AUTOFILL}
-                />
-                {duplicateName && (
-                  <span
-                    style={{
-                      position: "absolute",
-                      right: "0.5rem",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      display: "inline-flex",
-                    }}
-                  >
-                    <Tooltip
-                      align="end"
-                      content={
-                        <span>
-                          A checklist called{" "}
-                          <span style={{ fontWeight: 600 }}>{nameText.trim()}</span> is already on
-                          this issue. You can still save it, but the two will read alike wherever
-                          checklists are listed.
-                        </span>
-                      }
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+                  <input
+                    id="cl-name"
+                    name="name"
+                    type="text"
+                    autoFocus
+                    defaultValue={editing.kind === "rename" ? editing.checklist.name : ""}
+                    disabled={isPending}
+                    placeholder="e.g. Basic set, Imperforate, With tabs"
+                    style={{ ...INPUT_STYLE, paddingRight: duplicateName ? "2rem" : undefined }}
+                    onChange={(e) => setNameText(e.target.value)}
+                    {...NO_AUTOFILL}
+                  />
+                  {duplicateName && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        right: "0.5rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        display: "inline-flex",
+                      }}
                     >
-                      <span
-                        role="img"
-                        aria-label="A checklist with this name is already on this issue"
-                        style={{
-                          color: "var(--color-warning)",
-                          lineHeight: 1,
-                          cursor: "help",
-                        }}
+                      <Tooltip
+                        align="end"
+                        content={
+                          <span>
+                            A checklist called{" "}
+                            <span style={{ fontWeight: 600 }}>{nameText.trim()}</span> is already on
+                            this issue. You can still save it, but the two will read alike wherever
+                            checklists are listed.
+                          </span>
+                        }
                       >
-                        <Icon name="warning" size="sm" />
-                      </span>
-                    </Tooltip>
-                  </span>
+                        <span
+                          role="img"
+                          aria-label="A checklist with this name is already on this issue"
+                          style={{
+                            color: "var(--color-warning)",
+                            lineHeight: 1,
+                            cursor: "help",
+                          }}
+                        >
+                          <Icon name="warning" size="sm" />
+                        </span>
+                      </Tooltip>
+                    </span>
+                  )}
+                </div>
+                {titleLanguages.length > 0 && (
+                  <TranslationsField
+                    dialogTitle="Checklist name translations"
+                    description="What an album printed in that language calls this checklist. Left blank, a checklist still named after its issue uses the issue's translation."
+                    languages={titleLanguages}
+                    fields={[{ ...NAME_TRANSLATION_FIELDS[0], defaultValue: nameText }]}
+                    values={translations}
+                    onChange={setTranslations}
+                    onOpenChange={setTranslationsOpen}
+                    ariaLabel="Edit checklist name translations"
+                    disabled={isPending}
+                  />
                 )}
               </div>
             </DialogBody>

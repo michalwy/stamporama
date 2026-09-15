@@ -24,6 +24,9 @@ import { Icon } from "@/app/icons";
 const GAP_LABELS: Readonly<Record<string, string>> = {
   "stamp:name": "Stamp",
   "issue:name": "Issue",
+  // A checklist named by hand, printed by an album's checklist heading (#1308). One still named
+  // after its issue reports against the issue instead.
+  "checklist:name": "Checklist",
   "condition:name": "Condition",
   "condition:abbreviation": "Condition (abbr.)",
   "certificateStatus:name": "Certificate",

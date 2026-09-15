@@ -5,6 +5,7 @@ import { areaSubtreeIds } from "./areas";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { orderedChecklistStampIds } from "./checklists";
 import { normalizeLanguage } from "./languages";
+import { translationsByLanguage } from "./translations";
 import {
   asAlbumBorderStyle,
   asAlbumBoxBorderStyle,
@@ -121,6 +122,7 @@ const ALBUM_SELECT = {
   collectionAreaId: true,
   name: true,
   language: true,
+  dismissedNameSuggestion: true,
   ...PRESET_SELECT,
 } satisfies Prisma.AlbumSelect;
 
@@ -133,6 +135,8 @@ export interface AlbumData extends AlbumRenderPreset {
   collectionAreaId: string;
   name: string;
   language: string;
+  /** The area's translated name this album was offered and turned down (#1311), or null. */
+  dismissedNameSuggestion: string | null;
 }
 
 /** The three choice columns come back as `string`; everything else is already its own type. */
@@ -285,6 +289,43 @@ export async function updateAlbum(
   }
 }
 
+/**
+ * Take the name the album was offered (#1311) — the area's name in the album's language, in place of
+ * the default-language one it was created with.
+ *
+ * Only the name. Whether this album is offered that name, and whether the collector has been told how
+ * many printed cards it will make diverge, are the action's to establish before this runs; a printed
+ * card keeps the running head it was printed with, and #778 reports the difference.
+ */
+export async function renameAlbum(ownerId: string, albumId: string, name: string): Promise<void> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("An album needs a name.");
+  try {
+    await prisma.album.update({ where: { id: albumId }, data: { name: trimmed } });
+  } catch (err) {
+    rethrowNameClash(err, trimmed);
+  }
+}
+
+/**
+ * Turn down the name the album was offered (#1311). The offered name itself is what is stored, so the
+ * same offer stays away and a different translation, written later, is offered afresh.
+ */
+export async function dismissAlbumNameSuggestion(
+  ownerId: string,
+  albumId: string,
+  suggestion: string
+): Promise<void> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.album.update({
+    where: { id: albumId },
+    data: { dismissedNameSuggestion: suggestion.trim() || null },
+  });
+}
+
 /** Re-seed an album's render values from a template. A copy, again: nothing links back afterwards,
  *  and the album is free to be edited away from the template it came from. */
 export async function reseedAlbumFromTemplate(
@@ -359,8 +400,13 @@ export interface AlbumEntryData {
   id: string;
   checklistId: string;
   checklistName: string;
+  /** The checklist's own translations, language → name (#1308). */
+  checklistNameByLanguage: Record<string, string>;
   issueId: string | null;
   issueName: string | null;
+  /** The issue's translations, language → name — what a checklist still named after its issue prints
+   *  in the album's language (#1308). */
+  issueNameByLanguage: Record<string, string>;
   /** The chapter this entry falls in — `Issue.year`, or null for a checklist that spans issues. */
   year: number | null;
   sortOrder: number;
@@ -404,8 +450,16 @@ const ENTRY_SELECT = {
   checklist: {
     select: {
       name: true,
+      translations: { select: { language: true, name: true } },
       issueId: true,
-      issue: { select: { name: true, year: true, primaryCatalogSortKey: true } },
+      issue: {
+        select: {
+          name: true,
+          year: true,
+          primaryCatalogSortKey: true,
+          translations: { select: { language: true, name: true } },
+        },
+      },
       stamps: { select: { stampId: true, sortOrder: true } },
     },
   },
@@ -441,8 +495,10 @@ function toEntryData(row: EntryRow): AlbumEntryData {
     id: row.id,
     checklistId: row.checklistId,
     checklistName: row.checklist.name,
+    checklistNameByLanguage: translationsByLanguage(row.checklist.translations, (t) => t.name),
     issueId: row.checklist.issueId,
     issueName: row.checklist.issue?.name ?? null,
+    issueNameByLanguage: translationsByLanguage(row.checklist.issue?.translations ?? [], (t) => t.name),
     year: row.checklist.issue?.year ?? null,
     sortOrder: row.sortOrder,
     spaceBeforeMm: row.spaceBeforeMm,
