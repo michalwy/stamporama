@@ -553,7 +553,9 @@ function VariantPriceGrid({
         // said here, because a grid with one column and no controls otherwise reads as a grid that
         // has lost them.
         <p style={{ ...MUTED, margin: 0 }}>
-          Scoped to the copy being listed: <strong>{narrowedLabel}</strong>. Its other conditions,
+          {/* Worded for the copy in hand rather than for a listing: an umbrella's scan tile opens
+              the same narrowing (#1317). */}
+          Scoped to the copy in hand: <strong>{narrowedLabel}</strong>. Its other conditions,
           certificates and formats are priced from the Issues list or from Catalog → Variant prices.
           {/* The format tabs carried this line, and a grid fixed to a multiple still draws derived
               cells — so it comes with the scope instead. */}

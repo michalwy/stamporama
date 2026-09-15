@@ -17,7 +17,8 @@ import { VariantPriceGridDialog } from "./variant-price-grid-dialog";
  *
  * An **offer** opens it narrowed to the copy being listed (#633) by passing that copy's axes beside
  * the scope. It travels with the scope rather than with the hook for the same reason the scope does:
- * one card opens the grid over many rows, and each row is a different copy.
+ * one card opens the grid over many rows, and each row is a different copy. Scan-tile identification
+ * opens it the same way over the umbrella being identified (#1317), at the step's own answers.
  */
 export function useVariantPriceGrid({
   defaultScope,

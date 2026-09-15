@@ -5,6 +5,7 @@ import {
   EMPTY_INTAKE_CATALOG_VALUE,
   catalogValueEntry,
   catalogValueSubjectKey,
+  variantGridRestriction,
 } from "../../src/lib/intake-catalog-value";
 
 // The intake step's catalogue value (#593). What is tested here is the rule for *whether to write*,
@@ -79,5 +80,30 @@ describe("catalogValueSubjectKey", () => {
       catalogValueSubjectKey("s1", "mnh", "cert"),
       catalogValueSubjectKey("s1", "mnh", "cert")
     );
+  });
+});
+
+describe("variantGridRestriction", () => {
+  // An umbrella's grid opened from the intake step (#1317) is narrowed to the step's own answers.
+
+  it("narrows to nothing until a condition is chosen", () => {
+    assert.equal(variantGridRestriction("", "", ""), null);
+    assert.equal(variantGridRestriction("", "cert-bpp", "fmt-pair"), null);
+  });
+
+  it("reads a blank certificate and format as the axes' nulls — none and single", () => {
+    assert.deepEqual(variantGridRestriction("mnh", "", ""), {
+      conditionId: "mnh",
+      certificateStatusId: null,
+      formatId: null,
+    });
+  });
+
+  it("carries the format, unlike the single figure", () => {
+    assert.deepEqual(variantGridRestriction("used", "cert-bpp", "fmt-pair"), {
+      conditionId: "used",
+      certificateStatusId: "cert-bpp",
+      formatId: "fmt-pair",
+    });
   });
 });

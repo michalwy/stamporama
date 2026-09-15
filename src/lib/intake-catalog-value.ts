@@ -6,6 +6,7 @@
 // it is the thing worth a test rather than a screen.
 
 import { normalizeDecimalInput } from "./decimal-input";
+import type { VariantPriceRestriction } from "./variant-prices";
 
 /** What the field is holding, read by the intake dialog's submit. */
 export interface IntakeCatalogValue {
@@ -79,4 +80,27 @@ export function catalogValueSubjectKey(
   certificateStatusId: string
 ): string {
   return `${stampId}|${conditionId}|${certificateStatusId}`;
+}
+
+/**
+ * The axes an **umbrella's** variant price grid is narrowed to when it is opened from the intake
+ * step (#1317): the condition, certificate and format the step is currently answering, in the
+ * grid's own vocabulary — blank is *no certificate* and *single*, the axes' nulls, not "unset".
+ *
+ * Unlike the one figure above, the **format is one of them**. The field files a single's quotation
+ * whatever the format; the grid is #633's narrowing, which fixes all three axes of the copy in hand,
+ * and on a multiple's tab it draws the single-derived figures as placeholders rather than writing
+ * them. Null until a condition is chosen: a grid narrowed to no condition has no column to draw.
+ */
+export function variantGridRestriction(
+  conditionId: string,
+  certificateStatusId: string,
+  formatId: string
+): VariantPriceRestriction | null {
+  if (!conditionId) return null;
+  return {
+    conditionId,
+    certificateStatusId: certificateStatusId || null,
+    formatId: formatId || null,
+  };
 }
