@@ -474,6 +474,11 @@ export function CopyDetailPanel({
                         label="Pending"
                         reason="The purchase lot is still open — the cost per copy is not settled yet"
                       />
+                    ) : sale.profit.cost.reason === "no_opening_value" ? (
+                      <MissingFigure
+                        label="No opening value"
+                        reason="This copy came in on an opening balance whose lot has no opening value, so no profit can be worked out on its sale"
+                      />
                     ) : (
                       <MissingFigure
                         label="None recorded"

@@ -24,6 +24,10 @@ function pending(id: string, catalogPrice: number | null = 1): SaleProfitCopy {
 function noCost(id: string, catalogPrice: number | null = 1): SaleProfitCopy {
   return { id, costBasis: null, lotId: null, lotStatus: null, lotValued: null, catalogPrice };
 }
+/** A copy from an opening balance's lot stated without a value (#1323): cost not applicable. */
+function noOpeningValue(id: string, catalogPrice: number | null = 1): SaleProfitCopy {
+  return { id, costBasis: null, lotId: "opening-lot", lotStatus: "closed", lotValued: false, catalogPrice };
+}
 function line(id: string, netBase: number, copies: SaleProfitCopy[]): SaleProfitLine {
   return { id, netBase, copies };
 }
@@ -89,7 +93,7 @@ describe("computeSaleProfit", () => {
     );
     assert.equal(profit.copyCount, 3);
     assert.equal(profit.countedCount, 1);
-    assert.deepEqual(profit.leftOut, { costPending: 0, noCost: 1, noRate: 0, unsplittable: 1 });
+    assert.deepEqual(profit.leftOut, { costPending: 0, noCost: 1, noOpeningValue: 0, noRate: 0, unsplittable: 1 });
     assert.equal(profit.profit, "15.00");
     assert.equal(profit.units[0].leftOut.unsplittable, 0);
   });
@@ -97,7 +101,25 @@ describe("computeSaleProfit", () => {
   it("gives no figure, never zero, when no copy can be counted", () => {
     const profit = computeSaleProfit([line("l1", 20, [pending("a")]), line("l2", 5, [noCost("b")])], false);
     assert.equal(profit.profit, null);
-    assert.deepEqual(profit.leftOut, { costPending: 1, noCost: 1, noRate: 0, unsplittable: 0 });
+    assert.deepEqual(profit.leftOut, { costPending: 1, noCost: 1, noOpeningValue: 0, noRate: 0, unsplittable: 0 });
+  });
+
+  // #1324: an opening value is a cost basis like a purchase cost — profit is measured against it.
+  it("measures profit against an opening value exactly as against a purchase cost", () => {
+    const profit = computeSaleProfit([line("l1", 50, [known("a", "12.00")])], false);
+    assert.equal(profit.profit, "38.00");
+  });
+
+  // #1324: without an opening value the copy has no cost, never a zero one — so no profit figure,
+  // which a zero would inflate to the whole price, and a reason of its own.
+  it("gives no figure for a copy from an opening balance with no value, and says why", () => {
+    const profit = computeSaleProfit([line("l1", 50, [noOpeningValue("a")])], false);
+    assert.equal(profit.profit, null);
+    assert.equal(profit.proceeds, null);
+    assert.deepEqual(profit.leftOut, { costPending: 0, noCost: 0, noOpeningValue: 1, noRate: 0, unsplittable: 0 });
+    assert.equal(profit.units[0].profit, null);
+    assert.deepEqual(describeLeftOut(profit.leftOut), ["1 from an opening balance with no value"]);
+    assert.equal(sumProfitFigures([profit]).leftOut.noOpeningValue, 1);
   });
 
   it("states a loss when fees exceed the price", () => {
@@ -127,7 +149,7 @@ describe("sumProfitFigures", () => {
     const total = sumProfitFigures([a, b, c]);
     assert.equal(total.copyCount, 4);
     assert.equal(total.countedCount, 2);
-    assert.deepEqual(total.leftOut, { costPending: 1, noCost: 0, noRate: 1, unsplittable: 0 });
+    assert.deepEqual(total.leftOut, { costPending: 1, noCost: 0, noOpeningValue: 0, noRate: 1, unsplittable: 0 });
     assert.equal(total.proceeds, "70.00");
     assert.equal(total.cost, "20.00");
     assert.equal(total.profit, "50.00");
@@ -193,7 +215,7 @@ describe("saleRateMissing", () => {
 
 describe("describeLeftOut", () => {
   it("names each reason with its count and drops the zeros", () => {
-    assert.deepEqual(describeLeftOut({ costPending: 2, noCost: 0, noRate: 0, unsplittable: 1 }), [
+    assert.deepEqual(describeLeftOut({ costPending: 2, noCost: 0, noOpeningValue: 0, noRate: 0, unsplittable: 1 }), [
       "2 with cost pending",
       "1 whose share cannot be split",
     ]);

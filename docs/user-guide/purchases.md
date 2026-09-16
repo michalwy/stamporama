@@ -106,6 +106,27 @@ A lot **closes and reopens as a purchase lot does**:
   condition — the same rule as on a purchase, kept on purpose so that cataloguing an old stockbook
   is done properly, prices and all.
 
+### What an opening value counts towards
+
+An opening value is a **cost for profit and loss, never money spent**:
+
+- **It counts when a copy sells.** A sold copy's profit is its share of the sale against its share
+  of the opening value, exactly as it would be against a purchase price — on the sale's screen, the
+  copy's page, the [profit and loss screen](sales.md#profit-and-loss) and the Overview. Writing a
+  valued copy off counts its share as a loss the same way.
+- **Without a value there is no profit figure.** A copy from a lot with no opening value has no
+  cost to measure against, so its sale is left out of the profit and loss and says why — *from an
+  opening balance with no value* — rather than counting the whole price as profit.
+- **It is never counted as spent.** The holdings bar's **Purchase cost**, the Overview's **Purchase
+  ROI** and the cost line of the value-over-time chart leave it out; the holdings bar and the
+  Overview show it on a line of its own, **Opening value**. Adding an opening balance, valued or
+  not, changes none of the figures that mean money spent.
+- **It is never a price paid.** The **What I paid** section of a stamp's
+  [Valuation dialog](collections.md#the-valuation-dialog) leaves copies from opening balances out, so an
+  opening value cannot bend the average or the range of what you actually paid.
+- On the opening balance's own screen, once something has sold, **Net return** and **On sold** are
+  measured *against the opening value* and say so, instead of against money spent.
+
 ## The intake documents list
 
 Each row shows the document's **number** (`#7` — see [Quick jump](quick-jump.md)). A purchase then
@@ -282,6 +303,9 @@ bar for the whole parcel, each lot's bar for that lot alone.
 - **On sold** — realized minus what those *sold* copies cost, with a percentage. The other question:
   how the sales themselves went, regardless of how much is still unsold. Both are shown because
   neither answers the other.
+
+On an [opening balance](#opening-balances) the same rows are measured against the **opening value**
+instead, and the rows say *opening value* where a purchase's say *spent* — nothing was bought.
 
 The figures are live, not final: they move as more sells. Where a sale's copies came from several
 different purchases — or from two different lots of one purchase — each copy's share of that sale is

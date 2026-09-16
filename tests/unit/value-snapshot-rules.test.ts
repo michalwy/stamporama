@@ -43,6 +43,8 @@ describe("holdingsSnapshotFields", () => {
     uncertainCount: 1,
     uncertainBaseAmount: "10.00",
     cost: { baseCurrency: "PLN", totalCostBasis: "80.00", knownCount: 5, pendingCount: 1, noneCount: 1 },
+    // #1324: never in the acquisition cost or its counts, but its copies are still held.
+    openingValue: { baseCurrency: "PLN", totalCostBasis: "500.00", knownCount: 2, pendingCount: 0, noneCount: 1 },
     writeOff: {
       cost: { baseCurrency: "PLN", totalCostBasis: "999.00", knownCount: 3, pendingCount: 0, noneCount: 0 },
       count: 3,
@@ -65,7 +67,7 @@ describe("holdingsSnapshotFields", () => {
       costKnownCount: 5,
       costPendingCount: 1,
       costNoneCount: 1,
-      copiesHeld: 7,
+      copiesHeld: 10,
     });
   });
 });

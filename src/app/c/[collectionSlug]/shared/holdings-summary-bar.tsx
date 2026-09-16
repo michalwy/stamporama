@@ -1,6 +1,6 @@
 "use client";
 
-import type { HoldingsSummary } from "@/lib/valuation";
+import { costBasisCopyCount, type HoldingsSummary } from "@/lib/valuation";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { PurchaseSpend } from "@/lib/purchase-spend";
 import {
@@ -400,6 +400,11 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
   // yet, the whole of the proceeds would read as profit.
   const netReturn = differenceFigure(ret.netReturn, [realized, spent]);
   const soldMargin = differenceFigure(ret.soldMargin, [realized, soldCost]);
+  // An opening balance's figures are against its opening value, which nobody paid (#1324): the
+  // arithmetic is the purchase's, the word is not.
+  const opening = ret.basis === "opening_value";
+  const costWord = opening ? "opening value of" : "spent on";
+  const noCostYet = opening ? "no opening value worked out yet" : "no cost worked out yet";
 
   return (
     <>
@@ -426,8 +431,8 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
             paid into what is still held and what was written off (#396), and this figure is both. */}
         <span style={NOTE_STYLE}>
           {spent.amount === null
-            ? `no cost worked out yet for the ${ret.copyCount} ${copiesWord(ret.copyCount)}`
-            : `against ${spent.amount} ${ret.spent.baseCurrency} spent on all ${ret.copyCount} ${copiesWord(ret.copyCount)}`}
+            ? `${noCostYet} for the ${ret.copyCount} ${copiesWord(ret.copyCount)}`
+            : `against ${spent.amount} ${ret.spent.baseCurrency} ${costWord} all ${ret.copyCount} ${copiesWord(ret.copyCount)}`}
           {percentNote(ret.netReturnPercent)}
         </span>
       </div>
@@ -444,8 +449,8 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
         />
         <span style={NOTE_STYLE}>
           {soldCost.amount === null
-            ? `no cost worked out yet for the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`
-            : `against ${soldCost.amount} ${ret.soldCost.baseCurrency} spent on the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`}
+            ? `${noCostYet} for the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`
+            : `against ${soldCost.amount} ${ret.soldCost.baseCurrency} ${costWord} the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`}
           {percentNote(ret.soldMarginPercent)}
         </span>
       </div>
@@ -546,6 +551,26 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
     costNotes.push(`${cost.noneCount} no cost recorded`);
   }
 
+  // Copies from opening balances (#1324): their frozen amount is an opening value, a cost basis for
+  // profit and loss that nobody paid, so it is its own row and never part of the purchase cost.
+  // Each row is drawn when it has copies behind it; the purchase row also when neither has, so a
+  // scope that is empty still says what an empty scope cost.
+  const opening = total.openingValue;
+  const openingCopies = costBasisCopyCount(opening);
+  const showPurchaseCost = costBasisCopyCount(cost) > 0 || openingCopies === 0;
+  const openingFigure = stateFigure(
+    opening.totalCostBasis,
+    opening.knownCount,
+    opening.pendingCount + opening.noneCount
+  );
+  const openingNotes: string[] = [];
+  if (opening.pendingCount > 0) {
+    openingNotes.push(`${opening.pendingCount} pending`);
+  }
+  if (opening.noneCount > 0) {
+    openingNotes.push(`${opening.noneCount} without a value`);
+  }
+
   // Copies no longer held (#396). Their cost is stated on its own line rather than folded into
   // the purchase total: what was spent on the collection and what was spent on copies that are
   // gone are two different questions, and adding them answers neither.
@@ -565,14 +590,26 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
 
   return (
     <>
-      <div style={ROW_STYLE}>
-        <span style={LABEL_STYLE}>Purchase cost</span>
-        <FigureAmount figure={costFigure} currency={cost.baseCurrency} style={AMOUNT_STYLE} />
-        <span style={NOTE_STYLE}>
-          {cost.knownCount} costed
-          {costNotes.length > 0 ? ` · ${costNotes.join(" · ")}` : ""}
-        </span>
-      </div>
+      {showPurchaseCost && (
+        <div style={ROW_STYLE}>
+          <span style={LABEL_STYLE}>Purchase cost</span>
+          <FigureAmount figure={costFigure} currency={cost.baseCurrency} style={AMOUNT_STYLE} />
+          <span style={NOTE_STYLE}>
+            {cost.knownCount} costed
+            {costNotes.length > 0 ? ` · ${costNotes.join(" · ")}` : ""}
+          </span>
+        </div>
+      )}
+      {openingCopies > 0 && (
+        <div style={ROW_STYLE}>
+          <span style={LABEL_STYLE}>Opening value</span>
+          <FigureAmount figure={openingFigure} currency={opening.baseCurrency} style={AMOUNT_STYLE} />
+          <span style={NOTE_STYLE}>
+            {opening.knownCount} valued
+            {openingNotes.length > 0 ? ` · ${openingNotes.join(" · ")}` : ""}
+          </span>
+        </div>
+      )}
       {/* Copies in scope that are gone (#396): disposed after delivery, or never arrived in usable
           form. Only shown when there are some — a permanent 0.00 row would put a loss on every
           screen that has never had one. It carries a **cost** and no catalog value on purpose: a

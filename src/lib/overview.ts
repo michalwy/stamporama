@@ -136,8 +136,15 @@ async function purchaseRecoup(
 ): Promise<PurchaseRecoupTally> {
   // `returnOverCopies`' scope (#559): everything that arrived, sold or not, disposed included —
   // that money really was spent — and never-delivered copies left out, carrying no cost basis.
+  // Purchases only: an opening balance spent nothing, so it has no cost to have returned (#1324),
+  // and its opening value must not sit in the tile's *spent* total.
   const rows = await prisma.item.findMany({
-    where: { collectionId, lotId: { not: null }, deliveryState: { not: "not_delivered" } },
+    where: {
+      collectionId,
+      lotId: { not: null },
+      lot: { purchase: { kind: "purchase" } },
+      deliveryState: { not: "not_delivered" },
+    },
     select: {
       id: true,
       costBasis: true,

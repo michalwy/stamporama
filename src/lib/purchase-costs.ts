@@ -30,6 +30,11 @@ import {
 // deliberately not the catalog price's behaviour (#238 rolls a headline price up from the lowest
 // variant child), because a price is a property of the stamp while a copy is a thing on the table.
 //
+// **Never a copy from an opening balance** (#1324). Its frozen amount is an opening value — a share
+// of what the collector said the material was worth, not a price anybody paid — and one of them
+// among real prices would bend the average and the range. Such a copy is left out of the section
+// altogether rather than counted as uncosted: it is not a purchase at all.
+//
 // Nothing is stored and nothing is converted: a cost basis is frozen in the base currency when its
 // lot closes, so the figures are already in one currency and the next read reflects the next lot to
 // close.
@@ -102,6 +107,8 @@ export async function getStampPurchaseCosts(
       ...NOT_TRADED_AWAY,
       disposedAt: null,
       deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
+      // Bought, or from no lot at all — never from an opening balance (#1324).
+      OR: [{ lotId: null }, { lot: { purchase: { kind: "purchase" } } }],
     },
     select: {
       costBasis: true,

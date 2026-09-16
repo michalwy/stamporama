@@ -120,6 +120,23 @@ describe("summarizePurchaseReturn", () => {
     assert.equal(result.soldMarginPercent, 50);
   });
 
+  it("is against money spent unless told otherwise", () => {
+    const result = summarizePurchaseReturn([copy({ id: "a", costBasis: "10.00" })], 0, "PLN");
+    assert.equal(result.basis, "spent");
+  });
+
+  // #1324: an opening balance runs the same arithmetic against its opening value, and says so.
+  it("runs an opening balance's return against its opening value", () => {
+    const result = summarizePurchaseReturn(
+      [copy({ id: "a", costBasis: "8.00", sold: true, proceedsResolved: true })],
+      20,
+      "PLN",
+      "opening_value"
+    );
+    assert.equal(result.basis, "opening_value");
+    assert.equal(result.soldMargin, "12.00");
+  });
+
   it("counts a copy whose proceeds could not be attributed as sold, but adds nothing for it", () => {
     const result = summarizePurchaseReturn(
       [

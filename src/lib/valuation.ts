@@ -301,7 +301,11 @@ export interface MarketHoldingsTotal {
  * scope that are gone, so the two halves partition the scope instead of some of it silently
  * vanishing. */
 export interface HoldingsSummary extends HoldingsTotal {
+  /** Cost basis of the held copies that were bought, or came from no lot — money spent. */
   cost: CostBasisTotal;
+  /** Cost basis of the held copies from opening balances (#1324): an opening value, which counts
+   *  towards profit and loss on sale but was never spent, so it is summed apart from {@link cost}. */
+  openingValue: CostBasisTotal;
   writeOff: WriteOffTotal;
   market: MarketHoldingsTotal;
 }

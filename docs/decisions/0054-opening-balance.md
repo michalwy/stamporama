@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted and implemented in #1323. Designed in #1321 with the collector on 2026-09-15 and
+Accepted and implemented in #1323; §7 by #1324. Designed in #1321 with the collector on 2026-09-15 and
 2026-09-16; the children that complete it are #1324 (profit and loss, never spend), #1325 (the
 summary panel) and #1326 (retiring Card scans). **Replaces #725's decision that identification
 without a purchase creates no cost basis** (ADR-0033, *What #725 added*), for opening balances.
@@ -99,11 +99,28 @@ stored collapse state is keyed on the first and nobody reads either.
 
 *Rejected:* a separate navigation entry, and keeping the names.
 
+### 7. An opening value counts towards profit and loss, never as money spent (#1324)
+
+The opening value frozen onto a copy is a cost basis like any other, so a sale is measured against
+it, a write-off loses it, and the Overview's realized figure includes it. It is **never** money
+spent and **never** a price paid:
+
+- A holdings summary states it on a line of its own, **Opening value**, beside **Purchase cost**,
+  which covers purchases alone. The collector chose that over leaving it out of the holdings
+  entirely or relabelling the one total as *cost basis* (2026-09-16). The value-over-time chart's
+  cost line is purchases only; the Overview's surplus is measured against both, being a result.
+- The Overview's purchase-ROI tally counts purchases only, and the Valuation dialog's *What I paid*
+  leaves opening-balance copies out rather than counting them as uncosted.
+- An opening balance's own return rows run the purchase's arithmetic against the opening value and
+  say so.
+- A copy from a lot without a value has no profit figure, and the reason is stated as *no opening
+  value* rather than *no cost recorded* — `CostBasisState` `none` carries the reason.
+
 ## Consequences
 
-- **Money spent is #1324's.** Until it lands, an opening value is read like a purchase price by the
-  figures that mean *money spent* — ROI, collection value and P/L, the purchase-price statistics.
-  #1324 makes it count towards profit and loss on sale and never as spend.
+- **Money spent** was #1324's, and is §7. One path still carries an opening value into a purchase
+  cost: a trade order prices its lots at the cost basis of the copies given away (#644), opening
+  values included.
 - **The summary panel is #1325's.** An opening balance passes no order total to the holdings bar, so
   no price or shipping row appears; #1325 leads the panel with the opening value.
 - **Card scans stays until #1326**, which retires it and moves its batches onto one opening balance.

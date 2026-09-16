@@ -117,6 +117,8 @@ export interface WriteOffFigures {
   countedCount: number;
   costPending: number;
   noCost: number;
+  /** From an opening balance's lot with no opening value (#1324) — no loss to state. */
+  noOpeningValue: number;
   /** Σ known cost basis, 2-dp string. A loss, stated positive. */
   cost: string;
 }
@@ -126,15 +128,24 @@ export function summarizeWriteOffs(copies: readonly CostBasisInput[]): WriteOffF
   let countedCount = 0;
   let costPending = 0;
   let noCost = 0;
+  let noOpeningValue = 0;
   for (const copy of copies) {
     const state = resolveCostBasis(copy);
     if (state.state === "known") {
       countedCount++;
       cents += toCents(state.amount);
     } else if (state.state === "pending") costPending++;
+    else if (state.reason === "no_opening_value") noOpeningValue++;
     else noCost++;
   }
-  return { copyCount: copies.length, countedCount, costPending, noCost, cost: fromCents(cents) };
+  return {
+    copyCount: copies.length,
+    countedCount,
+    costPending,
+    noCost,
+    noOpeningValue,
+    cost: fromCents(cents),
+  };
 }
 
 /** The write-off's uncounted copies as short phrases, zeros dropped — `describeLeftOut`'s wording. */
@@ -142,6 +153,9 @@ export function describeWriteOffLeftOut(writeOff: WriteOffFigures): string[] {
   const parts: string[] = [];
   if (writeOff.costPending > 0) parts.push(`${writeOff.costPending} with cost pending`);
   if (writeOff.noCost > 0) parts.push(`${writeOff.noCost} with no cost recorded`);
+  if (writeOff.noOpeningValue > 0) {
+    parts.push(`${writeOff.noOpeningValue} from an opening balance with no value`);
+  }
   return parts;
 }
 
@@ -171,7 +185,11 @@ function resultOf(sales: readonly SaleFigureInput[], writeOffs: readonly CostBas
   const nothingCounted =
     salesFigures.countedCount === 0 &&
     writeOff.countedCount === 0 &&
-    leftOutTotal(salesFigures.leftOut) + writeOff.costPending + writeOff.noCost > 0;
+    leftOutTotal(salesFigures.leftOut) +
+      writeOff.costPending +
+      writeOff.noCost +
+      writeOff.noOpeningValue >
+      0;
   return {
     saleCount: sales.length,
     sales: salesFigures,

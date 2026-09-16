@@ -560,9 +560,11 @@ nothing here took.
 
 ### The valuation reads over a wider set than the holdings list
 
-`summarize_valuation` states four totals — catalogue, market, cost, write-off — and **every one of
-them travels with the counts saying how much of the collection is behind it** (`valuation.md`): a
-figure built from a tenth of the copies must never read as the collection's worth.
+`summarize_valuation` states five totals — catalogue, market, cost, opening value, write-off — and
+**every one of them travels with the counts saying how much of the collection is behind it**
+(`valuation.md`): a figure built from a tenth of the copies must never read as the collection's
+worth. `openingValue` joined in #1324: copies from an opening balance carry a cost basis nobody
+paid, so it is a group of its own and never inside `cost`.
 
 **It covers the held copies *and* the ones in the same scope that are gone**, because
 `getHoldingsValuation` lifts the disposal exclusion on purpose (#396) so it can state a write-off.

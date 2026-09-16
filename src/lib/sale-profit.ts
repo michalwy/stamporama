@@ -11,6 +11,10 @@
 //                 base figure exists for any copy on it.
 //   cost-pending  the copy's purchase lot is still open; its cost basis is not settled.
 //   no-cost       the copy carries no cost basis at all (added by hand, dropped from its lot).
+//   no-opening-value
+//                 the copy came in on an opening balance whose lot was stated without a value
+//                 (#1323) — a cost *not applicable*, never zero, which would make the whole price
+//                 profit (#1324). Told apart from no-cost so the screen can say which.
 //   unsplittable  the copy's own cost is known, but it shares a unit with a copy that is left out,
 //                 and the unit's net cannot be split across its copies (ADR-0012 §6.3) — so its
 //                 share is unknown.
@@ -70,14 +74,28 @@ export interface SaleProfitLine {
 export interface ProfitLeftOut {
   costPending: number;
   noCost: number;
+  /** From an opening balance's lot with no opening value (#1324). */
+  noOpeningValue: number;
   noRate: number;
   unsplittable: number;
 }
 
-const NOTHING_LEFT_OUT: ProfitLeftOut = { costPending: 0, noCost: 0, noRate: 0, unsplittable: 0 };
+const NOTHING_LEFT_OUT: ProfitLeftOut = {
+  costPending: 0,
+  noCost: 0,
+  noOpeningValue: 0,
+  noRate: 0,
+  unsplittable: 0,
+};
 
 export function leftOutTotal(leftOut: ProfitLeftOut): number {
-  return leftOut.costPending + leftOut.noCost + leftOut.noRate + leftOut.unsplittable;
+  return (
+    leftOut.costPending +
+    leftOut.noCost +
+    leftOut.noOpeningValue +
+    leftOut.noRate +
+    leftOut.unsplittable
+  );
 }
 
 /** A profit figure over a set of sold copies, in the base currency, 2-dp strings. */
@@ -154,6 +172,7 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
     for (const state of states) {
       if (state.state === "known") knownCostCents += toCents(Number(state.amount));
       else if (state.state === "pending") unitLeftOut.costPending++;
+      else if (state.reason === "no_opening_value") unitLeftOut.noOpeningValue++;
       else unitLeftOut.noCost++;
     }
     const netCents = toCents(line.netBase);
@@ -175,6 +194,7 @@ export function computeSaleProfit(lines: SaleProfitLine[], rateMissing: boolean)
     units.push({ lineId: line.id, cost: null, profit: null, leftOut: unitLeftOut });
     leftOut.costPending += unitLeftOut.costPending;
     leftOut.noCost += unitLeftOut.noCost;
+    leftOut.noOpeningValue += unitLeftOut.noOpeningValue;
 
     const knownCount = n - leftOutTotal(unitLeftOut);
     if (knownCount === 0) continue;
@@ -228,6 +248,7 @@ export function sumProfitFigures(all: readonly ProfitFigures[]): ProfitFigures {
     countedCount += f.countedCount;
     leftOut.costPending += f.leftOut.costPending;
     leftOut.noCost += f.leftOut.noCost;
+    leftOut.noOpeningValue += f.leftOut.noOpeningValue;
     leftOut.noRate += f.leftOut.noRate;
     leftOut.unsplittable += f.leftOut.unsplittable;
     if (f.proceeds != null) proceedsCents += toCents(Number(f.proceeds));
@@ -289,6 +310,9 @@ export function describeLeftOut(leftOut: ProfitLeftOut): string[] {
   if (leftOut.noRate > 0) parts.push(`${leftOut.noRate} with no exchange rate`);
   if (leftOut.costPending > 0) parts.push(`${leftOut.costPending} with cost pending`);
   if (leftOut.noCost > 0) parts.push(`${leftOut.noCost} with no cost recorded`);
+  if (leftOut.noOpeningValue > 0) {
+    parts.push(`${leftOut.noOpeningValue} from an opening balance with no value`);
+  }
   if (leftOut.unsplittable > 0) parts.push(`${leftOut.unsplittable} whose share cannot be split`);
   return parts;
 }

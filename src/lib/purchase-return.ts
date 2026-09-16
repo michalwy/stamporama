@@ -23,6 +23,11 @@
 // and a line with an unpriced copy on it cannot be split at all. Such a copy is counted as sold and
 // its proceeds are left out of `realized`, which is then reported as covering fewer copies than have
 // sold — a figure that is short by a stated amount, rather than one quietly claiming a loss.
+//
+// **On an opening balance the same arithmetic runs against an opening value** (#1324): its frozen
+// cost basis is what the collector said the material was worth, and it counts towards profit and
+// loss exactly as a purchase cost does — but nothing was spent. `basis` says which of the two the
+// figures are against, so the screen never calls an opening value *spent*.
 
 import { aggregateCostBasis, type CostBasisInput, type CostBasisTotal } from "./cost-basis";
 import {
@@ -109,10 +114,17 @@ export interface PurchaseReturnCopy extends CostBasisInput {
   proceedsResolved: boolean;
 }
 
+/** What a return's cost side is (#1324): money spent on a purchase, or an opening balance's opening
+ * value — a cost basis for profit and loss that nobody paid. */
+export type ReturnBasis = "spent" | "opening_value";
+
 /** What one purchase order has cost and earned back so far (#559). Money is 2-dp base-currency
  * strings, as every other read model here states it. */
 export interface PurchaseReturn {
   baseCurrency: string;
+  /** What {@link spent} and {@link soldCost} are: money spent, or an opening value (#1324). The
+   *  field names stay the purchase's; a screen names the figure by this. */
+  basis: ReturnBasis;
   /** Copies of the order the figures are over — everything that arrived, sold or not. */
   copyCount: number;
   /** …of which have sold. */
@@ -154,7 +166,8 @@ function percentOf(amountCents: number, baseCents: number): number | null {
 export function summarizePurchaseReturn(
   copies: PurchaseReturnCopy[],
   realized: number,
-  baseCurrency: string
+  baseCurrency: string,
+  basis: ReturnBasis = "spent"
 ): PurchaseReturn {
   const sold = copies.filter((c) => c.sold);
   const realizedCents = toCents(realized);
@@ -166,6 +179,7 @@ export function summarizePurchaseReturn(
 
   return {
     baseCurrency,
+    basis,
     copyCount: copies.length,
     soldCount: sold.length,
     unattributedCount: sold.filter((c) => !c.proceedsResolved).length,

@@ -166,9 +166,14 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
   const ccy = data.baseCurrency;
   const heldCount =
     holdings.pricedCount + holdings.unpricedCount + holdings.unconvertibleCount;
+  // Surplus is what the holdings are worth over their whole cost basis — purchase cost and opening
+  // value together, since it is a result and not money spent (#1324). The cost line names each.
+  const opening = holdings.openingValue;
+  const openingCopies = opening.knownCount + opening.pendingCount + opening.noneCount;
   const surplus = (
     (Math.round(Number(holdings.totalBaseAmount) * 100) -
-      Math.round(Number(holdings.cost.totalCostBasis) * 100)) /
+      Math.round(Number(holdings.cost.totalCostBasis) * 100) -
+      Math.round(Number(opening.totalCostBasis) * 100)) /
     100
   ).toFixed(2);
 
@@ -183,7 +188,8 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
               {holdings.totalBaseAmount} {ccy}
             </div>
             <div style={LINE_STYLE}>
-              Cost {holdings.cost.totalCostBasis} {ccy} · surplus{" "}
+              Cost {holdings.cost.totalCostBasis} {ccy}
+              {openingCopies > 0 && ` · opening value ${opening.totalCostBasis} ${ccy}`} · surplus{" "}
               <span style={signedStyle(Number(surplus))}>{signed(surplus)}</span>
             </div>
             {holdings.market.valuedCount > 0 && (
@@ -198,6 +204,8 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
                 count(holdings.unconvertibleCount, "unconvertible"),
                 count(holdings.cost.pendingCount, "cost pending"),
                 count(holdings.cost.noneCount, "no cost recorded"),
+                count(opening.pendingCount, "opening value pending"),
+                count(opening.noneCount, "no opening value"),
               ]}
             />
           </>
@@ -261,6 +269,7 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
                 count(realized.leftOut.noRate, "with no exchange rate"),
                 count(realized.leftOut.costPending, "cost pending"),
                 count(realized.leftOut.noCost, "no cost recorded"),
+                count(realized.leftOut.noOpeningValue, "no opening value"),
                 count(realized.leftOut.unsplittable, "sold shares unsplittable"),
               ]}
             />

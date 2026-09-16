@@ -26,7 +26,13 @@ import {
 } from "./item-valuation";
 import { marketKeyOf } from "./market-value";
 import { readMarketMedians } from "./market-values";
-import { aggregateCostBasis, lotCostInputs, type CostBasisInput } from "./cost-basis";
+import {
+  aggregateCostBasis,
+  lotCostInputs,
+  lotIsOpeningBalance,
+  splitCostBasis,
+  type HoldingsCostInput,
+} from "./cost-basis";
 import { intakeDocumentName } from "./purchase-kind";
 import {
   isUnknownVariantStamp,
@@ -1587,6 +1593,9 @@ export interface ItemListItem {
    *  on an opening balance's lot without an opening value, whose copies' cost is *not applicable*
    *  rather than pending (#1323). */
   lotValued: boolean | null;
+  /** Whether the owning lot is on an opening balance (#1324): the copy's cost basis is then an
+   *  opening value, summed apart from what purchases cost. False when the copy has no lot. */
+  openingBalance: boolean;
   /** The purchase order the owning lot belongs to (#387), or null when the copy has no lot.
    * `label` is what the row menu names it by — supplier + date, the same pair the purchases
    * list leads with — so "Go to purchase" says *which* purchase before it navigates. */
@@ -1865,6 +1874,7 @@ function toItemListItem(
     tradedAway: tradeMark(row, "left"),
     lotId: row.lotId,
     ...lotCostInputs(row.lot),
+    openingBalance: lotIsOpeningBalance(row.lot),
     purchase: row.lot?.purchase
       ? { id: row.lot.purchase.id, label: purchaseLabel(row.lot.purchase) }
       : null,
@@ -3190,18 +3200,21 @@ function summarizeHoldings(
   // what arrived, and report what did not as a write-off rather than as a hole in the total.
   const held = items.filter(isHeld);
   const gone = items.filter((i) => !isHeld(i));
-  const costOf = (i: ItemListItem): CostBasisInput => ({
+  const costOf = (i: ItemListItem): HoldingsCostInput => ({
     costBasis: i.costBasis,
     lotId: i.lotId,
     lotStatus: i.lotStatus,
     lotValued: i.lotValued,
+    openingBalance: i.openingBalance,
   });
   return {
     ...aggregateHoldings(
       held.map((i) => i.value),
       baseCurrency
     ),
-    cost: aggregateCostBasis(held.map(costOf), baseCurrency),
+    // Purchase cost and opening value apart (#1324); the write-off below is the whole loss, since an
+    // opening value counts towards profit and loss.
+    ...splitCostBasis(held.map(costOf), baseCurrency),
     writeOff: {
       cost: aggregateCostBasis(gone.map(costOf), baseCurrency),
       count: gone.length,
@@ -3714,7 +3727,8 @@ const HOLDINGS_ROW_SELECT = {
   formatId: true,
   costBasis: true,
   lotId: true,
-  lot: { select: { status: true, price: true } },
+  // `purchase.kind` tells an opening value from a purchase cost (#1324).
+  lot: { select: { status: true, price: true, purchase: { select: { kind: true } } } },
   // The two axes `isHeld` reads (#396) — which side of the summary a copy lands on.
   disposedAt: true,
   deliveryState: true,
@@ -3757,13 +3771,14 @@ async function makeHoldingsSummarizer(
 
   // Actual purchase cost-basis over the same copy set (#134). Snapshots are frozen in
   // the base currency, so this needs no rate handling — unlike the catalog valuation above.
-  const costById = new Map<string, CostBasisInput>(
+  const costById = new Map<string, HoldingsCostInput>(
     rows.map((row) => [
       row.id,
       {
         costBasis: row.costBasis == null ? null : row.costBasis.toString(),
         lotId: row.lotId,
         ...lotCostInputs(row.lot),
+        openingBalance: lotIsOpeningBalance(row.lot),
       },
     ])
   );
@@ -3787,7 +3802,7 @@ async function makeHoldingsSummarizer(
         held.map((id) => valuations.get(id)).filter((v) => v !== undefined),
         baseCurrency
       ),
-      cost: aggregateCostBasis(
+      ...splitCostBasis(
         held.map((id) => costById.get(id)).filter((c) => c !== undefined),
         baseCurrency
       ),
