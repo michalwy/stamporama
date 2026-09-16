@@ -118,7 +118,7 @@ import {
 import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
 import { buildLocationPath } from "./location-path";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
-import { copyIdsByAreaSubtree } from "./value-snapshot-rules";
+import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -3839,6 +3839,44 @@ export async function getHoldingsValuationByAreaSubtree(
     collection: summarize(),
     areas: new Map(areas.map((area) => [area.id, summarize(idsByArea.get(area.id) ?? [])])),
   };
+}
+
+/**
+ * The holdings summary of every copy under **none** of the given areas' subtrees (#1330), at the
+ * scope {@link getHoldingsValuationByAreaSubtree} records — so the Overview's *Other* line reads the
+ * same copies, valued the same way, as the chosen areas' snapshot rows beside it.
+ *
+ * No ownership check: the Overview read asserts it before calling.
+ */
+export async function getHoldingsValuationOutsideAreas(
+  collectionId: string,
+  areas: { id: string; parentId: string | null }[],
+  areaIds: string[]
+): Promise<HoldingsSummary> {
+  const filters: ItemListFiltersPaginated = { excludeGone: true, includeDisposed: true };
+  const rows = await prisma.item.findMany({
+    where: buildItemWhere(collectionId, filters, null),
+    select: {
+      ...HOLDINGS_ROW_SELECT,
+      stamp: {
+        select: {
+          ...HOLDINGS_ROW_SELECT.stamp.select,
+          stampAreaLinks: { select: { collectionAreaId: true } },
+        },
+      },
+    },
+  });
+  const summarize = await makeHoldingsSummarizer(collectionId, rows);
+  return summarize(
+    copyIdsOutsideSubtrees(
+      areas,
+      rows.map((row) => ({
+        id: row.id,
+        areaIds: row.stamp.stampAreaLinks.map((link) => link.collectionAreaId),
+      })),
+      areaIds
+    )
+  );
 }
 
 /** Holdings summary over an explicit set of copy ids (#317) — the copies sitting under a set of

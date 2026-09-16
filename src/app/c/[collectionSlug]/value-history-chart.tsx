@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useRef,
@@ -34,6 +35,10 @@ import { useOverviewValueHistory } from "./use-overview-query";
  *   area row covers its subtree and a stamp filed in two areas counts under both, so the areas need
  *   not add up to the total and a stack would claim they do.
  * - **Fewer than two recorded days is a waiting state**, not an empty frame.
+ * - **The split is by the areas the collector chose**, or by the top level (#1330). An area whose
+ *   history begins after the chart's first day is marked where it begins, and each area's name in
+ *   the readout links to its copies. *Other* has no history and no link: it is today's figure only,
+ *   and no list filter selects "the rest".
  */
 
 const CHART_HEIGHT = 220;
@@ -152,21 +157,37 @@ function Swatch({ color, dashed }: { color: string; dashed?: boolean }) {
   );
 }
 
+const AREA_LINK_STYLE: CSSProperties = {
+  color: "var(--color-text-muted)",
+  textDecoration: "underline",
+  textDecorationColor: "var(--color-border)",
+  textUnderlineOffset: "0.2em",
+};
+
 function ReadoutItem({
   color,
   dashed,
   label,
+  href,
   children,
 }: {
-  color: string;
+  color?: string;
   dashed?: boolean;
   label: string;
+  /** The area's rows (#1330) — the chart's one link, from the name rather than the drawing. */
+  href?: string;
   children: ReactNode;
 }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
-      <Swatch color={color} dashed={dashed} />
-      <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
+      {color && <Swatch color={color} dashed={dashed} />}
+      {href ? (
+        <Link href={href} style={AREA_LINK_STYLE}>
+          {label}
+        </Link>
+      ) : (
+        <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
+      )}
       <span>{children}</span>
     </span>
   );
@@ -176,10 +197,12 @@ function Readout({
   history,
   point,
   split,
+  base,
 }: {
   history: ValueHistory;
   point: ValueHistoryPoint;
   split: boolean;
+  base: string;
 }) {
   const ccy = history.baseCurrency;
   const surplus = signedDifference(point.catalogueValue, point.acquisitionCost);
@@ -216,12 +239,30 @@ function Readout({
               key={area.areaId}
               color={AREA_COLORS[i % AREA_COLORS.length]}
               label={area.name}
+              href={`${base}/inventory?areaId=${area.areaId}`}
             >
               {point.areaValues[area.areaId] != null
                 ? `${point.areaValues[area.areaId]} ${ccy}`
-                : "—"}
+                : area.historyFrom == null || point.day < area.historyFrom
+                  ? "not recorded yet"
+                  : "—"}
             </ReadoutItem>
           ))}
+          {history.other && (
+            <ReadoutItem label="Other">
+              {history.other.catalogueValue} {ccy}{" "}
+              <span style={{ color: "var(--color-text-muted)" }}>
+                {[
+                  "today, not recorded by day",
+                  history.other.unpricedCount > 0 && `${history.other.unpricedCount} unpriced`,
+                  history.other.unconvertibleCount > 0 &&
+                    `${history.other.unconvertibleCount} unconvertible`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </ReadoutItem>
+          )}
         </div>
       )}
       <div style={NOTE_STYLE}>
@@ -239,6 +280,8 @@ interface Line {
   dashed?: boolean;
   width: number;
   value: (point: ValueHistoryPoint) => string | undefined;
+  /** The day this line's history begins, when later than the chart's first day (#1330). */
+  historyFrom?: string;
 }
 
 function Plot({
@@ -331,6 +374,20 @@ function Plot({
         </text>
       ))}
 
+      {lines.map(
+        (line) =>
+          line.historyFrom && (
+            <line
+              key={`${line.key}-from`}
+              x1={x(line.historyFrom)}
+              x2={x(line.historyFrom)}
+              y1={PAD.top}
+              y2={PAD.top + innerHeight}
+              style={{ stroke: line.color, strokeWidth: 1, strokeDasharray: "2 3" }}
+            />
+          )
+      )}
+
       {lines.map((line) =>
         splitIntoRuns(points, (point) => line.value(point) != null).map((run) =>
           run.length === 1 ? (
@@ -386,7 +443,7 @@ function Plot({
   );
 }
 
-function Chart({ history }: { history: ValueHistory }) {
+function Chart({ history, base }: { history: ValueHistory; base: string }) {
   const [split, setSplit] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
   const [plotRef, width] = useWidth<HTMLDivElement>();
@@ -400,6 +457,8 @@ function Chart({ history }: { history: ValueHistory }) {
           color: AREA_COLORS[i % AREA_COLORS.length],
           width: 1.5,
           value: (point: ValueHistoryPoint) => point.areaValues[area.areaId],
+          historyFrom:
+            area.historyFrom && area.historyFrom > points[0].day ? area.historyFrom : undefined,
         }))
       : []),
     { key: "cost", color: COST_COLOR, dashed: true, width: 1.5, value: (p) => p.acquisitionCost },
@@ -408,7 +467,7 @@ function Chart({ history }: { history: ValueHistory }) {
 
   return (
     <>
-      <Readout history={history} point={points[hovered]} split={split} />
+      <Readout history={history} point={points[hovered]} split={split} base={base} />
       <div ref={plotRef} style={{ height: `${CHART_HEIGHT}px` }}>
         {width > 0 && (
           <Plot
@@ -423,7 +482,7 @@ function Chart({ history }: { history: ValueHistory }) {
       {areas.length > 0 && (
         <div>
           <FilterChip
-            label="Split by area"
+            label={history.chosen ? "Split by chosen areas" : "Split by area"}
             active={split}
             toggle
             onClick={() => setSplit((on) => !on)}
@@ -445,7 +504,7 @@ function WaitingState({ history }: { history: ValueHistory }) {
   );
 }
 
-export function ValueHistoryChart({ collectionId }: { collectionId: string }) {
+export function ValueHistoryChart({ collectionId, base }: { collectionId: string; base: string }) {
   const query = useOverviewValueHistory(collectionId);
   const history = query.data;
 
@@ -454,7 +513,11 @@ export function ValueHistoryChart({ collectionId }: { collectionId: string }) {
       <div style={LABEL_STYLE}>Value over time</div>
       {history ? (
         <>
-          {hasEnoughHistory(history) ? <Chart history={history} /> : <WaitingState history={history} />}
+          {hasEnoughHistory(history) ? (
+            <Chart history={history} base={base} />
+          ) : (
+            <WaitingState history={history} />
+          )}
           {history.otherCurrencyDays > 0 && (
             <div style={NOTE_STYLE}>
               {history.otherCurrencyDays}{" "}

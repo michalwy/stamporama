@@ -121,13 +121,89 @@ function closerToDone(a: ChecklistProgress, b: ChecklistProgress): boolean {
   return a.checklistId < b.checklistId;
 }
 
-// ── Coverage by area ──────────────────────────────────────────────────────────
+// ── Breakdown areas (#1330) ───────────────────────────────────────────────────
 
 export interface AreaNode {
   id: string;
   parentId: string | null;
   name: string;
 }
+
+export interface AreaBreakdown {
+  /** True when the collector chose the areas; false is the default split by top-level areas. */
+  chosen: boolean;
+  /** The areas to break down by, in the tree's own order (depth first, siblings as given). */
+  areaIds: string[];
+  /** Areas lying under none of them — what the *Other* line ranges over. Always empty by default,
+   * since the top-level areas cover the whole tree. */
+  outsideAreaIds: string[];
+}
+
+/**
+ * Which areas the Overview breaks the collection down by (#1330): the ones the collector chose, at
+ * any depth, or — with nothing chosen — the top-level areas, as before. A chosen id no longer in the
+ * tree is ignored; if none is left the default applies. `areas` must arrive in sibling order (the
+ * tree read's `sortOrder, name`), and the result is in depth-first tree order so a nested pair reads
+ * parent before child.
+ */
+export function resolveAreaBreakdown(areas: AreaNode[], chosenIds: string[]): AreaBreakdown {
+  const ordered = treeOrder(areas);
+  const chosenSet = new Set(chosenIds);
+  const chosen = ordered.filter((a) => chosenSet.has(a.id)).map((a) => a.id);
+  if (chosen.length === 0) {
+    return {
+      chosen: false,
+      areaIds: ordered.filter((a) => a.parentId == null).map((a) => a.id),
+      outsideAreaIds: [],
+    };
+  }
+  const covered = new Set(chosen);
+  const outsideAreaIds = ordered
+    .filter((a) => !ancestorsAndSelf(areas, a.id).some((id) => covered.has(id)))
+    .map((a) => a.id);
+  return { chosen: true, areaIds: chosen, outsideAreaIds };
+}
+
+/** Depth first from the roots, siblings in the order given. An area whose parent is missing is
+ * treated as a root; a cycle is cut rather than followed. */
+function treeOrder<T extends AreaNode>(areas: T[]): T[] {
+  const ids = new Set(areas.map((a) => a.id));
+  const children = new Map<string | null, T[]>();
+  for (const area of areas) {
+    const parent = area.parentId && ids.has(area.parentId) ? area.parentId : null;
+    const list = children.get(parent);
+    if (list) list.push(area);
+    else children.set(parent, [area]);
+  }
+  const out: T[] = [];
+  const seen = new Set<string>();
+  const visit = (parentId: string | null) => {
+    for (const area of children.get(parentId) ?? []) {
+      if (seen.has(area.id)) continue;
+      seen.add(area.id);
+      out.push(area);
+      visit(area.id);
+    }
+  };
+  visit(null);
+  return out;
+}
+
+/** The area and every ancestor above it, nearest first — guarded against a cycle. */
+export function ancestorsAndSelf(areas: AreaNode[], areaId: string): string[] {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let node = byId.get(areaId);
+  while (node && !seen.has(node.id)) {
+    seen.add(node.id);
+    out.push(node.id);
+    node = node.parentId ? byId.get(node.parentId) : undefined;
+  }
+  return out;
+}
+
+// ── Coverage by area ──────────────────────────────────────────────────────────
 
 export interface AreaCoverage {
   areaId: string;
@@ -138,67 +214,76 @@ export interface AreaCoverage {
 }
 
 export interface AreaCoverageRollup {
-  /** Root areas with at least one non-empty checklist under them, **worst-covered first** —
+  /** True when the rows are the collector's chosen areas (#1330) rather than the top level. */
+  chosen: boolean;
+  /** Breakdown areas with at least one non-empty checklist under them, **worst-covered first** —
    * the tile points at where the collection is thin (#651). */
   tracked: AreaCoverage[];
-  /** Root areas with no checklist anywhere in their subtree. Said outright rather than reported
-   * as 100%: coverage is only meaningful where a checklist defines the denominator. */
+  /** Breakdown areas with no checklist anywhere in their subtree. Said outright rather than
+   * reported as 100%: coverage is only meaningful where a checklist defines the denominator. */
   untracked: { areaId: string; name: string }[];
+  /** Everything outside the chosen areas (#1330), so the breakdown still accounts for the whole
+   * collection. Null when nothing lies outside them — always, by default. `checklistCount` 0 is
+   * *not tracked*, never complete. */
+  other: { owned: number; required: number; checklistCount: number } | null;
 }
 
 /**
- * Checklist completeness rolled up to the **root** areas — the level a collection is scanned at
- * ("how is Poland doing"), each root covering its whole subtree. An issue is attributed to its
- * area's root; an issue whose area is missing from the tree is skipped rather than invented.
+ * Checklist completeness rolled up to the breakdown areas (#651, #1330): the top-level areas — the
+ * level a collection is scanned at ("how is Poland doing") — or the areas the collector chose, at any
+ * depth. Each covers its whole subtree, so with a nested pair chosen an issue counts under both and
+ * nothing is summed across them. An issue under none of the chosen areas counts under *Other*; an
+ * issue whose area is missing from the tree is skipped rather than invented.
  */
 export function rollUpAreaCoverage(
   areas: AreaNode[],
   issues: { issueId: string; areaId: string }[],
-  checklists: { issueId: string; owned: number; requiredCount: number }[]
+  checklists: { issueId: string; owned: number; requiredCount: number }[],
+  chosenIds: string[] = []
 ): AreaCoverageRollup {
   const byId = new Map(areas.map((a) => [a.id, a]));
-  const rootOf = new Map<string, string>();
-  const rootFor = (id: string): string | null => {
-    const cached = rootOf.get(id);
-    if (cached) return cached;
-    // Walk up with a guard: a cycle in the tree must not hang the dashboard.
-    const seen = new Set<string>();
-    let node = byId.get(id);
-    if (!node) return null;
-    while (node.parentId && !seen.has(node.id)) {
-      seen.add(node.id);
-      const parent = byId.get(node.parentId);
-      if (!parent) break;
-      node = parent;
-    }
-    rootOf.set(id, node.id);
-    return node.id;
-  };
+  const breakdown = resolveAreaBreakdown(areas, chosenIds);
+  const breakdownSet = new Set(breakdown.areaIds);
 
-  const rootByIssue = new Map<string, string>();
+  // For each issue, the breakdown areas holding it — none means *Other* (only possible when chosen).
+  const holdersByIssue = new Map<string, string[]>();
   for (const issue of issues) {
-    const root = rootFor(issue.areaId);
-    if (root) rootByIssue.set(issue.issueId, root);
+    if (!byId.has(issue.areaId)) continue;
+    holdersByIssue.set(
+      issue.issueId,
+      ancestorsAndSelf(areas, issue.areaId).filter((id) => breakdownSet.has(id))
+    );
   }
 
   const coverage = new Map<string, AreaCoverage>();
+  let other = { owned: 0, required: 0, checklistCount: 0 };
   for (const row of checklists) {
     if (row.requiredCount <= 0) continue;
-    const root = rootByIssue.get(row.issueId);
-    if (!root) continue;
-    const entry = coverage.get(root);
-    if (entry) {
-      entry.owned += row.owned;
-      entry.required += row.requiredCount;
-      entry.checklistCount += 1;
-    } else {
-      coverage.set(root, {
-        areaId: root,
-        name: byId.get(root)?.name ?? "",
-        owned: row.owned,
-        required: row.requiredCount,
-        checklistCount: 1,
-      });
+    const holders = holdersByIssue.get(row.issueId);
+    if (!holders) continue;
+    if (holders.length === 0) {
+      other = {
+        owned: other.owned + row.owned,
+        required: other.required + row.requiredCount,
+        checklistCount: other.checklistCount + 1,
+      };
+      continue;
+    }
+    for (const areaId of holders) {
+      const entry = coverage.get(areaId);
+      if (entry) {
+        entry.owned += row.owned;
+        entry.required += row.requiredCount;
+        entry.checklistCount += 1;
+      } else {
+        coverage.set(areaId, {
+          areaId,
+          name: byId.get(areaId)?.name ?? "",
+          owned: row.owned,
+          required: row.requiredCount,
+          checklistCount: 1,
+        });
+      }
     }
   }
 
@@ -213,11 +298,16 @@ export function rollUpAreaCoverage(
     return a.name.localeCompare(b.name);
   });
 
-  const untracked = areas
-    .filter((a) => a.parentId == null && !coverage.has(a.id))
-    .map((a) => ({ areaId: a.id, name: a.name }));
+  const untracked = breakdown.areaIds
+    .filter((id) => !coverage.has(id))
+    .map((id) => ({ areaId: id, name: byId.get(id)?.name ?? "" }));
 
-  return { tracked, untracked };
+  return {
+    chosen: breakdown.chosen,
+    tracked,
+    untracked,
+    other: breakdown.outsideAreaIds.length > 0 ? other : null,
+  };
 }
 
 // ── Purchase ROI ──────────────────────────────────────────────────────────────

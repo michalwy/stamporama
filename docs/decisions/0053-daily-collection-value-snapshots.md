@@ -98,7 +98,11 @@ if one is ever wanted, is a later decision.
 
 ## Consequences
 
-- The chart (#653) reads stored rows only; it never calls the valuation.
+- The chart (#653) reads stored rows only; it never calls the valuation. **One exception since
+  #1330**: with areas chosen for the breakdown, *Other* — every copy under none of them — is valued
+  live and shown for today only. No row records it, and it cannot be derived from the area rows,
+  since a stamp filed in two areas counts under both; it is drawn as no line at all rather than as a
+  history reconstructed from current state.
 - A figure's definition is fixed by what the Overview read at the time. If a read's scope changes
   later, older rows keep the old meaning — the price of recording rather than reconstructing.
 - Each hourly pass costs one Overview Value read per collection (without the realized and purchase

@@ -87,7 +87,7 @@ describe("buildValueHistory", () => {
       "PLN",
       [EUROPE, ASIA]
     );
-    assert.deepEqual(history.areas, [EUROPE]);
+    assert.deepEqual(history.areas, [{ ...EUROPE, historyFrom: "2026-03-01" }]);
     assert.deepEqual(history.points[0].areaValues, { europe: "80.00", asia: "0.00" });
   });
 
@@ -108,6 +108,63 @@ describe("buildValueHistory", () => {
       history.areas.map((a) => a.areaId),
       ["europe", "asia"]
     );
+  });
+});
+
+describe("buildValueHistory with chosen areas (#1330)", () => {
+  const POLAND = { areaId: "poland", name: "Poland" };
+
+  it("keeps every chosen area, a nested pair and one never valued included", () => {
+    const history = buildValueHistory(
+      [
+        row("2026-03-01", {
+          areas: [
+            { collectionAreaId: "europe", catalogueValue: "80.00" },
+            { collectionAreaId: "poland", catalogueValue: "30.00" },
+            { collectionAreaId: "asia", catalogueValue: "0.00" },
+          ],
+        }),
+      ],
+      "PLN",
+      [EUROPE, POLAND, ASIA],
+      true
+    );
+    assert.equal(history.chosen, true);
+    assert.deepEqual(
+      history.areas.map((a) => a.areaId),
+      ["europe", "poland", "asia"]
+    );
+    assert.deepEqual(history.points[0].areaValues, {
+      europe: "80.00",
+      poland: "30.00",
+      asia: "0.00",
+    });
+  });
+
+  it("marks where an area's history begins, and null where it never does", () => {
+    const history = buildValueHistory(
+      [
+        row("2026-03-01", { areas: [{ collectionAreaId: "europe", catalogueValue: "80.00" }] }),
+        row("2026-03-02", {
+          areas: [
+            { collectionAreaId: "europe", catalogueValue: "81.00" },
+            { collectionAreaId: "poland", catalogueValue: "30.00" },
+          ],
+        }),
+      ],
+      "PLN",
+      [EUROPE, POLAND, ASIA],
+      true
+    );
+    assert.deepEqual(
+      history.areas.map((a) => [a.areaId, a.historyFrom]),
+      [
+        ["europe", "2026-03-01"],
+        ["poland", "2026-03-02"],
+        ["asia", null],
+      ]
+    );
+    assert.equal(history.points[0].areaValues.poland, undefined);
   });
 });
 

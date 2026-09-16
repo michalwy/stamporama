@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   copyIdsByAreaSubtree,
+  copyIdsOutsideSubtrees,
   holdingsSnapshotFields,
   ratesIntoBase,
   snapshotDay,
@@ -132,5 +133,37 @@ describe("copyIdsByAreaSubtree", () => {
     assert.deepEqual(out.get("a"), ["c1"]);
     assert.deepEqual(out.get("b"), ["c1"]);
     assert.equal(out.has("gone"), false);
+  });
+});
+
+describe("copyIdsOutsideSubtrees (#1330)", () => {
+  const areas = [
+    { id: "europe", parentId: null },
+    { id: "poland", parentId: "europe" },
+    { id: "gg", parentId: "poland" },
+    { id: "germany", parentId: "europe" },
+    { id: "asia", parentId: null },
+  ];
+  const copies = [
+    { id: "polish", areaIds: ["gg"] },
+    { id: "german", areaIds: ["germany"] },
+    { id: "shared", areaIds: ["germany", "poland"] },
+    { id: "asian", areaIds: ["asia"] },
+    { id: "unfiled", areaIds: [] },
+  ];
+
+  it("leaves out every copy under a chosen subtree by any of its links, and keeps unfiled copies", () => {
+    assert.deepEqual(copyIdsOutsideSubtrees(areas, copies, ["poland", "asia"]), [
+      "german",
+      "unfiled",
+    ]);
+  });
+
+  it("with a nested pair chosen, is the same as the outer area alone", () => {
+    assert.deepEqual(
+      copyIdsOutsideSubtrees(areas, copies, ["europe", "gg"]),
+      copyIdsOutsideSubtrees(areas, copies, ["europe"])
+    );
+    assert.deepEqual(copyIdsOutsideSubtrees(areas, copies, ["europe"]), ["asian", "unfiled"]);
   });
 });

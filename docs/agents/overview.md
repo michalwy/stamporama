@@ -88,10 +88,41 @@ built by #649–#651).
     under both (ADR-0053 §3), so bands would claim a sum that does not hold. The split is over
     **top-level areas** that held a non-zero value on some day; a root with no row on a day (created
     later) breaks its own line there.
-  - **The chart is the one element that is not a tile and not a link**: no list screen holds a
-    history to link into. Its split toggle is local state rather than URL state — a view of one
-    card, not a filter of rows. **Plain SVG, no charting library** — a few polylines, a hover guide
-    and a ResizeObserver width do not warrant a dependency (and so no ADR).
+  - **The chart is the one element that is not a tile**: no list screen holds a history to link
+    into, so the drawing is not a link. Since #1330 each **area name in the readout** is one, to
+    `/inventory?areaId=…` — settled with the collector on 2026-09-16, the name rather than the line
+    because a polyline is no target to aim at. Its split toggle is local state rather than URL
+    state — a view of one card, not a filter of rows. **Plain SVG, no charting library** — a few
+    polylines, a hover guide and a ResizeObserver width do not warrant a dependency (and so no ADR).
+
+- **The collector chooses the areas the Overview breaks down by** (#1330), because a tree
+  organised by continent makes the top level say nothing. Settled with the collector on
+  2026-09-16:
+  - **Saved for the collection, chosen on the Overview itself**: `CollectionOverviewArea` rows,
+    read by `overview-areas.ts`, written by `saveOverviewAreasAction`, picked in
+    `overview-areas-dialog.tsx`. **No rows is the default — top-level areas**, so a collection that
+    never opens the control sees no change; a chosen area deleted cascades out of the choice.
+  - **One choice, both sections**: `resolveAreaBreakdown` (`overview-rules.ts`) is the only place a
+    choice meets the tree, and both `getOverviewValueHistory` and `rollUpAreaCoverage` go through it,
+    so Value over time and Coverage by area cannot split differently.
+  - **Any depth, each area its whole subtree, a nested pair allowed** — each its own line, nothing
+    summed across overlapping lines.
+  - **Other is everything under none of the chosen areas, and "reconcile" means nothing drops
+    out**, not that the lines add up: a stamp filed in two chosen areas counts under both, so the
+    lines can exceed the total. The arithmetic alternative (total minus the areas) was rejected — it
+    goes wrong, even negative, on exactly those stamps. A copy linked into a chosen subtree by *any*
+    of its links is not Other's (`copyIdsOutsideSubtrees`); a copy in no area is.
+  - **Other has no history** on the chart. Snapshots record per-area subtrees, not "outside a
+    choice", and it cannot be derived from them for the reason above. Recording it going forward was
+    offered and declined: it is **today's figure, valued live** (`getHoldingsValuationOutsideAreas`,
+    at the snapshot's own scope) and stated in the readout — the one figure the chart does not read
+    from stored rows (ADR-0053 carries the note).
+  - **Other is not a link** anywhere: no list filter selects "the rest", and a link to the
+    unfiltered list would open rows other than the ones it counts.
+  - **A chosen area's history reaches back as far as its rows do**; `historyFrom` is its first
+    recorded day, and the chart draws a dotted marker there and reads earlier days as *not recorded
+    yet* instead of zero. A chosen area is kept even if it never held value — the collector asked
+    for it — where the top-level default still drops the all-zero ones.
 
 - **Tiles are `RowLink` cards** (#557's overlay): the whole tile navigates, and an inner link —
   the exposure line to `/auctions`, a coverage row to its area — is lifted with `ROW_LINK_ABOVE`.
