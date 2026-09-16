@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
+import { getCollectionAreas } from "@/lib/areas";
+import { getOverviewAreaIds } from "@/lib/overview-areas";
 import { OverviewPanel } from "./overview-panel";
 
 export const metadata = { title: "Overview" };
@@ -23,6 +25,12 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
+  // The area tree and the saved choice for the breakdown control (#1330); the figures stay queries.
+  const [areas, overviewAreaIds] = await Promise.all([
+    getCollectionAreas(session.user.id, collection.id),
+    getOverviewAreaIds(session.user.id, collection.id),
+  ]);
+
   return (
     <div style={{ padding: "2rem", minHeight: "100vh" }}>
       <h2
@@ -35,7 +43,12 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
       >
         Overview
       </h2>
-      <OverviewPanel collectionId={collection.id} collectionSlug={collectionSlug} />
+      <OverviewPanel
+        collectionId={collection.id}
+        collectionSlug={collectionSlug}
+        areas={areas}
+        initialAreaIds={overviewAreaIds}
+      />
     </div>
   );
 }

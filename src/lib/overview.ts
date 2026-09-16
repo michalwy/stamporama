@@ -1,7 +1,11 @@
 import "server-only";
 import { lotCostInputs } from "./cost-basis";
 import { prisma } from "./db";
-import { getHoldingsValuation, listIssueGroupCompleteness } from "./items";
+import {
+  getHoldingsValuation,
+  getHoldingsValuationOutsideAreas,
+  listIssueGroupCompleteness,
+} from "./items";
 import type { HoldingsSummary } from "./valuation";
 import { offersSummary } from "./offers";
 import { auctionLotExposure } from "./auctions";
@@ -10,9 +14,12 @@ import type { ProfitFigures } from "./sale-profit";
 import { summarizePurchaseReturn, type PurchaseReturnCopy } from "./purchase-return";
 import { openWantGapSummary, type OpenWantGapSummary } from "./wants";
 import { readCollectionAreas } from "./areas";
+import { readOverviewAreaIds } from "./overview-areas";
+import { costBasisCopyCount } from "./valuation";
 import {
   buildGrowthSeries,
   classifyPurchaseReturns,
+  resolveAreaBreakdown,
   rollUpAreaCoverage,
   tallyChecklists,
   type AreaCoverageRollup,
@@ -188,14 +195,31 @@ async function purchaseRecoup(
 /**
  * The value-over-time chart's series: the daily snapshots #652 recorded, read as stored and never
  * re-valued (ADR-0053). Every recorded day is returned — the chart's span is the collection's whole
- * history — with each top-level area's subtree value beside it for the split.
+ * history — with each split area's subtree value beside it: the top-level areas, or the areas the
+ * collector chose (#1330).
+ *
+ * The one figure not read from stored rows is *Other*, the catalogue value outside the chosen areas
+ * today. Snapshots record no such figure and it cannot be derived from the area rows — a stamp filed
+ * in two areas counts under both — so it is valued live, at the snapshot's own scope, and has no
+ * history (settled with the collector on #1330).
  */
 export async function getOverviewValueHistory(
   ownerId: string,
   collectionId: string
 ): Promise<ValueHistory> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
-  const [rows, rootAreas] = await Promise.all([
+  const [allAreas, chosenIds] = await Promise.all([
+    prisma.collectionArea.findMany({
+      where: { collectionId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, parentId: true, name: true },
+    }),
+    readOverviewAreaIds(collectionId),
+  ]);
+  const breakdown = resolveAreaBreakdown(allAreas, chosenIds);
+  const nameOf = new Map(allAreas.map((area) => [area.id, area.name]));
+
+  const [rows, other] = await Promise.all([
     prisma.collectionValueSnapshot.findMany({
       where: { collectionId },
       orderBy: { day: "asc" },
@@ -212,19 +236,17 @@ export async function getOverviewValueHistory(
         costPendingCount: true,
         costNoneCount: true,
         areas: {
-          where: { collectionArea: { parentId: null } },
+          where: { collectionAreaId: { in: breakdown.areaIds } },
           select: { collectionAreaId: true, catalogueValue: true },
         },
       },
     }),
-    prisma.collectionArea.findMany({
-      where: { collectionId, parentId: null },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true },
-    }),
+    breakdown.outsideAreaIds.length > 0
+      ? getHoldingsValuationOutsideAreas(collectionId, allAreas, breakdown.areaIds)
+      : null,
   ]);
 
-  return buildValueHistory(
+  const history = buildValueHistory(
     rows.map((row) => ({
       ...row,
       catalogueValue: row.catalogueValue.toFixed(2),
@@ -236,8 +258,20 @@ export async function getOverviewValueHistory(
       })),
     })),
     baseCurrency,
-    rootAreas.map((area) => ({ areaId: area.id, name: area.name }))
+    breakdown.areaIds.map((id) => ({ areaId: id, name: nameOf.get(id) ?? "" })),
+    breakdown.chosen
   );
+  return {
+    ...history,
+    other: other
+      ? {
+          catalogueValue: other.totalBaseAmount,
+          copiesHeld: costBasisCopyCount(other.cost) + costBasisCopyCount(other.openingValue),
+          unpricedCount: other.unpricedCount,
+          unconvertibleCount: other.unconvertibleCount,
+        }
+      : null,
+  };
 }
 
 // ── Progress (#651) ──────────────────────────────────────────────────────────
@@ -246,8 +280,9 @@ export async function getOverviewValueHistory(
 const GROWTH_MONTHS = 12;
 
 export interface OverviewProgress {
-  /** Checklist coverage rolled up to the root areas, worst-covered first; areas with no checklist
-   * are named as untracked rather than reported complete. */
+  /** Checklist coverage rolled up to the top-level areas or the collector's chosen ones (#1330),
+   * worst-covered first, with *Other* for the rest; areas with no checklist are named as untracked
+   * rather than reported complete. */
   coverage: AreaCoverageRollup;
   checklists: ChecklistTally;
   /** Copies and issues added per month, derived from creation dates with no new storage (#397's
@@ -262,8 +297,9 @@ export async function getOverviewProgress(
 ): Promise<OverviewProgress> {
   await assertCollectionOwner(ownerId, collectionId);
 
-  const [areas, issues] = await Promise.all([
+  const [areas, chosenAreaIds, issues] = await Promise.all([
     readCollectionAreas(collectionId),
+    readOverviewAreaIds(collectionId),
     prisma.issue.findMany({
       where: { collectionId, checklists: { some: {} } },
       select: { id: true, collectionAreaId: true },
@@ -296,7 +332,8 @@ export async function getOverviewProgress(
     coverage: rollUpAreaCoverage(
       areas.map((a) => ({ id: a.id, parentId: a.parentId, name: a.name })),
       issues.map((i) => ({ issueId: i.id, areaId: i.collectionAreaId })),
-      checklistRows
+      checklistRows,
+      chosenAreaIds
     ),
     checklists: tallyChecklists(checklistRows),
     growth: { months: growthMonths },

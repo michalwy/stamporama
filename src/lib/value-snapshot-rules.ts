@@ -101,3 +101,21 @@ export function copyIdsByAreaSubtree(
   }
   return out;
 }
+
+/**
+ * The copies under **none** of the given areas' subtrees — the Overview's *Other* line (#1330). A copy
+ * whose stamp is linked into no area at all is among them; a copy linked into a chosen area's subtree
+ * by any one of its links is not, however many of its other links land outside.
+ */
+export function copyIdsOutsideSubtrees(
+  areas: { id: string; parentId: string | null }[],
+  copies: { id: string; areaIds: string[] }[],
+  subtreeRootIds: string[]
+): string[] {
+  const inside = new Set(
+    [...copyIdsByAreaSubtree(areas, copies).entries()]
+      .filter(([areaId]) => subtreeRootIds.includes(areaId))
+      .flatMap(([, ids]) => ids)
+  );
+  return copies.filter((copy) => !inside.has(copy.id)).map((copy) => copy.id);
+}

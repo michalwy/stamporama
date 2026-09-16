@@ -175,9 +175,11 @@ describe("overview value history (#653)", () => {
 
   it("splits by top-level areas that held value, from their subtree rows", async () => {
     const history = await getOverviewValueHistory(userId, collectionId);
+    assert.equal(history.chosen, false);
+    assert.equal(history.other, null);
     assert.deepEqual(history.areas, [
-      { areaId: area.europe, name: "Europe" },
-      { areaId: area.asia, name: "Asia" },
+      { areaId: area.europe, name: "Europe", historyFrom: "2026-03-01" },
+      { areaId: area.asia, name: "Asia", historyFrom: "2026-03-01" },
     ]);
     const last = history.points[history.points.length - 1];
     assert.equal(last.areaValues[area.europe], "100.00");

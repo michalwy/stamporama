@@ -8,6 +8,23 @@ Every tile is a link. Clicking one takes you to the list screen that holds the u
 with the matching filter already applied — the Overview states sums, and the list screens stay
 the place where the detail lives. A tile with nothing behind it yet says what would fill it.
 
+## Choosing the areas
+
+The value-over-time chart and **Coverage by area** break the collection down by area. Out of the
+box that is the **top-level areas** — which says little if your tree starts with continents and
+the countries you actually collect sit further down. **Choose areas**, at the top of the Overview,
+opens the whole area tree: tick the areas you want to see, at any depth, and **Save**. The choice is
+kept for the collection and is there again on your next visit. **Use top-level areas** clears it.
+
+- **Each chosen area covers everything under it.** You may tick a country and one of its regions
+  together: each gets its own line, and they overlap rather than being added up.
+- **Other** holds the rest of the collection — everything under none of the areas you ticked — so
+  nothing drops out of the breakdown. A stamp filed in two areas counts under every chosen area it
+  is filed in, so the lines together can come to more than the collection's total; each copy is on
+  at least one of them. Other is not a link: no list shows "everything else".
+- The same choice applies to both the chart and the coverage tile, so the two never break down by
+  different areas.
+
 ## Value
 
 - **Holdings value** — the catalogue value of every copy you hold, against what you paid for it,
@@ -49,9 +66,18 @@ most recent day is shown.
   rewrite it.
 - **Gaps.** A day the app was not running has no point, and the line breaks there instead of
   joining across the missing days.
-- **Split by area.** Turn on *Split by area* to add one line per top-level area, each covering the
-  area and everything under it. The area lines are not stacked and need not add up to the total: a
-  stamp filed in two areas counts under both. Areas that have never held any value are left out.
+- **Split by area.** Turn on *Split by area* to add one line per top-level area — or, once you have
+  [chosen areas](#choosing-the-areas), per chosen area — each covering the area and everything under
+  it. The area lines are not stacked and need not add up to the total: a stamp filed in two areas
+  counts under both. Of the top-level areas, those that have never held any value are left out; a
+  chosen area is always shown. Each area's name in the readout opens the Copies list filtered to it.
+- **Where an area's history begins.** An area's value is recorded from the day it existed. If its
+  history starts later than the chart does, a dotted line in its colour marks the first recorded
+  day, and earlier days read *not recorded yet* rather than zero.
+- **Other.** With areas chosen, the readout also states *Other* — the catalogue value of
+  everything outside them **today**, with any copies it could not price counted beside it. It has
+  no line: the daily record keeps each area's value, not "everything outside" a choice you can
+  change at any time, so there is no past to draw.
 - **Still collecting data.** A new collection — or one that has just started recording — shows a
   waiting note until two days are in.
 - **A change of base currency.** Days recorded under a different base currency cannot share the
@@ -59,10 +85,12 @@ most recent day is shown.
 
 ## Progress
 
-- **Coverage by area** — checklist completeness rolled up per top-level collection area,
-  **worst-covered first**, so the tile points at where the collection is thin. Each area opens
-  the Issues list filtered to it. An area with no checklists reads *not tracked* rather than
-  complete — coverage only means something where a checklist defines what "all of it" is.
+- **Coverage by area** — checklist completeness rolled up per top-level collection area, or per
+  [chosen area](#choosing-the-areas), **worst-covered first**, so the tile points at where the
+  collection is thin. Each area opens the Issues list filtered to it. With areas chosen, an *Other*
+  line gives the coverage of everything outside them. An area with no checklists reads *not
+  tracked* rather than complete — coverage only means something where a checklist defines what "all
+  of it" is.
 - **Checklists** — how many checklists are complete, part-done and untouched, and which one is
   closest to done. Opens that checklist's issue.
 - **Growth** — copies and issues added per month over the last year, derived from when they were

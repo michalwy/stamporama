@@ -174,6 +174,7 @@ model Collection {
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
   valueSnapshots  CollectionValueSnapshot[]
+  overviewAreas   CollectionOverviewArea[]
 
   @@unique([ownerId, slug])
   @@map("collection")
@@ -2655,6 +2656,7 @@ model CollectionArea {
   formatFactors          StampFormatFactor[]
   platformCategoryLessons PlatformCategoryLesson[]
   valueSnapshots         CollectionAreaValueSnapshot[]
+  overviewChoices        CollectionOverviewArea[]
 
   @@index([primaryCatalogVendorId])
   @@map("collection_area")
@@ -6095,6 +6097,23 @@ model CollectionAreaValueSnapshot {
   @@unique([snapshotId, collectionAreaId])
   @@index([collectionAreaId])
   @@map("collection_area_value_snapshot")
+}
+
+// The areas the Overview breaks the collection down by (#1330), chosen by the collector on the
+// Overview itself. No rows is the default and means **top-level areas**, so a collection that never
+// opens the control sees no change. Any area at any depth; each counts its whole subtree, a nested
+// pair included. Value over time and Progress read the same rows, so the two never break down by
+// different areas. An area deleted drops out of the choice with it.
+model CollectionOverviewArea {
+  collectionId     String
+  collectionAreaId String
+
+  collection     Collection     @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, collectionAreaId])
+  @@index([collectionAreaId])
+  @@map("collection_overview_area")
 }
 
 model Session {

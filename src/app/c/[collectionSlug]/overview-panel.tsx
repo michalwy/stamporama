@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { DialogSecondaryButton } from "@/app/dialog-shell";
+import type { CollectionAreaData } from "@/lib/areas";
 import type { OverviewProgress, OverviewValue } from "@/lib/overview";
+import { OverviewAreasDialog } from "./overview-areas-dialog";
 import { RowLink, ROW_LINK_ABOVE } from "./shared/row-link";
 import { useOverviewProgress, useOverviewValue } from "./use-overview-query";
 import { ValueHistoryChart } from "./value-history-chart";
@@ -330,7 +334,7 @@ function ProgressTiles({ data, base }: { data: OverviewProgress; base: string })
   return (
     <div style={GRID_STYLE}>
       <Tile href={`${base}/issues`} label="Coverage by area">
-        {coverage.tracked.length === 0 ? (
+        {coverage.tracked.length === 0 && !coverage.other?.checklistCount ? (
           <TileEmpty>
             Add checklists to the issues you collect to track coverage
             {coverage.untracked.length > 0 &&
@@ -351,6 +355,7 @@ function ProgressTiles({ data, base }: { data: OverviewProgress; base: string })
                 {area.required})
               </Link>
             ))}
+            {coverage.other && <OtherCoverage other={coverage.other} />}
             <ProgressNote
               parts={[
                 coverage.tracked.length > COVERAGE_ROWS_SHOWN
@@ -440,6 +445,19 @@ function ProgressTiles({ data, base }: { data: OverviewProgress; base: string })
   );
 }
 
+/** Everything outside the chosen areas (#1330). Not a link: no list filter selects "the rest", and a
+ * link to the unfiltered list would open rows other than the ones this line counts. */
+function OtherCoverage({ other }: { other: NonNullable<OverviewProgress["coverage"]["other"]> }) {
+  return (
+    <div style={LINE_STYLE}>
+      Other —{" "}
+      {other.checklistCount === 0
+        ? "not tracked"
+        : `${Math.floor((other.owned / other.required) * 100)}% (${other.owned}/${other.required})`}
+    </div>
+  );
+}
+
 function ProgressNote({ parts }: { parts: (string | null)[] }) {
   const present = parts.filter((p): p is string => p != null);
   if (present.length === 0) return null;
@@ -454,19 +472,91 @@ const ERROR_STYLE: CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
+const BREAKDOWN_STYLE: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.75rem",
+  marginBottom: "1.25rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-secondary)",
+};
+
+/** The breakdown control (#1330): which areas Value over time and Coverage by area split by, stated
+ * and changed in one place so the two can never split by different areas. */
+function BreakdownControl({
+  collectionId,
+  areas,
+  areaIds,
+  onChange,
+}: {
+  collectionId: string;
+  areas: CollectionAreaData[];
+  areaIds: string[];
+  onChange: (areaIds: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const names = areas.filter((area) => areaIds.includes(area.id)).map((area) => area.name);
+  const summary =
+    names.length === 0
+      ? "Top-level areas"
+      : names.length <= 3
+        ? names.join(", ")
+        : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+
+  return (
+    <div style={BREAKDOWN_STYLE}>
+      <span>
+        <span style={{ color: "var(--color-text-muted)" }}>Broken down by </span>
+        {summary}
+      </span>
+      <DialogSecondaryButton onClick={() => setOpen(true)} disabled={areas.length === 0}>
+        Choose areas
+      </DialogSecondaryButton>
+      {open && (
+        <OverviewAreasDialog
+          collectionId={collectionId}
+          areas={areas}
+          areaIds={areaIds}
+          onClose={() => setOpen(false)}
+          onSaved={(saved) => {
+            setOpen(false);
+            onChange(saved);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function OverviewPanel({
   collectionId,
   collectionSlug,
+  areas,
+  initialAreaIds,
 }: {
   collectionId: string;
   collectionSlug: string;
+  areas: CollectionAreaData[];
+  initialAreaIds: string[];
 }) {
   const value = useOverviewValue(collectionId);
   const progress = useOverviewProgress(collectionId);
+  const queryClient = useQueryClient();
+  const [areaIds, setAreaIds] = useState(initialAreaIds);
   const base = `/c/${collectionSlug}`;
 
   return (
     <div>
+      <BreakdownControl
+        collectionId={collectionId}
+        areas={areas}
+        areaIds={areaIds}
+        onChange={(saved) => {
+          setAreaIds(saved);
+          // Both split reads change with the choice; the tiles without a split refresh harmlessly.
+          void queryClient.invalidateQueries({ queryKey: ["overview", collectionId] });
+        }}
+      />
       <section style={SECTION_STYLE}>
         <h3 style={SECTION_LABEL}>Value</h3>
         {value.data ? (
@@ -476,7 +566,7 @@ export function OverviewPanel({
         ) : (
           <SectionSkeleton />
         )}
-        <ValueHistoryChart collectionId={collectionId} />
+        <ValueHistoryChart collectionId={collectionId} base={base} />
       </section>
       <section style={SECTION_STYLE}>
         <h3 style={SECTION_LABEL}>Progress</h3>

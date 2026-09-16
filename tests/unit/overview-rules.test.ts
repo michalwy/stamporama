@@ -4,6 +4,7 @@ import {
   buildGrowthSeries,
   classifyPurchaseReturns,
   monthKey,
+  resolveAreaBreakdown,
   rollUpAreaCoverage,
   tallyChecklists,
   type ChecklistProgress,
@@ -136,6 +137,99 @@ describe("rollUpAreaCoverage", () => {
       [{ issueId: "i1", owned: 1, requiredCount: 2 }]
     );
     assert.equal(tracked.length, 0);
+  });
+
+  it("by default reports no Other line — the top level covers the whole tree", () => {
+    const rollup = rollUpAreaCoverage(areas, [], []);
+    assert.equal(rollup.chosen, false);
+    assert.equal(rollup.other, null);
+  });
+
+  describe("with chosen areas (#1330)", () => {
+    const issues = [
+      { issueId: "i1", areaId: "gg" },
+      { issueId: "i2", areaId: "pl" },
+      { issueId: "i3", areaId: "de" },
+      { issueId: "i4", areaId: "fr" },
+    ];
+    const checklists = [
+      { issueId: "i1", owned: 1, requiredCount: 4 },
+      { issueId: "i2", owned: 3, requiredCount: 4 },
+      { issueId: "i3", owned: 2, requiredCount: 4 },
+      { issueId: "i4", owned: 0, requiredCount: 0 },
+    ];
+
+    it("counts a nested pair each over its own subtree, and the rest under Other", () => {
+      const rollup = rollUpAreaCoverage(areas, issues, checklists, ["gg", "pl"]);
+      assert.equal(rollup.chosen, true);
+      const byId = new Map(rollup.tracked.map((t) => [t.areaId, t]));
+      // Poland holds GG's checklist too; GG holds only its own. Nothing is summed across the two.
+      assert.deepEqual(byId.get("pl"), {
+        areaId: "pl",
+        name: "Poland",
+        owned: 4,
+        required: 8,
+        checklistCount: 2,
+      });
+      assert.deepEqual(byId.get("gg"), {
+        areaId: "gg",
+        name: "GG",
+        owned: 1,
+        required: 4,
+        checklistCount: 1,
+      });
+      assert.deepEqual(
+        rollup.tracked.map((t) => t.areaId),
+        ["gg", "pl"]
+      );
+      // Germany and France lie outside: Germany's checklist is Other's, France's empty one is not.
+      assert.deepEqual(rollup.other, { owned: 2, required: 4, checklistCount: 1 });
+      assert.deepEqual(rollup.untracked, []);
+    });
+
+    it("names a chosen area with no checklist as untracked, and Other with none as zero", () => {
+      const rollup = rollUpAreaCoverage(areas, issues, checklists, ["fr"]);
+      assert.deepEqual(rollup.untracked, [{ areaId: "fr", name: "France" }]);
+      assert.deepEqual(rollup.other, { owned: 6, required: 12, checklistCount: 3 });
+    });
+
+    it("has no Other line when the chosen areas cover the whole tree", () => {
+      const rollup = rollUpAreaCoverage(areas, issues, checklists, ["pl", "de", "fr"]);
+      assert.equal(rollup.other, null);
+    });
+
+    it("falls back to the top level when every chosen area has gone from the tree", () => {
+      const rollup = rollUpAreaCoverage(areas, issues, checklists, ["ghost"]);
+      assert.equal(rollup.chosen, false);
+      assert.deepEqual(rollup.tracked.map((t) => t.areaId).sort(), ["de", "pl"]);
+    });
+  });
+});
+
+describe("resolveAreaBreakdown", () => {
+  const areas = [
+    { id: "eu", parentId: null, name: "Europe" },
+    { id: "af", parentId: null, name: "Africa" },
+    { id: "pl", parentId: "eu", name: "Poland" },
+    { id: "gg", parentId: "pl", name: "GG" },
+    { id: "de", parentId: "eu", name: "Germany" },
+    { id: "eg", parentId: "af", name: "Egypt" },
+  ];
+
+  it("defaults to the top-level areas with nothing outside them", () => {
+    assert.deepEqual(resolveAreaBreakdown(areas, []), {
+      chosen: false,
+      areaIds: ["eu", "af"],
+      outsideAreaIds: [],
+    });
+  });
+
+  it("returns chosen areas in tree order, parent before child, and every area under none", () => {
+    assert.deepEqual(resolveAreaBreakdown(areas, ["gg", "eg", "pl"]), {
+      chosen: true,
+      areaIds: ["pl", "gg", "eg"],
+      outsideAreaIds: ["eu", "de", "af"],
+    });
   });
 });
 

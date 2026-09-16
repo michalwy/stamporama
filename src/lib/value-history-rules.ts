@@ -45,6 +45,13 @@ export interface ValueHistoryArea {
   name: string;
 }
 
+export interface ValueHistorySplitArea extends ValueHistoryArea {
+  /** The first recorded day carrying a row for this area, or null when none does. Later than the
+   * series' first day when the area's history does not reach back that far (#1330) — the chart marks
+   * where it begins rather than drawing the days before as zero. */
+  historyFrom: string | null;
+}
+
 export interface ValueHistory {
   baseCurrency: string;
   /** Oldest first, one per recorded day in the current base currency. Missing days are not filled. */
@@ -53,9 +60,22 @@ export interface ValueHistory {
    * axis with these, and re-converting them at today's rate would be today's claim — so they are
    * left out and counted, never silently dropped. */
   otherCurrencyDays: number;
-  /** The top-level areas the chart can split by, in the tree's own order — only those with a
-   * non-zero point somewhere, since a line lying on the axis for its whole length says nothing. */
-  areas: ValueHistoryArea[];
+  /** True when the split is by the areas the collector chose (#1330) rather than the top level. */
+  chosen: boolean;
+  /** The areas the chart can split by, in the tree's own order. By default the top-level areas with
+   * a non-zero point somewhere, since a line lying on the axis for its whole length says nothing;
+   * chosen areas are all kept — the collector asked for them. */
+  areas: ValueHistorySplitArea[];
+  /** Catalogue value of everything outside the chosen areas **today**, read live (#1330). Null by
+   * default, and when nothing lies outside them. It has no history: a copy under none of the chosen
+   * areas is not a figure the daily snapshot records, and it cannot be derived from the area rows
+   * because a stamp filed in two areas counts under both. */
+  other: {
+    catalogueValue: string;
+    copiesHeld: number;
+    unpricedCount: number;
+    unconvertibleCount: number;
+  } | null;
 }
 
 /** Fewer points than this and there is no line to draw — the chart shows its waiting state. */
@@ -78,18 +98,21 @@ export function dayNumber(day: string): number {
 }
 
 /**
- * The chart's series from the stored rows. `rootAreas` are the collection's top-level areas in tree
- * order: the split is by the areas a collection is scanned at, each carrying its whole subtree, and
- * area lines are never stacked — a stamp filed in two areas counts under both (ADR-0053 §3), so they
- * need not add up to the total.
+ * The chart's series from the stored rows. `splitAreas` are the areas to split by, in tree order: the
+ * top-level areas a collection is scanned at, or the ones the collector chose (`chosen`, #1330), each
+ * carrying its whole subtree. Area lines are never stacked — a stamp filed in two areas counts under
+ * both (ADR-0053 §3), and a chosen nested pair overlaps outright — so they need not add up to the
+ * total. `other` is not built here: it has no stored rows to build from.
  */
 export function buildValueHistory(
   rows: SnapshotRowInput[],
   baseCurrency: string,
-  rootAreas: ValueHistoryArea[]
-): ValueHistory {
-  const rootIds = new Set(rootAreas.map((a) => a.areaId));
+  splitAreas: ValueHistoryArea[],
+  chosen = false
+): Omit<ValueHistory, "other"> {
+  const rootIds = new Set(splitAreas.map((a) => a.areaId));
   const valued = new Set<string>();
+  const historyFrom = new Map<string, string>();
   let otherCurrencyDays = 0;
   const points: ValueHistoryPoint[] = [];
 
@@ -99,13 +122,15 @@ export function buildValueHistory(
       continue;
     }
     const areaValues: Record<string, string> = {};
+    const day = dayKey(row.day);
     for (const area of row.areas) {
       if (!rootIds.has(area.collectionAreaId)) continue;
       areaValues[area.collectionAreaId] = area.catalogueValue;
+      if (!historyFrom.has(area.collectionAreaId)) historyFrom.set(area.collectionAreaId, day);
       if (Number(area.catalogueValue) !== 0) valued.add(area.collectionAreaId);
     }
     points.push({
-      day: dayKey(row.day),
+      day,
       catalogueValue: row.catalogueValue,
       acquisitionCost: row.acquisitionCost,
       marketValue: row.marketValue,
@@ -123,7 +148,10 @@ export function buildValueHistory(
     baseCurrency,
     points,
     otherCurrencyDays,
-    areas: rootAreas.filter((a) => valued.has(a.areaId)),
+    chosen,
+    areas: splitAreas
+      .filter((a) => chosen || valued.has(a.areaId))
+      .map((a) => ({ ...a, historyFrom: historyFrom.get(a.areaId) ?? null })),
   };
 }
 
