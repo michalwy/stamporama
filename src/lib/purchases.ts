@@ -6,7 +6,7 @@ import { getOrFetchRate } from "./exchange-rates";
 import { resolvePurchaseContact } from "./contacts";
 import { allocateEntityNumber } from "./items";
 import { realizedProceedsForItems } from "./sales";
-import { summarizePurchaseReturn, type PurchaseReturn } from "./purchase-return";
+import { summarizePurchaseReturn, type PurchaseReturn, type ReturnBasis } from "./purchase-return";
 import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
 import { roundAmount } from "./decimal-input";
 import {
@@ -520,8 +520,8 @@ export async function getPurchaseReturn(
   ownerId: string,
   purchaseId: string
 ): Promise<PurchaseReturn> {
-  const { collectionId, baseCurrency } = await assertPurchaseOwner(ownerId, purchaseId);
-  return returnOverCopies(collectionId, baseCurrency, { lot: { purchaseId } });
+  const { collectionId, baseCurrency, kind } = await assertPurchaseOwner(ownerId, purchaseId);
+  return returnOverCopies(collectionId, baseCurrency, { lot: { purchaseId } }, returnBasisOf(kind));
 }
 
 /**
@@ -538,14 +538,24 @@ export async function getLotReturn(ownerId: string, lotId: string): Promise<Purc
   const lot = await prisma.purchaseLot.findUnique({
     where: { id: lotId },
     select: {
-      purchase: { select: { collection: { select: { id: true, ownerId: true, baseCurrency: true } } } },
+      purchase: {
+        select: {
+          kind: true,
+          collection: { select: { id: true, ownerId: true, baseCurrency: true } },
+        },
+      },
     },
   });
   if (!lot || lot.purchase.collection.ownerId !== ownerId) {
     throw new Error("Lot not found or access denied.");
   }
   const { id, baseCurrency } = lot.purchase.collection;
-  return returnOverCopies(id, baseCurrency, { lotId });
+  return returnOverCopies(id, baseCurrency, { lotId }, returnBasisOf(lot.purchase.kind));
+}
+
+/** An opening balance's return is against its opening value, never money spent (#1324). */
+function returnBasisOf(kind: string): ReturnBasis {
+  return isOpeningBalance({ kind }) ? "opening_value" : "spent";
 }
 
 /** Shared body of the two scopes above: cost-basis and realized proceeds over whichever copies the
@@ -553,7 +563,8 @@ export async function getLotReturn(ownerId: string, lotId: string): Promise<Purc
 async function returnOverCopies(
   collectionId: string,
   baseCurrency: string,
-  where: Prisma.ItemWhereInput
+  where: Prisma.ItemWhereInput,
+  basis: ReturnBasis
 ): Promise<PurchaseReturn> {
   const rows = await prisma.item.findMany({
     where: { ...where, collectionId, deliveryState: { not: "not_delivered" } },
@@ -578,7 +589,8 @@ async function returnOverCopies(
       proceedsResolved: realized.resolved.has(r.id),
     })),
     realized.total,
-    baseCurrency
+    baseCurrency,
+    basis
   );
 }
 

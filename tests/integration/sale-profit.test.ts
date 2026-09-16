@@ -174,7 +174,7 @@ describe("sale profit and loss (#168)", () => {
     assert.deepEqual(detail.profit, {
       copyCount: 2,
       countedCount: 2,
-      leftOut: { costPending: 0, noCost: 0, noRate: 0, unsplittable: 0 },
+      leftOut: { costPending: 0, noCost: 0, noOpeningValue: 0, noRate: 0, unsplittable: 0 },
       proceeds: "45.00",
       cost: "20.00",
       profit: "25.00",
@@ -237,7 +237,7 @@ describe("sale profit and loss (#168)", () => {
 
     const detail = (await getSaleDetail(userId, saleId))!;
     assert.equal(detail.profit.profit, null);
-    assert.deepEqual(detail.profit.leftOut, { costPending: 0, noCost: 1, noRate: 0, unsplittable: 1 });
+    assert.deepEqual(detail.profit.leftOut, { costPending: 0, noCost: 1, noOpeningValue: 0, noRate: 0, unsplittable: 1 });
   });
 
   it("adds the sale screens up to exactly the Overview's realized figure", async () => {
@@ -246,7 +246,7 @@ describe("sale profit and loss (#168)", () => {
     let proceeds = 0;
     let cost = 0;
     let profit = 0;
-    const leftOut = { costPending: 0, noCost: 0, noRate: 0, unsplittable: 0 };
+    const leftOut = { costPending: 0, noCost: 0, noOpeningValue: 0, noRate: 0, unsplittable: 0 };
     for (const saleId of saleIds) {
       const { profit: p } = (await getSaleDetail(userId, saleId))!;
       copies += p.copyCount;

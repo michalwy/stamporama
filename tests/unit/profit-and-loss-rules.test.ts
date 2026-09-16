@@ -17,7 +17,7 @@ import type { ProfitFigures } from "../../src/lib/sale-profit";
 // what these cases pin down is how periods, platforms and write-offs add up — and that a copy that
 // cannot be counted stays counted apart rather than read as zero.
 
-const NONE = { costPending: 0, noCost: 0, noRate: 0, unsplittable: 0 };
+const NONE = { costPending: 0, noCost: 0, noOpeningValue: 0, noRate: 0, unsplittable: 0 };
 
 function figures(proceeds: string, cost: string, copies = 1): ProfitFigures {
   return {
@@ -79,8 +79,28 @@ describe("write-offs", () => {
       writeOff("2026-01-12", null, "open"),
       { costBasis: null, lotId: null, lotStatus: null, lotValued: null },
     ]);
-    assert.deepEqual(summary, { copyCount: 4, countedCount: 2, costPending: 1, noCost: 1, cost: "5.50" });
+    assert.deepEqual(summary, {
+      copyCount: 4,
+      countedCount: 2,
+      costPending: 1,
+      noCost: 1,
+      noOpeningValue: 0,
+      cost: "5.50",
+    });
     assert.deepEqual(describeWriteOffLeftOut(summary), ["1 with cost pending", "1 with no cost recorded"]);
+  });
+
+  // #1324: an opening value counts towards profit and loss, so writing off a valued copy is a loss
+  // at that value; one from a lot with no value has no loss to state, and says why.
+  it("writes off an opening value as a loss and counts a copy without one apart", () => {
+    const summary = summarizeWriteOffs([
+      writeOff("2026-01-10", "3.00"),
+      { costBasis: null, lotId: "opening-lot", lotStatus: "closed", lotValued: false },
+    ]);
+    assert.equal(summary.cost, "3.00");
+    assert.equal(summary.noOpeningValue, 1);
+    assert.equal(summary.noCost, 0);
+    assert.deepEqual(describeWriteOffLeftOut(summary), ["1 from an opening balance with no value"]);
   });
 });
 

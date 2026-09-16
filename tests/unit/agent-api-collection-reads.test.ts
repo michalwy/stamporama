@@ -540,6 +540,7 @@ const SUMMARY: HoldingsSummaryRow = {
   uncertainBaseAmount: "300.00",
   market: { totalBaseAmount: "210.00", valuedCount: 5, noEvidenceCount: 38 },
   cost: { totalCostBasis: "640.00", knownCount: 20, pendingCount: 8, noneCount: 15 },
+  openingValue: { totalCostBasis: "75.00", knownCount: 6, pendingCount: 0, noneCount: 2 },
   writeOff: {
     cost: { totalCostBasis: "30.00", knownCount: 1, pendingCount: 0, noneCount: 2 },
     count: 3,
@@ -570,6 +571,12 @@ describe("the valuation summary", () => {
     assert.equal(row.cost.total, "640.00");
     assert.equal(row.writeOff.cost.total, "30.00");
     assert.equal(row.writeOff.copies, 3);
+  });
+
+  // #1324: what opening balances were stated to be worth is never what was paid.
+  it("keeps the opening value out of the cost, with its own counts", () => {
+    assert.equal(row.cost.total, "640.00");
+    assert.deepEqual(row.openingValue, { total: "75.00", knownCount: 6, pendingCount: 0, noneCount: 2 });
   });
 
   it("carries the uncertain share beside the catalogue total", () => {

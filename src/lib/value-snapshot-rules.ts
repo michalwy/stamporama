@@ -45,12 +45,15 @@ export function holdingsSnapshotFields(summary: HoldingsSummary): HoldingsSnapsh
     marketValue: summary.market.totalBaseAmount,
     marketValuedCount: summary.market.valuedCount,
     marketNoEvidenceCount: summary.market.noEvidenceCount,
+    // What purchases cost, never an opening value (#1324): the chart's cost line means money spent.
+    // Copies from opening balances are in neither the sum nor its three counts.
     acquisitionCost: summary.cost.totalCostBasis,
     costKnownCount: summary.cost.knownCount,
     costPendingCount: summary.cost.pendingCount,
     costNoneCount: summary.cost.noneCount,
-    // The cost states partition the held copies, so their sum is the held count.
-    copiesHeld: costBasisCopyCount(summary.cost),
+    // The cost states partition the held copies between the two halves, so the sum over both is the
+    // held count.
+    copiesHeld: costBasisCopyCount(summary.cost) + costBasisCopyCount(summary.openingValue),
   };
 }
 

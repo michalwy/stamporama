@@ -5,6 +5,8 @@ import {
   lotCostInputs,
   aggregateCostBasis,
   aggregatePurchaseCostsByKey,
+  lotIsOpeningBalance,
+  splitCostBasis,
   type PurchaseCostInput,
 } from "../../src/lib/cost-basis";
 
@@ -35,14 +37,14 @@ describe("resolveCostBasis", () => {
   it("is `none` for a null snapshot on a closed lot (e.g. a not-delivered copy)", () => {
     assert.deepEqual(
       resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "closed", lotValued: true }),
-      { state: "none" }
+      { state: "none", reason: "unrecorded" }
     );
   });
 
   it("is `none` for a copy with no acquisition lot", () => {
     assert.deepEqual(
       resolveCostBasis({ costBasis: null, lotId: null, lotStatus: null, lotValued: null }),
-      { state: "none" }
+      { state: "none", reason: "unrecorded" }
     );
   });
 
@@ -51,22 +53,68 @@ describe("resolveCostBasis", () => {
   it("is `none` for a null snapshot on an open lot that carries no value", () => {
     assert.deepEqual(
       resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "open", lotValued: false }),
-      { state: "none" }
+      { state: "none", reason: "no_opening_value" }
     );
   });
 
   it("is `none` for a null snapshot on a closed lot that carries no value", () => {
     assert.deepEqual(
       resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "closed", lotValued: false }),
-      { state: "none" }
+      { state: "none", reason: "no_opening_value" }
     );
   });
 
   it("is `none` when a lot id lingers without a resolvable status", () => {
     assert.deepEqual(
       resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: null, lotValued: null }),
-      { state: "none" }
+      { state: "none", reason: "unrecorded" }
     );
+  });
+});
+
+// #1324: an opening value is a cost basis for profit and loss but never money spent, so a holdings
+// scope sums it apart from what purchases cost — every copy in exactly one of the two.
+describe("splitCostBasis", () => {
+  it("sums purchase cost and opening value apart, each with its own states", () => {
+    const split = splitCostBasis(
+      [
+        { costBasis: "10.00", lotId: "p1", lotStatus: "closed", lotValued: true, openingBalance: false },
+        { costBasis: null, lotId: null, lotStatus: null, lotValued: null, openingBalance: false },
+        { costBasis: "4.50", lotId: "o1", lotStatus: "closed", lotValued: true, openingBalance: true },
+        { costBasis: null, lotId: "o2", lotStatus: "open", lotValued: true, openingBalance: true },
+        { costBasis: null, lotId: "o3", lotStatus: "closed", lotValued: false, openingBalance: true },
+      ],
+      "PLN"
+    );
+    assert.deepEqual(split.cost, {
+      baseCurrency: "PLN",
+      totalCostBasis: "10.00",
+      knownCount: 1,
+      pendingCount: 0,
+      noneCount: 1,
+    });
+    assert.deepEqual(split.openingValue, {
+      baseCurrency: "PLN",
+      totalCostBasis: "4.50",
+      knownCount: 1,
+      pendingCount: 1,
+      noneCount: 1,
+    });
+  });
+
+  it("states both halves over an empty scope", () => {
+    const split = splitCostBasis([], "EUR");
+    assert.equal(split.cost.totalCostBasis, "0.00");
+    assert.equal(split.openingValue.knownCount + split.openingValue.noneCount, 0);
+  });
+});
+
+describe("lotIsOpeningBalance", () => {
+  it("is true only for a lot on an opening balance", () => {
+    assert.equal(lotIsOpeningBalance({ purchase: { kind: "opening_balance" } }), true);
+    assert.equal(lotIsOpeningBalance({ purchase: { kind: "purchase" } }), false);
+    assert.equal(lotIsOpeningBalance(null), false);
+    assert.equal(lotIsOpeningBalance(undefined), false);
   });
 });
 

@@ -789,10 +789,11 @@ export interface AgentCostTotal {
 /**
  * The valuation summary over a scope.
  *
- * **Four answers to four different questions, grouped rather than flattened, and that is
+ * **Five answers to five different questions, grouped rather than flattened, and that is
  * deliberate.** The catalogue is a published list price, the market is what copies like these have
- * fetched, the cost is what this collector paid, and the write-off is what the copies in scope that
- * are gone had cost. `valuation.md` is emphatic that these must not be blurred; eighteen sibling
+ * fetched, the cost is what this collector paid, the opening value is what the copies brought in on
+ * an opening balance were stated to be worth (#1324), and the write-off is what the copies in scope
+ * that are gone had cost. `valuation.md` is emphatic that these must not be blurred; eighteen sibling
  * scalars on one object would invite exactly that, where four named groups make the distinction
  * structural.
  *
@@ -808,6 +809,9 @@ export interface AgentValuationSummary {
   readonly catalogue: AgentCatalogueTotal;
   readonly market: AgentMarketTotal;
   readonly cost: AgentCostTotal;
+  /** What the held copies from opening balances were stated to be worth (#1324) — a cost basis for
+   *  profit and loss that nobody paid, so never part of {@link cost}. */
+  readonly openingValue: AgentCostTotal;
   readonly writeOff: { readonly cost: AgentCostTotal; readonly copies: number };
 }
 
@@ -831,6 +835,7 @@ export interface HoldingsSummaryRow {
     readonly pendingCount: number;
     readonly noneCount: number;
   };
+  readonly openingValue: HoldingsSummaryRow["cost"];
   readonly writeOff: {
     readonly cost: {
       readonly totalCostBasis: string;
@@ -868,6 +873,7 @@ export function valuationSummary(row: HoldingsSummaryRow): AgentValuationSummary
       noEvidenceCount: row.market.noEvidenceCount,
     },
     cost: costTotal(row.cost),
+    openingValue: costTotal(row.openingValue),
     writeOff: { cost: costTotal(row.writeOff.cost), copies: row.writeOff.count },
   };
 }

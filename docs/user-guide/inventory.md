@@ -299,7 +299,12 @@ occasionally.
   [cost-basis](#cost-basis) of the same copies (in your base currency). It calls out copies
   whose cost is still **pending** (on an open purchase lot) or has **no cost recorded** (added
   by hand, or dropped from a lot) — those contribute nothing to the total, the same way the
-  per-copy cost-basis distinguishes them.
+  per-copy cost-basis distinguishes them. Copies from an
+  [opening balance](purchases.md#opening-balances) are never in it: nothing was paid for them.
+- **Opening value** — shown only when some of the copies came in on an opening balance: what their
+  lots were stated to be worth, split across the copies the same way. It counts towards profit and
+  loss when they sell, but it is not money spent, so it has its own line. Copies whose lot has no
+  opening value are counted beside it as *without a value*.
 
 Comparing the lines shows list price, what the market pays and what you paid, side by side. What
 you **paid** is ruled off from what the copies are **worth** and labelled *Cost accounted to

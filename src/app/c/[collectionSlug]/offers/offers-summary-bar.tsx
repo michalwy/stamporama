@@ -274,6 +274,13 @@ export function OffersSummaryBar({
   const costNotes: string[] = [];
   if (cost.pendingCount > 0) costNotes.push(`${cost.pendingCount} pending`);
   if (cost.noneCount > 0) costNotes.push(`${cost.noneCount} no cost recorded`);
+  // Copies from opening balances carry an opening value, never a purchase cost (#1324): a row of
+  // its own, drawn only when some of these copies came in that way.
+  const opening = holdings.openingValue;
+  const openingCopies = opening.knownCount + opening.pendingCount + opening.noneCount;
+  const openingNotes: string[] = [];
+  if (opening.pendingCount > 0) openingNotes.push(`${opening.pendingCount} pending`);
+  if (opening.noneCount > 0) openingNotes.push(`${opening.noneCount} without a value`);
 
   return (
     <div style={FRAME_STYLE}>
@@ -345,6 +352,18 @@ export function OffersSummaryBar({
               {costNotes.length > 0 ? ` · ${costNotes.join(" · ")}` : ""}
             </span>
           </div>
+          {openingCopies > 0 && (
+            <div style={ROW_STYLE}>
+              <span style={LABEL_STYLE}>Opening value</span>
+              <span style={AMOUNT_STYLE}>
+                {opening.totalCostBasis} {opening.baseCurrency}
+              </span>
+              <span style={NOTE_STYLE}>
+                {opening.knownCount} valued
+                {openingNotes.length > 0 ? ` · ${openingNotes.join(" · ")}` : ""}
+              </span>
+            </div>
+          )}
 
           {summary.platforms.length > 0 && (
             <>

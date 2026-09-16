@@ -47,7 +47,9 @@ built by #649–#651).
   2026-09-15: one rule, and a copy that cannot be counted — no rate, cost pending, no cost, an
   unsplittable share — is left out of **both** sides and counted by why on the tile. Purchase ROI
   (`realizedProceedsByGroup`) still attributes proceeds without the no-rate exclusion; it answers a
-  per-order question and was not part of #168. Since #1305 `realizedProfit` sums
+  per-order question and was not part of #168. **Opening balances are not purchases**: the ROI tally
+  reads purchase lots only, and the holdings tile names an opening value beside the cost and measures
+  the surplus against both (#1324, see `purchases-and-intake.md`). Since #1305 `realizedProfit` sums
   `listSaleProfitRows`, the per-sale read the profit and loss screen lists, so the tile and that
   screen's all-dates total are one read.
 

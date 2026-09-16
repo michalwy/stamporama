@@ -187,6 +187,9 @@ counted as costing nothing — when:
 
 - **its cost is pending** — it belongs to a purchase lot that is still open;
 - **it has no cost recorded** — you added it by hand, or it came through no purchase lot;
+- **it has no opening value** — it came in on an [opening balance](purchases.md#opening-balances)
+  whose lot was given no value, so there is nothing to measure a profit against (a copy from a lot
+  *with* an opening value counts against its share of it, as against a purchase price);
 - **there is no exchange rate** — the sale, or the shipping you paid, is in another currency and no
   rate to your base currency is known for the sale date; then none of the sale's copies can be
   counted;

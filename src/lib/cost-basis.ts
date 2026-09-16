@@ -15,7 +15,9 @@
 //                   or via a channel that records no cost), it was dropped from a closed
 //                   lot as not-delivered (ADR-0009 §5) and so carries no frozen cost, or its
 //                   lot is on an opening balance and carries **no opening value** (#1323) —
-//                   open or closed, since there is nothing for a close to freeze.
+//                   open or closed, since there is nothing for a close to freeze. That last
+//                   case carries `reason: "no_opening_value"` so a screen can say *why* there is
+//                   no figure (#1324); every other `none` is `"unrecorded"`.
 //
 // Profit/loss (out of scope for #123) is `sale proceeds − cost-basis`, defined only when
 // the state is `known`; a `pending` or `none` copy has no basis to compute against yet.
@@ -25,7 +27,12 @@
 export type CostBasisState =
   | { state: "known"; amount: string }
   | { state: "pending" }
-  | { state: "none" };
+  | { state: "none"; reason: CostBasisNoneReason };
+
+/** Why a copy has no cost basis. `no_opening_value` is an opening balance's lot stated without a
+ * value (#1323, #1324) — a deliberate absence, told apart so it is never read as *not recorded*;
+ * `unrecorded` is everything else (no lot, or dropped from a closed lot). */
+export type CostBasisNoneReason = "unrecorded" | "no_opening_value";
 
 /** The minimal copy projection needed to resolve cost-basis: the frozen snapshot plus the
  * owning lot's id and lifecycle status (`"open" | "closed"`, or null when there is no lot). */
@@ -64,7 +71,41 @@ export function resolveCostBasis(input: CostBasisInput): CostBasisState {
   if (input.lotId != null && input.lotStatus === "open" && input.lotValued !== false) {
     return { state: "pending" };
   }
-  return { state: "none" };
+  return { state: "none", reason: input.lotValued === false ? "no_opening_value" : "unrecorded" };
+}
+
+/** A copy as a holdings summary reads it (#1324): its cost-basis inputs, and whether its lot is on an
+ * opening balance — whose frozen amount is an opening value, a cost basis for profit and loss but
+ * **never money spent**, so it is summed apart from what purchases cost. */
+export interface HoldingsCostInput extends CostBasisInput {
+  openingBalance: boolean;
+}
+
+/** Whether a copy's owning lot is on an opening balance, read off the lot as selected
+ *  (`purchase: { select: { kind: true } }`). A copy with no lot is not. */
+export function lotIsOpeningBalance(
+  lot: { purchase: { kind: string } } | null | undefined
+): boolean {
+  return lot?.purchase.kind === "opening_balance";
+}
+
+/** A holdings scope's cost, split by what the amount means (#1324): `cost` over copies from
+ *  purchases (or from no lot at all) — money spent — and `openingValue` over copies from opening
+ *  balances. Every copy lands in exactly one of the two. Pure. */
+export function splitCostBasis(
+  inputs: HoldingsCostInput[],
+  baseCurrency: string
+): { cost: CostBasisTotal; openingValue: CostBasisTotal } {
+  return {
+    cost: aggregateCostBasis(
+      inputs.filter((i) => !i.openingBalance),
+      baseCurrency
+    ),
+    openingValue: aggregateCostBasis(
+      inputs.filter((i) => i.openingBalance),
+      baseCurrency
+    ),
+  };
 }
 
 /** Aggregate actual purchase cost-basis over a set of copies (#134), mirroring the shape
