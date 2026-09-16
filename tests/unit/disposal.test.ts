@@ -106,6 +106,7 @@ describe("costBasisCopyCount", () => {
         knownCount: 2,
         pendingCount: 1,
         noneCount: 3,
+        noOpeningValueCount: 1,
       }),
       6
     );

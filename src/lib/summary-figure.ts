@@ -27,19 +27,30 @@
 // **A real zero therefore survives**, and reads differently from an absence: only the counts
 // separate a scope whose copies genuinely add to nothing from one whose figures were never
 // computed, and nothing else on the row could.
+//
+// A fourth state arrived with opening balances (#1325):
+//
+//   not applicable  nothing contributed, nothing is waiting, and every copy in scope is one the
+//                   figure **cannot** apply to — a copy from an opening-balance lot with no opening
+//                   value has no cost, open or closed. *Not worked out yet* would promise a figure
+//                   that is never coming, and `0.00` would state a value nobody gave.
 
 /** How much of the scope is behind a figure. See the module header for what each state prints. */
-export type FigureState = "unknown" | "partial" | "complete";
+export type FigureState = "unknown" | "not_applicable" | "partial" | "complete";
 
 export interface StatedFigure {
   state: FigureState;
-  /** The amount to print, 2 dp; `null` exactly when {@link state} is `"unknown"`. */
+  /** The amount to print, 2 dp; `null` exactly when {@link state} is `"unknown"` or
+   *  `"not_applicable"`. */
   amount: string | null;
 }
 
 /** What the screen says in place of an amount it has not got. The collector's terms, not the
  * engine's: the figure is not *unavailable* or *null*, it simply has not been worked out yet. */
 export const NOT_WORKED_OUT = "not worked out yet";
+
+/** What the screen says in place of an amount that cannot exist for this scope (#1325). */
+export const NOT_APPLICABLE = "not applicable";
 
 /**
  * An amount as it may be shown — never as a negative zero.
@@ -54,12 +65,20 @@ function plainAmount(amount: string): string {
 /**
  * How to state one aggregate figure.
  *
- * @param amount   the computed sum, 2-dp string, as the read model already states it
- * @param behind   copies that contributed to it
- * @param missing  copies in the same scope that could not
+ * @param amount         the computed sum, 2-dp string, as the read model already states it
+ * @param behind         copies that contributed to it
+ * @param missing        copies in the same scope that could not *yet*
+ * @param notApplicable  copies in the same scope the figure can never apply to (#1325) — neither
+ *                       behind it nor missing from it, so they only decide the empty case
  */
-export function stateFigure(amount: string, behind: number, missing: number): StatedFigure {
+export function stateFigure(
+  amount: string,
+  behind: number,
+  missing: number,
+  notApplicable = 0
+): StatedFigure {
   if (behind === 0 && missing > 0) return { state: "unknown", amount: null };
+  if (behind === 0 && notApplicable > 0) return { state: "not_applicable", amount: null };
   return { state: missing > 0 ? "partial" : "complete", amount: plainAmount(amount) };
 }
 
@@ -69,10 +88,14 @@ export function stateFigure(amount: string, behind: number, missing: number): St
  * A difference against an absence is not a smaller figure, it is no figure: subtracting a cost
  * nobody has worked out yet states the whole of the proceeds as profit, and subtracting proceeds
  * nobody could attribute states the whole of the spend as a loss. So both sides have to be stated
- * before the difference is, and it inherits the weaker of their states.
+ * before the difference is, and it inherits the weaker of their states — a side that is *not
+ * applicable* makes the difference not applicable too, unless another side is still to come.
  */
 export function differenceFigure(amount: string, sides: StatedFigure[]): StatedFigure {
   if (sides.some((side) => side.state === "unknown")) return { state: "unknown", amount: null };
+  if (sides.some((side) => side.state === "not_applicable")) {
+    return { state: "not_applicable", amount: null };
+  }
   return {
     state: sides.some((side) => side.state === "partial") ? "partial" : "complete",
     amount: plainAmount(amount),

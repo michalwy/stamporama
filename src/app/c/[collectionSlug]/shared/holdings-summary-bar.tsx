@@ -1,9 +1,12 @@
 "use client";
 
 import { costBasisCopyCount, type HoldingsSummary } from "@/lib/valuation";
+import type { CostBasisTotal } from "@/lib/cost-basis";
+import type { OpeningValue } from "@/lib/opening-value";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { PurchaseSpend } from "@/lib/purchase-spend";
 import {
+  NOT_APPLICABLE,
   NOT_WORKED_OUT,
   differenceFigure,
   negatedAmount,
@@ -33,6 +36,10 @@ import { Icon } from "@/app/icons";
  * the **collapsed** bar — which is the headline row alone — a line it does not need. The groups
  * inside the expander take one each, because that is where "is this the same kind of thing as the
  * row above" is actually asked.
+ *
+ * An **opening balance** (#1325) leads with its opening value instead: nothing was paid and nothing
+ * shipped, so an order total with a breakdown under it would state something untrue. The groups
+ * below are the purchase's, unchanged.
  *
  * Currency is per amount and stays per amount. The order is stated in its transaction currency with
  * a base-currency approximation beside it while the valuations are in the base currency outright,
@@ -232,9 +239,29 @@ function SkeletonRows({ withCatalog }: { withCatalog: boolean }) {
   );
 }
 
+/** Words in an amount slot, where the slot has no amount to hold: muted and set in text figures, so
+ * the eye does not take them for a number. */
+function AbsentAmount({ text, style }: { text: string; style: React.CSSProperties }) {
+  return (
+    <span
+      style={{
+        ...style,
+        fontSize: "0.8125rem",
+        fontWeight: 500,
+        color: "var(--color-text-muted)",
+        fontVariantNumeric: "normal",
+        letterSpacing: "normal",
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
 /** The amount slot, in the one place that decides whether there is an amount to put in it (#1184).
  * A figure with nothing behind it says so in the collector's terms instead of printing a sum of
- * nothing; the grey sentence beside it, which counts what is missing, is unchanged either way. */
+ * nothing; the grey sentence beside it, which counts what is missing, is unchanged either way. A
+ * figure that cannot apply to anything in scope (#1325) says that instead of promising it. */
 function FigureAmount({
   figure,
   currency,
@@ -249,18 +276,10 @@ function FigureAmount({
 }) {
   if (figure.amount === null) {
     return (
-      <span
-        style={{
-          ...style,
-          fontSize: "0.8125rem",
-          fontWeight: 500,
-          color: "var(--color-text-muted)",
-          fontVariantNumeric: "normal",
-          letterSpacing: "normal",
-        }}
-      >
-        {NOT_WORKED_OUT}
-      </span>
+      <AbsentAmount
+        text={figure.state === "not_applicable" ? NOT_APPLICABLE : NOT_WORKED_OUT}
+        style={style}
+      />
     );
   }
   return (
@@ -290,6 +309,29 @@ function percentNote(percent: number | null): string {
 
 function copiesWord(n: number): string {
   return `cop${n === 1 ? "y" : "ies"}`;
+}
+
+/** A cost over a set of copies, stated (#1184). A copy from an opening-balance lot with no opening
+ * value is neither behind the figure nor missing from it — its cost is not applicable (#1325) — so a
+ * scope made only of such copies reads *not applicable* rather than *not worked out yet*. */
+function costFigure(total: CostBasisTotal): StatedFigure {
+  return stateFigure(
+    total.totalCostBasis,
+    total.knownCount,
+    total.pendingCount + total.noneCount - total.noOpeningValueCount,
+    total.noOpeningValueCount
+  );
+}
+
+/** The copies a cost has nothing for, by why: still to be frozen, never recorded, or — from an opening
+ * balance's unvalued lot — not applicable (#1325). */
+function costGapNotes(total: CostBasisTotal, pendingWord = "pending"): string[] {
+  const notes: string[] = [];
+  const unrecorded = total.noneCount - total.noOpeningValueCount;
+  if (total.pendingCount > 0) notes.push(`${total.pendingCount} ${pendingWord}`);
+  if (unrecorded > 0) notes.push(`${unrecorded} no cost recorded`);
+  if (total.noOpeningValueCount > 0) notes.push(`${total.noOpeningValueCount} without a value`);
+  return notes;
 }
 
 /**
@@ -367,6 +409,69 @@ function SpendRow({
   );
 }
 
+/** The words for a lot count: `1 lot`, `3 lots`. */
+function lotsWord(n: number): string {
+  return `lot${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * An opening balance's lead line (#1325): what it brings in at value, where a purchase states what it
+ * cost. No price or shipping sits under it — nothing was paid and nothing was shipped.
+ *
+ * The amount is in the document's currency with the base-currency equivalent beside it, exactly as a
+ * purchase's total is. **No value is said in words, never `0.00`** (#1184): a lot without an opening
+ * value is not a lot worth nothing. Where only some lots carry one the sum is still stated — it is the
+ * value the collector gave — and the note says how many do not, so it is never read as the whole.
+ */
+function OpeningValueRow({
+  openingValue,
+  children,
+}: {
+  openingValue: OpeningValue;
+  children?: React.ReactNode;
+}) {
+  const { value, currency, baseCurrency } = openingValue;
+  // Not "Opening value": the group below has a row of that name, which is the part frozen onto
+  // copies — the same distinction #852 drew between "Order total" and "Purchase cost".
+  const label = openingValue.scope === "lot" ? "Lot value" : "Opening total";
+
+  const notes: string[] = [];
+  let warn = false;
+  if (value && currency !== baseCurrency) {
+    if (value.base) {
+      notes.push(`≈ ${value.base} ${baseCurrency}`);
+    } else {
+      notes.push(
+        `no exchange rate to ${baseCurrency} recorded for this opening balance, so this cannot be stated in it`
+      );
+      warn = true;
+    }
+  }
+  // Only beside a figure: with no value at all the amount slot already says so, and a lot is one lot.
+  if (value && openingValue.unvaluedLotCount > 0) {
+    notes.push(
+      `${openingValue.unvaluedLotCount} of ${openingValue.lotCount} ${lotsWord(openingValue.lotCount)} without a value`
+    );
+  }
+
+  return (
+    <div style={ROW_STYLE}>
+      <span style={HEADLINE_LABEL_STYLE}>{label}</span>
+      {value ? (
+        <span style={HEADLINE_AMOUNT_STYLE}>
+          {value.tx} {currency}
+        </span>
+      ) : (
+        <AbsentAmount text="no opening value" style={HEADLINE_AMOUNT_STYLE} />
+      )}
+      {notes.length > 0 && (
+        <span style={warn ? WARN_NOTE_STYLE : NOTE_STYLE}>{notes.join(" · ")}</span>
+      )}
+      {children}
+    </div>
+  );
+}
+
 /**
  * What this scope has earned back so far (#559), as further rows of the bar rather than a frame of
  * its own: cost and return are the two halves of one question about the very same copies, and two
@@ -386,16 +491,8 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
     ret.soldCount - ret.unattributedCount,
     ret.unattributedCount
   );
-  const spent = stateFigure(
-    ret.spent.totalCostBasis,
-    ret.spent.knownCount,
-    ret.spent.pendingCount + ret.spent.noneCount
-  );
-  const soldCost = stateFigure(
-    ret.soldCost.totalCostBasis,
-    ret.soldCost.knownCount,
-    ret.soldCost.pendingCount + ret.soldCost.noneCount
-  );
+  const spent = costFigure(ret.spent);
+  const soldCost = costFigure(ret.soldCost);
   // Both are differences, so both wait for both of their sides: against a spend nobody has costed
   // yet, the whole of the proceeds would read as profit.
   const netReturn = differenceFigure(ret.netReturn, [realized, spent]);
@@ -405,6 +502,9 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
   const opening = ret.basis === "opening_value";
   const costWord = opening ? "opening value of" : "spent on";
   const noCostYet = opening ? "no opening value worked out yet" : "no cost worked out yet";
+  // Copies from lots with no opening value have no cost to measure against, and never will (#1325).
+  const noCost = (figure: StatedFigure) =>
+    figure.state === "not_applicable" ? "no opening value" : noCostYet;
 
   return (
     <>
@@ -431,7 +531,7 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
             paid into what is still held and what was written off (#396), and this figure is both. */}
         <span style={NOTE_STYLE}>
           {spent.amount === null
-            ? `${noCostYet} for the ${ret.copyCount} ${copiesWord(ret.copyCount)}`
+            ? `${noCost(spent)} for the ${ret.copyCount} ${copiesWord(ret.copyCount)}`
             : `against ${spent.amount} ${ret.spent.baseCurrency} ${costWord} all ${ret.copyCount} ${copiesWord(ret.copyCount)}`}
           {percentNote(ret.netReturnPercent)}
         </span>
@@ -449,7 +549,7 @@ function ReturnRows({ ret }: { ret: PurchaseReturn }) {
         />
         <span style={NOTE_STYLE}>
           {soldCost.amount === null
-            ? `${noCostYet} for the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`
+            ? `${noCost(soldCost)} for the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`
             : `against ${soldCost.amount} ${ret.soldCost.baseCurrency} ${costWord} the ${ret.soldCount} sold ${copiesWord(ret.soldCount)}`}
           {percentNote(ret.soldMarginPercent)}
         </span>
@@ -538,18 +638,8 @@ function MarketValueRow({ total }: { total: HoldingsSummary }) {
  * has been accounted for — and neither is what the scope is worth. */
 function AccountedRows({ total }: { total: HoldingsSummary }) {
   const cost = total.cost;
-  const costFigure = stateFigure(
-    cost.totalCostBasis,
-    cost.knownCount,
-    cost.pendingCount + cost.noneCount
-  );
-  const costNotes: string[] = [];
-  if (cost.pendingCount > 0) {
-    costNotes.push(`${cost.pendingCount} pending`);
-  }
-  if (cost.noneCount > 0) {
-    costNotes.push(`${cost.noneCount} no cost recorded`);
-  }
+  const purchaseFigure = costFigure(cost);
+  const costNotes = costGapNotes(cost);
 
   // Copies from opening balances (#1324): their frozen amount is an opening value, a cost basis for
   // profit and loss that nobody paid, so it is its own row and never part of the purchase cost.
@@ -558,42 +648,22 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
   const opening = total.openingValue;
   const openingCopies = costBasisCopyCount(opening);
   const showPurchaseCost = costBasisCopyCount(cost) > 0 || openingCopies === 0;
-  const openingFigure = stateFigure(
-    opening.totalCostBasis,
-    opening.knownCount,
-    opening.pendingCount + opening.noneCount
-  );
-  const openingNotes: string[] = [];
-  if (opening.pendingCount > 0) {
-    openingNotes.push(`${opening.pendingCount} pending`);
-  }
-  if (opening.noneCount > 0) {
-    openingNotes.push(`${opening.noneCount} without a value`);
-  }
+  const openingFigure = costFigure(opening);
+  const openingNotes = costGapNotes(opening);
 
   // Copies no longer held (#396). Their cost is stated on its own line rather than folded into
   // the purchase total: what was spent on the collection and what was spent on copies that are
   // gone are two different questions, and adding them answers neither.
   const writeOff = total.writeOff;
-  const writeOffFigure = stateFigure(
-    writeOff.cost.totalCostBasis,
-    writeOff.cost.knownCount,
-    writeOff.cost.pendingCount + writeOff.cost.noneCount
-  );
-  const writeOffNotes: string[] = [];
-  if (writeOff.cost.pendingCount > 0) {
-    writeOffNotes.push(`${writeOff.cost.pendingCount} cost pending`);
-  }
-  if (writeOff.cost.noneCount > 0) {
-    writeOffNotes.push(`${writeOff.cost.noneCount} no cost recorded`);
-  }
+  const writeOffFigure = costFigure(writeOff.cost);
+  const writeOffNotes = costGapNotes(writeOff.cost, "cost pending");
 
   return (
     <>
       {showPurchaseCost && (
         <div style={ROW_STYLE}>
           <span style={LABEL_STYLE}>Purchase cost</span>
-          <FigureAmount figure={costFigure} currency={cost.baseCurrency} style={AMOUNT_STYLE} />
+          <FigureAmount figure={purchaseFigure} currency={cost.baseCurrency} style={AMOUNT_STYLE} />
           <span style={NOTE_STYLE}>
             {cost.knownCount} costed
             {costNotes.length > 0 ? ` · ${costNotes.join(" · ")}` : ""}
@@ -650,6 +720,7 @@ function AccountedRows({ total }: { total: HoldingsSummary }) {
  *
  * `spend` (#852) adds what the scope **cost**, in both currencies, at the top. See its prop doc
  * for which figure then leads and why that reverses #845's choice rather than contradicting it.
+ * `openingValue` (#1325) takes that place on an opening balance.
  *
  * **A figure with nothing behind it is not stated as an amount** (#1184): every figure here except
  * the spend rows is a sum over a set of copies, and where no copy contributed the row says it has
@@ -671,6 +742,7 @@ export function HoldingsSummaryBar({
   storageKey,
   itemCount,
   spend,
+  openingValue,
 }: {
   total: HoldingsSummary | undefined;
   ret?: PurchaseReturn;
@@ -714,13 +786,25 @@ export function HoldingsSummaryBar({
    * add up to, which is what they are.
    */
   spend?: PurchaseSpend;
+  /**
+   * What an **opening balance** — or one of its lots — brings in at value (#1325), in `spend`'s place:
+   * the call site passes one or the other, never both. It leads the bar as the order total does, with
+   * no breakdown under it, and catalog value moves inside the expander just the same.
+   */
+  openingValue?: OpeningValue;
 }) {
   const [expanded, setExpanded] = usePersistedFlag(storageKey);
+  // Whether something other than catalog value leads, which displaces catalog value into its group.
+  const ledByDocument = spend !== undefined || openingValue !== undefined;
 
   const toggle = (
     <Tooltip
       content={
-        spend
+        openingValue
+          ? expanded
+            ? "Hide the catalog and market value, the opening value accounted to copies, and what these copies have returned"
+            : "Show the catalog and market value, the opening value accounted to copies, and what these copies have returned"
+          : spend
           ? expanded
             ? "Hide the price and shipping breakdown, the catalog and market value, and what these copies have returned"
             : "Show the price and shipping breakdown, the catalog and market value, and what these copies have returned"
@@ -746,9 +830,10 @@ export function HoldingsSummaryBar({
 
   return (
     <div style={FRAME_STYLE}>
-      {/* The headline: what the scope cost where that is known, and otherwise the catalog value.
-          It is the one row that renders before the valuation has loaded — `spend` rides in on the
-          purchase's own server-rendered props, so the figure the collector came for is on screen
+      {/* The headline: what the scope cost where that is known, what an opening balance brings in
+          at value on one of those, and otherwise the catalog value. It is the one row that renders
+          before the valuation has loaded — `spend` and `openingValue` ride in on the document's own
+          server-rendered props, so the figure the collector came for is on screen
           immediately and only the rows below it wait. */}
       {spend ? (
         <SpendRow
@@ -764,6 +849,8 @@ export function HoldingsSummaryBar({
         >
           {toggle}
         </SpendRow>
+      ) : openingValue ? (
+        <OpeningValueRow openingValue={openingValue}>{toggle}</OpeningValueRow>
       ) : total ? (
         <CatalogValueRow total={total} itemCount={itemCount} headline>
           {toggle}
@@ -820,7 +907,7 @@ export function HoldingsSummaryBar({
                   catalog value is displaced into it; without one, catalog value already leads the
                   bar and market value simply continues its group, so a heading here would rule a
                   figure off from the one it belongs with. */}
-              {spend ? (
+              {ledByDocument ? (
                 <Group label={WORTH_LABEL}>
                   <CatalogValueRow total={total} itemCount={itemCount} headline={false} />
                   <MarketValueRow total={total} />
@@ -844,7 +931,7 @@ export function HoldingsSummaryBar({
             // Catalogue value, market value and copy cost — the three a loaded bar all but always
             // draws — held open at their final height, in their final groups, while the valuation
             // pass runs.
-            <SkeletonRows withCatalog={spend !== undefined} />
+            <SkeletonRows withCatalog={ledByDocument} />
           )}
         </>
       )}

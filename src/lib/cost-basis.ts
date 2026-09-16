@@ -124,6 +124,10 @@ export interface CostBasisTotal {
   /** Copies with no cost-basis recorded (added by hand, dropped from a closed lot, or on an
    *  opening-balance lot with no opening value). */
   noneCount: number;
+  /** The part of {@link noneCount} whose reason is `no_opening_value` (#1325): a cost that is not
+   *  applicable rather than one nobody recorded, so a summary can say so instead of *not worked out
+   *  yet*. */
+  noOpeningValueCount: number;
 }
 
 /** Aggregate per-copy cost-basis into a {@link CostBasisTotal}. See the module header for
@@ -136,6 +140,7 @@ export function aggregateCostBasis(
   let knownCount = 0;
   let pendingCount = 0;
   let noneCount = 0;
+  let noOpeningValueCount = 0;
   for (const input of inputs) {
     const resolved = resolveCostBasis(input);
     if (resolved.state === "known") {
@@ -145,6 +150,7 @@ export function aggregateCostBasis(
       pendingCount++;
     } else {
       noneCount++;
+      if (resolved.reason === "no_opening_value") noOpeningValueCount++;
     }
   }
   return {
@@ -153,6 +159,7 @@ export function aggregateCostBasis(
     knownCount,
     pendingCount,
     noneCount,
+    noOpeningValueCount,
   };
 }
 

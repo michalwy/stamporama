@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted and implemented in #1323; §7 by #1324; §8 by #1326. Designed in #1321 with the collector on 2026-09-15 and
+Accepted and implemented in #1323; §7 by #1324; §8 by #1326; the summary panel (Consequences) by
+#1325. Designed in #1321 with the collector on 2026-09-15 and
 2026-09-16; the children that complete it are #1324 (profit and loss, never spend), #1325 (the
 summary panel) and #1326 (retiring Card scans). **Replaces #725's decision that identification
 without a purchase creates no cost basis** (ADR-0033, *What #725 added*), for opening balances.
@@ -141,7 +142,10 @@ The collector retired it and carried its work over (2026-09-16):
 - **Money spent** was #1324's, and is §7. One path still carries an opening value into a purchase
   cost: a trade order prices its lots at the cost basis of the copies given away (#644), opening
   values included.
-- **The summary panel is #1325's.** An opening balance passes no order total to the holdings bar, so
-  no price or shipping row appears; #1325 leads the panel with the opening value.
+- **The summary panel leads with the opening value (#1325).** An opening balance passes no order
+  total to the holdings bar, so no price or shipping row appears; its lead line is the sum of its
+  lots' opening values in both currencies, *no opening value* when no lot has one (never `0.00`),
+  and a count of the lots without one when only some have it. A cost that cannot apply — every copy
+  behind it from an unvalued lot — reads *not applicable* rather than *not worked out yet*.
 - **Card scans is retired (#1326)** — see §8.
 - The quick jump's `p` sequence is shared: an opening balance takes the next purchase number.

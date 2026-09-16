@@ -106,6 +106,27 @@ A lot **closes and reopens as a purchase lot does**:
   condition — the same rule as on a purchase, kept on purpose so that cataloguing an old stockbook
   is done properly, prices and all.
 
+### The values bar on an opening balance
+
+Where a purchase's values bar opens with the **order total**, an opening balance's opens with its
+**opening total** — the opening values of its lots added up, in the document's currency, with the
+equivalent in your base currency beside it, as on a purchase. Nothing was paid and nothing was
+shipped, so there is **no Price or Shipping** under it.
+
+- When **only some lots** have a value, the total covers those, and the line says how many do not —
+  *1 of 3 lots without a value* — so it is never read as the value of everything.
+- When **no lot** has a value, the line reads *no opening value* rather than `0.00`. A lot you
+  valued at `0` is a value, and counts as one.
+
+Each lot's own bar opens the same way with its **lot value**: that lot's opening value, or *no
+opening value*.
+
+**More** opens the same groups a purchase has — *What it's worth*, *Cost accounted to copies* and,
+once something has sold, *What it has returned*. A cost that does not apply reads as such: copies
+from a lot without a value are counted *without a value*, and where they are all the line has, it
+says *not applicable* instead of *not worked out yet*. The bar remembers whether it is open exactly
+as a purchase's does.
+
 ### What an opening value counts towards
 
 An opening value is a **cost for profit and loss, never money spent**:
@@ -251,7 +272,9 @@ A lot's **⋮** menu lets you **Edit lot** (title and price), **Close** or **Reo
 populate the lot, so they are removed with it (you are warned how many when confirming). A
 lot's price can only be edited while it is open.
 
-**What the order cost.** The values bar at the top of the page opens with the **order total** —
+**What the order cost.** (An opening balance opens with its opening value instead — see
+[The values bar on an opening balance](#the-values-bar-on-an-opening-balance).) The values bar at
+the top of the page opens with the **order total** —
 what the whole parcel cost you: every lot, every expense and the shipping, added up. It is stated
 in the order's own transaction currency (what you actually paid, and what a receipt would show)
 and, next to it, in your **base currency** at the rate frozen on the order — the only figure you can

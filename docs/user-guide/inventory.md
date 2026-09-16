@@ -323,6 +323,10 @@ is missing — a partial answer is useful as long as it is not passed off as a c
 figure that genuinely comes to nothing still reads `0.00`: copies that are all priced at zero are a
 different statement from copies nobody has valued, and the line makes both.
 
+A figure that **cannot** apply says so too. A copy from an opening-balance lot with no opening value
+has no cost at all, and never will, so when every copy behind a cost line is one of those the line
+reads *not applicable* — not *not worked out yet*, which would promise a figure that is not coming.
+
 All three lines cover the copies you **actually hold**. A copy you have marked as
 [no longer held](#copies-you-no-longer-hold), and one whose delivery state is *Not delivered /
 missing* or *Damaged*, is worth nothing to you however the catalog prices it, so it counts towards

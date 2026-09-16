@@ -92,6 +92,7 @@ describe("splitCostBasis", () => {
       knownCount: 1,
       pendingCount: 0,
       noneCount: 1,
+      noOpeningValueCount: 0,
     });
     assert.deepEqual(split.openingValue, {
       baseCurrency: "PLN",
@@ -99,6 +100,7 @@ describe("splitCostBasis", () => {
       knownCount: 1,
       pendingCount: 1,
       noneCount: 1,
+      noOpeningValueCount: 1,
     });
   });
 
@@ -154,6 +156,7 @@ describe("aggregateCostBasis", () => {
       knownCount: 0,
       pendingCount: 0,
       noneCount: 0,
+      noOpeningValueCount: 0,
     });
   });
 
@@ -174,6 +177,7 @@ describe("aggregateCostBasis", () => {
       knownCount: 2,
       pendingCount: 1,
       noneCount: 2,
+      noOpeningValueCount: 0,
     });
   });
 
@@ -200,6 +204,8 @@ describe("aggregateCostBasis", () => {
     );
     assert.equal(result.pendingCount, 1);
     assert.equal(result.noneCount, 1);
+    // …and tells that none apart as not applicable rather than unrecorded (#1325).
+    assert.equal(result.noOpeningValueCount, 1);
   });
 });
 

@@ -32,10 +32,11 @@ import {
   type DeliveryState,
 } from "./purchase-allocation";
 import { resolvePurchaseSpend, type PurchaseSpend } from "./purchase-spend";
+import { resolveOpeningValue, type OpeningValue } from "./opening-value";
 import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { roundAmount } from "./decimal-input";
-import { intakeDocumentName, type PurchaseKind } from "./purchase-kind";
+import { intakeDocumentName, isOpeningBalance, type PurchaseKind } from "./purchase-kind";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -151,6 +152,9 @@ export interface LotSummary {
    *  with the breakdown the pool chip has never given: the chip states the sum and its tooltip
    *  states the formula, neither of them the share itself. */
   spend: PurchaseSpend;
+  /** On an opening balance, what this lot brings in at value — the lead line of its panel instead of
+   *  `spend` (#1325); null on a purchase. */
+  openingValue: OpeningValue | null;
 }
 
 export interface PurchaseDetail {
@@ -180,6 +184,9 @@ export interface PurchaseDetail {
   /** What the whole order cost, in both currencies, broken into its priced lines and its
    *  shipping (#852) — the one figure the screen held every part of and never added up. */
   spend: PurchaseSpend;
+  /** On an opening balance, its lots' opening values summed, and how many lots have none — the lead
+   *  line of its panel instead of `spend` (#1325); null on a purchase. */
+  openingValue: OpeningValue | null;
   /** The auction sale this purchase was settled from (#28), or null for a hand-entered one. The
    * link is worth carrying because the bidding record is where the lots' figures came from, and it
    * survives this purchase being deleted. */
@@ -302,6 +309,18 @@ export async function getPurchaseDetail(
     fxRateToBase,
   };
 
+  const opening = isOpeningBalance(row);
+  const openingValueOf = (scope: "order" | "lot", lotPrices: (number | null)[]) =>
+    opening
+      ? resolveOpeningValue({
+          scope,
+          lotPrices,
+          currency: row.currency,
+          baseCurrency: row.collection.baseCurrency,
+          fxRateToBase,
+        })
+      : null;
+
   const lots: LotSummary[] = row.lots.map((l) => {
     const pool = computeLotPool(costs, l.id);
     const valued = l.price != null;
@@ -325,6 +344,7 @@ export async function getPurchaseDetail(
         fxRateToBase,
         shippingShareOf: costs.shippingCost,
       }),
+      openingValue: openingValueOf("lot", [l.price == null ? null : Number(l.price)]),
     };
   });
 
@@ -364,6 +384,10 @@ export async function getPurchaseDetail(
     expenseCount: row.expenses.length,
     total: total.toFixed(2),
     spend,
+    openingValue: openingValueOf(
+      "order",
+      row.lots.map((l) => (l.price == null ? null : Number(l.price)))
+    ),
     auctionSale: row.auctionSale ? { id: row.auctionSale.id, name: row.auctionSale.name } : null,
     trade: row.trade
       ? { id: row.trade.id, tradeNo: row.trade.tradeNo, partnerName: row.trade.partner.name }

@@ -19,6 +19,7 @@ import {
 // Each is asserted on the counts that separate them, because nothing else can.
 
 const UNKNOWN: StatedFigure = { state: "unknown", amount: null };
+const NOT_APPLICABLE: StatedFigure = { state: "not_applicable", amount: null };
 
 describe("stateFigure", () => {
   it("states no amount when nothing contributed and something was meant to", () => {
@@ -46,6 +47,20 @@ describe("stateFigure", () => {
   it("leaves a real amount's digits exactly as the read model stated them", () => {
     assert.equal(stateFigure("1200.40", 8, 0).amount, "1200.40");
   });
+
+  // #1325: copies from an opening-balance lot with no opening value have no cost at all.
+  it("states not applicable when every copy in scope is one the figure cannot apply to", () => {
+    assert.deepEqual(stateFigure("0.00", 0, 0, 12), NOT_APPLICABLE);
+  });
+
+  it("still waits when something in scope is yet to be worked out", () => {
+    // A pending copy beside unvalued ones: a figure is coming, so it is not *not applicable*.
+    assert.deepEqual(stateFigure("0.00", 0, 1, 12), UNKNOWN);
+  });
+
+  it("states the amount over the copies it applies to, and calls it complete", () => {
+    assert.deepEqual(stateFigure("40.00", 3, 0, 12), { state: "complete", amount: "40.00" });
+  });
 });
 
 describe("differenceFigure", () => {
@@ -67,6 +82,14 @@ describe("differenceFigure", () => {
       state: "complete",
       amount: "20.00",
     });
+  });
+
+  it("is not applicable against a side that is not applicable (#1325)", () => {
+    assert.deepEqual(differenceFigure("120.00", [stated, NOT_APPLICABLE]), NOT_APPLICABLE);
+  });
+
+  it("still waits when one side is not applicable and another is unknown", () => {
+    assert.deepEqual(differenceFigure("120.00", [UNKNOWN, NOT_APPLICABLE]), UNKNOWN);
   });
 
   it("never carries a negative zero through", () => {
