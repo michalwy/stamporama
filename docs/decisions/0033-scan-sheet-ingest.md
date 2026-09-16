@@ -24,7 +24,7 @@ none of the rest was, and because the manual editor it feeds is the primitive, n
 
 ## Decisions
 
-### 1. A tile is its own entity, owned by the **purchase** — and, since #725, by the **collection** with the purchase optional; `Item` is not it
+### 1. A tile is its own entity, owned by the **purchase** — carried on the **collection** too since #725, and the purchase required again since #1326; `Item` is not it
 
 `Item.stampId` is `NOT NULL` and stays that way, so an unidentified stub copy cannot be an `Item`.
 
@@ -200,11 +200,11 @@ and are corrected exactly as hand-drawn ones are. The geometry lives in one pure
 
 | Table | What it holds |
 | --- | --- |
-| `scan_sheet` | A retained card scan: **collection**, optional purchase (#725), `batchNo`, an optional `label` (#587), `side`, storage key + mime, original and `view` dimensions, size. Unique on `(purchaseId, batchNo, side)`, plus a partial unique on `(collectionId, batchNo, side) WHERE purchaseId IS NULL`. |
-| `scan_tile` | One region of one cut: **collection**, optional purchase, `batchNo`, `position`, `state`, the front and back boxes with the sheets they were drawn on, an optional note. CHECK: at least one side. Sheet FKs are `Restrict`. |
+| `scan_sheet` | A retained card scan: **collection** and **purchase** (optional from #725 to #1326, required again since), `batchNo`, an optional `label` (#587), `side`, storage key + mime, original and `view` dimensions, size. Unique on `(purchaseId, batchNo, side)`; #725's partial unique for purchase-less batches was dropped by #1326. |
+| `scan_tile` | One region of one cut: **collection**, purchase, `batchNo`, `position`, `state`, the front and back boxes with the sheets they were drawn on, an optional note. CHECK: at least one side. Sheet FKs are `Restrict`. |
 | `photo.tileId` | Fourth owner. CHECK widened to `num_nonnulls(itemId, stampId, offerId, tileId) = 1`; partial unique `(tileId, role)`. |
 | `purchase.nextScanBatchNo` | Per-**purchase** batch sequence (#586). Not per lot, where the number named nothing. |
-| `collection.nextScanBatchNo` | The twin of it for cards scanned outside any order (#725). |
+| `collection.nextScanBatchNo` | The twin of it for cards scanned outside any order (#725); dropped by #1326. |
 
 Both owner columns started as `lotId` and were moved by #586, existing rows migrating through their
 lot's purchase. The migration **renumbers**: numbers were unique per lot, so two lots of one order
@@ -665,10 +665,12 @@ then the close look is over anyway.
 
 ## What #725 added: the owner is the collection, and the purchase is optional
 
-> **Since #1323 ([ADR-0054](0054-opening-balance.md))** stamps already owned also come in on an
-> **opening balance** — a purchase-order type that says plainly nothing was bought — whose optional
-> opening value replaces the *no cost basis* reading below for those documents. Card scans itself is
-> retired by #1326.
+> **Retired by #1326 ([ADR-0054](0054-opening-balance.md)).** Since #1323 stamps already owned come
+> in on an **opening balance** — a purchase-order type that says plainly nothing was bought — and
+> #1326 retired the Card scans screen onto it: every purchase-less card of a collection moved onto one
+> opening balance titled *Card scans* (one unvalued lot, batch numbers kept), copies already created
+> there were left as they were, and `purchaseId` became NOT NULL again with the collection's batch
+> counter dropped. What follows is the record of what #725 decided, not the current state.
 
 The same pass — scan a card, cut it, pair the backs, identify each piece — is worth exactly as much
 on **stamps already owned**: a shelf being digitised, a gift, an inheritance. None of that is a

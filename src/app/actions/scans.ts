@@ -40,9 +40,9 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 // `src/app/actions/`; the one binary boundary — uploading the scan itself — is a route handler
 // (ADR-0011's rule, unchanged).
 //
-// The batch-level verbs take a `ScanOwnerRef` rather than a purchase id (#725), because a card can
-// belong to an order or to nothing but the collection. The tile-level ones take tile ids and are
-// unchanged: a tile carries its own owner, and the server reads it rather than believing a caller.
+// The batch-level verbs take a `ScanOwnerRef` naming the intake document the card belongs to. The
+// tile-level ones take tile ids: a tile carries its own owner, and the server reads it rather than
+// believing a caller.
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -229,8 +229,8 @@ export type TileOutcomeActionState =
  * Each outcome is the created copy as the want review reads it (`ArrivingCopy`), and the field is
  * still `outcomes`, deliberately **not** `copies`: the purchase screen's shared `run` raises the
  * review from a `copies` field (#532), and a tile copy on an order is created `ordered` or `to_sort`
- * — its review comes when it is stored (ADR-0032 §6b). Only the collection's own Card scans screen
- * reads `outcomes` as arrivals (#1262), because a copy identified there is created `delivered`.
+ * — its review comes when it is stored (ADR-0032 §6b). The retired Card scans screen was the one
+ * reader of `outcomes` as arrivals (#1262), its copies having been created `delivered` (#1326).
  */
 export type TilesOutcomeActionState =
   | { status: "success"; outcomes: ArrivingCopy[] }

@@ -38,11 +38,8 @@ export type { IssueRunIdentification } from "./issue-run";
  *   (#121), the internal copy number (#268), the format (#573) and the dispositions (#160) are
  *   that function's, and a second implementation of them here would be a second set to keep right.
  *
- * - **An existing copy** — the auction path. On an order that is every copy of the **purchase**
- *   still needing photographs; on a card scanned outside any order (#725) it is every copy of the
- *   **collection**, which is the same rule read at the level the card belongs to: what is being
- *   matched against is the copies this card's pieces could be, and digitising a shelf is exactly
- *   the case where most of them are already recorded and only lack pictures.
+ * - **An existing copy** — the auction path: every copy of the **purchase** still needing
+ *   photographs.
  *
  *   The auction path proper: a purchase settled from a won auction
  *   sale already holds identified copies, because the contents were described in order to bid;
@@ -175,9 +172,10 @@ export async function identifyTileAsNewCopy(
  * copies **once** (`copies: N`) rather than called in a loop, which is also what makes the arrived
  * order rule, the format and the dispositions stay that function's.
  *
- * **Each outcome is the copy as the want review reads it** (#1262): `intakeStamps`' own
- * `ArrivingCopy`, so a card scanned outside any order — whose copies are created `delivered` — can
- * put the review up from what came back, judged on the very answers that were written.
+ * **Each outcome is the copy as `intakeStamps` returned it** (`ArrivingCopy`, #1262). Nothing reads
+ * it as an arrival any more: a tile's copy lands `ordered` or `to_sort` and is reviewed when it is
+ * stored (ADR-0032 §6b). Card scans, whose copies were created `delivered`, was the one screen that
+ * put the review up from here, and it was retired onto opening balances (#1326).
  */
 export async function identifyTilesAsNewCopies(
   ownerId: string,
@@ -198,12 +196,7 @@ export async function identifyTilesAsNewCopies(
   // tile named twice would otherwise create two copies and give the second one no images, the images
   // having moved to the first.
   const tiles = await loadSelectedTiles(ownerId, tileIds);
-  // Which lot — or, for a card that belongs to no order (#725), no lot at all. A purchase-less
-  // tile's copy is one that was never bought: `intakeStamps` writes it `delivered` with a null
-  // cost basis, which is what `Item.lotId` being nullable has always meant.
-  const target = tiles[0].purchaseId
-    ? { lotId: await resolveTileLot(tiles[0].purchaseId, input.lotId) }
-    : { collectionId: tiles[0].collectionId };
+  const target = { lotId: await resolveTileLot(tiles[0].purchaseId, input.lotId) };
 
   const copies = await intakeStamps(ownerId, target, {
     stampId: input.stampId,
@@ -348,31 +341,27 @@ export async function identifyTilesAsChecklistStamps(
   await assertRunAnswersExist(collectionId, answers);
   // Which lot each copy goes onto — resolved per distinct answer before anything exists, so a lot
   // closed in another tab or one missing on an order with several is a sentence and not a run cut
-  // off halfway. A card that belongs to no order has no lot to ask about (#725).
+  // off halfway.
   const lotByAnswer = new Map<string, string>();
-  if (purchaseId) {
-    for (const lotId of new Set(answers.map((a) => a.lotId))) {
-      const resolved = await resolveTileLot(purchaseId, lotId || null);
-      const lot = await prisma.purchaseLot.findUniqueOrThrow({
-        where: { id: resolved },
-        select: { status: true },
-      });
-      if (lot.status !== "open") {
-        throw new ScanValidationError(
-          "That lot is closed. Reopen it before identifying more copies into it."
-        );
-      }
-      lotByAnswer.set(lotId, resolved);
+  for (const lotId of new Set(answers.map((a) => a.lotId))) {
+    const resolved = await resolveTileLot(purchaseId, lotId || null);
+    const lot = await prisma.purchaseLot.findUniqueOrThrow({
+      where: { id: resolved },
+      select: { status: true },
+    });
+    if (lot.status !== "open") {
+      throw new ScanValidationError(
+        "That lot is closed. Reopen it before identifying more copies into it."
+      );
     }
+    lotByAnswer.set(lotId, resolved);
   }
 
   // What came back from each `intakeStamps`, which is what the want review reads (#1262).
   const outcomes: ArrivingCopy[] = [];
   for (const [i, tile] of tiles.entries()) {
     const a = answers[i];
-    const target = purchaseId
-      ? { lotId: lotByAnswer.get(a.lotId) as string }
-      : { collectionId };
+    const target = { lotId: lotByAnswer.get(a.lotId) as string };
     const [copy] = await intakeStamps(ownerId, target, {
       stampId: input.tiles[i].stampId,
       conditionId: a.conditionId,
@@ -448,11 +437,7 @@ async function assertRunAnswersExist(
  * arriving in one envelope and scanned on one card, and the old same-lot rule made most of them
  * unreachable from the tile in front of the collector. This path asks nothing about lots because
  * the copy already has one — it is only *creating* a copy that has to name one.
- *
- * **A card that belongs to no order widens it to the collection** (#725) — not a relaxation but the
- * same sentence at the level that card exists at. There is no parcel to be "on", and the copies
- * being matched against while digitising a shelf are simply the ones already recorded; the
- * collection check above is what keeps it from being wider than that.
+
  */
 export async function assignTileToCopy(
   ownerId: string,
@@ -475,12 +460,9 @@ export async function assignTileToCopy(
   if (item.collectionId !== tile.collectionId) {
     throw new ScanAuthError("Copy not found or access denied.");
   }
-  // On an order, the copy has to be **on that order** — #586's rule, and the one that makes the
-  // candidate list the settled parcel's own lines. A card that belongs to no order (#725) has no
-  // such narrowing to make: the collection is the level it exists at, so the collection is the set
-  // it may hand its pictures to, which is the same sentence read one level up rather than a second
-  // rule.
-  if (tile.purchaseId && item.lot?.purchaseId !== tile.purchaseId) {
+  // The copy has to be **on that order** — #586's rule, and the one that makes the candidate list
+  // the settled parcel's own lines.
+  if (item.lot?.purchaseId !== tile.purchaseId) {
     throw new ScanValidationError("That copy is not on this order.");
   }
 
@@ -1030,9 +1012,8 @@ async function loadSelectedTiles(ownerId: string, tileIds: string[]) {
   }
   const tiles: Awaited<ReturnType<typeof loadOpenTile>>[] = [];
   for (const tileId of tileIds) tiles.push(await loadOpenTile(ownerId, tileId));
-  // Both halves of the owner, since #725: two tiles of one collection can still belong to
-  // different orders, and one of them belonging to no order at all is a third case. A selection is
-  // a pass over **one card's** pieces, and a card has exactly one owner.
+  // Both halves of the owner: two tiles of one collection can still belong to different orders. A
+  // selection is a pass over **one card's** pieces, and a card has exactly one owner.
   if (
     tiles.some(
       (t) => t.collectionId !== tiles[0].collectionId || t.purchaseId !== tiles[0].purchaseId

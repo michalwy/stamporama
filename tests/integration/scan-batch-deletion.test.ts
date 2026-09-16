@@ -287,23 +287,4 @@ describe("deleting a worked-through card scan (#1218)", () => {
     assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), 2, "neither card went");
     assert.equal(await prisma.scanTile.count({ where: { purchaseId } }), 4);
   });
-
-  it("works the same on a card scanned outside any order (#725)", async () => {
-    const sheet = await uploadSheet(userId, { collectionId }, {
-      source: await card(),
-      mime: "image/png",
-      side: "front",
-    });
-    await commitCut(userId, sheet.id, BOXES);
-    const tiles = await prisma.scanTile.findMany({
-      where: { frontSheetId: sheet.id },
-      orderBy: { position: "asc" },
-    });
-    const { itemId } = await identifyTileAsNewCopy(userId, tiles[0].id, { stampId, conditionId });
-    await discardTile(userId, tiles[1].id);
-
-    await deleteBatches(userId, { collectionId }, [sheet.batchNo]);
-    assert.equal(await prisma.scanSheet.count({ where: { id: sheet.id } }), 0);
-    assert.equal((await getItemListItem(userId, itemId)).scan, null);
-  });
 });

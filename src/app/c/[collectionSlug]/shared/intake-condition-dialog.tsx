@@ -43,11 +43,8 @@ import {
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
  *
- * It lived in `purchase-detail-panel.tsx` until #725, which is where it was first needed and where
- * it stopped being able to stay: the same chain — picker, then this — now runs from the collection's
- * own card scans, with no order anywhere in it. Nothing about the dialog changed in the move; what
- * changed is that `lotChoice` being absent is now an ordinary case rather than the stockbook
- * exception, since a card scanned outside a purchase has no lot to ask about at all.
+ * It lived in `purchase-detail-panel.tsx` until #725 moved it out, and it stays a module of its own:
+ * `lotChoice` absent is the stockbook case, where the one lot is not in question.
  *
  * The remembered answers are `add-copy-defaults`', deliberately shared with every other add-copy
  * surface: one set of "the same as last time", so a sitting that moves between screens does not

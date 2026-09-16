@@ -523,24 +523,15 @@ export function CollectionSidebar({
         </NavSection>
 
         <NavSection {...sectionProps("collection")}>
-          {/* Cataloguing from card scans with nothing bought (#725) is its own entry, because it is
-              a pass that runs over days and dozens of cards and has to be somewhere to come back
-              to — and it is grouped under Inventory (#762) because what it produces is copies, the
-              same subject the list beside it reads. Cards that came in a parcel stay on that
-              order's screen, where the lot question is. */}
-          <NavGroup
+          {/* Card scans used to hang under Inventory (#725, #762). It was retired onto opening
+              balances (#1326): a card of stamps already owned is scanned on its opening balance,
+              under Intake, like any other document's. */}
+          <NavItem
+            href={`${base}/inventory`}
             icon={<Icon name="inventory" />}
             label="Inventory"
-            href={`${base}/inventory`}
-            active={isActive(`${base}/inventory`, false, [`${base}/inventory/scans`])}
-          >
-            <NavItem
-              href={`${base}/inventory/scans`}
-              label="Card scans"
-              active={isActive(`${base}/inventory/scans`)}
-              nested
-            />
-          </NavGroup>
+            active={isActive(`${base}/inventory`)}
+          />
           {/* Locations and Albums follow Inventory, being where the paper physically sits. */}
           <NavItem
             href={`${base}/locations`}

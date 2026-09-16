@@ -1,5 +1,5 @@
 import type { UploadedSheet } from "@/lib/scan-sheets";
-import { scansApiBase, type ScanOwner } from "./use-scans-query";
+import { scansApiBase } from "./use-scans-query";
 
 /**
  * Send a card scan in parts (#590).
@@ -44,19 +44,18 @@ export class SheetUploadError extends Error {}
 
 export async function uploadSheetInChunks(input: {
   collectionId: string;
-  /** Whose card this is (#725) — the only thing the owner decides here is where the upload is
+  /** The document the card belongs to — the only thing it decides here is where the upload is
    * **opened**. */
-  owner: ScanOwner;
+  purchaseId: string;
   file: File;
   side: "front" | "back";
   batchNo?: number;
   label?: string | null;
   onProgress: (progress: SheetUploadProgress) => void;
 }): Promise<UploadedSheet> {
-  const openUrl = `${scansApiBase(input.collectionId, input.owner)}/uploads`;
+  const openUrl = `${scansApiBase(input.collectionId, input.purchaseId)}/uploads`;
   // The parts, the finalize and the abort are addressed by the **upload**, which knows its own
-  // owner: one pair of routes serves both screens, and the order never belonged in their path
-  // (#725). Only the open has to say who the card is for.
+  // owner, so the order is not in their path. Only the open has to say who the card is for.
   const base = `/api/collections/${input.collectionId}/scan-sheets/uploads`;
 
   // Opened with the file's description alone. The size and the format are refused here if they are

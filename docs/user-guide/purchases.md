@@ -127,6 +127,23 @@ An opening value is a **cost for profit and loss, never money spent**:
 - On the opening balance's own screen, once something has sold, **Net return** and **On sold** are
   measured *against the opening value* and say so, instead of against money spent.
 
+### Where your Card scans went
+
+There used to be a separate **Card scans** screen under Inventory for scanning stamps you already
+own. It is gone: an opening balance does the same job, and scanning happens there now.
+
+Nothing you had on it was lost. Each collection that had cards on that screen now has **one opening
+balance called *Card scans***, dated the day you scanned the oldest of them, with **one lot and no
+opening value**. Every card is on it with the same batch number it had before — the number you may
+have written on the card — together with its name, and every piece is where you left it:
+still waiting, set aside to check with its note and shortlist, or discarded with its note. A piece
+still waiting is identified exactly as on any opening balance, and its copy lands on that lot as
+*to sort*.
+
+The copies you had **already identified** there are left exactly as they were: delivered, on no lot,
+with no cost. They are not added to the opening balance, and the cards they came from still show
+what each piece became. Rename the document or give its lot a value whenever you like.
+
 ## The intake documents list
 
 Each row shows the document's **number** (`#7` — see [Quick jump](quick-jump.md)). A purchase then
@@ -321,9 +338,8 @@ at once** and cut the scan into per-stamp **tiles**. Each stamp is then handled 
 
 Open an order and use **Add card scan** in its **Card scans** section, above the lots.
 
-For stamps you **already own** — a shelf being catalogued, a gift, an inheritance — the same flow
-runs from [Card scans under Inventory](inventory.md#cataloguing-from-card-scans), with no order and
-no cost involved.
+For stamps you **already own** — a shelf being catalogued, a gift, an inheritance — scan them on an
+[opening balance](#opening-balances), which has the same section.
 
 **A card belongs to the whole order, not to one of its lots.** That is what the section sits at the
 order level for. A stockbook you bought as one lot is scanned onto one or two cards and reads exactly

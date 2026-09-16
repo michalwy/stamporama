@@ -65,12 +65,7 @@ import {
 } from "./tile-identify-dialog";
 import type { IdentifiedPiece } from "./tile-zoom-view";
 import { useInvalidateLotCopies } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/use-lot-copies-query";
-import {
-  scanOwnerUiKey,
-  useInvalidateScans,
-  useScans,
-  type ScanOwner,
-} from "./use-scans-query";
+import { useInvalidateScans, useScans } from "./use-scans-query";
 import { IndeterminateBar, ProgressBar } from "@/app/progress-bar";
 import {
   SheetUploadError,
@@ -124,17 +119,8 @@ interface Props {
   /** The area tree, for the picker a parked tile's shortlist is built from (#607) — the same one
    * the identification opens, so a candidate is chosen exactly the way a stamp is. */
   areas: CollectionAreaData[];
-  /** Whose cards these are (#725): an order's, or the collection's own — the cards scanned outside
-   * any purchase. The section is otherwise identical, which is the point of the prop: one card,
-   * two screens, and nothing below asks which except where the answer actually differs. */
-  owner: ScanOwner;
-  /** Draw the section permanently open, with no caret (#725).
-   *
-   * The section is collapsible on the order screen because it is **one of that screen's sections**,
-   * and a card of forty tiles is forty thumbnails between the header and the lots. On its own page
-   * there is nothing for it to be collapsed beside: the page *is* the card scans, and a screen whose
-   * whole content is one closed line is a screen that has to be opened before it says anything. */
-  alwaysOpen?: boolean;
+  /** The intake document these cards belong to — a purchase order or an opening balance. */
+  purchaseId: string;
   /** Scan tiles on this order still waiting to become something, and how many cards it holds —
    * server-rendered with the order (`getPurchaseDetail`), so the header can say what is inside
    * before the section is opened and the batches are fetched. */
@@ -200,8 +186,7 @@ export function ScansCard({
   collectionId,
   areas,
   scanDpi,
-  owner,
-  alwaysOpen = false,
+  purchaseId,
   unidentifiedTileCount,
   parkedTileCount,
   discardedTileCount,
@@ -216,10 +201,10 @@ export function ScansCard({
   /** The card's own view state, remembered per order so an identification pass resumes where it
    * stopped — which section was open, what the strip was narrowed to, whether the worked-through
    * batches were showing, and which batches were opened against their default. */
-  const [scansUi, patchScansUi] = usePurchaseScansUi(collectionId, scanOwnerUiKey(owner));
+  const [scansUi, patchScansUi] = usePurchaseScansUi(collectionId, purchaseId);
   /** Collapsed until asked for: a card of forty tiles is forty thumbnails and a carton is fifty
    * cards, so the section rests as one line naming what is inside. */
-  const open = alwaysOpen || scansUi.open;
+  const open = scansUi.open;
   const setOpen = (next: boolean) => patchScansUi({ open: next });
   /**
    * Which tiles the strip is narrowed to — a chip on the header, pressed (#567), and since #853
@@ -296,12 +281,11 @@ export function ScansCard({
     if (parseTileFilter(filterInUrl) === filter) return;
     filterUrlRef.current(filter);
   }, [filter, filterInUrl]);
-  const { data, isLoading } = useScans(collectionId, owner, open);
+  const { data, isLoading } = useScans(collectionId, purchaseId, open);
   const { invalidateScans } = useInvalidateScans();
-  /** The owner as the server actions name it. Built once here so the three batch-level writes
-   * cannot each spell it differently. */
-  const ownerRef =
-    owner.kind === "purchase" ? { purchaseId: owner.purchaseId } : { collectionId };
+  /** The owner as the server actions name it. Built once here so the batch-level writes cannot each
+   * spell it differently. */
+  const ownerRef = { purchaseId };
   const { invalidateLotCopies } = useInvalidateLotCopies();
   const { invalidateList: invalidateInventory } = useInvalidateInventory();
   // Collection URLs are slug-addressed (`/c/[collectionSlug]/…`), and what this component is handed
@@ -510,7 +494,7 @@ export function ScansCard({
     try {
       const body = await uploadSheetInChunks({
         collectionId,
-        owner,
+        purchaseId,
         file,
         side,
         batchNo,
@@ -680,33 +664,26 @@ export function ScansCard({
           the way to add a card on the right — the controls belong beside the heading rather than on
           a line of their own, which on a collapsed section is a band of nothing. */}
       <header style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-        {alwaysOpen ? (
-          <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Icon name="scan" size="sm" />
-            <strong style={{ fontSize: "0.9375rem" }}>Card scans</strong>
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setOpen(!open)}
-            aria-expanded={open}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              background: "none",
-              border: "none",
-              padding: 0,
-              font: "inherit",
-              color: "inherit",
-              cursor: "pointer",
-            }}
-          >
-            <Icon name={open ? "collapse" : "expand"} size="sm" />
-            <Icon name="scan" size="sm" />
-            <strong style={{ fontSize: "0.9375rem" }}>Card scans</strong>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            background: "none",
+            border: "none",
+            padding: 0,
+            font: "inherit",
+            color: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          <Icon name={open ? "collapse" : "expand"} size="sm" />
+          <Icon name="scan" size="sm" />
+          <strong style={{ fontSize: "0.9375rem" }}>Card scans</strong>
+        </button>
         {scanSheetCount > 0 && (
           <span style={CHIP}>
             {scanSheetCount} {scanSheetCount === 1 ? "scan" : "scans"}
@@ -998,7 +975,7 @@ export function ScansCard({
           collectionId={collectionId}
           areas={areas}
           scanDpi={scanDpi}
-          owner={owner}
+          purchaseId={purchaseId}
           // One tile, or the ticked run — one dialog either way (#596), with the sides worked out
           // here: `ScanSheetData` already answers both questions the deep look asks (which scan, and
           // whether the retention sweep has taken it, #578), and a run can cross two cards of the

@@ -133,7 +133,7 @@ export async function openScanUpload(
     totalBytes: number;
   }
 ): Promise<OpenedScanUpload> {
-  // The same check the finished sheet will pass (#725), taken once at the open: an upload is
+  // The same check the finished sheet will pass, taken once at the open: an upload is
   // staging for a `uploadSheet` call, so the two must not be able to disagree about who may write
   // where. The resolved owner is written onto the row and handed straight back at finalize.
   const owner = await assertScanOwner(ownerId, ref);
@@ -178,7 +178,7 @@ export async function openScanUpload(
 interface UploadRow {
   id: string;
   collectionId: string;
-  purchaseId: string | null;
+  purchaseId: string;
   side: string;
   batchNo: number | null;
   label: string | null;
@@ -323,9 +323,7 @@ export async function finalizeScanUpload(
 
     return await uploadSheet(
       ownerId,
-      upload.purchaseId
-        ? { purchaseId: upload.purchaseId }
-        : { collectionId: upload.collectionId },
+      { purchaseId: upload.purchaseId },
       {
         source: { path: scan },
         mime: upload.mime,

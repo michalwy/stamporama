@@ -84,11 +84,11 @@ The toolbar **stays pinned to the top of the window** as you scroll a long list,
 sorting and the filter chips are always in reach — on every list that has one: Issues,
 Stamps, Copies, Offers, Sales and Purchases.
 
-The screen's three actions — **Quick offer mode**, **Scan a card** and **Add copy** — sit at the
+The screen's actions — **Quick offer mode** and **Add copy** — sit at the
 **right-hand end of that same toolbar row**, the way the [Offers](offers.md) screen arranges its
 own. They used to stand in the header above it, which made using a filter and then an action a trip
 across the window. Nothing about what they do has changed. On a narrow window the filters wrap onto
-further lines first and the actions stay put on the right; only when even that runs out do the three
+further lines first and the actions stay put on the right; only when even that runs out do they
 drop to a line of their own, still right-aligned.
 
 **Using a filter never moves the filter bar.** Each control keeps the same width whatever is picked
@@ -560,51 +560,14 @@ screen, and any open **View copies** popup for that stamp or issue reflects it.
 ## Cataloguing from card scans
 
 If you have a lot of stamps to enter — a shelf of stockbooks, a collection you inherited, a gift —
-typing them in one at a time is the slow way. **Card scans** (**Collection → Inventory → Card
-scans** in the sidebar, or
-**Scan a card** beside **Add copy**) does it the other way round: scan a whole stockbook card — or a
-whole album page, mounts and all — cut the scan into one piece per stamp, and identify each piece on
-screen afterwards. Each stamp is handled physically once, and everything after that happens at the
-keyboard. An album page is not even handled once: it is scanned as it stands.
+typing them in one at a time is the slow way. Scan whole stockbook cards or album pages instead, cut
+each scan into one piece per stamp, and identify the pieces on screen afterwards: open an
+[opening balance](purchases.md#opening-balances) for them and use its **Card scans** section, which
+the [purchases guide](purchases.md#card-scans) describes in full.
 
-An [opening balance](purchases.md#opening-balances) is the other way in for stamps you already own:
-the same scans, but on a document of its own, with the identified copies landing *to sort* until you
-store them and an optional opening value to cost them by.
-
-It is the same flow orders use, and the [Card scans section of the purchases
-guide](purchases.md#card-scans) describes all of it: the two kinds of card, how to lay one out, how the cut editor
-works, how a second scan of the backs pairs onto the fronts, and what you can do with each piece —
-identify it as a new copy, give its pictures to a copy you already have, set it aside to check, or
-discard it with a note.
-
-Two differences, and both are things you are **not** asked:
-
-- **Nothing is filed against a purchase.** The copies you create here have no lot and no cost — they
-  were not bought, they were already yours. If the stamps did come in a parcel, scan them from that
-  order's screen instead, where the cost is worked out.
-- **You are never asked which lot a piece belongs to**, because there is no lot to choose.
-
-**Wants the new copies could satisfy.** As soon as you identify a piece — one tile, several tiles as
-the same stamp, or a run as the stamps of a set — Stamporama shows the open entries on your [want
-list](wants.md) the new copies could satisfy, exactly as it does for a copy added by hand or a parcel
-you have sorted, and lets you **close**, **narrow** or **leave open** each one. A want that several of
-the new copies answer is shown once, naming them all. Nothing is closed automatically — see [Taking a
-copy in](wants.md#taking-a-copy-in).
-
-Cards you scan here are numbered separately from any order's — *Batch 1, 2, 3* on this screen counts
-only the cards you scanned outside a purchase — and they appear only here, never on an order.
-
-**Giving a scan to a copy you already have.** Most of a shelf being catalogued is often already
-recorded and only missing pictures. On each piece, **Assign to a copy already recorded** offers every
-copy in the collection whose front (or back) is still empty; pick one and the piece's images move
-onto it, with no new copy created.
-
-**Taking the discarded pieces back out of the stockbook.** When you have finished identifying a card,
-the **N discarded** chip on the header shows only the tiles you rejected — in the order they sit on
-the card, with their pictures at full strength and the notes you left underneath, so you can walk the
-strip against the stockbook and pull those stamps out. It is the same chip the purchases screen has,
-and [that guide describes it in
-full](purchases.md#pulling-the-discarded-pieces-off-the-card).
+There used to be a separate **Card scans** screen here, under Inventory, and a **Scan a card** button
+beside **Add copy**. Both are gone; what you had on that screen is now on an opening balance — see
+[Where your Card scans went](purchases.md#where-your-card-scans-went).
 
 ## Adding a copy
 

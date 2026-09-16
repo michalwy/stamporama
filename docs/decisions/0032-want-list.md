@@ -295,10 +295,12 @@ Mechanically: the bulk lot writes read their candidates **before** the update, b
 copy that has just arrived cannot be told from one that was already here, and `updateItem` reports
 `becameDelivered`. `intakeStampsAction` deliberately returns no copies at all.
 
-A card scanned outside any order (#725) creates its copies `delivered` — nothing was bought and the
-piece is on the desk — so under this rule they are reviewed on creation, exactly as a hand-added copy
-is (#1262). #725 first left them out, reading a shelf being catalogued as no arrival; the want then
-stayed open beside the copy that answered it. When one pass creates several copies against one want —
+A card scanned outside any order (#725) created its copies `delivered` — nothing was bought and the
+piece was on the desk — so under this rule they were reviewed on creation, exactly as a hand-added
+copy is (#1262). #725 first left them out, reading a shelf being catalogued as no arrival; the want
+then stayed open beside the copy that answered it. Since #1326 there is no such card: stamps already
+owned are scanned on an opening balance (ADR-0054), whose copies land *to sort* and are reviewed at
+**Store** like any order's. When one pass creates several copies against one want —
 a card of the same stamp, a run, a bulk *Store* — the want is asked about **once**, naming every copy,
 and the narrow seed drops every condition among them.
 
