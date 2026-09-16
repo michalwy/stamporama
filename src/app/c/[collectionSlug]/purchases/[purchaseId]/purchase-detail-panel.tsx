@@ -891,8 +891,9 @@ export function PurchaseDetailPanel({
         // collapsed; the price/shipping breakdown is behind the expander, those two being what the
         // collector already had separately.
         // Not on an opening balance (#1323): nothing was paid, so an order total with a shipping row
-        // under it would state something untrue. What leads that panel instead is #1325's.
+        // under it would state something untrue. Its opening value leads instead (#1325).
         spend={openingBalance ? undefined : purchase.spend}
+        openingValue={purchase.openingValue ?? undefined}
         storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
       />
 
@@ -2970,6 +2971,8 @@ function LotCard({
                   // the sum but never the share, and they are the *collapsed* lot's only answer,
                   // so both stay — the chip is the shut lot's line, this is the open one's table.
                   spend={openingBalance ? undefined : lot.spend}
+                  // An opening balance's lot leads with its own opening value instead (#1325).
+                  openingValue={lot.openingValue ?? undefined}
                   storageKey={`stamporama:purchase:lotSummaryExpanded:${collectionId}`}
                 />
               </div>

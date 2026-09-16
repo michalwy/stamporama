@@ -317,4 +317,38 @@ describe("opening balance", () => {
     const purchaseLotId = await createLot(userId, purchase.id, 5, null);
     await assert.rejects(updateLot(userId, purchaseLotId, { price: null }), /price is required/);
   });
+
+  // #1325: the summary panel leads with this rather than an order total.
+  it("states the opening value for its panel, and none in words rather than as 0.00", async () => {
+    const doc = await openingBalance("Panel value");
+    const noneId = await createLot(userId, doc.id, null, "No value");
+
+    let detail = (await getPurchaseDetail(userId, doc.id))!;
+    assert.equal(detail.openingValue?.value, null);
+    assert.equal(detail.openingValue?.unvaluedLotCount, 1);
+    assert.equal(detail.lots[0].openingValue?.value, null);
+
+    const valuedId = await createLot(userId, doc.id, 12.5, "Valued");
+    await createLot(userId, doc.id, 7.25, "Also valued");
+    detail = (await getPurchaseDetail(userId, doc.id))!;
+    assert.deepEqual(detail.openingValue, {
+      scope: "order",
+      value: { tx: "19.75", base: "19.75" },
+      currency: "EUR",
+      baseCurrency: "EUR",
+      lotCount: 3,
+      unvaluedLotCount: 1,
+    });
+    const lot = (id: string) => detail.lots.find((l) => l.id === id)!;
+    assert.deepEqual(lot(valuedId).openingValue?.value, { tx: "12.50", base: "12.50" });
+    assert.equal(lot(noneId).openingValue?.value, null);
+
+    // A purchase has an order total and no opening value.
+    const purchase = await createPurchase(userId, collectionId, { purchasedAt: "2026-09-16", currency: "EUR" });
+    await createLot(userId, purchase.id, 5, null);
+    const purchaseDetail = (await getPurchaseDetail(userId, purchase.id))!;
+    assert.equal(purchaseDetail.openingValue, null);
+    assert.equal(purchaseDetail.lots[0].openingValue, null);
+    assert.equal(purchaseDetail.spend.tx.total, "5.00");
+  });
 });
