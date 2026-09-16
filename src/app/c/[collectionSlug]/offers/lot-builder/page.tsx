@@ -50,6 +50,15 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
     .filter((c) => c.platform)
     .map((c) => ({ id: c.id, name: c.name, platformCurrency: c.platformCurrency }));
 
+  // **`minHeight`, not the album page editor's `height`, and deliberately** (#838). The two screens
+  // look alike — a card holding a rail and the work — but they answer *what scrolls* the opposite
+  // way. Here the **document** scrolls, as on every list screen: a proposal is a hundred copy rows,
+  // far taller than any window, and the card grows to hold them while the area rail
+  // (`CollapsibleFilterPanel`) and the figures band (`STICKY_TOOLBAR_STYLE`, #358) pin with `sticky`
+  // against the page. The floor only makes the card reach the window's bottom while it is empty.
+  // The page editor's columns scroll *themselves* and nothing on it is sticky, so a floor there let
+  // the card grow and carried its columns away (#815); that screen needs a definite `height`. Swap
+  // this one to `height` and the card is clipped at the window, the proposal with it.
   return (
     <div
       style={{
