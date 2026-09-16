@@ -21,15 +21,15 @@ const given = (over: Partial<GivenCopy> & { itemId: string }): GivenCopy => ({
   fulfillment: "fulfilled",
   costBasis: null,
   lotId: null,
-  lotStatus: null,
+  lotStatus: null, lotValued: null,
   ...over,
 });
 
 describe("the carried-over pool", () => {
   it("sums the frozen cost basis of everything that left", () => {
     const pool = carryOverPool([
-      given({ itemId: "a", costBasis: "10.00", lotId: "l1", lotStatus: "closed" }),
-      given({ itemId: "b", costBasis: "20.50", lotId: "l1", lotStatus: "closed" }),
+      given({ itemId: "a", costBasis: "10.00", lotId: "l1", lotStatus: "closed", lotValued: true }),
+      given({ itemId: "b", costBasis: "20.50", lotId: "l1", lotStatus: "closed", lotValued: true }),
     ]);
     assert.equal(pool.total, 30.5);
     assert.equal(pool.knownCount, 2);
@@ -38,16 +38,16 @@ describe("the carried-over pool", () => {
 
   it("counts a copy lost in the post, because it left too", () => {
     const pool = carryOverPool([
-      given({ itemId: "a", fulfillment: "fulfilled", costBasis: "10.00", lotId: "l", lotStatus: "closed" }),
-      given({ itemId: "b", fulfillment: "missing", costBasis: "5.00", lotId: "l", lotStatus: "closed" }),
+      given({ itemId: "a", fulfillment: "fulfilled", costBasis: "10.00", lotId: "l", lotStatus: "closed", lotValued: true }),
+      given({ itemId: "b", fulfillment: "missing", costBasis: "5.00", lotId: "l", lotStatus: "closed", lotValued: true }),
     ]);
     assert.equal(pool.total, 15);
   });
 
   it("leaves a withdrawn line out — its copy never went in the envelope", () => {
     const pool = carryOverPool([
-      given({ itemId: "a", costBasis: "10.00", lotId: "l", lotStatus: "closed" }),
-      given({ itemId: "b", fulfillment: "withdrawn", costBasis: "99.00", lotId: "l", lotStatus: "closed" }),
+      given({ itemId: "a", costBasis: "10.00", lotId: "l", lotStatus: "closed", lotValued: true }),
+      given({ itemId: "b", fulfillment: "withdrawn", costBasis: "99.00", lotId: "l", lotStatus: "closed", lotValued: true }),
     ]);
     assert.equal(pool.total, 10);
     assert.equal(pool.knownCount, 1);
@@ -55,8 +55,8 @@ describe("the carried-over pool", () => {
 
   it("holds the pool open on a copy whose own lot is still open, naming it", () => {
     const pool = carryOverPool([
-      given({ itemId: "a", costBasis: "10.00", lotId: "l1", lotStatus: "closed" }),
-      given({ itemId: "b", lotId: "l2", lotStatus: "open" }),
+      given({ itemId: "a", costBasis: "10.00", lotId: "l1", lotStatus: "closed", lotValued: true }),
+      given({ itemId: "b", lotId: "l2", lotStatus: "open", lotValued: true }),
     ]);
     assert.deepEqual(pool.pendingItemIds, ["b"]);
     assert.equal(isCarryOverSettled(pool), false);
@@ -74,7 +74,7 @@ describe("the carried-over pool", () => {
 
   it("says nothing when every copy carried a cost", () => {
     const pool = carryOverPool([
-      given({ itemId: "a", costBasis: "1.00", lotId: "l", lotStatus: "closed" }),
+      given({ itemId: "a", costBasis: "1.00", lotId: "l", lotStatus: "closed", lotValued: true }),
     ]);
     assert.equal(tradeUnrecordedCostNote(pool), null);
   });

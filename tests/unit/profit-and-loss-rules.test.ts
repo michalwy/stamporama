@@ -44,7 +44,7 @@ function sale(soldAt: string, platform: string, profit: ProfitFigures): SaleFigu
 }
 
 function writeOff(disposedAt: string, costBasis: string | null, lotStatus = "closed"): WriteOffCopy {
-  return { disposedAt, costBasis, lotId: "lot", lotStatus };
+  return { disposedAt, costBasis, lotId: "lot", lotStatus, lotValued: true };
 }
 
 describe("date range", () => {
@@ -77,7 +77,7 @@ describe("write-offs", () => {
       writeOff("2026-01-10", "4.00"),
       writeOff("2026-01-11", "1.50"),
       writeOff("2026-01-12", null, "open"),
-      { costBasis: null, lotId: null, lotStatus: null },
+      { costBasis: null, lotId: null, lotStatus: null, lotValued: null },
     ]);
     assert.deepEqual(summary, { copyCount: 4, countedCount: 2, costPending: 1, noCost: 1, cost: "5.50" });
     assert.deepEqual(describeWriteOffLeftOut(summary), ["1 with cost pending", "1 with no cost recorded"]);

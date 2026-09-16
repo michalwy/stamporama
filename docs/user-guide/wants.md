@@ -1,7 +1,7 @@
 # Want list
 
 The **want list** records what you are *looking for*: stamps you do not own yet, and
-stamps you own but want in better shape. Open it from **Want list** in the **Buying**
+stamps you own but want in better shape. Open it from **Want list** in the **Intake**
 section of the sidebar.
 
 It is deliberately separate from the disposition flags on a copy (**in collection**,

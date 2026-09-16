@@ -7,6 +7,7 @@ import type {
   PurchaseStatus,
 } from "@/lib/purchases";
 import type { ContactData } from "@/lib/contacts";
+import type { IntakeDocumentType } from "@/lib/purchase-kind";
 
 interface PurchasesPage {
   items: PurchaseListItem[];
@@ -14,6 +15,7 @@ interface PurchasesPage {
 }
 
 export interface PurchaseFilters {
+  type?: IntakeDocumentType;
   status?: PurchaseStatus;
   sortBy?: PurchaseSortBy;
   sortDir?: "asc" | "desc";
@@ -34,6 +36,7 @@ export function usePurchasesInfinite(
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
+      if (filters.type) params.set("type", filters.type);
       if (filters.status) params.set("status", filters.status);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);

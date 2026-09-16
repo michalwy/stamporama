@@ -6,6 +6,7 @@ import {
   type PurchaseSortBy,
   type PurchaseStatus,
 } from "@/lib/purchases";
+import { isIntakeDocumentType } from "@/lib/purchase-kind";
 
 const VALID_SORT_BY = new Set<PurchaseSortBy>(["purchasedAt", "createdAt"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -27,6 +28,8 @@ export async function GET(
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const statusParam = sp.get("status") as PurchaseStatus | null;
   const status = statusParam && VALID_STATUS.has(statusParam) ? statusParam : undefined;
+  const typeParam = sp.get("type");
+  const type = isIntakeDocumentType(typeParam) ? typeParam : undefined;
   const contactId = sp.get("contactId") || undefined;
   const sortByParam = sp.get("sortBy") as PurchaseSortBy | null;
   const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
@@ -39,6 +42,7 @@ export async function GET(
   try {
     const result = await listPurchasesPaginated(session.user.id, collectionId, {
       offset,
+      type,
       status,
       contactId,
       sortBy,

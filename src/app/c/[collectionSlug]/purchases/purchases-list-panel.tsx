@@ -6,8 +6,13 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
-import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import type { PurchaseListItem, PurchaseSortBy, PurchaseStatus } from "@/lib/purchases";
+import {
+  INTAKE_DOCUMENT_TYPES,
+  isIntakeDocumentType,
+  type PurchaseKind,
+} from "@/lib/purchase-kind";
 import {
   usePurchasesInfinite,
   useInvalidatePurchases,
@@ -19,7 +24,7 @@ import { useToast } from "@/app/toast-provider";
 
 type DialogState =
   | { kind: "none" }
-  | { kind: "add" }
+  | { kind: "add"; document: PurchaseKind }
   | { kind: "edit"; purchase: PurchaseListItem }
   | { kind: "delete"; purchase: PurchaseListItem };
 
@@ -56,16 +61,21 @@ export function PurchasesListPanel({
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList, invalidateContacts } = useInvalidatePurchases();
 
+  const typeParam = searchParams.get("type");
+  const type = isIntakeDocumentType(typeParam) ? typeParam : undefined;
+  // A delivery status is a purchase's own (#1323): under *Opening balances* there is none to filter
+  // by, so the status chips are not drawn and a stale `status` in the address is not applied.
+  const showStatus = type !== "opening_balance";
   const statusParam = searchParams.get("status") as PurchaseStatus | null;
-  const status = statusParam && STATUS_FILTERS.some((s) => s.value === statusParam)
+  const status = showStatus && statusParam && STATUS_FILTERS.some((s) => s.value === statusParam)
     ? statusParam
     : undefined;
   const sortBy = (searchParams.get("sortBy") as PurchaseSortBy) || "purchasedAt";
   const sortDir = (searchParams.get("sortDir") as "asc" | "desc") || "desc";
 
   const filters: PurchaseFilters = useMemo(
-    () => ({ status, sortBy, sortDir }),
-    [status, sortBy, sortDir]
+    () => ({ type, status, sortBy, sortDir }),
+    [type, status, sortBy, sortDir]
   );
 
   const updateParams = useCallback(
@@ -106,7 +116,7 @@ export function PurchasesListPanel({
   // you made it. What gets a toast is the edit and the delete, both of which leave you on the list.
   const { toast } = useToast();
 
-  const hasActiveFilters = !!status;
+  const hasActiveFilters = !!status || !!type;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -124,6 +134,20 @@ export function PurchasesListPanel({
           background: "var(--color-bg-page)",
         }}
       >
+        {/* The document type (#1323): purchases, the orders trades create, and opening balances are
+            one list, told apart here rather than by a navigation entry each. */}
+        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+          {INTAKE_DOCUMENT_TYPES.map(({ value, label }) => (
+            <FilterChip
+              key={value}
+              label={label}
+              active={type === value}
+              onClick={() => updateParams({ type: type === value ? "" : value })}
+            />
+          ))}
+        </div>
+
+        {showStatus && (
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
           {STATUS_FILTERS.map(({ value, label }) => {
             const active = status === value;
@@ -146,6 +170,7 @@ export function PurchasesListPanel({
             );
           })}
         </div>
+        )}
 
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", marginLeft: "auto" }}>
           <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -174,9 +199,24 @@ export function PurchasesListPanel({
           </Tooltip>
         </div>
 
+        {/* Two doors, one per document (#1323). An opening balance is created here, beside the
+            purchases it is listed with, rather than from a screen of its own. */}
         <button
           type="button"
-          onClick={() => setDialog({ kind: "add" })}
+          onClick={() => setDialog({ kind: "add", document: "opening_balance" })}
+          style={{
+            ...FILTER_CONTROL_STYLE,
+            cursor: "pointer",
+            fontWeight: 600,
+            color: "var(--color-text-primary)",
+            padding: "0.375rem 0.875rem",
+          }}
+        >
+          Add opening balance
+        </button>
+        <button
+          type="button"
+          onClick={() => setDialog({ kind: "add", document: "purchase" })}
           style={{
             ...FILTER_CONTROL_STYLE,
             cursor: "pointer",
@@ -204,15 +244,15 @@ export function PurchasesListPanel({
       >
         {isLoading && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-            Loading purchases…
+            Loading intake documents…
           </div>
         )}
 
         {!isLoading && rows.length === 0 && (
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {hasActiveFilters
-              ? "No purchases match this filter."
-              : "No purchases yet. Record your first acquisition."}
+              ? "No intake documents match this filter."
+              : "Nothing here yet. Record a purchase, or an opening balance for stamps you already own."}
           </div>
         )}
 
@@ -241,6 +281,7 @@ export function PurchasesListPanel({
       {(dialog.kind === "add" || dialog.kind === "edit") && (
         <PurchaseFormDialog
           mode={dialog.kind}
+          kind={dialog.kind === "add" ? dialog.document : undefined}
           collectionId={collectionId}
           baseCurrency={baseCurrency}
           today={today}
@@ -266,10 +307,11 @@ export function PurchasesListPanel({
                 const result = await updatePurchaseAction(purchaseId, fd);
                 if (result.status === "success") {
                   handleSuccess();
+                  const opening = dialog.purchase.kind === "opening_balance";
                   toast({
-                    message: "Purchase saved",
+                    message: opening ? "Opening balance saved" : "Purchase saved",
                     href: `/c/${collectionSlug}/purchases/${purchaseId}`,
-                    linkLabel: "Open purchase",
+                    linkLabel: opening ? "Open opening balance" : "Open purchase",
                   });
                 } else if (result.status === "error") setActionError(result.message);
               }
@@ -281,9 +323,13 @@ export function PurchasesListPanel({
       {/* Delete confirmation */}
       {dialog.kind === "delete" && (
         <ConfirmDialog
-          title="Delete purchase"
-          message="This permanently removes this purchase and its lot and expense lines. This cannot be undone."
-          actionLabel="Delete purchase"
+          title={dialog.purchase.kind === "opening_balance" ? "Delete opening balance" : "Delete purchase"}
+          message={
+            dialog.purchase.kind === "opening_balance"
+              ? "This permanently removes this opening balance and its lots. This cannot be undone."
+              : "This permanently removes this purchase and its lot and expense lines. This cannot be undone."
+          }
+          actionLabel={dialog.purchase.kind === "opening_balance" ? "Delete opening balance" : "Delete purchase"}
           pendingLabel="Deleting…"
           variant="destructive"
           isPending={isPending}
@@ -295,7 +341,12 @@ export function PurchasesListPanel({
               const result = await deletePurchaseAction(dialog.purchase.id);
               if (result.status === "success") {
                 handleSuccess();
-                toast({ message: "Purchase deleted" });
+                toast({
+                  message:
+                    dialog.purchase.kind === "opening_balance"
+                      ? "Opening balance deleted"
+                      : "Purchase deleted",
+                });
               } else if (result.status === "error") setActionError(result.message);
             });
           }}

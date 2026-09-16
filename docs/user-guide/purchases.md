@@ -1,10 +1,15 @@
-# Purchases
+# Purchases and opening balances
 
 A **purchase** records one acquisition — a single event where money changed hands. It is
 where your **cost** lives: what you paid a dealer, an auction house, or a private seller,
 including shipping. A purchase groups together everything bought in that transaction.
 
-Open the **Purchases** screen from the **Buying** section of the sidebar.
+An **opening balance** brings in stamps you already own without buying them — a shelf of
+stockbooks being catalogued, a gift, an inheritance — and otherwise works exactly as a purchase
+does. See [Opening balances](#opening-balances).
+
+Open the **Intake documents** screen from the **Intake** section of the sidebar. It lists your
+purchases, the orders your trades created and your opening balances together.
 
 ## What a purchase holds
 
@@ -67,15 +72,59 @@ in the one transaction currency you pick. If that currency differs from your col
 base currency, the exchange rate as of the purchase date is captured and stored with the
 record.
 
-## The purchases list
+## Opening balances
 
-Each row shows the purchase's **number** (`#7` — see [Quick jump](quick-jump.md)), the
-**supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, the delivery **status**, a
+An opening balance is for stamps that come into the collection **without being bought** — the
+stockbook on the shelf you are finally cataloguing, a gift, an inheritance. It is a document of its
+own on the **Intake documents** list, and its screen is the purchase screen: scans, identification,
+the want review, *to sort*, **Store** and **Move**, lots, grouping, filtering and sorting all work
+exactly as they do on a purchase.
+
+What makes it different is only what a purchase has and it does not:
+
+- **A title instead of a supplier.** Click **Add opening balance** on the list and give it a
+  **title** (*Stockbook Poland 1*, *Inheritance*), a **date** and a **currency** — the currency
+  defaults to your collection's base one, and a different one has its exchange rate captured as of
+  the date, as on a purchase. The title is required: it is what the list, the quick jump and a
+  copy's **Go to purchase** name the document by. **Edit header** changes the same three things.
+- **No supplier, platform, shipping or delivery status.** None of them is asked for or shown. The
+  stamps are in your hands from the start, so there is nothing to mark arrived: every copy you
+  identify lands as **to sort**, never *ordered*, and becomes delivered when you **Store** it.
+- **An optional opening value on each lot.** Add as many lots as you like, each with a title and,
+  if you want one, an **opening value** — what that material is worth to you, in the document's
+  currency. Leave the field blank when it has none; a blank field is *no value*, which is not the
+  same as `0`.
+
+A lot **closes and reopens as a purchase lot does**:
+
+- A lot **with** an opening value is split across its copies by their primary-catalogue prices, and
+  each copy's share is frozen as its cost when the lot closes — exactly like a purchase price.
+- A lot **without** one closes too, but freezes no cost: every copy on it has a cost that is **not
+  applicable** (*cost n/a*), whether the lot is open or closed. It never reads `0` and never
+  *pending*.
+- Either way, closing is **blocked while a copy lacks a primary-catalogue price** for its
+  condition — the same rule as on a purchase, kept on purpose so that cataloguing an old stockbook
+  is done properly, prices and all.
+
+## The intake documents list
+
+Each row shows the document's **number** (`#7` — see [Quick jump](quick-jump.md)). A purchase then
+shows its **supplier** (or *No supplier*, with *via …* when a platform is set), the **date**, a
+*Trade* mark when the order came from closing a trade, the delivery **status**, a
 short summary of its lines (how many **lots** and **expenses**), and the **total** — the sum
 of every lot, every expense, and the shipping cost, shown in the purchase's currency. A
 freshly recorded purchase shows *0 lots* until you add its lines during intake.
 
-- **Filter** by delivery status with the *Preparing* / *In transit* / *Arrived* toggles.
+An opening balance shows its **title**, the **date**, an *Opening balance* mark, how many **lots**
+it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
+opening value* rather than `0.00`, and when only some do, a chip says how many lots have none.
+
+- **Filter** by type with the *Purchases* / *Trades* / *Opening balances* toggles. *Purchases* are
+  the orders you recorded or settled from an auction; *Trades* are the orders closing a trade
+  created.
+- **Filter** by delivery status with the *Preparing* / *In transit* / *Arrived* toggles. A delivery
+  status belongs to a purchase alone, so these never show an opening balance, and they are not
+  offered while *Opening balances* is selected.
 - **Sort** by purchase date or by the date the record was added, ascending or descending.
 
 Your filter, sort, and scroll position are kept in the page URL, so you can bookmark or
@@ -83,7 +132,8 @@ share a view. The list loads more rows as you scroll.
 
 ## Adding a purchase
 
-Click **Add purchase**. The dialog captures only the header:
+Click **Add purchase**. (For stamps you already own, click **Add opening balance** instead — see
+[Opening balances](#opening-balances).) The dialog captures only the header:
 
 1. **Supplier** — start typing to search your suppliers and pick one. You don't have to
    pick: if you type a new name and leave it, it is saved as a new supplier when you save

@@ -70,6 +70,12 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
   const [hovered, setHovered] = useState(false);
   const status = statusChip(p.status);
   const detailHref = `/c/${collectionSlug}/purchases/${p.id}`;
+  // An opening balance (#1323) is named by its title and has no supplier, platform, shipping or
+  // delivery status to show; its money figure is the lots' opening values, or a sentence saying
+  // there are none.
+  const opening = p.kind === "opening_balance";
+  const name = opening ? p.title : p.contactName;
+  const fallbackName = opening ? "Untitled" : "No supplier";
 
   const menuActions: RowAction[] = [
     { key: "open", label: "Open", icon: "open", href: detailHref },
@@ -98,7 +104,7 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
           cursor: "pointer",
         }}
       >
-        <RowLink href={detailHref} label={p.contactName ?? "No supplier"} />
+        <RowLink href={detailHref} label={name ?? fallbackName} />
 
         {/* Line 1: supplier (· via platform) + actions */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
@@ -106,8 +112,8 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
             style={{
               fontSize: "0.9375rem",
               fontWeight: 600,
-              color: p.contactName ? "var(--color-text-primary)" : "var(--color-text-muted)",
-              fontStyle: p.contactName ? undefined : "italic",
+              color: name ? "var(--color-text-primary)" : "var(--color-text-muted)",
+              fontStyle: name ? undefined : "italic",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -115,9 +121,9 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
               maxWidth: "60%",
             }}
           >
-            {p.contactName ?? "No supplier"}
+            {name ?? fallbackName}
           </span>
-          {p.platformName && (
+          {!opening && p.platformName && (
             <Tooltip content={`Bought via ${p.platformName}`} style={ROW_LINK_ABOVE}>
               <span style={META_INLINE}>via {p.platformName}</span>
             </Tooltip>
@@ -141,9 +147,22 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
         <div style={{ ...ROW_LINK_ABOVE, display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem" }}>
           <EntityNoChip entity="purchase" no={p.purchaseNo} prefix="p" />
           <span style={META_INLINE}>{p.purchasedAt}</span>
-          <Tooltip content="Delivery status">
-            <span style={status.style}>{status.label}</span>
-          </Tooltip>
+          {opening ? (
+            <Tooltip content="Stamps brought into the collection without being bought">
+              <span style={CHIP}>Opening balance</span>
+            </Tooltip>
+          ) : (
+            <>
+              {p.type === "trade" && (
+                <Tooltip content="The incoming half of a trade">
+                  <span style={CHIP}>Trade</span>
+                </Tooltip>
+              )}
+              <Tooltip content="Delivery status">
+                <span style={status.style}>{status.label}</span>
+              </Tooltip>
+            </>
+          )}
         </div>
 
         {/* Line 3: line-count / shipping chips + total */}
@@ -172,22 +191,32 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
               </span>
             </Tooltip>
           )}
+          {opening && p.total != null && p.unvaluedLotCount > 0 && (
+            <span style={CHIP}>
+              {p.unvaluedLotCount} lot{p.unvaluedLotCount === 1 ? "" : "s"} without a value
+            </span>
+          )}
           <Tooltip
-            content="Total (lots + expenses + shipping)"
+            content={opening ? "Opening value (the lots' values added up)" : "Total (lots + expenses + shipping)"}
             align="end"
             style={{ marginLeft: "auto" }}
           >
-            <span
-              style={{
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                fontVariantNumeric: "tabular-nums",
-                color: "var(--color-text-primary)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {p.total} {p.currency}
-            </span>
+            {p.total == null ? (
+              // No lot carries a value: said in words, never `0.00` (#1184).
+              <span style={{ ...META_INLINE, fontStyle: "italic" }}>No opening value</span>
+            ) : (
+              <span
+                style={{
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  fontVariantNumeric: "tabular-nums",
+                  color: "var(--color-text-primary)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {p.total} {p.currency}
+              </span>
+            )}
           </Tooltip>
         </div>
       </div>

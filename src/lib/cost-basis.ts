@@ -12,8 +12,10 @@
 //   - **pending** — the copy belongs to a lot that is still `open`; its cost-basis will be
 //                   frozen when the lot closes (ADR-0009 §5). Shown as a pending indicator.
 //   - **none**    — no cost-basis applies: the copy has no acquisition lot (added by hand
-//                   or via a channel that records no cost), or it was dropped from a closed
-//                   lot as not-delivered (ADR-0009 §5) and so carries no frozen cost.
+//                   or via a channel that records no cost), it was dropped from a closed
+//                   lot as not-delivered (ADR-0009 §5) and so carries no frozen cost, or its
+//                   lot is on an opening balance and carries **no opening value** (#1323) —
+//                   open or closed, since there is nothing for a close to freeze.
 //
 // Profit/loss (out of scope for #123) is `sale proceeds − cost-basis`, defined only when
 // the state is `known`; a `pending` or `none` copy has no basis to compute against yet.
@@ -34,17 +36,32 @@ export interface CostBasisInput {
   lotId: string | null;
   /** Owning lot's status (`"open" | "closed"`), or null when there is no lot. */
   lotStatus: string | null;
+  /** Whether the owning lot carries a value to split (`PurchaseLot.price` is set), or null when
+   *  there is no lot. `false` only on an opening balance's lot without an opening value (#1323),
+   *  whose copies are never *pending*: there is no pool for a close to freeze. */
+  lotValued: boolean | null;
+}
+
+/** The lot half of a {@link CostBasisInput}, read off the owning lot as selected (`status` and
+ *  `price`), so every reader states *pending* and *no value* the same way (#1323). */
+export function lotCostInputs(
+  lot: { status: string; price: unknown } | null | undefined
+): Pick<CostBasisInput, "lotStatus" | "lotValued"> {
+  return lot
+    ? { lotStatus: lot.status, lotValued: lot.price != null }
+    : { lotStatus: null, lotValued: null };
 }
 
 /** Resolve a copy's cost-basis into an explicit {@link CostBasisState}. A frozen snapshot
- * always wins (`known`); otherwise a copy on an `open` lot is `pending`, and everything
- * else — no lot, or a closed lot that left this copy without a snapshot — is `none`. This
- * is the documented accessor downstream profit/loss should read cost-basis through. */
+ * always wins (`known`); otherwise a copy on an `open` lot with a value is `pending`, and
+ * everything else — no lot, a lot with no value (#1323), or a closed lot that left this copy
+ * without a snapshot — is `none`. This is the documented accessor downstream profit/loss
+ * should read cost-basis through. */
 export function resolveCostBasis(input: CostBasisInput): CostBasisState {
   if (input.costBasis != null) {
     return { state: "known", amount: input.costBasis };
   }
-  if (input.lotId != null && input.lotStatus === "open") {
+  if (input.lotId != null && input.lotStatus === "open" && input.lotValued !== false) {
     return { state: "pending" };
   }
   return { state: "none" };
@@ -63,7 +80,8 @@ export interface CostBasisTotal {
   knownCount: number;
   /** Copies whose cost-basis is pending — they belong to a still-open purchase lot. */
   pendingCount: number;
-  /** Copies with no cost-basis recorded (added by hand, or dropped from a closed lot). */
+  /** Copies with no cost-basis recorded (added by hand, dropped from a closed lot, or on an
+   *  opening-balance lot with no opening value). */
   noneCount: number;
 }
 

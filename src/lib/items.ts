@@ -26,7 +26,8 @@ import {
 } from "./item-valuation";
 import { marketKeyOf } from "./market-value";
 import { readMarketMedians } from "./market-values";
-import { aggregateCostBasis, type CostBasisInput } from "./cost-basis";
+import { aggregateCostBasis, lotCostInputs, type CostBasisInput } from "./cost-basis";
+import { intakeDocumentName } from "./purchase-kind";
 import {
   isUnknownVariantStamp,
   subtypeLabel,
@@ -400,13 +401,17 @@ export function stampLabel(stamp: {
 }
 
 /** Supplier + date — the pair the purchases list leads with — naming the order a copy came from
- * (#387), so its row menu says *which* purchase before navigating to it. */
+ * (#387), so its row menu says *which* purchase before navigating to it. An opening balance has no
+ * supplier and is named by its title instead (#1323). */
 function purchaseLabel(p: {
+  kind: string;
+  title: string | null;
   purchasedAt: Date;
   contact: { name: string } | null;
 }): string {
   const date = p.purchasedAt.toISOString().slice(0, 10);
-  return p.contact?.name ? `${p.contact.name} · ${date}` : date;
+  const name = intakeDocumentName({ kind: p.kind, title: p.title, contactName: p.contact?.name ?? null });
+  return name ? `${name} · ${date}` : date;
 }
 
 const ITEM_SELECT = {
@@ -1578,6 +1583,10 @@ export interface ItemListItem {
    * Feeds `resolveCostBasis` so a null cost-basis on an open lot reads as **pending**
    * rather than "no cost" (#123). */
   lotStatus: string | null;
+  /** Whether the owning lot carries a value to split, or null when the copy has no lot. `false`
+   *  on an opening balance's lot without an opening value, whose copies' cost is *not applicable*
+   *  rather than pending (#1323). */
+  lotValued: boolean | null;
   /** The purchase order the owning lot belongs to (#387), or null when the copy has no lot.
    * `label` is what the row menu names it by — supplier + date, the same pair the purchases
    * list leads with — so "Go to purchase" says *which* purchase before it navigates. */
@@ -1646,9 +1655,17 @@ const ITEM_LIST_SELECT = {
   lot: {
     select: {
       status: true,
+      // Whether the lot carries a value to split (#1323) — null only on an opening balance.
+      price: true,
       // The owning order, for the copy's "Go to purchase" action (#387).
       purchase: {
-        select: { id: true, purchasedAt: true, contact: { select: { name: true } } },
+        select: {
+          id: true,
+          kind: true,
+          title: true,
+          purchasedAt: true,
+          contact: { select: { name: true } },
+        },
       },
     },
   },
@@ -1847,7 +1864,7 @@ function toItemListItem(
     // fact, never two that can drift.
     tradedAway: tradeMark(row, "left"),
     lotId: row.lotId,
-    lotStatus: row.lot?.status ?? null,
+    ...lotCostInputs(row.lot),
     purchase: row.lot?.purchase
       ? { id: row.lot.purchase.id, label: purchaseLabel(row.lot.purchase) }
       : null,
@@ -3177,6 +3194,7 @@ function summarizeHoldings(
     costBasis: i.costBasis,
     lotId: i.lotId,
     lotStatus: i.lotStatus,
+    lotValued: i.lotValued,
   });
   return {
     ...aggregateHoldings(
@@ -3696,7 +3714,7 @@ const HOLDINGS_ROW_SELECT = {
   formatId: true,
   costBasis: true,
   lotId: true,
-  lot: { select: { status: true } },
+  lot: { select: { status: true, price: true } },
   // The two axes `isHeld` reads (#396) — which side of the summary a copy lands on.
   disposedAt: true,
   deliveryState: true,
@@ -3745,7 +3763,7 @@ async function makeHoldingsSummarizer(
       {
         costBasis: row.costBasis == null ? null : row.costBasis.toString(),
         lotId: row.lotId,
-        lotStatus: row.lot?.status ?? null,
+        ...lotCostInputs(row.lot),
       },
     ])
   );

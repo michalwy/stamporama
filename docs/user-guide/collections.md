@@ -26,8 +26,8 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - **Overview**, pinned above everything else — the one screen about the collection as a whole
 - Five **sections**, each one a heading you can fold away: **Catalog** (Issues, Stamps and the
   variant-price worklist under it, then Areas), **Collection** (Inventory with Card scans under it, then
-  Locations and Albums), **Selling** (the Offers group, the Marketplaces group, Sales), **Buying** (Want list,
-  Purchases, Auctions) and **Partners** (Trades, Contacts, Colnect — the screens that serve buying
+  Locations and Albums), **Selling** (the Offers group, the Marketplaces group, Sales), **Intake** (Want list,
+  Intake documents, Auctions) and **Partners** (Trades, Contacts, Colnect — the screens that serve buying
   and selling alike). A subject read through more than one screen carries the extra ones indented
   under it: **Stamps**, **Inventory** and **Offers** are themselves the list you open every day,
   with **Variant prices**, **Card scans** and the **Lot builder** / **Series from singles** / **Bulk listing** beneath them,

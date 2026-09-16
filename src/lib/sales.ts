@@ -1,4 +1,5 @@
 import "server-only";
+import { lotCostInputs } from "./cost-basis";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
@@ -1368,12 +1369,16 @@ function resolveSaleNets(sale: SaleAmountsRow, baseCurrency: string) {
 /** A sold copy's cost-basis inputs, as every profit read loads them. */
 const SALE_PROFIT_COPY_SELECT = {
   itemId: true,
-  item: { select: { costBasis: true, lotId: true, lot: { select: { status: true } } } },
+  item: { select: { costBasis: true, lotId: true, lot: { select: { status: true, price: true } } } },
 } as const;
 
 interface SaleProfitCopyRow {
   itemId: string;
-  item: { costBasis: Prisma.Decimal | null; lotId: string | null; lot: { status: string } | null };
+  item: {
+    costBasis: Prisma.Decimal | null;
+    lotId: string | null;
+    lot: { status: string; price: Prisma.Decimal | null } | null;
+  };
 }
 
 interface SaleProfitSaleInput {
@@ -1392,7 +1397,7 @@ function toProfitLines(
       id: row.itemId,
       costBasis: row.item.costBasis == null ? null : row.item.costBasis.toFixed(2),
       lotId: row.item.lotId,
-      lotStatus: row.item.lot?.status ?? null,
+      ...lotCostInputs(row.item.lot),
       catalogPrice: weightOf(row.itemId),
     })),
   }));
