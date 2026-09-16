@@ -683,6 +683,10 @@ export function PurchaseDetailPanel({
       ? PURCHASE_STATUS_ORDER[statusIdx + 1]
       : null;
 
+  // An opening balance (#1323) is this same screen over a document that bought nothing: it is named by
+  // its title, and has no supplier, platform, shipping or delivery status to show or to set.
+  const openingBalance = purchase.kind === "opening_balance";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       {/* Header summary */}
@@ -696,9 +700,14 @@ export function PurchaseDetailPanel({
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-            {purchase.contactName ?? "No supplier"}
+            {openingBalance ? purchase.title : purchase.contactName ?? "No supplier"}
           </h2>
-          {purchase.platformName && (
+          {openingBalance && (
+            <Tooltip content="Stamps brought into the collection without being bought. Its copies are in hand from the start, and a lot's opening value, when it has one, is split across the copies as a purchase price would be.">
+              <span style={CHIP}>Opening balance</span>
+            </Tooltip>
+          )}
+          {!openingBalance && purchase.platformName && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
               via {purchase.platformName}
             </span>
@@ -735,11 +744,11 @@ export function PurchaseDetailPanel({
               date, the currency, a shipping chip and the order total; the last two are now rows of
               the values table below and the currency rides on every amount there, so the whole row
               went and the header is a line shorter for it. */}
-          <Tooltip content="When this order was placed">
+          <Tooltip content={openingBalance ? "The date of this opening balance" : "When this order was placed"}>
             <span style={CHIP}>{purchase.purchasedAt}</span>
           </Tooltip>
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            {(() => {
+            {!openingBalance && (() => {
               const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
               return (
                 <>
@@ -808,7 +817,13 @@ export function PurchaseDetailPanel({
                 list's own dialog, so there is still exactly one editor per order. It sits with the
                 status control because that is the other thing on this card that changes the order
                 itself rather than its lots. */}
-            <Tooltip content="Edit this order's header — supplier, platform, date, currency and shipping. The lots below are edited on their own cards.">
+            <Tooltip
+              content={
+                openingBalance
+                  ? "Edit the title, date and currency. The lots below are edited on their own cards."
+                  : "Edit this order's header — supplier, platform, date, currency and shipping. The lots below are edited on their own cards."
+              }
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -829,7 +844,7 @@ export function PurchaseDetailPanel({
                 <Icon name="edit" size="sm" /> Edit header
               </button>
             </Tooltip>
-            {purchase.status !== "arrived" && (
+            {!openingBalance && purchase.status !== "arrived" && (
               <Tooltip content="Mark the whole order arrived: its copies move to “to sort”, ready to be filed">
                 <button
                   type="button"
@@ -876,7 +891,9 @@ export function PurchaseDetailPanel({
         // header used to state in part and never in whole. It leads the bar, so it is on screen
         // collapsed; the price/shipping breakdown is behind the expander, those two being what the
         // collector already had separately.
-        spend={purchase.spend}
+        // Not on an opening balance (#1323): nothing was paid, so an order total with a shipping row
+        // under it would state something untrue. What leads that panel instead is #1325's.
+        spend={openingBalance ? undefined : purchase.spend}
         storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
       />
 
@@ -1203,6 +1220,7 @@ export function PurchaseDetailPanel({
               scanDpi={scanDpi}
               currency={purchase.currency}
               baseCurrency={purchase.baseCurrency}
+              openingBalance={openingBalance}
               areas={areas}
               locations={locations}
               conditions={conditions}
@@ -1307,6 +1325,7 @@ export function PurchaseDetailPanel({
         <LotDialog
           title="Add lot"
           actionLabel="Add lot"
+          openingBalance={openingBalance}
           isPending={isPending}
           error={error}
           onClose={() => {
@@ -1432,6 +1451,7 @@ export function PurchaseDetailPanel({
         <LotDialog
           title="Add lot with stamps"
           actionLabel="Create lot"
+          openingBalance={openingBalance}
           isPending={isPending}
           error={error}
           onClose={() => {
@@ -1483,6 +1503,9 @@ export function PurchaseDetailPanel({
 interface LotCardProps {
   index: number;
   lot: LotSummary;
+  /** The lot is on an opening balance (#1323): its price is an optional opening value, and it has no
+   *  share of any shipping to show. */
+  openingBalance: boolean;
   /** Flash the card once right after this lot is created (#158). */
   justAdded: boolean;
   /** The lot named by `?lot=` when the screen opened — what a copy's "Go to purchase" arrived to
@@ -2459,6 +2482,7 @@ function LotCard({
   purchaseId,
   currency,
   baseCurrency,
+  openingBalance,
   areas,
   locations,
   conditions,
@@ -2843,13 +2867,22 @@ function LotCard({
           </Tooltip>
         )}
         <span style={{ flex: 1 }} />
-        <Tooltip content="Lot price">
-          <span
-            style={{ fontSize: "0.875rem", fontVariantNumeric: "tabular-nums", color: "var(--color-text-secondary)" }}
-          >
-            {lot.price} {currency}
-          </span>
-        </Tooltip>
+        {lot.price == null ? (
+          // No opening value (#1323): said in words, never `0.00` (#1184).
+          <Tooltip content="This lot has no opening value, so its copies' cost is not applicable">
+            <span style={{ fontSize: "0.8125rem", fontStyle: "italic", color: "var(--color-text-muted)" }}>
+              No opening value
+            </span>
+          </Tooltip>
+        ) : (
+          <Tooltip content={openingBalance ? "Opening value" : "Lot price"}>
+            <span
+              style={{ fontSize: "0.875rem", fontVariantNumeric: "tabular-nums", color: "var(--color-text-secondary)" }}
+            >
+              {lot.price} {currency}
+            </span>
+          </Tooltip>
+        )}
         {open && (
           <Tooltip content="Identify stamps into this lot">
             <button
@@ -2875,15 +2908,19 @@ function LotCard({
         <RowActionsMenu actions={actions} ariaLabel={`Lot ${index + 1} actions`} />
       </div>
 
-      {/* Pool line — part of the pinned header block */}
+      {/* Pool line — part of the pinned header block. An opening balance has no shipping, so its pool
+          is its value and says nothing the price beside the title has not (#1323); only the
+          base-currency equivalent is worth a chip there. */}
       <div style={{ padding: "0 1.25rem 0.625rem 2.35rem", display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+        {!openingBalance && (
         <Tooltip content="Pool = price + share of shipping (transaction currency)">
           <span style={CHIP}>
             Pool {lot.poolTx} {currency}
           </span>
         </Tooltip>
+        )}
         {currency !== baseCurrency && lot.poolBase != null && (
-          <Tooltip content="Pool in base currency at the frozen rate">
+          <Tooltip content={openingBalance ? "Opening value in base currency at the frozen rate" : "Pool in base currency at the frozen rate"}>
             <span style={CHIP}>
               ≈ {lot.poolBase} {baseCurrency}
             </span>
@@ -2933,7 +2970,7 @@ function LotCard({
                   // shipping, which is what a cost basis is split from. The pool chips above say
                   // the sum but never the share, and they are the *collapsed* lot's only answer,
                   // so both stay — the chip is the shut lot's line, this is the open one's table.
-                  spend={lot.spend}
+                  spend={openingBalance ? undefined : lot.spend}
                   storageKey={`stamporama:purchase:lotSummaryExpanded:${collectionId}`}
                 />
               </div>
@@ -3092,6 +3129,7 @@ function LotCard({
           actionLabel="Save"
           initialTitle={lot.title}
           initialPrice={lot.price}
+          openingBalance={openingBalance}
           isPending={isPending}
           error={copyError}
           onClose={closeDialog}
@@ -3150,7 +3188,9 @@ function LotCard({
                 ? `${unsortedCount} cop${
                     unsortedCount === 1 ? "y is" : "ies are"
                   } still unsorted (ordered / to sort / in transit). You can still close — closing runs the cost allocation and freezes each copy's cost-basis — but sorting first is recommended. Closing is blocked only if a copy lacks a primary-catalog price for its condition.`
-                : "Closing runs the cost allocation and freezes each copy's cost-basis. Closing is blocked if any copy lacks a primary-catalog price for its condition."}
+                : lot.price == null
+                  ? "This lot has no opening value, so closing freezes no cost — every copy's cost stays not applicable. Closing is still blocked if any copy lacks a primary-catalog price for its condition."
+                  : "Closing runs the cost allocation and freezes each copy's cost-basis. Closing is blocked if any copy lacks a primary-catalog price for its condition."}
               {/* A warning, never a block (#566) — the same call the unsorted count makes. A tile
                   has no stamp, so no catalogue price, so no weight in the split: closing without it
                   is arithmetically fine, and it is the collector's memory that needs the nudge.
@@ -3201,7 +3241,11 @@ function LotCard({
       {dialog === "reopen" && (
         <ConfirmDialog
           title="Reopen lot"
-          message="Reopening returns every copy's cost-basis to pending so you can correct the lot, then close it again."
+          message={
+            lot.price == null
+              ? "Reopening lets you correct the lot, then close it again. Its copies' cost stays not applicable — the lot has no opening value."
+              : "Reopening returns every copy's cost-basis to pending so you can correct the lot, then close it again."
+          }
           actionLabel="Reopen lot"
           pendingLabel="Reopening…"
           isPending={isPending}
@@ -3495,7 +3539,10 @@ interface LotDialogProps {
   title: string;
   actionLabel: string;
   initialTitle?: string | null;
-  initialPrice?: string;
+  initialPrice?: string | null;
+  /** On an opening balance the price is an **optional opening value** (#1323): blank means none,
+   *  which is never the same as `0`. */
+  openingBalance?: boolean;
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -3508,6 +3555,7 @@ function LotDialog({
   actionLabel,
   initialTitle,
   initialPrice,
+  openingBalance = false,
   isPending,
   error,
   onClose,
@@ -3537,16 +3585,24 @@ function LotDialog({
               Leave blank to label the lot by the stamps you add to it.
             </p>
           </div>
-          <LabelWithError htmlFor="lot-price">Lot price</LabelWithError>
+          <LabelWithError htmlFor="lot-price">
+            {openingBalance ? "Opening value (optional)" : "Lot price"}
+          </LabelWithError>
           <NumericInput
             kind="amount"
             id="lot-price"
             name="price"
-            required
+            required={!openingBalance}
             defaultValue={initialPrice ?? ""}
             disabled={isPending}
             style={INPUT_STYLE}
           />
+          {openingBalance && (
+            <p style={{ margin: "0.375rem 0 0", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+              What this material is worth to you, split across its copies as a purchase price would
+              be. Leave blank when it has none — its copies&rsquo; cost is then not applicable.
+            </p>
+          )}
         </DialogBody>
         <DialogActions actionLabel={isPending ? "Saving…" : actionLabel} onCancel={onClose} disabled={isPending} error={error} />
       </form>
@@ -4046,6 +4102,12 @@ function LotCopyChips({
           <span style={{ ...CHIP, fontVariantNumeric: "tabular-nums" }}>
             cost {item.costBasis} {baseCurrency}
           </span>
+        </Tooltip>
+      ) : item.lotValued === false ? (
+        // A lot with no opening value (#1323): the cost is not applicable, open or closed — never an
+        // estimate, never pending and never `0`.
+        <Tooltip content="This copy's lot has no opening value, so its cost is not applicable.">
+          <span style={{ ...CHIP, color: "var(--color-text-muted)" }}>cost n/a</span>
         </Tooltip>
       ) : estimate != null ? (
         <Tooltip content="Estimated cost-basis if the lot closed now — computed live, frozen when you close the lot.">

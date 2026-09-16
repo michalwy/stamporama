@@ -12,6 +12,7 @@ import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
+import { intakeDocumentName } from "@/lib/purchase-kind";
 import { PurchaseDetailPanel } from "./purchase-detail-panel";
 
 interface PurchaseDetailPageProps {
@@ -29,6 +30,7 @@ export async function generateMetadata({
   const purchase = await getPurchaseDetail(session.user.id, purchaseId);
   if (!purchase) return {};
 
+  if (purchase.kind === "opening_balance") return { title: `Opening balance — ${purchase.title}` };
   return { title: `Purchase — ${purchase.contactName ?? purchase.purchasedAt}` };
 }
 
@@ -82,7 +84,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
           marginBottom: "0.75rem",
         }}
       >
-        ← Back to purchases
+        ← Back to intake documents
       </Link>
       <RecordRecentVisit
         collectionId={collection.id}
@@ -90,8 +92,8 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         id={purchase.id}
         href={`/c/${collectionSlug}/purchases/${purchase.id}`}
         // Who it was bought from is what a purchase is remembered by; the date tells two orders
-        // from the same dealer apart.
-        label={purchase.contactName ?? purchase.platformName ?? "Purchase"}
+        // from the same dealer apart. An opening balance is remembered by its title (#1323).
+        label={intakeDocumentName(purchase) ?? "Purchase"}
         sublabel={purchase.purchasedAt}
       />
       <PurchaseDetailPanel

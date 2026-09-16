@@ -1,4 +1,5 @@
 import "server-only";
+import { lotCostInputs } from "./cost-basis";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { allocateEntityNumber } from "./items";
@@ -43,7 +44,7 @@ import {
 const GIVE_SELECT = {
   itemId: true,
   fulfillment: true,
-  item: { select: { costBasis: true, lotId: true, lot: { select: { status: true } } } },
+  item: { select: { costBasis: true, lotId: true, lot: { select: { status: true, price: true } } } },
 } satisfies Prisma.TradeLineSelect;
 
 const RECEIVE_SELECT = {
@@ -84,7 +85,7 @@ function poolOf(give: GiveRow[]): CarryOverPool {
       fulfillment: line.fulfillment,
       costBasis: line.item?.costBasis?.toFixed(2) ?? null,
       lotId: line.item?.lotId ?? null,
-      lotStatus: line.item?.lot?.status ?? null,
+      ...lotCostInputs(line.item?.lot),
     }))
   );
 }

@@ -3222,8 +3222,17 @@ model Purchase {
   fxRateToBase Decimal?
   // Shared cost (shipping/handling) distributed across all lines by price (ADR-0009 §3).
   shippingCost Decimal? @db.Decimal(10, 2)
-  // Physical delivery status of the shipment: preparing | in_transit | arrived.
+  // Physical delivery status of the shipment: preparing | in_transit | arrived. Always `arrived` on
+  // an opening balance, whose copies are in hand from the start and which shows no status (#1323).
   status       String   @default("preparing")
+  // Which intake document this is (#1323, ADR-0054): `purchase` | `opening_balance`, closed in
+  // `src/lib/purchase-kind.ts` rather than in the database. An opening balance brings copies in
+  // without buying them and otherwise works as a purchase does; CHECK `purchase_kind_shape` keeps
+  // the purchase-only fields (supplier, platform, shipping, trade) off it.
+  kind         String   @default("purchase")
+  // The free title an opening balance is named by (*Klaser Polska 1*, *Inheritance*) — required on
+  // one, absent on a purchase, which is named by its supplier and date (#1323).
+  title        String?
   // The trade this purchase carries the incoming half of, when it came from one (#644). Nullable
   // and 1:1, exactly as `Purchase.auctionSale` marks a purchase transcribed from an auction
   // settlement (ADR-0021): the record says where the material came from, and nothing pretends the
@@ -3257,6 +3266,7 @@ model Purchase {
 
   @@unique([collectionId, purchaseNo])
   @@index([collectionId])
+  @@index([collectionId, kind])
   @@index([contactId])
   @@index([platformId])
   @@map("purchase")
@@ -3272,8 +3282,10 @@ model PurchaseLot {
   // When blank, the UI derives a display label from the copies identified into the lot,
   // falling back to a positional "Lot N" (#121).
   title      String?
-  // Line price in the purchase's transaction currency.
-  price      Decimal @db.Decimal(10, 2)
+  // Line price in the purchase's transaction currency. On an opening balance this is the lot's
+  // **optional opening value**, and null means there is none — never `0` (#1184, #1323): a copy on
+  // such a lot has a cost that is *not applicable*. A purchase lot always has one (`lots.ts`).
+  price      Decimal? @db.Decimal(10, 2)
   // Intake status: open (items still being identified, cost pending) | closed
   // (pool allocated to items, cost-basis frozen). See ADR-0009 §3/§5.
   status     String  @default("open")

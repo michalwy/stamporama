@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { PurchasesListPanel } from "./purchases-list-panel";
 
-export const metadata = { title: "Purchases" };
+export const metadata = { title: "Intake documents" };
 
 interface PurchasesPageProps {
   params: Promise<{ collectionSlug: string }>;
@@ -41,7 +41,7 @@ export default async function PurchasesPage({ params }: PurchasesPageProps) {
           color: "var(--color-text-primary)",
         }}
       >
-        Purchases
+        Intake documents
       </h2>
       <PurchasesListPanel
         collectionId={collection.id}

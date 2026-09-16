@@ -16,13 +16,13 @@ import {
 // never valued at zero.
 
 function known(id: string, cost: string, catalogPrice: number | null = 1): SaleProfitCopy {
-  return { id, costBasis: cost, lotId: "lot", lotStatus: "closed", catalogPrice };
+  return { id, costBasis: cost, lotId: "lot", lotStatus: "closed", lotValued: true, catalogPrice };
 }
 function pending(id: string, catalogPrice: number | null = 1): SaleProfitCopy {
-  return { id, costBasis: null, lotId: "lot", lotStatus: "open", catalogPrice };
+  return { id, costBasis: null, lotId: "lot", lotStatus: "open", lotValued: true, catalogPrice };
 }
 function noCost(id: string, catalogPrice: number | null = 1): SaleProfitCopy {
-  return { id, costBasis: null, lotId: null, lotStatus: null, catalogPrice };
+  return { id, costBasis: null, lotId: null, lotStatus: null, lotValued: null, catalogPrice };
 }
 function line(id: string, netBase: number, copies: SaleProfitCopy[]): SaleProfitLine {
   return { id, netBase, copies };

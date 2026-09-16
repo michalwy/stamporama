@@ -5,6 +5,7 @@ import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { getCollectionBaseCurrency } from "./pricing";
 import {
   aggregatePurchaseCostsByKey,
+  lotCostInputs,
   type PurchaseCostCell,
   type PurchaseCostInput,
 } from "./cost-basis";
@@ -105,7 +106,7 @@ export async function getStampPurchaseCosts(
     select: {
       costBasis: true,
       lotId: true,
-      lot: { select: { status: true, purchase: { select: { purchasedAt: true } } } },
+      lot: { select: { status: true, price: true, purchase: { select: { purchasedAt: true } } } },
       condition: { select: { id: true, name: true, abbreviation: true, sortOrder: true } },
       certificateStatus: { select: { id: true, name: true, abbreviation: true, sortOrder: true } },
       format: { select: { id: true, name: true, abbreviation: true, sortOrder: true } },
@@ -152,7 +153,7 @@ export async function getStampPurchaseCosts(
       formatId: item.format?.id ?? null,
       costBasis: item.costBasis?.toString() ?? null,
       lotId: item.lotId,
-      lotStatus: item.lot?.status ?? null,
+      ...lotCostInputs(item.lot),
       purchasedAt: item.lot?.purchase?.purchasedAt ?? null,
     };
   });

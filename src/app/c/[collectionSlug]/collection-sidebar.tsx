@@ -610,7 +610,7 @@ export function CollectionSidebar({
               while the per-platform views are read when one wants to know what a single
               marketplace has been doing. The order used to follow the *pipeline* (offers go out,
               the marketplace shows them, sales come back); it now follows how often the screen is
-              wanted, which is the same rule that puts Selling before Buying at the top of this
+              wanted, which is the same rule that puts Selling before Intake at the top of this
               section. */}
           <NavItem
             href={`${base}/sales`}
@@ -646,8 +646,8 @@ export function CollectionSidebar({
 
         <NavSection {...sectionProps("buying")}>
           {/* Leads the section (#532): what is being looked for comes before what has been ordered.
-              It is the screen opened *before* a fair or a dealer's list, whereas Purchases is what
-              is written up afterwards. */}
+              It is the screen opened *before* a fair or a dealer's list, whereas the intake documents
+              are what is written up afterwards. */}
           <NavItem
             href={`${base}/wants`}
             icon={<Icon name="wants" />}
@@ -657,7 +657,9 @@ export function CollectionSidebar({
           <NavItem
             href={`${base}/purchases`}
             icon={<Icon name="purchases" />}
-            label="Purchases"
+            // Intake documents, not Purchases (#1323): opening balances are listed here too, and
+            // they were not bought. The address stays `/purchases`, which nobody reads.
+            label="Intake documents"
             active={isActive(`${base}/purchases`)}
           />
           {/* Two entries, not one (#376). The lots screen and the settlement screen answer different
@@ -684,12 +686,12 @@ export function CollectionSidebar({
 
         {/* The screens that serve **both** directions, under a heading of their own (#762) rather
             than trailing the nav on spacing alone: once every other entry folds away, a tail
-            hanging under a collapsed Buying reads as part of it. A trade is the one part of the
+            hanging under a collapsed Intake reads as part of it. A trade is the one part of the
             hobby where the two directions are the same act — material leaves and material arrives
             in one agreement (#646); one address book holds the house you bid with, the marketplace
             you list on and the collector you swap with; and Colnect's lists (#686) are what a
             partner reads before offering anything, next to the wish list saying what this
-            collection is after. Filing any of them under Selling or Buying would pick one half. */}
+            collection is after. Filing any of them under Selling or Intake would pick one half. */}
         <NavSection {...sectionProps("partners")}>
           <NavItem
             href={`${base}/trades`}

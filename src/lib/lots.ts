@@ -35,6 +35,7 @@ import { resolvePurchaseSpend, type PurchaseSpend } from "./purchase-spend";
 import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { roundAmount } from "./decimal-input";
+import { intakeDocumentName, type PurchaseKind } from "./purchase-kind";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -61,13 +62,15 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
 async function assertLotOwner(
   ownerId: string,
   lotId: string
-): Promise<{ collectionId: string; purchaseId: string; status: string }> {
+): Promise<{ collectionId: string; purchaseId: string; purchaseKind: string; status: string }> {
   const lot = await prisma.purchaseLot.findUnique({
     where: { id: lotId },
     select: {
       status: true,
       purchaseId: true,
-      purchase: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
+      purchase: {
+        select: { collectionId: true, kind: true, collection: { select: { ownerId: true } } },
+      },
     },
   });
   if (!lot || lot.purchase.collection.ownerId !== ownerId) {
@@ -76,6 +79,7 @@ async function assertLotOwner(
   return {
     collectionId: lot.purchase.collectionId,
     purchaseId: lot.purchaseId,
+    purchaseKind: lot.purchase.kind,
     status: lot.status,
   };
 }
@@ -83,15 +87,15 @@ async function assertLotOwner(
 async function assertPurchaseOwner(
   ownerId: string,
   purchaseId: string
-): Promise<{ collectionId: string }> {
+): Promise<{ collectionId: string; kind: string }> {
   const purchase = await prisma.purchase.findUnique({
     where: { id: purchaseId },
-    select: { collectionId: true, collection: { select: { ownerId: true } } },
+    select: { collectionId: true, kind: true, collection: { select: { ownerId: true } } },
   });
   if (!purchase || purchase.collection.ownerId !== ownerId) {
     throw new Error("Purchase not found or access denied.");
   }
-  return { collectionId: purchase.collectionId };
+  return { collectionId: purchase.collectionId, kind: purchase.kind };
 }
 
 function money(n: number): Prisma.Decimal {
@@ -103,6 +107,20 @@ function parsePrice(price: number): number {
     throw new Error("A lot price must be a non-negative number.");
   }
   return Number(roundAmount(price));
+}
+
+/**
+ * A lot's stored price for the document it is on (#1323). A purchase lot always has one. On an
+ * opening balance the price is the **optional opening value**, and `null` stays null — no value is
+ * never written as `0`, because a zero is a value and would state that the material cost nothing
+ * (#1184).
+ */
+function lotPriceFor(kind: string, price: number | null): Prisma.Decimal | null {
+  if (price == null) {
+    if (kind === "opening_balance") return null;
+    throw new Error("A lot price is required.");
+  }
+  return money(parsePrice(price));
 }
 
 // ---------------------------------------------------------------------------
@@ -117,12 +135,16 @@ export interface LotSummary {
   /** Stored free-text title, or null when the lot has none. The UI derives a label from the
    * lot's copies' catalog numbers when this is null (#121). */
   title: string | null;
-  price: string;
+  /** The line price — on an opening balance the optional opening value, null when there is none
+   *  (#1323). */
+  price: string | null;
   status: string;
   itemCount: number;
-  /** price + share of shared cost, transaction currency (2 dp). */
-  poolTx: string;
-  /** poolTx at the frozen FX rate, base currency (2 dp), or null when no rate is known. */
+  /** price + share of shared cost, transaction currency (2 dp); null on a lot with no value, whose
+   *  copies have nothing to be split (#1323). */
+  poolTx: string | null;
+  /** poolTx at the frozen FX rate, base currency (2 dp), or null when no rate is known or the lot
+   *  has no value. */
   poolBase: string | null;
   /** What this lot cost, in both currencies, broken into its price and its share of the order's
    *  shipping (#852). The same figures `poolTx`/`poolBase` carry, restated for the values bar
@@ -134,6 +156,11 @@ export interface LotSummary {
 export interface PurchaseDetail {
   id: string;
   collectionId: string;
+  /** Which intake document this is (#1323). An opening balance has no supplier, platform, shipping
+   *  or delivery status, and its lots' prices are optional opening values. */
+  kind: PurchaseKind;
+  /** The opening balance's title; null on a purchase. */
+  title: string | null;
   /** Supplier and platform ids beside their names (#752), so the order screen can open the
    *  Purchases list's own header dialog pre-filled — its two contact pickers are addressed by id. */
   contactId: string | null;
@@ -215,6 +242,8 @@ export async function getPurchaseDetail(
     select: {
       id: true,
       collectionId: true,
+      kind: true,
+      title: true,
       purchasedAt: true,
       currency: true,
       fxRateToBase: true,
@@ -266,21 +295,24 @@ export async function getPurchaseDetail(
     fxRateToBase != null || row.currency === row.collection.baseCurrency;
   const costs: PurchaseCosts = {
     shippingCost: row.shippingCost != null ? Number(row.shippingCost) : 0,
-    lots: row.lots.map((l) => ({ id: l.id, price: Number(l.price) })),
+    // A lot with no value weighs nothing in the shipping split — and only an opening balance has one,
+    // which carries no shipping to split anyway (#1323).
+    lots: row.lots.map((l) => ({ id: l.id, price: l.price == null ? 0 : Number(l.price) })),
     expenses: row.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
     fxRateToBase,
   };
 
   const lots: LotSummary[] = row.lots.map((l) => {
     const pool = computeLotPool(costs, l.id);
+    const valued = l.price != null;
     return {
       id: l.id,
       title: l.title,
-      price: l.price.toFixed(2),
+      price: l.price?.toFixed(2) ?? null,
       status: l.status,
       itemCount: l._count.items,
-      poolTx: pool.poolTx.toFixed(2),
-      poolBase: canExpressBase ? pool.poolBase.toFixed(2) : null,
+      poolTx: valued ? pool.poolTx.toFixed(2) : null,
+      poolBase: valued && canExpressBase ? pool.poolBase.toFixed(2) : null,
       // The lot's own two halves, straight off the engine (#852): its line price and the share
       // of the order's shipping the apportionment gave it. Named as a share, with the whole
       // charge beside it, because the lot did not incur it — ADR-0009 §3.1 spread it by price.
@@ -297,7 +329,7 @@ export async function getPurchaseDetail(
   });
 
   const linesTotal = [...row.lots, ...row.expenses].reduce(
-    (sum, l) => sum.add(l.price),
+    (sum, l) => (l.price == null ? sum : sum.add(l.price)),
     new Prisma.Decimal(0)
   );
   const total = row.shippingCost ? linesTotal.add(row.shippingCost) : linesTotal;
@@ -316,6 +348,8 @@ export async function getPurchaseDetail(
   return {
     id: row.id,
     collectionId: row.collectionId,
+    kind: row.kind as PurchaseKind,
+    title: row.title,
     contactId: row.contact?.id ?? null,
     contactName: row.contact?.name ?? null,
     platformId: row.platform?.id ?? null,
@@ -349,19 +383,20 @@ export async function getPurchaseDetail(
 // ---------------------------------------------------------------------------
 
 /** Add a new open lot to a purchase. Lines are managed here (during intake), not in the
- * purchase header dialog (ADR-0009, #120/#121). */
+ * purchase header dialog (ADR-0009, #120/#121). `price` may be null only on an opening balance,
+ * where it is the lot's optional opening value (#1323). */
 export async function createLot(
   ownerId: string,
   purchaseId: string,
-  price: number,
+  price: number | null,
   title?: string | null
 ): Promise<string> {
-  await assertPurchaseOwner(ownerId, purchaseId);
+  const { kind } = await assertPurchaseOwner(ownerId, purchaseId);
   const lot = await prisma.purchaseLot.create({
     data: {
       purchaseId,
       title: title?.trim() || null,
-      price: money(parsePrice(price)),
+      price: lotPriceFor(kind, price),
       status: "open",
     },
     select: { id: true },
@@ -378,7 +413,7 @@ export async function createLotWithStamps(
   ownerId: string,
   purchaseId: string,
   input: {
-    price: number;
+    price: number | null;
     title?: string | null;
     stampId?: string | null;
     checklistId?: string | null;
@@ -424,15 +459,15 @@ export async function createLotWithStamps(
 export async function updateLot(
   ownerId: string,
   lotId: string,
-  data: { price: number; title?: string | null }
+  data: { price: number | null; title?: string | null }
 ): Promise<void> {
-  const { status } = await assertLotOwner(ownerId, lotId);
+  const { status, purchaseKind } = await assertLotOwner(ownerId, lotId);
   if (status !== "open") {
     throw new Error("Reopen the lot before changing its price.");
   }
   await prisma.purchaseLot.update({
     where: { id: lotId },
-    data: { title: data.title?.trim() || null, price: money(parsePrice(data.price)) },
+    data: { title: data.title?.trim() || null, price: lotPriceFor(purchaseKind, data.price) },
   });
 }
 
@@ -539,7 +574,13 @@ export async function attachItemsToLot(
         select: {
           status: true,
           purchase: {
-            select: { id: true, purchasedAt: true, contact: { select: { name: true } } },
+            select: {
+              id: true,
+              kind: true,
+              title: true,
+              purchasedAt: true,
+              contact: { select: { name: true } },
+            },
           },
         },
       },
@@ -554,7 +595,13 @@ export async function attachItemsToLot(
   for (const item of items) {
     if (item.lotId === lotId) continue; // already here — nothing to do
     if (item.lot && item.lot.status !== "open") {
-      const label = item.lot.purchase.contact?.name ?? "another purchase";
+      const { purchase } = item.lot;
+      const label =
+        intakeDocumentName({
+          kind: purchase.kind,
+          title: purchase.title,
+          contactName: purchase.contact?.name ?? null,
+        }) ?? "another purchase";
       refused.push({
         itemId: item.id,
         reason: `This copy belongs to a closed lot (${label}). Reopen that lot before moving it.`,
@@ -921,7 +968,7 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
       // and two concurrent closes cannot both write.
       const lot = await tx.purchaseLot.findUnique({
         where: { id: lotId },
-        select: { status: true },
+        select: { status: true, price: true },
       });
       if (!lot) throw new Error("Lot not found or access denied.");
       if (lot.status !== "open") {
@@ -947,11 +994,17 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
 
       const costs: PurchaseCosts = {
         shippingCost: purchase.shippingCost != null ? Number(purchase.shippingCost) : 0,
-        lots: purchase.lots.map((l) => ({ id: l.id, price: Number(l.price) })),
+        lots: purchase.lots.map((l) => ({ id: l.id, price: l.price == null ? 0 : Number(l.price) })),
         expenses: purchase.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
         fxRateToBase: purchase.fxRateToBase != null ? Number(purchase.fxRateToBase) : null,
       };
-      const poolBase = computeLotPool(costs, lotId).poolBase;
+      // A lot with no opening value (#1323) has nothing to split, and still closes **exactly as a
+      // purchase lot does** — including the block on a copy without a primary-catalogue price, which
+      // the collector chose over an exemption (cataloguing discipline, #1321). So the engine runs
+      // over a zero pool for its refusals, and nothing it returns is frozen: a copy's cost there is
+      // *not applicable*, and a snapshot of `0.00` would be the very zero #1184 rules out.
+      const unvalued = lot.price == null;
+      const poolBase = unvalued ? 0 : computeLotPool(costs, lotId).poolBase;
 
       const lotItems: LotItem[] = items.map((it) => ({
         id: it.id,
@@ -968,7 +1021,7 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
       // for the not-delivered set, collapsing thousands of sequential UPDATEs into a handful
       // and shortening how long the transaction holds row locks (#173).
       const idsByBasis = new Map<string, string[]>();
-      for (const snap of allocation.snapshots) {
+      for (const snap of unvalued ? [] : allocation.snapshots) {
         const key = snap.costBasis.toFixed(2);
         const ids = idsByBasis.get(key);
         if (ids) ids.push(snap.itemId);
@@ -989,7 +1042,7 @@ export async function closeLot(ownerId: string, lotId: string): Promise<CloseLot
       }
       await tx.purchaseLot.update({ where: { id: lotId }, data: { status: "closed" } });
 
-      return { ok: true, snapshotCount: allocation.snapshots.length };
+      return { ok: true, snapshotCount: unvalued ? 0 : allocation.snapshots.length };
     });
   } catch (err) {
     if (err instanceof LotCloseBlockedError) {
@@ -1045,7 +1098,9 @@ export async function markPurchaseArrived(
   purchaseId: string,
   opts: { locationId?: string | null } = {}
 ): Promise<{ toSortCount: number }> {
-  const { collectionId } = await assertPurchaseOwner(ownerId, purchaseId);
+  const { collectionId, kind } = await assertPurchaseOwner(ownerId, purchaseId);
+  // Its copies are in hand from the start (#1323): nothing is ever `ordered` on it to arrive.
+  if (kind === "opening_balance") throw new Error("An opening balance has no delivery status.");
 
   const locationId = opts.locationId?.trim() || null;
   if (locationId) await assertLocationAssignable(collectionId, locationId);

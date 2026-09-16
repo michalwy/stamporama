@@ -36,7 +36,10 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
   catalog: "Catalog",
   collection: "Collection",
   selling: "Selling",
-  buying: "Buying",
+  // Named **Intake**, not *Buying* (#1323): the section's list holds opening balances — stamps brought
+  // in without being bought — beside the purchases. The key stays `buying`, since a stored collapse
+  // state is keyed on it and nothing a collector sees reads the key.
+  buying: "Intake",
   partners: "Partners",
 };
 
@@ -44,8 +47,8 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
  * One quiet hue per section, and it is **not decoration**: the app reuses colours it already reads
  * elsewhere, so the tint says the same thing twice rather than something new. Green, blue and
  * violet are the **disposition** colours — in collection, for sale, for trade — so `Collection`,
- * `Selling` and `Partners` wear the colour their own records already carry, and `Buying` takes
- * amber, money going the other way.
+ * `Selling` and `Partners` wear the colour their own records already carry, and `Intake` (once
+ * `Buying`, #1323) takes amber, material coming the other way.
  *
  * `Catalog` takes the near-neutral **slate**, and that is the point of it: five saturated families
  * one under another is the "pstrokate" sidebar this was fixing, and the catalog is the section to

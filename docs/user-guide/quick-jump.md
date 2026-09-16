@@ -40,7 +40,7 @@ recent first. Pick one to go back to it.
 Each entry is **coloured by the section of the sidebar it comes from** — its icon, and the word
 naming what it is (*Offer*, *Copy*, *Trade*) — in the same colour that section has in the
 navigation: a stamp or an issue in Catalog's slate, a copy in Collection's green, an offer or a sale
-in Selling's blue, a purchase or an auction sale in Buying's amber, a trade in Partners' violet. So
+in Selling's blue, a purchase, an opening balance or an auction sale in Intake's amber, a trade in Partners' violet. So
 the list can be read at a glance by where each record lives. The colours are the navigation's own,
 so they always match it.
 

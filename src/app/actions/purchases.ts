@@ -12,6 +12,7 @@ import {
   type PurchaseCreateInput,
   type PurchaseStatus,
 } from "@/lib/purchases";
+import { isPurchaseKind } from "@/lib/purchase-kind";
 import {
   createLot,
   createLotWithStamps,
@@ -96,6 +97,15 @@ function parseMoney(raw: string): number | null {
   return Number(roundAmount(n));
 }
 
+/** A lot's price field (#1323): a blank field is `null` — which the domain accepts only on an
+ * opening balance, as *no opening value* — and anything typed must be a valid amount. `undefined`
+ * means the field held something that is not one. */
+function parseLotPrice(formData: FormData): number | null | undefined {
+  const raw = str(formData, "price");
+  if (!raw) return null;
+  return parseMoney(raw) ?? undefined;
+}
+
 const VALID_STATUS = new Set<PurchaseStatus>(["preparing", "in_transit", "arrived"]);
 
 /** Parse the purchase header from the dialog form. The order's line items — inventory
@@ -103,14 +113,25 @@ const VALID_STATUS = new Set<PurchaseStatus>(["preparing", "in_transit", "arrive
  * intake (#121). */
 function parseFields(formData: FormData): { data: PurchaseCreateInput; error?: string } {
   const purchasedAt = str(formData, "purchasedAt");
-  if (!purchasedAt) return { data: {} as PurchaseCreateInput, error: "A purchase date is required." };
+  if (!purchasedAt) return { data: {} as PurchaseCreateInput, error: "A date is required." };
   const currency = str(formData, "currency");
   if (!currency) return { data: {} as PurchaseCreateInput, error: "A currency is required." };
   const statusRaw = str(formData, "status") as PurchaseStatus;
   const status = VALID_STATUS.has(statusRaw) ? statusRaw : "preparing";
+  const kindRaw = str(formData, "kind");
+  const kind = isPurchaseKind(kindRaw) ? kindRaw : "purchase";
+
+  // An opening balance's header is a title, a date and a currency and nothing else (#1323); the
+  // domain nulls the rest whatever arrives, so only what it reads is parsed.
+  if (kind === "opening_balance") {
+    const title = str(formData, "title");
+    if (!title) return { data: {} as PurchaseCreateInput, error: "A title is required." };
+    return { data: { kind, title, purchasedAt, currency } };
+  }
 
   return {
     data: {
+      kind,
       contactId: optionalStr(formData, "contactId"),
       contactName: optionalStr(formData, "contactName"),
       platformId: optionalStr(formData, "platformId"),
@@ -203,8 +224,8 @@ export async function createLotAction(
   formData: FormData
 ): Promise<PurchaseActionState> {
   const session = await getSession();
-  const price = parseMoney(str(formData, "price"));
-  if (price == null) return { status: "error", message: "A valid lot price is required." };
+  const price = parseLotPrice(formData);
+  if (price === undefined) return { status: "error", message: "Enter a valid amount." };
   try {
     const lotId = await createLot(
       session.user.id,
@@ -229,8 +250,8 @@ export async function createLotWithStampsAction(
   formData: FormData
 ): Promise<PurchaseActionState> {
   const session = await getSession();
-  const price = parseMoney(str(formData, "price"));
-  if (price == null) return { status: "error", message: "A valid lot price is required." };
+  const price = parseLotPrice(formData);
+  if (price === undefined) return { status: "error", message: "Enter a valid amount." };
   const conditionId = str(formData, "conditionId");
   if (!conditionId) return { status: "error", message: "A condition must be selected." };
   const stampId = optionalStr(formData, "stampId");
@@ -267,8 +288,8 @@ export async function updateLotAction(
   formData: FormData
 ): Promise<PurchaseActionState> {
   const session = await getSession();
-  const price = parseMoney(str(formData, "price"));
-  if (price == null) return { status: "error", message: "A valid lot price is required." };
+  const price = parseLotPrice(formData);
+  if (price === undefined) return { status: "error", message: "Enter a valid amount." };
   try {
     await updateLot(session.user.id, lotId, { price, title: optionalStr(formData, "title") });
     return { status: "success" };

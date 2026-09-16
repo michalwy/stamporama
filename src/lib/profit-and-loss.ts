@@ -1,4 +1,5 @@
 import "server-only";
+import { lotCostInputs } from "./cost-basis";
 import { prisma } from "./db";
 import { listSaleProfitRows, type SaleProfitRow } from "./sales";
 import { NOT_TRADED_AWAY } from "./trade-exit";
@@ -45,13 +46,13 @@ async function listWriteOffCopies(collectionId: string, range: DateRange): Promi
       saleLineItems: { none: {} },
       ...NOT_TRADED_AWAY,
     },
-    select: { disposedAt: true, costBasis: true, lotId: true, lot: { select: { status: true } } },
+    select: { disposedAt: true, costBasis: true, lotId: true, lot: { select: { status: true, price: true } } },
   });
   return rows.map((row) => ({
     disposedAt: row.disposedAt!,
     costBasis: row.costBasis == null ? null : row.costBasis.toFixed(2),
     lotId: row.lotId,
-    lotStatus: row.lot?.status ?? null,
+    ...lotCostInputs(row.lot),
   }));
 }
 

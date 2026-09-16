@@ -4,7 +4,7 @@ Auction tracking is a **bidding watchlist with a fork at the end**. You record w
 on, keep the bids current while the lots run, and each lot ends either won — settled into a
 [purchase](purchases.md) — or lost, which leaves behind what the material actually fetched.
 
-**Auctions** in the **Buying** section of the sidebar opens onto two entries. **Lots** is the
+**Auctions** in the **Intake** section of the sidebar opens onto two entries. **Lots** is the
 watchlist — every lot across every seller, which is where the daily job is done: scanning closing
 times and refreshing bids. **Sales** is the settlement side, one row per parcel, which is where you
 go when an invoice arrives. They are separate destinations because they are separate jobs, done on

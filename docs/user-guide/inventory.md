@@ -562,6 +562,10 @@ whole album page, mounts and all — cut the scan into one piece per stamp, and 
 screen afterwards. Each stamp is handled physically once, and everything after that happens at the
 keyboard. An album page is not even handled once: it is scanned as it stands.
 
+An [opening balance](purchases.md#opening-balances) is the other way in for stamps you already own:
+the same scans, but on a document of its own, with the identified copies landing *to sort* until you
+store them and an optional opening value to cost them by.
+
 It is the same flow orders use, and the [Card scans section of the purchases
 guide](purchases.md#card-scans) describes all of it: the two kinds of card, how to lay one out, how the cut editor
 works, how a second scan of the backs pairs onto the fronts, and what you can do with each piece —

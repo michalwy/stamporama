@@ -89,7 +89,7 @@ function copy(over: Partial<PurchaseReturnCopy> & { id: string }): PurchaseRetur
   return {
     costBasis: null,
     lotId: "lot-1",
-    lotStatus: "closed",
+    lotStatus: "closed", lotValued: true,
     sold: false,
     proceedsResolved: false,
     ...over,
@@ -138,7 +138,7 @@ describe("summarizePurchaseReturn", () => {
 
   it("states no percentage when nothing is costed yet", () => {
     const result = summarizePurchaseReturn(
-      [copy({ id: "a", lotStatus: "open", sold: true, proceedsResolved: true })],
+      [copy({ id: "a", lotStatus: "open", lotValued: true, sold: true, proceedsResolved: true })],
       25,
       "PLN"
     );

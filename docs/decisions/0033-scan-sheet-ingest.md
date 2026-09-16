@@ -665,6 +665,11 @@ then the close look is over anyway.
 
 ## What #725 added: the owner is the collection, and the purchase is optional
 
+> **Since #1323 ([ADR-0054](0054-opening-balance.md))** stamps already owned also come in on an
+> **opening balance** — a purchase-order type that says plainly nothing was bought — whose optional
+> opening value replaces the *no cost basis* reading below for those documents. Card scans itself is
+> retired by #1326.
+
 The same pass — scan a card, cut it, pair the backs, identify each piece — is worth exactly as much
 on **stamps already owned**: a shelf being digitised, a gift, an inheritance. None of that is a
 purchase, and inventing one to reach the flow would have put a fictional order in the Purchases list

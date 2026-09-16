@@ -10,6 +10,7 @@ import {
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { PurchaseListItem } from "@/lib/purchases";
+import { OPENING_BALANCE_TITLE_MAX, type PurchaseKind } from "@/lib/purchase-kind";
 import { PurchaseContactSelect } from "./purchase-contact-select";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -37,6 +38,8 @@ const STATUS_OPTIONS = [
  *  other to hand them over. */
 export type PurchaseHeaderFields = Pick<
   PurchaseListItem,
+  | "kind"
+  | "title"
   | "contactId"
   | "contactName"
   | "platformId"
@@ -49,6 +52,9 @@ export type PurchaseHeaderFields = Pick<
 
 export interface PurchaseFormDialogProps {
   mode: "add" | "edit";
+  /** Which document is being added (#1323). Edit mode reads it off `purchase`, since a document's
+   *  type is fixed once it exists. */
+  kind?: PurchaseKind;
   collectionId: string;
   /** Default transaction currency for a new purchase (collection base currency). */
   baseCurrency: string;
@@ -70,6 +76,7 @@ export interface PurchaseFormDialogProps {
  * (#121). Editing a purchase therefore never touches its lots or expenses. */
 export function PurchaseFormDialog({
   mode,
+  kind: kindProp,
   collectionId,
   baseCurrency,
   today,
@@ -84,6 +91,22 @@ export function PurchaseFormDialog({
     onSubmit(new FormData(e.currentTarget));
   }
 
+  const kind: PurchaseKind = purchase?.kind ?? kindProp ?? "purchase";
+  if (kind === "opening_balance") {
+    return (
+      <OpeningBalanceFormDialog
+        mode={mode}
+        baseCurrency={baseCurrency}
+        today={today}
+        purchase={purchase}
+        isPending={isPending}
+        error={error}
+        onClose={onClose}
+        onSubmit={onSubmit}
+      />
+    );
+  }
+
   const title = mode === "add" ? "Add purchase" : "Edit purchase";
   const actionLabel = isPending
     ? mode === "add" ? "Adding…" : "Saving…"
@@ -96,6 +119,7 @@ export function PurchaseFormDialog({
         onSubmit={handleSubmit}
       >
         <DialogBody>
+          <input type="hidden" name="kind" value="purchase" />
           {/* Supplier + platform */}
           <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
             <div style={{ flex: 1 }}>
@@ -189,6 +213,103 @@ export function PurchaseFormDialog({
               disabled={isPending}
               style={{ ...INPUT_STYLE, maxWidth: "10rem" }}
             />
+          </div>
+        </DialogBody>
+        <DialogActions
+          actionLabel={actionLabel}
+          onCancel={onClose}
+          disabled={isPending}
+          error={error}
+        />
+      </form>
+    </DialogShell>
+  );
+}
+
+/**
+ * The header of an **opening balance** (#1323): a title, a date and a currency, and nothing else. It
+ * brings in stamps that were not bought, so a supplier, a platform, shipping and a delivery status
+ * are neither asked for nor shown — its copies are in hand from the start. The title is required
+ * (the collector's call, 2026-09-16): it is the only name the document has.
+ */
+function OpeningBalanceFormDialog({
+  mode,
+  baseCurrency,
+  today,
+  purchase,
+  isPending,
+  error,
+  onClose,
+  onSubmit,
+}: Omit<PurchaseFormDialogProps, "kind" | "collectionId">) {
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onSubmit(new FormData(e.currentTarget));
+  }
+
+  const actionLabel = isPending
+    ? mode === "add" ? "Adding…" : "Saving…"
+    : mode === "add" ? "Add opening balance" : "Save changes";
+
+  return (
+    <DialogShell
+      title={mode === "add" ? "Add opening balance" : "Edit opening balance"}
+      onClose={onClose}
+      minHeight="16rem"
+      maxWidth="34rem"
+    >
+      <form
+        style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+        onSubmit={handleSubmit}
+      >
+        <DialogBody>
+          <input type="hidden" name="kind" value="opening_balance" />
+          <div style={FIELD_GAP}>
+            <LabelWithError htmlFor="opening-balance-title">Title</LabelWithError>
+            <input
+              id="opening-balance-title"
+              name="title"
+              type="text"
+              defaultValue={purchase?.title ?? ""}
+              placeholder="e.g. Stockbook Poland 1, Inheritance"
+              maxLength={OPENING_BALANCE_TITLE_MAX}
+              disabled={isPending}
+              required
+              data-autofocus
+              style={INPUT_STYLE}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="opening-balance-date">Date</LabelWithError>
+              <input
+                id="opening-balance-date"
+                name="purchasedAt"
+                type="date"
+                defaultValue={purchase?.purchasedAt ?? today}
+                max={today}
+                disabled={isPending}
+                required
+                style={INPUT_STYLE}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <LabelWithError htmlFor="opening-balance-currency">Currency</LabelWithError>
+              <select
+                id="opening-balance-currency"
+                name="currency"
+                defaultValue={purchase?.currency ?? baseCurrency}
+                disabled={isPending}
+                style={{ ...INPUT_STYLE, cursor: "pointer" }}
+              >
+                {COMMON_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </DialogBody>
         <DialogActions

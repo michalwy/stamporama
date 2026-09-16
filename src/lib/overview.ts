@@ -1,4 +1,5 @@
 import "server-only";
+import { lotCostInputs } from "./cost-basis";
 import { prisma } from "./db";
 import { getHoldingsValuation, listIssueGroupCompleteness } from "./items";
 import type { HoldingsSummary } from "./valuation";
@@ -141,7 +142,7 @@ async function purchaseRecoup(
       id: true,
       costBasis: true,
       lotId: true,
-      lot: { select: { status: true, purchaseId: true } },
+      lot: { select: { status: true, price: true, purchaseId: true } },
     },
   });
 
@@ -160,7 +161,7 @@ async function purchaseRecoup(
       id: row.id,
       costBasis: row.costBasis == null ? null : row.costBasis.toFixed(2),
       lotId: row.lotId,
-      lotStatus: row.lot?.status ?? null,
+      ...lotCostInputs(row.lot),
       sold: proceeds.resolved.has(row.id) || proceeds.unresolved.has(row.id),
       proceedsResolved: proceeds.resolved.has(row.id),
     };

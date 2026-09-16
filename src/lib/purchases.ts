@@ -1,4 +1,5 @@
 import "server-only";
+import { lotCostInputs } from "./cost-basis";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
@@ -8,6 +9,13 @@ import { realizedProceedsForItems } from "./sales";
 import { summarizePurchaseReturn, type PurchaseReturn } from "./purchase-return";
 import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
 import { roundAmount } from "./decimal-input";
+import {
+  intakeDocumentType,
+  isOpeningBalance,
+  normalizeOpeningBalanceTitle,
+  type IntakeDocumentType,
+  type PurchaseKind,
+} from "./purchase-kind";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -15,6 +23,11 @@ import { roundAmount } from "./decimal-input";
 // are `PurchaseLot`s (inventory) and `PurchaseExpense`s (non-inventory). This module
 // owns CRUD only; lot close / item resolution and cost allocation are #121/#122 and
 // live elsewhere (see `purchase-allocation.ts`).
+//
+// A `Purchase` row is also the **opening balance** (#1323, ADR-0054): the same document with a
+// `kind` of `opening_balance`, a required free `title`, and none of a purchase's own fields — no
+// supplier, platform or shipping, and no delivery status of its own (stored `arrived`, since its
+// copies are in hand from the start). The kind is fixed at creation.
 //
 // All access is collection-owner-scoped; the checks live here, server-side.
 
@@ -32,14 +45,15 @@ async function assertCollectionOwner(
 }
 
 /** Resolve the owning collection of a purchase, asserting ownership. Returns the
- * collection id + base currency so mutations can (re)freeze the FX rate. */
+ * collection id + base currency so mutations can (re)freeze the FX rate, and the document's
+ * kind, which decides which header fields it has (#1323). */
 async function assertPurchaseOwner(
   ownerId: string,
   purchaseId: string
-): Promise<{ collectionId: string; baseCurrency: string }> {
+): Promise<{ collectionId: string; baseCurrency: string; kind: string }> {
   const purchase = await prisma.purchase.findUnique({
     where: { id: purchaseId },
-    select: { collection: { select: { id: true, ownerId: true, baseCurrency: true } } },
+    select: { kind: true, collection: { select: { id: true, ownerId: true, baseCurrency: true } } },
   });
   if (!purchase || purchase.collection.ownerId !== ownerId) {
     throw new Error("Purchase not found or access denied.");
@@ -47,6 +61,7 @@ async function assertPurchaseOwner(
   return {
     collectionId: purchase.collection.id,
     baseCurrency: purchase.collection.baseCurrency,
+    kind: purchase.kind,
   };
 }
 
@@ -60,7 +75,8 @@ export type PurchaseSortBy = "purchasedAt" | "createdAt";
  * CRUD dialog only reads/writes the price and never opens the lifecycle here. */
 export interface PurchaseLotData {
   id: string;
-  price: string;
+  /** Null only on an opening balance's lot without an opening value (#1323). */
+  price: string | null;
   status: string;
 }
 
@@ -75,6 +91,9 @@ export interface PurchaseExpenseData {
 export interface PurchaseData {
   id: string;
   collectionId: string;
+  kind: PurchaseKind;
+  /** The opening balance's title (#1323); null on a purchase. */
+  title: string | null;
   contactId: string | null;
   contactName: string | null;
   platformId: string | null;
@@ -89,10 +108,16 @@ export interface PurchaseData {
   expenses: PurchaseExpenseData[];
 }
 
-/** A row in the purchases list. `total` is lots + expenses + shipping, in the
+/** A row in the Intake documents list. `total` is lots + expenses + shipping, in the
  * transaction currency (2 dp). */
 export interface PurchaseListItem {
   id: string;
+  kind: PurchaseKind;
+  /** Which of the list's three types the row is filed under (#1323) — a trade order is a purchase
+   *  with a trade behind it. */
+  type: IntakeDocumentType;
+  /** The opening balance's title (#1323); null on a purchase. */
+  title: string | null;
   /** The short per-collection purchase number (#432) — what the quick-jump box takes after `p`. */
   purchaseNo: number;
   contactId: string | null;
@@ -105,11 +130,18 @@ export interface PurchaseListItem {
   shippingCost: string | null;
   lotCount: number;
   expenseCount: number;
-  total: string;
+  /** On an opening balance, the sum of the lots' opening values, and **null when no lot carries
+   *  one** — never `0.00` (#1184). Always set on a purchase. */
+  total: string | null;
+  /** Lots with no opening value — only ever above zero on an opening balance (#1323). */
+  unvaluedLotCount: number;
 }
 
 export interface PurchaseListFilters {
   offset?: number;
+  /** The document type (#1323). */
+  type?: IntakeDocumentType;
+  /** Delivery status — a purchase's alone, so it narrows to purchases (an opening balance has none). */
   status?: PurchaseStatus;
   contactId?: string;
   sortBy?: PurchaseSortBy;
@@ -136,6 +168,10 @@ export interface PurchaseExpenseInput {
 }
 
 export interface PurchaseCreateInput {
+  /** Which document to create (#1323); a purchase when omitted. Fixed once created. */
+  kind?: PurchaseKind;
+  /** The opening balance's title — required there, ignored on a purchase. */
+  title?: string | null;
   // Supplier / platform may arrive as a picked id, or as a typed name that is resolved to
   // an existing contact or created on save (#120). When both are present the id wins.
   contactId?: string | null;
@@ -209,7 +245,10 @@ export async function listPurchasesPaginated(
   const rows = await prisma.purchase.findMany({
     where: {
       collectionId,
-      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.type ? documentTypeWhere(filters.type) : {}),
+      // A delivery status is a purchase's own: an opening balance is stored `arrived` and shows no
+      // status, so it must not answer the *Arrived* chip (#1323).
+      ...(filters.status ? { status: filters.status, kind: "purchase" } : {}),
       ...(filters.contactId ? { contactId: filters.contactId } : {}),
     },
     orderBy,
@@ -217,6 +256,9 @@ export async function listPurchasesPaginated(
     skip: offset,
     select: {
       id: true,
+      kind: true,
+      title: true,
+      tradeId: true,
       purchaseNo: true,
       contactId: true,
       platformId: true,
@@ -235,13 +277,15 @@ export async function listPurchasesPaginated(
   const page = hasMore ? rows.slice(0, pageSize) : rows;
 
   const items: PurchaseListItem[] = page.map((row) => {
-    const linesTotal = [...row.lots, ...row.expenses].reduce(
-      (sum, l) => sum.add(l.price),
-      new Prisma.Decimal(0)
-    );
+    const valued = [...row.lots, ...row.expenses].flatMap((l) => (l.price == null ? [] : [l.price]));
+    const linesTotal = valued.reduce((sum, price) => sum.add(price), new Prisma.Decimal(0));
     const total = row.shippingCost ? linesTotal.add(row.shippingCost) : linesTotal;
+    const kind = row.kind as PurchaseKind;
     return {
       id: row.id,
+      kind,
+      type: intakeDocumentType(row),
+      title: row.title,
       purchaseNo: row.purchaseNo,
       contactId: row.contactId,
       contactName: row.contact?.name ?? null,
@@ -253,12 +297,26 @@ export async function listPurchasesPaginated(
       shippingCost: row.shippingCost?.toFixed(2) ?? null,
       lotCount: row.lots.length,
       expenseCount: row.expenses.length,
-      total: total.toFixed(2),
+      // No value at all is said as such rather than summed to nothing (#1184).
+      total: isOpeningBalance(row) && valued.length === 0 ? null : total.toFixed(2),
+      unvaluedLotCount: row.lots.filter((l) => l.price == null).length,
     };
   });
 
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
+}
+
+/** The `where` that files a document under one of the list's types (#1323). */
+function documentTypeWhere(type: IntakeDocumentType): Prisma.PurchaseWhereInput {
+  switch (type) {
+    case "opening_balance":
+      return { kind: "opening_balance" };
+    case "trade":
+      return { kind: "purchase", tradeId: { not: null } };
+    case "purchase":
+      return { kind: "purchase", tradeId: null };
+  }
 }
 
 /** One purchase with its lines, for the edit dialog. Returns `null` if not found /
@@ -272,6 +330,8 @@ export async function getPurchase(
     select: {
       id: true,
       collectionId: true,
+      kind: true,
+      title: true,
       contactId: true,
       platformId: true,
       purchasedAt: true,
@@ -295,6 +355,8 @@ export async function getPurchase(
   return {
     id: row.id,
     collectionId: row.collectionId,
+    kind: row.kind as PurchaseKind,
+    title: row.title,
     contactId: row.contactId,
     contactName: row.contact?.name ?? null,
     platformId: row.platformId,
@@ -305,7 +367,7 @@ export async function getPurchase(
     shippingCost: row.shippingCost?.toFixed(2) ?? null,
     status: row.status,
     createdAt: row.createdAt,
-    lots: row.lots.map((l) => ({ id: l.id, price: l.price.toFixed(2), status: l.status })),
+    lots: row.lots.map((l) => ({ id: l.id, price: l.price?.toFixed(2) ?? null, status: l.status })),
     expenses: row.expenses.map((e) => ({
       id: e.id,
       label: e.label,
@@ -328,11 +390,58 @@ export async function createPurchase(
   });
   const baseCurrency = col!.baseCurrency;
 
+  const kind: PurchaseKind = data.kind ?? "purchase";
+  const header = await resolveHeader(collectionId, baseCurrency, kind, data);
+
+  // In a transaction for the number's sake (#432): the counter bump and the row it belongs to have
+  // to stand or fall together, or a failed create would burn a number. An opening balance takes the
+  // same `p` sequence — it is the same document on the same list, reached by the same quick jump.
+  const created = await prisma.$transaction(async (tx) =>
+    tx.purchase.create({
+      data: {
+        collectionId,
+        purchaseNo: await allocateEntityNumber(tx, collectionId, "purchase"),
+        kind,
+        ...header,
+        // No line items here — lots and expenses are created during intake (#121).
+      },
+      select: { id: true },
+    })
+  );
+
+  return (await getPurchase(ownerId, created.id))!;
+}
+
+/**
+ * The header columns a create or an edit writes, for the document's kind. A purchase resolves its
+ * supplier and platform and keeps its shipping and status; an **opening balance** writes its title
+ * and nulls every purchase-only field — whatever the form sent — with its status held at `arrived`,
+ * so the CHECK `purchase_kind_shape` is met by construction rather than by a caller remembering it.
+ */
+async function resolveHeader(
+  collectionId: string,
+  baseCurrency: string,
+  kind: PurchaseKind,
+  data: PurchaseCreateInput
+) {
   const currency = data.currency.trim();
   if (!currency) throw new Error("A transaction currency is required.");
-
   const purchasedAt = toDate(data.purchasedAt);
   const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
+
+  if (kind === "opening_balance") {
+    return {
+      title: normalizeOpeningBalanceTitle(data.title),
+      contactId: null,
+      platformId: null,
+      purchasedAt,
+      currency,
+      fxRateToBase,
+      shippingCost: null,
+      status: "arrived" satisfies PurchaseStatus,
+    };
+  }
+
   const contactId = await resolvePurchaseContact(collectionId, {
     id: data.contactId,
     name: data.contactName,
@@ -343,28 +452,16 @@ export async function createPurchase(
     name: data.platformName,
     role: "platform",
   });
-
-  // In a transaction for the number's sake (#432): the counter bump and the row it belongs to have
-  // to stand or fall together, or a failed create would burn a number.
-  const created = await prisma.$transaction(async (tx) =>
-    tx.purchase.create({
-      data: {
-        collectionId,
-        purchaseNo: await allocateEntityNumber(tx, collectionId, "purchase"),
-        contactId,
-        platformId,
-        purchasedAt,
-        currency,
-        fxRateToBase,
-        shippingCost: data.shippingCost != null ? money(data.shippingCost) : null,
-        status: normalizeStatus(data.status),
-        // No line items here — lots and expenses are created during intake (#121).
-      },
-      select: { id: true },
-    })
-  );
-
-  return (await getPurchase(ownerId, created.id))!;
+  return {
+    title: null,
+    contactId,
+    platformId,
+    purchasedAt,
+    currency,
+    fxRateToBase,
+    shippingCost: data.shippingCost != null ? money(data.shippingCost) : null,
+    status: normalizeStatus(data.status),
+  };
 }
 
 /** Update a purchase header. The FX rate is re-frozen when the currency or date changes.
@@ -377,35 +474,14 @@ export async function updatePurchase(
   purchaseId: string,
   data: PurchaseUpdateInput
 ): Promise<PurchaseData> {
-  const { collectionId, baseCurrency } = await assertPurchaseOwner(ownerId, purchaseId);
-
-  const currency = data.currency.trim();
-  if (!currency) throw new Error("A transaction currency is required.");
-
-  const purchasedAt = toDate(data.purchasedAt);
-  const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
-  const contactId = await resolvePurchaseContact(collectionId, {
-    id: data.contactId,
-    name: data.contactName,
-    role: "seller",
-  });
-  const platformId = await resolvePurchaseContact(collectionId, {
-    id: data.platformId,
-    name: data.platformName,
-    role: "platform",
-  });
+  const { collectionId, baseCurrency, kind } = await assertPurchaseOwner(ownerId, purchaseId);
+  if (data.kind && data.kind !== kind) {
+    throw new Error("A document's type cannot be changed.");
+  }
 
   await prisma.purchase.update({
     where: { id: purchaseId },
-    data: {
-      contactId,
-      platformId,
-      purchasedAt,
-      currency,
-      fxRateToBase,
-      shippingCost: data.shippingCost != null ? money(data.shippingCost) : null,
-      status: normalizeStatus(data.status),
-    },
+    data: await resolveHeader(collectionId, baseCurrency, kind as PurchaseKind, data),
   });
 
   return (await getPurchase(ownerId, purchaseId))!;
@@ -420,7 +496,10 @@ export async function setPurchaseStatus(
   purchaseId: string,
   status: PurchaseStatus
 ): Promise<void> {
-  await assertPurchaseOwner(ownerId, purchaseId);
+  const { kind } = await assertPurchaseOwner(ownerId, purchaseId);
+  if (kind === "opening_balance") {
+    throw new Error("An opening balance has no delivery status.");
+  }
   await prisma.purchase.update({
     where: { id: purchaseId },
     data: { status: normalizeStatus(status) },
@@ -482,7 +561,7 @@ async function returnOverCopies(
       id: true,
       costBasis: true,
       lotId: true,
-      lot: { select: { status: true } },
+      lot: { select: { status: true, price: true } },
     },
   });
   const realized = await realizedProceedsForItems(
@@ -494,7 +573,7 @@ async function returnOverCopies(
       id: r.id,
       costBasis: r.costBasis == null ? null : r.costBasis.toFixed(2),
       lotId: r.lotId,
-      lotStatus: r.lot?.status ?? null,
+      ...lotCostInputs(r.lot),
       sold: realized.resolved.has(r.id) || realized.unresolved.has(r.id),
       proceedsResolved: realized.resolved.has(r.id),
     })),

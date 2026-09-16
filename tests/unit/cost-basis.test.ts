@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   resolveCostBasis,
+  lotCostInputs,
   aggregateCostBasis,
   aggregatePurchaseCostsByKey,
   type PurchaseCostInput,
@@ -10,7 +11,7 @@ import {
 describe("resolveCostBasis", () => {
   it("returns the frozen amount as `known` when a snapshot is present", () => {
     assert.deepEqual(
-      resolveCostBasis({ costBasis: "12.34", lotId: "lot-1", lotStatus: "closed" }),
+      resolveCostBasis({ costBasis: "12.34", lotId: "lot-1", lotStatus: "closed", lotValued: true }),
       { state: "known", amount: "12.34" }
     );
   });
@@ -19,37 +20,81 @@ describe("resolveCostBasis", () => {
     // Defensive: a snapshot should not coexist with an open lot, but if it does the
     // frozen value is authoritative, never overridden by a `pending` reading.
     assert.deepEqual(
-      resolveCostBasis({ costBasis: "5.00", lotId: "lot-1", lotStatus: "open" }),
+      resolveCostBasis({ costBasis: "5.00", lotId: "lot-1", lotStatus: "open", lotValued: true }),
       { state: "known", amount: "5.00" }
     );
   });
 
   it("is `pending` for a null snapshot on an open lot", () => {
     assert.deepEqual(
-      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "open" }),
+      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "open", lotValued: true }),
       { state: "pending" }
     );
   });
 
   it("is `none` for a null snapshot on a closed lot (e.g. a not-delivered copy)", () => {
     assert.deepEqual(
-      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "closed" }),
+      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "closed", lotValued: true }),
       { state: "none" }
     );
   });
 
   it("is `none` for a copy with no acquisition lot", () => {
     assert.deepEqual(
-      resolveCostBasis({ costBasis: null, lotId: null, lotStatus: null }),
+      resolveCostBasis({ costBasis: null, lotId: null, lotStatus: null, lotValued: null }),
+      { state: "none" }
+    );
+  });
+
+  // #1323: an opening balance's lot without an opening value has nothing for a close to freeze, so
+  // its copies' cost is *not applicable* whether the lot is open or closed — never pending.
+  it("is `none` for a null snapshot on an open lot that carries no value", () => {
+    assert.deepEqual(
+      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "open", lotValued: false }),
+      { state: "none" }
+    );
+  });
+
+  it("is `none` for a null snapshot on a closed lot that carries no value", () => {
+    assert.deepEqual(
+      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: "closed", lotValued: false }),
       { state: "none" }
     );
   });
 
   it("is `none` when a lot id lingers without a resolvable status", () => {
     assert.deepEqual(
-      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: null }),
+      resolveCostBasis({ costBasis: null, lotId: "lot-1", lotStatus: null, lotValued: null }),
       { state: "none" }
     );
+  });
+});
+
+describe("lotCostInputs", () => {
+  it("reads a priced lot as valued, keeping its status", () => {
+    assert.deepEqual(lotCostInputs({ status: "open", price: "12.00" }), {
+      lotStatus: "open",
+      lotValued: true,
+    });
+  });
+
+  it("reads a zero price as a value — zero is not *no value* (#1184)", () => {
+    assert.deepEqual(lotCostInputs({ status: "open", price: "0.00" }), {
+      lotStatus: "open",
+      lotValued: true,
+    });
+  });
+
+  it("reads a null price as a lot with no value (#1323)", () => {
+    assert.deepEqual(lotCostInputs({ status: "closed", price: null }), {
+      lotStatus: "closed",
+      lotValued: false,
+    });
+  });
+
+  it("answers null on both for a copy with no lot", () => {
+    assert.deepEqual(lotCostInputs(null), { lotStatus: null, lotValued: null });
+    assert.deepEqual(lotCostInputs(undefined), { lotStatus: null, lotValued: null });
   });
 });
 
@@ -67,11 +112,11 @@ describe("aggregateCostBasis", () => {
   it("sums frozen snapshots and splits copies by cost-basis state", () => {
     const result = aggregateCostBasis(
       [
-        { costBasis: "12.50", lotId: "lot-1", lotStatus: "closed" }, // known
-        { costBasis: "7.25", lotId: "lot-2", lotStatus: "closed" }, // known
-        { costBasis: null, lotId: "lot-3", lotStatus: "open" }, // pending
-        { costBasis: null, lotId: "lot-4", lotStatus: "closed" }, // none (dropped)
-        { costBasis: null, lotId: null, lotStatus: null }, // none (no lot)
+        { costBasis: "12.50", lotId: "lot-1", lotStatus: "closed", lotValued: true }, // known
+        { costBasis: "7.25", lotId: "lot-2", lotStatus: "closed", lotValued: true }, // known
+        { costBasis: null, lotId: "lot-3", lotStatus: "open", lotValued: true }, // pending
+        { costBasis: null, lotId: "lot-4", lotStatus: "closed", lotValued: true }, // none (dropped)
+        { costBasis: null, lotId: null, lotStatus: null, lotValued: null }, // none (no lot)
       ],
       "EUR"
     );
@@ -87,14 +132,26 @@ describe("aggregateCostBasis", () => {
   it("counts pending copies but never sums them into the total", () => {
     const result = aggregateCostBasis(
       [
-        { costBasis: null, lotId: "lot-1", lotStatus: "open" },
-        { costBasis: null, lotId: "lot-2", lotStatus: "open" },
+        { costBasis: null, lotId: "lot-1", lotStatus: "open", lotValued: true },
+        { costBasis: null, lotId: "lot-2", lotStatus: "open", lotValued: true },
       ],
       "USD"
     );
     assert.equal(result.totalCostBasis, "0.00");
     assert.equal(result.pendingCount, 2);
     assert.equal(result.knownCount, 0);
+  });
+
+  it("counts copies on a lot with no value as none, never pending (#1323)", () => {
+    const result = aggregateCostBasis(
+      [
+        { costBasis: null, lotId: "lot-1", lotStatus: "open", lotValued: false },
+        { costBasis: null, lotId: "lot-2", lotStatus: "open", lotValued: true },
+      ],
+      "EUR"
+    );
+    assert.equal(result.pendingCount, 1);
+    assert.equal(result.noneCount, 1);
   });
 });
 
@@ -106,7 +163,7 @@ describe("aggregatePurchaseCostsByKey", () => {
       ...key,
       costBasis: null,
       lotId: null,
-      lotStatus: null,
+      lotStatus: null, lotValued: null,
       purchasedAt: null,
       ...over,
     };
@@ -118,9 +175,9 @@ describe("aggregatePurchaseCostsByKey", () => {
 
   it("averages the frozen snapshots and carries min, max and the newest order date", () => {
     const result = aggregatePurchaseCostsByKey([
-      copy({ costBasis: "10.00", lotId: "l1", lotStatus: "closed", purchasedAt: new Date("2026-01-05") }),
-      copy({ costBasis: "20.00", lotId: "l2", lotStatus: "closed", purchasedAt: new Date("2026-03-09") }),
-      copy({ costBasis: "30.00", lotId: "l3", lotStatus: "closed", purchasedAt: new Date("2026-02-01") }),
+      copy({ costBasis: "10.00", lotId: "l1", lotStatus: "closed", lotValued: true, purchasedAt: new Date("2026-01-05") }),
+      copy({ costBasis: "20.00", lotId: "l2", lotStatus: "closed", lotValued: true, purchasedAt: new Date("2026-03-09") }),
+      copy({ costBasis: "30.00", lotId: "l3", lotStatus: "closed", lotValued: true, purchasedAt: new Date("2026-02-01") }),
     ]);
     assert.equal(result.length, 1);
     assert.deepEqual(result[0], {
@@ -137,9 +194,9 @@ describe("aggregatePurchaseCostsByKey", () => {
 
   it("counts pending and unrecorded copies without letting them reach the figures", () => {
     const [cell] = aggregatePurchaseCostsByKey([
-      copy({ costBasis: "8.00", lotId: "l1", lotStatus: "closed" }),
-      copy({ costBasis: null, lotId: "l2", lotStatus: "open" }), // pending
-      copy({ costBasis: null, lotId: "l3", lotStatus: "closed" }), // none (dropped)
+      copy({ costBasis: "8.00", lotId: "l1", lotStatus: "closed", lotValued: true }),
+      copy({ costBasis: null, lotId: "l2", lotStatus: "open", lotValued: true }), // pending
+      copy({ costBasis: null, lotId: "l3", lotStatus: "closed", lotValued: true }), // none (dropped)
       copy({}), // none (hand-added)
     ]);
     assert.equal(cell.average, "8.00");
@@ -152,8 +209,8 @@ describe("aggregatePurchaseCostsByKey", () => {
 
   it("keeps a key whose copies are all pending — counts, no figures", () => {
     const [cell] = aggregatePurchaseCostsByKey([
-      copy({ costBasis: null, lotId: "l1", lotStatus: "open", purchasedAt: new Date("2026-04-01") }),
-      copy({ costBasis: null, lotId: "l2", lotStatus: "open" }),
+      copy({ costBasis: null, lotId: "l1", lotStatus: "open", lotValued: true, purchasedAt: new Date("2026-04-01") }),
+      copy({ costBasis: null, lotId: "l2", lotStatus: "open", lotValued: true }),
     ]);
     assert.equal(cell.average, null);
     assert.equal(cell.min, null);
@@ -172,10 +229,10 @@ describe("aggregatePurchaseCostsByKey", () => {
 
   it("groups on condition, certificate and format independently", () => {
     const result = aggregatePurchaseCostsByKey([
-      copy({ costBasis: "10.00", lotId: "l1", lotStatus: "closed" }),
-      copy({ conditionId: "used", costBasis: "4.00", lotId: "l2", lotStatus: "closed" }),
-      copy({ certificateStatusId: "cert", costBasis: "50.00", lotId: "l3", lotStatus: "closed" }),
-      copy({ formatId: "pair", costBasis: "25.00", lotId: "l4", lotStatus: "closed" }),
+      copy({ costBasis: "10.00", lotId: "l1", lotStatus: "closed", lotValued: true }),
+      copy({ conditionId: "used", costBasis: "4.00", lotId: "l2", lotStatus: "closed", lotValued: true }),
+      copy({ certificateStatusId: "cert", costBasis: "50.00", lotId: "l3", lotStatus: "closed", lotValued: true }),
+      copy({ formatId: "pair", costBasis: "25.00", lotId: "l4", lotStatus: "closed", lotValued: true }),
     ]);
     assert.equal(result.length, 4);
     assert.deepEqual(
