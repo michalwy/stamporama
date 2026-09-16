@@ -630,8 +630,7 @@ export async function attachItemsToLot(
   return { attached: toAttach.length, refused };
 }
 
-/** Identify stamps into an open lot (intake, ADR-0009 §5, #121) — or, with no lot at all, straight
- * into the collection (#725). Accepts either a single
+/** Identify stamps into an open lot (intake, ADR-0009 §5, #121). Accepts either a single
  * `stampId` or a `checklistId` (which fans out to every stamp on that checklist, #531 — an issue
  * may carry several, so the caller names the goal rather than the publication). Every created copy
  * shares the given condition, certificate, and storage
@@ -652,17 +651,9 @@ export async function attachItemsToLot(
  * condition. The count callers used to get is the array's length. */
 export async function intakeStamps(
   ownerId: string,
-  /**
-   * Where the copies land. `{ lotId }` is intake against a purchase — the pool the lot will later
-   * be split across. `{ collectionId }` is a copy that was **not bought** (#725): the scan-tile
-   * pass entered from the collection's own card scans, digitising a stockbook already owned. No
-   * lot means no cost basis, which is what `Item.lotId` and `Item.costBasis` being nullable have
-   * always meant, and the copy is `delivered` because it is already in hand.
-   *
-   * Two shapes rather than a nullable `lotId`: everything below reads the collection off the lot,
-   * so a caller that meant "no lot" has to say which collection instead, and cannot forget to.
-   */
-  target: { lotId: string } | { collectionId: string },
+  /** Where the copies land: the lot on a purchase or an opening balance. #725's lot-less target, for
+   * cards scanned outside any order, went with Card scans (#1326). */
+  target: { lotId: string },
   input: {
     stampId?: string | null;
     checklistId?: string | null;
@@ -706,30 +697,19 @@ export async function intakeStamps(
     stamps?: readonly ItemStampEntryInput[] | null;
   }
 ): Promise<ArrivingCopy[]> {
-  const lotId = "lotId" in target ? target.lotId : null;
-  let collectionId: string;
-  let deliveryState: string;
-  if (lotId) {
-    const lot = await assertLotOwner(ownerId, lotId);
-    if (lot.status !== "open") {
-      throw new Error("This lot is closed. Reopen it before identifying more copies.");
-    }
-    collectionId = lot.collectionId;
-    // Once the order has arrived, copies identified during the sort pass skip `ordered` and
-    // land straight in `to_sort` — they are already in hand, just not filed yet (#121).
-    const purchase = await prisma.purchase.findUniqueOrThrow({
-      where: { id: lot.purchaseId },
-      select: { status: true },
-    });
-    deliveryState = purchase.status === "arrived" ? "to_sort" : "ordered";
-  } else {
-    collectionId = (target as { collectionId: string }).collectionId;
-    await assertCollectionOwner(ownerId, collectionId);
-    // Nothing was ordered and nothing is in transit: the piece is on the desk under the scanner.
-    // The same `delivered` an ordinary *Add copy* writes, and the reason a copy identified this way
-    // needs no sort pass to become a holding.
-    deliveryState = "delivered";
+  const { lotId } = target;
+  const lot = await assertLotOwner(ownerId, lotId);
+  if (lot.status !== "open") {
+    throw new Error("This lot is closed. Reopen it before identifying more copies.");
   }
+  const collectionId = lot.collectionId;
+  // Once the order has arrived, copies identified during the sort pass skip `ordered` and
+  // land straight in `to_sort` — they are already in hand, just not filed yet (#121).
+  const purchase = await prisma.purchase.findUniqueOrThrow({
+    where: { id: lot.purchaseId },
+    select: { status: true },
+  });
+  const deliveryState = purchase.status === "arrived" ? "to_sort" : "ordered";
 
   const conditionId = input.conditionId?.trim();
   if (!conditionId) throw new Error("A condition is required.");

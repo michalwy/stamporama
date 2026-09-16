@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted and implemented in #1323; §7 by #1324. Designed in #1321 with the collector on 2026-09-15 and
+Accepted and implemented in #1323; §7 by #1324; §8 by #1326. Designed in #1321 with the collector on 2026-09-15 and
 2026-09-16; the children that complete it are #1324 (profit and loss, never spend), #1325 (the
 summary panel) and #1326 (retiring Card scans). **Replaces #725's decision that identification
 without a purchase creates no cost basis** (ADR-0033, *What #725 added*), for opening balances.
@@ -116,6 +116,26 @@ spent and **never** a price paid:
 - A copy from a lot without a value has no profit figure, and the reason is stated as *no opening
   value* rather than *no cost recorded* — `CostBasisState` `none` carries the reason.
 
+### 8. Card scans is retired onto an opening balance (#1326)
+
+With opening balances in place, Card scans (#725) was a second path one step apart from the first.
+The collector retired it and carried its work over (2026-09-16):
+
+- The screen, its sidebar entry and the *Scan a card* button are gone. Stamps already owned are
+  scanned on an opening balance.
+- Migration `20260916160000_retire_card_scans` gives each collection that had purchase-less cards
+  **one** opening balance titled *Card scans*, dated by the oldest card, in the base currency, with
+  **one lot and no opening value** — a tile identifies into a copy on a lot, and one lot is the case
+  that asks nothing. Every sheet, tile (in every state, notes and shortlists included) and in-flight
+  upload moves onto it with its **batch number unchanged**; the document's batch counter continues
+  past the highest.
+- **Copies already created from Card scans stay as they are**: delivered, on no lot, cost not
+  applicable, not attached to the document.
+- A card always belongs to a document again: `purchaseId` is NOT NULL on `scan_sheet`, `scan_tile`
+  and `scan_upload`, and `collection.nextScanBatchNo` is dropped.
+
+*Rejected:* keeping Card scans beside opening balances, and retiring it without migrating.
+
 ## Consequences
 
 - **Money spent** was #1324's, and is §7. One path still carries an opening value into a purchase
@@ -123,5 +143,5 @@ spent and **never** a price paid:
   values included.
 - **The summary panel is #1325's.** An opening balance passes no order total to the holdings bar, so
   no price or shipping row appears; #1325 leads the panel with the opening value.
-- **Card scans stays until #1326**, which retires it and moves its batches onto one opening balance.
+- **Card scans is retired (#1326)** — see §8.
 - The quick jump's `p` sequence is shared: an opening balance takes the next purchase number.

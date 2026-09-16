@@ -69,11 +69,11 @@ import { VARIANT_FLAG_SELECT } from "./variant-classification";
  *   arrives as one shipment and is scanned on one or two cards, so nothing below this line names a
  *   lot: which lot a piece belongs to is not answerable until it has been identified, and
  *   `scan-tiles.ts` is where that answer lands.
- * - **…and a card need not belong to a purchase at all** (#725). A stockbook already owned is
- *   scanned the same way, so the owner of a sheet, a tile and an upload is the **collection**, with
- *   the purchase an optional extra. Every scope below is a {@link ScanOwner} rather than a purchase
- *   id; `{ purchaseId: null }` is not "any card in the collection" but exactly the purchase-less
- *   ones, which is what makes one `where` serve both screens.
+ * - **…and every card belongs to one** (#1326). #725 had let a card belong to no order, for a
+ *   stockbook already owned; that material now has an intake document of its own, the opening
+ *   balance (ADR-0054), and Card scans was retired onto it. Each row still carries its
+ *   `collectionId`, so every scope below is a {@link ScanOwner} — both halves — rather than a
+ *   purchase id alone.
  */
 
 export class ScanAuthError extends Error {}
@@ -115,46 +115,35 @@ export function isSheetKind(value: string): value is SheetKind {
 // ── What a card hangs off ─────────────────────────────────────────────────────────────────────
 
 /**
- * The owner a caller **names** (#725): an order, or the collection itself.
- *
- * Two shapes rather than one nullable field, so a caller cannot pass a collection and a purchase
- * together and cannot forget which of the two it meant. {@link assertScanOwner} resolves it into
- * the {@link ScanOwner} everything below scopes by.
+ * The owner a caller **names**: the intake document the card belongs to — a purchase order or an
+ * opening balance (#1326). {@link assertScanOwner} resolves it into the {@link ScanOwner} everything
+ * below scopes by.
  */
-export type ScanOwnerRef = { purchaseId: string } | { collectionId: string };
+export type ScanOwnerRef = { purchaseId: string };
 
-/** The **resolved** owner. The collection is always known; the purchase only when the card came in
- * one. Written onto every sheet, tile and upload, and used as the `where` for every read. */
+/** The **resolved** owner, written onto every sheet, tile and upload and used as the `where` for
+ * every read. */
 export interface ScanOwner {
   collectionId: string;
-  purchaseId: string | null;
+  purchaseId: string;
 }
 
-/**
- * The scope fragment, and the reason a null purchase is spelled out rather than omitted:
- * `{ collectionId, purchaseId: null }` selects the collection's **purchase-less** cards, while
- * leaving the key out would select every card it has, an order's included. The two screens are
- * different lists of the same table, so the difference has to be in the `where`.
- */
-export function scanOwnerWhere(owner: ScanOwner): { collectionId: string; purchaseId: string | null } {
+/** The scope fragment every read and write below is filtered by. */
+export function scanOwnerWhere(owner: ScanOwner): { collectionId: string; purchaseId: string } {
   return { collectionId: owner.collectionId, purchaseId: owner.purchaseId };
 }
 
 // ── Authorization ─────────────────────────────────────────────────────────────────────────────
 
-/** Resolve and check whichever owner the caller named. */
+/** Resolve and check the document the caller named. */
 export async function assertScanOwner(ownerId: string, ref: ScanOwnerRef): Promise<ScanOwner> {
-  if ("purchaseId" in ref) {
-    const { collectionId } = await assertPurchaseOwner(ownerId, ref.purchaseId);
-    return { collectionId, purchaseId: ref.purchaseId };
-  }
-  await assertScanCollectionOwner(ownerId, ref.collectionId);
-  return { collectionId: ref.collectionId, purchaseId: null };
+  const { collectionId } = await assertPurchaseOwner(ownerId, ref.purchaseId);
+  return { collectionId, purchaseId: ref.purchaseId };
 }
 
 /** Shared with `scan-tiles.ts` (#567), which works on the same collections through the same check
  * rather than growing a second one that could drift from this. A row carries its `collectionId`
- * since #725, so this is the check every scan path passes — purchase or no purchase.
+ * since #725, so this is the check every path that starts from a row passes.
  *
  * Written here rather than imported from `collections.ts`, which imports enough of the app that a
  * cycle would be one edit away; the query is two columns. */
@@ -211,7 +200,7 @@ export interface UploadedSheet {
 }
 
 /**
- * Store a card scan against a **purchase** (#586), or against the collection alone (#725).
+ * Store a card scan against a **purchase** (#586) — an order or an opening balance.
  *
  * A **front** with no `batchNo` opens a new batch. A **back** always names the batch it belongs to,
  * because a back with no front is a scan of nothing this flow can use. Re-uploading a side replaces
@@ -261,9 +250,6 @@ export async function uploadSheet(
       ? await allocateBatchNo(owner)
       : requireBatchNo(input);
 
-  // `findFirst` and not `findUnique`: the uniqueness of a purchase-less batch is a **partial**
-  // index (see the migration), which Prisma has no compound key for. The database still refuses a
-  // duplicate; this read just cannot address it by name.
   const existing = await prisma.scanSheet.findFirst({
     where: { ...scanOwnerWhere(owner), batchNo, side: input.side },
     select: { id: true, storageBackend: true, storageKey: true, mime: true, label: true, _count: { select: { frontTiles: true, backTiles: true } } },
@@ -396,21 +382,9 @@ async function assertBatchHasFront(owner: ScanOwner, batchNo: number): Promise<v
  * uploads racing cannot both take the same one (`allocateEntityNumber`'s rule, applied per
  * purchase). Per purchase rather than per lot (#586): the number names the card on the desk, and a
  * parcel of twenty small lots is scanned on one or two cards, not twenty. */
-/** The next batch number, off whichever counter owns the card (#725): the order's for a parcel,
- * the collection's for a card scanned outside one. Two counters and not one shared sequence —
- * merging them would renumber batches a collector has already written on physical cards, which is
- * exactly what these counters exist to prevent (#268/#432). */
 async function allocateBatchNo(owner: ScanOwner): Promise<number> {
-  if (owner.purchaseId) {
-    const updated = await prisma.purchase.update({
-      where: { id: owner.purchaseId },
-      data: { nextScanBatchNo: { increment: 1 } },
-      select: { nextScanBatchNo: true },
-    });
-    return updated.nextScanBatchNo - 1;
-  }
-  const updated = await prisma.collection.update({
-    where: { id: owner.collectionId },
+  const updated = await prisma.purchase.update({
+    where: { id: owner.purchaseId },
     data: { nextScanBatchNo: { increment: 1 } },
     select: { nextScanBatchNo: true },
   });
@@ -973,9 +947,7 @@ export async function pairTilesManually(
     backTile.collectionId !== frontTile.collectionId ||
     backTile.purchaseId !== frontTile.purchaseId
   ) {
-    // Both halves of the check, because since #725 "the same owner" is a pair: two tiles of one
-    // collection can still belong to different orders, and a purchase-less tile must not be
-    // dragged onto a parcel's card or the other way about.
+    // Both halves of the check: two tiles of one collection can still belong to different orders.
     throw new ScanValidationError("Both tiles must be on the same card.");
   }
   await assertScanCollectionOwner(ownerId, backTile.collectionId);
@@ -1403,7 +1375,7 @@ export async function deleteBatches(
  * `Photo` rows but never the files — the same split `deletePhotoBytesForItem` exists for. */
 async function deleteTiles(where: {
   collectionId: string;
-  purchaseId: string | null;
+  purchaseId: string;
   batchNo?: number;
 }): Promise<number> {
   const photos = await prisma.photo.findMany({
@@ -1740,17 +1712,13 @@ export interface ScansData {
   batches: ScanBatchData[];
   /** Whether this purchase was settled from a won auction sale (ADR-0021) — which is what makes
    * "assign this tile to a copy the order already holds" the ordinary path rather than the
-   * exception: settlement created identified copies that need photographs, not identification.
-   * Always false for cards scanned outside an order (#725), which came from no sale at all. */
+   * exception: settlement created identified copies that need photographs, not identification. */
   fromAuction: boolean;
 }
 
 /**
  * Every batch of one owner, newest first — the shape the Card scans section renders and the review
  * editor reloads a previous cut from.
- *
- * One function for both screens (#725). The order's version reads its auction description; the
- * collection's has none to read, and asks for nothing an order-less card cannot answer.
  */
 export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<ScansData> {
   const owner = await assertScanOwner(ownerId, ref);
@@ -1760,23 +1728,18 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
   // The auction lines this parcel was described by, when it came from a settled sale. Read as a
   // set of stamp ids across **every** lot of the purchase, because the question asked of it is
   // whether the parcel held something its description never listed — and the parcel is the order,
-  // which is also the only level a card exists at. A card with no order was described by nobody,
-  // so both reads are skipped rather than answered with an empty parcel's answers.
-  const auctionLots = purchaseId
-    ? await prisma.auctionLot.findMany({
-        where: { purchaseLot: { purchaseId } },
-        select: { lines: { select: { stampId: true } } },
-      })
-    : [];
+  // which is also the only level a card exists at.
+  const auctionLots = await prisma.auctionLot.findMany({
+    where: { purchaseLot: { purchaseId } },
+    select: { lines: { select: { stampId: true } } },
+  });
   const describedStampIds = new Set(
     auctionLots.flatMap((l) => l.lines.map((line) => line.stampId))
   );
-  const auctionSale = purchaseId
-    ? await prisma.auctionSale.findUnique({
-        where: { purchaseId },
-        select: { id: true },
-      })
-    : null;
+  const auctionSale = await prisma.auctionSale.findUnique({
+    where: { purchaseId },
+    select: { id: true },
+  });
 
   const [sheets, tiles] = await Promise.all([
     prisma.scanSheet.findMany({
@@ -2054,35 +2017,6 @@ export async function countUnidentifiedTiles(owner: ScanOwner): Promise<number> 
  * they were parked to leave. */
 export async function countParkedTiles(owner: ScanOwner): Promise<number> {
   return prisma.scanTile.count({ where: { ...scanOwnerWhere(owner), state: "parked" } });
-}
-
-/** What the Card scans header says before the batches are fetched (#725) — the three figures the
- * order's own screen gets from `getPurchaseDetail`, for an owner that has no detail page to get
- * them from. Server-rendered with the screen, so the section can say what is inside while still
- * collapsed. */
-export async function getScanCounts(
-  ownerId: string,
-  ref: ScanOwnerRef
-): Promise<{
-  unidentifiedTileCount: number;
-  parkedTileCount: number;
-  /** Tiles taken out during identification (#853) — the pull list for the cards on the desk.
-   * Counted here beside the outstanding two so the chip that narrows to them can be drawn from the
-   * server's answer rather than from whichever batches the strip happens to have fetched: the chip
-   * decides what the strip shows, so a count derived from the strip would settle after it. */
-  discardedTileCount: number;
-  scanSheetCount: number;
-}> {
-  const owner = await assertScanOwner(ownerId, ref);
-  const scope = scanOwnerWhere(owner);
-  const [unidentifiedTileCount, parkedTileCount, discardedTileCount, scanSheetCount] =
-    await Promise.all([
-      prisma.scanTile.count({ where: { ...scope, state: "unidentified" } }),
-      prisma.scanTile.count({ where: { ...scope, state: "parked" } }),
-      prisma.scanTile.count({ where: { ...scope, state: "discarded" } }),
-      prisma.scanSheet.count({ where: scope }),
-    ]);
-  return { unidentifiedTileCount, parkedTileCount, discardedTileCount, scanSheetCount };
 }
 
 /** Resolve a sheet for the serving route: its owning collection + owner for the auth check, plus

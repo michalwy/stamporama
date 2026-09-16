@@ -77,6 +77,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
   let otherUserId: string;
   let collectionId: string;
   let otherCollectionId: string;
+  /** The order the cards in `tileOnCard` belong to — every card belongs to one (#1326). */
+  let purchaseId: string;
   let stampId: string;
   let itemId: string;
   let frontPhotoId: string;
@@ -108,6 +110,11 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
           baseCurrency: "EUR",
           ownerId: otherUserId,
         },
+      })
+    ).id;
+    purchaseId = (
+      await prisma.purchase.create({
+        data: { collectionId, purchaseNo: 1, purchasedAt: new Date(), currency: "EUR" },
       })
     ).id;
     const condition = await prisma.stampCondition.create({
@@ -275,6 +282,7 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
     const sheet = await prisma.scanSheet.create({
       data: {
         collectionId,
+        purchaseId,
         batchNo,
         side: "front",
         storageBackend: front.storageBackend,
@@ -291,6 +299,7 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
     const tile = await prisma.scanTile.create({
       data: {
         collectionId,
+        purchaseId,
         batchNo,
         position: 0,
         frontSheetId: sheet.id,

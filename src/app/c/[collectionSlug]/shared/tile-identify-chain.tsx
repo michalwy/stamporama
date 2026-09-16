@@ -43,20 +43,13 @@ import { IssueRunDialog } from "./issue-run-dialog";
  * and the write at the end of it — including a repeat off the identification history (#757, #595
  * before it) and *Identify again* (#584).
  *
- * It lived in `purchase-detail-panel.tsx` until #725, and the move is the point of the issue rather
- * than tidying beside it: the very same chain now runs from the collection's own card scans, where
- * there is no order and no lot. Two copies of it would have been two sets of remembered choices, two
- * places for a repeated identification to mean something slightly different, and two ends to keep in
- * step with `identifyTilesAction`.
- *
- * **The one thing the two screens differ in is `lotChoice`.** An order asks which lot the new copy
- * belongs to (#586); a card scanned outside any order asks nothing, because there is no lot — and
- * absent is the shape the condition step already had for *the lot is not in question*.
+ * It was moved out of `purchase-detail-panel.tsx` by #725, for a Card scans screen that ran it with
+ * no order behind it; that screen was retired onto opening balances (#1326), and the chain stays its
+ * own module because it is one.
  *
  * The chain owns no writing. `run` is the caller's — the purchase screen's version refreshes the
- * order and invalidates its copy pages, the card-scans screen's raises the want review from the
- * copies a pass created (#1262) — so what happens after a copy is created stays where the knowledge
- * of it is.
+ * order and invalidates its copy pages — so what happens after a copy is created stays where the
+ * knowledge of it is.
  */
 
 /**
@@ -377,13 +370,12 @@ export interface TileIdentifyChainDialogsProps {
   isPending: boolean;
   error?: string;
   setError: (message: string | undefined) => void;
-  /** The lot question (#586), or absent where there is none to ask — a purchase with one lot, and
-   * every card that belongs to no order at all (#725). A correction never asks it whatever this
-   * says; see the condition step below. */
+  /** The lot question (#586), or absent where there is none to ask — a purchase with one lot. A
+   * correction never asks it whatever this says; see the condition step below. */
   lotChoice?: IntakeConditionDialogProps["lotChoice"];
   /** The screen's own runner: what happens after a copy exists. The purchase screen refreshes the
-   * order and invalidates its copy pages; the card-scans screen has none of those to do, and raises
-   * the want review from `outcomes` instead (#1262), its copies being created `delivered`. */
+   * order and invalidates its copy pages. A tile's copy lands `ordered` or `to_sort`, so its want
+   * review comes when it is stored rather than from `outcomes` (ADR-0032 §6b). */
   run: (
     fn: () => Promise<{ status: string; message?: string; id?: string; outcomes?: ArrivingCopy[] }>,
     onDone?: (result: { status: string; message?: string; id?: string }) => void
@@ -594,8 +586,7 @@ export function TileIdentifyChainDialogs({
           // than about what the piece is — and the identification is what is being corrected here.
           // Offering the question would also mean quietly moving a copy off a closed lot, since
           // only open ones can be offered. Absent is the shape this dialog already has for *the lot
-          // is not in question* — the stockbook case, and every card that belongs to no order at
-          // all (#725).
+          // is not in question* — the stockbook case.
           lotChoice={tileCorrection ? undefined : lotChoice}
           // The copy a correction re-answers is the piece on screen, not one of the copies held to
           // compare it with (#1207).

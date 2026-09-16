@@ -14,8 +14,7 @@ import { openScanUpload } from "@/lib/scan-uploads";
  * would ignore it).
  *
  * The parts, the finalize and the abort are at `/api/collections/[collectionId]/scan-sheets/uploads/[uploadId]`
- * (#725) — a chunk is addressed by its upload and never needed the order in its path, so one pair of
- * routes serves both this and the purchase-less open beside it.
+ * — a chunk is addressed by its upload and never needed the order in its path.
  *
  * `side=front` with no `batchNo` opens a new batch and `side=back` names the batch its front is in,
  * exactly as the single-request route did — the questions the upload answers are unchanged, they

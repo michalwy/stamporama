@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
@@ -1240,7 +1239,7 @@ export function InventoryListPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
-      {/* Header: the holdings summary, alone. The screen's three actions used to sit beside it and
+      {/* Header: the holdings summary, alone. The screen's actions used to sit beside it and
           are in the filter bar now (#847), where the Offers screen has kept its own — the controls
           were spread across the width, and using two of them in a row was a trip across the
           window. */}
@@ -1307,7 +1306,7 @@ export function InventoryListPanel({
                of working — it is the one control here that is never left set — and on a row
                carrying eleven others its width was the cheapest to give back. */
             searchMaxWidth="13rem"
-            /* The screen's three actions, trailing the filters as they do on Offers (#847) — the
+            /* The screen's actions, trailing the filters as they do on Offers (#847) — the
                arrangement is followed rather than re-invented, and the primary one is filled for
                the same reason it is there. They are what the screen *does*, so they are one group
                apart from the eleven controls that narrow it, and the row's answer to running out
@@ -1353,28 +1352,6 @@ export function InventoryListPanel({
                     </button>
                   </Tooltip>
                 )}
-                {/* The other way copies are added (#725): a whole stockbook card scanned, cut and
-                    identified piece by piece. A **link** and not a dialog — the pass runs over
-                    days, so it has its own screen — and it sits beside *Add copy* because the two
-                    answer the same question: one stamp in the tweezers, or forty on a card. */}
-                <Tooltip content="Scan a whole stockbook card and identify its stamps into the collection — for cataloguing what is already owned.">
-                  <Link
-                    href={`/c/${collectionSlug}/inventory/scans`}
-                    style={{
-                      ...FILTER_CONTROL_STYLE,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.375rem",
-                      textDecoration: "none",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      color: "var(--color-text-secondary)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Icon name="scan" size="sm" /> Scan a card
-                  </Link>
-                </Tooltip>
                 <button
                   type="button"
                   onClick={() => setDialog({ kind: "add" })}

@@ -1299,34 +1299,6 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.equal(tile.state, "unidentified");
   });
 
-  it("identifies a cover off a card that belongs to no order (#750, #725)", async () => {
-    const sheet = await uploadSheet(userId, { collectionId }, {
-      source: await card(),
-      mime: "image/png",
-      side: "front",
-    });
-    await commitCut(userId, sheet.id, BOXES);
-    const tile = await prisma.scanTile.findFirstOrThrow({
-      where: { frontSheetId: sheet.id },
-      orderBy: { position: "asc" },
-    });
-    const [outcome] = await identifyTilesAsNewCopies(userId, [tile.id], {
-      stampId,
-      conditionId,
-      stamps: [{ stampId }, { stampId: describedStampId }],
-    });
-    const item = await prisma.item.findUniqueOrThrow({
-      where: { id: outcome.itemId },
-      select: { lotId: true, stampCount: true },
-    });
-    assert.equal(item.lotId, null);
-    assert.equal(item.stampCount, 2);
-    assert.deepEqual(await entriesOf(outcome.itemId), [
-      [stampId, 1, null],
-      [describedStampId, 1, null],
-    ]);
-  });
-
   // ── A run as the stamps of a checklist (#1220, #1225) ─────────────────────────────────────────
 
   /** An issue of its own with these stamps on it, in this order — each with its Michel number where
@@ -1548,38 +1520,6 @@ describe("identifying scan tiles into copies (#567)", () => {
       select: { state: true },
     });
     assert.deepEqual(states.map((t) => t.state), ["unidentified", "unidentified"]);
-  });
-
-  it("identifies a run off a card that belongs to no order, with no lot (#1220, #725)", async () => {
-    const sheet = await uploadSheet(userId, { collectionId }, {
-      source: await card(),
-      mime: "image/png",
-      side: "front",
-    });
-    await commitCut(userId, sheet.id, BOXES);
-    const tiles = await prisma.scanTile.findMany({
-      where: { frontSheetId: sheet.id },
-      orderBy: { position: "asc" },
-      select: { id: true },
-    });
-    const { checklistId, stampIds } = await issueWithStamps(["Shelf 1", "Shelf 2"]);
-    const outcomes = await identifyTilesAsChecklistStamps(userId, {
-      checklistId,
-      // A lot named on a card with no order is not a question, and is ignored.
-      shared: runShared({ lotId: "ignored" }),
-      tiles: tiles.map((t, i) => ({ tileId: t.id, stampId: stampIds[i] })),
-    });
-    const items = await prisma.item.findMany({
-      where: { id: { in: outcomes.map((o) => o.itemId) } },
-      select: { lotId: true, deliveryState: true },
-    });
-    assert.deepEqual(
-      items.map((i) => [i.lotId, i.deliveryState]),
-      [
-        [null, "delivered"],
-        [null, "delivered"],
-      ]
-    );
   });
 
   it("builds a run on one of an issue's two checklists, in its own hand-set order, and corrects a tile to the other's stamp (#1225)", async () => {

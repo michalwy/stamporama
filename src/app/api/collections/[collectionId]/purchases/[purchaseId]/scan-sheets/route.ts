@@ -6,9 +6,6 @@ import { listScans } from "@/lib/scan-sheets";
 /**
  * An order's card scans.
  *
- * The collection's own purchase-less cards are the twin of this at
- * `/api/collections/[collectionId]/scan-sheets` (#725).
- *
  * **The upload lives under `uploads/`** (#590), not here: a 1200 dpi card is 100–200 MB and no
  * ordinary deployment can carry that in one request body — nginx defaults `client_max_body_size` to
  * 1 MB, Cloudflare caps at 100 MB — so a scan is opened, sent in parts and finalized. The

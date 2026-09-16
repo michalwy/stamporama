@@ -285,9 +285,6 @@ The review happens when a copy reaches **your hands** — the moment it becomes 
 — not when the record is first created. That is one rule covering every route in:
 
 - a copy added by hand starts delivered, so the review comes straight away;
-- a copy identified from a [card scan](inventory.md#cataloguing-from-card-scans) outside any order
-  starts delivered too — the stamp is on your desk — so its review also comes straight away, whether
-  you identified one piece, several as the same stamp, or a run as a set;
 - a copy bought on a purchase order starts *ordered*, and gets its review when you sort it
   (**Store**) or set it to *delivered* yourself;
 - a parcel won at auction and settled into a purchase arrives the same way, so it reaches

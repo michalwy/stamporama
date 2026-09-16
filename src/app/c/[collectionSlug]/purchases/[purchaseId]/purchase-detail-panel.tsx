@@ -575,9 +575,8 @@ export function PurchaseDetailPanel({
 
   const { invalidateScans } = useInvalidateScans();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
-  /** The picker → condition chain a scan tile is identified through (#567/#584/#595), shared with
-   * the collection's own card scans since #725. The screen keeps the runner and the error slot; the
-   * chain keeps where it is and what it is carrying. */
+  /** The picker → condition chain a scan tile is identified through (#567/#584/#595). The screen
+   * keeps the runner and the error slot; the chain keeps where it is and what it is carrying. */
   const tileChain = useTileIdentifyChain({ setError });
 
   function run(
@@ -911,7 +910,7 @@ export function PurchaseDetailPanel({
         // opens for the identification itself.
         areas={areas}
         scanDpi={scanDpi}
-        owner={{ kind: "purchase", purchaseId: purchase.id }}
+        purchaseId={purchase.id}
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         parkedTileCount={purchase.parkedTileCount}
         discardedTileCount={purchase.discardedTileCount}
