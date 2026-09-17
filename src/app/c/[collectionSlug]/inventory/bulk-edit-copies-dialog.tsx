@@ -17,16 +17,11 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { BulkCopyChanges } from "@/app/c/[collectionSlug]/shared/bulk-copy-changes";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%",
-  padding: "0.5rem 0.625rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.875rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-};
+import {
+  LocationRefField,
+  useLocationRefUsage,
+} from "@/app/c/[collectionSlug]/shared/location-ref-field";
+import { resolveLocationRefChoice } from "@/lib/location-ref";
 
 const HINT_STYLE: React.CSSProperties = {
   margin: "0.375rem 0 0",
@@ -127,7 +122,11 @@ const NO_FLAG_CHANGES: Record<DispositionFlag, FlagOp> = {
  * The **ref rides with the location**, exactly as it does when a purchase is stored (#565): it
  * names a card *inside* a location, so it is offered only while one is being chosen, and a move
  * with the box left blank clears the refs the copies carried — a slot name from the old album
- * addresses nothing in the new one.
+ * addresses nothing in the new one. It is Store's field itself (`LocationRefField`, #1334), not a
+ * second one that agrees with it: the chosen location's own counter fills the box, *Next ref*
+ * starts a new card, and a ref already in use says how many copies it holds. Filing from this list
+ * used to mean remembering where a box's numbering stood, which is the one thing Store had already
+ * stopped asking.
  *
  * **Tags are the one axis stated as two verbs** (#1181), and they are the exception that proves
  * every other section's rule rather than a break from it. A copy has one location, one grade and
@@ -176,7 +175,10 @@ export function BulkEditCopiesDialog({
 }) {
   const [locationMode, setLocationMode] = useState<LocationMode>("keep");
   const [locationId, setLocationId] = useState("");
-  const [locationRef, setLocationRef] = useState("");
+  // Only the *typed* ref is state — until the collector types, the box shows the card the chosen
+  // location is up to, so picking another location re-offers for it (#1334). `LocationRefField`
+  // holds the whole reading; this half only needs the trimmed value the submit writes.
+  const [typedRef, setTypedRef] = useState<string | null>(null);
   const [flagOps, setFlagOps] = useState<Record<DispositionFlag, FlagOp>>(NO_FLAG_CHANGES);
   // The three identity axes, each holding KEEP, NONE (where it has one) or a dictionary id.
   const [conditionChoice, setConditionChoice] = useState(KEEP);
@@ -192,6 +194,13 @@ export function BulkEditCopiesDialog({
   // so one Escape would otherwise close the menu *and* this dialog under it.
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
+  // Only asked for while a location is actually being chosen: *Leave as is* and *Clear* write no
+  // ref at all, so there is nothing to suggest and nothing to collide with.
+  const refUsage = useLocationRefUsage(
+    collectionId,
+    locationMode === "move" ? locationId : ""
+  );
+  const { trimmed: trimmedRef } = resolveLocationRefChoice(typedRef, refUsage.data);
 
   const count = copies.length;
   const copiesLabel = `${count} cop${count === 1 ? "y" : "ies"}`;
@@ -269,7 +278,7 @@ export function BulkEditCopiesDialog({
             changes.locationId = locationId;
             // Always sent alongside a location, so a blank box clears the refs the copies carried
             // rather than leaving them pointing at a slot in the location they have just left.
-            changes.locationRef = locationRef.trim();
+            changes.locationRef = trimmedRef;
           }
           // One write per flag the collector answered, and nothing at all for the ones left alone —
           // which is what lets "for trade on, for sale off" be the single act it reads as.
@@ -323,27 +332,27 @@ export function BulkEditCopiesDialog({
                       locationTree={locationTree}
                       name="bulk-edit-location"
                       selectedId={locationId}
-                      onSelectedIdChange={setLocationId}
+                      onSelectedIdChange={(id) => {
+                        setLocationId(id);
+                        // The counter belongs to the location, so a ref typed for the last one
+                        // means nothing here — drop back to the new location's own suggestion.
+                        setTypedRef(null);
+                      }}
                       onlyAssignableSelectable
                       disabled={isPending}
                       noneOptionLabel="— Choose a location"
                     />
                     <div style={{ marginTop: "0.625rem" }}>
-                      <LabelWithError htmlFor="bulk-edit-ref">Ref (optional)</LabelWithError>
-                      <input
+                      <LocationRefField
                         id="bulk-edit-ref"
-                        type="text"
-                        value={locationRef}
-                        onChange={(e) => setLocationRef(e.target.value)}
-                        disabled={isPending || !locationId}
-                        placeholder="e.g. A234"
-                        style={{ ...INPUT_STYLE, fontVariantNumeric: "tabular-nums" }}
+                        locationId={locationId}
+                        typedRef={typedRef}
+                        onTypedRefChange={setTypedRef}
+                        disabled={isPending}
+                        countLabel={copiesLabel}
+                        usage={refUsage}
+                        extraHint="Cleared on every picked copy if you empty the box — a ref addresses a place inside the location they are leaving."
                       />
-                      <p style={HINT_STYLE}>
-                        The card these copies sit on inside the location. Left blank, the refs they
-                        carry now are cleared — a ref addresses a place inside the location they are
-                        leaving.
-                      </p>
                     </div>
                   </div>
                 ))}

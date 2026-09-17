@@ -8,8 +8,10 @@ import {
   nextLocationRef,
   parseLocationRef,
   parseRefCardCount,
+  resolveLocationRefChoice,
   DEFAULT_REF_CARDS,
   MAX_REF_CARDS,
+  type LocationRefUsage,
 } from "../../src/lib/location-ref";
 
 function sorted(refs: (string | null)[]): (string | null)[] {
@@ -189,5 +191,74 @@ describe("parseRefCardCount", () => {
       const count = parseRefCardCount(raw);
       assert.ok(Number.isFinite(count) && count >= 1, `count for ${JSON.stringify(raw)}`);
     }
+  });
+});
+
+describe("resolveLocationRefChoice", () => {
+  // A box part-way through its `A` strip: `A147` is the card being packed, `A148` the first blank.
+  const usage: LocationRefUsage = {
+    refs: [
+      { ref: "A146", count: 20 },
+      { ref: "A147", count: 12 },
+    ],
+    highest: "A147",
+    suggestion: "A148",
+  };
+
+  it("offers the card being packed until the collector types (#629)", () => {
+    const choice = resolveLocationRefChoice(null, usage);
+    assert.equal(choice.ref, "A147");
+    assert.equal(choice.continuingCurrentCard, true);
+    assert.equal(choice.collision, 12);
+  });
+
+  it("takes a typed ref over the suggestion, even an empty one", () => {
+    assert.equal(resolveLocationRefChoice("A200", usage).ref, "A200");
+    // Clearing the box is an answer: it means "no ref", not "go back to the suggestion".
+    assert.equal(resolveLocationRefChoice("", usage).ref, "");
+    assert.equal(resolveLocationRefChoice("", usage).collision, 0);
+  });
+
+  it("names how many copies an in-use ref already holds", () => {
+    const choice = resolveLocationRefChoice("A146", usage);
+    assert.equal(choice.collision, 20);
+    // Not the card being packed, so this is the one that might be a typo.
+    assert.equal(choice.continuingCurrentCard, false);
+  });
+
+  it("matches an in-use ref regardless of case, and trims what was typed", () => {
+    const choice = resolveLocationRefChoice("  a147  ", usage);
+    assert.equal(choice.trimmed, "a147");
+    assert.equal(choice.collision, 12);
+    assert.equal(choice.continuingCurrentCard, true);
+  });
+
+  it("finds no collision on a free ref", () => {
+    assert.equal(resolveLocationRefChoice("A148", usage).collision, 0);
+  });
+
+  // Blank cards are printed for the cards *not yet* packed, so continuing `A147` prints from
+  // `A148` — otherwise the default would print a fresh card carrying a ref that already has
+  // stamps on it. A ref the collector typed is taken at face value.
+  it("starts a printed strip one past the card being packed", () => {
+    assert.equal(resolveLocationRefChoice(null, usage).printFrom, "A148");
+    assert.equal(resolveLocationRefChoice("B-20", usage).printFrom, "B-20");
+  });
+
+  it("offers nothing for a location that has never been ref'd in", () => {
+    const empty: LocationRefUsage = { refs: [], highest: null, suggestion: null };
+    const choice = resolveLocationRefChoice(null, empty);
+    assert.equal(choice.ref, "");
+    assert.equal(choice.collision, 0);
+    assert.equal(choice.continuingCurrentCard, false);
+    assert.equal(choice.printFrom, "");
+  });
+
+  // The usage arrives over the wire, so every reading has to survive the request being in flight.
+  it("reads as an empty location while the usage is still loading", () => {
+    const choice = resolveLocationRefChoice(null, undefined);
+    assert.equal(choice.ref, "");
+    assert.equal(choice.collision, 0);
+    assert.equal(choice.continuingCurrentCard, false);
   });
 });
