@@ -159,3 +159,72 @@ export function locationRefStrip(start: string, count: number): string[] {
   }
   return strip;
 }
+
+// ── What the ref box is showing, and what that means (#629/#1334) ────────────
+//
+// Two dialogs ask the same question — Store on a purchase order, and Bulk edit on the Copies list —
+// so the reading of "typed nothing yet / typed something / that ref is already in use" is one
+// function rather than one per dialog. It lives here, beside the ordering and the counter it reads,
+// because it is pure: the usage comes off the wire and everything below is arithmetic on it.
+
+/** One in-location ref and how many copies currently sit under it. */
+export interface LocationRefInUse {
+  ref: string;
+  count: number;
+}
+
+/** What refs a location already holds, which card its counter is at, and the next free one. */
+export interface LocationRefUsage {
+  /** Every ref written in this location, in walk order, with its copy count. */
+  refs: LocationRefInUse[];
+  /** The card this location's counter is at — what filing offers by default (#629), or null when
+   * the location uses no refs. */
+  highest: string | null;
+  /** The next free ref, for starting a new card and for printing a strip of blank ones (#565). */
+  suggestion: string | null;
+}
+
+/** How a ref field reads right now, given what the collector has typed and what the location holds. */
+export interface LocationRefChoice {
+  /** What the box shows: the typed ref if there is one, otherwise the card being packed (#629). */
+  ref: string;
+  /** {@link ref} trimmed — what would actually be written. */
+  trimmed: string;
+  /** How many copies already sit under {@link trimmed} in this location; 0 for a free ref. */
+  collision: number;
+  /** Whether that collision is the card the location is up to — the expected path, said quietly,
+   * as against any other collision, which might be a typo and keeps the warning colour. */
+  continuingCurrentCard: boolean;
+  /** Where a strip of blank cards should start: one past the card being packed, since blank cards
+   * are printed for the cards *not yet* packed. A typed ref is taken at face value. */
+  printFrom: string;
+}
+
+/**
+ * Read a ref field's state: what it shows and whether that ref is already in use (#629).
+ *
+ * `typedRef` is null until the collector types — the box then simply shows the card the location is
+ * up to, so switching location re-offers on its own, and once they have typed, what they typed
+ * stands. A ref already in use is a **confirmation, not an error**: a card holding twenty stamps is
+ * rarely filled in one sitting, so topping one up is the normal path.
+ */
+export function resolveLocationRefChoice(
+  typedRef: string | null,
+  usage: LocationRefUsage | undefined
+): LocationRefChoice {
+  const highest = usage?.highest ?? null;
+  const ref = typedRef ?? highest ?? "";
+  const trimmed = ref.trim();
+  const lower = trimmed.toLocaleLowerCase();
+  const collision = trimmed
+    ? (usage?.refs.find((r) => r.ref.toLocaleLowerCase() === lower)?.count ?? 0)
+    : 0;
+  const continuingCurrentCard = highest != null && lower === highest.toLocaleLowerCase();
+  return {
+    ref,
+    trimmed,
+    collision,
+    continuingCurrentCard,
+    printFrom: continuingCurrentCard ? (usage?.suggestion ?? "") : trimmed,
+  };
+}

@@ -1228,6 +1228,21 @@ While you are moving copies, a **Ref** box appears under the location. Fill it i
 copy gets that ref — the card they now sit on inside the location. **Leave it blank and the refs
 they carry now are cleared**, because a ref addresses a place inside the location they are leaving.
 
+The box is not empty: it is the **same field the Store dialog uses** when you put a purchase away
+(see [The ref](purchases.md#the-ref)), so you never have to remember where a box's numbering stood.
+It opens on **the card that location is currently up to** — the counter belongs to the location, not
+to what you are filing — and press **Next ref** when that card is full to have the first unused
+number filled in. Both are suggestions: the field stays yours to edit. Pick a different location and
+the suggestion follows it, unless you have typed a ref of your own, which always stands.
+
+A location nothing has ever been ref'd in offers nothing and stays blank, which is the normal case
+for an album or stockbook, and there is no **Next ref** to press. Filing onto a ref **already in
+use** is not an error — the dialog says *"A147 already holds 12 copies here. Adding 5 copies to
+it."* On the card that location is up to that line is a quiet confirmation; on any other ref it
+turns into a warning, which is what catches a typo.
+
+**Leave as is** and **Clear** write no ref at all, so neither suggests anything.
+
 **Disposition** carries all three flags — *In collection*, *For sale*, *For trade* — each with its
 own **Leave as is · On · Off**. They are independent (a copy can be in the collection, for sale and
 for trade at once), so answer as many as your change needs: moving a drawer from stock to swaps is

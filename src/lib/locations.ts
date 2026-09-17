@@ -1,6 +1,16 @@
 import "server-only";
 import { prisma } from "./db";
-import { compareLocationRef, highestLocationRef, nextLocationRef } from "./location-ref";
+import {
+  compareLocationRef,
+  highestLocationRef,
+  nextLocationRef,
+  type LocationRefUsage,
+} from "./location-ref";
+
+// The shape of a location's ref usage is declared beside the ordering and the counter that build
+// it (`location-ref.ts`), because the two dialogs that read it are client code and this module is
+// `server-only`. Re-exported here so callers keep asking the module that answers the question.
+export type { LocationRefInUse, LocationRefUsage } from "./location-ref";
 
 // Server-side CRUD for storage locations (`Location`), collection-scoped (#56).
 // Adjacency-list hierarchy mirroring `CollectionArea` (see areas.ts): grouping-only
@@ -66,22 +76,6 @@ export async function getLocations(
     itemCount: l._count.items,
     childCount: l._count.children,
   }));
-}
-
-/** One in-location ref and how many copies currently sit under it. */
-export interface LocationRefInUse {
-  ref: string;
-  count: number;
-}
-
-export interface LocationRefUsage {
-  /** Every ref written in this location, in walk order, with its copy count. */
-  refs: LocationRefInUse[];
-  /** The card this location's counter is at — what filing offers by default (#629), or null when
-   * the location uses no refs. */
-  highest: string | null;
-  /** The next free ref, for starting a new card and for printing a strip of blank ones (#565). */
-  suggestion: string | null;
 }
 
 /**
