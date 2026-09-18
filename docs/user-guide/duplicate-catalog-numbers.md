@@ -37,6 +37,11 @@ Duplicate handling is set per collection under **Settings → Duplicates**:
   [stamp generation](collections.md#generating-an-issues-stamps-from-its-catalog-range) on the
   **Add issue** dialog, every number it would generate is checked and any collisions are listed
   before you create the issue. **Add stamp range…** checks the same way.
+- **The catalog-number grid** — in
+  [Edit catalog numbers…](collections.md#editing-an-issues-catalog-numbers-in-one-grid), a number
+  repeated **within the issue's own column** is marked in amber and still saved. The
+  collection-wide check runs as each cell is saved: in **block** mode a number another stamp
+  already carries is refused, with the message on the cell.
 
 ## The duplicate report
 

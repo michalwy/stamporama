@@ -65,6 +65,7 @@ import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offer
 import { AddIssueWantsDialog } from "@/app/c/[collectionSlug]/wants/use-add-issue-wants-action";
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
+import { useCatalogNumberGrid } from "@/app/c/[collectionSlug]/shared/use-catalog-number-grid";
 import { Icon } from "@/app/icons";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 
@@ -178,6 +179,15 @@ export function IssueDetailPanel({
     void invalidateStampsAndIssues(collectionId);
     void queryClient.invalidateQueries({ queryKey: ["checklistPriceDetails", collectionId] });
   }
+  // The Issues row's catalogue-number grid (#1346), over this issue. The tree, its chips and the
+  // declared range come with the route, and the Issues list goes stale with them.
+  const catalogNumbers = useCatalogNumberGrid({
+    issueId: issue.id,
+    onSaved: () => {
+      router.refresh();
+      void invalidateStampsAndIssues(collectionId);
+    },
+  });
   // Dropped while reordering: a drag inside a narrowed tree would move a stamp past a sibling
   // that was never on screen, and the server refuses a partial group.
   const { tree, contextIds } = filterStampTreeByChecklists(
@@ -217,6 +227,12 @@ export function IssueDetailPanel({
                 <Icon name="edit" size="sm" /> Edit
               </button>
             </Tooltip>
+            <Tooltip content="Every stamp's catalog numbers on one screen, one column per catalog.">
+              <button type="button" style={DETAIL_BUTTON} onClick={catalogNumbers.open}>
+                <Icon name="catalogNumbers" size="sm" /> Catalog numbers
+              </button>
+            </Tooltip>
+            {catalogNumbers.dialog}
           </span>
         </DetailFullRow>
 

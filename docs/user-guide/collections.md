@@ -456,6 +456,24 @@ If the merged-in stamps push the target issue's **declared catalog range** beyon
 
 When you type a name in the **Add issue** dialog, Stamporama checks whether an issue with that same name already exists **in the selected area** (the check ignores case and surrounding spaces). If one does, a small **⚠ warning icon** appears inside the name field; hover it to see a tooltip naming the existing issue(s) and their year. The warning never blocks you — the same name can legitimately repeat, so you can create the issue anyway if the duplicate is intentional. The check is per area only: the same name in a different area (for example, the same series name across two countries) is not flagged.
 
+## Editing an issue's catalog numbers in one grid
+
+Numbers generated when an issue is created are only the start. To add a **second catalog** to an issue that already has its stamps, or to correct a run of numbers that came out wrong, open the issue's **⋮** menu on the **Issues** list and choose **Edit catalog numbers…** — or press **Catalog numbers** at the top of the issue's own page. You no longer have to open each stamp in turn.
+
+The grid has **one row per stamp of the issue, variants included**, indented and in the same order as the issue's stamp tree, and **one column per catalog** the stamp form offers for the issue's area, with the area's leading catalog first. A column header shows the catalog and the prefix its numbers carry here (`Mi·PL`); hover it for the catalog's full name. A stamp on none of the issue's checklists is marked *extra*.
+
+It types the way the [variant price grid](variant-prices.md#the-grid) does:
+
+- The **first cell takes the cursor** as soon as the grid appears.
+- **Tab** moves **down a catalog column**, and on to the top of the next column at the end of one, so a whole catalog's numbers are entered in one pass. **Shift+Tab** goes back. Off the **last** cell it lands on **Done**.
+- **Enter** saves the cell and closes the grid. If the number is refused, the grid stays open with the message on the cell.
+- There is **no Save**. Each number is written when you leave the cell; **Done** only closes.
+- **Clearing a cell removes that catalog's number** from the stamp.
+
+A number **repeated within one catalog** in the issue is marked in amber, and hovering it names the other stamps that carry it. It is still saved — a repeat is usually a typo, but not always. In a collection set to **block** [duplicate catalog numbers](duplicate-catalog-numbers.md), a number another stamp already carries is refused instead, exactly as it is in the stamp form.
+
+The issue's **declared range follows the numbers**: every number you save recomputes that catalog's range from the issue's checklist stamps — see the next section.
+
 ## Keeping an issue's catalog range in step with its stamps
 
 An issue can declare a **catalog number range** per catalog (a **First** and optional **Last**, e.g. `100`–`105`). Stamporama checks whether the stamps on the issue's **checklists** still fit inside that declared range and flags it when one **extends beyond** it. Only stamps on a checklist count — optional extras such as blocks or varieties never widen the range. When an issue carries several checklists, all of them are read together: an issue publishes one range of numbers however many sets are collected inside it.
@@ -476,6 +494,8 @@ You cannot save the stamp until you pick one, so the decision is never made for 
 The check only ever suggests **widening** a range, never narrowing it — a range that is broader than the checklist stamps you have entered so far is normal while an issue is still being filled in, so it is never flagged. Comparison stays within the **same numbering family** as the range: for a plain numeric range like `100–105`, a block (`BL12`) or sheetlet (`Ark. 103`) that belongs to the same issue is a different family and is left alone, whereas a range written as `BL17–BL18` **is** extended by `BL19`.
 
 The **basic numbering takes precedence**. If a range was declared in a special numbering — for example a block range `BL1–BL3` — and a checklist stamp with the basic numbering (a plain number like `200`) is added, the series **adopts the basic numbering**: the proposal replaces the block range with the basic one (`BL1–BL3 → 200`) rather than extending it.
+
+**The [catalog-number grid](#editing-an-issues-catalog-numbers-in-one-grid) does not propose — it recomputes.** There you are editing the very numbers the range summarises, so each number you save sets that catalog's range to the lowest–highest of the checklist stamps' numbers, with no question asked: it **widens**, it **narrows**, it **appears** for a catalog the issue had no range for, and it **goes away** once no checklist stamp carries a number in that catalog. The family rules are the ones above — basic numbering first, then the range's own family, then a family every number shares (`Bl5`–`Bl7`). Numbers spread over several families with no range to choose between them leave the range as it was, for you to declare. Extras on no checklist never count, and an issue with no checklist stamps at all keeps whatever range it has.
 
 ## Checklists
 

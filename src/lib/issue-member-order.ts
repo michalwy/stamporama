@@ -89,6 +89,52 @@ export function sortOrderAssignments(
   return orderedStampIds.map((stampId, i) => ({ stampId, sortOrder: i }));
 }
 
+/**
+ * The issue's tree **read down the page**: every member once, each after its parent, siblings in
+ * `sortOrder` then `stampId` (`MEMBER_SELECT`'s own order), with its depth for indenting. The
+ * catalogue-number grid (#1346) draws its rows from this, so they come in exactly the order the
+ * Issues list's tree does.
+ *
+ * Roots follow {@link effectiveParentId}, so a variant whose base belongs to another issue is
+ * drawn as a root rather than dropped. A member reachable from no root — only a cycle, which
+ * nothing at the database level forbids — is appended at depth 0 so it is never lost.
+ */
+export function flattenMemberTree(
+  members: readonly (OrderableMember & { sortOrder: number })[]
+): { stampId: string; depth: number }[] {
+  const ids = new Set(members.map((m) => m.stampId));
+  const childrenOf = new Map<string | null, (OrderableMember & { sortOrder: number })[]>();
+  for (const m of members) {
+    const parent = effectiveParentId(m, ids);
+    const list = childrenOf.get(parent);
+    if (list) list.push(m);
+    else childrenOf.set(parent, [m]);
+  }
+  for (const list of childrenOf.values()) {
+    list.sort((a, b) => a.sortOrder - b.sortOrder || a.stampId.localeCompare(b.stampId));
+  }
+
+  const out: { stampId: string; depth: number }[] = [];
+  const visited = new Set<string>();
+  const walk = (parentId: string | null, depth: number) => {
+    for (const m of childrenOf.get(parentId) ?? []) {
+      if (visited.has(m.stampId)) continue;
+      visited.add(m.stampId);
+      out.push({ stampId: m.stampId, depth });
+      walk(m.stampId, depth + 1);
+    }
+  };
+  walk(null, 0);
+  for (const m of members) {
+    if (!visited.has(m.stampId)) {
+      visited.add(m.stampId);
+      out.push({ stampId: m.stampId, depth: 0 });
+      walk(m.stampId, 1);
+    }
+  }
+  return out;
+}
+
 /** Move one element of a list, the way a drop does: `to` is the index it ends up at. */
 export function moveInOrder<T>(items: readonly T[], from: number, to: number): T[] {
   const next = [...items];
