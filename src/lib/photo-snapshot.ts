@@ -141,7 +141,7 @@ export async function saveAnnotatedSnapshot(
   })
     .composite([
       {
-        input: Buffer.from(snapshotOverlaySvg(request.marks, region, out, request.style, request.viewScale)),
+        input: Buffer.from(snapshotOverlaySvg(request.marks, region, out, request.viewScale)),
         left: 0,
         top: 0,
       },

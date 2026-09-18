@@ -19,9 +19,13 @@ import {
   ANNOTATION_FONT_FAMILY,
   MAX_TEXT_MARK,
   NO_MARKS,
+  annotationAt,
+  annotationBounds,
   annotationFromDrag,
   changeMarks,
+  restyleMark,
   snapshotRegion,
+  styleFieldsOf,
   textMarkAt,
   undoMarks,
   type AnnotationKind,
@@ -542,7 +546,8 @@ function needsScale(tool: MeasureTool): boolean {
 }
 
 /** A note being typed or edited (#1300): a new one where the picture was clicked (`index` null), or the
- * note at `index` opened again. */
+ * note at `index` opened again. A new note takes the settings as they stand when it is kept; a note
+ * opened again keeps its own style (#1342). */
 interface TextEdit {
   index: number | null;
   at: ScanPoint;
@@ -891,11 +896,15 @@ export function TileZoomView({
    * click, which can arrive in one turn, and only the first of them may keep it. */
   const [editing, setEditing] = useState<TextEdit | null>(null);
   const editingRef = useRef<TextEdit | null>(null);
+  /** The mark selected by a click (#1342), whose style the settings then change — that mark only.
+   * An index into the marks, so anything that reorders or replaces them lets it go. */
+  const [selected, setSelected] = useState<number | null>(null);
   if (marksOn !== (current?.photoId ?? null)) {
     setMarksOn(current?.photoId ?? null);
     setMarks(null);
     setHistory(NO_MARKS);
     setEditing(null);
+    setSelected(null);
   }
   // …and the note's ref with it, once the new picture is in: a blur arriving from the old picture's
   // field must find nothing to keep.
@@ -904,12 +913,15 @@ export function TileZoomView({
     editingRef.current = null;
   }, [photoOnScreen]);
 
-  /** How marks are drawn (#1300) — one style for all of them, remembered for the next sitting. */
+  /** How the next mark is drawn (#1300, #1342), remembered for the next sitting. A mark already drawn
+   * keeps the style it was drawn in. */
   const [annotationStyle, setAnnotationStyle] = useAnnotationStyle();
 
   const editNote = useCallback((next: TextEdit | null) => {
     editingRef.current = next;
     setEditing(next);
+    // A note opened for typing is the one the settings act on; nothing else stays selected beside it.
+    if (next) setSelected(null);
   }, []);
 
   /** Finish the note being typed: keep it (an emptied note is removed), or drop the edit. */
@@ -922,7 +934,9 @@ export function TileZoomView({
       const text = edit.text.trim().slice(0, MAX_TEXT_MARK);
       setHistory((h) => {
         if (edit.index === null) {
-          return text ? changeMarks(h, [...h.marks, { kind: "text", at: edit.at, text }]) : h;
+          return text
+            ? changeMarks(h, [...h.marks, { kind: "text", at: edit.at, text, style: annotationStyle }])
+            : h;
         }
         const note = h.marks[edit.index];
         if (!note || note.kind !== "text" || note.text === text) return h;
@@ -934,7 +948,7 @@ export function TileZoomView({
         );
       });
     },
-    [editNote]
+    [annotationStyle, editNote]
   );
 
   /** The stated scale, as typed. Prefilled from the collection and **never written back**: a card
@@ -974,6 +988,7 @@ export function TileZoomView({
       setMarks(null);
       setHistory(NO_MARKS);
       editNote(null);
+      setSelected(null);
     },
     [editNote]
   );
@@ -984,6 +999,7 @@ export function TileZoomView({
     finishNote(true);
     setChosenTool((t) => (t === next ? "off" : next));
     setMarks(null);
+    setSelected(null);
   };
 
   useEffect(() => {
@@ -1022,6 +1038,8 @@ export function TileZoomView({
   }, measuring);
   // A note being typed is the topmost thing of all: Escape drops the edit, and the tool stays down.
   useEscapeLayer(() => finishNote(false), editing !== null);
+  // A selected mark is let go of first, before the line or the tool (#1342).
+  useEscapeLayer(() => setSelected(null), selected !== null);
 
   /** A viewport point as a mark, clamped to the picture: a drag that leaves the tile would
    * otherwise measure to a point of card that is not on it. */
@@ -1237,6 +1255,9 @@ export function TileZoomView({
 
   const pan = useRef<{ x: number; y: number } | null>(null);
   const marking = useRef(false);
+  /** Where the primary button went down, to tell a click — which selects a mark (#1342) — from a drag,
+   * which draws one or moves the picture. */
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   /** The line as the pointer left it. A ref beside the state because the count runs on pointer-up
    * and wants the mark the drag actually finished on, not the one the last render happened to
    * have. */
@@ -1254,10 +1275,11 @@ export function TileZoomView({
       finishNote(true);
       return;
     }
+    pressedAt.current = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
     if (e.button === 0 && !handDrag && tool === "text") {
       const at = markAt(e.clientX, e.clientY);
       if (!at) return;
-      const hit = textMarkAt(annotations, at, annotationStyle.fontSize, view.scale);
+      const hit = textMarkAt(annotations, at, view.scale);
       const note = hit === null ? null : annotations[hit];
       editNote(
         note && note.kind === "text"
@@ -1300,11 +1322,18 @@ export function TileZoomView({
     setView((v) => panBy(v, e.clientX - last.x, e.clientY - last.y, picture, size));
     pan.current = { x: e.clientX, y: e.clientY };
   };
-  const endPan = () => {
+  const endPan = (e: React.PointerEvent) => {
     pan.current = null;
     setPanning(false);
     const wasMarking = marking.current;
     marking.current = false;
+    const pressed = pressedAt.current;
+    pressedAt.current = null;
+    // A press that let go where it went down is a click, not a drag.
+    const clicked =
+      e.type === "pointerup" &&
+      pressed !== null &&
+      Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < CLICK_SLOP;
     // The count runs when the line is finished, not while it is being dragged: reading the pixels
     // on every pointer move would recount a run the collector is still stretching, and the number
     // under their hand would flicker through every count on the way to the one they meant.
@@ -1313,10 +1342,23 @@ export function TileZoomView({
     // A ring, a line or a ruler mark is finished when the drag is, and joins the ones already
     // drawn; the marks clear so the next drag starts a new one rather than stretching this. A ruler
     // mark takes the scale on the bar with it — the one it was drawn at.
+    // A click draws nothing: it is how a mark is selected instead.
     if (wasMarking && isAnnotationTool(tool) && tool !== "text" && line) {
-      const mark = annotationFromDrag(tool, line.a, line.b, dpi);
-      if (mark) setHistory((h) => changeMarks(h, [...h.marks, mark]));
+      const mark = clicked ? null : annotationFromDrag(tool, line.a, line.b, annotationStyle, dpi);
+      if (mark) {
+        setHistory((h) => changeMarks(h, [...h.marks, mark]));
+        setSelected(null);
+      }
       setMarks(null);
+    }
+    // A click on a mark selects it, so its style can be changed on its own (#1342); a click anywhere
+    // else lets go. The text tool's click belongs to notes — it places one or opens one.
+    if (clicked && tool !== "text") {
+      const at = markAt(e.clientX, e.clientY);
+      const hit = at ? annotationAt(annotations, at, view.scale) : null;
+      setSelected(hit);
+      // The press set the measuring line's first end; on a mark, it was a selection, not a start.
+      if (hit !== null && !annotating) setMarks(null);
     }
   };
 
@@ -1386,7 +1428,6 @@ export function TileZoomView({
   const [snapshot, setSnapshot] = useState<{
     region: Box;
     marks: SnapshotMark[];
-    style: AnnotationStyle;
     viewScale: number;
   } | null>(null);
 
@@ -1408,10 +1449,24 @@ export function TileZoomView({
         a: marks.a,
         b: marks.b,
         label: reading.text,
+        // Drawn as it stands on screen: in the settings of the moment, like the next mark.
+        style: annotationStyle,
       });
     }
-    setSnapshot({ region, marks: kept, style: annotationStyle, viewScale: view.scale });
+    setSnapshot({ region, marks: kept, viewScale: view.scale });
   };
+
+  /** What the settings bar acts on (#1342): a note open for editing or a mark selected by a click —
+   * that mark only — or else the settings for the next mark drawn. */
+  const targetIndex = editing ? editing.index : selected;
+  const target = targetIndex === null ? null : (annotations[targetIndex] ?? null);
+  const restyleTarget = (next: AnnotationStyle) => {
+    if (targetIndex === null) return;
+    setHistory((h) => changeMarks(h, restyleMark(h.marks, targetIndex, next)));
+  };
+  /** The style the note being typed shows in: its own when it is opened again, the settings when new. */
+  const noteStyle = target?.kind === "text" ? target.style : annotationStyle;
+  const selectedMark = editing ? null : target;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -1591,9 +1646,13 @@ export function TileZoomView({
         onPointerUp={endPan}
         onPointerCancel={endPan}
         // Middle-button down starts the browser's own autoscroll, which `onPointerDown` is too
-        // late to stop — the same guard the cut editor needs for the same reason.
+        // late to stop — the same guard the cut editor needs for the same reason. And a click that
+        // opens a note (#1342): the field is focused as the press comes down, and the mouse-down
+        // that follows would move the focus to the page behind it — blurring the field, which keeps
+        // the note, empty, and so drops it before a letter could be typed.
         onMouseDown={(e) => {
           if (e.button === 1) e.preventDefault();
+          if (e.button === 0 && tool === "text" && !handDrag) e.preventDefault();
         }}
         style={{
           flex: 1,
@@ -1702,11 +1761,12 @@ export function TileZoomView({
               <AnnotationShapes
                 marks={editing?.index != null ? annotations.filter((_, i) => i !== editing.index) : annotations}
                 scale={view.scale}
-                style={annotationStyle}
               />
               {measuring && marks && tool !== "text" && (
-                <AnnotationShapes marks={[dragMark(tool, marks, dpi)]} scale={view.scale} style={annotationStyle} />
+                <AnnotationShapes marks={[dragMark(tool, marks, dpi, annotationStyle)]} scale={view.scale} />
               )}
+              {/* The selected mark (#1342), outlined on screen only — a snapshot never shows it. */}
+              {selectedMark && <SelectionOutline box={annotationBounds(selectedMark, view.scale)} scale={view.scale} />}
             </svg>
           )}
 
@@ -1739,10 +1799,10 @@ export function TileZoomView({
                 margin: 0,
                 padding: 0,
                 border: "none",
-                outline: `1px dashed ${noteColour(annotationStyle).colour}`,
+                outline: `1px dashed ${noteColour(noteStyle).colour}`,
                 background: "rgba(17, 17, 17, 0.35)",
-                color: noteColour(annotationStyle).colour,
-                font: `600 ${annotationStyle.fontSize}px ${ANNOTATION_FONT_FAMILY}`,
+                color: noteColour(noteStyle).colour,
+                font: `600 ${noteStyle.fontSize}px ${ANNOTATION_FONT_FAMILY}`,
                 lineHeight: 1.25,
                 userSelect: "text",
               }}
@@ -1796,19 +1856,28 @@ export function TileZoomView({
           <span style={{ color: "var(--color-text-muted)" }}>
             {editing
               ? "Type the note — Enter keeps it, Esc drops the change"
+              : selectedMark
+                ? `${MARK_NOUN[selectedMark.kind]} selected — the settings change it only · Esc lets go`
               : annotations.length > 0
                 ? `${annotations.length} ${annotations.length === 1 ? "mark" : "marks"} — kept only in a snapshot`
                 : tool === "rulerMark"
                   ? "Ruler marks stay on the picture — kept only in a snapshot"
                   : reading.text}
           </span>
-          {/* One style for every mark (#1300) — changing it restyles what is already drawn. */}
-          <AnnotationStyleControls style={annotationStyle} onChange={setAnnotationStyle} />
+          {/* The settings for the next mark, or for the one selected (#1342) — a mark keeps the style it
+              was drawn in until it is selected and changed. */}
+          <AnnotationStyleControls
+            style={target?.style ?? annotationStyle}
+            onChange={target ? restyleTarget : setAnnotationStyle}
+            target={target ? "selected" : "next"}
+            fields={target ? styleFieldsOf(target.kind) : undefined}
+          />
           <span style={{ flex: 1 }} />
           {editing?.index != null && (
             <ScanToolButton
               label="Remove note"
               hint="Take this note off the picture"
+              keepFocus
               onClick={() => {
                 const held = editingRef.current;
                 if (!held) return;
@@ -1823,6 +1892,7 @@ export function TileZoomView({
               hint="Take back the last change — a mark drawn, a note typed, changed or removed, or Clear"
               onClick={() => {
                 editNote(null);
+                setSelected(null);
                 setHistory(undoMarks);
               }}
             />
@@ -1833,6 +1903,7 @@ export function TileZoomView({
               hint="Take every mark off — Undo brings them back"
               onClick={() => {
                 editNote(null);
+                setSelected(null);
                 setHistory((h) => changeMarks(h, []));
               }}
             />
@@ -2004,7 +2075,7 @@ export function TileZoomView({
       >
         {measuring ? (
           <>
-            {tool === "text" ? "Click to place a note, or on a note to change it" : "Drag to mark"} · hold <kbd>space</kbd> or the middle button to move · <kbd>Esc</kbd> clears
+            {tool === "text" ? "Click to place a note, or on a note to change it" : "Drag to mark · click a mark to select it"} · hold <kbd>space</kbd> or the middle button to move · <kbd>Esc</kbd> clears
             {/* Said only when it is true, and it is the accuracy warning rather than a tip: the
                 reading is taken on the scan's own pixels either way, but below 1:1 a mark is placed
                 to within more than one of them, and a gauge separates 11½ from 12 by under 4%. */}
@@ -2015,6 +2086,7 @@ export function TileZoomView({
         ) : (
           <>
             Drag to move · wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms · <kbd>0</kbd> fits
+            {annotations.length > 0 ? " · click a mark to select it" : ""}
             {sides.length > 1 ? " · the zoom is kept when you switch sides" : ""}
             {/* Said for a photo, where the tools' absence has a reason worth knowing (#1290): a
                 tile without a box is rare and explained on the purchase screen, while an old photo
@@ -2032,7 +2104,6 @@ export function TileZoomView({
           photoId={current.photoId}
           region={snapshot.region}
           marks={snapshot.marks}
-          style={snapshot.style}
           viewScale={snapshot.viewScale}
           onClose={() => setSnapshot(null)}
           onSaved={() => {
@@ -2059,13 +2130,46 @@ function noteColour(style: AnnotationStyle) {
 function dragMark(
   tool: MeasureTool,
   marks: { a: ScanPoint; b: ScanPoint },
-  dpi: number | null
+  dpi: number | null,
+  style: AnnotationStyle
 ): SnapshotMark {
   const { a, b } = marks;
-  if (tool === "ellipse" || tool === "line") return { kind: tool, a, b };
-  if (tool === "rulerMark") return dpi === null ? { kind: "line", a, b } : { kind: "rulerMark", a, b, dpi };
-  if (tool === "size") return { kind: "box", a, b, label: "" };
-  return { kind: "distance", a, b, label: "" };
+  if (tool === "ellipse" || tool === "line") return { kind: tool, a, b, style };
+  if (tool === "rulerMark") {
+    return dpi === null ? { kind: "line", a, b, style } : { kind: "rulerMark", a, b, dpi, style };
+  }
+  if (tool === "size") return { kind: "box", a, b, label: "", style };
+  return { kind: "distance", a, b, label: "", style };
+}
+
+/** How far the pointer may travel between down and up, in screen pixels, for the press to be a click
+ * — which selects a mark (#1342) — rather than a drag. */
+const CLICK_SLOP = 4;
+
+/** What the marks bar calls a selected mark. */
+const MARK_NOUN: Record<SnapshotMark["kind"], string> = {
+  ellipse: "Ring",
+  line: "Line",
+  rulerMark: "Ruler mark",
+  text: "Note",
+  distance: "Measurement",
+  box: "Size",
+};
+
+/** A selected mark's outline (#1342): a dashed box a little outside it, light over a dark halo so it
+ * shows on paper and ink. Screen furniture — it is not a mark and a snapshot never draws it. */
+function SelectionOutline({ box, scale }: { box: Box; scale: number }) {
+  const pad = 6;
+  const x = box.x * scale - pad;
+  const y = box.y * scale - pad;
+  const w = box.w * scale + pad * 2;
+  const h = box.h * scale + pad * 2;
+  return (
+    <>
+      <rect x={x} y={y} width={w} height={h} rx={3} fill="none" stroke="rgba(0,0,0,0.65)" strokeWidth={3} />
+      <rect x={x} y={y} width={w} height={h} rx={3} fill="none" stroke="#ffffff" strokeWidth={1} strokeDasharray="4 3" />
+    </>
+  );
 }
 
 /**

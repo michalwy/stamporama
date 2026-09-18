@@ -17,6 +17,7 @@ export function ScanToolButton({
   disabled,
   active,
   tint,
+  keepFocus,
   onClick,
 }: {
   /** Optional: `1:1` is its own picture, and the vocabulary is deliberately not the place to invent
@@ -37,6 +38,9 @@ export function ScanToolButton({
    * meanings share one colour, and the picture the chip changes is the thing being judged.
    */
   tint?: string;
+  /** Leave the focus where it is when pressed — for a control that acts on the field being typed in,
+   * such as *Remove note* (#1342): taking the focus would blur the field, and a blur finishes it. */
+  keepFocus?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -47,6 +51,7 @@ export function ScanToolButton({
       <button
         type="button"
         onClick={onClick}
+        onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
         disabled={disabled}
         style={{
         display: "inline-flex",

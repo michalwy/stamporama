@@ -8,7 +8,6 @@ import { saveAnnotatedSnapshotAction } from "@/app/actions/photo-measure";
 import {
   DEFAULT_SNAPSHOT_TITLE,
   MAX_SNAPSHOT_TITLE,
-  type AnnotationStyle,
   type SnapshotMark,
 } from "@/lib/annotations";
 import type { Box } from "@/lib/scan-boxes";
@@ -33,7 +32,6 @@ export function SnapshotDialog({
   photoId,
   region,
   marks,
-  style,
   viewScale,
   onClose,
   onSaved,
@@ -41,10 +39,10 @@ export function SnapshotDialog({
   collectionId: string;
   photoId: string;
   region: Box;
+  /** Each in its own style (#1342). */
   marks: SnapshotMark[];
-  /** The style and the zoom on screen when the button was pressed (#1300), so the photo draws the
-   * marks as they looked. */
-  style: AnnotationStyle;
+  /** The zoom on screen when the button was pressed (#1300), so the photo draws the marks as they
+   * looked. */
   viewScale: number;
   onClose: () => void;
   onSaved: () => void;
@@ -65,7 +63,6 @@ export function SnapshotDialog({
         region,
         marks,
         title,
-        style,
         viewScale,
       });
       if (state.status === "error") {

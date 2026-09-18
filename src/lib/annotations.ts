@@ -32,7 +32,7 @@ import type { Box } from "./scan-boxes";
 import {
   MAX_SCAN_DPI,
   MIN_SCAN_DPI,
-  formatMillimetresAt,
+  formatMillimetres,
   scanPixelsToMm,
   type ScanPoint,
 } from "./scan-measure";
@@ -43,14 +43,18 @@ import { toSheetPoint, type Viewport, type ViewportSize } from "./scan-viewport"
  *
  * - **ellipse** and **line** point at something and say nothing numeric (#674).
  * - **rulerMark** is a line with graduations and its length in millimetres (#1300). It carries the
- *   scale it was drawn at, so its figure is never shown without one and a later correction of the
- *   scale field does not silently re-measure a mark already on the picture.
+ *   scale it was drawn at, so a later correction of the scale field does not silently re-measure a
+ *   mark already on the picture. Its label is the length alone (#1342): the scale is said by the
+ *   viewer while measuring, and on the picture it was clutter.
  * - **text** is a note, its top-left corner where it was placed (#1300).
+ *
+ * Every mark carries the **style it was drawn in** (#1342): changing the settings styles the next mark,
+ * and a red line stays red after switching to yellow. Only a mark selected on purpose is restyled.
  */
 export type Annotation =
-  | { kind: "ellipse" | "line"; a: ScanPoint; b: ScanPoint }
-  | { kind: "rulerMark"; a: ScanPoint; b: ScanPoint; dpi: number }
-  | { kind: "text"; at: ScanPoint; text: string };
+  | { kind: "ellipse" | "line"; a: ScanPoint; b: ScanPoint; style: AnnotationStyle }
+  | { kind: "rulerMark"; a: ScanPoint; b: ScanPoint; dpi: number; style: AnnotationStyle }
+  | { kind: "text"; at: ScanPoint; text: string; style: AnnotationStyle };
 
 export type AnnotationKind = Annotation["kind"];
 /** The marks drawn by dragging from one end to the other. */
@@ -69,7 +73,7 @@ export type DragAnnotationKind = "ellipse" | "line" | "rulerMark";
  */
 export type SnapshotMark =
   | Annotation
-  | { kind: "distance" | "box"; a: ScanPoint; b: ScanPoint; label: string };
+  | { kind: "distance" | "box"; a: ScanPoint; b: ScanPoint; label: string; style: AnnotationStyle };
 
 // ── Style (#1300) ────────────────────────────────────────────────────────────────────────────────
 
@@ -106,6 +110,14 @@ export interface AnnotationStyle {
   colour: AnnotationColour;
   thickness: number;
   fontSize: number;
+}
+
+/** Which of the three settings show on a mark of a kind — a note has no line, a ring no type. What
+ * the settings bar offers for a selected mark (#1342). */
+export function styleFieldsOf(kind: SnapshotMark["kind"]): { thickness: boolean; fontSize: boolean } {
+  if (kind === "text") return { thickness: false, fontSize: true };
+  if (kind === "ellipse" || kind === "line") return { thickness: true, fontSize: false };
+  return { thickness: true, fontSize: true };
 }
 
 /** What marks look like until the collector says otherwise — #674's white hairline on a dark halo. */
@@ -175,22 +187,38 @@ export const MAX_MARK_HISTORY = 100;
 // ── Drawing marks ───────────────────────────────────────────────────────────────────────────────
 
 /**
- * A mark from the two ends of a drag, or null when the drag drew nothing: a ring needs a width
- * **and** a height, and a line needs a length. A click that never became a drag is not a mark. A
- * ruler mark also needs a stated scale — without one it has no figure, and it is not drawn.
+ * A mark from the two ends of a drag, in the style it is drawn in, or null when the drag drew
+ * nothing: a ring needs a width **and** a height, and a line needs a length. A click that never
+ * became a drag is not a mark. A ruler mark also needs a stated scale — without one it has no figure,
+ * and it is not drawn.
  */
 export function annotationFromDrag(
   kind: DragAnnotationKind,
   a: ScanPoint,
   b: ScanPoint,
+  style: AnnotationStyle,
   dpi: number | null = null
 ): Annotation | null {
   const w = Math.abs(b.x - a.x);
   const h = Math.abs(b.y - a.y);
-  if (kind === "ellipse") return w > 0 && h > 0 ? { kind, a, b } : null;
+  if (kind === "ellipse") return w > 0 && h > 0 ? { kind, a, b, style } : null;
   if (Math.hypot(w, h) <= 0) return null;
-  if (kind === "rulerMark") return dpi === null ? null : { kind, a, b, dpi };
-  return { kind, a, b };
+  if (kind === "rulerMark") return dpi === null ? null : { kind, a, b, dpi, style };
+  return { kind, a, b, style };
+}
+
+/**
+ * The marks with the one at `index` in a new style (#1342) — a mark selected and restyled on purpose.
+ * The same array when nothing changes, so {@link changeMarks} records no step for it.
+ */
+export function restyleMark(marks: Annotation[], index: number, style: AnnotationStyle): Annotation[] {
+  const mark = marks[index];
+  if (!mark || sameStyle(mark.style, style)) return marks;
+  return marks.map((m, i) => (i === index ? { ...m, style } : m));
+}
+
+export function sameStyle(a: AnnotationStyle, b: AnnotationStyle): boolean {
+  return a.colour === b.colour && a.thickness === b.thickness && a.fontSize === b.fontSize;
 }
 
 /**
@@ -219,14 +247,14 @@ export function undoMarks(history: MarksHistory): MarksHistory {
 /**
  * The rectangle a note covers on the picture, in picture pixels — what a click with the text tool
  * hits to open a note for editing. An estimate from the number of characters, generous by a little,
- * since there are no font metrics here; the note is set from its top-left corner.
+ * since there are no font metrics here; the note is set from its top-left corner, in its own size.
  */
 export function textMarkBox(
-  mark: { at: ScanPoint; text: string },
-  fontSize: number,
+  mark: { at: ScanPoint; text: string; style: AnnotationStyle },
   viewScale: number
 ): Box {
   const scale = viewScale > 0 ? viewScale : 1;
+  const fontSize = mark.style.fontSize;
   return {
     x: mark.at.x,
     y: mark.at.y,
@@ -236,21 +264,78 @@ export function textMarkBox(
 }
 
 /** The topmost note under a picture point, or null — the last drawn wins, as it is drawn on top. */
-export function textMarkAt(
-  marks: readonly Annotation[],
-  point: ScanPoint,
-  fontSize: number,
-  viewScale: number
-): number | null {
+export function textMarkAt(marks: readonly Annotation[], point: ScanPoint, viewScale: number): number | null {
   for (let i = marks.length - 1; i >= 0; i--) {
     const mark = marks[i];
     if (mark.kind !== "text") continue;
-    const box = textMarkBox(mark, fontSize, viewScale);
-    if (point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h) {
-      return i;
-    }
+    if (insideBox(point, textMarkBox(mark, viewScale))) return i;
   }
   return null;
+}
+
+/** How near a click has to land to a mark's line to take it, in screen pixels beyond the stroke. */
+const HIT_SLOP = 5;
+
+/**
+ * The topmost mark under a picture point, or null (#1342) — what a click selects. A ring and a line are
+ * taken near their stroke, not anywhere inside, so a click inside a ring can still reach a note or a
+ * line drawn within it; a note anywhere in its box. The last drawn wins, as it is drawn on top.
+ */
+export function annotationAt(marks: readonly Annotation[], point: ScanPoint, viewScale: number): number | null {
+  const scale = viewScale > 0 ? viewScale : 1;
+  for (let i = marks.length - 1; i >= 0; i--) {
+    const mark = marks[i];
+    if (mark.kind === "text") {
+      if (insideBox(point, textMarkBox(mark, scale))) return i;
+      continue;
+    }
+    const reach = (mark.style.thickness / 2 + HIT_SLOP) / scale;
+    const off =
+      mark.kind === "ellipse"
+        ? distanceToEllipse(point, mark.a, mark.b)
+        : distanceToSegment(point, mark.a, mark.b);
+    if (off <= reach) return i;
+  }
+  return null;
+}
+
+/** The rectangle a mark occupies on the picture — where the viewer outlines a selected one. */
+export function annotationBounds(mark: Annotation, viewScale: number): Box {
+  if (mark.kind === "text") return textMarkBox(mark, viewScale);
+  return {
+    x: Math.min(mark.a.x, mark.b.x),
+    y: Math.min(mark.a.y, mark.b.y),
+    w: Math.abs(mark.b.x - mark.a.x),
+    h: Math.abs(mark.b.y - mark.a.y),
+  };
+}
+
+function insideBox(point: ScanPoint, box: Box): boolean {
+  return point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h;
+}
+
+function distanceToSegment(p: ScanPoint, a: ScanPoint, b: ScanPoint): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0, 1) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** How far a point is from the outline of the ellipse inscribed in the box a–b, measured along the ray
+ * from its centre — close enough to the true distance for a hit test. */
+function distanceToEllipse(p: ScanPoint, a: ScanPoint, b: ScanPoint): number {
+  const cx = (a.x + b.x) / 2;
+  const cy = (a.y + b.y) / 2;
+  const rx = Math.abs(b.x - a.x) / 2;
+  const ry = Math.abs(b.y - a.y) / 2;
+  const dx = p.x - cx;
+  const dy = p.y - cy;
+  const r = Math.hypot(dx, dy);
+  if (rx <= 0 || ry <= 0) return distanceToSegment(p, a, b);
+  const d = Math.hypot(dx / rx, dy / ry);
+  if (d === 0) return Math.min(rx, ry);
+  return Math.abs(r - r / d);
 }
 
 // ── Primitives: what both surfaces draw ─────────────────────────────────────────────────────────
@@ -338,11 +423,8 @@ export function rulerTicks(
  * One mark as primitives, in drawing order: every halo first, then every stroke on top, then type —
  * so a graduation's halo never cuts across the line it sits on.
  */
-export function markPrimitives(
-  mark: SnapshotMark,
-  place: MarkPlacement,
-  style: AnnotationStyle
-): Primitive[] {
+export function markPrimitives(mark: SnapshotMark, place: MarkPlacement): Primitive[] {
+  const { style } = mark;
   const { colour, halo } = paletteOf(style);
   const s = place.screen;
   const at = (p: ScanPoint) => ({
@@ -426,9 +508,11 @@ export function markPrimitives(
       const offset = majorHalf + 4 * s;
       const mid = { x: (a.x + b.x) / 2 + n.x * offset, y: (a.y + b.y) / 2 + n.y * offset };
       const sideways = Math.abs(n.x) >= 0.7;
+      // The length alone (#1342). The scale it was drawn at is on the mark and in the viewer's
+      // reading while measuring; set on the picture beside every mark it was clutter.
       type.push(
         textPrimitive(
-          formatMillimetresAt(lengthMm, mark.dpi),
+          `${formatMillimetres(lengthMm)} mm`,
           mid.x,
           sideways ? mid.y + size * 0.35 : mid.y - size * 0.2,
           size,
@@ -484,10 +568,9 @@ export interface SnapshotRequest {
   photoId: string;
   /** The part of the picture to keep, in the picture's own frame. */
   region: Box;
+  /** Each in the style it was drawn in on screen (#1342). */
   marks: SnapshotMark[];
   title: string;
-  /** How the marks were styled on screen when the snapshot was taken (#1300). */
-  style: AnnotationStyle;
   /** Screen pixels per picture pixel when it was taken — what turns the style's screen pixels into
    * the snapshot's (#1300). */
   viewScale: number;
@@ -521,7 +604,7 @@ export function snapshotRegion(
  */
 export function parseSnapshotRequest(raw: unknown): SnapshotRequest | null {
   if (!isRecord(raw)) return null;
-  const { photoId, region, marks, title, style, viewScale } = raw;
+  const { photoId, region, marks, title, viewScale } = raw;
   if (typeof photoId !== "string" || photoId.length === 0 || photoId.length > 64) return null;
 
   if (!isRecord(region)) return null;
@@ -552,8 +635,6 @@ export function parseSnapshotRequest(raw: unknown): SnapshotRequest | null {
     if (trimmed) name = trimmed;
   }
 
-  const parsedStyle = parseAnnotationStyle(style);
-  if (!parsedStyle) return null;
   if (typeof viewScale !== "number" || !Number.isFinite(viewScale)) return null;
   if (viewScale < MIN_VIEW_SCALE || viewScale > MAX_VIEW_SCALE) return null;
 
@@ -562,35 +643,37 @@ export function parseSnapshotRequest(raw: unknown): SnapshotRequest | null {
     region: box as Box,
     marks: parsed,
     title: name,
-    style: parsedStyle,
     viewScale,
   };
 }
 
 function parseMark(raw: unknown): SnapshotMark | null {
   if (!isRecord(raw)) return null;
+  // Every mark in a style the viewer could have drawn it in (#1342).
+  const style = parseAnnotationStyle(raw.style);
+  if (!style) return null;
   if (raw.kind === "text") {
     const at = parsePoint(raw.at);
     if (!at || typeof raw.text !== "string") return null;
     const text = raw.text.trim();
     if (!text || text.length > MAX_TEXT_MARK) return null;
-    return { kind: "text", at, text };
+    return { kind: "text", at, text, style };
   }
   const a = parsePoint(raw.a);
   const b = parsePoint(raw.b);
   if (!a || !b) return null;
-  if (raw.kind === "ellipse" || raw.kind === "line") return { kind: raw.kind, a, b };
+  if (raw.kind === "ellipse" || raw.kind === "line") return { kind: raw.kind, a, b, style };
   if (raw.kind === "rulerMark") {
-    // A ruler mark never travels without the scale it was drawn at, so never without its figure's.
+    // A ruler mark never travels without the scale it was drawn at — its length is computed from it.
     const { dpi } = raw;
     if (!isWhole(dpi) || dpi < MIN_SCAN_DPI || dpi > MAX_SCAN_DPI) return null;
-    return { kind: "rulerMark", a, b, dpi };
+    return { kind: "rulerMark", a, b, dpi, style };
   }
   if (raw.kind === "distance" || raw.kind === "box") {
     if (typeof raw.label !== "string") return null;
     const label = raw.label.trim();
     if (!label || label.length > MAX_SNAPSHOT_LABEL) return null;
-    return { kind: raw.kind, a, b, label };
+    return { kind: raw.kind, a, b, label, style };
   }
   return null;
 }
@@ -624,19 +707,19 @@ export function snapshotOutputSize(
 
 /**
  * The marks as one SVG the size of the snapshot, to composite over the cropped picture — the same
- * primitives the viewer drew, placed in the region and sized by how many snapshot pixels each screen
- * pixel covered. A reading's plate is nudged inside the picture when it would be cut off.
+ * primitives the viewer drew, each mark in its own style, placed in the region and sized by how many
+ * snapshot pixels each screen pixel covered. A reading's plate is nudged inside the picture when it
+ * would be cut off.
  */
 export function snapshotOverlaySvg(
   marks: readonly SnapshotMark[],
   region: Box,
   out: { width: number; height: number },
-  style: AnnotationStyle,
   viewScale: number
 ): string {
   const scale = out.width / region.w;
   const place: MarkPlacement = { origin: { x: region.x, y: region.y }, scale, screen: scale / viewScale };
-  const parts = marks.flatMap((mark) => clampPlates(markPrimitives(mark, place, style), out).map(primitiveSvg));
+  const parts = marks.flatMap((mark) => clampPlates(markPrimitives(mark, place), out).map(primitiveSvg));
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${out.width}" height="${out.height}">` +
     parts.join("") +

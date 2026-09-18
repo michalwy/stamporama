@@ -6,19 +6,23 @@ import {
   MAX_SNAPSHOT_MARKS,
   MIN_SNAPSHOT_EDGE,
   NO_MARKS,
+  annotationAt,
   annotationFromDrag,
   changeMarks,
   markPrimitives,
   parseAnnotationStyle,
   parseSnapshotRequest,
   readStoredAnnotationStyle,
+  restyleMark,
   rulerTicks,
+  styleFieldsOf,
   snapshotOutputSize,
   snapshotOverlaySvg,
   snapshotRegion,
   textMarkAt,
   undoMarks,
   type Annotation,
+  type AnnotationStyle,
   type Primitive,
 } from "../../src/lib/annotations";
 
@@ -27,17 +31,19 @@ import {
 // picture into the snapshot — and sizes it as it looked on screen — is the one place a circle could
 // land beside the flaw it was drawn around, or a line come out thinner than it was drawn.
 
+const D = DEFAULT_ANNOTATION_STYLE;
+const YELLOW: AnnotationStyle = { colour: "yellow", thickness: 3, fontSize: 24 };
+
 const VALID = {
   photoId: "photo-1",
   region: { x: 10, y: 20, w: 100, h: 50 },
   marks: [
-    { kind: "ellipse", a: { x: 20, y: 30 }, b: { x: 60, y: 50 } },
-    { kind: "distance", a: { x: 10, y: 20 }, b: { x: 110, y: 20 }, label: "4.23 mm at 1200 dpi" },
-    { kind: "rulerMark", a: { x: 10, y: 60 }, b: { x: 110, y: 60 }, dpi: 1200 },
-    { kind: "text", at: { x: 30, y: 30 }, text: " Plate flaw " },
+    { kind: "ellipse", a: { x: 20, y: 30 }, b: { x: 60, y: 50 }, style: YELLOW },
+    { kind: "distance", a: { x: 10, y: 20 }, b: { x: 110, y: 20 }, label: "4.23 mm at 1200 dpi", style: D },
+    { kind: "rulerMark", a: { x: 10, y: 60 }, b: { x: 110, y: 60 }, dpi: 1200, style: D },
+    { kind: "text", at: { x: 30, y: 30 }, text: " Plate flaw ", style: { ...YELLOW, colour: "red" } },
   ],
   title: "  Plate flaw  ",
-  style: { colour: "yellow", thickness: 3, fontSize: 24 },
   viewScale: 2,
 };
 
@@ -45,13 +51,14 @@ const PLACE_ON_SCREEN = { origin: { x: 0, y: 0 }, scale: 1, screen: 1 };
 
 describe("annotations (#674)", () => {
   it("makes a mark only from a drag that drew something", () => {
-    assert.equal(annotationFromDrag("ellipse", { x: 5, y: 5 }, { x: 5, y: 5 }), null);
+    assert.equal(annotationFromDrag("ellipse", { x: 5, y: 5 }, { x: 5, y: 5 }, D), null);
     // A ring needs both a width and a height — a flat drag is a line, not a circle of nothing.
-    assert.equal(annotationFromDrag("ellipse", { x: 5, y: 5 }, { x: 30, y: 5 }), null);
-    assert.deepEqual(annotationFromDrag("line", { x: 5, y: 5 }, { x: 30, y: 5 }), {
+    assert.equal(annotationFromDrag("ellipse", { x: 5, y: 5 }, { x: 30, y: 5 }, D), null);
+    assert.deepEqual(annotationFromDrag("line", { x: 5, y: 5 }, { x: 30, y: 5 }, YELLOW), {
       kind: "line",
       a: { x: 5, y: 5 },
       b: { x: 30, y: 5 },
+      style: YELLOW,
     });
   });
 
@@ -80,8 +87,17 @@ describe("annotations (#674)", () => {
     assert.ok(parsed);
     assert.equal(parsed.title, "Plate flaw");
     assert.equal(parsed.marks.length, 4);
-    assert.deepEqual(parsed.marks[3], { kind: "text", at: { x: 30, y: 30 }, text: "Plate flaw" });
-    assert.deepEqual(parsed.style, VALID.style);
+    assert.deepEqual(parsed.marks[3], {
+      kind: "text",
+      at: { x: 30, y: 30 },
+      text: "Plate flaw",
+      style: { ...YELLOW, colour: "red" },
+    });
+    // Each mark keeps its own style through the request (#1342).
+    assert.deepEqual(
+      parsed.marks.map((m) => m.style.colour),
+      ["yellow", "white", "white", "red"]
+    );
     assert.equal(parsed.viewScale, 2);
     assert.equal(parseSnapshotRequest({ ...VALID, title: "   " })?.title, DEFAULT_SNAPSHOT_TITLE);
     assert.equal(parseSnapshotRequest({ ...VALID, title: undefined })?.title, DEFAULT_SNAPSHOT_TITLE);
@@ -93,33 +109,24 @@ describe("annotations (#674)", () => {
     assert.equal(parseSnapshotRequest({ ...VALID, region: { x: 1.5, y: 0, w: 10, h: 10 } }), null);
     assert.equal(parseSnapshotRequest({ ...VALID, region: { x: -1, y: 0, w: 10, h: 10 } }), null);
     assert.equal(parseSnapshotRequest({ ...VALID, region: { x: 0, y: 0, w: 2, h: 10 } }), null);
-    assert.equal(parseSnapshotRequest({ ...VALID, marks: [{ kind: "star", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }] }), null);
+    const withMark = (mark: Record<string, unknown>) => parseSnapshotRequest({ ...VALID, marks: [{ style: D, ...mark }] });
+    assert.equal(withMark({ kind: "star", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }), null);
     // A measurement never travels without its figure, and so never without its scale.
-    assert.equal(
-      parseSnapshotRequest({ ...VALID, marks: [{ kind: "distance", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }] }),
-      null
-    );
+    assert.equal(withMark({ kind: "distance", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }), null);
     // …and a ruler mark never without the scale it was drawn at (#1300).
-    assert.equal(
-      parseSnapshotRequest({ ...VALID, marks: [{ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }] }),
-      null
-    );
-    assert.equal(
-      parseSnapshotRequest({ ...VALID, marks: [{ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 }, dpi: 12 }] }),
-      null
-    );
+    assert.equal(withMark({ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }), null);
+    assert.equal(withMark({ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 }, dpi: 12 }), null);
     // A note of nothing is not a note.
-    assert.equal(parseSnapshotRequest({ ...VALID, marks: [{ kind: "text", at: { x: 0, y: 0 }, text: "  " }] }), null);
-    assert.equal(
-      parseSnapshotRequest({ ...VALID, marks: [{ kind: "line", a: { x: Number.NaN, y: 0 }, b: { x: 1, y: 1 } }] }),
-      null
-    );
+    assert.equal(withMark({ kind: "text", at: { x: 0, y: 0 }, text: "  " }), null);
+    assert.equal(withMark({ kind: "line", a: { x: Number.NaN, y: 0 }, b: { x: 1, y: 1 } }), null);
     const many = Array.from({ length: MAX_SNAPSHOT_MARKS + 1 }, () => VALID.marks[0]);
     assert.equal(parseSnapshotRequest({ ...VALID, marks: many }), null);
-    // The style is one the viewer could have drawn, and the zoom a zoom.
-    assert.equal(parseSnapshotRequest({ ...VALID, style: undefined }), null);
-    assert.equal(parseSnapshotRequest({ ...VALID, style: { ...VALID.style, colour: "#ff00ff" } }), null);
-    assert.equal(parseSnapshotRequest({ ...VALID, style: { ...VALID.style, thickness: 4 } }), null);
+    // Every mark's style is one the viewer could have drawn (#1342), and the zoom a zoom.
+    const line = { kind: "line", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } };
+    assert.ok(withMark(line));
+    assert.equal(withMark({ ...line, style: undefined }), null);
+    assert.equal(withMark({ ...line, style: { ...D, colour: "#ff00ff" } }), null);
+    assert.equal(withMark({ ...line, style: { ...D, thickness: 4 } }), null);
     assert.equal(parseSnapshotRequest({ ...VALID, viewScale: 0 }), null);
     assert.equal(parseSnapshotRequest({ ...VALID, viewScale: "2" }), null);
   });
@@ -145,12 +152,11 @@ describe("annotations (#674)", () => {
   it("draws each mark where it was placed, relative to the region kept", () => {
     const svg = snapshotOverlaySvg(
       [
-        { kind: "ellipse", a: { x: 20, y: 30 }, b: { x: 60, y: 50 } },
-        { kind: "line", a: { x: 10, y: 20 }, b: { x: 110, y: 70 } },
+        { kind: "ellipse", a: { x: 20, y: 30 }, b: { x: 60, y: 50 }, style: D },
+        { kind: "line", a: { x: 10, y: 20 }, b: { x: 110, y: 70 }, style: D },
       ],
       { x: 10, y: 20, w: 100, h: 50 },
       { width: 200, height: 100 },
-      DEFAULT_ANNOTATION_STYLE,
       2
     );
     // The ring spans (20,30)–(60,50) on the picture, which is (10,10)–(50,30) in the region and
@@ -165,10 +171,9 @@ describe("annotations (#674)", () => {
 
   it("sets a measurement's figure in the drawing, escaped and inside the picture", () => {
     const svg = snapshotOverlaySvg(
-      [{ kind: "box", a: { x: 0, y: 0 }, b: { x: 100, y: 50 }, label: "21.5 × 25 mm at <1200> dpi" }],
+      [{ kind: "box", a: { x: 0, y: 0 }, b: { x: 100, y: 50 }, label: "21.5 × 25 mm at <1200> dpi", style: D }],
       { x: 0, y: 0, w: 100, h: 50 },
       { width: 800, height: 400 },
-      DEFAULT_ANNOTATION_STYLE,
       // Kept at the resolution it was shown at: 800 screen pixels across the region.
       8
     );
@@ -184,7 +189,7 @@ describe("annotations (#674)", () => {
 describe("annotation style (#1300)", () => {
   it("draws every stroke in the chosen colour over a halo, at the chosen thickness", () => {
     const style = { colour: "red" as const, thickness: 3, fontSize: 16 };
-    const prims = markPrimitives({ kind: "line", a: { x: 0, y: 0 }, b: { x: 10, y: 0 } }, PLACE_ON_SCREEN, style);
+    const prims = markPrimitives({ kind: "line", a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, style }, PLACE_ON_SCREEN);
     const lines = prims.filter((p): p is Extract<Primitive, { type: "line" }> => p.type === "line");
     assert.equal(lines.length, 2);
     // Halo first, wider; the colour on top.
@@ -196,10 +201,9 @@ describe("annotation style (#1300)", () => {
   it("keeps a stroke's screen thickness in a snapshot taken at another resolution", () => {
     // Shown at zoom 0.5, kept at 1:1: every screen pixel covers two snapshot pixels.
     const svg = snapshotOverlaySvg(
-      [{ kind: "line", a: { x: 0, y: 50 }, b: { x: 100, y: 50 } }],
+      [{ kind: "line", a: { x: 0, y: 50 }, b: { x: 100, y: 50 }, style: { colour: "black", thickness: 2, fontSize: 16 } }],
       { x: 0, y: 0, w: 100, h: 100 },
       { width: 100, height: 100 },
-      { colour: "black", thickness: 2, fontSize: 16 },
       0.5
     );
     assert.match(svg, /stroke="#111111" stroke-width="4"/);
@@ -207,21 +211,48 @@ describe("annotation style (#1300)", () => {
     assert.match(svg, /stroke="rgba\(255,255,255,0.8\)" stroke-width="8"/);
   });
 
-  it("restyles marks already drawn, since a mark carries no style of its own", () => {
-    const mark: Annotation = { kind: "ellipse", a: { x: 0, y: 0 }, b: { x: 10, y: 10 } };
-    const white = markPrimitives(mark, PLACE_ON_SCREEN, DEFAULT_ANNOTATION_STYLE);
-    const green = markPrimitives(mark, PLACE_ON_SCREEN, { ...DEFAULT_ANNOTATION_STYLE, colour: "green" });
+  it("draws each mark in the style it was drawn in, not the settings of the moment (#1342)", () => {
+    // A red line drawn, the settings switched to yellow, the next line drawn: the first stays red.
+    const red = annotationFromDrag("line", { x: 0, y: 0 }, { x: 10, y: 0 }, { ...D, colour: "red" });
+    const yellow = annotationFromDrag("line", { x: 0, y: 5 }, { x: 10, y: 5 }, { ...D, colour: "yellow" });
+    assert.ok(red && yellow);
     const strokeOf = (prims: Primitive[]) => {
       const last = prims.at(-1);
-      return last?.type === "ellipse" ? last.stroke : null;
+      return last?.type === "line" ? last.stroke : null;
     };
-    assert.equal(strokeOf(white), "#ffffff");
-    assert.equal(strokeOf(green), "#30d158");
+    assert.equal(strokeOf(markPrimitives(red, PLACE_ON_SCREEN)), "#ff3b30");
+    assert.equal(strokeOf(markPrimitives(yellow, PLACE_ON_SCREEN)), "#ffd60a");
+    // …and in a snapshot, each in its own.
+    const svg = snapshotOverlaySvg([red, yellow], { x: 0, y: 0, w: 10, h: 10 }, { width: 100, height: 100 }, 10);
+    assert.match(svg, /stroke="#ff3b30"/);
+    assert.match(svg, /stroke="#ffd60a"/);
+  });
+
+  it("restyles one selected mark and leaves the rest as they were (#1342)", () => {
+    const ring: Annotation = { kind: "ellipse", a: { x: 0, y: 0 }, b: { x: 10, y: 10 }, style: D };
+    const line: Annotation = { kind: "line", a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, style: D };
+    const marks = [ring, line];
+    const next = restyleMark(marks, 1, { ...D, colour: "green", thickness: 5 });
+    assert.deepEqual(next[0], ring);
+    assert.deepEqual(next[1].style, { ...D, colour: "green", thickness: 5 });
+    // No change, no new array — and so no Undo step for it.
+    assert.equal(restyleMark(marks, 1, { ...D }), marks);
+    assert.equal(restyleMark(marks, 7, YELLOW), marks);
+    let h = changeMarks(NO_MARKS, marks);
+    h = changeMarks(h, restyleMark(h.marks, 0, YELLOW));
+    assert.equal(h.past.length, 2);
+    assert.deepEqual(undoMarks(h).marks, marks);
+  });
+
+  it("offers for a selected mark only the settings that show on it", () => {
+    assert.deepEqual(styleFieldsOf("text"), { thickness: false, fontSize: true });
+    assert.deepEqual(styleFieldsOf("ellipse"), { thickness: true, fontSize: false });
+    assert.deepEqual(styleFieldsOf("rulerMark"), { thickness: true, fontSize: true });
   });
 
   it("sets a note in the chosen colour and size, from its top-left corner", () => {
     const style = { colour: "yellow" as const, thickness: 5, fontSize: 24 };
-    const prims = markPrimitives({ kind: "text", at: { x: 10, y: 20 }, text: "Retouch" }, PLACE_ON_SCREEN, style);
+    const prims = markPrimitives({ kind: "text", at: { x: 10, y: 20 }, text: "Retouch", style }, PLACE_ON_SCREEN);
     assert.equal(prims.length, 1);
     const [note] = prims;
     assert.ok(note.type === "text");
@@ -253,12 +284,13 @@ describe("annotation style (#1300)", () => {
 
 describe("ruler mark (#1300)", () => {
   it("needs a stated scale to be drawn at all", () => {
-    assert.equal(annotationFromDrag("rulerMark", { x: 0, y: 0 }, { x: 100, y: 0 }, null), null);
-    assert.deepEqual(annotationFromDrag("rulerMark", { x: 0, y: 0 }, { x: 100, y: 0 }, 600), {
+    assert.equal(annotationFromDrag("rulerMark", { x: 0, y: 0 }, { x: 100, y: 0 }, D, null), null);
+    assert.deepEqual(annotationFromDrag("rulerMark", { x: 0, y: 0 }, { x: 100, y: 0 }, D, 600), {
       kind: "rulerMark",
       a: { x: 0, y: 0 },
       b: { x: 100, y: 0 },
       dpi: 600,
+      style: D,
     });
   });
 
@@ -285,16 +317,30 @@ describe("ruler mark (#1300)", () => {
     assert.equal(rulerTicks(100, 0.8).minor, 10);
   });
 
-  it("carries its length in millimetres with the scale it was drawn at", () => {
-    // 600 px at 1200 dpi is 12.7 mm.
+  it("is labelled with its length in millimetres alone, measured at the scale it was drawn at", () => {
+    // 600 px at 1200 dpi is 12.7 mm; at 600 dpi the same line is twice that. The scale measures the
+    // mark but is not written on it (#1342).
     const prims = markPrimitives(
-      { kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, dpi: 1200 },
-      PLACE_ON_SCREEN,
-      DEFAULT_ANNOTATION_STYLE
+      { kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, dpi: 1200, style: D },
+      PLACE_ON_SCREEN
     );
     const label = prims.find((p) => p.type === "text");
     assert.ok(label && label.type === "text");
-    assert.equal(label.text, "12.70 mm at 1200 dpi");
+    assert.equal(label.text, "12.70 mm");
+    const at600 = markPrimitives(
+      { kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, dpi: 600, style: D },
+      PLACE_ON_SCREEN
+    ).find((p) => p.type === "text");
+    assert.ok(at600 && at600.type === "text");
+    assert.equal(at600.text, "25.40 mm");
+    const svg = snapshotOverlaySvg(
+      [{ kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, dpi: 1200, style: D }],
+      { x: 0, y: 0, w: 700, h: 200 },
+      { width: 1400, height: 400 },
+      2
+    );
+    assert.match(svg, />12\.70 mm<\/text>/);
+    assert.doesNotMatch(svg, /dpi/);
     // Above the line, centred on it.
     assert.equal(label.anchor, "middle");
     assert.ok(label.y < 100);
@@ -306,8 +352,8 @@ describe("ruler mark (#1300)", () => {
 });
 
 describe("marks history (#1300)", () => {
-  const ring: Annotation = { kind: "ellipse", a: { x: 0, y: 0 }, b: { x: 10, y: 10 } };
-  const note: Annotation = { kind: "text", at: { x: 50, y: 50 }, text: "Flaw" };
+  const ring: Annotation = { kind: "ellipse", a: { x: 0, y: 0 }, b: { x: 10, y: 10 }, style: D };
+  const note: Annotation = { kind: "text", at: { x: 50, y: 50 }, text: "Flaw", style: D };
 
   it("undoes every change in turn — a mark, an edit, a removal and Clear", () => {
     let h = changeMarks(NO_MARKS, [ring]);
@@ -328,13 +374,37 @@ describe("marks history (#1300)", () => {
   });
 
   it("finds the note under a click, the topmost first", () => {
-    const marks: Annotation[] = [ring, note, { kind: "text", at: { x: 52, y: 52 }, text: "Second" }];
+    const marks: Annotation[] = [ring, note, { kind: "text", at: { x: 52, y: 52 }, text: "Second", style: D }];
     // At zoom 1 and 16 px type, a four-letter note spans ~48 × 20 picture px from its corner.
-    assert.equal(textMarkAt(marks, { x: 60, y: 60 }, 16, 1), 2);
-    assert.equal(textMarkAt(marks, { x: 51, y: 51 }, 16, 1), 1);
-    assert.equal(textMarkAt(marks, { x: 5, y: 5 }, 16, 1), null);
+    assert.equal(textMarkAt(marks, { x: 60, y: 60 }, 1), 2);
+    assert.equal(textMarkAt(marks, { x: 51, y: 51 }, 1), 1);
+    assert.equal(textMarkAt(marks, { x: 5, y: 5 }, 1), null);
     // Zoomed in 4×, the same note covers a quarter of the picture.
-    assert.equal(textMarkAt([note], { x: 70, y: 55 }, 16, 4), null);
-    assert.equal(textMarkAt([note], { x: 60, y: 54 }, 16, 4), 0);
+    assert.equal(textMarkAt([note], { x: 70, y: 55 }, 4), null);
+    assert.equal(textMarkAt([note], { x: 60, y: 54 }, 4), 0);
+    // A note's box is its own size's: set at 32 px, the same note reaches twice as far (#1342).
+    assert.equal(textMarkAt([{ ...note, style: { ...D, fontSize: 32 } }], { x: 70, y: 55 }, 4), 0);
+  });
+
+  it("finds the mark under a click — near a ring's or a line's stroke, anywhere on a note (#1342)", () => {
+    const line: Annotation = { kind: "line", a: { x: 100, y: 100 }, b: { x: 200, y: 100 }, style: D };
+    const bigRing: Annotation = { kind: "ellipse", a: { x: 0, y: 0 }, b: { x: 400, y: 200 }, style: D };
+    const marks: Annotation[] = [bigRing, line, note];
+    // On the line, and a few screen pixels off it.
+    assert.equal(annotationAt(marks, { x: 150, y: 100 }, 1), 1);
+    assert.equal(annotationAt(marks, { x: 150, y: 104 }, 1), 1);
+    assert.equal(annotationAt(marks, { x: 150, y: 110 }, 1), null);
+    // Beyond its end is not on it.
+    assert.equal(annotationAt(marks, { x: 210, y: 100 }, 1), null);
+    // A ring is taken by its rim, not its inside: a click inside it can still reach what is within.
+    assert.equal(annotationAt(marks, { x: 400, y: 100 }, 1), 0);
+    assert.equal(annotationAt(marks, { x: 200, y: 2 }, 1), 0);
+    assert.equal(annotationAt(marks, { x: 300, y: 150 }, 1), null);
+    // A note anywhere in its box; the last drawn wins.
+    assert.equal(annotationAt(marks, { x: 60, y: 60 }, 1), 2);
+    // Zoomed out, the same reach on screen covers more of the picture.
+    assert.equal(annotationAt(marks, { x: 150, y: 110 }, 0.5), 1);
+    // A thicker line is easier to hit.
+    assert.equal(annotationAt([{ ...line, style: { ...D, thickness: 5 } }], { x: 150, y: 107 }, 1), 0);
   });
 });

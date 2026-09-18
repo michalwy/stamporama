@@ -155,9 +155,8 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       photoId: frontPhotoId,
       // The right half of the upload — green — in the upload's own frame.
       region: { x: W / 2, y: 0, w: W / 2, h: H },
-      marks: [{ kind: "ellipse", a: { x: 1600, y: 100 }, b: { x: 2000, y: 500 } }],
+      marks: [{ kind: "ellipse", a: { x: 1600, y: 100 }, b: { x: 2000, y: 500 }, style: STYLE }],
       title: "Plate flaw",
-      style: STYLE,
       viewScale: 0.5,
     });
     assert.equal(owner, "item");
@@ -191,17 +190,23 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
     assert.deepEqual([front.width, front.height], [2500, 1250]);
   });
 
-  it("draws the marks in the chosen colour and thickness, ruler graduations and notes included (#1300)", async () => {
-    // The red half, blue marks: a ruler mark along y = 1200 and a note near the top-left corner.
+  it("draws each mark in its own colour and thickness, ruler graduations and notes included (#1300, #1342)", async () => {
+    // The red half: a blue ruler mark along y = 1200, and a yellow note near the top-left corner —
+    // each in the style it was drawn in, not in one style for all.
     const { photoId } = await saveAnnotatedSnapshot(userId, collectionId, {
       photoId: frontPhotoId,
       region: { x: 0, y: 0, w: W / 2, h: H },
       marks: [
-        { kind: "rulerMark", a: { x: 100, y: 1200 }, b: { x: 1400, y: 1200 }, dpi: 1200 },
-        { kind: "text", at: { x: 200, y: 200 }, text: "Flaw" },
+        {
+          kind: "rulerMark",
+          a: { x: 100, y: 1200 },
+          b: { x: 1400, y: 1200 },
+          dpi: 1200,
+          style: { colour: "blue", thickness: 5, fontSize: 32 },
+        },
+        { kind: "text", at: { x: 200, y: 200 }, text: "Flaw", style: { colour: "yellow", thickness: 1, fontSize: 32 } },
       ],
       title: "Ruler",
-      style: { colour: "blue", thickness: 5, fontSize: 32 },
       viewScale: 0.5,
     });
     const row = await prisma.photo.findUniqueOrThrow({ where: { id: photoId } });
@@ -223,14 +228,19 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
     const between = colourAt(px, Math.round((100 + 1.25 * pxPerMm) * scale), off);
     assert.ok(between[0] > 150 && between[2] < 120, `no graduation at 1.25 mm (got ${between})`);
 
-    // The note is set in the same colour, from its top-left corner.
+    // The note is set in its own colour, from its top-left corner — yellow, and not the ruler's blue.
+    const yellow = ([r, g, b]: [number, number, number]) => r > 150 && g > 150 && b < 110;
+    let noteYellow = 0;
     let noteBlue = 0;
     for (let y = Math.round(200 * scale); y < Math.round(200 * scale) + 60; y++) {
       for (let x = Math.round(200 * scale); x < Math.round(200 * scale) + 140; x++) {
-        if (blue(colourAt(px, x, y))) noteBlue++;
+        const c = colourAt(px, x, y);
+        if (yellow(c)) noteYellow++;
+        if (blue(c)) noteBlue++;
       }
     }
-    assert.ok(noteBlue > 100, `the note is drawn in blue (got ${noteBlue} blue pixels)`);
+    assert.ok(noteYellow > 100, `the note is drawn in yellow (got ${noteYellow} yellow pixels)`);
+    assert.equal(noteBlue, 0, "the note does not take the ruler mark's colour");
   });
 
   it("maps a region across the downscale rather than onto the derivative's own pixels", async () => {
@@ -242,7 +252,6 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       region: { x: 1000, y: 0, w: 1000, h: 1000 },
       marks: [],
       title: "Straddle",
-      style: STYLE,
       viewScale: 0.5,
     });
     const px = await pixels(await prisma.photo.findUniqueOrThrow({ where: { id: photoId } }));
@@ -333,7 +342,6 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       region: { x: 0, y: 0, w: W / 2, h: H },
       marks: [],
       title: "Detail",
-      style: STYLE,
       viewScale: 0.5,
     });
     assert.equal(owner, "tile");
@@ -353,7 +361,6 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
       region: { x: 0, y: 0, w: W / 2, h: H },
       marks: [],
       title: "Detail",
-      style: STYLE,
       viewScale: 0.5,
     });
     const row = await prisma.photo.findUniqueOrThrow({ where: { id: photoId } });
@@ -369,7 +376,6 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
         region: { x: 0, y: 0, w: 100, h: 100 },
         marks: [],
         title: "Detail",
-        style: STYLE,
         viewScale: 0.5,
       }),
       PhotoAuthError
@@ -380,7 +386,6 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
         region: { x: W + 10, y: 0, w: 100, h: 100 },
         marks: [],
         title: "Detail",
-        style: STYLE,
         viewScale: 0.5,
       })
     );

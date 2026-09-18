@@ -10,28 +10,36 @@ import {
 } from "@/lib/annotations";
 
 /**
- * How marks are drawn (#1300): one colour for every mark, text included; one thickness for every mark
- * but text; one font size for what is written on the picture. Each a few steps rather than a free
- * value — see `annotations.ts` for why.
+ * How marks are drawn (#1300): a colour, a line thickness (every mark but a note) and a font size (a
+ * note and a ruler mark's figure). Each a few steps rather than a free value — see `annotations.ts`
+ * for why.
  *
  * Beside the annotation layer rather than inside the tile viewer, for the same reason the layer is:
  * the comparison view can offer the same three settings over its pictures without a second set.
- * Changing one restyles every mark already drawn, because a mark carries no style of its own.
+ *
+ * What they act on is `target` (#1342): the marks drawn **next** — a mark keeps the style it was drawn
+ * in — or one mark **selected** on purpose, when only the settings that show on it are offered.
  */
 export function AnnotationStyleControls({
   style,
   onChange,
+  target = "next",
+  fields = { thickness: true, fontSize: true },
 }: {
   style: AnnotationStyle;
   onChange: (next: AnnotationStyle) => void;
+  target?: "next" | "selected";
+  /** Which of the settings apply — for a selected note there is no line, for a ring no type. */
+  fields?: { thickness: boolean; fontSize: boolean };
 }) {
+  const scope = target === "selected" ? "the selected mark only" : "the marks you draw next";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
       <Group label="Colour">
         {ANNOTATION_COLOURS.map((c) => (
           <Step
             key={c.id}
-            hint={`${c.label} — every mark and every note`}
+            hint={`${c.label} — ${scope}`}
             label={c.label}
             active={style.colour === c.id}
             onClick={() => onChange({ ...style, colour: c.id })}
@@ -54,9 +62,10 @@ export function AnnotationStyleControls({
         {ANNOTATION_THICKNESSES.map((t) => (
           <Step
             key={t}
-            hint={`Lines ${t} px thick — every mark but notes`}
+            hint={fields.thickness ? `Lines ${t} px thick — ${scope}` : "A note has no line"}
             label={`${t} px`}
             active={style.thickness === t}
+            disabled={!fields.thickness}
             onClick={() => onChange({ ...style, thickness: t })}
           >
             <span
@@ -75,9 +84,10 @@ export function AnnotationStyleControls({
         {ANNOTATION_FONT_SIZES.map((size, i) => (
           <Step
             key={size}
-            hint={`Notes and ruler figures set at ${size} px`}
+            hint={fields.fontSize ? `Notes and ruler figures set at ${size} px — ${scope}` : "This mark has no text"}
             label={`${size} px`}
             active={style.fontSize === size}
+            disabled={!fields.fontSize}
             onClick={() => onChange({ ...style, fontSize: size })}
           >
             <span style={{ fontSize: `${0.6875 + i * 0.125}rem`, fontWeight: 600, lineHeight: 1 }}>A</span>
@@ -115,12 +125,14 @@ function Step({
   hint,
   label,
   active,
+  disabled = false,
   onClick,
   children,
 }: {
   hint: string;
   label: string;
   active: boolean;
+  disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -130,9 +142,15 @@ function Step({
         type="button"
         aria-label={label}
         aria-pressed={active}
+        disabled={disabled}
         onClick={onClick}
+        // The focus stays in a note being typed (#1342): pressing a setting would otherwise blur the
+        // field, which finishes the note before the setting could reach it.
+        onMouseDown={(e) => e.preventDefault()}
         style={{
           ...STEP,
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.4 : 1,
           border: `1px solid ${active ? "var(--color-action-primary)" : "var(--color-border-strong)"}`,
           boxShadow: active ? "inset 0 0 0 1px var(--color-action-primary)" : "none",
         }}
