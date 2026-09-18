@@ -3,7 +3,6 @@
 import {
   ANNOTATION_FONT_FAMILY,
   markPrimitives,
-  type AnnotationStyle,
   type Primitive,
   type SnapshotMark,
 } from "@/lib/annotations";
@@ -14,27 +13,19 @@ import {
  *
  * Its own component rather than a branch inside the tile viewer, for ADR-0049's sake: the comparison
  * view must be able to put an annotation layer over its pictures later without a second copy of the
- * drawing code coming to exist. It knows a list of shapes in the picture's own pixels, the scale they
- * are drawn at and the style, and nothing about tiles, photos or who is looking.
+ * drawing code coming to exist. It knows a list of shapes in the picture's own pixels, each in its own
+ * style (#1342), and the scale they are drawn at — nothing about tiles, photos or who is looking.
  *
  * What it draws is `markPrimitives`' answer — the very primitives the snapshot is rendered from
  * (`snapshotOverlaySvg`), so the photo a snapshot keeps is this layer at the snapshot's resolution.
  */
-export function AnnotationShapes({
-  marks,
-  scale,
-  style,
-}: {
-  marks: readonly SnapshotMark[];
-  scale: number;
-  style: AnnotationStyle;
-}) {
+export function AnnotationShapes({ marks, scale }: { marks: readonly SnapshotMark[]; scale: number }) {
   const place = { origin: { x: 0, y: 0 }, scale, screen: 1 };
   return (
     <>
       {marks.map((mark, index) => (
         <g key={index}>
-          {markPrimitives(mark, place, style).map((p, i) => (
+          {markPrimitives(mark, place).map((p, i) => (
             <PrimitiveShape key={i} p={p} />
           ))}
         </g>
