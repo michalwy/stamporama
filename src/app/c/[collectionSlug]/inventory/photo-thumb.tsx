@@ -39,6 +39,8 @@ export const photoThumbUrl = thumbUrl;
 function fullUrl(collectionId: string, photoId: string): string {
   return `/api/collections/${collectionId}/photos/${photoId}/full`;
 }
+/** …and the full-size one, for a thumbnail drawn by hand that still wants the hover preview (#1344). */
+export const photoFullUrl = fullUrl;
 
 function roleLabel(photo: PhotoSummary): string {
   if (photo.role === "front") return "Front";

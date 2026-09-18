@@ -1,11 +1,19 @@
 "use client";
 
 import { LabelWithError } from "@/app/dialog-shell";
-import { THUMB_OBJECT_FIT, photoThumbUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import {
+  THUMB_OBJECT_FIT,
+  ThumbPreview,
+  photoFullUrl,
+  photoThumbUrl,
+} from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import type { EditablePhotoSummary } from "@/lib/photos";
 import type { IdentifiedPiece } from "./tile-zoom-view";
 
 const THUMB = "4.5rem";
+
+/** The preview's trigger fills the figure's box, so the whole square answers to the pointer. */
+const PREVIEW_TRIGGER: React.CSSProperties = { display: "block", width: "100%", height: "100%" };
 
 /** A piece's front picture, or null for a tile cut from the back alone. */
 export function pieceFrontPhotoId(piece: IdentifiedPiece): string | null {
@@ -19,6 +27,10 @@ export function pieceFrontPhotoId(piece: IdentifiedPiece): string | null {
  * first copy identified gave the stamp its picture, and this is the moment a better one is in hand.
  * With several tiles identified as one stamp (#596) each is offered and one is picked — the stamp has
  * one main picture, and the app does not choose it for the collector.
+ *
+ * The choice is about quality — centring, colour, cancel, margins — and none of that can be judged at
+ * this size, so each picture opens the shared hover preview, as every other thumbnail does (#1344).
+ * Hover only: the collector settled that a click-to-compare view was more than the choice needs.
  *
  * The state and its defaults are the dialog's (`tile-stamp-photo.ts`); this only draws them.
  */
@@ -71,52 +83,70 @@ export function TileStampPhotoField({
               {stampPhotos === undefined ? (
                 <Placeholder text="…" />
               ) : current ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={photoThumbUrl(collectionId, current.id)}
-                  alt="The stamp's current photo"
-                  style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
-                />
+                <ThumbPreview
+                  src={photoFullUrl(collectionId, current.id)}
+                  thumbSrc={photoThumbUrl(collectionId, current.id)}
+                  label="The stamp's current photo"
+                  style={PREVIEW_TRIGGER}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photoThumbUrl(collectionId, current.id)}
+                    alt="The stamp's current photo"
+                    style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT, display: "block" }}
+                  />
+                </ThumbPreview>
               ) : (
                 <Placeholder text="No photo" />
               )}
             </Figure>
             {withFront.map((piece) => {
               const chosen = piece.tileId === tileId;
+              const frontId = pieceFrontPhotoId(piece) as string;
               return (
                 <Figure
                   key={piece.tileId}
                   caption={`Tile ${piece.position + 1}`}
                   selected={several && on === true && chosen}
                 >
-                  <button
-                    type="button"
-                    disabled={disabled || !several}
-                    aria-pressed={several ? chosen : undefined}
-                    aria-label={`Use tile ${piece.position + 1}'s front`}
-                    onClick={() => onChange({ on: true, tileId: piece.tileId })}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      padding: 0,
-                      border: "none",
-                      background: "none",
-                      cursor: several && !disabled ? "pointer" : "default",
-                    }}
+                  <ThumbPreview
+                    src={photoFullUrl(collectionId, frontId)}
+                    thumbSrc={photoThumbUrl(collectionId, frontId)}
+                    label={`Tile ${piece.position + 1}, front`}
+                    style={PREVIEW_TRIGGER}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={photoThumbUrl(collectionId, pieceFrontPhotoId(piece) as string)}
-                      alt={`Tile ${piece.position + 1}, front`}
+                    <button
+                      type="button"
+                      disabled={disabled || !several}
+                      aria-pressed={several ? chosen : undefined}
+                      aria-label={`Use tile ${piece.position + 1}'s front`}
+                      onClick={() => onChange({ on: true, tileId: piece.tileId })}
                       style={{
                         width: "100%",
                         height: "100%",
-                        objectFit: THUMB_OBJECT_FIT,
-                        display: "block",
-                        opacity: several && !(on && chosen) ? 0.55 : 1,
+                        padding: 0,
+                        border: "none",
+                        background: "none",
+                        cursor: several && !disabled ? "pointer" : "default",
+                        // A disabled button swallows the pointer, and the preview's wrapper would
+                        // never hear it arrive — so a button with nothing to do lets it through.
+                        pointerEvents: disabled || !several ? "none" : undefined,
                       }}
-                    />
-                  </button>
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photoThumbUrl(collectionId, frontId)}
+                        alt={`Tile ${piece.position + 1}, front`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: THUMB_OBJECT_FIT,
+                          display: "block",
+                          opacity: several && !(on && chosen) ? 0.55 : 1,
+                        }}
+                      />
+                    </button>
+                  </ThumbPreview>
                 </Figure>
               );
             })}

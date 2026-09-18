@@ -1186,6 +1186,8 @@ one, so a photo is only ever replaced when you tick the box.
   picture**. That is normally the poor photo your first copy passed up to it. Where it has no photo
   at all it gets this one. Where it shows a different picture, such as a sibling variant's or one
   you chose yourself, it is left alone, and so is everything above it.
+- Rest the pointer on either picture to see it enlarged, as on any other thumbnail — the choice is
+  about centring, colour and the cancel, which the small squares cannot show.
 - With several tiles ticked as one stamp, every tile's front is shown. Click the one you want.
 - A piece given a **format** (a pair, a block) is not offered, because its picture is not a picture
   of the single stamp.
