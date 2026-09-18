@@ -38,7 +38,10 @@ the form, next to the field that caused it, and stays there until you deal with 
 If your operating system is set to **reduce motion**, Stamporama takes the animation out rather
 than slowing it down.
 
-- Rows and cards that would flash as they arrive simply appear, with no tint and no outline.
+- Rows and cards that would flash as they arrive are marked **without the fade**: the tint (and,
+  on a card you clicked through to, the outline) is simply there for the same second or two the
+  flash would have lasted, then gone in one step. The mark is the message, so it stays; only the
+  movement goes.
 - A confirmation note appears without sliding in from the edge. It is still shown — it is the
   message, not the movement.
 - When the app takes you somewhere — a lot you clicked through to, the first line that needs
@@ -46,9 +49,3 @@ than slowing it down.
 
 There is nothing to configure here: Stamporama reads the setting your system already has, and
 follows it as soon as you change it.
-
-**One consequence is worth stating, because it is a choice and not an omission.** With the flash
-gone, nothing else is put in its place — no ring, no marker to dismiss. What tells you that you
-have arrived is the page having moved and the card being open, and on a purchase order also the
-copies view having gone back to **Lot**. On an auction sale there is no equivalent, so the arrival
-there is quieter still.

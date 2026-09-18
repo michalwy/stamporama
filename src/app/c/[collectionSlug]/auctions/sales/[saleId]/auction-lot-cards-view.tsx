@@ -372,8 +372,9 @@ function LotCard({
   // Bring the lot the collector came here for into view, once. `block: "center"` rather than the
   // default: the card's own header is sticky, so a card scrolled to the top edge would sit under
   // the toolbar it just scrolled past. Through `shared/motion.ts`, which decides gliding or
-  // instant from `prefers-reduced-motion` — under that preference the flash is suppressed too, and
-  // a page smooth-scrolling itself would have been the one piece of motion left (#1022).
+  // instant from `prefers-reduced-motion` — under that preference the flash holds still instead of
+  // fading (#877), and a page smooth-scrolling itself would have been the one piece of motion left
+  // (#1022).
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (arrived) scrollIntoView(cardRef.current, { block: "center" });

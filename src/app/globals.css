@@ -215,7 +215,8 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
 
 /* One-shot highlight applied to a row/card right after it is added (#158), so the user can
    confirm the action landed without scanning the list. Fades from a warm tint back to the
-   surface colour. Suppressed under reduced-motion, where the tint simply isn't shown. */
+   surface colour. Under reduced motion the tint holds still and then goes, rather than fading
+   (#877) — see the rule below. */
 @keyframes just-added-flash {
   0% {
     background-color: var(--color-bg-highlight-flash);
@@ -232,8 +233,13 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* The message stays, the motion goes (#877) — the toast's rule. The tint *is* the message
+     (this row is the one you just added), so switching the animation off, as #158 did, took the
+     message with it. `step-end` holds the first keyframe — the tint at its strongest — for the
+     whole 1.6s and then drops it in one step: no fade, no transition, and gone on the same beat
+     the animated version would have finished. */
   .just-added-flash {
-    animation: none;
+    animation-timing-function: step-end;
   }
 }
 
@@ -250,12 +256,9 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
    element (the second `animation` declaration replaces the first), hence one keyframes doing both.
 
    It holds before it fades: the card scrolls itself into view at the same moment, and a flash that
-   has finished by the time the scroll settles was never shown. Suppressed under reduced-motion, as
-   #158's is — there the scroll and the card opening are the arrival, and **the scroll is instant**
-   (#1022): the card's own `scrollIntoView` goes through `shared/motion.ts`, which reads this same
-   preference, because a suppression here that left the page gliding would have removed the flash
-   and kept the motion. Nothing static replaces the flash, deliberately — the reasoning and its
-   date are in `docs/agents/ui-patterns.md`. */
+   has finished by the time the scroll settles was never shown. Under reduced motion it becomes a
+   static mark for the same 2s (#877), and **the scroll is instant** (#1022): the card's own
+   `scrollIntoView` goes through `shared/motion.ts`, which reads this same preference. */
 @keyframes arrival-flash {
   0%,
   45% {
@@ -273,8 +276,15 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* The message stays, the motion goes (#877) — the toast's rule. The flash is the only thing
+     saying *this is the card you came for*: since #1022 the scroll is instant, so with the
+     animation switched off, as it was until #877, the card simply appeared among its neighbours.
+     `step-end` holds the keyframes' opening state — tint and ring, the flash at its strongest —
+     for the whole 2s and then removes both in one step, with no fade. The ring is a `box-shadow`
+     either way, so the static mark moves nothing as it appears or goes. The decision and its
+     date are in `docs/agents/ui-patterns.md`. */
   .arrival-flash {
-    animation: none;
+    animation-timing-function: step-end;
   }
 }
 

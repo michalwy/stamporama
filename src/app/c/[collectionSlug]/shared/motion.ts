@@ -2,12 +2,12 @@
 
 // The one place the app reads `prefers-reduced-motion` (#1022).
 //
-// `globals.css` already suppresses the three animations it has — `.just-added-flash` (#158),
-// `.arrival-flash` (#850/#876) and the toast slide (#541) — under
-// `@media (prefers-reduced-motion: reduce)`. The **scroll** that goes with an arrival is
-// JavaScript, and it honoured nothing: a collector who had asked for less motion got the flash
-// suppressed and the whole page gliding instead, which is the motion they asked not to have. The
-// CSS kept the preference and the JavaScript did not.
+// `globals.css` takes the motion out of the three animations it has — `.just-added-flash` (#158)
+// and `.arrival-flash` (#850/#876) hold still instead of fading (#877), the toast (#541) appears
+// without sliding — under `@media (prefers-reduced-motion: reduce)`. The **scroll** that goes with
+// an arrival is JavaScript, and until #1022 it honoured nothing: a collector who had asked for less
+// motion got the flash suppressed and the whole page gliding instead, which is the motion they
+// asked not to have. The CSS kept the preference and the JavaScript did not.
 //
 // **Decided here rather than at each call site.** Three call sites reaching for `matchMedia`
 // separately is three chances to miss the fourth, and the fourth is the one nobody would notice —
