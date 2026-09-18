@@ -1502,18 +1502,30 @@ the message says why — a figure you read off the catalogue is not dropped quie
 Identify a card-scan tile as a stamp that has **variants of its own** — an umbrella, typically
 because the picture cannot tell you which variant it is — and the catalogue in front of you lists a
 price for each variant rather than one for the stamp. So instead of the single field, the step shows
-a **Price variants…** button.
+a **Variant prices** section with a price field for each variant, right there in the dialog.
 
-- It opens the [variant price grid](variant-prices.md) for that stamp and every variant under it,
-  on your primary catalogue's latest edition, **narrowed to the condition, certificate and format**
-  you have chosen in the step. Pick a condition first; the button waits for one.
-- The grid behaves as it does everywhere: the cursor starts in the first cell, **Tab** moves down
-  the column, **Enter** saves the cell and closes the grid. The umbrella's own row shows what its
-  variants roll up to and is read-only.
+- **One row per stamp down the tree**, indented as the tree is: the stamp you picked, and every
+  variant under it. The fields are for your primary catalogue's latest edition, **narrowed to the
+  condition, certificate and format** you have chosen in the step. Change any of the three and the
+  fields follow. Pick a condition first; the fields wait for one.
+- **The heading shows the stamp's value and what is missing** — the lowest of its variants' prices
+  (marked `≈`, since it is computed rather than recorded) and how many variants still have no price,
+  for example *≈3.20 EUR · 2 of 5 variants unpriced*. Both update as you type, and both stay visible
+  when you fold the section away.
+- **Fold it or leave it open** with the arrow in the heading. The dialog remembers which you chose,
+  so the next umbrella opens the same way.
+- **The umbrella's own row cannot be edited**, nor can an umbrella further down the tree: each shows
+  what its variants roll up to. A price recorded on the umbrella directly is shown plainly instead.
+- **Tab** moves from one variant's price to the next and nothing in between. Amounts take a comma or
+  a full stop and show two decimals when you leave the field. **Enter** saves the price and confirms
+  the step.
 - **Prices are saved as you enter them**, on their own. Going back or cancelling the identification
   afterwards does not undo them — a catalogue price is a fact about the stamp, not about this tile.
-- Change the condition, certificate or format and open the grid again: it is narrowed to the new
-  choice.
+- On a format other than a single, a variant with no price of its own shows the value derived from
+  its single's price (a dashed field). Nothing is stored until you type over it.
+- **Full grid…** in the heading opens the [variant price grid](variant-prices.md) for the same tree,
+  for pricing other conditions, certificates and formats, or for recording a price on the umbrella
+  itself. What you save there shows up in the section when you close it.
 - The same applies when several tiles are identified as one stamp. A stamp without variants keeps
   the single field, and a run of tiles identified as a set keeps its own values column.
 

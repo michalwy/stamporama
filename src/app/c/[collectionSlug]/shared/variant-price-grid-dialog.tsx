@@ -7,9 +7,15 @@ import { DialogShell, DialogBody, DialogFooter, DialogPrimaryButton } from "@/ap
 import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { formatAmountInput, normalizeDecimalInput } from "@/lib/decimal-input";
-import { deriveFormatPrice } from "@/lib/format-factor";
+import { formatAmountInput } from "@/lib/decimal-input";
 import { fillCertificateCell, formatPricePercent } from "@/lib/certificate-price-fill";
+import {
+  derivedCellAmount,
+  lowestVariantAmount,
+  shownCellAmount,
+  variantDescendantMap,
+  variantPriceCellKey as cellKey,
+} from "@/lib/variant-price-cells";
 import type {
   VariantPriceGridData,
   VariantPriceRestriction,
@@ -167,18 +173,6 @@ export function VariantPriceGridDialog({
   );
 }
 
-/** How a cell is identified in the component's own maps — every axis a `StampCatalogPrice` is keyed
- *  on. Local to this file: nothing crosses the wire under it, the write naming its axes in full. */
-function cellKey(
-  stampId: string,
-  editionId: string,
-  conditionId: string,
-  certId: string | null,
-  formatId: string | null
-): string {
-  return `${stampId}~${editionId}~${conditionId}~${certId ?? ""}~${formatId ?? ""}`;
-}
-
 function VariantPriceGrid({
   grid,
   restrict,
@@ -254,21 +248,9 @@ function VariantPriceGrid({
   }, [grid.formatFactors]);
 
   /** The variant-kind descendants of every row, at any depth — whose lowest price an umbrella row
-   *  is worth (#238). Read off the flattened tree: the rows are a depth-first walk, so a row's
-   *  subtree is the run of deeper rows that follows it. The filter is `isVariant` **flat**, not
-   *  pruned at the first non-variant: that is exactly the set `valuateItemRows` rolls up, and this
-   *  figure has to be the one the rest of the app prints. */
-  const variantDescendants = useMemo(() => {
-    const map = new Map<string, string[]>();
-    grid.rows.forEach((row, i) => {
-      const ids: string[] = [];
-      for (let j = i + 1; j < grid.rows.length && grid.rows[j].depth > row.depth; j++) {
-        if (grid.rows[j].isVariant) ids.push(grid.rows[j].stampId);
-      }
-      map.set(row.stampId, ids);
-    });
-    return map;
-  }, [grid.rows]);
+   *  is worth (#238). The rule is `variantDescendantMap`'s, shared with the identification step's
+   *  variant section (#1337) so the two cannot disagree about an umbrella's value. */
+  const variantDescendants = useMemo(() => variantDescendantMap(grid.rows), [grid.rows]);
 
   const isLocked = (row: VariantPriceGridData["rows"][number]) =>
     !row.identified && !unlocked.has(row.stampId);
@@ -457,24 +439,18 @@ function VariantPriceGrid({
    *  without both. */
   function derivedFor(stampId: string, conditionId: string): string | null {
     if (!formatId || !editionId) return null;
-    const factor = factorFor.get(`${stampId}~${formatId}~${conditionId}`);
-    if (!factor) return null;
-    const single = (values.get(cellKey(stampId, editionId, conditionId, certId, null)) ?? "").trim();
-    if (single === "") return null;
-    const amount = Number(normalizeDecimalInput(single));
-    if (!Number.isFinite(amount)) return null;
-    return deriveFormatPrice(amount, factor).toFixed(2);
+    return derivedCellAmount(
+      values.get(cellKey(stampId, editionId, conditionId, certId, null)) ?? "",
+      factorFor.get(`${stampId}~${formatId}~${conditionId}`)
+    );
   }
 
   /** What a stamp's cell is worth in this column as the grid draws it: the figure typed into it, or
    *  failing that the one derived from the single by this format's multiplier. */
   function shownAmount(stampId: string, conditionId: string): number | null {
     if (!editionId) return null;
-    const own = (values.get(cellKey(stampId, editionId, conditionId, certId, formatId)) ?? "").trim();
-    const shown = own === "" ? derivedFor(stampId, conditionId) : normalizeDecimalInput(own);
-    if (!shown) return null;
-    const amount = Number(shown);
-    return Number.isFinite(amount) ? amount : null;
+    const own = values.get(cellKey(stampId, editionId, conditionId, certId, formatId)) ?? "";
+    return shownCellAmount(own, own.trim() === "" ? derivedFor(stampId, conditionId) : null);
   }
 
   /**
@@ -489,12 +465,9 @@ function VariantPriceGrid({
    * sits above.
    */
   function rollupFor(stampId: string, conditionId: string): string | null {
-    let lowest: number | null = null;
-    for (const id of variantDescendants.get(stampId) ?? []) {
-      const amount = shownAmount(id, conditionId);
-      if (amount !== null && (lowest === null || amount < lowest)) lowest = amount;
-    }
-    return lowest === null ? null : lowest.toFixed(2);
+    return lowestVariantAmount(variantDescendants.get(stampId) ?? [], (id) =>
+      shownAmount(id, conditionId)
+    );
   }
 
   if (grid.rows.length === 0) {

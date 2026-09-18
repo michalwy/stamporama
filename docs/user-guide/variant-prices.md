@@ -75,8 +75,9 @@ puts the rolled-up figure back on screen.
 - **A stamp** — the **Price variants** button on the worklist below, on an offer's *Items*
   card, or on a listing blocker naming an unpriced variant. Opening it over any stamp of a
   tree shows the **whole tree**, since that is what the value is read from.
-- **A card-scan tile** — identifying a tile as a stamp that has variants of its own, the
-  **Price variants…** button in place of the catalog value field. See
+- **A card-scan tile** — identifying a tile as a stamp that has variants of its own shows a
+  price field per variant in the dialog itself, and **Full grid…** in that section's heading opens
+  this grid. See
   [Pricing an umbrella's variants](purchases.md#pricing-an-umbrellas-variants-while-identifying).
 
 Opened **from an offer** — the *Items* card or a listing blocker — or **from a card-scan
