@@ -6,7 +6,7 @@ import { formatItemNo } from "./item-number";
 import { updateItem } from "./items";
 import type { ItemStampEntryInput } from "./item-stamps";
 import { intakeStamps } from "./lots";
-import { autoSeedStampMainFromFront } from "./photos";
+import { autoSeedStampMainFromFront, makeCopyPhotoStampMain } from "./photos";
 import {
   OPEN_TILE_STATES,
   ScanAuthError,
@@ -135,6 +135,14 @@ export interface TileIdentification {
    * extra copies, so nothing about which tile becomes which copy changes. Absent is the ordinary
    * identification. */
   stamps?: readonly ItemStampEntryInput[] | null;
+  /**
+   * Whether the stamp takes a tile's picture (#1340), and whose. Absent is #149's auto-seed, which
+   * gives the stamp the first tile's front only when it has no photo at all. A tile id — one of the
+   * tiles being identified — makes **that** tile's front the stamp's main picture, replacing the one
+   * it has ({@link makeCopyPhotoStampMain}). Null gives the stamp nothing, even when it has no photo:
+   * the dialog offers the choice on by default there, so null is the collector turning it off.
+   */
+  stampPhotoTileId?: string | null;
 }
 
 export async function identifyTileAsNewCopy(
@@ -196,6 +204,7 @@ export async function identifyTilesAsNewCopies(
   // tile named twice would otherwise create two copies and give the second one no images, the images
   // having moved to the first.
   const tiles = await loadSelectedTiles(ownerId, tileIds);
+  const stampPhotoFrom = chosenStampPhoto(tiles, input.stampPhotoTileId, input.formatId);
   const target = { lotId: await resolveTileLot(tiles[0].purchaseId, input.lotId) };
 
   const copies = await intakeStamps(ownerId, target, {
@@ -224,8 +233,11 @@ export async function identifyTilesAsNewCopies(
   for (const [i, tile] of tiles.entries()) {
     const copy = copies[i];
     await consumeTile(tile.id, copy.itemId);
-    await seedStampImage(ownerId, copy.itemId);
+    if (input.stampPhotoTileId === undefined) await seedStampImage(ownerId, copy.itemId);
   }
+  // The collector's own answer (#1340), once every copy exists: the chosen tile's front — the same
+  // row, now on its copy — becomes the stamp's picture.
+  if (stampPhotoFrom) await giveStampTilePhoto(ownerId, stampPhotoFrom);
   return copies;
 }
 
@@ -518,6 +530,9 @@ export interface TileReidentification {
    * stamp, which is the one way the extra entries come off — because being wrong about which stamps
    * are on a piece is as much a mis-identification as being wrong about the first. */
   stamps?: readonly ItemStampEntryInput[] | null;
+  /** {@link TileIdentification.stampPhotoTileId}, on a correction: the tile being corrected or
+   * null, and absent for the auto-seed. */
+  stampPhotoTileId?: string | null;
 }
 
 /**
@@ -577,6 +592,17 @@ export async function reidentifyTileCopy(
       "The copy this tile became has been deleted, so there is nothing to re-identify."
     );
   }
+  // The stamp's picture (#1340) is checked by the identification's own rule, against the tile as it
+  // was cut: its crops left it for the copy, and the copy's front is that very row.
+  const copyPhotos = await prisma.photo.findMany({
+    where: { itemId: tile.itemId },
+    select: { id: true, role: true },
+  });
+  const stampPhotoFrom = chosenStampPhoto(
+    [{ id: tile.id, photos: copyPhotos }],
+    input.stampPhotoTileId,
+    input.formatId
+  );
   // Every field the step asked for is written, including the ones left empty: the condition dialog
   // opens on **what the copy is now**, so a blank is the collector clearing an answer rather than
   // declining to give one. Absent instead of null would make *remove the certificate* impossible
@@ -595,7 +621,8 @@ export async function reidentifyTileCopy(
     // one save and one transaction, exactly as the copy dialog saves them.
     ...(stamps ? { stamps } : {}),
   });
-  await seedStampImage(ownerId, item.id);
+  if (input.stampPhotoTileId === undefined) await seedStampImage(ownerId, item.id);
+  if (stampPhotoFrom) await giveStampTilePhoto(ownerId, stampPhotoFrom);
   return { itemId: item.id, itemNo: item.itemNo };
 }
 
@@ -918,6 +945,44 @@ async function movePhotosToItem(
       data: { tileId: null, itemId, sortOrder: photo.role === "back" ? 1 : 0 },
     });
   }
+}
+
+/**
+ * The front photo the collector chose to give the stamp (#1340), checked before anything is written:
+ * one of the tiles being identified, in the **default format**, and carrying a front. Null when the
+ * answer is absent or null — the auto-seed, or nothing.
+ *
+ * The format rule is #346's, for the same reason: a block's or a pair's picture misrepresents the
+ * single stamp the catalogue entry stands for. The dialog does not offer the choice on one, so a
+ * request that makes it anyway is refused rather than quietly dropped.
+ */
+function chosenStampPhoto(
+  tiles: readonly { id: string; photos: readonly { id: string; role: string | null }[] }[],
+  stampPhotoTileId: string | null | undefined,
+  formatId: string | null | undefined
+): string | null {
+  if (stampPhotoTileId == null) return null;
+  const tile = tiles.find((t) => t.id === stampPhotoTileId);
+  if (!tile) {
+    throw new ScanValidationError("The stamp's picture has to come from a tile being identified.");
+  }
+  if (formatId) {
+    throw new ScanValidationError(
+      "Only a single's picture can become the stamp's photo — this piece has a format."
+    );
+  }
+  const front = tile.photos.find((p) => p.role === "front");
+  if (!front) throw new ScanValidationError("That tile has no front picture to give the stamp.");
+  return front.id;
+}
+
+/** Make a tile's front — by then its copy's — the stamp's main picture (#1340). Best-effort for
+ * {@link seedStampImage}'s reason: the copy and its images are already committed, and failing the
+ * identification over the catalogue picture would leave the collector unsure the copy exists. */
+async function giveStampTilePhoto(ownerId: string, photoId: string): Promise<void> {
+  await makeCopyPhotoStampMain(ownerId, photoId).catch((err) => {
+    console.error("Tile front → stamp main failed", err);
+  });
 }
 
 /** #149's auto-seed, reached from the scan path: the first photograph of a stamp identifies the

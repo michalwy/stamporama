@@ -1161,6 +1161,26 @@ nothing, and one is still to be identified. A tile set aside keeps its picture a
 its own coloured edge, because it is still work — only not work for right now. The label underneath
 still gives the copy number, which is what you read when you want the detail rather than the glance.
 
+#### A better picture for the stamp
+
+The stamp's own photo usually comes from the first copy identified as it, and the first copy is
+often a poor one. The condition step has a **Stamp photo** section that shows the stamp's current photo, or *No photo*, beside the tile's front, with
+**Use the tile's front as the stamp's photo**. The box starts ticked when the stamp has no photo,
+which is the automatic first picture made visible. It starts unticked when the stamp already has
+one, so a photo is only ever replaced when you tick the box.
+
+- Ticked, the tile's front **replaces** the stamp's main photo when the identification completes.
+  Nothing else of the old main photo is kept on the stamp. A photo taken from a copy is still on
+  that copy.
+- A stamp **above** it in the variant tree changes too, but only where it shows **that same
+  picture**. That is normally the poor photo your first copy passed up to it. Where it has no photo
+  at all it gets this one. Where it shows a different picture, such as a sibling variant's or one
+  you chose yourself, it is left alone, and so is everything above it.
+- With several tiles ticked as one stamp, every tile's front is shown. Click the one you want.
+- A piece given a **format** (a pair, a block) is not offered, because its picture is not a picture
+  of the single stamp.
+- **Identify again** offers the same choice for the stamp you correct the piece to.
+
 #### Comparing a piece with a reference
 
 A variant — or a forgery — is often told apart by laying the piece against a picture of the real

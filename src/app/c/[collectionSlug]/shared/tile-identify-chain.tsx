@@ -578,6 +578,9 @@ export function TileIdentifyChainDialogs({
           // open (#1317) — so the one figure gives way to the variant grid. Here and not on the
           // purchase screen's intake, which has no piece in hand to identify.
           priceVariantsInGrid
+          // A better picture of the stamp than the one it has is found here, with the piece in hand
+          // (#1340) — on a correction too, which is the same dialog and the same moment.
+          offerStampPhoto
           // The one question #586 left to identification. Only the order's **open** lots, since a
           // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
           // refusal.
