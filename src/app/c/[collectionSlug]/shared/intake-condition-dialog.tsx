@@ -236,11 +236,12 @@ export interface IntakeConditionDialogProps {
    * of the held copies it is compared with. Absent on every intake that creates a copy. */
   correctedCopyId?: string;
   /**
-   * Offer an **umbrella's** variant price grid in place of its one catalogue value (#1317) — the
+   * Price an **umbrella's** variants in place of its one catalogue value (#1317, #1337) — the
    * scan-tile chain only. The catalogue page open at an umbrella prices each variant rather than the
-   * umbrella, so one field for the umbrella's own figure is the wrong question there; the grid is
-   * #618's, narrowed to this step's condition, certificate and format (#633) and started at the
-   * umbrella (#679). A stamp without variants keeps the field either way.
+   * umbrella, so one field for the umbrella's own figure is the wrong question there; the step
+   * draws a price field per variant instead, narrowed to its condition, certificate and format
+   * (#633) and started at the umbrella (#679), with #618's full grid a press away. A stamp without
+   * variants keeps the field either way.
    */
   priceVariantsInGrid?: boolean;
   onBack: () => void;
@@ -709,7 +710,9 @@ function IntakeConditionDialog({
               disabled={isPending || savingPrice}
               onChange={handleCatalogValueChange}
               variantGrid={
-                priceVariantsInGrid ? { formatId, subjectLabel: variantGridLabel } : undefined
+                priceVariantsInGrid
+                  ? { formatId, subjectLabel: variantGridLabel, collectionId }
+                  : undefined
               }
             />
           )}

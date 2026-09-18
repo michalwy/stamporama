@@ -1,15 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
-import { Icon } from "@/app/icons";
+import { LabelWithError } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
-import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
-import {
-  catalogValueSubjectKey,
-  variantGridRestriction,
-  type IntakeCatalogValue,
-} from "@/lib/intake-catalog-value";
+import { catalogValueSubjectKey, type IntakeCatalogValue } from "@/lib/intake-catalog-value";
+import { IntakeVariantPricesSection, type IntakeVariantPricesHandle } from "./intake-variant-prices";
 
 /**
  * *The catalogue value, while the catalogue is still open* (#593) — one field in the intake step.
@@ -64,14 +59,15 @@ import {
  * Identifying a scan tile as an **umbrella** — a stamp with variants of its own, the tile the picture
  * cannot settle — puts the catalogue open at a page that prices each variant and not the umbrella
  * (#1317). One figure for the umbrella would be the override #627 locks behind a padlock, so where
- * the caller asks for it (`variantGrid`) the input gives way to a button opening #618's variant grid:
- * started at this stamp (#679), narrowed to the step's condition, certificate **and** format (#633),
- * on the grid's own default edition — the primary catalogue's latest, the one this field writes.
+ * the caller asks for it (`variantGrid`) the input gives way to a price field per variant, in the
+ * step itself (#1337, `IntakeVariantPricesSection`): started at this stamp (#679), narrowed to the
+ * step's condition, certificate **and** format (#633), on the grid's own default edition — the
+ * primary catalogue's latest, the one this field writes. #1317 drew a button opening #618's grid
+ * there instead; the grid is still one press away from the section, for every other axis.
  *
- * The grid writes cell by cell, so its prices are saved **independently of the identification**:
- * they are facts about the stamps, and cancelling the tile afterwards takes none of them back. The
- * step itself then writes nothing — the field reports itself blank. The restriction is read at the
- * moment of opening, so a condition changed afterwards narrows the next opening to the new answer.
+ * The section writes field by field, so its prices are saved **independently of the
+ * identification**: they are facts about the stamps, and cancelling the tile afterwards takes none of
+ * them back. The step itself then writes nothing — the field reports itself blank.
  */
 
 interface Target {
@@ -105,18 +101,18 @@ export function IntakeCatalogValueField({
   columns: number;
   disabled: boolean;
   onChange: (value: IntakeCatalogValue) => void;
-  /** Price an umbrella through its variant grid instead of this field (#1317) — see the module
+  /** Price an umbrella through its variants instead of this field (#1317, #1337) — see the module
    * header. `formatId` is the step's format, blank for a single; `subjectLabel` names all three
-   * axes the grid is narrowed to. Absent: the field, whatever the stamp. */
-  variantGrid?: { formatId: string; subjectLabel: string };
+   * axes the section is narrowed to; `collectionId` scopes its remembered open or closed state.
+   * Absent: the field, whatever the stamp. */
+  variantGrid?: { formatId: string; subjectLabel: string; collectionId: string };
 }) {
   const [target, setTarget] = useState<Target | null>(null);
   /** Whether the stamp has variants of its own, off the same read as the target. Per stamp, so a
    * change of condition keeps it rather than flickering the field in and out while re-reading. */
   const [umbrella, setUmbrella] = useState(false);
   const gridMode = variantGrid != null && umbrella;
-  const grid = useVariantPriceGrid();
-  const openGridRef = useRef<HTMLButtonElement>(null);
+  const sectionRef = useRef<IntakeVariantPricesHandle>(null);
   const [amount, setAmount] = useState("");
   const [recorded, setRecorded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -198,7 +194,7 @@ export function IntakeCatalogValueField({
   useEffect(() => {
     onChange({
       catalogNameId: target?.catalogNameId ?? null,
-      // Blank while the grid stands in for the input (#1317): the umbrella's own figure is still
+      // Blank while the variant section stands in for the input (#1317, #1337): the umbrella's own figure is still
       // prefilled into `amount` underneath, and the step must not write it back.
       amount: gridMode ? "" : amount,
       recorded,
@@ -238,10 +234,11 @@ export function IntakeCatalogValueField({
     if (openedOn.current !== key) return;
     const active = document.activeElement;
     if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
-    // On an umbrella the claim goes to the button that opens the grid (#1317): Enter opens it, and
-    // the grid takes the cursor into its first cell from there (#634).
+    // On an umbrella the claim goes to the first variant's price (#1337) — the field the collector
+    // is there to type — or to the section's heading while it is closed. The section may still be
+    // reading its tree, so it takes the claim when it can, under the same mid-typing guard.
     if (gridMode) {
-      openGridRef.current?.focus();
+      sectionRef.current?.claimFocus();
       return;
     }
     inputRef.current?.focus();
@@ -255,66 +252,17 @@ export function IntakeCatalogValueField({
   if (!target) return null;
 
   if (gridMode) {
-    const restriction = variantGridRestriction(
-      conditionId,
-      certificateStatusId,
-      variantGrid.formatId
-    );
     return (
-      <div style={{ marginTop: "0.75rem" }}>
-        <LabelWithError htmlFor="intake-variant-prices">Catalog values (optional)</LabelWithError>
-        {/* The field's own tracks, so the button takes the input's place under the Condition
-            control and the caption keeps its place beside it. */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${columns}, 1fr)`,
-            gap: "0.75rem",
-            alignItems: "center",
-          }}
-        >
-          <DialogSecondaryButton
-            id="intake-variant-prices"
-            ref={openGridRef}
-            // A grid narrowed to no condition has no column to draw, so it waits for one — the
-            // input's own rule.
-            disabled={disabled || loading || restriction === null}
-            onClick={() => {
-              if (!restriction) return;
-              grid.open({ kind: "stamp", stampId, subtree: true }, restriction);
-            }}
-            style={{ minWidth: 0, gap: "0.375rem", whiteSpace: "nowrap" }}
-          >
-            <Icon name="prices" size="xs" /> Price variants…
-          </DialogSecondaryButton>
-          <span
-            style={{
-              gridColumn: "2 / -1",
-              fontSize: "0.75rem",
-              color: "var(--color-text-muted)",
-              minWidth: 0,
-            }}
-          >
-            {target.catalogLabel} {target.editionYear} · {target.currency}
-            {conditionId ? (
-              <>
-                {" — every variant, for "}
-                <strong style={{ color: "var(--color-text-secondary)" }}>
-                  {variantGrid.subjectLabel}
-                </strong>
-              </>
-            ) : (
-              " — pick a condition first"
-            )}
-          </span>
-        </div>
-        <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-          This stamp has variants, so its value is the lowest of theirs — price them in the grid.
-          Each price is saved as you enter it, and stays saved whether or not you finish
-          identifying.
-        </p>
-        {grid.dialog}
-      </div>
+      <IntakeVariantPricesSection
+        ref={sectionRef}
+        collectionId={variantGrid.collectionId}
+        stampId={stampId}
+        conditionId={conditionId}
+        certificateStatusId={certificateStatusId}
+        formatId={variantGrid.formatId}
+        subjectLabel={variantGrid.subjectLabel}
+        disabled={disabled}
+      />
     );
   }
 

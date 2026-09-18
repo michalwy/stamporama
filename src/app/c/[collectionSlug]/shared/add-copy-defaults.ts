@@ -23,6 +23,11 @@ export const LS_LAST_DISPOSITION = "stamporama:intake:disposition";
 // refuses. Suffixed by the caller as `<collectionId>:<purchaseId>`.
 export const LS_LAST_SCAN_LOT = "stamporama:intake:scanLotId";
 
+// Whether the identification step's variant-prices section was last left closed (#1337), remembered
+// per collection so a run of umbrellas does not cost a click each. Stored only as `closed`: open is
+// the default, the section being the step's pricing for an umbrella rather than something to reveal.
+export const LS_VARIANT_PRICES_CLOSED = "stamporama:intake:variantPricesClosed";
+
 // The last subtype chosen when adding or editing a child stamp (#342), remembered per collection so
 // a run of plate flaws or colour varieties is entered once and repeated. Its own `stamp` namespace
 // rather than `intake`: this is a property of the catalog entry, not of a copy being taken in, and
