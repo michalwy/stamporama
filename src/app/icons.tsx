@@ -72,6 +72,7 @@ import {
   Group,
   HandCoins,
   Handshake,
+  Hash,
   House,
   ImageOff,
   Layers,
@@ -318,6 +319,8 @@ const GLYPHS = {
   translations: Globe,
   /** Catalogue values recorded for a stamp. */
   prices: Coins,
+  /** Catalogue numbers entered for a whole issue at once (#1346). */
+  catalogNumbers: Hash,
   /** The per-format multipliers a value is scaled by (ADR-0020). */
   factors: Percent,
   /** Picks a different example at random. */

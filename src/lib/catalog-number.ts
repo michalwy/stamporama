@@ -842,6 +842,85 @@ export function computeIssueRangeSuggestions(
   return out;
 }
 
+/** What {@link recomputeDeclaredRange} decides for one catalogue's declared range. */
+export type DeclaredRangeRecompute =
+  | { kind: "set"; firstNumber: string; lastNumber: string | null }
+  | { kind: "remove" }
+  | { kind: "keep" };
+
+/**
+ * An issue's declared range for one catalogue, **recomputed from its stamps** rather than proposed
+ * (#1346). The catalogue-number grid edits the numbers themselves, so the range follows them — it
+ * widens, narrows, appears for a catalogue that had none and goes when the last number goes. That is
+ * the difference from {@link computeIssueRangeExtension}, which only ever proposes a widening for the
+ * collector to confirm (#333): there the range is the thing being declared, here it is a summary of
+ * numbers just typed.
+ *
+ * `memberNumbers` are the catalogue's numbers on the issue's **checklist stamps**, the union #333
+ * measures against — an optional extra (a block, a variety) never defines the range. Which family the
+ * span is taken in is the extension's own precedence:
+ *
+ *   1. **basic numbering** (plain integers) wins wherever it appears, as `adopt-basic` has it;
+ *   2. else the **declared range's own family**, when it has one and some member is in it;
+ *   3. else a family **every** member shares (`Bl5`–`Bl7`, one prefix and suffix around a number).
+ *
+ * `keep` where none of those answers — numbers in several families with no range to choose between
+ * them are left for the collector to declare, and a guess would be a range nobody asked for.
+ */
+export function recomputeDeclaredRange(
+  current: { firstNumber: string; lastNumber: string | null } | null,
+  memberNumbers: readonly string[]
+): DeclaredRangeRecompute {
+  const parsed = memberNumbers
+    .map((raw) => ({ raw: raw.trim(), parts: parseMemberParts(raw) }))
+    .filter((p): p is { raw: string; parts: CatalogNumberParts } => p.raw !== "" && p.parts !== null);
+  if (memberNumbers.every((n) => n.trim() === "")) {
+    return current ? { kind: "remove" } : { kind: "keep" };
+  }
+
+  const spanIn = (scheme: CatalogRangeScheme, scalars: number[]): DeclaredRangeRecompute => {
+    const min = Math.min(...scalars);
+    const max = Math.max(...scalars);
+    const firstNumber = formatSchemeValue(scheme, min);
+    const lastNumber = max > min ? formatSchemeValue(scheme, max) : null;
+    if (current && current.firstNumber === firstNumber && (current.lastNumber || null) === lastNumber) {
+      return { kind: "keep" };
+    }
+    return { kind: "set", firstNumber, lastNumber };
+  };
+
+  const basic = parsed
+    .map((p) => basicValue(p.parts))
+    .filter((v): v is number => v !== null);
+  if (basic.length > 0) {
+    return spanIn({ kind: "base", prefix: "", suffix: "", from: 0 }, basic);
+  }
+
+  if (current) {
+    const resolved = resolveCatalogRange(current.firstNumber, current.lastNumber);
+    if (!("error" in resolved)) {
+      const scalars = parsed
+        .map((p) => scalarInScheme(resolved.scheme, p.parts))
+        .filter((v): v is number => v !== null);
+      if (scalars.length > 0) return spanIn(resolved.scheme, scalars);
+    }
+  }
+
+  const head = parsed[0];
+  if (
+    head &&
+    head.parts.base !== "" &&
+    parsed.length === memberNumbers.filter((n) => n.trim() !== "").length &&
+    parsed.every((p) => p.parts.base !== "" && p.parts.prefix === head.parts.prefix && p.parts.suffix === head.parts.suffix)
+  ) {
+    return spanIn(
+      { kind: "base", prefix: head.parts.prefix, suffix: head.parts.suffix, from: 0 },
+      parsed.map((p) => parseInt(p.parts.base, 10))
+    );
+  }
+  return { kind: "keep" };
+}
+
 /**
  * Does the (normalized) query appear in any of a stamp's catalog keys? A query
  * like `"200"` matches `"mipl200"` (bare number), `"mipl200"` matches it exactly,

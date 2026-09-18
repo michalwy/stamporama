@@ -53,6 +53,7 @@ import type { AddVariantRangeParent } from "@/app/c/[collectionSlug]/shared/add-
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant-price-grid";
+import { useCatalogNumberGrid } from "@/app/c/[collectionSlug]/shared/use-catalog-number-grid";
 import { useQuickPriceDialog } from "@/app/c/[collectionSlug]/shared/use-quick-price-dialog";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import type { StampFormatData } from "@/lib/stamp-formats";
@@ -740,6 +741,17 @@ export function IssueRow({
     },
   });
 
+  // Every stamp's catalog numbers typed down one screen (#1346), from the row for the price grid's
+  // reason. Each write moves the stamps' chips and the issue's declared range, so both caches are
+  // refreshed once it closes.
+  const catalogNumbers = useCatalogNumberGrid({
+    issueId: issue.id,
+    onSaved: async () => {
+      await invalidateStampsAndIssues(collectionId);
+      await invalidateMembers(collectionId, issue.id);
+    },
+  });
+
   const rangeSuggestions = issue.rangeSuggestions;
   // Recomputing the declared range (#333) is an explicit, always-available action that confirms
   // before writing — the list row's warning chip is a hint, not the only way in.
@@ -757,6 +769,7 @@ export function IssueRow({
     offers.action,
     ...prices.actions,
     variantPrices.action,
+    catalogNumbers.action,
     checklists.action,
     sizePreset.action,
     formatFactors.action,
@@ -879,6 +892,7 @@ export function IssueRow({
           {offers.dialog}
           {prices.dialog}
           {variantPrices.dialog}
+          {catalogNumbers.dialog}
           {checklists.dialog}
           {sizePreset.dialog}
           {formatFactors.dialog}
