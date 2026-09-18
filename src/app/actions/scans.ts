@@ -237,6 +237,17 @@ export type TilesOutcomeActionState =
   | { status: "error"; message: string };
 
 /**
+ * The condition step's answer to *use the tile's photo as the stamp's photo* (#1340), in the three
+ * states `TileIdentification.stampPhotoTileId` reads: the field absent is the auto-seed, empty is
+ * *no*, and a tile id is *yes, this tile's*.
+ */
+function stampPhotoTileId(formData: FormData): string | null | undefined {
+  const v = formData.get("stampPhotoTileId");
+  if (typeof v !== "string") return undefined;
+  return v.trim() === "" ? null : v.trim();
+}
+
+/**
  * Identify one or several tiles into **new copies** — the stockbook path, and ordinary intake
  * entered from a tile instead of from a stamp picker.
  *
@@ -287,6 +298,7 @@ export async function identifyTilesAction(
       // Every stamp on the piece, when the tile was identified as one carrying several (#750). The
       // copy dialog's own field and reading (#746): one list, one vocabulary.
       stamps: parseItemStampEntries(formData.get("stamps")),
+      stampPhotoTileId: stampPhotoTileId(formData),
     });
     return { status: "success", outcomes: copies };
   } catch (e) {
@@ -379,6 +391,7 @@ export async function reidentifyTileAction(
       forSale: formData.get("forSale") === "true",
       forTrade: formData.get("forTrade") === "true",
       stamps: parseItemStampEntries(formData.get("stamps")),
+      stampPhotoTileId: stampPhotoTileId(formData),
     });
     return { status: "success" };
   } catch (e) {

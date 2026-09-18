@@ -29,6 +29,13 @@ import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inv
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { IntakeCatalogValueField } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-catalog-value";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
+import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
+import { useStampPhotos } from "@/app/c/[collectionSlug]/stamps/use-stamps-query";
+import {
+  effectiveStampPhotoChoice,
+  stampPhotoFormValue,
+  type StampPhotoChoice,
+} from "@/lib/tile-stamp-photo";
 import { NO_AUTOFILL } from "./no-autofill";
 import {
   readLast,
@@ -244,6 +251,13 @@ export interface IntakeConditionDialogProps {
    * variants keeps the field either way.
    */
   priceVariantsInGrid?: boolean;
+  /**
+   * Offer to make the tile's front the **stamp's** photo (#1340) — the scan-tile chain only, where a
+   * piece is in hand to be compared with the stamp's current picture. On by default when the stamp
+   * has no photo (#149's seed, made visible) and off when it has one; the answer is sent as
+   * `stampPhotoTileId` (`tile-stamp-photo.ts`).
+   */
+  offerStampPhoto?: boolean;
   onBack: () => void;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
@@ -271,6 +285,7 @@ function IntakeConditionDialog({
   onEditStamps,
   correctedCopyId,
   priceVariantsInGrid,
+  offerStampPhoto,
   onBack,
   onClose,
   onSubmit,
@@ -360,6 +375,26 @@ function IntakeConditionDialog({
 
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
+  // The stamp's picture (#1340). The answer is held against the stamp it was given for, so picking
+  // another stamp — at the stamp editor, or Back and a new pick — asks afresh from its own default.
+  const photoStampId =
+    offerStampPhoto && selection.kind === "stamp" ? selection.stampId : null;
+  const { data: stampPhotos } = useStampPhotos(collectionId, photoStampId);
+  const [stampPhotoChoice, setStampPhotoChoice] = useState<StampPhotoChoice | null>(null);
+  const firstFrontTileId =
+    pieces?.find((p) => pieceFrontPhotoId(p) !== null)?.tileId ?? null;
+  const stampPhoto =
+    photoStampId && firstFrontTileId
+      ? effectiveStampPhotoChoice({
+          stampId: photoStampId,
+          choice: stampPhotoChoice,
+          stampPhotoCount: stampPhotos?.length,
+          defaultTileId: firstFrontTileId,
+        })
+      : null;
+  // A single only (#346): a pair's picture misrepresents the stamp.
+  const stampPhotoOffered = formatId === "";
+
   // Photos are captured only for a single-stamp intake (#148): a whole-issue intake fans out
   // into several distinct copies, so shared photos would be meaningless. The pending change-set
   // is held in a ref (the derive-on-change loop in PhotoEditor never depends on it) and written
@@ -438,6 +473,13 @@ function IntakeConditionDialog({
     fd.set("forTrade", String(disposition.forTrade));
     if (photos) {
       fd.set("photoChangeSet", JSON.stringify(photoValueRef.current.changeSet));
+    }
+    if (offerStampPhoto) {
+      const value = stampPhoto
+        ? stampPhotoFormValue({ offered: stampPhotoOffered, on: stampPhoto.on, tileId: stampPhoto.tileId })
+        : // No piece with a front: nothing to give the stamp, and the seed would find nothing either.
+          "";
+      if (value !== undefined) fd.set("stampPhotoTileId", value);
     }
 
     // The catalogue value goes **before** the intake and on its own (#593). It is a fact about the
@@ -772,6 +814,22 @@ function IntakeConditionDialog({
               />
             </div>
           </div>
+
+          {/* The stamp's photo (#1340): beside the disposition because it is one more thing this
+              identification does, and after the copy's own answers because it is about the stamp
+              rather than the copy. */}
+          {photoStampId && stampPhoto && pieces && (
+            <TileStampPhotoField
+              collectionId={collectionId}
+              pieces={pieces}
+              stampPhotos={stampPhotos}
+              offered={stampPhotoOffered}
+              on={stampPhoto.on}
+              tileId={stampPhoto.tileId}
+              disabled={isPending}
+              onChange={(next) => setStampPhotoChoice({ stampId: photoStampId, ...next })}
+            />
+          )}
 
           {/* Photos (#148): only for a single-stamp intake — a whole-issue intake creates several
               distinct copies, so shared photos would be ambiguous. Eager staged uploads; the

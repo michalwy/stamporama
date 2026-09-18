@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { StampListItem, StampSortBy, StampYearFacet } from "@/lib/stamps";
 import type { IssueSearchItem } from "@/lib/issues";
+import type { EditablePhotoSummary } from "@/lib/photos";
 import type { AreaFacet } from "@/lib/area-facets";
 import {
   STAMP_ATTRIBUTE_FILTER_KEYS,
@@ -74,7 +75,24 @@ export const stampKeys = {
     ["stamps", collectionId, "area-facets", filters] as const,
   issueSearch: (collectionId: string, query: string, areaIds?: string[]) =>
     ["stamps", collectionId, "issueSearch", query, areaIds ?? "all"] as const,
+  /** One stamp's photos (#1340). Under `all`, so every stamp write that invalidates the lists
+   * re-reads them too — a photo the identification just replaced included. */
+  photos: (collectionId: string, stampId: string) =>
+    ["stamps", collectionId, "photos", stampId] as const,
 };
+
+/** A stamp's committed photos, main first (#1340) — what the tile identification step shows beside
+ * its offer to replace them. Null `stampId` fetches nothing. */
+export function useStampPhotos(collectionId: string, stampId: string | null) {
+  return useQuery<EditablePhotoSummary[]>({
+    queryKey: stampKeys.photos(collectionId, stampId ?? ""),
+    queryFn: async () => {
+      const { listStampPhotosAction } = await import("@/app/actions/stamps");
+      return listStampPhotosAction(stampId as string);
+    },
+    enabled: stampId !== null,
+  });
+}
 
 export function useStampsInfinite(
   collectionId: string,

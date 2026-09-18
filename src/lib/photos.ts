@@ -622,6 +622,63 @@ export async function promoteCopyPhotoToStamp(
   photoId: string,
   target: { role: PhotoRole; title: string | null }
 ): Promise<void> {
+  const source = await loadPromotableCopyPhoto(ownerId, photoId);
+  const ancestors = await ancestorsToFill(source.collectionId, source.stampId, null);
+  await duplicateUpTheTree(source, ancestors, normalizeRole(target.role), target.title);
+}
+
+/**
+ * Make a copy photo **the stamp's main picture, replacing the one it has** (#1340) — the choice the
+ * tile identification dialog offers when the piece in hand is a better picture of the stamp than the
+ * one the catalogue entry took from an earlier, poorer copy.
+ *
+ * The incumbent main is simply replaced, as a hand promotion into the Main slot always replaced it:
+ * a stamp photo is an independent duplicate (#137), and the collector settled on 2026-09-18 that
+ * nothing more is kept of it.
+ *
+ * **Ancestors follow the picture, not the slot.** #347's walk fills an ancestor only while it has no
+ * photo at all, and on its own that would leave the umbrella `3` wearing the poor picture its variant
+ * `3a` has just been given a better one for — because the poor one is exactly what #347 propagated up
+ * from `3a` in the first place. So an ancestor whose main is **the same picture** as the main being
+ * replaced here is replaced with it; one with no photo is filled as before; and one with any other
+ * picture — chosen by hand, or propagated from a sibling variant — ends the walk untouched. *The same
+ * picture* is decided by the bytes ({@link samePicture}), since a propagated duplicate is a verbatim
+ * copy with its own key and nothing on the row says where it came from.
+ *
+ * The walk is read **before** anything is written: the incumbent's bytes are what the ancestors are
+ * compared against, and replacing it deletes them.
+ *
+ * With no main on the stamp this is exactly {@link promoteCopyPhotoToStamp} into Main.
+ */
+export async function makeCopyPhotoStampMain(ownerId: string, photoId: string): Promise<void> {
+  const source = await loadPromotableCopyPhoto(ownerId, photoId);
+  const incumbent = await prisma.photo.findFirst({
+    where: { stampId: source.stampId, role: "main" },
+    select: PICTURE_SELECT,
+  });
+  const ancestors = await ancestorsToFill(source.collectionId, source.stampId, incumbent);
+  await duplicateUpTheTree(source, ancestors, "main", null);
+}
+
+/** What a copy photo carries into a promotion: the row's own facts, and where it sits. */
+interface PromotableCopyPhoto {
+  collectionId: string;
+  stampId: string;
+  storageBackend: string;
+  storageKey: string;
+  mime: string;
+  width: number;
+  height: number;
+  originalWidth: number | null;
+  originalHeight: number | null;
+  sizeBytes: number;
+}
+
+/** A copy photo that can be promoted: on a copy identified to a stamp, in the owner's collection. */
+async function loadPromotableCopyPhoto(
+  ownerId: string,
+  photoId: string
+): Promise<PromotableCopyPhoto> {
   const source = await prisma.photo.findUnique({
     where: { id: photoId },
     select: {
@@ -639,16 +696,24 @@ export async function promoteCopyPhotoToStamp(
   if (!source || !source.item) {
     throw new PhotoValidationError("Photo is not a copy photo.");
   }
-  const { collectionId, stampId } = source.item;
+  const { item, ...photo } = source;
+  const { collectionId, stampId } = item;
   if (!stampId) {
     throw new PhotoValidationError(
       "This copy isn't identified to a stamp, so its photo can't be promoted."
     );
   }
   await assertCollectionOwner(ownerId, collectionId);
+  return { ...photo, collectionId, stampId };
+}
 
-  const role = normalizeRole(target.role);
-
+/** Duplicate the photo onto its stamp and then onto each of `ancestors`, in the same role. */
+async function duplicateUpTheTree(
+  source: PromotableCopyPhoto,
+  ancestors: string[],
+  role: PhotoRole,
+  title: string | null
+): Promise<void> {
   // The copy photo's own bytes seed the first duplicate; **every later one is copied from that
   // first duplicate**, never from the source again (#1134). On one backend it makes no difference
   // — each target is a server-side copy either way — but where the source sits on a backend that is
@@ -656,30 +721,64 @@ export async function promoteCopyPhotoToStamp(
   // once per ancestor. The first duplicate is a byte-for-byte copy of the source and is on the
   // active backend, so it is the better source for the rest by both measures.
   const seed = await duplicatePhotoOntoStamp(
-    collectionId,
-    stampId,
+    source.collectionId,
+    source.stampId,
     source,
     { backend: source.storageBackend, key: source.storageKey },
     role,
-    target.title
+    title
   );
 
-  for (const ancestorId of await photolessAncestors(collectionId, stampId)) {
-    await duplicatePhotoOntoStamp(collectionId, ancestorId, source, seed, role, target.title);
+  for (const ancestorId of ancestors) {
+    await duplicatePhotoOntoStamp(source.collectionId, ancestorId, source, seed, role, title);
   }
 }
 
-/** The stamp's ancestors, nearest first, up to (excluding) the first one that already has a
- * photo (#347). A step up is only taken when the node below **acts as a variant** of its parent
- * (#368, ADR-0010 §3 — the per-stamp override, else the subtype's flag): a colour or perforation
- * variant is the same stamp pictured, but an error, plate flaw or overprint is a picture of the
- * flaw, not of the parent. A non-variant node ends the walk rather than being skipped over — its
- * own ancestors are reached through it, so nothing above it is representative either.
+const PICTURE_SELECT = {
+  id: true,
+  storageBackend: true,
+  storageKey: true,
+  mime: true,
+  width: true,
+  height: true,
+  originalWidth: true,
+  originalHeight: true,
+  sizeBytes: true,
+} as const;
+
+/** A stamp photo as {@link samePicture} compares it. */
+interface Picture {
+  id: string;
+  storageBackend: string;
+  storageKey: string;
+  mime: string;
+  width: number;
+  height: number;
+  originalWidth: number | null;
+  originalHeight: number | null;
+  sizeBytes: number;
+}
+
+/**
+ * The stamp's ancestors, nearest first, that a promotion reaches (#347). A step up is only taken
+ * when the node below **acts as a variant** of its parent (#368, ADR-0010 §3 — the per-stamp
+ * override, else the subtype's flag): a colour or perforation variant is the same stamp pictured,
+ * but an error, plate flaw or overprint is a picture of the flaw, not of the parent. A non-variant
+ * node ends the walk rather than being skipped over — its own ancestors are reached through it, so
+ * nothing above it is representative either.
+ *
+ * An ancestor is reached when it has **no photo**, or — with `replacing` given (#1340) — when its
+ * main is the same picture as the one being replaced on the stamp. Any other photo ends the walk:
+ * that collector's choice, or an earlier propagation from somewhere else, is never overwritten, and
+ * neither is anything above it.
+ *
  * `seen` bounds the walk: the tree is acyclic by intent, but a cycle here would otherwise loop
- * forever writing photo rows. */
-async function photolessAncestors(
+ * forever writing photo rows.
+ */
+async function ancestorsToFill(
   collectionId: string,
-  stampId: string
+  stampId: string,
+  replacing: Picture | null
 ): Promise<string[]> {
   const out: string[] = [];
   const seen = new Set<string>([stampId]);
@@ -698,12 +797,55 @@ async function photolessAncestors(
     if (!parentId || seen.has(parentId)) break;
     if (!childIsVariant(current)) break;
     seen.add(parentId);
-    const photoCount = await prisma.photo.count({ where: { stampId: parentId } });
-    if (photoCount > 0) break;
+    const photos = await prisma.photo.findMany({
+      where: { stampId: parentId },
+      select: { role: true, ...PICTURE_SELECT },
+    });
+    if (photos.length > 0) {
+      const main = photos.find((p) => p.role === "main");
+      if (!replacing || !main || !(await samePicture(main, replacing))) break;
+    }
     out.push(parentId);
     currentId = parentId;
   }
   return out;
+}
+
+/**
+ * Whether two stamp photos are **the same picture** (#1340) — a propagated duplicate and the photo
+ * it was duplicated from, each under its own key (#137, #347).
+ *
+ * The row's facts are compared first, and they settle every difference in practice: a duplicate is
+ * written with its source's mime, dimensions and byte count. Equal facts are then confirmed on the
+ * **thumbnails' bytes**, which a verbatim copy shares exactly, so two different photographs of the
+ * same size are never mistaken for one — reading the small variant keeps that confirmation cheap.
+ */
+async function samePicture(a: Picture, b: Picture): Promise<boolean> {
+  if (a.id === b.id) return true;
+  if (
+    a.mime !== b.mime ||
+    a.width !== b.width ||
+    a.height !== b.height ||
+    a.sizeBytes !== b.sizeBytes ||
+    a.originalWidth !== b.originalWidth ||
+    a.originalHeight !== b.originalHeight
+  ) {
+    return false;
+  }
+  const [bytesA, bytesB] = await Promise.all([thumbBytes(a), thumbBytes(b)]);
+  return bytesA.equals(bytesB);
+}
+
+async function thumbBytes(photo: Picture): Promise<Buffer> {
+  // `delivery` (#591): a comparison of bytes, not an operation over the image.
+  const obj = await getStorage(photo.storageBackend).get(
+    variantKey(photo.storageKey, "thumb", photo.mime),
+    photo.mime,
+    "delivery"
+  );
+  const chunks: Buffer[] = [];
+  for await (const chunk of obj.stream) chunks.push(Buffer.from(chunk as Uint8Array));
+  return Buffer.concat(chunks);
 }
 
 /** Byte-for-byte duplicate of a photo onto one stamp: a fresh permanent key on the active
