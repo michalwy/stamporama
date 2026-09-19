@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { valuateItemRows, type ValuationRow } from "./item-valuation";
-import { STAMP_LABEL_SELECT, type OfferLabeller } from "./offer-labels";
+import { makeOfferLabeller, STAMP_LABEL_SELECT, type OfferLabeller } from "./offer-labels";
 import type { CatalogRollupGap } from "./listing-preconditions";
 
 // Which catalogue entry a copy is **listed under** on the platform (#616, part of #155).
@@ -304,4 +304,43 @@ export async function resolveListingCatalogItemIds(
     });
   }
   return resolved;
+}
+
+/**
+ * The stamp a resolved copy is **listed under** — the variant its listing stands on where one was
+ * derived or chosen, and its own stamp otherwise (#1347).
+ *
+ * A variant that is itself unmatched still counts: the listing is refused until it is matched, but
+ * the entry it will stand on once it is is already that variant's, and two offers heading for one
+ * entry are a duplicate before either is posted. A tree that cannot be resolved (#617), an umbrella
+ * whose own price won, a stale choice — every answer that names no variant — leaves the copy as the
+ * stamp it is recorded on.
+ */
+export function listedStampIdOf(ownStampId: string, resolved: ResolvedCatalogItemId | undefined): string {
+  if (resolved?.sourceStampId) return resolved.sourceStampId;
+  if (resolved?.gap?.kind === "unmatched-variant") return resolved.gap.stampId;
+  return ownStampId;
+}
+
+/**
+ * Which stamp each copy is listed under (#1347), keyed like {@link resolveListingCatalogItemIds} —
+ * that very function, read for identity rather than for an item-ID, so the duplicate check and the
+ * listing cannot come to disagree about what an offer is.
+ *
+ * Builds its own labeller, and only when a copy actually has something to resolve: the check it
+ * serves states no names, and a selection of matched or variant-less stamps should cost nothing.
+ */
+export async function resolveListedStampIds(
+  collectionId: string,
+  copies: readonly ListingCatalogCopy[]
+): Promise<Map<string, string>> {
+  const out = new Map(copies.map((c) => [c.itemId, c.stampId]));
+  if (!copies.some((c) => !c.ownCatalogItemId && c.unknownVariant)) return out;
+  const resolved = await resolveListingCatalogItemIds(
+    collectionId,
+    copies,
+    await makeOfferLabeller(collectionId)
+  );
+  for (const copy of copies) out.set(copy.itemId, listedStampIdOf(copy.stampId, resolved.get(copy.itemId)));
+  return out;
 }

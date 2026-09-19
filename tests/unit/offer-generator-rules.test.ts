@@ -25,7 +25,9 @@ let nextNo = 0;
 function copy(
   itemId: string,
   stampId: string,
-  opts: Partial<Pick<GeneratorCopy, "conditionId" | "certificateStatusId" | "formatId" | "multiStamp" | "itemNo">> & {
+  opts: Partial<
+    Pick<GeneratorCopy, "conditionId" | "certificateStatusId" | "formatId" | "multiStamp" | "itemNo" | "listedStampId">
+  > & {
     chain?: string[];
   } = {}
 ): GeneratorCopy {
@@ -40,6 +42,7 @@ function copy(
     formatId: opts.formatId ?? null,
     multiStamp: opts.multiStamp ?? false,
     catalogSortKey: null,
+    ...(opts.listedStampId ? { listedStampId: opts.listedStampId } : {}),
   };
 }
 
@@ -173,6 +176,49 @@ describe("planOffers (#1287)", () => {
       copies: [copy("own", "s1"), copy("v", "s1v", { chain: ["s1v", "s1"] }), copy("a", "s2"), copy("b", "s2")],
     });
     assert.equal(lines.length, 2);
+  });
+
+  it("packs an umbrella with the variant it is listed under as one line (#1347, decided 2026-09-19)", () => {
+    const { lines } = plan({
+      copies: [
+        copy("umb", "523", { conditionId: "used", listedStampId: "523I" }),
+        copy("var", "523I", { conditionId: "used", chain: ["523I", "523"], listedStampId: "523I" }),
+      ],
+      mode: "singles",
+    });
+    assert.deepEqual(lines.map((line) => ids(line.sets)), [[["umb"], ["var"]]]);
+  });
+
+  it("keeps an umbrella apart from a variant it is not listed under (#1347)", () => {
+    const { lines } = plan({
+      copies: [
+        copy("umb", "523", { conditionId: "used", listedStampId: "523II" }),
+        copy("var", "523I", { conditionId: "used", chain: ["523I", "523"], listedStampId: "523I" }),
+      ],
+      mode: "singles",
+    });
+    assert.equal(lines.length, 2);
+  });
+
+  it("adds an umbrella single to the offer on the variant it is listed under (#1347)", () => {
+    const offers = new Map([["o7", offer("o7", 7)]]);
+    const { lines } = plan({
+      copies: [copy("umb", "523", { conditionId: "used", listedStampId: "523I" })],
+      mode: "singles",
+      members: [
+        {
+          offerId: "o7",
+          offerSetId: "set7",
+          itemId: "listed",
+          stampId: "523I",
+          conditionId: "used",
+          listedStampId: "523I",
+          listsResolved: true,
+        },
+      ],
+      offers,
+    });
+    assert.deepEqual(lines[0].target, { kind: "existing", offerId: "o7" });
   });
 
   it("adds a matching set to an existing offer with multi-quantity, and not with separate offers", () => {

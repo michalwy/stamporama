@@ -10,8 +10,12 @@ import { CLOSED_OFFER_STATES, isOfferState, type OfferState } from "./offer-rule
 import { TRADED_AWAY } from "./trade-exit";
 import { formatItemNo } from "./item-number";
 import { formatEntityNo } from "./quick-jump";
+import { usesPlatformCatalogue } from "./platform-modules";
+import { resolveListedStampIds } from "./listing-catalog-ids";
+import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import {
   GenerationChangedError,
+  collisionStampIds,
   loadCollisionMembers,
   OfferActionBlockedError,
   quickOfferCreationBlock,
@@ -81,7 +85,7 @@ const POOL_SELECT = {
   certificateStatusId: true,
   formatId: true,
   stampCount: true,
-  stamp: { select: { primaryCatalogSortKey: true } },
+  stamp: { select: { primaryCatalogSortKey: true, colnectId: true, variants: { select: VARIANT_FLAG_SELECT } } },
 } as const;
 
 async function readGeneratorState(
@@ -92,7 +96,7 @@ async function readGeneratorState(
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await prisma.contact.findFirst({
     where: { id: input.platformId, collectionId, platform: true },
-    select: { name: true },
+    select: { name: true, platformModule: true },
   });
   if (!platform) throw new Error("Platform not found.");
 
@@ -120,7 +124,26 @@ async function readGeneratorState(
     askedIds.filter((id) => !poolIds.has(id))
   );
 
-  const chains = await loadVariantChains(collectionId, [...new Set(rows.map((row) => row.stampId))]);
+  // What each copy would be listed as (#1347): on a platform that lists an umbrella under its
+  // cheapest variant, a `523` copy resolving to `523I` is that listing, so it packs with the `523I`
+  // copies and matches their offers. The derivation a new listing makes — no offer, so no choice.
+  const [chains, listed] = await Promise.all([
+    loadVariantChains(collectionId, [...new Set(rows.map((row) => row.stampId))]),
+    usesPlatformCatalogue(platform.platformModule)
+      ? resolveListedStampIds(
+          collectionId,
+          rows.map((row) => ({
+            itemId: row.id,
+            stampId: row.stampId,
+            conditionId: row.conditionId,
+            certificateStatusId: row.certificateStatusId,
+            formatId: row.formatId,
+            unknownVariant: isUnknownVariantStamp(row.stamp),
+            ownCatalogItemId: row.stamp.colnectId?.trim() || null,
+          }))
+        )
+      : new Map<string, string>(),
+  ]);
   const copies: GeneratorCopy[] = rows.map((row) => ({
     itemId: row.id,
     itemNo: row.itemNo,
@@ -131,11 +154,12 @@ async function readGeneratorState(
     multiStamp: row.stampCount > 1,
     catalogSortKey: row.stamp.primaryCatalogSortKey,
     variantChain: chains.get(row.stampId) ?? [row.stampId],
+    listedStampId: listed.get(row.id) ?? row.stampId,
   }));
 
   const [checklists, members] = await Promise.all([
     orderedChecklists(collectionId, copies.filter((copy) => !copy.multiStamp)),
-    loadCollisionMembers(collectionId, copies.map((copy) => copy.stampId), { platformId: input.platformId }),
+    loadCollisionMembers(collectionId, collisionStampIds(copies), { platformId: input.platformId }),
   ]);
   const offers = await readOffers(collectionId, [...new Set(members.map((member) => member.offerId))]);
 

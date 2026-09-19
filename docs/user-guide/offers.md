@@ -1845,6 +1845,15 @@ that too — see [The same stamp in the same
 condition](inventory.md#the-same-stamp-in-the-same-condition). It is likewise a warning and never a
 block.
 
+An offer that is **already** a second listing of the same thing says so on its own screen: an amber
+line at the top, *the same stamps in the same conditions are already offered on Colnect in #12*, with
+a link to each such offer. It reads the rule the warnings read — the whole composition, per
+platform, and on Colnect by what each stamp [will be listed
+as](#a-stamp-whose-variant-you-havent-identified) — so a pair made before the warning could see it,
+such as an offer of an unidentified `523` beside one of `523I`, turns up on both offers' screens. It
+goes away once you merge the two, and it is only shown while both are Preparing, Ready, Active or
+Paused.
+
 ## Copies promised in a trade
 
 A copy on the giving side of an **agreed** [trade](trades.md) is committed to your partner, and

@@ -54,6 +54,11 @@ export interface GeneratorCopy extends CoverageCopy {
   multiStamp: boolean;
   /** The stamp's catalogue sort key, which orders the singles as the catalogue reads. */
   catalogSortKey: string | null;
+  /** The stamp the copy would be **listed under** on this platform (#1347) — the umbrella's resolved
+   *  variant where the platform lists umbrellas that way, `stampId` otherwise and when absent. What
+   *  *identical* and *a similar offer already exists* both read, so a `523` and a `523I` heading for
+   *  one marketplace entry are one line and match one offer. */
+  listedStampId?: string;
 }
 
 /** An open offer on the platform, as the plan needs to know it. */
@@ -134,20 +139,32 @@ export function assembleSets(
   return { sets, singles };
 }
 
+/** The stamp a copy is listed under on the pass's platform (#1347) — its own where nothing resolves. */
+function listedStampOf(copy: GeneratorCopy): string {
+  return copy.listedStampId ?? copy.stampId;
+}
+
 /**
  * What makes two sets **identical**, so that they may share a multi-quantity offer: for a series, the
  * same checklist in the same stamps — a variant filling a slot makes a different set, decided with the
  * user on 2026-09-14 — and for a single the same stamp; in both, the same condition, certificate status
  * and format. A multi-stamp copy is identical to nothing.
+ *
+ * "The same stamp" is the stamp each copy is **listed under** (#1347, decided with the user on
+ * 2026-09-19): on a platform that lists an umbrella under its cheapest variant, a `523` copy resolving
+ * to `523I` goes on the very entry a `523I` copy does, and two lines for it would be two offers the
+ * marketplace refuses the second of. A variant that is *not* what its umbrella resolves to still makes
+ * a different set, exactly as before.
  */
+
 export function setIdentity(set: GeneratedSet): string {
   const { conditionId, certificateStatusId, formatId } = set.combination;
   if (set.checklistId !== null) {
-    return JSON.stringify(["set", set.checklistId, set.copies.map((c) => c.stampId), conditionId, certificateStatusId, formatId]);
+    return JSON.stringify(["set", set.checklistId, set.copies.map(listedStampOf), conditionId, certificateStatusId, formatId]);
   }
   const copy = set.copies[0];
   if (copy.multiStamp) return JSON.stringify(["carrier", copy.itemId]);
-  return JSON.stringify(["single", copy.stampId, conditionId, certificateStatusId, formatId]);
+  return JSON.stringify(["single", listedStampOf(copy), conditionId, certificateStatusId, formatId]);
 }
 
 /** FNV-1a, hex — a short stable id for a line, safe in a query string. */
@@ -258,7 +275,12 @@ export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
     let biddingMatches: string[] = [];
     if (input.packaging === "multi") {
       const hits = collidingItemIdsByOffer(
-        first.copies.map((copy) => ({ itemId: copy.itemId, stampId: copy.stampId, conditionId: copy.conditionId })),
+        first.copies.map((copy) => ({
+          itemId: copy.itemId,
+          stampId: copy.stampId,
+          conditionId: copy.conditionId,
+          listedStampId: copy.listedStampId,
+        })),
         input.members
       );
       const found = [...hits.keys()].filter((offerId) => input.offers.has(offerId)).sort((a, b) => offerNo(a) - offerNo(b));
