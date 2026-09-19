@@ -393,15 +393,23 @@ export async function buildLotProposal(
     rejectedItemIds: request.rejectedItemIds,
   });
 
-  const [copies, missingPinned, tradeCommitments, series] = await Promise.all([
+  const [copies, missingPinned, tradeCommitments, series, language] = await Promise.all([
     loadPickedCopies(ownerId, collectionId, plan.itemIds),
     nameMissingPinned(collectionId, plan.missingPinnedItemIds),
     findCommittedCopies(collectionId, plan.itemIds),
     nameChecklists(collectionId, plan),
+    listingLanguage(collectionId, criteria.platformId),
   ]);
   // The whole lot, not a sample of it: `{count}` has to preview the figure the listing will carry,
-  // and a template previewed over three of a hundred copies would say `3`.
-  const templateSamples = await titleSampleCopiesByIds(ownerId, collectionId, plan.itemIds);
+  // and a template previewed over three of a hundred copies would say `3`. In the platform's listing
+  // language, as the offer's texts are rendered (#1350) — the default-language names would preview
+  // a title the listing never carries.
+  const templateSamples = await titleSampleCopiesByIds(
+    ownerId,
+    collectionId,
+    plan.itemIds,
+    language
+  );
 
   const summary = summarize(pool, criteria, baseCurrency);
   return {
@@ -415,6 +423,18 @@ export async function buildLotProposal(
     suggested: await suggestTexts(collectionId, criteria),
     templateSamples,
   };
+}
+
+/** The language the platform's listings are written in (`Contact.titleLanguage`, #293) — what
+ * `syncGeneratedTexts` renders the lot's title and description in. Null for the collection's default,
+ * and for a proposal read before a platform is chosen. */
+async function listingLanguage(collectionId: string, platformId: string): Promise<string | null> {
+  if (!platformId) return null;
+  const platform = await prisma.contact.findFirst({
+    where: { id: platformId, collectionId },
+    select: { titleLanguage: true },
+  });
+  return platform?.titleLanguage ?? null;
 }
 
 /**

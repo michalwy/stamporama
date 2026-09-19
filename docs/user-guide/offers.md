@@ -1278,7 +1278,9 @@ the value are in front of you, and read the list below afterwards.
 
 They are **templates**, in the same `{token}` language a platform's own templates are written in, and
 they preview against **this lot's copies** rather than random samples — so `{count}` shows the number
-this listing will really carry. `{area}`, `{year}`, `{condition}` and `{count}` are the ones a job lot
+this listing will really carry, in the title as in the description. Both previews read exactly as the
+offer will: the lot as the one set it is created as (a `{#set}…{/set}` block appears once, not once
+per copy), in the platform's listing language. `{area}`, `{year}`, `{condition}` and `{count}` are the ones a job lot
 is mostly made of; the rest of the vocabulary is there if you want it. The description lists the
 [repeating blocks](contacts.md#description-and-private-note) as well — `{#copy}…{/copy}` to write one
 line per copy, a condition legend, and the rest — exactly as a platform's description template does.

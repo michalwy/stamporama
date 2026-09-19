@@ -113,6 +113,7 @@ import {
   renderTitleTemplate,
   renderTitleTemplateSegments,
   renderListingTemplate,
+  offerTitleCopies,
   titleFallbackTokens,
   titleFallbacks,
   listingFallbacks,
@@ -620,9 +621,8 @@ async function generateListingTexts(
     listedAsByItem(collectionId, offerId, composition, platformModule, [description, privateNote]),
   ]);
   const sets = await templateSets(ownerId, collectionId, composition, language, listedAs);
-  const copies = sets.flatMap((s) => [...s.copies]);
   return {
-    name: title ? renderTitleTemplate(title, copies) || null : null,
+    name: title ? renderTitleTemplate(title, offerTitleCopies(sets)) || null : null,
     description: description ? renderListingTemplate(description, sets, context) || null : null,
     privateNote: privateNote ? renderListingTemplate(privateNote, sets, context) || null : null,
   };

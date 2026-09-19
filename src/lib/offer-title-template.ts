@@ -1627,3 +1627,43 @@ export function listingFallbacks(
 ): TitleFallback[] {
   return templateFallbacks(template, sets);
 }
+
+// ── Preview scope (#1350) ────────────────────────────────────────────────────
+
+/** The copies an offer's **title** renders over: every copy of every set, flat. The one place that
+ * says so — the generator and the template preview both read it, so a preview cannot render the
+ * title over a different scope than the offer then gets (#1350, where it said `{count}` = 1). */
+export function offerTitleCopies(sets: readonly TemplateSet[]): TitleTemplateCopy[] {
+  return sets.flatMap((s) => [...s.copies]);
+}
+
+/** What a template preview renders against: the sets a listing text iterates, and the copies the
+ * title aggregates over. */
+export interface TemplatePreviewScope {
+  sets: TemplateSet[];
+  titleCopies: TitleTemplateCopy[];
+}
+
+/**
+ * The scope a template preview renders its sample copies in.
+ *
+ * **Samples** (`oneListing` false) are unrelated copies drawn to preview a platform template written
+ * before any listing exists: each stands for a set of its own so a `{#set}` block visibly repeats,
+ * and the title previews the first one's — a one-copy offer, which is what a platform template
+ * mostly titles.
+ *
+ * **One listing** (`oneListing` true) is the copies of a single offer that is about to exist — the
+ * lot builder's (#774): one set holding all of them, exactly as `commitLotProposal` creates it, and
+ * the title over all of them, so `{count}` previews the figure the listing will carry (#1350).
+ */
+export function templatePreviewScope(
+  copies: readonly TitleTemplateCopy[],
+  oneListing: boolean
+): TemplatePreviewScope {
+  const sets: TemplateSet[] = oneListing
+    ? copies.length > 0
+      ? [{ title: null, copies }]
+      : []
+    : copies.map((c) => ({ title: null, copies: [c] }));
+  return { sets, titleCopies: offerTitleCopies(oneListing ? sets : sets.slice(0, 1)) };
+}

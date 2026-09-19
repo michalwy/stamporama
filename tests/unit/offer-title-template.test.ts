@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   renderTitleTemplate,
   renderTitleTemplateSegments,
+  renderListingTemplate,
+  offerTitleCopies,
+  templatePreviewScope,
   titleFallbackTokens,
   titleFallbacks,
   DEFAULT_TITLE_TEMPLATE,
@@ -828,5 +831,55 @@ describe("renderTitleTemplate — {catalog} on a multi-stamp copy (#749)", () =>
       renderTitleTemplate("{catalog}", [cover([pl("200")], [pl("201")]), copy({ catalogNumbers: [pl("201")] })]),
       "Mi·PL 200-01"
     );
+  });
+});
+
+// The lot builder's title preview said `{count}` = 1 while its description preview and the created
+// offer said 23 (#1350): the preview rendered the title over the first sample copy, the offer over
+// all of them. One listing's copies now preview as the offer renders them.
+describe("templatePreviewScope — a preview renders as the offer does (#1350)", () => {
+  const lot = Array.from({ length: 23 }, (_, i) =>
+    copy({ name: `Stamp ${i + 1}`, area: "Bohemia and Moravia" })
+  );
+  const template = "{area}: Zestaw {count} znaczków.";
+
+  it("titles one listing over every copy, as its description counts them", () => {
+    const { sets, titleCopies } = templatePreviewScope(lot, true);
+    assert.equal(
+      renderTitleTemplate(template, titleCopies),
+      "Bohemia and Moravia: Zestaw 23 znaczków."
+    );
+    assert.equal(
+      renderListingTemplate(template, sets),
+      "Bohemia and Moravia: Zestaw 23 znaczków."
+    );
+  });
+
+  it("titles one listing exactly as the offer holding those copies in one set is titled", () => {
+    const { titleCopies } = templatePreviewScope(lot, true);
+    const offer = [{ title: null, copies: lot }];
+    assert.equal(
+      renderTitleTemplate(template, titleCopies),
+      renderTitleTemplate(template, offerTitleCopies(offer))
+    );
+  });
+
+  it("previews one listing as one set, so a set block renders once", () => {
+    const { sets } = templatePreviewScope(lot.slice(0, 3), true);
+    assert.equal(sets.length, 1);
+    assert.equal(renderListingTemplate("{#set}Set of {count}.\n{/set}", sets), "Set of 3.");
+  });
+
+  it("keeps unrelated samples as sets of their own, titling the first", () => {
+    const samples = lot.slice(0, 3);
+    const { sets, titleCopies } = templatePreviewScope(samples, false);
+    assert.equal(sets.length, 3);
+    assert.deepEqual(titleCopies, [samples[0]]);
+    assert.equal(renderTitleTemplate("{name} ({count})", titleCopies), "Stamp 1 (1)");
+  });
+
+  it("previews nothing over no copies", () => {
+    assert.deepEqual(templatePreviewScope([], true), { sets: [], titleCopies: [] });
+    assert.deepEqual(templatePreviewScope([], false), { sets: [], titleCopies: [] });
   });
 });
