@@ -559,8 +559,8 @@ A sale's own screen shows its terms and its lots, and is where you:
 
 Its lot cards carry the same two rows of chips the flat list has — *can still bid*, *outbid*, *over
 ceiling* and the rest, then the recorded outcomes — asked of this one parcel. Only what the parcel
-actually holds is offered, and the choice is not carried between visits: it is a working filter, not
-a view.
+actually holds is offered, and the choice **is** carried between visits, along with everything else
+on the toolbar below it — see [the parcel screen](#the-parcel-screen).
 
 **New sale** on the sales screen is for the auction-house case, where the sale is known up front and
 you add lots into it. You never need it for a marketplace basket; that one is created for you by the
@@ -750,7 +750,15 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
   editing one happens in its lot's card.
 - **Issue** sub-groups the lines under whichever of the two is showing, with the same collapsible
   issue header the other screens use.
-- **Only** narrows to the lines that need work: **unpriced**, **no photo**, **unknown variant**.
+- **Only** narrows to what needs work. Three of them are about the **lines**: **unpriced**, **no
+  photo**, **unknown variant** — the lot card stays, its contents are narrowed. The fourth,
+  **not described**, is about the **lots**: it shows exactly the lots with nothing recorded in them
+  at all, which is the list of what is still to be described. A lot described only in part is not
+  one of them.
+
+  **Not described** is offered only while **Group by Lot** is on, because it is a question about
+  lots and the flat view has none on screen — a lot with nothing in it puts nothing into a list of
+  stamps. Turning the grouping off switches it back off with it.
 - **Sort lines** orders them by the same keys copies are sorted by — order added, year, catalog
   number, price, name — with a direction toggle.
 - **Collapse all** / **Expand all** for the cards themselves. Lot cards start **collapsed**: a
@@ -758,8 +766,28 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
   by themselves — the one you arrived at by clicking a lot on the watchlist (the card that
   flashed), and one added while the screen is open. Either can be closed by hand afterwards.
 
-The grouping and sorting choices are remembered per collection, exactly as they are on the other two
-screens. The **Only** filters are not: they are a job you do and finish.
+**The whole toolbar is remembered, and a refresh does not reset it.** The status chips, the
+grouping, all four **Only** filters and the sort field and direction are kept in the address bar, so
+a reload, the Back button and a copied link all show the same view — and a link you follow wins over
+what was remembered, so an address that names a filter means exactly what it says. They are
+remembered **per collection, not per sale**: how you look at a parcel is a way of working you carry
+to the next one, so opening another sale starts from the same settings.
+
+This is the same arrangement the two auction lists have, and until it arrived the sale screen was the
+one auction screen that forgot. Half of it used to survive a reload — the grouping and the sort —
+while the chips and the **Only** filters went back to their defaults, which is worse than either
+whole answer.
+
+Whenever anything is narrowing the parcel, a line appears under the toolbar, exactly as it does on
+the watchlist:
+
+> Showing **3** of 21 lots — Outbid · Not described   **Clear filters**
+
+It names each filter in the words of the control that set it, so you can find the control and switch
+that one off, and **Clear filters** puts the whole parcel back in one press. The lot count appears
+only when something is actually hiding lots; with just the line filters on, every lot is still there
+and the line reads *This view is narrowed* instead. **Group by**, **Issue** and **Sort lines** are
+never named and never cleared — they are how the parcel is arranged, not which of it you can see.
 
 ## Settling a parcel into a purchase
 
