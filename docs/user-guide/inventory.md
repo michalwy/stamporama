@@ -970,6 +970,16 @@ single-set offer of it — that is the same entry offered more of, which is exac
 word. And an offer whose sets differ from one another is compared set by set: it conflicts if any one
 of its compositions is the one you picked, never by pooling them together.
 
+**On a platform that lists an unidentified variant under its cheapest one, a stamp counts as what it
+will be listed as.** Colnect is such a platform: a copy of `523` whose variant you haven't identified
+goes on Colnect under [its cheapest variant](offers.md#a-stamp-whose-variant-you-havent-identified) —
+say `523I` — which is the very entry a copy identified as `523I` goes on. So picking the `523` copy
+while an offer of the `523I` copy is live warns, and **Add to #N instead** puts it in as a second unit
+of that listing. The answer is worked out the way the listing works it out: per condition (a used
+`523` may resolve to `523I` and an MNH one to `523II`), from today's prices, and following a variant
+you [picked by hand](offers.md#saying-which-variant-it-should-be) on the offer already listed. On a
+platform that lists `523` as itself, `523` and `523I` stay two different things.
+
 The warning only ever states the fact — *this is already offered on platform X, the same stamps in
 the same conditions*. It does not claim a rule, because whether it blocks anything depends on the
 platform you are listing on.
@@ -1181,7 +1191,10 @@ Two choices:
     its own.
 - **How to pack identical sets.**
   - **Multi-quantity** — identical sets (the same stamps, in the same condition, certificate status
-    and format) share one offer, with one set per copy of the set. If an offer on that platform —
+    and format) share one offer, with one set per copy of the set. On a platform that lists an
+    unidentified variant under its cheapest one, "the same stamps" means what each copy
+    [will be listed as](#the-same-stamp-in-the-same-condition): a `523` copy that goes on Colnect as
+    `523I` packs with the `523I` copies, since two offers of it would be refused. If an offer on that platform —
     Preparing, Ready, Active or Paused — already lists exactly those stamps in those conditions, the
     sets are **added to it** instead of making a second one. With several such offers the
     lowest-numbered is proposed, and you can pick another. An Active or Paused offer that receives

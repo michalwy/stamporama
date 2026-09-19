@@ -160,3 +160,94 @@ describe("collidingItemIdsByOffer", () => {
     assert.equal(collidingItemIdsByOffer([copy("a", "s1", "mnh")], []).size, 0);
   });
 });
+
+/** A copy as a platform listing umbrellas under a resolved variant sees it (#1347). */
+const listedCopy = (itemId: string, stampId: string, conditionId: string, listedStampId: string): CollisionCopy => ({
+  itemId,
+  stampId,
+  conditionId,
+  listedStampId,
+});
+
+const resolvedMember = (
+  offerId: string,
+  itemId: string,
+  stampId: string,
+  conditionId: string,
+  listedStampId: string,
+  offerSetId = `${offerId}-set`
+): OfferMemberCopy => ({ offerId, offerSetId, itemId, stampId, conditionId, listedStampId, listsResolved: true });
+
+describe("collidingItemIdsByOffer — by what a set is listed as (#1347)", () => {
+  it("matches an umbrella copy against an offer on the variant it resolves to", () => {
+    // The collector's case: 523 used resolves to 523I, which an offer already lists.
+    const out = collidingItemIdsByOffer(
+      [listedCopy("umb", "523", "used", "523I")],
+      [resolvedMember("o1", "var", "523I", "used", "523I")]
+    );
+    assert.deepEqual([...out], [["o1", ["umb"]]]);
+  });
+
+  it("matches a variant copy against an umbrella offer resolving to it", () => {
+    const out = collidingItemIdsByOffer(
+      [listedCopy("var", "523I", "used", "523I")],
+      [resolvedMember("o1", "umb", "523", "used", "523I")]
+    );
+    assert.deepEqual(out.get("o1"), ["var"]);
+  });
+
+  it("does not match when the umbrella resolves to another variant in that condition", () => {
+    // Used 523 resolves to 523II here: the 523I offer is a different entry.
+    const out = collidingItemIdsByOffer(
+      [listedCopy("umb", "523", "used", "523II")],
+      [resolvedMember("o1", "var", "523I", "used", "523I")]
+    );
+    assert.equal(out.size, 0);
+  });
+
+  it("compares recorded stamps against a set on a platform that lists the umbrella itself", () => {
+    const umbrella = [listedCopy("umb", "523", "used", "523I")];
+    // An Allegro offer of 523I is not the 523 entry there…
+    assert.equal(
+      collidingItemIdsByOffer(umbrella, [member("o1", "var", "523I", "used")]).size,
+      0
+    );
+    // …and an Allegro offer of 523 is, whatever 523 would resolve to on Colnect.
+    assert.deepEqual(
+      collidingItemIdsByOffer(umbrella, [member("o2", "old", "523", "used")]).get("o2"),
+      ["umb"]
+    );
+  });
+
+  it("reads each set in its own platform's terms within one answer", () => {
+    const out = collidingItemIdsByOffer(
+      [listedCopy("umb", "523", "used", "523I")],
+      [
+        resolvedMember("colnect", "a", "523I", "used", "523I"),
+        member("allegro", "b", "523I", "used"),
+      ]
+    );
+    assert.deepEqual([...out.keys()], ["colnect"]);
+  });
+
+  it("counts an umbrella and its resolved variant as one entry of a set — quantity, not composition", () => {
+    // Selecting 523 and 523I together is one listing of 523I at quantity two.
+    const out = collidingItemIdsByOffer(
+      [listedCopy("umb", "523", "used", "523I"), listedCopy("var", "523I", "used", "523I")],
+      [resolvedMember("o1", "old", "523I", "used", "523I")]
+    );
+    assert.deepEqual(out.get("o1"), ["umb", "var"]);
+  });
+
+  it("still compares whole compositions — a resolved single out of a listed series is silent", () => {
+    const out = collidingItemIdsByOffer(
+      [listedCopy("umb", "523", "used", "523I")],
+      [
+        resolvedMember("o1", "a", "522", "used", "522"),
+        resolvedMember("o1", "b", "523I", "used", "523I"),
+      ]
+    );
+    assert.equal(out.size, 0);
+  });
+});
+

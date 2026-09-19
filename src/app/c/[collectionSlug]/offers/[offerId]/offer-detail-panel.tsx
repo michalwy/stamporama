@@ -21,6 +21,7 @@ import {
   useOfferDetail,
   useOfferCopies,
   useOfferTranslationGaps,
+  useOfferListingDuplicates,
   useInvalidateOffers,
 } from "../use-offers-query";
 import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
@@ -67,6 +68,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
 import { Icon, type IconName } from "@/app/icons";
+import { formatEntityNo } from "@/lib/quick-jump";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -375,6 +377,9 @@ export function OfferDetailPanel({
   const { data: gapData } = useOfferTranslationGaps(collectionId, offerId, titleLanguages.length > 0);
   const gapLanguage = gapData?.language ?? null;
   const gaps = gapData?.gaps ?? [];
+  // Other live offers on this platform listing the same thing (#1347) — the pair the collision
+  // warnings exist to prevent, found after the fact so it can be merged.
+  const { data: listingDuplicates = [] } = useOfferListingDuplicates(collectionId, offerId, !!offer);
 
   if (isLoading || !offer) {
     return (
@@ -680,6 +685,43 @@ export function OfferDetailPanel({
           >
             <Icon name="close" size="sm" />
           </button>
+        </div>
+      )}
+
+      {/* The same entry offered twice on this platform (#1347): the fact, never a rule (#524), and
+          never a gate — the collector merges by hand, from either side. Read by what each set is
+          listed as, so an umbrella offer and one on the variant it resolves to are a pair. */}
+      {listingDuplicates.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+            border: "1px solid var(--color-warning-border)",
+            borderRadius: "0.5rem",
+            background: "var(--color-warning-soft)",
+            padding: "0.625rem 1rem",
+            fontSize: "0.8125rem",
+            color: "var(--color-warning)",
+          }}
+        >
+          <Icon name="warning" size="sm" />
+          <span>
+            The same stamps in the same conditions are already offered on {offer.platformName} in{" "}
+            {listingDuplicates.map((d, i) => (
+              <span key={d.offerId}>
+                {i > 0 && ", "}
+                <Link
+                  href={`/c/${collectionSlug}/offers/${d.offerId}`}
+                  style={{ color: "inherit", fontWeight: 600 }}
+                >
+                  {formatEntityNo(d.offerNo)} {d.offerLabel}
+                </Link>
+              </span>
+            ))}
+            .
+          </span>
         </div>
       )}
 

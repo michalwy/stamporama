@@ -10,7 +10,12 @@ import {
   type ItemListItem,
 } from "./items";
 import type { HoldingsSummary } from "./valuation";
-import { collidingItemIdsByOffer, type OfferMemberCopy } from "./offer-collision-rules";
+import {
+  collidingItemIdsByOffer,
+  type CollisionCopy,
+  type OfferMemberCopy,
+} from "./offer-collision-rules";
+import { loadVariantChains } from "./checklist-variant-rollup";
 import {
   aggregateOfferAsking,
   type OfferPlatformTotal,
@@ -64,7 +69,9 @@ import { colnectMarketUrl, colnectSaleCode, colnectSearchUrl, colnectStampUrl } 
 import {
   listedVariantKey,
   loadOfferListedVariants,
+  resolveListedStampIds,
   resolveListingCatalogItemIds,
+  type ListingCatalogCopy,
   type ResolvedCatalogItemId,
 } from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
@@ -1584,6 +1591,71 @@ export interface StampConditionCollision {
 export const COLLIDING_STATES = ["preparing", "ready", "active", "paused"] as const;
 
 /**
+ * What a collision read needs of a copy to say what it will be **listed as** (#1347): the axes the
+ * listing's own resolution is made at, and whether the stamp is an unmatched umbrella at all.
+ */
+const COLLISION_COPY_SELECT = {
+  id: true,
+  stampId: true,
+  conditionId: true,
+  certificateStatusId: true,
+  formatId: true,
+  stamp: { select: { colnectId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+} as const;
+
+type CollisionCopyRow = Prisma.ItemGetPayload<{ select: typeof COLLISION_COPY_SELECT }>;
+
+/** One copy as the listing's resolution takes it, under the caller's own `key`. */
+function collisionListingCopy(
+  key: string,
+  row: CollisionCopyRow,
+  listedAsStampId: string | null
+): ListingCatalogCopy {
+  return {
+    itemId: key,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    formatId: row.formatId,
+    unknownVariant: isUnknownVariantStamp(row.stamp),
+    ownCatalogItemId: row.stamp.colnectId?.trim() || null,
+    listedAsStampId,
+  };
+}
+
+/**
+ * The copies being added, each carrying the stamp a **new** listing of it would stand under (#1347) —
+ * the derivation, no offer's choice, since the offer these copies would create does not exist yet.
+ * The candidate side of every collision read, the offer generator's included.
+ */
+export async function loadCollisionCandidates(
+  collectionId: string,
+  itemIds: readonly string[]
+): Promise<CollisionCopy[]> {
+  if (itemIds.length === 0) return [];
+  const rows = await prisma.item.findMany({
+    where: { collectionId, id: { in: [...new Set(itemIds)] } },
+    select: COLLISION_COPY_SELECT,
+  });
+  const listed = await resolveListedStampIds(
+    collectionId,
+    rows.map((row) => collisionListingCopy(row.id, row, null))
+  );
+  return rows.map((row) => ({
+    itemId: row.id,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    listedStampId: listed.get(row.id) ?? row.stampId,
+  }));
+}
+
+/** Every stamp a candidate is recorded on **or** listed under — what {@link loadCollisionMembers}
+ *  starts its reach from. */
+export function collisionStampIds(candidates: readonly CollisionCopy[]): string[] {
+  return [...new Set(candidates.flatMap((c) => [c.stampId, c.listedStampId ?? c.stampId]))];
+}
+
+/**
  * The raw read behind every stamp × condition warning: which live offers duplicate which of
  * `itemIds`, keyed by offer id. Shared by {@link findStampConditionCollisions} and
  * {@link listComposeTargets} so the picker's note and the selection bar's chip cannot disagree.
@@ -1600,24 +1672,13 @@ async function collidingItemIds(
   itemIds: string[],
   opts: { platformId?: string; excludeOfferId?: string } = {}
 ): Promise<Map<string, string[]>> {
-  if (itemIds.length === 0) return new Map();
-  const candidates = await prisma.item.findMany({
-    where: { collectionId, id: { in: itemIds } },
-    select: { id: true, stampId: true, conditionId: true },
-  });
+  const candidates = await loadCollisionCandidates(collectionId, itemIds);
   if (candidates.length === 0) return new Map();
 
-  const members = await loadCollisionMembers(
-    collectionId,
-    candidates.map((c) => c.stampId),
-    opts
-  );
+  const members = await loadCollisionMembers(collectionId, collisionStampIds(candidates), opts);
   if (members.length === 0) return new Map();
 
-  return collidingItemIdsByOffer(
-    candidates.map((c) => ({ itemId: c.id, stampId: c.stampId, conditionId: c.conditionId })),
-    members
-  );
+  return collidingItemIdsByOffer(candidates, members);
 }
 
 /**
@@ -1625,6 +1686,14 @@ async function collidingItemIds(
  * set of a live offer that holds one of `stampIds` (#732 — a set is compared whole, never through the
  * members it happens to share). Exported for the offer generator (#1287), which asks the same question
  * of hundreds of compositions at once and must ask it of the same members.
+ *
+ * `stampIds` are the stamps the candidates are recorded on and listed under
+ * ({@link collisionStampIds}), and the reach is widened **up each one's variant chain** (#1347): on a
+ * platform that lists an umbrella under its cheapest variant, a set holding the umbrella `523` is the
+ * listing of `523I` whenever that is what it resolves to, so a `523I` candidate has to reach it. Each
+ * member of an offer on such a platform then carries the stamp **its own offer** lists it under —
+ * the derivation, or the variant chosen on that offer by hand — so the comparison reads exactly what
+ * each listing would.
  */
 export async function loadCollisionMembers(
   collectionId: string,
@@ -1632,9 +1701,11 @@ export async function loadCollisionMembers(
   opts: { platformId?: string; excludeOfferId?: string } = {}
 ): Promise<OfferMemberCopy[]> {
   if (stampIds.length === 0) return [];
+  const chains = await loadVariantChains(collectionId, stampIds);
+  const reach = [...new Set([...chains.values()].flat())];
   const candidateSets = await prisma.offerSetItem.findMany({
     where: {
-      item: { stampId: { in: [...new Set(stampIds)] } },
+      item: { stampId: { in: reach } },
       offerSet: {
         offer: {
           collectionId,
@@ -1654,16 +1725,35 @@ export async function loadCollisionMembers(
     select: {
       itemId: true,
       offerSetId: true,
-      offerSet: { select: { offerId: true } },
-      item: { select: { stampId: true, conditionId: true } },
+      offerSet: { select: { offerId: true, offer: { select: { platform: { select: { platformModule: true } } } } } },
+      item: { select: COLLISION_COPY_SELECT },
     },
   });
+
+  // Only an offer on a platform that lists umbrellas as a variant is compared by listed stamps, and
+  // only its members are resolved — through its own choices, one query for all of them.
+  const resolving = memberships.filter((m) => usesPlatformCatalogue(m.offerSet.offer.platform.platformModule));
+  const memberKey = (m: (typeof memberships)[number]) => `${m.offerSetId}|${m.itemId}`;
+  const chosen = await loadOfferListedVariants(resolving.map((m) => m.offerSet.offerId));
+  const listed = await resolveListedStampIds(
+    collectionId,
+    resolving.map((m) =>
+      collisionListingCopy(
+        memberKey(m),
+        m.item,
+        chosen.get(listedVariantKey(m.offerSet.offerId, m.item.stampId, m.item.conditionId)) ?? null
+      )
+    )
+  );
+
   return memberships.map((m) => ({
     offerId: m.offerSet.offerId,
     offerSetId: m.offerSetId,
     itemId: m.itemId,
     stampId: m.item.stampId,
     conditionId: m.item.conditionId,
+    listedStampId: listed.get(memberKey(m)) ?? m.item.stampId,
+    listsResolved: usesPlatformCatalogue(m.offerSet.offer.platform.platformModule),
   }));
 }
 
@@ -1709,6 +1799,104 @@ export async function findStampConditionCollisions(
       itemIds: byOffer.get(r.id) ?? [],
     }))
     .sort((a, b) => b.itemIds.length - a.itemIds.length || a.offerNo - b.offerNo);
+}
+
+/** Another live offer on the same platform that one of this offer's sets would share a marketplace
+ *  entry with (#1347) — the pair the collision warnings exist to stop, found after the fact. */
+export interface OfferListingDuplicate {
+  offerId: string;
+  offerNo: number;
+  offerLabel: string;
+  state: OfferState;
+}
+
+/**
+ * The live offers that already list what this one lists (#1347): on the same platform, a set of
+ * exactly the same stamps in exactly the same conditions — read by what each will be **listed as**,
+ * so a `523` offer resolving to `523I` finds the `523I` offer beside it.
+ *
+ * #732's rule asked from the other end. The warnings catch a duplicate while copies are being added;
+ * this finds the pairs made before the check could see them — umbrellas that only coincide once
+ * resolved (#616), and any pair created despite the warning — so they can be merged. One rule for
+ * both, {@link collidingItemIdsByOffer} over {@link loadCollisionMembers}, each set of this offer
+ * standing as the candidate and resolved through **this offer's** own choices, which is how it will
+ * be listed. A copy both offers hold is #167's fact and is not reported here, the picker's rule.
+ * Nothing for an offer that is no longer live: a closed listing duplicates nothing.
+ */
+export async function findOfferListingDuplicates(
+  ownerId: string,
+  collectionId: string,
+  offerId: string
+): Promise<OfferListingDuplicate[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const offer = await prisma.offer.findFirst({
+    where: { id: offerId, collectionId, state: { in: [...COLLIDING_STATES] } },
+    select: {
+      platformId: true,
+      platform: { select: { platformModule: true } },
+      sets: { select: { id: true, items: { select: { item: { select: COLLISION_COPY_SELECT } } } } },
+    },
+  });
+  if (!offer) return [];
+  const rows = offer.sets.flatMap((set) => set.items.map(({ item }) => item));
+  if (rows.length === 0) return [];
+
+  // What this offer lists each copy as — its own choices included, since that is the listing.
+  let listed = new Map<string, string>();
+  if (usesPlatformCatalogue(offer.platform.platformModule)) {
+    const chosen = await loadOfferListedVariants([offerId]);
+    listed = await resolveListedStampIds(
+      collectionId,
+      rows.map((row) =>
+        collisionListingCopy(
+          row.id,
+          row,
+          chosen.get(listedVariantKey(offerId, row.stampId, row.conditionId)) ?? null
+        )
+      )
+    );
+  }
+  const candidateOf = (row: CollisionCopyRow): CollisionCopy => ({
+    itemId: row.id,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    listedStampId: listed.get(row.id) ?? row.stampId,
+  });
+
+  const members = await loadCollisionMembers(collectionId, collisionStampIds(rows.map(candidateOf)), {
+    platformId: offer.platformId,
+    excludeOfferId: offerId,
+  });
+  if (members.length === 0) return [];
+  // Each set is its own composition on the marketplace (#732), so each is asked in turn.
+  const duplicateIds = new Set(
+    offer.sets.flatMap((set) => [
+      ...collidingItemIdsByOffer(
+        set.items.map(({ item }) => candidateOf(item)),
+        members
+      ).keys(),
+    ])
+  );
+  if (duplicateIds.size === 0) return [];
+
+  const others = await prisma.offer.findMany({
+    where: { id: { in: [...duplicateIds] }, collectionId },
+    select: {
+      id: true,
+      offerNo: true,
+      name: true,
+      state: true,
+      sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+    },
+    orderBy: { offerNo: "asc" },
+  });
+  const labeller = others.some((r) => !r.name) ? await makeOfferLabeller(collectionId) : null;
+  return others.map((r) => ({
+    offerId: r.id,
+    offerNo: r.offerNo,
+    offerLabel: offerDisplayLabel(r.name, r.sets, labeller),
+    state: (isOfferState(r.state) ? r.state : "active") as OfferState,
+  }));
 }
 
 // ── Read models ─────────────────────────────────────────────────────────────

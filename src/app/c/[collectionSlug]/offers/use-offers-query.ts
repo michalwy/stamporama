@@ -9,6 +9,7 @@ import type {
   OfferListItem,
   OfferCollision,
   StampConditionCollision,
+  OfferListingDuplicate,
   OfferDetail,
   ComposeTargets,
   OfferFilterCounts,
@@ -349,6 +350,20 @@ export function useStampConditionCollisions(
       return (await res.json()).collisions;
     },
     enabled: enabled && !!platformId && itemIds.length > 0,
+  });
+}
+
+/** The live offers on this offer's platform listing the same thing it does (#1347) — keyed under the
+ * offer's detail, so everything that re-reads the offer re-asks this too. */
+export function useOfferListingDuplicates(collectionId: string, offerId: string, enabled: boolean) {
+  return useQuery<OfferListingDuplicate[]>({
+    queryKey: [...offerKeys.detail(collectionId, offerId), "listing-duplicates"] as const,
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/offers/${offerId}/listing-duplicates`);
+      if (!res.ok) throw new Error("Failed to check for duplicate listings");
+      return (await res.json()).duplicates;
+    },
+    enabled,
   });
 }
 

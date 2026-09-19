@@ -15,6 +15,14 @@
 //
 // Nothing is blocked either way. It is a warning: a collector who knows what they are doing (two
 // platforms, a deliberate re-list) may proceed.
+//
+// **A set is compared by what it will be listed as** (#1347). A platform that lists an unknown-variant
+// umbrella under its cheapest variant (#616) puts a copy of `523` and a copy of `523I` on one and the
+// same marketplace entry whenever `523I` is what `523` resolves to, so on such a platform a copy's key
+// reads the stamp it is *listed under* rather than the one it is recorded on. The resolution is the
+// listing's own (`resolveListingCatalogItemIds`), made by the caller and handed in as
+// {@link CollisionCopy.listedStampId}: the check and the listing must never disagree about what an
+// offer is. A platform that lists the umbrella itself compares recorded stamps, as before.
 
 import { copyGroupKey, encodeCopyGroupKey, DEFAULT_GROUP_AXES, type GroupableCopy } from "./copy-groups";
 
@@ -24,6 +32,11 @@ export interface CollisionCopy {
   itemId: string;
   stampId: string;
   conditionId: string;
+  /** The stamp this copy is **listed under** on a platform that lists an umbrella as its resolved
+   *  variant (#1347) — `stampId` itself wherever nothing resolves, and absent meaning the same. Read
+   *  only against a set whose offer is on such a platform. A candidate's is the derivation a new
+   *  listing would make; a member's is its own offer's, a variant chosen by hand included. */
+  listedStampId?: string | null;
 }
 
 /** One copy already listed on an offer, as the membership rows come back. The **set** it sits in is
@@ -35,11 +48,14 @@ export interface CollisionCopy {
 export interface OfferMemberCopy extends CollisionCopy {
   offerId: string;
   offerSetId: string;
+  /** Whether the member's offer is on a platform that lists an umbrella under its resolved variant
+   *  (#1347), and so whether its set is compared by listed stamps. One answer per offer. */
+  listsResolved?: boolean;
 }
 
-function keyOf(copy: CollisionCopy): string {
+function keyOf(copy: CollisionCopy, listed: boolean): string {
   const groupable: GroupableCopy = {
-    stampId: copy.stampId,
+    stampId: (listed ? copy.listedStampId : null) ?? copy.stampId,
     conditionId: copy.conditionId,
     formatId: null,
     certificateStatusId: null,
@@ -51,7 +67,8 @@ function keyOf(copy: CollisionCopy): string {
  * For each offer, which of `candidates` it would duplicate on the marketplace: an offer holding a
  * **set of exactly the same stamps in exactly the same conditions** as the selection (#732).
  *
- * Set equality on distinct stamp × condition keys, so quantity does not enter into it — selecting
+ * Set equality on distinct stamp × condition keys — the stamp being the one each copy is **listed
+ * under** where the set's platform resolves umbrellas (#1347) — so quantity does not enter into it; selecting
  * the series twice over is the same entry at a larger quantity, and collides just as one does. The
  * comparison is per **set**, not per offer: a mixed offer is asked about each of its compositions
  * in turn, and matching any one of them is the conflict.
@@ -65,20 +82,22 @@ export function collidingItemIdsByOffer(
   members: readonly OfferMemberCopy[]
 ): Map<string, string[]> {
   if (candidates.length === 0) return new Map();
-  // What the selection would put on the marketplace, as one composition.
-  const wanted = new Set(candidates.map(keyOf));
+  // What the selection would put on the marketplace, as one composition — read both ways, since the
+  // members may sit on platforms of both kinds and each set is compared in its own platform's terms.
+  const wantedRecorded = new Set(candidates.map((c) => keyOf(c, false)));
+  const wantedListed = new Set(candidates.map((c) => keyOf(c, true)));
   const candidateIds = new Set(candidates.map((c) => c.itemId));
 
   // Each set's own composition, and — per offer — which candidates it literally already lists.
-  const bySet = new Map<string, { offerId: string; keys: Set<string> }>();
+  const bySet = new Map<string, { offerId: string; listed: boolean; keys: Set<string> }>();
   const holdsByOffer = new Map<string, Set<string>>();
   for (const member of members) {
     let set = bySet.get(member.offerSetId);
     if (!set) {
-      set = { offerId: member.offerId, keys: new Set() };
+      set = { offerId: member.offerId, listed: member.listsResolved ?? false, keys: new Set() };
       bySet.set(member.offerSetId, set);
     }
-    set.keys.add(keyOf(member));
+    set.keys.add(keyOf(member, set.listed));
     if (candidateIds.has(member.itemId)) {
       let holds = holdsByOffer.get(member.offerId);
       if (!holds) {
@@ -90,7 +109,8 @@ export function collidingItemIdsByOffer(
   }
 
   const matched = new Set<string>();
-  for (const { offerId, keys } of bySet.values()) {
+  for (const { offerId, listed, keys } of bySet.values()) {
+    const wanted = listed ? wantedListed : wantedRecorded;
     if (keys.size === wanted.size && [...wanted].every((k) => keys.has(k))) matched.add(offerId);
   }
 
