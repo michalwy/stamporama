@@ -363,6 +363,8 @@ export function LotBuilderPanel({
       setPicking: () => {},
       candidates: [],
       pick: () => {},
+      // The lot's own copies, previewed as the one-set offer the commit creates (#1350).
+      oneListing: true,
     }),
     [proposal?.templateSamples, proposalLoading]
   );

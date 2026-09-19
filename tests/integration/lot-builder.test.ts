@@ -607,6 +607,38 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       );
     });
 
+    it("previews the lot in the platform's listing language, as its offer is written (#1350)", async () => {
+      const root = await prisma.collectionArea.findUniqueOrThrow({
+        where: { id: rootAreaId },
+        select: { primaryCatalogNameId: true },
+      });
+      // An area of its own, so the lot holds this one copy and nothing the other cases made.
+      const languageAreaId = await area("Language", rootAreaId, root.primaryCatalogNameId!);
+      const stampId = await stamp(languageAreaId, "Eagle", { price: "1.00" });
+      await prisma.stampTranslation.create({ data: { stampId, language: "pl", name: "Orzeł" } });
+      await copy(stampId);
+      const polishPlatformId = (
+        await prisma.contact.create({
+          data: {
+            collectionId,
+            name: "Allegro",
+            platform: true,
+            platformCurrency: "PLN",
+            titleLanguage: "pl",
+          },
+        })
+      ).id;
+      const proposal = await buildLotProposal(
+        userId,
+        collectionId,
+        request({ criteria: { platformId: polishPlatformId, areaId: languageAreaId, countMin: 1 } })
+      );
+      assert.deepEqual(
+        proposal.templateSamples.map((c) => c.copy.name),
+        ["Orzeł"]
+      );
+    });
+
     it("names a pinned copy the pool no longer holds rather than releasing it (#314)", async () => {
       const spare = await copy(await stamp(pickAreaId, "Pinned then listed", { price: "2.00" }));
       await offerHolding(spare);

@@ -7,6 +7,7 @@ import {
   renderListingTemplateSegments,
   titleFallbackTokens,
   listingFallbackTokens,
+  templatePreviewScope,
   EXAMPLE_OFFER_URL,
   AVAILABLE_LISTING_BLOCKS,
   type ListingTemplateContext,
@@ -81,6 +82,10 @@ export interface TemplateSamples {
   candidates: TitleSampleCopy[];
   /** Replace the first sample with a specific copy (the others stay, so blocks still repeat). */
   pick: (copy: TitleSampleCopy) => void;
+  /** The copies are **one listing's**, not unrelated samples (#1350): the lot builder's, whose
+   *  previews must read as the offer it creates will — one set of all of them, the title over every
+   *  copy. Absent, each copy is a sample set of its own and the title previews the first. */
+  oneListing?: boolean;
 }
 
 /**
@@ -360,19 +365,22 @@ export function TemplateBuilder({
   }
 
   // Rendered as segments rather than a plain string so the parts that fell back to the default
-  // language can be marked (#298); each sample copy carries which of its fields did. A multi-line
-  // template previews the copies as separate sets, so a `{#set}` block visibly repeats.
-  const previewSets = samples.copies.map((s) => ({ title: null, copies: [s.copy] }));
-  const previewCopies = samples.copies.map((s) => s.copy);
+  // language can be marked (#298); each sample copy carries which of its fields did. Sample copies
+  // preview as separate sets, so a `{#set}` block visibly repeats; one listing's copies preview as
+  // the one set that listing is (#1350) — `templatePreviewScope` says which.
+  const { sets: previewSets, titleCopies } = templatePreviewScope(
+    samples.copies.map((s) => s.copy),
+    samples.oneListing ?? false
+  );
   // `{offerUrl}` (#415) names an offer, and a template is written before any of them — the preview
   // shows the example link so the collector sees how much room a URL takes in the text.
   const previewContext = context ?? { offerUrl: EXAMPLE_OFFER_URL };
   const segments = multiline
     ? renderListingTemplateSegments(value, previewSets, previewContext)
-    : renderTitleTemplateSegments(value, previewCopies.slice(0, 1), previewContext);
+    : renderTitleTemplateSegments(value, titleCopies, previewContext);
   const fallbackTokens = multiline
     ? listingFallbackTokens(value, previewSets)
-    : titleFallbackTokens(value, previewCopies.slice(0, 1));
+    : titleFallbackTokens(value, titleCopies);
   const preview = segments.map((s) => s.text).join("");
 
   const fieldProps = {
