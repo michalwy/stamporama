@@ -26,6 +26,7 @@ import { lotHasSignal, LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { SaleStatusChip } from "../../auction-badges";
 import { SIGNALS } from "../../auction-controls";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { useAuctionSaleView } from "./use-auction-sale-view";
 import { formatBase, formatDay } from "../../auction-format";
 import { Icon } from "@/app/icons";
 
@@ -104,13 +105,24 @@ export function AuctionSaleDetailPanel({
   // and the flash must outlive that.
   const [arrivedLotId, setArrivedLotId] = useState<string | null>(() => searchParams.get("lot"));
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
-  // Which outcome the lot list below is narrowed to. Local state rather than a URL param, unlike
-  // the flat list: this is one parcel being worked through — "what is still running", then "what
-  // did I win" while settling — not a view anyone links to.
-  const [outcome, setOutcome] = useState<AuctionLotOutcome | undefined>();
-  // The same derived states the flat list filters by, asked of one parcel. Computed here rather
-  // than fetched: the sale's lots are already in hand, and the rules are pure.
-  const [signal, setSignal] = useState<LotSignal | undefined>();
+  // **The whole toolbar over the lots, in the address and remembered across sales** (#1353) — the
+  // status chips here, and grouping / *Only* / sort down in the cards view, all off one value.
+  //
+  // The two chip groups used to be plain `useState`, on the argument that *"this is one parcel
+  // being worked through — 'what is still running', then 'what did I win' while settling — not a
+  // view anyone links to."* **Superseded 2026-09-19 (#1353), and the argument is kept rather than
+  // deleted**: the collector reported the opposite, that setting the view up again after every
+  // reload is the cost, and this was the one auction screen that forgot — the lots list (#1018)
+  // and the sales list (#496) both remember. The narrowing is answered by being **said out loud**
+  // instead, in the band below the toolbar, exactly as #1018 answered it.
+  //
+  // The derived states are computed here rather than fetched: the sale's lots are already in hand,
+  // and the rules are pure.
+  const { view, setView, clearFilters } = useAuctionSaleView(
+    collectionId,
+    `/c/${collectionSlug}/auctions/sales/${saleId}`
+  );
+  const { signal, outcome } = view;
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateAuctions();
@@ -470,7 +482,7 @@ export function AuctionSaleDetailPanel({
                   label={label}
                   count={signalCounts[value]}
                   active={active}
-                  onClick={() => setSignal(active ? undefined : value)}
+                  onClick={() => setView({ signal: active ? undefined : value })}
                 />
               </Tooltip>
             );
@@ -493,7 +505,7 @@ export function AuctionSaleDetailPanel({
                 label={AUCTION_LOT_OUTCOME_LABEL[value]}
                 count={outcomeCounts[value] ?? 0}
                 active={active}
-                onClick={() => setOutcome(active ? undefined : value)}
+                onClick={() => setView({ outcome: active ? undefined : value })}
               />
             );
           })}
@@ -514,27 +526,23 @@ export function AuctionSaleDetailPanel({
           No lots in this sale yet. <strong>Add lot</strong> puts one straight into this parcel;
           adding from the lots screen and naming this seller and platform lands in it too.
         </div>
-      ) : visibleLots.length === 0 ? (
-        <div
-          style={{
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.75rem",
-            background: "var(--color-bg-elevated)",
-            padding: "2rem",
-            color: "var(--color-text-muted)",
-            fontSize: "0.9375rem",
-          }}
-        >
-          No lots in this parcel match that filter.
-        </div>
       ) : (
         /* Each lot a collapsible card over what it holds (#353) — the purchase-order intake and
            offer detail layout, applied to a parcel. The flat watchlist keeps its plain rows: there
-           the question is what to bid on next, across every seller. */
+           the question is what to bid on next, across every seller.
+
+           Drawn whenever the parcel holds anything, **including when the chips above have narrowed
+           it to nothing** (#1353): the toolbar and the band that says what is narrowing it live in
+           there, and a screen that swapped them for a bare "nothing matches" would take away the
+           controls at the one moment the collector needs them. */
         <AuctionLotCardsView
           collectionId={collectionId}
           collectionSlug={collectionSlug}
           lots={visibleLots}
+          totalLotCount={sale.lots.length}
+          view={view}
+          onSetView={setView}
+          onClearFilters={clearFilters}
           areas={areas}
           issueHeaderById={issueHeaderById}
           now={now}

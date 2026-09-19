@@ -14,8 +14,19 @@ import {
   COPY_SORT_KEYS,
   COPY_SORT_LABELS,
   sortSortableCopies,
+  type CopySortKey,
 } from "@/app/c/[collectionSlug]/shared/copy-sort";
-import { useHydrated, usePersistentString, usePersistentToggle } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { useHydrated } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { LIST_BANNER_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { AUCTION_LOT_OUTCOME_LABEL, type AuctionLotOutcome } from "@/lib/auction-rules";
+import { SIGNALS } from "../../auction-controls";
+import {
+  auctionSaleViewNarrowings,
+  auctionSaleViewNarrowsLots,
+  type AuctionSaleNarrowing,
+  type AuctionSaleView,
+} from "./sale-view-params";
 import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
 import { issueLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { AuctionLotRow } from "../../auction-lot-row";
@@ -38,10 +49,11 @@ import { Icon, type IconName } from "@/app/icons";
 // answer. That split is the same one the offers list has with an offer's own screen.
 
 
-const LS_PRIMARY = "stamporama:auctionSale:primaryGroup";
-const LS_BY_ISSUE = "stamporama:auctionSale:byIssue";
-const LS_SORT_KEY = "stamporama:auctionSale:sortKey";
-const LS_SORT_DIR = "stamporama:auctionSale:sortDir";
+// The toolbar's own state is **not** held here any more (#1353). It was four `localStorage` keys —
+// grouping, issue sub-grouping, sort key, sort direction — beside three `useState`s for the *Only*
+// filters, so half the toolbar survived a reload and half did not, and none of it was in the
+// address. It is now one value owned by the panel, in the URL and remembered per collection:
+// `sale-view-params.ts` for the vocabulary, `use-auction-sale-view.ts` for where it is kept.
 
 const STUCK_SHADOW = "0 6px 8px -6px rgba(0, 0, 0, 0.28)";
 
@@ -63,6 +75,36 @@ const TOOLBAR_LABEL: React.CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.04em",
 };
+
+/**
+ * How the band names one filter — **in the words of the control that set it**, so the collector can
+ * go and find the thing to switch off. The rule and its reasoning are `lot-params.ts`': the pure
+ * module decides *which* settings narrow, and the wording stays beside the chips, or the band and
+ * the chip could come to say different things about one filter.
+ *
+ * The three line filters lose their counts here and keep their words: a chip reads `12 no photo`
+ * because the number is the reason to press it, while the band is naming what is in force.
+ */
+function narrowingLabel({ key, value }: AuctionSaleNarrowing): string {
+  switch (key) {
+    case "signal":
+      return SIGNALS.find((s) => s.value === value)?.label ?? value;
+    case "outcome":
+      return AUCTION_LOT_OUTCOME_LABEL[value as AuctionLotOutcome] ?? value;
+    case "unpriced":
+      return "Unpriced";
+    case "noPhoto":
+      return "No photo";
+    case "unknownVariant":
+      return "Unknown variant";
+    case "notDescribed":
+      // The flat watchlist's own wording for the same question (#442), so the two screens name it
+      // identically.
+      return "Not described";
+    default:
+      return value;
+  }
+}
 
 const MUTED_BOX: React.CSSProperties = {
   padding: "1rem",
@@ -490,7 +532,16 @@ function LotCard({
 interface AuctionLotCardsViewProps {
   collectionId: string;
   collectionSlug: string;
+  /** The parcel's lots, already narrowed by the status chips above — **not** by *not described*,
+   * which is this toolbar's own filter and is applied here so its chip can still count what it
+   * would hide. */
   lots: AuctionLotDetailView[];
+  /** Every lot in the parcel, for the band's *Showing N of M*. */
+  totalLotCount: number;
+  /** The whole toolbar's state, owned by the panel so it can live in the address (#1353). */
+  view: AuctionSaleView;
+  onSetView: (patch: Partial<AuctionSaleView>) => void;
+  onClearFilters: () => void;
   areas: CollectionAreaData[];
   issueHeaderById: Record<string, IssueHeader>;
   now: Date;
@@ -521,6 +572,10 @@ export function AuctionLotCardsView({
   collectionId,
   collectionSlug,
   lots,
+  totalLotCount,
+  view,
+  onSetView,
+  onClearFilters,
   areas,
   issueHeaderById,
   now,
@@ -535,11 +590,7 @@ export function AuctionLotCardsView({
   onMarkChecked,
 }: AuctionLotCardsViewProps) {
   const hydrated = useHydrated();
-  const [primaryRaw, setPrimary] = usePersistentString(`${LS_PRIMARY}:${collectionId}`, "lot");
-  const primary = primaryRaw === "none" ? "none" : "lot";
-  const [byIssue, setByIssue] = usePersistentToggle(`${LS_BY_ISSUE}:${collectionId}`, false);
-  const [sortKey, setSortKey] = usePersistentString(`${LS_SORT_KEY}:${collectionId}`, "added");
-  const [sortDir, setSortDir] = usePersistentString(`${LS_SORT_DIR}:${collectionId}`, "asc");
+  const { group: primary, byIssue, sortKey, sortDir } = view;
 
   // Lots are collapsed by default (#382): a sale is read as "what is in this parcel", and a
   // lot's own composition is a second question. The two exceptions the hook covers are the lot
@@ -549,19 +600,36 @@ export function AuctionLotCardsView({
     arrivedLotId
   );
 
-  const [onlyUnpriced, setOnlyUnpriced] = useState(false);
-  const [onlyNoPhoto, setOnlyNoPhoto] = useState(false);
-  const [onlyUnknownVariant, setOnlyUnknownVariant] = useState(false);
-  const filterActive = onlyUnpriced || onlyNoPhoto || onlyUnknownVariant;
+  const {
+    unpriced: onlyUnpriced,
+    noPhoto: onlyNoPhoto,
+    unknownVariant: onlyUnknownVariant,
+    notDescribed: onlyNotDescribed,
+  } = view;
+  const lineFilterActive = onlyUnpriced || onlyNoPhoto || onlyUnknownVariant;
   const matches = (line: AuctionLotLineItem) =>
     (!onlyUnpriced || line.unpriced) &&
     (!onlyNoPhoto || line.photos.length === 0) &&
     (!onlyUnknownVariant || line.unknownVariant);
 
+  // The three counts are taken over the parcel as the chips above left it and **not** over each
+  // other, so a chip always says how many it would show rather than how many survive the filters
+  // already on — the flat watchlist's facets read the same way.
   const allLines = useMemo(() => lots.flatMap((lot) => lot.lines), [lots]);
   const unpricedCount = allLines.filter((l) => l.unpriced).length;
   const noPhotoCount = allLines.filter((l) => l.photos.length === 0).length;
   const unknownVariantCount = allLines.filter((l) => l.unknownVariant).length;
+  // *Not described* is the one filter here that hides a whole **lot** (#1353) — a lot with nothing
+  // recorded in its composition (#353), which is the worklist of what is left to describe. Counted
+  // before it is applied, for the same reason as the three above.
+  const notDescribedCount = lots.filter((lot) => lot.lines.length === 0).length;
+  const shownLots = onlyNotDescribed ? lots.filter((lot) => lot.lines.length === 0) : lots;
+
+  // What is narrowing the parcel right now, decided by the pure rule in `sale-view-params.ts` so
+  // that a control added to this toolbar cannot slip past the band without somebody having said
+  // whether it hides anything.
+  const narrowings = auctionSaleViewNarrowings(view);
+  const narrowed = narrowings.length > 0;
 
   // Which lot is having a line added or edited. One at a time across the whole screen: two open
   // forms would be two stamp pickers competing for the same "last search" state, and the collector
@@ -643,13 +711,18 @@ export function AuctionLotCardsView({
           <ToggleChip
             label="Lot"
             on={primary === "lot"}
-            onClick={() => setPrimary(primary === "lot" ? "none" : "lot")}
+            onClick={() => onSetView({ group: primary === "lot" ? "none" : "lot" })}
           />
           <span style={{ width: "1px", height: "1rem", background: "var(--color-border)" }} />
-          <ToggleChip label="Issue" on={byIssue} onClick={() => setByIssue(!byIssue)} />
+          <ToggleChip label="Issue" on={byIssue} onClick={() => onSetView({ byIssue: !byIssue })} />
         </div>
 
-        {(unpricedCount > 0 || noPhotoCount > 0 || unknownVariantCount > 0 || filterActive) && (
+        {(unpricedCount > 0 ||
+          noPhotoCount > 0 ||
+          unknownVariantCount > 0 ||
+          onlyNotDescribed ||
+          (primary === "lot" && notDescribedCount > 0) ||
+          lineFilterActive) && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span style={TOOLBAR_LABEL}>Only</span>
             {(unpricedCount > 0 || onlyUnpriced) && (
@@ -658,7 +731,7 @@ export function AuctionLotCardsView({
                 icon="warning"
                     label={`${unpricedCount} unpriced`}
                 active={onlyUnpriced}
-                onClick={() => setOnlyUnpriced(!onlyUnpriced)}
+                onClick={() => onSetView({ unpriced: !onlyUnpriced })}
               />
             )}
             {(noPhotoCount > 0 || onlyNoPhoto) && (
@@ -666,7 +739,7 @@ export function AuctionLotCardsView({
                 token="accent"
                 label={`${noPhotoCount} no photo`}
                 active={onlyNoPhoto}
-                onClick={() => setOnlyNoPhoto(!onlyNoPhoto)}
+                onClick={() => onSetView({ noPhoto: !onlyNoPhoto })}
               />
             )}
             {(unknownVariantCount > 0 || onlyUnknownVariant) && (
@@ -674,7 +747,25 @@ export function AuctionLotCardsView({
                 token="warning"
                 label={`~ ${unknownVariantCount} unknown variant`}
                 active={onlyUnknownVariant}
-                onClick={() => setOnlyUnknownVariant(!onlyUnknownVariant)}
+                onClick={() => onSetView({ unknownVariant: !onlyUnknownVariant })}
+              />
+            )}
+            {/* **A lot, where its three neighbours are a line** (#1353) — the lots with nothing
+                recorded in their composition at all (#353), which is the list of what is still to
+                be described. A lot described only in part is not one of them.
+
+                Offered **only while the lots are on screen**, which is why it is guarded on the
+                grouping and its neighbours are not: with *Group by → Lot* off the parcel is one
+                flat list of stamps, and a lot holding none contributes nothing to it — the filter
+                could only ever empty the screen. Switching the grouping off clears it outright
+                rather than leaving it latched, in `sale-view-params.ts`. */}
+            {primary === "lot" && (notDescribedCount > 0 || onlyNotDescribed) && (
+              <CountFilterChip
+                token="warning"
+                icon="warning"
+                label={`${notDescribedCount} not described`}
+                active={onlyNotDescribed}
+                onClick={() => onSetView({ notDescribed: !onlyNotDescribed })}
               />
             )}
           </div>
@@ -685,7 +776,7 @@ export function AuctionLotCardsView({
           <select
             aria-label="Sort lines by"
             value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
+            onChange={(e) => onSetView({ sortKey: e.target.value as CopySortKey })}
             style={{ ...TOOLBAR_CHIP, cursor: "pointer", appearance: "auto", paddingRight: "1.25rem" }}
           >
             {COPY_SORT_KEYS.map((k) => (
@@ -701,7 +792,7 @@ export function AuctionLotCardsView({
           >
             <button
               type="button"
-              onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+              onClick={() => onSetView({ sortDir: sortDir === "asc" ? "desc" : "asc" })}
               aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
               style={{ ...TOOLBAR_CHIP, cursor: "pointer", fontWeight: 600 }}
             >
@@ -710,7 +801,7 @@ export function AuctionLotCardsView({
           </Tooltip>
         </div>
 
-        {primary === "lot" && lots.length > 0 && (
+        {primary === "lot" && shownLots.length > 0 && (
           <button
             type="button"
             onClick={expansion.toggleAll}
@@ -721,9 +812,64 @@ export function AuctionLotCardsView({
         )}
       </div>
 
+      {/* **A narrowed parcel says so, and clears in one press** (#1353) — the flat watchlist's band
+          (#1018), one level down and for the same reason: now that the toolbar comes back as it was
+          left, a filter the collector has forgotten setting would otherwise read as lots that have
+          disappeared. Absent when nothing is narrowing, rather than permanently drawn saying "no
+          filters"; it arrives as a whole row below the controls, so it reflows nothing under the
+          pointer, and the clear lives in it because it only matters while it is up. */}
+      {narrowed && (
+        <div style={{ ...LIST_BANNER_STYLE, marginBottom: "0.75rem" }}>
+          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
+            {/* Counted only where a filter actually takes lots off the screen. With the three line
+                filters alone every lot is still there, and *Showing 12 of 12 lots* would be a true
+                figure about the one unit they did not touch. */}
+            {auctionSaleViewNarrowsLots(view) ? (
+              <>
+                Showing <strong>{shownLots.length}</strong> of {totalLotCount} lot
+                {totalLotCount === 1 ? "" : "s"} —{" "}
+              </>
+            ) : (
+              <>This view is narrowed — </>
+            )}
+            {narrowings.map(narrowingLabel).join(" · ")}
+          </span>
+          <button
+            type="button"
+            onClick={onClearFilters}
+            style={{
+              ...FILTER_CONTROL_STYLE,
+              marginLeft: "auto",
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              color: "var(--color-accent)",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+
       {primary === "lot" ? (
+        shownLots.length === 0 ? (
+          <div
+            style={{
+              border: "1px solid var(--color-border)",
+              borderRadius: "0.75rem",
+              background: "var(--color-bg-elevated)",
+              padding: "2rem",
+              color: "var(--color-text-muted)",
+              fontSize: "0.9375rem",
+            }}
+          >
+            No lots in this parcel match that filter.
+          </div>
+        ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {lots.map((lot) => (
+          {shownLots.map((lot) => (
             <LotCard
               key={lot.id}
               lot={lot}
@@ -754,6 +900,7 @@ export function AuctionLotCardsView({
             />
           ))}
         </div>
+        )
       ) : (
         <div
           style={{
@@ -765,7 +912,7 @@ export function AuctionLotCardsView({
         >
           {flatLines.length === 0 ? (
             <div style={MUTED_BOX}>
-              {filterActive
+              {lineFilterActive
                 ? "No lines match the filter."
                 : "Nothing described in this parcel yet. Group by lot to start."}
             </div>
