@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { searchStampsForPicker } from "@/lib/stamps";
+import { readSearchParam } from "@/lib/text-input";
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +14,7 @@ export async function GET(
   }
 
   const { collectionId } = await params;
-  const query = request.nextUrl.searchParams.get("q") ?? "";
+  const query = readSearchParam(request.nextUrl.searchParams, "q") ?? "";
 
   try {
     const items = await searchStampsForPicker(session.user.id, collectionId, query);

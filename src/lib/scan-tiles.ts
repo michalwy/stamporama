@@ -1,6 +1,5 @@
 import "server-only";
-import { prisma } from "./db";
-import type { Prisma } from "@/generated/prisma/client";
+import { prisma, type DbTransaction } from "./db";
 import { getRunChecklist } from "./checklists";
 import { formatItemNo } from "./item-number";
 import { updateItem } from "./items";
@@ -931,7 +930,7 @@ async function consumeTile(tileId: string, itemId: string): Promise<void> {
  * written in cut order and a copy reads them in role order.
  */
 async function movePhotosToItem(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   tileId: string,
   itemId: string
 ): Promise<void> {

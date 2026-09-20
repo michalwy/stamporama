@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { searchContacts } from "@/lib/contacts";
+import { readSearchParam } from "@/lib/text-input";
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +14,7 @@ export async function GET(
   }
 
   const { collectionId } = await params;
-  const query = request.nextUrl.searchParams.get("q") ?? "";
+  const query = readSearchParam(request.nextUrl.searchParams, "q") ?? "";
   // Role-filtering for the trading pickers: `seller` for the supplier field, `platform` for the
   // platform field (#120), `buyer` for the sale buyer field (#166), `exchangePartner` for the trade
   // partner field (#646). Any other value is ignored so the endpoint stays a plain name search for

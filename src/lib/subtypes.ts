@@ -1,6 +1,5 @@
 import "server-only";
-import { prisma } from "./db";
-import type { PrismaClient } from "@/generated/prisma/client";
+import { prisma, type DbTransaction } from "./db";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -95,7 +94,7 @@ export const DEFAULT_STAMP_SUBTYPES: ReadonlyArray<{
  */
 export async function seedDefaultSubtypes(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<void> {
   await tx.stampSubtype.createMany({
     data: DEFAULT_STAMP_SUBTYPES.map((s, i) => ({

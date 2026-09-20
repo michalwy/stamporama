@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { offerFilterCounts } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
+import { readSearchParam } from "@/lib/text-input";
 
 // Faceted counts for the offer list's filter controls (#332). Takes the same params as the list
 // route: each count ignores its own dimension and respects the rest.
@@ -25,7 +26,7 @@ export async function GET(
     const counts = await offerFilterCounts(session.user.id, collectionId, {
       platformId: sp.get("platformId") || undefined,
       states,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       needsAction: sp.get("needsAction") === "1",
       bidding: sp.get("bidding") === "1",
       endedAuction: sp.get("endedAuction") === "1",

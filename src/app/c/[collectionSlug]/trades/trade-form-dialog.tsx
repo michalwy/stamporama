@@ -11,6 +11,7 @@ import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { TradeListItem } from "@/lib/trades";
 import { TradePartnerSelect } from "./trade-partner-select";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -293,7 +294,7 @@ export function TradeFormDialog({
 
           <div>
             <LabelWithError htmlFor="trade-notes">Notes</LabelWithError>
-            <textarea
+            <TextArea
               id="trade-notes"
               name="notes"
               rows={3}

@@ -15,6 +15,7 @@ import {
 } from "@/lib/disposal";
 import { formatItemNo } from "@/lib/item-number";
 import { useCollectionItemNoPad } from "./use-inventory-query";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -102,7 +103,7 @@ export function DisposeCopyDialog({
               <LabelWithError htmlFor="disposal-note">
                 {disposalNoteRequired(reason) ? "What happened" : "Note (optional)"}
               </LabelWithError>
-              <textarea
+              <TextArea
                 id="disposal-note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}

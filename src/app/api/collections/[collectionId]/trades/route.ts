@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listTradesPaginated, type TradeSortBy } from "@/lib/trades";
 import { isTradeStatus } from "@/lib/trade-rules";
 import { parseEntityNoSearch } from "@/lib/quick-jump";
+import { readSearchParam } from "@/lib/text-input";
 
 const VALID_SORT_BY = new Set<TradeSortBy>(["createdAt", "tradeNo"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -29,7 +30,7 @@ export async function GET(
   // `7`) is the trade number the quick jump sends, anything else is the partner's name. The number
   // match is *instead of* the name match, not in addition to it — a partner called "7" is not a
   // thing, and the quick jump has to land on exactly one row.
-  const search = (sp.get("search") ?? "").trim();
+  const search = readSearchParam(sp) ?? "";
   const tradeNo = search ? (parseEntityNoSearch(search) ?? undefined) : undefined;
   const partnerSearch = search && tradeNo === undefined ? search : undefined;
   const sortByParam = sp.get("sortBy") as TradeSortBy | null;

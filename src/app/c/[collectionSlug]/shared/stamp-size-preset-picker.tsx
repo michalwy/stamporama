@@ -17,6 +17,7 @@ import {
 } from "./filter-popover";
 import { useStampSizePresets } from "./use-stamp-size-presets";
 import { NO_AUTOFILL } from "./no-autofill";
+import { TextInput } from "./text-input";
 
 /**
  * Choosing one of the collection's stamp size presets (#805; ADR-0048) — a trigger that opens a
@@ -134,8 +135,7 @@ export function StampSizePresetPicker({
               overflowY: "hidden",
             }}
           >
-            <input
-              type="text"
+            <TextInput
               autoFocus
               value={query}
               onChange={(e) => {

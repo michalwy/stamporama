@@ -49,6 +49,7 @@ import {
 import { TranslationsField } from "./translations-field";
 import { useTitleLanguages } from "./use-title-languages";
 import { parseTranslationValues } from "@/lib/translations";
+import { TextInput } from "./text-input";
 
 const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
 
@@ -393,10 +394,9 @@ export function ChecklistsDialog({
               <LabelWithError htmlFor="cl-name">Name</LabelWithError>
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                 <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-                  <input
+                  <TextInput
                     id="cl-name"
                     name="name"
-                    type="text"
                     autoFocus
                     defaultValue={editing.kind === "rename" ? editing.checklist.name : ""}
                     disabled={isPending}

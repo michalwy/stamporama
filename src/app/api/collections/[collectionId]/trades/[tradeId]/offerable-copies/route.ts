@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listOfferableCopies } from "@/lib/trade-lines";
+import { readSearchParam } from "@/lib/text-input";
 
 /** The copies this trade could still promise (#637) — in hand, unsold, not already committed to a
  * live trade. Unpaginated, mirroring the offer composition picker: the dialog scopes by area and
@@ -33,7 +34,7 @@ export async function GET(
   try {
     const items = await listOfferableCopies(session.user.id, tradeId, {
       areaIds: areaIds.length > 0 ? areaIds : null,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       year,
       forTradeOnly: sp.get("forTrade") !== "false",
     });

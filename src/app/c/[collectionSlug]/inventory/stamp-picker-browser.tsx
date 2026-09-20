@@ -60,6 +60,7 @@ import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-pick
 import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
  * area, a new stamp / variant (parent set) in an issue, or a whole lettered run of variants
@@ -706,8 +707,7 @@ function IssueBrowser({
           gap: "0.5rem",
         }}
       >
-        <input
-          type="text"
+        <TextInput
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}
           placeholder={selectedAreaId ? "Filter issues in this area…" : "Filter issues…"}

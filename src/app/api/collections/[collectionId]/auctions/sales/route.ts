@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listAuctionSales } from "@/lib/auctions";
 import { isAuctionSaleStatus } from "@/lib/auction-rules";
+import { readSearchParam } from "@/lib/text-input";
 
 // Every auction sale with its parcel totals — the settlement list. Unpaginated by design: a sale is
 // one parcel from one seller, and the screen answers "what do I owe whom".
@@ -22,7 +23,7 @@ export async function GET(
   try {
     const items = await listAuctionSales(session.user.id, collectionId, {
       status: statusParam && isAuctionSaleStatus(statusParam) ? statusParam : undefined,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
     });
     return NextResponse.json({ items });
   } catch {

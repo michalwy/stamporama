@@ -2,6 +2,7 @@ import type { ItemListFiltersPaginated } from "@/lib/items";
 import { isDeliveryState } from "@/lib/delivery-state";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
+import { readSearchParam } from "@/lib/text-input";
 
 /** Only an explicit "true" narrows to that disposition; absence / any other value means the filter
  * is off (show all), matching the default "show all copies". */
@@ -56,7 +57,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     subtypeIds: readCsvParam(sp, "subtypeIds"),
     deliveryStates: readDeliveryStates(sp),
     areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
-    search: sp.get("search") || undefined,
+    search: readSearchParam(sp),
     catalogVendorId: sp.get("catalogVendorId") || undefined,
     catalogNumber: sp.get("catalogNumber") || undefined,
     stampId: sp.get("stampId") || undefined,

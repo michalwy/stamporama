@@ -1,6 +1,5 @@
 import "server-only";
-import { prisma } from "./db";
-import type { PrismaClient } from "@/generated/prisma/client";
+import { prisma, type DbTransaction } from "./db";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -78,7 +77,7 @@ export const DEFAULT_FORMATS: ReadonlyArray<{
  */
 export async function seedDefaultFormats(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<void> {
   await tx.stampFormat.createMany({
     data: DEFAULT_FORMATS.map((f, i) => ({

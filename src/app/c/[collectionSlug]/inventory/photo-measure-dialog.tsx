@@ -16,6 +16,7 @@ import {
 } from "@/lib/stamp-size";
 import { TileZoomView } from "@/app/c/[collectionSlug]/shared/tile-zoom-view";
 import { ScanToolButton } from "@/app/c/[collectionSlug]/shared/scan-tool-button";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /**
  * What a screen tells a photo strip so that its photos can be measured (#1290).
@@ -251,7 +252,7 @@ function SizeField({
   // Blank is marked too: a size set from a measurement is the whole of it.
   const bad = !parsed.ok || parsed.mm === null;
   return (
-    <input
+    <TextInput
       value={value}
       onChange={(e) => onChange(e.target.value)}
       inputMode="decimal"

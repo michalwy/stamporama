@@ -36,6 +36,7 @@ import {
 } from "@/lib/collage-template-rules";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -134,10 +135,9 @@ function CollageTemplateForm({
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
         <LabelWithError htmlFor="f-collage-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-collage-name"
           name="name"
-          type="text"
           defaultValue={template?.name}
           disabled={isPending}
           placeholder="e.g. Small definitives"

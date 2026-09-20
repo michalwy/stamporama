@@ -29,6 +29,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -107,10 +108,9 @@ function SubtypeForm({
           {translatable ? `Name — ${languageLabel(defaultLanguage)}` : "Name"}
         </LabelWithError>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-subtype-name"
             name="name"
-            type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={isPending}

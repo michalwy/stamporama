@@ -10,6 +10,7 @@ import { ContactRow } from "./contact-row";
 import { CONTACT_ROLES } from "./contact-roles";
 import { useToast } from "@/app/toast-provider";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 type DialogState =
   | { kind: "none" }
@@ -86,7 +87,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-        <input
+        <TextInput
           type="search"
           value={query}
           onChange={(e) => updateParams({ q: e.target.value })}

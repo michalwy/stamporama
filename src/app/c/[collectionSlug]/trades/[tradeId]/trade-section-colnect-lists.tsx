@@ -11,6 +11,7 @@ import {
   deleteTradeColnectListAction,
   updateTradeColnectListAction,
 } from "@/app/actions/trades";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // **The Colnect lists one side of one section is about** (#645; re-parented in #680), on the
 // collector's screen.
@@ -218,7 +219,7 @@ function ListForm({
       onSubmit={handleSubmit}
       style={{ display: "flex", flexDirection: "column", gap: "0.35rem", marginBottom: "0.4rem" }}
     >
-      <input
+      <TextInput
         value={url}
         onChange={(event) => setUrl(event.target.value)}
         placeholder="https://colnect.com/en/stamps/list/…"
@@ -227,7 +228,7 @@ function ListForm({
         disabled={disabled}
         style={INPUT}
       />
-      <input
+      <TextInput
         value={label}
         onChange={(event) => setLabel(event.target.value)}
         placeholder="What to call it (optional)"

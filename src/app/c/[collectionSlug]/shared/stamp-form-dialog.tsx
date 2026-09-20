@@ -60,6 +60,7 @@ import { TagEntryField } from "./tag-entry-field";
 import type { TagSummary } from "@/lib/tags";
 import { DEFAULT_CHECKLIST } from "@/lib/checklist-vocabulary";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 
 /** The stamp's one translatable field (#296). `defaultValue` is filled in at render time from the
  * live Name input, so the dialog's placeholder shows what a blank entry falls back to. Mirrors
@@ -839,9 +840,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
                   <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.75rem" }}>
                     <div style={{ flex: 1 }}>
                       <LabelWithError htmlFor="f-new-issue-name">Issue name</LabelWithError>
-                      <input
+                      <TextInput
                         id="f-new-issue-name"
-                        type="text"
                         value={newIssueName}
                         onChange={(e) => setNewIssueName(e.target.value)}
                         disabled={isPending}
@@ -915,9 +915,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
                         {v.vendorAbbreviation}{v.prefix ? `·${v.prefix}` : ""}
                       </span>
                       <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
-                        <input
+                        <TextInput
                           name={`catalogNumber_${v.catalogVendorId}`}
-                          type="text"
                           disabled={isPending}
                           placeholder="e.g. 1"
                           {...NO_AUTOFILL}
@@ -963,9 +962,8 @@ export function StampFormDialog(props: StampFormDialogProps) {
                         Colnect
                       </span>
                       <div style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}>
-                        <input
+                        <TextInput
                           name="colnectId"
-                          type="text"
                           inputMode="numeric"
                           disabled={isPending}
                           defaultValue={editProps?.stamp.colnectId ?? ""}
@@ -1113,10 +1111,9 @@ export function StampFormDialog(props: StampFormDialogProps) {
                     : "Name (optional)"}
                 </LabelWithError>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <input
+                  <TextInput
                     id="f-stamp-name"
                     name="name"
-                    type="text"
                     disabled={isPending}
                     defaultValue={editProps?.stamp.name ?? ""}
                     placeholder="e.g. 5 kr blue"
@@ -1405,10 +1402,9 @@ function StampAttributesTab({
                 <LabelWithError htmlFor={`f-stamp-${field}`}>
                   {STAMP_TEXT_ATTRIBUTE_LABELS[field].field}
                 </LabelWithError>
-                <input
+                <TextInput
                   id={`f-stamp-${field}`}
                   name={field}
-                  type="text"
                   disabled={disabled}
                   value={values[field] ?? ""}
                   onChange={(e) => setValue(field, e.target.value)}
@@ -1467,10 +1463,9 @@ function StampAttributesTab({
                 <LabelWithError htmlFor={`f-stamp-${field}`}>
                   {STAMP_SIZE_LABELS[field].field}
                 </LabelWithError>
-                <input
+                <TextInput
                   id={`f-stamp-${field}`}
                   name={field}
-                  type="text"
                   inputMode="decimal"
                   disabled={disabled}
                   value={values[field] ?? ""}

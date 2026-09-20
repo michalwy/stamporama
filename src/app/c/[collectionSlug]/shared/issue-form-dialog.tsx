@@ -45,6 +45,7 @@ import { CatalogDuplicateWarningIcon } from "@/app/c/[collectionSlug]/shared/cat
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -300,10 +301,9 @@ function IssueForm({
         </LabelWithError>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-            <input
+            <TextInput
               id="f-issue-name"
               name="name"
-              type="text"
               defaultValue={defaultName}
               disabled={isPending}
               placeholder="e.g. First Issue"
@@ -431,9 +431,8 @@ function IssueForm({
                       align="start"
                       style={{ flexShrink: 0 }}
                     >
-                      <input
+                      <TextInput
                         name={`issueCatalogPrefix_${v.catalogVendorId}`}
-                        type="text"
                         defaultValue={prefixOverride?.areaPrefix ?? ""}
                         disabled={isPending}
                         placeholder={v.prefix ?? "Prefix"}
@@ -465,9 +464,8 @@ function IssueForm({
                           <div
                             style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
                           >
-                            <input
+                            <TextInput
                               name={`issueCatalogNumbers_${v.catalogVendorId}`}
-                              type="text"
                               disabled={isPending}
                               placeholder="e.g. 2820-2822, 2823a"
                               aria-label={`${v.vendorAbbreviation} catalog numbers`}
@@ -501,9 +499,8 @@ function IssueForm({
                           <div
                             style={{ position: "relative", flex: 1, minWidth: 0, display: "flex" }}
                           >
-                            <input
+                            <TextInput
                               name={`issueCatalogFirst_${v.catalogVendorId}`}
-                              type="text"
                               defaultValue={existing?.firstNumber ?? ""}
                               disabled={isPending}
                               placeholder="First"
@@ -528,9 +525,8 @@ function IssueForm({
                           >
                             –
                           </span>
-                          <input
+                          <TextInput
                             name={`issueCatalogLast_${v.catalogVendorId}`}
-                            type="text"
                             defaultValue={existing?.lastNumber ?? ""}
                             disabled={isPending}
                             placeholder="Last (optional)"

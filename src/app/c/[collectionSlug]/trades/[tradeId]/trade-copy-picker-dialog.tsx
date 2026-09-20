@@ -22,6 +22,7 @@ import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-i
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { addTradeGiveLinesAction } from "@/app/actions/trades";
 import { useOfferableCopies, useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The **give side's** picker (#637): which copies leave.
 //
@@ -256,8 +257,7 @@ export function TradeCopyPickerDialog({
               />
               All
             </label>
-            <input
-              type="text"
+            <TextInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by stamp, issue, catalog number, or location ref…"

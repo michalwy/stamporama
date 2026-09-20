@@ -120,6 +120,10 @@ there before working against one.
 - Every dismissable overlay registers with `useEscapeLayer`; Escape closes the topmost surface only.
 - Every icon comes from `src/app/icons.tsx` — the only file that may import `lucide-react` — drawn as
   `<Icon name="…" />` (ADR-0030).
+- Every **free-text field is `TextInput` or `TextArea`** (`shared/text-input.tsx`), never a bare
+  `<input>` or `<textarea>`: the whitespace around what is typed goes the moment the field is left,
+  and the database removes it again on every write (ADR-0055). `type="password"` is the one
+  exception, and it is named in `tests/unit/text-field-coverage.test.ts`.
 - A hover hint is the shared `Tooltip`, never the browser's `title`.
 - Row-level actions go in a single `⋮` `RowActionsMenu`.
 - Semantic color tokens from `src/app/globals.css`; a new token needs values in **both** `:root` and

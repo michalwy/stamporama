@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { TextInput } from "./text-input";
 
 // Shared flat search-suggestion autocomplete primitive (#109). A single
 // `Autocomplete` component owns every interaction — the input, debounced open,
@@ -250,9 +251,8 @@ export function Autocomplete<T>({
 
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
-      <input
+      <TextInput
         id={inputId}
-        type="text"
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={showDropdown}

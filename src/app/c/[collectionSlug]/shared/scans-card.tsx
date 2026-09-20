@@ -72,6 +72,7 @@ import {
   uploadSheetInChunks,
   type SheetUploadProgress,
 } from "./upload-sheet-chunks";
+import { TextInput } from "./text-input";
 
 /**
  * An order's card scans (#566, ADR-0033) and the tiles cut from them (#567).
@@ -775,7 +776,7 @@ export function ScansCard({
             dialog because a step in front of *Add card scan* would make the frequent path pay for
             the rare one — and because the name is almost always known at the scanner and almost
             never worth a second screen. */}
-        <input
+        <TextInput
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
           maxLength={MAX_BATCH_LABEL_LENGTH}
@@ -1867,7 +1868,7 @@ function BatchName({
 
   if (naming) {
     return (
-      <input
+      <TextInput
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}

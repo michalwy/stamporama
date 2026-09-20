@@ -1,7 +1,7 @@
 import "server-only";
 import { lotCostInputs } from "./cost-basis";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
@@ -465,7 +465,7 @@ async function resolveSaleShipping(
 /** Whether every set of an offer has now sold **through this offer** — read inside the sale
  * transaction so the just-recorded lines count. Drives the offer → `sold` flip. A set that sold
  * elsewhere does not count (that leaves the offer `active` / needing action, not `sold`). */
-async function isOfferFullySold(tx: Prisma.TransactionClient, offerId: string): Promise<boolean> {
+async function isOfferFullySold(tx: DbTransaction, offerId: string): Promise<boolean> {
   const sets = await tx.offerSet.findMany({ where: { offerId }, select: { id: true } });
   if (sets.length === 0) return false;
   const soldSets = await tx.saleLine.findMany({

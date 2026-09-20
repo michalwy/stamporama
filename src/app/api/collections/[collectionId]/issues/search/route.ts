@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { searchIssues } from "@/lib/issues";
+import { readSearchParam } from "@/lib/text-input";
 
 export async function GET(
   request: NextRequest,
@@ -14,7 +15,7 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
-  const query = sp.get("q") ?? "";
+  const query = readSearchParam(sp, "q") ?? "";
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
 

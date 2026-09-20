@@ -21,6 +21,7 @@ import type { RowAction } from "./row-actions-menu";
 import { RowActionsMenu } from "./row-actions-menu";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { useCollectionConditions } from "./use-display-condition";
+import { TextInput } from "./text-input";
 
 // Format multipliers managed from the row whose scope they belong to — an issue's on that issue,
 // an area's on that area. The anchor is therefore never a field: the screen you opened this from
@@ -314,10 +315,9 @@ export function FormatFactorsDialog({
 
               <div style={{ marginBottom: "1rem" }}>
                 <LabelWithError htmlFor="sf-factor">Multiplier</LabelWithError>
-                <input
+                <TextInput
                   id="sf-factor"
                   name="factor"
-                  type="text"
                   inputMode="decimal"
                   defaultValue={editing.kind === "edit" ? String(editing.factor.factor) : ""}
                   disabled={isPending}

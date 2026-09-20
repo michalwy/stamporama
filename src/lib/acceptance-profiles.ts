@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import { validateAcceptance, type AcceptanceInput } from "./acceptance";
 
 // Named acceptance profiles (#533; ADR-0032 §9) — the collection's dictionary of reusable
@@ -88,7 +88,7 @@ export async function listAcceptanceProfiles(
 /** The three member tables, written as one replacement — the want's own `writeAcceptance` idiom,
  *  and for the same reason: the editor owns all three sets and hands them back whole. */
 async function writeProfileAcceptance(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   profileId: string,
   acceptance: AcceptanceInput
 ): Promise<void> {

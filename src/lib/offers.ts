@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import {
   allocateOfferNumber,
   getHoldingsValuationByGroup,
@@ -4903,7 +4903,7 @@ export async function createOffer(
     /** Further writes that must stand or fall with the new offer, run inside its transaction once the
      *  offer and its seed exist. Composing a series out of single offers (#1211) takes the copies'
      *  sets out of their old offers here: no new offer without that, and none of that without it. */
-    inTransaction?: (tx: Prisma.TransactionClient, offerId: string) => Promise<void>;
+    inTransaction?: (tx: DbTransaction, offerId: string) => Promise<void>;
   } = {}
 ): Promise<string> {
   const prepared = await prepareOfferCreation(ownerId, collectionId, input, opts);
@@ -5037,7 +5037,7 @@ async function prepareOfferCreation(
 
 /** The offer row and its seed, inside the caller's transaction. */
 async function writeOfferCreation(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   prepared: PreparedOfferCreation
 ): Promise<string> {
   const { collectionId, input, platform, currency, pricing, seedComposition, texts, photoConfig, colnectSaleId } =

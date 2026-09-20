@@ -30,6 +30,7 @@ import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import type { OfferTitlePreview } from "@/lib/offers";
 import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -285,8 +286,7 @@ export function ComposeSetDialog({
               <input type="checkbox" checked={allSelected} onChange={(e) => toggleAll(e.target.checked)} disabled={visibleCopies.length === 0} />
               All
             </label>
-            <input
-              type="text"
+            <TextInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by stamp, issue, catalog number, or location ref…"

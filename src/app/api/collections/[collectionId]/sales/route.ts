@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listSalesPaginated } from "@/lib/sales";
 import { isSaleStatus } from "@/lib/sale-status";
+import { readSearchParam } from "@/lib/text-input";
 
 // Paginated sales list for the Sales screen (ADR-0012, #166). Filters by platform, fulfillment
 // status (#392), free text, and whether a set is still to be chosen (#697).
@@ -26,7 +27,7 @@ export async function GET(
   // dropped rather than refused — a stale link narrows to nothing otherwise, and the chips are the
   // authority on what exists.
   const statuses = (sp.get("status") || "").split(",").filter(isSaleStatus);
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   // "Only the sales still waiting on which set went" (#697). Present-and-`1` rather than any truthy
   // value, so a link carrying `setChoice=0` reads as off rather than as on.
   const setChoicePending = sp.get("setChoice") === "1";

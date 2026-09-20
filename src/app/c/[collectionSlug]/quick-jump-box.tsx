@@ -8,6 +8,7 @@ import { RECENT_ENTITY_LABELS, type RecentEntityKind } from "@/lib/recent-entiti
 import { useRecentEntities } from "./shared/use-recent-entities";
 import { Icon, type IconName } from "@/app/icons";
 import { sectionTintForHref } from "./nav-sections";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /**
  * The quick-jump box (#431) — one field in the sidebar that takes a type prefix and a short number
@@ -182,7 +183,7 @@ export function QuickJumpBox({
 
   return (
     <div style={{ padding: "0.5rem 0.75rem 0" }}>
-      <input
+      <TextInput
         ref={inputRef}
         value={value}
         role="combobox"

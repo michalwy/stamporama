@@ -29,6 +29,7 @@ import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Settings → Assistant (#252, part of #155). Two ways to connect the browser extension to this
 // instance + collection:
@@ -481,10 +482,9 @@ export function AssistantPanel({
             <DialogBody>
               <div>
                 <LabelWithError htmlFor="f-token-label">Label (optional)</LabelWithError>
-                <input
+                <TextInput
                   id="f-token-label"
                   name="label"
-                  type="text"
                   disabled={isPending}
                   placeholder="e.g. Raspberry Pi, dev laptop"
                   {...NO_AUTOFILL}

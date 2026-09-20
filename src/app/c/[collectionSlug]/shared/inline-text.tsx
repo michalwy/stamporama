@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { NumericInput } from "./numeric-input";
+import { TextInput } from "./text-input";
 
 const INLINE_INPUT: React.CSSProperties = {
   padding: "0.125rem 0.375rem",
@@ -158,7 +159,7 @@ export function InlineText({
       {inputType === "amount" ? (
         <NumericInput kind="amount" {...fieldProps} />
       ) : (
-        <input type={inputType} {...fieldProps} />
+        <TextInput type={inputType} {...fieldProps} />
       )}
       {suffix && <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{suffix}</span>}
     </span>

@@ -16,6 +16,7 @@ import { STAMP_SIZE_LABELS } from "@/lib/stamp-attribute-kinds";
 import { NO_AUTOFILL } from "./no-autofill";
 import type { RowAction } from "./row-actions-menu";
 import { StampSizePresetPicker } from "./stamp-size-preset-picker";
+import { TextInput } from "./text-input";
 
 // Applying a stamp size preset to an issue or a checklist (#806; ADR-0048 §4, §6, §7) — the Germania
 // case for a series already entered: dozens of stamps, one size, one click, with the counts on screen
@@ -252,9 +253,8 @@ export function ApplySizePresetDialog({
                     <LabelWithError htmlFor={`f-apply-size-${field}`}>
                       {STAMP_SIZE_LABELS[field].field}
                     </LabelWithError>
-                    <input
+                    <TextInput
                       id={`f-apply-size-${field}`}
-                      type="text"
                       inputMode="decimal"
                       disabled={isPending}
                       value={text}

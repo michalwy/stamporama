@@ -8,6 +8,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { formatIssuedDate } from "@/app/stamp-display";
 import { catalogNumberCellKey as cellKey, repeatedCatalogNumbers } from "@/lib/catalog-number-grid";
 import type { CatalogNumberGridData } from "@/lib/issue-catalog-numbers";
+import { TextInput } from "./text-input";
 
 /**
  * The catalogue-number grid (#1346): every stamp of an issue, variants included, against every
@@ -306,8 +307,7 @@ function CatalogNumberGrid({
                     return (
                       <td key={col.catalogVendorId} style={tdCellStyle}>
                         <Tooltip content={hint}>
-                          <input
-                            type="text"
+                          <TextInput
                             ref={(el) => {
                               inputRefs.current.set(key, el);
                             }}

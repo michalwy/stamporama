@@ -20,6 +20,7 @@ import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chi
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useInvalidateOffers, useLotBuilderPresets } from "../use-offers-query";
 import { NOTE } from "./lot-builder-chrome";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Saved criteria for the bulk-lot builder (#773) — the control, on *The pick*'s heading row.
 //
@@ -212,7 +213,7 @@ export function LotPresetBar({
             >
               Name
             </label>
-            <input
+            <TextInput
               id="lot-preset-name"
               autoFocus
               value={name}

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listIssuesPaginated, type IssueSortBy } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { readSearchParam } from "@/lib/text-input";
 
 const VALID_SORT_BY = new Set<IssueSortBy>(["year", "name", "catalogNumber"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -22,7 +23,7 @@ export async function GET(
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
   const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
   const catalogVendorId = sp.get("catalogVendorId") || undefined;

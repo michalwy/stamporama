@@ -12,6 +12,7 @@ import {
 } from "@/lib/trade-realisation-rules";
 import type { TradeSide } from "@/lib/trade-rules";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // **What actually became of this line** (#642; ADR-0039 §11).
 //
@@ -170,7 +171,7 @@ export function TradeFulfillmentDialog({
 
             <div>
               <LabelWithError htmlFor="trade-fulfillment-note">Why (optional)</LabelWithError>
-              <textarea
+              <TextArea
                 id="trade-fulfillment-note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}

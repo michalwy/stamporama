@@ -19,6 +19,7 @@ import { Tooltip } from "./tooltip";
 import type { DescriptionFormat } from "@/lib/description-format";
 import type { TitleSampleCopy } from "@/lib/title-samples";
 import { Icon } from "@/app/icons";
+import { TextArea, TextInput } from "./text-input";
 
 // The template editor (#210, #266, #267): a `{token}` template edited against a **live preview** of
 // real inventory — a random copy by default, shuffled, or searched out. Extracted from the old
@@ -218,8 +219,7 @@ export function TemplateSamplePicker({ samples }: { samples: TemplateSamples }) 
 
       {samples.picking && (
         <div style={{ marginTop: "0.625rem" }}>
-          <input
-            type="text"
+          <TextInput
             value={samples.search}
             onChange={(e) => samples.setSearch(e.target.value)}
             placeholder="Search by stamp name or catalog number…"
@@ -456,14 +456,14 @@ export function TemplateBuilder({
 
       <LabelWithError htmlFor={fieldId}>Template</LabelWithError>
       {multiline ? (
-        <textarea
+        <TextArea
           id={fieldId}
           rows={rows}
           {...fieldProps}
           style={{ ...INPUT_STYLE, resize: "vertical", minHeight: `${rows * 1.4}rem`, whiteSpace: "pre" }}
         />
       ) : (
-        <input id={fieldId} type="text" {...fieldProps} />
+        <TextInput id={fieldId} {...fieldProps} />
       )}
 
       {/* Click-to-insert token (and block) chips. They are a shortcut into the field above — the

@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { MULTI_STAMP, NOT_MULTI_STAMP } from "./multi-stamp";
@@ -1225,7 +1225,7 @@ export interface WantCreateResult {
 
 /** The three acceptance tables, written as one replacement — see {@link WantAcceptanceInput}. */
 async function writeAcceptance(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   wantId: string,
   acceptance: WantAcceptanceInput
 ): Promise<void> {

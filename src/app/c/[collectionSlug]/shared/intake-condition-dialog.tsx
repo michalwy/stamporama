@@ -46,6 +46,7 @@ import {
   LS_LAST_DISPOSITION,
   LS_LAST_SCAN_LOT,
 } from "./add-copy-defaults";
+import { TextInput } from "./text-input";
 
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
@@ -783,10 +784,9 @@ function IntakeConditionDialog({
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <input
+                  <TextInput
                     id="intake-locationRef"
                     name="locationRef"
-                    type="text"
                     placeholder="Ref, e.g. A234"
                     // The one field here that is never remembered between intakes, and is filled by
                     // a repeat all the same (#595): two duplicates worked through in a run go into

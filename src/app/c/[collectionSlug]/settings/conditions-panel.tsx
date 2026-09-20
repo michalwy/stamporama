@@ -29,6 +29,7 @@ import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-
 import { Icon } from "@/app/icons";
 import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker";
 import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -121,10 +122,9 @@ function ConditionForm({
           {translatable ? `Abbreviation — ${languageLabel(defaultLanguage)}` : "Abbreviation"}
         </LabelWithError>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-cond-abbr"
             name="abbreviation"
-            type="text"
             value={abbreviation}
             onChange={(e) => setAbbreviation(e.target.value)}
             disabled={isPending}
@@ -152,10 +152,9 @@ function ConditionForm({
         </LabelWithError>
         {/* Each field carries its own 🌐 (#294), so a badge always refers to exactly one field. */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-cond-name"
             name="name"
-            type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={isPending}

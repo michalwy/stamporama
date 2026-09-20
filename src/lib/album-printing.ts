@@ -1,5 +1,5 @@
 import "server-only";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import { Prisma } from "@/generated/prisma/client";
 import {
   albumNoteBlock,
@@ -237,7 +237,7 @@ export async function markAlbumPagesPrinted(
  * itself awaiting one. A reprint that came out as two cards, or that has only been half done, leaves
  * the row standing and the album goes on saying a superseded card is in the binder.
  */
-async function discardCoveredReprints(tx: Prisma.TransactionClient, albumId: string): Promise<void> {
+async function discardCoveredReprints(tx: DbTransaction, albumId: string): Promise<void> {
   const waiting = await tx.albumPrintedPage.findMany({
     where: { albumId, reprintingAt: { not: null } },
     select: { id: true, stamps: { select: { stampId: true } } },

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { offerListNeighbours } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
+import { readSearchParam } from "@/lib/text-input";
 
 // Where one offer sits in the filtered offer list, for the detail screen's next/previous links
 // (#429). Takes the same filter params as the list route, plus the offer being looked at.
@@ -29,7 +30,7 @@ export async function GET(
     const result = await offerListNeighbours(session.user.id, collectionId, offerId, {
       platformId: sp.get("platformId") || undefined,
       states,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       needsAction: sp.get("needsAction") === "1",
       bidding: sp.get("bidding") === "1",
       endedAuction: sp.get("endedAuction") === "1",

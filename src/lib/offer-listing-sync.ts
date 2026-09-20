@@ -1,6 +1,5 @@
 import "server-only";
-import { prisma } from "./db";
-import type { Prisma } from "@/generated/prisma/client";
+import { prisma, type DbTransaction } from "./db";
 import { LISTED_OFFER_STATES } from "./offer-listing-drift";
 
 // Writing down that a **live listing** is out of step with its offer, and that it is back in step
@@ -17,7 +16,7 @@ import { LISTED_OFFER_STATES } from "./offer-listing-drift";
 // change that caused it should stand or fall together.
 
 /** Either the client or a transaction's — the writes below are the same either way. */
-type OfferWriter = Pick<Prisma.TransactionClient, "offer">;
+type OfferWriter = Pick<DbTransaction, "offer">;
 
 /**
  * Record that a **live** listing no longer says what its offer says (#542).

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 interface SignInFormProps {
   /** The instance refused a session this browser still holds, said in one sentence (#1175). */
@@ -116,7 +117,7 @@ export default function SignInForm({ signedOutNotice, landing }: SignInFormProps
             <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
               Email
             </span>
-            <input
+            <TextInput
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

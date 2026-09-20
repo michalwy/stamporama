@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listOffersPaginated } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
+import { readSearchParam } from "@/lib/text-input";
 
 // Paginated offers list for the Offers screen (ADR-0013). Filters by platform + state, or the
 // derived "needs action" overlay (active offers holding a set sold elsewhere).
@@ -31,7 +32,7 @@ export async function GET(
   const listingOutOfDate = sp.get("listingOutOfDate") === "1";
   // Listings sold on a connected platform with no sale recorded here yet (#499).
   const platformSale = sp.get("platformSale") === "1";
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   const includeClosed = sp.get("includeClosed") === "1";
 
   try {

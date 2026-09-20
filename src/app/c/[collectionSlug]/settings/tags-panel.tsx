@@ -24,6 +24,7 @@ import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/us
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { tagKeys } from "@/app/c/[collectionSlug]/shared/use-tags";
 import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The tag dictionary (#152) — the collector's own labels for what the fixed schema does not name.
 //
@@ -83,10 +84,9 @@ function TagForm({
     <>
       <div>
         <LabelWithError htmlFor="f-tag-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-tag-name"
           name="name"
-          type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={isPending}

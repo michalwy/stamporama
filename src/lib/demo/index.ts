@@ -1,5 +1,5 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 import { seedCatalog } from "./seed-catalog";
 import { seedAreas } from "./seed-areas";
 import { seedStamps } from "./seed-stamps";
@@ -9,7 +9,7 @@ import { seedAttributes } from "./seed-attributes";
 
 export async function seedDemoData(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<void> {
   const catalog = await seedCatalog(collectionId, tx);
   const areas = await seedAreas(collectionId, tx, catalog);
@@ -23,7 +23,7 @@ export async function seedDemoData(
 
 export async function wipeDemoData(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<void> {
   // Inventory first: variant history and items cascade from stamp deletion, but
   // deleting them explicitly keeps the intent clear. Contacts and certificate

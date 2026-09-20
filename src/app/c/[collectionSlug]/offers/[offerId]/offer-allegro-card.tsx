@@ -24,6 +24,7 @@ import type {
   AllegroOfferParameterView,
 } from "@/lib/allegro-offer-listing";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // **On Allegro** — what this offer will be listed as (#494).
 //
@@ -602,17 +603,15 @@ function ParameterInput({
   if (field.range) {
     return (
       <>
-        <input
+        <TextInput
           autoFocus
-          type="text"
           value={draft.from}
           placeholder="From"
           disabled={disabled}
           style={{ ...PARAM_INPUT, width: "6rem" }}
           onChange={(e) => onChange({ ...draft, from: e.target.value })}
         />
-        <input
-          type="text"
+        <TextInput
           value={draft.to}
           placeholder="To"
           disabled={disabled}
@@ -623,18 +622,28 @@ function ParameterInput({
     );
   }
 
-  return (
-    <input
-      autoFocus
-      type={field.type === "integer" || field.type === "float" ? "number" : "text"}
-      value={draft.values[0] ?? ""}
-      disabled={disabled}
-      min={field.min ?? undefined}
-      max={field.max ?? undefined}
-      maxLength={field.maxLength ?? undefined}
-      step={field.type === "float" ? "any" : undefined}
-      style={{ ...PARAM_INPUT, width: "14rem" }}
-      onChange={(e) => onChange({ ...draft, values: e.target.value ? [e.target.value] : [] })}
-    />
-  );
+  const shared = {
+    autoFocus: true,
+    value: draft.values[0] ?? "",
+    disabled,
+    style: { ...PARAM_INPUT, width: "14rem" },
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      onChange({ ...draft, values: e.target.value ? [e.target.value] : [] }),
+  };
+
+  // Two elements rather than one with a computed `type`: a number is a number and a free-text
+  // parameter is text, and text goes through the shared field so Allegro is never sent a value
+  // with a space on the end of it (#1357).
+  if (field.type === "integer" || field.type === "float") {
+    return (
+      <input
+        {...shared}
+        type="number"
+        min={field.min ?? undefined}
+        max={field.max ?? undefined}
+        step={field.type === "float" ? "any" : undefined}
+      />
+    );
+  }
+  return <TextInput {...shared} maxLength={field.maxLength ?? undefined} />;
 }

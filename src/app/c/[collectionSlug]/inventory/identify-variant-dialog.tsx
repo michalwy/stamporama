@@ -19,6 +19,7 @@ import {
   ReferenceCompareDialog,
   copyPictures,
 } from "@/app/c/[collectionSlug]/shared/reference-compare-dialog";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /** Edge of each picture in the dialog (#1003). Two of them side by side fill the dialog's width,
  * which is as large as a front and a back can be drawn here without the dialog growing. */
@@ -189,7 +190,7 @@ export function IdentifyVariantDialog({
           {/* Optional reason */}
           <div style={{ marginBottom: "1.25rem" }}>
             <LabelWithError htmlFor="identify-note">Reason (optional)</LabelWithError>
-            <textarea
+            <TextArea
               id="identify-note"
               name="variantChangeNote"
               rows={2}

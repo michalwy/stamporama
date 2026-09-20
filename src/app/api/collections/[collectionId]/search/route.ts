@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveCollectionOwner } from "@/lib/route-auth";
 import { searchCollection } from "@/lib/collection-search";
+import { readSearchParam } from "@/lib/text-input";
 
 // "Have I got this?", asked from outside the app (#529) — the endpoint the Assistant's **Find in
 // Stamporama** context menu lands on with whatever text the collector selected on an auction page.
@@ -24,7 +25,7 @@ export async function GET(
     const result = await searchCollection(
       ownerId,
       collectionId,
-      request.nextUrl.searchParams.get("q") ?? ""
+      readSearchParam(request.nextUrl.searchParams, "q") ?? ""
     );
     return NextResponse.json(result);
   } catch {

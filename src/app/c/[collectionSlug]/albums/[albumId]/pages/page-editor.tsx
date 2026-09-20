@@ -89,6 +89,7 @@ import {
   type CanvasSelection,
 } from "./page-canvas";
 import { AlbumNameSuggestion } from "../album-name-suggestion";
+import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The page editor (#769): where the collector overrules the automatic layout.
 //
@@ -1608,9 +1609,8 @@ function StampSizeSection({ collectionId, box }: { collectionId: string; box: Al
             return (
               <div key={id} style={{ flex: 1 }}>
                 <LabelWithError htmlFor={id}>{label}</LabelWithError>
-                <input
+                <TextInput
                   id={id}
-                  type="text"
                   inputMode="decimal"
                   value={value}
                   disabled={pending}
@@ -1850,7 +1850,7 @@ function BlockPanel({
       {block.kind === "text" && (
         <div>
           <LabelWithError htmlFor="note-text">Words</LabelWithError>
-          <textarea
+          <TextArea
             id="note-text"
             value={text}
             rows={3}
@@ -2092,7 +2092,7 @@ function AddNoteDialog({
           <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
             <div>
               <LabelWithError htmlFor="new-note-text">Words</LabelWithError>
-              <textarea
+              <TextArea
                 id="new-note-text"
                 name="text"
                 rows={3}

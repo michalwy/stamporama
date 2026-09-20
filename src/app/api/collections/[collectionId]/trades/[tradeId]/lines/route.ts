@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listTradeLinePage } from "@/lib/trade-lines";
 import { isTradeSide } from "@/lib/trade-rules";
 import { readTradeGroupLevels } from "@/lib/trade-grouping";
+import { readSearchParam } from "@/lib/text-input";
 
 /**
  * One page of one side of one section of a trade (#637).
@@ -47,7 +48,7 @@ export async function GET(
       offset,
       pageSize: 50,
       filters: {
-        search: sp.get("search")?.trim() || undefined,
+        search: readSearchParam(sp),
         conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
         // Give-side only, and the domain simply never applies it to a receive line — a filter the
         // other column does not offer must still be harmless if it arrives.

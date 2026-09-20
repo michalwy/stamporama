@@ -163,6 +163,7 @@ import {
   IntakeConditionDialog,
   type PendingSelection,
 } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /** When to release the arrival mark on a deep-linked lot card (#876). A **floor** under the 2s
  * `.arrival-flash` animation in `globals.css`, not a duration of its own: the animation starts a
@@ -3576,10 +3577,9 @@ function LotDialog({
         <DialogBody>
           <div style={{ marginBottom: "1rem" }}>
             <LabelWithError htmlFor="lot-title">Title (optional)</LabelWithError>
-            <input
+            <TextInput
               id="lot-title"
               name="title"
-              type="text"
               placeholder="e.g. Album Polska 1950s"
               defaultValue={initialTitle ?? ""}
               autoFocus

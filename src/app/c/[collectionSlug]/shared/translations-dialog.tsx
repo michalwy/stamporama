@@ -9,6 +9,7 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import { languageLabel } from "@/lib/languages";
+import { TextInput } from "./text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -203,9 +204,8 @@ export function TranslationsDialog({
                         {field.label}
                       </LabelWithError>
                     )}
-                    <input
+                    <TextInput
                       id={`translation-${lang}-${field.key}`}
-                      type="text"
                       value={draft[lang]?.[field.key] ?? ""}
                       onChange={(e) => update(lang, field.key, e.target.value)}
                       onKeyDown={handleKeyDown}

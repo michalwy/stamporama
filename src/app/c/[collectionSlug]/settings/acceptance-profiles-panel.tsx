@@ -31,6 +31,7 @@ import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-dis
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { useAcceptanceProfiles } from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The collection's named acceptance profiles (#533; ADR-0032 §9), edited beside the three
 // dictionaries they are built from.
@@ -192,9 +193,8 @@ export function AcceptanceProfilesPanel({ collectionId }: { collectionId: string
     <>
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-profile-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-profile-name"
-          type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={isPending}

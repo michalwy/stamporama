@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listStampAreaFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { readSearchParam } from "@/lib/text-input";
 
 /** The area rail's counts (#843) — the mirror of `../years`: same filters, except that this one
  *  keeps `year` and drops the area selection, so each row says what selecting it would list. */
@@ -18,7 +19,7 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;

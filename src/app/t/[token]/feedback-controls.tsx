@@ -15,6 +15,7 @@ import {
   TRADE_FEEDBACK_NOTE_MAX,
 } from "@/lib/trade-feedback-rules";
 import type { TradeSide } from "@/lib/trade-rules";
+import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // **The partner answering back** (#641), and seeing what they already answered (#667) — the client
 // code on this page.
@@ -263,9 +264,8 @@ export function LineFeedback({ lineId, side }: { lineId: string; side: TradeSide
         />
         {tradeFeedbackRejectLabel(side)}
       </label>
-      <input
+      <TextInput
         className="ts-fb-input"
-        type="text"
         value={draft}
         maxLength={TRADE_FEEDBACK_NOTE_MAX}
         placeholder="Add a note"
@@ -337,7 +337,7 @@ export function TradeNoteFeedback({
         here, and nothing you write changes the list itself. Use the box below for anything about the
         exchange as a whole.
       </p>
-      <textarea
+      <TextArea
         className="ts-fb-textarea"
         rows={3}
         value={note}

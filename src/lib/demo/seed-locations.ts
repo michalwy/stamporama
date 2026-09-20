@@ -1,5 +1,5 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 
 // Storage locations demo data (#56): a physical storage tree (cabinets → stockbooks/
 // boxes) plus assignment of a fraction of the seeded copies to assignable locations,
@@ -55,7 +55,7 @@ const TREE: LocationNode[] = [
 
 export async function seedLocations(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<void> {
   const rng = mulberry32(0x4c4f_4341);
 

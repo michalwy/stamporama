@@ -14,6 +14,7 @@ import { formatBytes } from "@/lib/format-bytes";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 import { ThumbPreview, THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Add manual attachments to an offer's photo plan (#313, #331).
 //
@@ -295,7 +296,7 @@ export function AddAttachmentDialog({
             content="Shown in the plan only — never drawn on the image"
             style={{ flex: 1, minWidth: "14rem" }}
           >
-            <input
+            <TextInput
               id="attachment-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}

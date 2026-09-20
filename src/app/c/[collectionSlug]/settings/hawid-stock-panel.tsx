@@ -31,6 +31,7 @@ import {
 } from "@/lib/hawid";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The hawid stock (#765) — the ref-card panel's list-and-dialog scaffolding with the formats
 // panel's drag order, because both apply here: it is a dictionary of millimetres, and its order is
@@ -143,10 +144,9 @@ function StripForm({ strip, isPending }: { strip?: HawidStripData; isPending: bo
 
       <div>
         <LabelWithError htmlFor="f-hawid-label">Label (optional)</LabelWithError>
-        <input
+        <TextInput
           id="f-hawid-label"
           name="label"
-          type="text"
           defaultValue={strip?.label ?? ""}
           disabled={isPending}
           placeholder="e.g. Hawid 264"

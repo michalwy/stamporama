@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import {
@@ -252,7 +252,7 @@ async function resolveLocationScope(
  * Pass the surrounding transaction client when the copies are created inside one, so a rolled-back
  * intake also rolls back the numbers it reserved. */
 export async function allocateItemNumbers(
-  client: Prisma.TransactionClient,
+  client: DbTransaction,
   collectionId: string,
   count: number
 ): Promise<number[]> {
@@ -272,7 +272,7 @@ export async function allocateItemNumbers(
 
 /** Convenience wrapper for the common single-copy case. */
 export async function allocateItemNumber(
-  client: Prisma.TransactionClient,
+  client: DbTransaction,
   collectionId: string
 ): Promise<number> {
   const [itemNo] = await allocateItemNumbers(client, collectionId, 1);
@@ -290,7 +290,7 @@ export async function allocateItemNumber(
  * Must be called with the transaction that creates the offer, so a rolled-back creation also rolls
  * back the number it reserved. */
 export async function allocateOfferNumber(
-  client: Prisma.TransactionClient,
+  client: DbTransaction,
   collectionId: string
 ): Promise<number> {
   const rows = await client.$queryRaw<{ nextOfferNo: number }[]>`
@@ -327,7 +327,7 @@ export type NumberedEntity = keyof typeof ENTITY_NUMBER_COUNTERS;
  * Must be called with the transaction that creates the row, so a rolled-back creation also rolls
  * back the number it reserved. */
 export async function allocateEntityNumber(
-  client: Prisma.TransactionClient,
+  client: DbTransaction,
   collectionId: string,
   entity: NumberedEntity
 ): Promise<number> {

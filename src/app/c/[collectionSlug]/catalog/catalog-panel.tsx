@@ -24,6 +24,7 @@ import {
 import type { CatalogVendorData, CatalogNameData, CatalogEditionData } from "@/lib/catalog";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const CURRENCIES = [
   "AUD", "BGN", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP",
@@ -79,10 +80,9 @@ function VendorForm({ defaultName, defaultAbbreviation, isPending }: {
     <>
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-vendor-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-vendor-name"
           name="name"
-          type="text"
           defaultValue={defaultName}
           disabled={isPending}
           placeholder="e.g. Michel"
@@ -91,10 +91,9 @@ function VendorForm({ defaultName, defaultAbbreviation, isPending }: {
       </div>
       <div>
         <LabelWithError htmlFor="f-vendor-abbr">Abbreviation</LabelWithError>
-        <input
+        <TextInput
           id="f-vendor-abbr"
           name="abbreviation"
-          type="text"
           defaultValue={defaultAbbreviation}
           disabled={isPending}
           placeholder="e.g. Mi"
@@ -114,10 +113,9 @@ function CatalogNameForm({ defaultName, defaultCurrency, isPending }: {
     <>
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-name-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-name-name"
           name="name"
-          type="text"
           defaultValue={defaultName}
           disabled={isPending}
           placeholder="e.g. Michel Deutschland"

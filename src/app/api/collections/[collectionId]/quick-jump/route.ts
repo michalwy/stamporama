@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { parseQuickJump } from "@/lib/quick-jump";
 import { quickJumpMissMessage, resolveQuickJump } from "@/lib/quick-jump-server";
+import { readSearchParam } from "@/lib/text-input";
 
 // `GET …/quick-jump?q=<what was typed>` (#431).
 //
@@ -21,7 +22,7 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
-  const target = parseQuickJump(sp.get("q") ?? "");
+  const target = parseQuickJump(readSearchParam(sp, "q") ?? "");
 
   if (!target) {
     // Not a jump at all — a distinct answer from "no such row", because the two need different

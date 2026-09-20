@@ -1,7 +1,7 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 
 export type SeederContribution = (
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ) => Promise<void>;

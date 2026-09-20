@@ -26,6 +26,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The physical-format dictionary. Mirrors `conditions-panel.tsx` rather than reinventing the
 // list/drag/dialog scaffolding — a format is the same kind of per-collection taxonomy, set up once
@@ -115,10 +116,9 @@ function FormatForm({
           {translatable ? `Abbreviation — ${languageLabel(defaultLanguage)}` : "Abbreviation"}
         </LabelWithError>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-fmt-abbr"
             name="abbreviation"
-            type="text"
             value={abbreviation}
             onChange={(e) => setAbbreviation(e.target.value)}
             disabled={isPending}
@@ -145,10 +145,9 @@ function FormatForm({
           {translatable ? `Name — ${languageLabel(defaultLanguage)}` : "Name"}
         </LabelWithError>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-fmt-name"
             name="name"
-            type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={isPending}
