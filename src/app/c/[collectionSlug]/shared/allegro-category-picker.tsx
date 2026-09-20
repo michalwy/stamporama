@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import {
+  DialogShell,
+  DialogBody,
+  DialogActions,
+  LabelWithError,
+  PICKER_DIALOG_HEIGHT,
+} from "@/app/dialog-shell";
 import type { AllegroCategory, AllegroCategoryParameter } from "@/lib/allegro-api";
 import {
   parameterDraft,
@@ -261,7 +267,7 @@ export function AllegroCategoryPicker({
   }
 
   return (
-    <DialogShell title={title} onClose={onClose} maxWidth="42rem" minHeight="28rem">
+    <DialogShell title={title} onClose={onClose} maxWidth="42rem" height={PICKER_DIALOG_HEIGHT}>
       <DialogBody>
         <div
           style={{ display: "flex", flexDirection: "column", gap: "1rem" }}

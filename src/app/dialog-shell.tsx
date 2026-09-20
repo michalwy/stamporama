@@ -12,6 +12,34 @@ import {
 import { useEscapeLayer } from "@/app/escape-stack";
 import { Icon } from "@/app/icons";
 
+// ── Picker height ───────────────────────────────────────────────────────────
+
+/**
+ * The height of a dialog **whose purpose is to pick something from a list or a tree** (#1361).
+ *
+ * One figure for all of them rather than a per-dialog guess, because the collector meets several in
+ * a row — a copy picker, then a stamp browser, then a set chooser — and a picker that is a third
+ * shorter than the one before it reads as a different kind of surface. The figures it replaces were
+ * exactly that: `min(90vh, 48rem)` here, `min(85vh, 40rem)` there, each set on the day its dialog
+ * was written, and every one of them cutting the list off well above the bottom of the window.
+ *
+ * `min(100vh - 4rem, 70rem)`, the album template dialog's figure (#978) and for its reasons. The
+ * first term is **`DialogShell`'s own `maxHeight`**: any smaller factor of `vh` is clamped by the
+ * shell on a short window, so it can only ever lose rows a taller panel would have shown. The
+ * 70rem ceiling is what stops a very tall monitor from drawing a picker no eye tracks from its
+ * search box to its footer.
+ *
+ * It is a **fixed `height`, never a `maxHeight`**: the list scrolls inside the panel and the panel
+ * does not move. A dialog that grew and shrank as the search narrowed would shift the rows under
+ * the cursor — #848's reason for stopping the lists themselves from jumping — and the moment it
+ * would do it is the moment the collector is reading them. A short result list therefore leaves
+ * space rather than closing it up.
+ *
+ * The header, the search box and the footer stay in view either way: that is the shell's own
+ * layout, and a picker only has to give its list `flex: 1; min-height: 0` to scroll within it.
+ */
+export const PICKER_DIALOG_HEIGHT = "min(100vh - 4rem, 70rem)";
+
 // ── Shell ────────────────────────────────────────────────────────────────────
 
 /**

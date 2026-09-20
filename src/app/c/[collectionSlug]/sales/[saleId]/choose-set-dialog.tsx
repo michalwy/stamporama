@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  PICKER_DIALOG_HEIGHT,
   DialogShell,
   DialogBody,
   DialogFooter,
@@ -103,7 +104,7 @@ export function ChooseSetDialog({
       title="Choose set"
       onClose={onClose}
       maxWidth="min(94vw, 60rem)"
-      height="min(90vh, 46rem)"
+      height={PICKER_DIALOG_HEIGHT}
       zIndexBase={120}
     >
       <DialogBody>

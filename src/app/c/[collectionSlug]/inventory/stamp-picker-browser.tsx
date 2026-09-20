@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { DialogShell, type DialogAsideProps } from "@/app/dialog-shell";
+import { DialogShell, PICKER_DIALOG_HEIGHT, type DialogAsideProps } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import {
@@ -430,7 +430,7 @@ export function StampPickerBrowser({
         // itself, or one Esc would close both.
         dismissable={!create && !checklistsFor}
         maxWidth="min(96vw, 110rem)"
-        height="min(90vh, 60rem)"
+        height={PICKER_DIALOG_HEIGHT}
         // Which stamp a piece *is* is read off the piece, so when this picker is one step of
         // identifying a scan tile the tile comes with it (#592) — leftmost, outside the area tree,
         // because it is the subject of the browsing rather than one more way of narrowing it.

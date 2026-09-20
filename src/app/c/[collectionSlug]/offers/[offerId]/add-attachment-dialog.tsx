@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import {
+  PICKER_DIALOG_HEIGHT,
   DialogShell,
   DialogBody,
   DialogActions,
@@ -219,7 +220,7 @@ export function AddAttachmentDialog({
       // picking across a whole offer's photos means seeing many of them at once.
       maxWidth="min(96vw, 100rem)"
       // Fixed so switching tabs never resizes the dialog; the bodies scroll instead.
-      height="min(90vh, 60rem)"
+      height={PICKER_DIALOG_HEIGHT}
       zIndexBase={110}
     >
       <div style={{ display: "flex", borderBottom: "1px solid var(--color-border)", padding: "0 1.5rem" }}>

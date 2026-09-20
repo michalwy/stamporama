@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  PICKER_DIALOG_HEIGHT,
   DialogShell,
   DialogFooter,
   DialogPrimaryButton,
@@ -408,7 +409,7 @@ export function AddSaleLineDialog({
       title="Add sold sets"
       onClose={onClose}
       maxWidth="min(94vw, 78rem)"
-      height="min(90vh, 48rem)"
+      height={PICKER_DIALOG_HEIGHT}
       zIndexBase={120}
     >
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>

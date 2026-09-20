@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
+  PICKER_DIALOG_HEIGHT,
   DialogShell,
   DialogFooter,
   DialogPrimaryButton,
@@ -266,7 +267,7 @@ export function ComposeSetDialog({
       onClose={onClose}
       dismissable={openFix === null}
       maxWidth="min(96vw, 100rem)"
-      height="min(90vh, 60rem)"
+      height={PICKER_DIALOG_HEIGHT}
     >
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <ListFilterSidebar

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
-import { DialogShell } from "@/app/dialog-shell";
+import { DialogShell, PICKER_DIALOG_HEIGHT } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { StampNodeData } from "@/lib/issues";
 import {
@@ -97,7 +97,7 @@ export function IssueStampPickerDialog({
       title={`Select a stamp · ${issue.name ?? "(unnamed issue)"}`}
       onClose={onClose}
       maxWidth="min(94vw, 56rem)"
-      height="min(85vh, 40rem)"
+      height={PICKER_DIALOG_HEIGHT}
     >
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {isLoading ? (
