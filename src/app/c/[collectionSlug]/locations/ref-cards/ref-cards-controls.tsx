@@ -11,6 +11,7 @@ import {
   readLast,
   writeLast,
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const FIELD: React.CSSProperties = {
   padding: "0.3125rem 0.5rem",
@@ -146,8 +147,7 @@ export function RefCardsControls({
 
       <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <span style={LABEL}>Start at</span>
-        <input
-          type="text"
+        <TextInput
           value={draftStart}
           onChange={(e) => setDraftStart(e.target.value)}
           placeholder="A147"

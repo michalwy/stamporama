@@ -17,6 +17,7 @@ import type { AreaCatalogEntry } from "@/lib/areas";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
+import { TextInput } from "./text-input";
 
 // A whole run of variants under one base stamp, in one save (#722).
 //
@@ -209,10 +210,9 @@ export function AddVariantRangeDialog({
               <input type="hidden" name="catalogVendorId" value={vendor.catalogVendorId} />
 
               <LabelWithError htmlFor="f-variant-numbers">Variant numbers</LabelWithError>
-              <input
+              <TextInput
                 id="f-variant-numbers"
                 name="variantNumbers"
-                type="text"
                 value={spec}
                 autoFocus
                 disabled={isPending}

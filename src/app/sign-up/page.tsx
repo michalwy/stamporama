@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -87,8 +88,7 @@ export default function SignUpPage() {
             <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
               Name
             </span>
-            <input
-              type="text"
+            <TextInput
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -109,7 +109,7 @@ export default function SignUpPage() {
             <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
               Email
             </span>
-            <input
+            <TextInput
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

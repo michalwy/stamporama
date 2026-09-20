@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listStampYearFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { readSearchParam } from "@/lib/text-input";
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +19,7 @@ export async function GET(
   const sp = request.nextUrl.searchParams;
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;

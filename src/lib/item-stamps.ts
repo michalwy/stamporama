@@ -1,6 +1,5 @@
 import "server-only";
-import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 
 // The stamps a copy carries (ADR-0044, #744) — and the **only** module that writes them, or
 // `Item.stampId` and `Item.stampCount`.
@@ -150,7 +149,7 @@ export async function validateItemStampEntries(
  * `docs/agents/platform.md`) has nothing here to collide with.
  */
 async function syncItemFromEntriesTx(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   itemId: string
 ): Promise<ItemStampEntry[]> {
   const rows = await tx.itemStamp.findMany({
@@ -202,7 +201,7 @@ async function syncItemFromEntriesTx(
  * is never *born* a carrier — a carrier is made by editing one (#746).
  */
 export async function createLeadingEntriesTx(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   copies: readonly { id: string; stampId: string }[]
 ): Promise<void> {
   if (copies.length === 0) return;
@@ -230,7 +229,7 @@ export async function createLeadingEntriesTx(
  * Returns quietly when the copy is already there, so no caller has to check first.
  */
 export async function repointLeadingStampTx(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   itemId: string,
   toStampId: string
 ): Promise<void> {
@@ -340,7 +339,7 @@ export async function setItemStamps(
  * owns cannot be got round by using the Tx form.
  */
 export async function setItemStampsTx(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   itemId: string,
   entries: readonly ItemStampEntryInput[]
 ): Promise<ItemStampEntry[]> {

@@ -30,6 +30,7 @@ import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
 import { isSaleStatus } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -1321,8 +1322,7 @@ function EditableShippingRow({
               <option value={CUSTOM_SHIPPING_METHOD}>Custom…</option>
             </select>
             {draftMethod === CUSTOM_SHIPPING_METHOD && (
-              <input
-                type="text"
+              <TextInput
                 aria-label="Custom method name"
                 placeholder="Method name"
                 value={draftMethodName}

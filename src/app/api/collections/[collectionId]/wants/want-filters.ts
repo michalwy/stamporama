@@ -1,4 +1,5 @@
 import { isWantPriority, type WantListFilters, type WantPriority } from "@/lib/wants";
+import { readSearchParam } from "@/lib/text-input";
 
 // One parser for the list route and the year-facet route beside it (#532). Shared so a facet can
 // never be counted against a different question than the page it sits next to — the two routes
@@ -27,7 +28,7 @@ export function parseWantListFilters(params: URLSearchParams): WantListFilters {
     year: params.get("year") ?? undefined,
     issueId: params.get("issueId") ?? undefined,
     stampId: params.get("stampId") ?? undefined,
-    search: params.get("search") ?? undefined,
+    search: readSearchParam(params),
     searchCatalogNumber: params.get("searchCatalogNumber") ?? undefined,
     searchCatalogVendorId: params.get("searchCatalogVendorId") ?? undefined,
     // A junk offset is page one, not an error: the parameter is ours, and a 400 here would break

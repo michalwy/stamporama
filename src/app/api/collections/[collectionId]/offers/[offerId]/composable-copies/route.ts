@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listComposableCopies } from "@/lib/offers";
+import { readSearchParam } from "@/lib/text-input";
 
 // Copies eligible to add to an offer's set (ADR-0013): For sale, delivered, not sold, and not
 // already in a set of this offer.
@@ -16,7 +17,7 @@ export async function GET(
 
   const { collectionId, offerId } = await params;
   const sp = request.nextUrl.searchParams;
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   const areaIds = sp.getAll("areaId");
 
   try {

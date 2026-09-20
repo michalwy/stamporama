@@ -30,6 +30,7 @@ import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-
 import { attachCopiesToLotAction } from "@/app/actions/purchases";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -303,8 +304,7 @@ export function AttachCopiesDialog({
               />
               All
             </label>
-            <input
-              type="text"
+            <TextInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by stamp, issue, catalog number, or location ref…"

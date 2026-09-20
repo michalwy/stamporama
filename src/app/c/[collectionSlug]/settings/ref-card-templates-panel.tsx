@@ -28,6 +28,7 @@ import {
   refCardGeometrySummary,
 } from "@/lib/ref-card-template-rules";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The collection's ref-card formats (#569), edited the way collage templates are — the second named
 // dictionary of its kind, so the CRUD, the dialogs and the row shape are that panel's rather than
@@ -127,10 +128,9 @@ function RefCardTemplateForm({
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
         <LabelWithError htmlFor="f-refcard-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-refcard-name"
           name="name"
-          type="text"
           defaultValue={template?.name}
           disabled={isPending}
           placeholder="e.g. Postcard pocket"

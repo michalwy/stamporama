@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { listItemAreaFacets } from "@/lib/items";
 import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
+import { readSearchParam } from "@/lib/text-input";
 
 /** The area rail's counts (#843) — the mirror of `../years`: the same filters as the list, except
  *  that this one keeps `year` and drops the area selection, so each row says what selecting it
@@ -37,7 +38,7 @@ export async function GET(
       formatIds: readCsvParam(sp, "formatIds"),
       subtypeIds: readCsvParam(sp, "subtypeIds"),
       year,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       catalogVendorId: sp.get("catalogVendorId") || undefined,
       catalogNumber: sp.get("catalogNumber") || undefined,
       stampId: sp.get("stampId") || undefined,

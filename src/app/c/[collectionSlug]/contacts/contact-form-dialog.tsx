@@ -36,6 +36,7 @@ import {
 } from "@/lib/offer-photo-config";
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
 import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
+import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -302,10 +303,9 @@ export function ContactFormDialog({
             <div style={showTabs ? { visibility: activeTab === "contact" ? "visible" : "hidden" } : undefined}>
               <div style={FIELD_GAP}>
                 <LabelWithError htmlFor="contact-name">Name</LabelWithError>
-                <input
+                <TextInput
                   id="contact-name"
                   name="name"
-                  type="text"
                   defaultValue={contact?.name ?? ""}
                   placeholder="e.g. Jan Kowalski, Allegro, Cherrystone…"
                   disabled={isPending}
@@ -322,10 +322,9 @@ export function ContactFormDialog({
                   has to carry the name their order states. Blank on nearly every contact. */}
               <div style={FIELD_GAP}>
                 <LabelWithError htmlFor="contact-full-name">Full name (optional)</LabelWithError>
-                <input
+                <TextInput
                   id="contact-full-name"
                   name="fullName"
-                  type="text"
                   defaultValue={contact?.fullName ?? ""}
                   placeholder="The name on the parcel, if it differs from above"
                   disabled={isPending}
@@ -336,7 +335,7 @@ export function ContactFormDialog({
               <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
                 <div style={{ flex: 1 }}>
                   <LabelWithError htmlFor="contact-email">Email</LabelWithError>
-                  <input
+                  <TextInput
                     id="contact-email"
                     name="email"
                     type="email"
@@ -347,7 +346,7 @@ export function ContactFormDialog({
                 </div>
                 <div style={{ flex: 1 }}>
                   <LabelWithError htmlFor="contact-phone">Phone</LabelWithError>
-                  <input
+                  <TextInput
                     id="contact-phone"
                     name="phone"
                     type="tel"
@@ -403,7 +402,7 @@ export function ContactFormDialog({
 
               <div>
                 <LabelWithError htmlFor="contact-notes">Notes</LabelWithError>
-                <textarea
+                <TextArea
                   id="contact-notes"
                   name="notes"
                   rows={3}

@@ -1,5 +1,5 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 import { createLeadingEntriesTx } from "../item-stamps";
 
 // Inventory demo data: owned copies (`Item`), contacts (`Contact` address book),
@@ -96,7 +96,7 @@ function weightedIndex(rng: () => number, weights: number[]): number {
 
 export async function seedInventory(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<void> {
   const rng = mulberry32(0x5741_4d50);
 

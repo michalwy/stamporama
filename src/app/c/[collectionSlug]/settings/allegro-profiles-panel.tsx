@@ -27,6 +27,7 @@ import {
   setDefaultAllegroListingProfileAction,
   updateAllegroListingProfileAction,
 } from "@/app/actions/allegro-listing-profiles";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Settings → Allegro, the listing-profile half (#486; ADR-0025) — below the connection, because a
 // profile is built from dictionaries only a connected account can be asked for.
@@ -475,7 +476,7 @@ function AllegroProfileDialog({
         <div style={{ display: "grid", gap: "0.875rem" }}>
           <div>
             <LabelWithError htmlFor="profile-name">Name</LabelWithError>
-            <input
+            <TextInput
               id="profile-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -635,7 +636,7 @@ function AllegroProfileDialog({
           <div style={{ display: "grid", gridTemplateColumns: "1fr 8rem 6rem", gap: "0.5rem" }}>
             <div>
               <LabelWithError htmlFor="profile-city">City sent from</LabelWithError>
-              <input
+              <TextInput
                 id="profile-city"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
@@ -646,7 +647,7 @@ function AllegroProfileDialog({
             </div>
             <div>
               <LabelWithError htmlFor="profile-post-code">Post code</LabelWithError>
-              <input
+              <TextInput
                 id="profile-post-code"
                 value={postCode}
                 onChange={(e) => setPostCode(e.target.value)}
@@ -657,7 +658,7 @@ function AllegroProfileDialog({
             </div>
             <div>
               <LabelWithError htmlFor="profile-country">Country</LabelWithError>
-              <input
+              <TextInput
                 id="profile-country"
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value.toUpperCase())}

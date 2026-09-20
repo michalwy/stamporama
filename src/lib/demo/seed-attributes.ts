@@ -1,5 +1,5 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 
 // The demo's stamp attributes (#72, extending #77): the four dictionaries, and a rule deriving
 // each seeded stamp's six values from what the dataset already says about it. The stamp names in
@@ -36,7 +36,7 @@ function capitalize(s: string): string {
 
 export async function seedAttributes(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<DemoAttributes> {
   const rows = (names: readonly string[]) =>
     names.map((name, i) => ({ collectionId, name, sortOrder: i }));

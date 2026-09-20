@@ -26,6 +26,7 @@ import {
   toLocalInputValue,
 } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { useLastOfferDefaults } from "./use-last-offer-defaults";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -434,7 +435,7 @@ export function OfferFormDialog({
               other two are usually left at their remembered values. */}
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="offer-url">Listing URL (optional)</LabelWithError>
-            <input
+            <TextInput
               id="offer-url"
               name="url"
               type="url"

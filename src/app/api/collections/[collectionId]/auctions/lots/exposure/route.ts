@@ -5,6 +5,7 @@ import { auctionLotExposure } from "@/lib/auctions";
 import { isAuctionLotOutcome } from "@/lib/auction-rules";
 import type { AuctionClosingWindow } from "@/lib/auctions";
 import { LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
+import { readSearchParam } from "@/lib/text-input";
 
 /** A derived-state filter (`bid-possible`, `outbid`, …), ignored when it says anything else. */
 function lotSignal(raw: string | null): LotSignal | undefined {
@@ -39,7 +40,7 @@ export async function GET(
       signal: lotSignal(sp.get("signal")),
       undescribed: sp.get("undescribed") === "1" || undefined,
       duplicate: sp.get("duplicate") === "1" || undefined,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       sellerId: sp.get("sellerId") || undefined,
       platformId: sp.get("platformId") || undefined,
       saleId: sp.get("saleId") || undefined,

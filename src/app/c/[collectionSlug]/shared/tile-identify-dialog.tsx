@@ -65,6 +65,7 @@ import {
   usePurchaseCopiesInfinite,
   type LotCopiesParams,
 } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/use-lot-copies-query";
+import { TextArea, TextInput } from "./text-input";
 
 /**
  * A tile — or a **run of them** — and what can become of it (#567) — three ends, and since #597 one
@@ -584,7 +585,7 @@ export function TileIdentifyDialog({
         {/* One question for the run, since that is what a run of one definitive poses — and the
             count says how many pieces the sentence is about to be written on. */}
         {count === 1 ? "What to check?" : `What to check on all ${count}?`}
-        <input
+        <TextInput
           autoFocus
           value={parkNote}
           onChange={(e) => setParkNote(e.target.value)}
@@ -1824,7 +1825,7 @@ function TileNote({
   return (
     <label style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
       {label}
-      <textarea
+      <TextArea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={disabled}

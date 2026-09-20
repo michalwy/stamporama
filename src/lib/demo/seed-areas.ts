@@ -1,5 +1,5 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 import type { DemoCatalog } from "./seed-catalog";
 
 export type DemoAreas = Record<string, string>;
@@ -18,7 +18,7 @@ interface AreaNode {
 
 export async function seedAreas(
   collectionId: string,
-  tx: PrismaClient,
+  tx: DbTransaction,
   catalog: DemoCatalog
 ): Promise<DemoAreas> {
   const tree: AreaNode[] = [

@@ -14,6 +14,7 @@ import type { AuctionSaleRaw } from "@/app/actions/auctions";
 import { useOpenAuctionSale, type AuctionSaleView } from "./use-auctions-query";
 import { fromLocalInputValue, toLocalInputValue } from "./auction-format";
 import { formatAmountInput } from "@/lib/decimal-input";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -210,7 +211,7 @@ export function AuctionSaleFormDialog({
 
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="sale-name">Name</LabelWithError>
-            <input
+            <TextInput
               id="sale-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -225,7 +226,7 @@ export function AuctionSaleFormDialog({
 
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="sale-url">Catalogue URL</LabelWithError>
-            <input
+            <TextInput
               id="sale-url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}

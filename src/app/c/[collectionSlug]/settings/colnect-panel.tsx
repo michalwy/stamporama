@@ -18,6 +18,7 @@ import {
 import type { ColnectMappingData } from "@/lib/colnect";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -73,10 +74,9 @@ function MappingForm({
     <>
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-colnect-abbrev">Colnect abbreviation</LabelWithError>
-        <input
+        <TextInput
           id="f-colnect-abbrev"
           name="colnectAbbrev"
-          type="text"
           defaultValue={defaultAbbrev}
           disabled={isPending}
           placeholder="e.g. Pol"

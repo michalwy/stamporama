@@ -29,6 +29,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { usesPlatformCatalogue } from "@/lib/platform-modules";
 import { listingItemGaps } from "@/lib/offer-item-gaps";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The offer's stamps and what **Colnect** knows each of them as (#423), each with the two pages a
 // seller actually opens while pricing a listing: what the stamp *is* (its catalog page, #290) and
@@ -809,9 +810,8 @@ export function OfferPlatformItemsCard({
                           answer to this write can be a refusal with a Replace beside it, and a
                           field that saved itself on the way to pressing Replace would have made
                           the decision the button is asking about. */}
-                      <input
+                      <TextInput
                         autoFocus
-                        type="text"
                         value={entering.draft}
                         placeholder="item-ID or address"
                         aria-label={`Colnect item-ID for ${item.catalogItemVariant ?? item.label}`}

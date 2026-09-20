@@ -58,6 +58,7 @@ import {
   useInvalidateColnectReport,
   type ColnectReportFilterState,
 } from "./use-colnect-report-query";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // **The Colnect list-sync report** (#686) — a screen, not a dialog, because the first pass over a
 // wish list is tens of thousands of rows and no dialog survives that.
@@ -1211,7 +1212,7 @@ function IgnoreDialog({
           <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)" }}>
             Why (optional)
           </span>
-          <textarea
+          <TextArea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}

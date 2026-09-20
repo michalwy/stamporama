@@ -27,6 +27,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/translations-dialog";
 import { TranslationsField } from "@/app/c/[collectionSlug]/shared/translations-field";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // One of the four stamp-attribute dictionaries (#72) — colour, watermark, paper, printing method.
 // Mirrors `subtypes-panel.tsx` with the behaviour stripped: no default radio (there is no "usual
@@ -115,10 +116,9 @@ function AttributeForm({
         {translatable ? `Name — ${languageLabel(defaultLanguage)}` : "Name"}
       </LabelWithError>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <input
+        <TextInput
           id={inputId}
           name="name"
-          type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={isPending}

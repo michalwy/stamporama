@@ -36,6 +36,7 @@ import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-
 import { WantFormDialog } from "./want-form-dialog";
 import { useToast } from "@/app/toast-provider";
 import { WantRow, type WantDictionaries } from "./want-row";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 type DialogState =
   | { kind: "none" }
@@ -382,7 +383,7 @@ export function WantsListPanel({
           </span>
         )}
 
-        <input
+        <TextInput
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

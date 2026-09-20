@@ -24,6 +24,7 @@ import { THUMB_OBJECT_FIT } from "./photo-thumb";
 import { turnBy, type QuarterTurn } from "@/lib/tile-turn";
 import { PHOTO_SOURCE_MAX_LENGTH } from "@/lib/photo-source";
 import { derivePhotoChangeSet } from "./photo-change-set";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Inline photo editor for the copy dialog (#112) and the stamp dialog (#137). One flat,
 // horizontally-scrolling strip of photo cards sits above a single full-width dropzone. Each card
@@ -731,9 +732,8 @@ function PhotoCard({
         }}
       >
         {onSetSource && editingSource ? (
-          <input
+          <TextInput
             autoFocus
-            type="text"
             value={entry.sourceUrl}
             placeholder="Source — link or citation"
             aria-label="Photo source"
@@ -838,9 +838,8 @@ function TitleFooter({
   }
   if (editingTitle) {
     return (
-      <input
+      <TextInput
         autoFocus
-        type="text"
         value={entry.title}
         placeholder="Title"
         disabled={disabled}
@@ -1028,8 +1027,7 @@ function PromotePopover({
         })}
       </div>
       {role === null && (
-        <input
-          type="text"
+        <TextInput
           value={title}
           placeholder="Title (optional)"
           disabled={busy}

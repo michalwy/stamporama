@@ -26,6 +26,7 @@ import {
   setDefaultDelcampeListingProfileAction,
   updateDelcampeListingProfileAction,
 } from "@/app/actions/delcampe";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Settings → Delcampe, the listing-profile half (#608; ADR-0034) — everything an Easy Uploader row
 // carries that no offer knows about itself.
@@ -474,7 +475,7 @@ function DelcampeProfileDialog({
         <div style={{ display: "grid", gap: "0.875rem" }}>
           <div>
             <LabelWithError htmlFor="delcampe-profile-name">Name</LabelWithError>
-            <input
+            <TextInput
               id="delcampe-profile-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -490,7 +491,7 @@ function DelcampeProfileDialog({
 
           <div>
             <LabelWithError htmlFor="delcampe-profile-shipping-model">Shipping model</LabelWithError>
-            <input
+            <TextInput
               id="delcampe-profile-shipping-model"
               value={shippingModel}
               onChange={(e) => setShippingModel(e.target.value)}
@@ -617,7 +618,7 @@ function DelcampeProfileDialog({
               }}
             >
               <div>
-                <input
+                <TextInput
                   id="delcampe-profile-auction-end-day"
                   value={auctionEndDay}
                   onChange={(e) => setAuctionEndDay(e.target.value)}
@@ -631,7 +632,7 @@ function DelcampeProfileDialog({
                 </p>
               </div>
               <div>
-                <input
+                <TextInput
                   id="delcampe-profile-auction-end-time"
                   value={auctionEndTime}
                   onChange={(e) => setAuctionEndTime(e.target.value)}

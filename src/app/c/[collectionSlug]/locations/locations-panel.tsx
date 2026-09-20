@@ -22,6 +22,7 @@ import { getLocationDescendantIds, flattenLocationTree } from "@/app/c/[collecti
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
 import { Icon } from "@/app/icons";
+import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Persisted collapse state for the location management tree, consistent with the area
 // management tree (#237) and area filter tree (#81). Distinct key so it collapses independently.
@@ -120,10 +121,9 @@ function LocationForm({
     <>
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-location-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-location-name"
           name="name"
-          type="text"
           defaultValue={defaultName}
           disabled={isPending}
           placeholder="e.g. Klaser A"
@@ -149,7 +149,7 @@ function LocationForm({
         <LabelWithError htmlFor="f-location-description">
           Description (optional)
         </LabelWithError>
-        <textarea
+        <TextArea
           id="f-location-description"
           name="description"
           rows={3}

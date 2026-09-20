@@ -10,6 +10,7 @@ import {
   type StampAttributeKind,
 } from "@/lib/stamp-attribute-kinds";
 import type { StampAttributeData, StampAttributeLists } from "@/lib/stamp-attributes";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /** The panel's one button — *Fill matching*, per list. Shaped like the Settings panels' own
  * secondary actions rather than a primary: it proposes, and the fields below are the record. */
@@ -192,8 +193,7 @@ export function ColnectAttributesPanel({ lists }: { lists: StampAttributeLists }
                 </span>
                 {/* Saved on blur and on Enter rather than on every keystroke: a mapping is typed a
                     word at a time, and a write per character would be a write per character. */}
-                <input
-                  type="text"
+                <TextInput
                   aria-label={`What Colnect calls ${row.name}`}
                   defaultValue={row.colnectValue ?? ""}
                   placeholder="— not mapped —"

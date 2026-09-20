@@ -44,6 +44,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/template-builder";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { AlbumTemplatePreviewPanel } from "./album-template-preview";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The album templates (#766) — the ref-card panel's list-and-dialog scaffolding, with the listing
 // templates dialog's builder for the four texts.
@@ -356,10 +357,9 @@ export function AlbumPresetForm({
         {name !== null && (
           <div>
             <LabelWithError htmlFor="f-album-name">Name</LabelWithError>
-            <input
+            <TextInput
               id="f-album-name"
               name="name"
-              type="text"
               defaultValue={name}
               disabled={isPending}
               placeholder="e.g. Polska A4"

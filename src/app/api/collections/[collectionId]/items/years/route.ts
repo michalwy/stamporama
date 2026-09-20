@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { listItemYearFacets } from "@/lib/items";
 import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
+import { readSearchParam } from "@/lib/text-input";
 
 export async function GET(
   request: NextRequest,
@@ -25,7 +26,7 @@ export async function GET(
       formatIds: readCsvParam(sp, "formatIds"),
       subtypeIds: readCsvParam(sp, "subtypeIds"),
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       catalogVendorId: sp.get("catalogVendorId") || undefined,
       catalogNumber: sp.get("catalogNumber") || undefined,
       stampId: sp.get("stampId") || undefined,

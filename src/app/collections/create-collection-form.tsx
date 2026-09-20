@@ -6,6 +6,7 @@ import {
   type CreateCollectionState,
 } from "@/app/actions/collections";
 import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const initial: CreateCollectionState = { status: "idle" };
 
@@ -63,8 +64,7 @@ export function CreateCollectionForm() {
           >
             Collection name
           </span>
-          <input
-            type="text"
+          <TextInput
             name="name"
             required
             maxLength={100}

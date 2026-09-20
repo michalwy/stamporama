@@ -21,6 +21,7 @@ import {
   readRememberedProfile,
   rememberProfileFor,
 } from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -242,7 +243,7 @@ export function WantFormDialog({
 
             <div>
               <LabelWithError htmlFor="want-notes">Notes (optional)</LabelWithError>
-              <textarea
+              <TextArea
                 id="want-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

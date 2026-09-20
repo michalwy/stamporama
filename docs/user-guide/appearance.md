@@ -14,6 +14,26 @@ Use the theme toggle to switch between Light, Dark, and Auto. On collection page
 
 Your choice is saved in the browser and persists across sessions. It does not require an account setting — each browser remembers its own preference independently.
 
+## Typing into a field
+
+**The spaces around what you type are dropped.** Leave a field — Tab, Enter, or a click somewhere
+else — and a stray space before or after the text goes, and the field redraws without it, so what
+you are looking at is what gets saved. You never have to hunt for one: a space on the end of a name
+is invisible on screen but changes how the row sorts, stops a search for the same text typed
+cleanly from finding it, and travels out onto a marketplace listing.
+
+**Only the ends.** Inside a longer text — a description, a listing text, an album template — your
+line breaks and your indentation are left exactly as you wrote them. Nothing is ever reflowed.
+
+**A field with nothing but spaces in it counts as empty**, so a field that needs a value asks for
+one just as it would if you had typed nothing at all.
+
+**Search boxes too**, so a stray space on the end of what you are looking for never changes what
+comes back.
+
+The one field this does not touch is a **password**: a space there is a character you chose, and
+the app will not quietly drop it.
+
 ## Confirmations
 
 When an action finishes and you cannot see the result from where you are standing, Stamporama says so

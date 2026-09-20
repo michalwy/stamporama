@@ -23,6 +23,7 @@ import {
   type ShippingMethodActionState,
 } from "@/app/actions/shipping-methods";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -405,9 +406,8 @@ function DraftFields({
 }) {
   return (
     <>
-      <input
+      <TextInput
         id={`${idPrefix}-name`}
-        type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Registered letter"

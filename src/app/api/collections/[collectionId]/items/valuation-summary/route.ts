@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getHoldingsValuation } from "@/lib/items";
 import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
+import { readSearchParam } from "@/lib/text-input";
 
 /** Holdings valuation total over every copy matching the current filters (whole set,
  * not one page). Mirrors the list endpoint's disposition/condition/certificate filters
@@ -35,7 +36,7 @@ export async function GET(
       formatIds: readCsvParam(sp, "formatIds"),
       subtypeIds: readCsvParam(sp, "subtypeIds"),
       areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       catalogVendorId: sp.get("catalogVendorId") || undefined,
       catalogNumber: sp.get("catalogNumber") || undefined,
       issueId: sp.get("issueId") || undefined,

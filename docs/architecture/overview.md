@@ -113,7 +113,7 @@ Stamporama uses [Prisma](https://www.prisma.io/) with the `@prisma/adapter-pg` d
 
 **Config:** `prisma.config.ts` — loads `DATABASE_URL` from the environment (via dotenv), sets schema and migrations paths.
 
-**Client singleton:** `src/lib/db.ts` — exports `prisma`, a `PrismaClient` instance initialized with the `PrismaPg` adapter. Uses `globalThis` caching to avoid exhausting connections during Next.js hot-reload.
+**Client singleton:** `src/lib/db.ts` — exports `prisma`, a `PrismaClient` instance initialized with the `PrismaPg` adapter and **extended** with one `query` extension over `$allModels` that removes the whitespace around every string a write carries (#1357, ADR-0055). Uses `globalThis` caching to avoid exhausting connections during Next.js hot-reload. Because the client is extended, `PrismaClient` and `Prisma.TransactionClient` no longer name its type: the file also exports **`Db`** and **`DbTransaction`**, which is what a helper taking a client or a transaction declares.
 
 ## Domain Model
 

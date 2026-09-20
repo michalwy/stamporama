@@ -26,6 +26,7 @@ import { getDescendantIds } from "./area-helpers";
 import { Tooltip } from "./tooltip";
 import { NO_AUTOFILL } from "./no-autofill";
 import { Icon } from "@/app/icons";
+import { TextArea, TextInput } from "./text-input";
 
 /**
  * The collection-area form and the **Add area** dialog around it.
@@ -334,10 +335,9 @@ export function CollectionAreaForm({
     <>
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-area-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-area-name"
           name="name"
-          type="text"
           value={name}
           onChange={(e) => handleNameChange(e.target.value)}
           disabled={isPending}
@@ -362,7 +362,7 @@ export function CollectionAreaForm({
 
       <div style={{ marginBottom: "1rem" }}>
         <LabelWithError htmlFor="f-area-description">Description (optional)</LabelWithError>
-        <textarea
+        <TextArea
           id="f-area-description"
           name="description"
           rows={3}
@@ -382,10 +382,9 @@ export function CollectionAreaForm({
             : "Title name (optional)"}
         </LabelWithError>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-area-title-name"
             name="titleName"
-            type="text"
             value={titleName}
             onChange={(e) => setTitleName(e.target.value)}
             disabled={isPending}
@@ -472,9 +471,8 @@ export function CollectionAreaForm({
 
         <div style={{ marginBottom: "0.75rem" }}>
           <LabelWithError htmlFor="f-area-catalog-prefix">Area prefix</LabelWithError>
-          <input
+          <TextInput
             id="f-area-catalog-prefix"
-            type="text"
             value={catalogPrefix}
             onChange={(e) => setCatalogPrefix(e.target.value)}
             disabled={isPending}
@@ -524,8 +522,7 @@ export function CollectionAreaForm({
                           : `${bookCount} books`}
                     </span>
                   </span>
-                  <input
-                    type="text"
+                  <TextInput
                     value={row.noPrefix ? "" : row.prefix}
                     onChange={(e) => setVendorRow(vendorId, { prefix: e.target.value })}
                     disabled={isPending || row.noPrefix}

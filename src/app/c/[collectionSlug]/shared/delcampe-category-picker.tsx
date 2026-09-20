@@ -13,6 +13,7 @@ import {
 import { readDelcampeCategoriesAction } from "@/app/actions/delcampe";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 
 // Picking a Delcampe category (#609; ADR-0035 §5).
 //
@@ -192,7 +193,7 @@ export function DelcampeCategoryPicker({
           )}
 
           <div>
-            <input
+            <TextInput
               autoFocus
               type="search"
               value={term}

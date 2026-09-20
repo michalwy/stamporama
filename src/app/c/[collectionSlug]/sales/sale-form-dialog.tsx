@@ -10,6 +10,7 @@ import type { SaleHeaderRaw } from "@/app/actions/sales";
 import { getShippingMethodsAction } from "@/app/actions/shipping-methods";
 import type { ShippingMethodData } from "@/lib/shipping-methods";
 import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -370,9 +371,8 @@ export function SaleFormDialog({
           {/* External transaction / order number */}
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="sale-external-ref">Order number (optional)</LabelWithError>
-            <input
+            <TextInput
               id="sale-external-ref"
-              type="text"
               value={externalRef}
               onChange={(e) => setExternalRef(e.target.value)}
               placeholder="Transaction / order no. in the marketplace"
@@ -386,7 +386,7 @@ export function SaleFormDialog({
               offer's listing URL. Also editable in place on the detail screen, in any status. */}
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="sale-transaction-url">Transaction link (optional)</LabelWithError>
-            <input
+            <TextInput
               id="sale-transaction-url"
               type="url"
               inputMode="url"
@@ -518,9 +518,8 @@ export function SaleFormDialog({
             {effectiveShippingMethodId === CUSTOM_SHIPPING_METHOD && (
               <div style={{ flex: 1 }}>
                 <LabelWithError htmlFor="sale-shipping-method-name">Method name</LabelWithError>
-                <input
+                <TextInput
                   id="sale-shipping-method-name"
-                  type="text"
                   value={shippingMethodName}
                   onChange={(e) => setShippingMethodName(e.target.value)}
                   placeholder="e.g. Courier, one-off"

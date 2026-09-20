@@ -82,6 +82,7 @@ import { isSideways, turnBy, turnedSize, type QuarterTurn } from "@/lib/tile-tur
 import { ScanToolButton } from "./scan-tool-button";
 import { useSheetRegion } from "./use-sheet-region";
 import { useWatermarkView, type WatermarkStatus } from "./use-watermark-view";
+import { TextInput } from "./text-input";
 
 /**
  * The tile, large and zoomable — the identification dialog's whole left-hand side (#585).
@@ -1773,7 +1774,7 @@ export function TileZoomView({
           {/* The note being typed (#1300), where it will be set: the field wears the note's own size,
               face and colour, so typing it is placing it. */}
           {editing && ready && (
-            <input
+            <TextInput
               autoFocus
               value={editing.text}
               maxLength={MAX_TEXT_MARK}
@@ -1932,7 +1933,7 @@ export function TileZoomView({
 
           {tool === "perforation" && (
             <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-              <input
+              <TextInput
                 value={teethText}
                 onChange={(e) => {
                   setTeethText(e.target.value);
@@ -1984,7 +1985,7 @@ export function TileZoomView({
             content={`What this ${subject === "photo" ? "picture" : "card"} was scanned at. Correcting it here holds for this sitting only — the collection keeps its own setting, in Settings → General.`}
           >
             <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-              <input
+              <TextInput
                 value={dpiText}
                 onChange={(e) => setDpiText(e.target.value)}
                 inputMode="numeric"

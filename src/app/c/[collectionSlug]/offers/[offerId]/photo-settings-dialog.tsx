@@ -27,6 +27,7 @@ import {
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "@/lib/offer-photo-config";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -270,10 +271,9 @@ export function PhotoSettingsDialog({
                 descriptive on the right, drawn at one shared size. */}
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-photo-label-left">Tile label (left)</LabelWithError>
-              <input
+              <TextInput
                 id="offer-photo-label-left"
                 name="photoLabelLeftTemplate"
-                type="text"
                 value={labelLeft}
                 onChange={(e) => setLabelLeft(e.target.value)}
                 placeholder="{ref}"
@@ -283,10 +283,9 @@ export function PhotoSettingsDialog({
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-photo-label-right">Tile label (right)</LabelWithError>
-              <input
+              <TextInput
                 id="offer-photo-label-right"
                 name="photoLabelRightTemplate"
-                type="text"
                 value={labelRight}
                 onChange={(e) => setLabelRight(e.target.value)}
                 placeholder="{catalog}"

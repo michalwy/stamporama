@@ -1,6 +1,5 @@
 import "server-only";
-import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
@@ -703,7 +702,7 @@ function computeChecklistPriceTotal(
  * collector blanked out submits. Runs on the caller's transaction client.
  */
 async function writeIssueCatalogPrefixes(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   issueId: string,
   prefixes: { catalogVendorId: string; areaPrefix: string }[] | undefined
 ): Promise<void> {
@@ -724,7 +723,7 @@ async function writeIssueCatalogPrefixes(
  * both create and update already wrap their writes in one. Shared blank / delete / untouched rules
  * live in {@link syncEntityTranslations}. */
 async function syncIssueTranslations(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   issueId: string,
   values: TranslationValueMap | undefined
 ): Promise<void> {
@@ -1634,7 +1633,7 @@ function assertAutoCreateInput(
  *  and not two, and why the single add dialog leaves a child's checklists unticked for the same
  *  reason. */
 async function createRangeStamps(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   params: {
     collectionId: string;
     areaId: string;
@@ -2326,7 +2325,7 @@ export async function addStampToIssue(
  * also what makes it right for a stamp whose parent is picked *after* the position is taken.
  */
 async function nextIssueSortOrder(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   issueId: string
 ): Promise<number> {
   const highest = await tx.issueMember.aggregate({

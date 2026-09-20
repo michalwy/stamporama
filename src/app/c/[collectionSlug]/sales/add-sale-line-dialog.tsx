@@ -22,6 +22,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useSellableOffers, useSellableCopies } from "./use-sales-query";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 
 /** Maps + lookups the expandable copy rows need, bundled so they pass through one prop. */
@@ -462,8 +463,7 @@ export function AddSaleLineDialog({
           }}
         >
           <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border)" }}>
-            <input
-              type="text"
+            <TextInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by title, contents, set, catalog number, or location ref…"

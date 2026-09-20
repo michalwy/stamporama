@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/allegro";
 import type { AllegroConnectionStatus, AllegroDevicePrompt } from "@/lib/allegro-connection";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Settings → Allegro, the connection half (#476; ADR-0023).
 //
@@ -350,7 +351,7 @@ export function AllegroConnectionPanel({
             <label htmlFor="allegro-client-id" style={labelStyle}>
               Client ID
             </label>
-            <input
+            <TextInput
               id="allegro-client-id"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
@@ -362,7 +363,7 @@ export function AllegroConnectionPanel({
             <label htmlFor="allegro-application-name" style={labelStyle}>
               Application name
             </label>
-            <input
+            <TextInput
               id="allegro-application-name"
               value={applicationName}
               onChange={(e) => setApplicationName(e.target.value)}

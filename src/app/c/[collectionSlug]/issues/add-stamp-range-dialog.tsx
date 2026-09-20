@@ -23,6 +23,7 @@ import type {
 import type { StampSizePresetData } from "@/lib/stamp-size-presets";
 import { stampSizePresetPair } from "@/lib/stamp-size-preset-rules";
 import { StampSizePresetPicker } from "../shared/stamp-size-preset-picker";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -274,9 +275,8 @@ export function AddStampRangeDialog({
                     {r.selected && (
                       <input type="hidden" name={`autoCreateVendor_${v.catalogVendorId}`} value="1" />
                     )}
-                    <input
+                    <TextInput
                       name={`issueCatalogNumbers_${v.catalogVendorId}`}
-                      type="text"
                       value={r.numbers}
                       disabled={isPending || !r.selected}
                       placeholder="e.g. 2820-2822, 2823a"

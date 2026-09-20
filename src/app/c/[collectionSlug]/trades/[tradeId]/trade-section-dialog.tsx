@@ -11,6 +11,7 @@ import type { TradeSectionData } from "@/lib/trades";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { describeBalanceRule, type TradeBalanceRule } from "@/lib/trade-rules";
 import { createTradeSectionAction, updateTradeSectionAction } from "@/app/actions/trades";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Add or rename a section, and state — or clear — its balance rule (#637; ADR-0039 §3).
 //
@@ -105,7 +106,7 @@ export function TradeSectionDialog({
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
             <div>
               <LabelWithError htmlFor="trade-section-name">Name</LabelWithError>
-              <input
+              <TextInput
                 id="trade-section-name"
                 name="name"
                 defaultValue={section?.name ?? ""}
@@ -214,7 +215,7 @@ export function TradeSectionDialog({
                     <LabelWithError htmlFor="trade-section-value-tol">
                       Tolerance (%)
                     </LabelWithError>
-                    <input
+                    <TextInput
                       id="trade-section-value-tol"
                       name="valueTolerancePct"
                       defaultValue={String(section?.valueTolerancePct ?? 0)}
@@ -228,7 +229,7 @@ export function TradeSectionDialog({
                     <LabelWithError htmlFor="trade-section-count-tol">
                       Tolerance (stamps)
                     </LabelWithError>
-                    <input
+                    <TextInput
                       id="trade-section-count-tol"
                       name="countTolerance"
                       defaultValue={String(section?.countTolerance ?? 0)}
@@ -243,7 +244,7 @@ export function TradeSectionDialog({
                   <LabelWithError htmlFor="trade-section-warn">
                     Warn on skew (%, optional)
                   </LabelWithError>
-                  <input
+                  <TextInput
                     id="trade-section-warn"
                     name="ownValueWarnPct"
                     defaultValue={

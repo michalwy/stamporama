@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listStampsPaginated, type StampSortBy } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { readSearchParam } from "@/lib/text-input";
 
 const VALID_SORT_BY = new Set<StampSortBy>(["issueDate", "catalogNumber", "name", "issueName"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -23,7 +24,7 @@ export async function GET(
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;

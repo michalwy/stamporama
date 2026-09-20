@@ -37,6 +37,7 @@ import {
 import { formatBytes } from "@/lib/format-bytes";
 import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { AppVersionLabel } from "@/app/c/[collectionSlug]/shared/app-version-label";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 interface SettingsPanelProps {
   collectionId: string;
@@ -262,7 +263,7 @@ function RetentionSection({
 
         {state.mode === "days" && (
           <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <input
+            <TextInput
               aria-label={daysLabel}
               value={state.days}
               onChange={(e) => state.setDays(e.target.value)}
@@ -836,7 +837,7 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
             )}
           </div>
           <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-            <input
+            <TextInput
               aria-label="Scanner resolution in dots per inch"
               value={dpiText}
               onChange={(e) => setDpiText(e.target.value)}

@@ -31,6 +31,7 @@ import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker
 import { nextTagColor, tagColorTokens, type TagColor } from "@/lib/tag-colors";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { formatPricePercent } from "@/lib/certificate-price-fill";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -122,10 +123,9 @@ function CertificateStatusForm({
           {translatable ? `Abbreviation — ${languageLabel(defaultLanguage)}` : "Abbreviation"}
         </LabelWithError>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-cert-abbr"
             name="abbreviation"
-            type="text"
             value={abbreviation}
             onChange={(e) => setAbbreviation(e.target.value)}
             disabled={isPending}
@@ -153,10 +153,9 @@ function CertificateStatusForm({
         </LabelWithError>
         {/* Each field carries its own 🌐 (#294), so a badge always refers to exactly one field. */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
+          <TextInput
             id="f-cert-name"
             name="name"
-            type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={isPending}

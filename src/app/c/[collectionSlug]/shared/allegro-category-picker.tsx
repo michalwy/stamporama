@@ -15,6 +15,7 @@ import {
   getAllegroCategoryFormAction,
 } from "@/app/actions/allegro-categories";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 
 // Picking an Allegro category, and answering its parameters (#488; ADR-0026 §6).
 //
@@ -494,30 +495,36 @@ function ParameterField({
         )
       ) : parameter.range ? (
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <input
-            type="text"
+          <TextInput
             value={draft.from}
             onChange={(e) => onChange({ ...draft, from: e.target.value })}
             placeholder="From"
             style={INPUT_STYLE}
           />
-          <input
-            type="text"
+          <TextInput
             value={draft.to}
             onChange={(e) => onChange({ ...draft, to: e.target.value })}
             placeholder="To"
             style={INPUT_STYLE}
           />
         </div>
-      ) : (
+      ) : parameter.type === "integer" || parameter.type === "float" ? (
         <input
-          type={parameter.type === "integer" || parameter.type === "float" ? "number" : "text"}
+          type="number"
           value={draft.values[0] ?? ""}
           onChange={(e) => onChange({ ...draft, values: e.target.value ? [e.target.value] : [] })}
           min={parameter.min ?? undefined}
           max={parameter.max ?? undefined}
-          maxLength={parameter.maxLength ?? undefined}
           step={parameter.type === "float" ? "any" : undefined}
+          style={INPUT_STYLE}
+        />
+      ) : (
+        // A free-text parameter goes through the shared field, so Allegro is never sent a value
+        // with a space on the end of it (#1357). A number is left as a number.
+        <TextInput
+          value={draft.values[0] ?? ""}
+          onChange={(e) => onChange({ ...draft, values: e.target.value ? [e.target.value] : [] })}
+          maxLength={parameter.maxLength ?? undefined}
           style={INPUT_STYLE}
         />
       )}

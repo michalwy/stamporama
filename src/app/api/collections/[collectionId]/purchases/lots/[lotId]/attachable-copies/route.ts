@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listAttachableCopies } from "@/lib/lots";
+import { readSearchParam } from "@/lib/text-input";
 
 /** The copies this open lot could take on (#388) — everything not already on it and not frozen
  * into a closed lot's cost split. Unpaginated, mirroring the offer composition picker: the dialog
@@ -29,7 +30,7 @@ export async function GET(
   try {
     const items = await listAttachableCopies(session.user.id, lotId, {
       areaIds: areaIds.length > 0 ? areaIds : null,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       year,
     });
     return NextResponse.json({ items });

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { offersSummary } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
+import { readSearchParam } from "@/lib/text-input";
 
 // Aggregate figures for the offer list's summary bar (#317). Takes the same params as the list
 // route so the totals cover exactly the offers being shown, not the whole collection.
@@ -25,7 +26,7 @@ export async function GET(
     const summary = await offersSummary(session.user.id, collectionId, {
       platformId: sp.get("platformId") || undefined,
       states,
-      search: sp.get("search") || undefined,
+      search: readSearchParam(sp),
       needsAction: sp.get("needsAction") === "1",
       bidding: sp.get("bidding") === "1",
       endedAuction: sp.get("endedAuction") === "1",

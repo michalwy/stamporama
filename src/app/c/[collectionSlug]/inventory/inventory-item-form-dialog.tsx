@@ -37,6 +37,7 @@ import {
   type AddCopyDefaults,
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 import { Icon } from "@/app/icons";
+import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The tree-select trigger defaults to a compact toolbar height (min-h-8). Inside this
 // dialog it sits beside INPUT_STYLE inputs (~2.25rem, 0.5rem vertical padding), so bump
@@ -599,11 +600,10 @@ export function InventoryItemFormDialog({
                   </div>
                   <div style={{ flex: 1 }}>
                     <LabelWithError htmlFor="copy-location-ref">Ref</LabelWithError>
-                    <input
+                    <TextInput
                       ref={locationRefInputRef}
                       id="copy-location-ref"
                       name="locationRef"
-                      type="text"
                       placeholder="e.g. A234"
                       defaultValue={item?.locationRef ?? ""}
                       disabled={isPending || !locationId}
@@ -618,7 +618,7 @@ export function InventoryItemFormDialog({
             {/* Row 5: notes */}
             <div>
               <GroupLabel htmlFor="copy-notes">Notes</GroupLabel>
-              <textarea
+              <TextArea
                 id="copy-notes"
                 name="notes"
                 rows={2}

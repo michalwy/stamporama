@@ -1,6 +1,5 @@
 import "server-only";
-import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import { isTagColor, nextTagColor, type TagColor } from "./tag-colors";
 import { findTagByName, type TagEntry } from "./tag-entry";
 
@@ -200,7 +199,7 @@ export async function getTagUsage(
  * cannot offer one, so a request naming it is not something the collector did.
  */
 async function resolveTagEntries(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   collectionId: string,
   entries: readonly TagEntry[]
 ): Promise<string[]> {
@@ -383,7 +382,7 @@ export function hasItemTagChanges(changes: ItemTagChanges): boolean {
  * something the collector did.
  */
 export async function applyItemTagChanges(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   collectionId: string,
   itemIds: string[],
   changes: ItemTagChanges
@@ -412,7 +411,7 @@ export async function applyItemTagChanges(
  *  than against the state before it. `collectionId` scopes every read here as it does everywhere
  *  else — a tag id from another collection is not a tag. */
 async function validTagIdsWith(
-  client: Prisma.TransactionClient | typeof prisma,
+  client: DbTransaction | typeof prisma,
   collectionId: string,
   tagIds: string[]
 ): Promise<string[]> {

@@ -1,6 +1,5 @@
 import "server-only";
-import { prisma } from "./db";
-import type { PrismaClient } from "@/generated/prisma/client";
+import { prisma, type DbTransaction } from "./db";
 import { isTagColor, type TagColor } from "./tag-colors";
 import {
   syncEntityTranslations,
@@ -77,7 +76,7 @@ export const DEFAULT_CONDITIONS: ReadonlyArray<{
  */
 export async function seedDefaultConditions(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<void> {
   await tx.stampCondition.createMany({
     data: DEFAULT_CONDITIONS.map((c, i) => ({

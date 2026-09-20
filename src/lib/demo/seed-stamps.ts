@@ -1,5 +1,5 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 import { seedDefaultConditions } from "../conditions";
 import { allocateEntityNumber } from "../items";
 import type { DemoCatalog } from "./seed-catalog";
@@ -629,7 +629,7 @@ function buildIssues(): CompactIssue[] {
 
 export async function seedStamps(
   collectionId: string,
-  tx: PrismaClient,
+  tx: DbTransaction,
   catalog: DemoCatalog,
   areas: DemoAreas,
   attributes: DemoAttributes

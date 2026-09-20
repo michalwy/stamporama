@@ -6,6 +6,7 @@ import { languageLabel } from "@/lib/languages";
 import { titleFallbackKey, type TitleFallback } from "@/lib/offer-title-template";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 
 // Filling a **missing translation where the generated title needs it** (#299/#300).
 //
@@ -124,8 +125,7 @@ function GapRow({ collectionId, language, gap, onSaved, autoFocus }: GapRowProps
         <strong style={{ fontWeight: 600 }}>{gapLabel(gap)}</strong>{" "}
         <span style={{ color: "var(--color-text-muted)" }}>{gap.defaultValue}</span>
       </span>
-      <input
-        type="text"
+      <TextInput
         value={value}
         onChange={(e) => {
           setValue(e.target.value);

@@ -26,6 +26,7 @@ import {
 import type { CatalogImportPlanResult, CatalogImportRunResult } from "@/lib/catalog-import";
 import type { CollectionAreaData } from "@/lib/areas";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // **The import dialog** (#718) — the collector's end of the CSV catalog import track whose rules
 // are `catalog-import-rules.ts` (#716) and whose writes are `catalog-import.ts` (#717).
@@ -500,7 +501,7 @@ function SourceStep({
             {sourceName ?? (source.trim() ? "pasted text" : "no file chosen")}
           </span>
         </div>
-        <textarea
+        <TextArea
           id="catalog-import-text"
           value={source}
           disabled={disabled}

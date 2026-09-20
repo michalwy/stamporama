@@ -11,6 +11,7 @@ import {
   type SnapshotMark,
 } from "@/lib/annotations";
 import type { Box } from "@/lib/scan-boxes";
+import { TextInput } from "./text-input";
 
 /** What the toast says, by who the snapshot went to (#674). A tile's is the one worth a sentence:
  * the photo is not on any copy yet, and saying where it will end up is what stops it reading as lost. */
@@ -91,7 +92,7 @@ export function SnapshotDialog({
           . The picture itself is not changed.
         </p>
         <LabelWithError htmlFor="snapshot-title">Title</LabelWithError>
-        <input
+        <TextInput
           id="snapshot-title"
           data-autofocus-select
           value={title}

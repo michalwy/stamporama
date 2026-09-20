@@ -1,6 +1,6 @@
 import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
 import {
   catalogKeyMatches,
@@ -104,7 +104,7 @@ async function resolveStampCollection(stampId: string): Promise<string> {
  * untouched rules live in {@link syncEntityTranslations}.
  */
 export async function syncStampTranslations(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   stampId: string,
   values: TranslationValueMap | undefined
 ): Promise<void> {

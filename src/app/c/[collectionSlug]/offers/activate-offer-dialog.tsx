@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The publish step of the bulk listing workspace (#322): the collector has just pasted this listing
 // into the platform's own form, and the platform handed back a URL. That URL is the one thing the app
@@ -63,7 +64,7 @@ export function ActivateOfferDialog({
           Mark <strong>{offerLabel}</strong> live on {platformName}. Today becomes its listing date.
         </p>
         <LabelWithError htmlFor="f-listing-url">Listing URL (optional)</LabelWithError>
-        <input
+        <TextInput
           id="f-listing-url"
           data-autofocus-select
           type="url"

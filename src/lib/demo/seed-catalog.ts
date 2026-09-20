@@ -1,5 +1,5 @@
 import "server-only";
-import { PrismaClient } from "@/generated/prisma/client";
+import type { DbTransaction } from "@/lib/db";
 
 export interface DemoCatalog {
   fischerVendorId: string;
@@ -14,7 +14,7 @@ export interface DemoCatalog {
 
 export async function seedCatalog(
   collectionId: string,
-  tx: PrismaClient
+  tx: DbTransaction
 ): Promise<DemoCatalog> {
   const fischer = await tx.catalogVendor.create({
     data: { collectionId, name: "Fischer", abbreviation: "Fi" },

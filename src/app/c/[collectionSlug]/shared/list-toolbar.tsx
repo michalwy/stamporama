@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -290,8 +291,7 @@ export function ListToolbar({
           controls breaks where it must instead of overflowing the card. */}
       <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ position: "relative", flex: "1 1 auto", minWidth: "9rem", maxWidth: searchMaxWidth }}>
-          <input
-            type="text"
+          <TextInput
             placeholder="Search..."
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
@@ -362,8 +362,7 @@ export function ListToolbar({
           {/* Accepts a bare number or a prefixed one ("Mi PL 200", "MiPL200"); a
               recognized vendor prefix overrides the dropdown (#146). Always enabled
               so a number can be searched across all vendors without picking one. */}
-          <input
-            type="text"
+          <TextInput
             placeholder="e.g. 200 or Mi PL 200"
             value={catalogNumber ?? ""}
             onChange={(e) =>

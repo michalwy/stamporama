@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { SEARCH_INPUT_STYLE, useDebouncedValue } from "./autocomplete";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 
 // The free-text search box a server-side list toolbar carries (#193, #465, #484), and the debounce
 // that decides when what was typed becomes a request. Extracted here when the auction screens got
@@ -95,8 +96,7 @@ export function ListSearchBox({
 }: ListSearchBoxProps) {
   return (
     <div style={{ position: "relative", flex: `0 1 ${width}`, minWidth: "11rem" }}>
-      <input
-        type="text"
+      <TextInput
         placeholder={placeholder}
         aria-label={label}
         value={value}

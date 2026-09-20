@@ -30,6 +30,7 @@ import {
   toLocalInputValue,
 } from "./auction-format";
 import { Icon } from "@/app/icons";
+import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -559,7 +560,7 @@ export function AuctionLotFormDialog({
             </div>
             <div style={{ minWidth: 0 }}>
               <LabelWithError htmlFor="auction-url">Listing URL</LabelWithError>
-              <input
+              <TextInput
                 id="auction-url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
@@ -577,7 +578,7 @@ export function AuctionLotFormDialog({
           <div style={{ ...GRID_TWO, marginBottom: "1rem" }}>
             <div style={{ minWidth: 0 }}>
               <LabelWithError htmlFor="auction-lot-no">Lot number</LabelWithError>
-              <input
+              <TextInput
                 id="auction-lot-no"
                 value={lotNo}
                 onChange={(e) => setLotNo(e.target.value)}
@@ -588,7 +589,7 @@ export function AuctionLotFormDialog({
             </div>
             <div style={{ minWidth: 0 }}>
               <LabelWithError htmlFor="auction-title">Title</LabelWithError>
-              <input
+              <TextInput
                 id="auction-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -763,7 +764,7 @@ export function AuctionLotFormDialog({
 
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="auction-notes">Notes</LabelWithError>
-            <textarea
+            <TextArea
               id="auction-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}

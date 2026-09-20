@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
 import { getIssueRangeSuggestionsAction, applyIssueRangeSuggestionAction } from "@/app/actions/issues";
 import type { IssueRangeSuggestion } from "@/lib/issues";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   padding: "0.375rem 0.5rem",
@@ -142,8 +143,7 @@ export function RecomputeRangeDialog({
                         {rangeLabel(s.vendorAbbreviation, s.currentFirst, s.currentLast)}
                       </span>
                       <span style={{ color: "var(--color-text-muted)" }}>→</span>
-                      <input
-                        type="text"
+                      <TextInput
                         value={draft.first}
                         disabled={isPending}
                         aria-label={`${s.vendorAbbreviation} first catalog number`}
@@ -152,8 +152,7 @@ export function RecomputeRangeDialog({
                         style={INPUT_STYLE}
                       />
                       <span style={{ color: "var(--color-text-muted)" }}>–</span>
-                      <input
-                        type="text"
+                      <TextInput
                         value={draft.last}
                         disabled={isPending}
                         aria-label={`${s.vendorAbbreviation} last catalog number`}

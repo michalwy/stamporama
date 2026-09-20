@@ -75,6 +75,7 @@ import {
   LS_LAST_LOCATION,
   LS_LAST_SCAN_LOT,
 } from "./add-copy-defaults";
+import { TextInput } from "./text-input";
 
 /**
  * A ticked run of scan tiles identified **as the stamps of a checklist, in turn** (#1220, #1225).
@@ -1510,8 +1511,7 @@ function LocationFields({
           buttonClassName={LOCATION_SELECT_BUTTON_CLASS}
         />
       </div>
-      <input
-        type="text"
+      <TextInput
         placeholder="Ref, e.g. A234"
         value={value.locationRef}
         onChange={(e) => onChange({ ...value, locationRef: e.target.value })}

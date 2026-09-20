@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listIssueYearFacets } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { readSearchParam } from "@/lib/text-input";
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +18,7 @@ export async function GET(
   const sp = request.nextUrl.searchParams;
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
-  const search = sp.get("search") || undefined;
+  const search = readSearchParam(sp);
   const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
   const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
   const catalogVendorId = sp.get("catalogVendorId") || undefined;

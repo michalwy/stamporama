@@ -8,6 +8,7 @@ import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { INPUT_STYLE } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 import { resolveLocationRefChoice, type LocationRefUsage } from "@/lib/location-ref";
+import { TextInput } from "./text-input";
 
 /** The refs already written in one storage location, and the next one to suggest (#565). Read when
  * a filing dialog's location changes — the whole set at once, because a location holds as many refs
@@ -102,9 +103,8 @@ export function LocationRefField({
     <div>
       <LabelWithError htmlFor={id}>Ref (optional)</LabelWithError>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <input
+        <TextInput
           id={id}
-          type="text"
           value={locationId ? ref : ""}
           onChange={(e) => onTypedRefChange(e.target.value)}
           disabled={disabled || !locationId}

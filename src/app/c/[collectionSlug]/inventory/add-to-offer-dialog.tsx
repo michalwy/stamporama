@@ -39,6 +39,7 @@ import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-p
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -502,8 +503,7 @@ export function AddToOfferDialog({
               Add <strong>{copyName}</strong> to an offer — as {multi ? "new sets" : "a new set"}, or
               into an existing one.
             </p>
-            <input
-              type="text"
+            <TextInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by title, contents, platform, set, catalog number, or location ref…"

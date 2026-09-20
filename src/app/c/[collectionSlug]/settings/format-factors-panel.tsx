@@ -20,6 +20,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CollectionAreaData } from "@/lib/areas";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // Multipliers deriving a format's catalog price from the single's, for every stamp where no
 // explicit price was recorded. Kept beside the format list because the two are read together: the
@@ -137,10 +138,9 @@ function FactorForm({
 
       <div style={FIELD_STYLE}>
         <LabelWithError htmlFor="f-fac-factor">Multiplier</LabelWithError>
-        <input
+        <TextInput
           id="f-fac-factor"
           name="factor"
-          type="text"
           inputMode="decimal"
           defaultValue={defaults ? String(defaults.factor) : ""}
           disabled={isPending}

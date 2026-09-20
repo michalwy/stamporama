@@ -13,6 +13,7 @@ import {
 } from "@/lib/description-format";
 import type { OfferDetail } from "@/lib/offers";
 import { Icon } from "@/app/icons";
+import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The offer's two long generated texts (#266 description, #267 private note): shown under the header
 // card, edited in place, and regenerated per field from the platform's template. The title (#209)
@@ -296,7 +297,7 @@ export function OfferListingText({
 
             {isEditing ? (
               <div style={{ marginTop: "0.375rem" }}>
-                <textarea
+                <TextArea
                   autoFocus
                   value={draft}
                   placeholder={f.placeholder}

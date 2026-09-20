@@ -1,6 +1,5 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import { DEFAULT_CHECKLIST } from "./checklist-vocabulary";
 import type { RunChecklist } from "./issue-run";
 import {
@@ -64,7 +63,7 @@ const CHECKLIST_SELECT = {
 
 /** A checklist's translation rows, written the way every translatable entity writes them (#1308). */
 async function syncChecklistTranslations(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   checklistId: string,
   values: TranslationValueMap | undefined
 ): Promise<void> {
@@ -517,7 +516,7 @@ export async function reorderChecklistStamps(
 export { DEFAULT_CHECKLIST };
 
 export async function putStampOnChecklists(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   collectionId: string,
   issueId: string,
   stampId: string,
@@ -587,7 +586,7 @@ export async function setStampChecklistsForIssue(
  * collection before opening its transaction.
  */
 export async function ensureIssueChecklist(
-  tx: Prisma.TransactionClient,
+  tx: DbTransaction,
   collectionId: string,
   issueId: string
 ): Promise<string> {

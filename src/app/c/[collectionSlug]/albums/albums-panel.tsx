@@ -26,6 +26,7 @@ import { suggestAlbumName } from "@/lib/album-name";
 import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The album list (#767) — the hawid-stock panel's list-and-dialog scaffolding, one level up.
 //
@@ -131,10 +132,9 @@ function AlbumForm({
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
         <LabelWithError htmlFor="f-album-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-album-name"
           name="name"
-          type="text"
           value={nameValue}
           onChange={(e) => {
             setTypedName(e.target.value);

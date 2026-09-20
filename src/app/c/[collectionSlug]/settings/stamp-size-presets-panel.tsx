@@ -21,6 +21,7 @@ import { formatSizeMm } from "@/lib/stamp-size";
 import { STAMP_SIZE_LABELS } from "@/lib/stamp-attribute-kinds";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The collection's stamp size presets (#804; ADR-0048) — `hawid-stock-panel.tsx`'s scaffolding,
 // because the two are the same kind of thing: a dictionary of millimetres in the collector's own
@@ -98,10 +99,9 @@ function PresetForm({ preset, isPending }: { preset?: StampSizePresetData; isPen
             <LabelWithError htmlFor={`f-preset-${field}`}>
               {STAMP_SIZE_LABELS[field].field}
             </LabelWithError>
-            <input
+            <TextInput
               id={`f-preset-${field}`}
               name={field}
-              type="text"
               inputMode="decimal"
               defaultValue={preset ? formatSizeMm(preset[field]) : ""}
               disabled={isPending}
@@ -118,10 +118,9 @@ function PresetForm({ preset, isPending }: { preset?: StampSizePresetData; isPen
 
       <div>
         <LabelWithError htmlFor="f-preset-name">Name (optional)</LabelWithError>
-        <input
+        <TextInput
           id="f-preset-name"
           name="name"
-          type="text"
           defaultValue={preset?.name ?? ""}
           disabled={isPending}
           placeholder="e.g. Germania"

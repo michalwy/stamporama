@@ -12,6 +12,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { PurchaseListItem } from "@/lib/purchases";
 import { OPENING_BALANCE_TITLE_MAX, type PurchaseKind } from "@/lib/purchase-kind";
 import { PurchaseContactSelect } from "./purchase-contact-select";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -266,10 +267,9 @@ function OpeningBalanceFormDialog({
           <input type="hidden" name="kind" value="opening_balance" />
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="opening-balance-title">Title</LabelWithError>
-            <input
+            <TextInput
               id="opening-balance-title"
               name="title"
-              type="text"
               defaultValue={purchase?.title ?? ""}
               placeholder="e.g. Stockbook Poland 1, Inheritance"
               maxLength={OPENING_BALANCE_TITLE_MAX}

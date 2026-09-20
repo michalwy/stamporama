@@ -19,6 +19,7 @@ import type { CarrierData } from "@/lib/carriers";
 import { TRACKING_CODE_TOKEN } from "@/lib/tracking-rules";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -65,10 +66,9 @@ function CarrierForm({ carrier, isPending }: { carrier?: CarrierData; isPending:
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <div>
         <LabelWithError htmlFor="f-carrier-name">Name</LabelWithError>
-        <input
+        <TextInput
           id="f-carrier-name"
           name="name"
-          type="text"
           defaultValue={carrier?.name ?? ""}
           placeholder="e.g. Poczta Polska"
           disabled={isPending}
@@ -79,10 +79,9 @@ function CarrierForm({ carrier, isPending }: { carrier?: CarrierData; isPending:
       </div>
       <div>
         <LabelWithError htmlFor="f-carrier-template">Tracking address</LabelWithError>
-        <input
+        <TextInput
           id="f-carrier-template"
           name="trackingUrlTemplate"
-          type="text"
           defaultValue={carrier?.trackingUrlTemplate ?? ""}
           placeholder={EXAMPLE_TEMPLATE}
           disabled={isPending}

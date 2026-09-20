@@ -11,6 +11,7 @@ import {
 } from "@/app/dialog-shell";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import type { CarrierData } from "@/lib/carriers";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -120,9 +121,8 @@ export function ShipmentDialog({
           </p>
 
           <LabelWithError htmlFor="sale-tracking-code">Tracking number</LabelWithError>
-          <input
+          <TextInput
             id="sale-tracking-code"
-            type="text"
             data-autofocus-select
             placeholder="e.g. PL12345678901"
             value={trackingCode}
