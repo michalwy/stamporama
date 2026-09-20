@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
+  PICKER_DIALOG_HEIGHT,
   DialogShell,
   DialogFooter,
   DialogSecondaryButton,
@@ -309,7 +310,7 @@ export function TradeCandidatesDialog({
       title="Alternatives on this line"
       onClose={onClose}
       maxWidth="min(96vw, 80rem)"
-      height="min(90vh, 55rem)"
+      height={PICKER_DIALOG_HEIGHT}
     >
       {/* **The request, and its two answers, at the head of the list it is about** (#658). Above
           the hint rather than below it: the collector opened this screen because a row said their

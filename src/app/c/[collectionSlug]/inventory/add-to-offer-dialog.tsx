@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
+  PICKER_DIALOG_HEIGHT,
   DialogShell,
   DialogFooter,
   DialogPrimaryButton,
@@ -423,7 +424,7 @@ export function AddToOfferDialog({
       // must stop dismissing itself, or one Esc would close both.
       dismissable={!creating}
       maxWidth="min(94vw, 78rem)"
-      height="min(90vh, 48rem)"
+      height={PICKER_DIALOG_HEIGHT}
     >
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         {/* Facet panel */}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
+import { DialogShell, DialogActions, PICKER_DIALOG_HEIGHT } from "@/app/dialog-shell";
 import {
   type DelcampeCategoryRow,
   type DelcampeCategoryTreeNode,
@@ -185,102 +185,114 @@ export function DelcampeCategoryPicker({
   }
 
   return (
-    <DialogShell title={title} onClose={onClose} maxWidth="42rem" minHeight="32rem">
-      <DialogBody>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {(error ?? loadError) && (
-            <p style={{ ...helpTextStyle, color: "var(--color-error)" }}>{error ?? loadError}</p>
-          )}
+    <DialogShell title={title} onClose={onClose} maxWidth="42rem" height={PICKER_DIALOG_HEIGHT}>
+      {/* The shell's own body scrolls as a whole, which would leave the tree at whatever height
+          its rows add up to and the rest of a tall dialog empty below it. Here the search box and
+          its note are fixed and the **tree** takes the space (#1361), so the dialog getting taller
+          is the tree getting taller. */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
+          padding: "1.5rem",
+          gap: "0.75rem",
+        }}
+      >
+        {(error ?? loadError) && (
+          <p style={{ ...helpTextStyle, color: "var(--color-error)" }}>{error ?? loadError}</p>
+        )}
 
-          <div>
-            <TextInput
-              autoFocus
-              type="search"
-              value={term}
-              placeholder="Country, period, condition — or a category number"
-              style={INPUT_STYLE}
-              onChange={(e) => {
-                setPicked(null);
-                setError(null);
-                setTerm(e.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                confirm();
-              }}
-            />
-            <p style={{ ...helpTextStyle, margin: "0.375rem 0 0" }}>
-              Every word has to appear somewhere in the category&rsquo;s path, in any order —{" "}
-              <em>poland used 1961</em> finds one branch. Leave it empty to walk the tree.
-            </p>
-          </div>
-
-          {chosen && (
-            <p style={{ margin: 0, fontSize: "0.875rem" }}>
-              <DelcampeCategoryPath path={chosen.id} name={chosen.name} />{" "}
-              <span style={helpTextStyle}>· #{chosen.categoryId}</span>
-            </p>
-          )}
-
-          <div
-            role="listbox"
-            aria-label="Delcampe categories"
-            style={{
-              border: "1px solid var(--color-border)",
-              borderRadius: "0.375rem",
-              maxHeight: "22rem",
-              overflow: "auto",
-              padding: "0.25rem",
+        <div>
+          <TextInput
+            autoFocus
+            type="search"
+            value={term}
+            placeholder="Country, period, condition — or a category number"
+            style={INPUT_STYLE}
+            onChange={(e) => {
+              setPicked(null);
+              setError(null);
+              setTerm(e.target.value);
             }}
-          >
-            {offerTypedId && (
-              <button
-                type="button"
-                style={TYPED_ID_BUTTON}
-                onClick={() => onChosen({ categoryId: typedId, categoryName: null, categoryPath: null })}
-              >
-                <span style={{ fontSize: "0.875rem" }}>
-                  Use category <strong>#{typedId}</strong> as typed
-                </span>
-                <span style={helpTextStyle}>
-                  Not in the list this app has read — which is what a category created since the last
-                  read looks like.
-                </span>
-              </button>
-            )}
-            {rows === null && !loadError ? (
-              <p style={{ ...helpTextStyle, margin: 0, padding: "0.75rem" }}>
-                Reading Delcampe&rsquo;s category list…
-              </p>
-            ) : visible.length === 0 && !offerTypedId ? (
-              <p style={{ ...helpTextStyle, margin: 0, padding: "0.75rem" }}>
-                Nothing matches. Delcampe files stamps by country and period rather than by the areas
-                this collection uses, so try the country on its own.
-              </p>
-            ) : (
-              <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                {visible.map((node) => (
-                  <CategoryNode
-                    key={node.id}
-                    node={node}
-                    level={0}
-                    openIds={openIds}
-                    chosenId={chosen?.id ?? null}
-                    revealId={initialPath ?? null}
-                    onToggle={toggle}
-                    onChoose={(node) => {
-                      setError(null);
-                      setPicked(node);
-                    }}
-                    onCommit={choose}
-                  />
-                ))}
-              </ol>
-            )}
-          </div>
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              confirm();
+            }}
+          />
+          <p style={{ ...helpTextStyle, margin: "0.375rem 0 0" }}>
+            Every word has to appear somewhere in the category&rsquo;s path, in any order —{" "}
+            <em>poland used 1961</em> finds one branch. Leave it empty to walk the tree.
+          </p>
         </div>
-      </DialogBody>
+
+        {chosen && (
+          <p style={{ margin: 0, fontSize: "0.875rem" }}>
+            <DelcampeCategoryPath path={chosen.id} name={chosen.name} />{" "}
+            <span style={helpTextStyle}>· #{chosen.categoryId}</span>
+          </p>
+        )}
+
+        <div
+          role="listbox"
+          aria-label="Delcampe categories"
+          style={{
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.375rem",
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            padding: "0.25rem",
+          }}
+        >
+          {offerTypedId && (
+            <button
+              type="button"
+              style={TYPED_ID_BUTTON}
+              onClick={() => onChosen({ categoryId: typedId, categoryName: null, categoryPath: null })}
+            >
+              <span style={{ fontSize: "0.875rem" }}>
+                Use category <strong>#{typedId}</strong> as typed
+              </span>
+              <span style={helpTextStyle}>
+                Not in the list this app has read — which is what a category created since the last
+                read looks like.
+              </span>
+            </button>
+          )}
+          {rows === null && !loadError ? (
+            <p style={{ ...helpTextStyle, margin: 0, padding: "0.75rem" }}>
+              Reading Delcampe&rsquo;s category list…
+            </p>
+          ) : visible.length === 0 && !offerTypedId ? (
+            <p style={{ ...helpTextStyle, margin: 0, padding: "0.75rem" }}>
+              Nothing matches. Delcampe files stamps by country and period rather than by the areas
+              this collection uses, so try the country on its own.
+            </p>
+          ) : (
+            <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {visible.map((node) => (
+                <CategoryNode
+                  key={node.id}
+                  node={node}
+                  level={0}
+                  openIds={openIds}
+                  chosenId={chosen?.id ?? null}
+                  revealId={initialPath ?? null}
+                  onToggle={toggle}
+                  onChoose={(node) => {
+                    setError(null);
+                    setPicked(node);
+                  }}
+                  onCommit={choose}
+                />
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
       <DialogActions actionLabel="Use this category" onCancel={onClose} onAction={confirm} />
     </DialogShell>
   );
