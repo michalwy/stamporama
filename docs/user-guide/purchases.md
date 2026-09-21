@@ -907,7 +907,8 @@ saying you are done with the selection, so it unticks all three, and its hint sa
 Ticking changes nothing about clicking: the rest of the square still opens the tile's dialog, and a
 tile you have already dealt with has no box, having reached its end.
 
-**Work through N tiles** opens the **same dialog a single tile opens**, with all of the pieces beside
+**Work through N tiles** is the filled button at the bar's right end — the one thing a selection is
+made for, so it is the one that stands out. It opens the **same dialog a single tile opens**, with all of the pieces beside
 the answers — so a ticked run can be identified together, **set aside to check** together, or
 **discarded** together, and the shortlist of what they could be is written once for all of them. The
 one thing it cannot do is *assign to a copy on this order*: a copy has one front and one back, so

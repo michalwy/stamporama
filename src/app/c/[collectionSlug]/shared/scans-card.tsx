@@ -2512,7 +2512,7 @@ function TileSelectionBar({
       {/* Absent rather than disabled at nothing-in-view: there is no pass to offer over squares
           the chip is hiding, and a dead button beside a live *Clear* reads as a fault. */}
       {count > 0 && (
-        <SmallButton onClick={onOpen} disabled={busy}>
+        <SmallButton onClick={onOpen} disabled={busy} primary>
           <Icon name="scan" size="sm" /> Work through {count} {count === 1 ? "tile" : "tiles"}
         </SmallButton>
       )}
@@ -2888,12 +2888,17 @@ function SmallButton({
   onClick,
   disabled,
   danger,
+  primary,
   large,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  /** The action a surface exists for, in the dialogs' primary colours (`DialogPrimaryButton`) so it
+   *  reads as the same thing it is everywhere else (#1360). Never combined with `danger`: the loud
+   *  button and the dangerous one must not look alike. */
+  primary?: boolean;
   large?: boolean;
 }) {
   return (
@@ -2908,9 +2913,11 @@ function SmallButton({
         padding: large ? "0.375rem 0.75rem" : "0.25rem 0.5rem",
         borderRadius: "0.375rem",
         fontSize: "0.8125rem",
-        border: "1px solid var(--color-border-strong)",
-        background: "var(--color-bg-elevated)",
-        color: danger ? "var(--color-error)" : "var(--color-text-secondary)",
+        // Transparent rather than no border, so a primary sits at the same height as its neighbours.
+        border: primary ? "1px solid transparent" : "1px solid var(--color-border-strong)",
+        background: primary ? "var(--color-action-primary)" : "var(--color-bg-elevated)",
+        color: primary ? "#fff" : danger ? "var(--color-error)" : "var(--color-text-secondary)",
+        fontWeight: primary ? 600 : undefined,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.5 : 1,
       }}
