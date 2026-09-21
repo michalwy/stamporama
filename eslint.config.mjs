@@ -5,6 +5,22 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
+    // `eslint-config-next` sets `react.version: "detect"`, and on ESLint 10 that one word crashes
+    // the whole run: `eslint-plugin-react` 7.37.5 detects the version through
+    // `context.getFilename()`, which ESLint 10 removed, and it only takes that path when the value
+    // is literally `"detect"` (#1052). Naming the version skips it. This is the workaround
+    // vercel/next.js#89764 points at while jsx-eslint/eslint-plugin-react#3977 is open.
+    //
+    // It must match the `react` in `package.json`: a stale value only changes which version-gated
+    // rule branches run, so it would go wrong quietly, and `tests/unit/eslint-react-version.test.ts`
+    // is what makes it loud. Delete this object once an `eslint-plugin-react` that declares ESLint 10 reaches the lockfile.
+    settings: {
+      react: {
+        version: "19.3"
+      }
+    }
+  },
+  {
     // The extension is a separate workspace package with its own tsconfig, chrome globals, and
     // typecheck (`extension/`); the app's Next lint config does not apply to it.
     // `.claude/**` holds agent scratch space — plans and git worktrees, whose copies of the repo
