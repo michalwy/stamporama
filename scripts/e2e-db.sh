@@ -52,7 +52,12 @@ require_docker() {
 # that is about to die for want of `docker` should not take a number with it (#933).
 require_docker
 
-eval "$(scripts/dev-slot.sh env)"
+# Captured before it is evaluated, never `eval "$(…)"`: eval's status is that of the text it runs, so
+# a slot script that failed and printed nothing gave an eval of nothing, which succeeds. With the pool
+# exhausted that carried on into a Compose project with an empty suffix on slot 0's port (#1203).
+# dev-slot.sh has already said why on stderr; stop here, before any container exists.
+slot_env="$(scripts/dev-slot.sh env)" || exit 1
+eval "$slot_env"
 
 # `docker-compose.e2e.yml` reads STAMPORAMA_SLOT_SUFFIX for its project name and
 # STAMPORAMA_E2E_DB_PORT for the published port; both are exported above.

@@ -22,7 +22,7 @@
 # Usage:
 #   scripts/dev-slot.sh env       # shell `export` lines — this is what scripts/e2e-db.sh evals
 #   scripts/dev-slot.sh number    # just the slot number
-#   scripts/dev-slot.sh show      # every worktree, its slot and its ports — the default
+#   scripts/dev-slot.sh show      # every worktree, its slot and its ports — the default; a read
 #   scripts/dev-slot.sh release   # forget this worktree's slot
 #
 # `pnpm slot <verb>` reaches every one of them, because `package.json` declares the script path
@@ -104,7 +104,7 @@ EOF
       ;;
     esac
   done
-  die "all slots 1..$MAX_SLOT are taken; remove a worktree you no longer use, or run 'pnpm slot show'"
+  die "every slot 1..$MAX_SLOT is held by another worktree, so this one cannot have one (\`pnpm slot\` shows who holds what). Free one first: in a worktree that no longer needs its slot, run \`pnpm e2e:db:down\` and then \`pnpm slot release\` — or remove that worktree."
 }
 
 # Two sessions starting a suite in the same second must not both read "1 is free". mkdir is the
@@ -156,7 +156,11 @@ resolve_slot() {
     return 0
   fi
 
-  slot="$(with_lock allocate_slot)"
+  # `|| exit 1`, not `set -e`: this function is itself called inside command substitutions, where
+  # bash switches errexit off. Trusting it here is how an exhausted pool once wrote an empty
+  # `.env.slot` and carried on under a slot that does not exist (#1203).
+  slot="$(with_lock allocate_slot)" || exit 1
+  [ -n "$slot" ] || die "allocation printed no slot"
   write_slot_file "$slot"
   echo "$slot"
 }
@@ -167,7 +171,7 @@ suffix() { [ "$1" = 0 ] || echo "-$1"; }
 
 cmd_env() {
   local slot
-  slot="$(resolve_slot)"
+  slot="$(resolve_slot)" || exit 1 # errexit does not reach into the substitution (#1203)
   echo "export STAMPORAMA_SLOT=$slot"
   echo "export STAMPORAMA_SLOT_SUFFIX=$(suffix "$slot")"
   echo "export STAMPORAMA_HTTP_PORT=$(port "$BASE_HTTP_PORT" "$slot")"
@@ -180,13 +184,18 @@ cmd_show() {
   local this main path slot mark
   this="$(this_worktree)"
   main="$(main_worktree)"
-  resolve_slot >/dev/null # so the current worktree appears with the number it will actually use
+  # A read, and only a read (#922). It used to resolve — and so allocate — this worktree's slot first,
+  # so that the table showed the number the worktree would get; that made `pnpm slot release` followed
+  # by `pnpm slot` hand the number straight back. The number is taken by whatever actually needs it:
+  # `env`, which every scripts/e2e-db.sh command runs, or `number`.
   printf '%-5s %-9s %-9s %-9s %-22s %s\n' slot app dev e2e-db project worktree
   while IFS= read -r path; do
     slot="$(slot_of "$path")"
     if [ -z "$slot" ] && [ "$path" = "$main" ]; then slot=0; fi
     if [ -z "$slot" ]; then
-      printf '%-5s %-9s %-9s %-9s %-22s %s\n' '-' '-' '-' '-' '-' "$path (no slot yet)"
+      mark=""
+      [ "$path" = "$this" ] && mark=" <- this worktree; the next e2e-db command takes one"
+      printf '%-5s %-9s %-9s %-9s %-22s %s\n' '-' '-' '-' '-' '-' "$path (no slot yet)$mark"
       continue
     fi
     mark=""
@@ -223,7 +232,7 @@ cmd_release() {
 # names it explicitly. So nothing depended on the old default (#913).
 case "${1:-show}" in
 env) cmd_env ;;
-number) resolve_slot ;;
+number) resolve_slot || exit 1 ;;
 show) cmd_show ;;
 release) cmd_release ;;
 *) die "usage: $0 [env|number|show|release]" ;;
