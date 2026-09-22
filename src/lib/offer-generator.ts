@@ -13,6 +13,7 @@ import { formatEntityNo } from "./quick-jump";
 import { usesPlatformCatalogue } from "./platform-modules";
 import { resolveListedStampIds } from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { sortPhotos, type PhotoSummary } from "./photos";
 import {
   GenerationChangedError,
   collisionStampIds,
@@ -25,7 +26,9 @@ import type { LotChecklist } from "./lot-builder-rules";
 import {
   findPlanDrift,
   fingerprintPlan,
+  generatorCombinationParts,
   planOffers,
+  seriesSubtitle,
   SKIP_REASON_LABEL,
   SKIP_REASONS,
   skipReason,
@@ -288,19 +291,41 @@ export interface GeneratorOfferRef {
   setCount: number;
 }
 
+/** One axis of a line's combination, short (#1368): the chip says `label`, its hover says `name`. */
+export interface GeneratorCombinationPart {
+  axis: "condition" | "certificate" | "format";
+  /** Null only for a condition the copies do not record. */
+  id: string | null;
+  /** The dictionary's abbreviation, else its name. */
+  label: string;
+  name: string;
+}
+
+/** One copy of a set, as the expanded line shows it for checking against the desk (#1368). */
+export interface GeneratorCopyView {
+  itemId: string;
+  itemNo: number;
+  /** The copy's own catalogue number, bare — the line's catalogue already names the vendor. */
+  catalog: string;
+  photos: PhotoSummary[];
+}
+
 export interface GeneratorLineView {
   id: string;
   kind: "series" | "single" | "carrier";
-  /** The checklist's name for a series; the leading catalogue number and the stamp's name otherwise. */
+  /** The checklist's name for a series; the stamp's name otherwise. */
   title: string;
-  /** The issue a series belongs to. */
+  /** The issue a series belongs to, only where it is not already the checklist's name (#1368). */
   subtitle: string | null;
-  /** Condition, certificate and format, in words. */
-  combinationLabels: string[];
-  /** The variants filling a slot of the series in place of their parent (#661), named. */
+  /** Condition always, certificate and format only when not the default (#1368, as #1243). */
+  combination: GeneratorCombinationPart[];
+  /** What a set is, by catalogue number and as ranges where they run (#379/#400). Every set of a line
+   * holds the same stamps, so the first one speaks for all. */
+  catalog: string;
+  /** The variants filling a slot of the series in place of their parent (#661), by catalogue number. */
   variantLabels: string[];
-  /** The copy numbers of every set. */
-  sets: number[][];
+  /** The copies of every set. */
+  sets: GeneratorCopyView[][];
   target: { kind: "new" } | { kind: "existing"; offerId: string };
   /** Offers that may receive the sets (#732), lowest number first — the choice offered. */
   matches: GeneratorOfferRef[];
@@ -354,11 +379,13 @@ export async function previewOfferGeneration(
   };
 }
 
-/** The names behind the plan's ids: checklists and issues, stamps, the combination, the offers. */
+/** The names behind the plan's ids: checklists and issues, stamps, the combination, the offers, and
+ * the copies' photos for the line expanded to check a set against the desk (#1368). */
 async function nameLines(collectionId: string, state: GeneratorState): Promise<GeneratorLineView[]> {
   const { plan } = state;
   if (plan.lines.length === 0) return [];
   const stampIds = new Set<string>();
+  const itemIds = new Set<string>();
   const checklistIds = new Set<string>();
   const offerIds = new Set<string>();
   const conditionIds = new Set<string>();
@@ -371,11 +398,16 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
     if (conditionId) conditionIds.add(conditionId);
     if (certificateStatusId) certificateIds.add(certificateStatusId);
     if (formatId) formatIds.add(formatId);
-    for (const set of line.sets) for (const copy of set.copies) stampIds.add(copy.stampId);
+    for (const set of line.sets) {
+      for (const copy of set.copies) {
+        stampIds.add(copy.stampId);
+        itemIds.add(copy.itemId);
+      }
+    }
   }
 
-  const dictionarySelect = { id: true, name: true } as const;
-  const [checklists, stamps, offers, conditions, certificates, formats, labeller] = await Promise.all([
+  const dictionarySelect = { id: true, name: true, abbreviation: true } as const;
+  const [checklists, stamps, photoRows, offers, conditions, certificates, formats, labeller] = await Promise.all([
     prisma.checklist.findMany({
       where: { id: { in: [...checklistIds] }, collectionId },
       select: { id: true, name: true, issue: { select: { name: true } } },
@@ -383,6 +415,10 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
     prisma.stamp.findMany({
       where: { id: { in: [...stampIds] }, collectionId },
       select: { id: true, ...STAMP_LABEL_SELECT.stamp.select },
+    }),
+    prisma.item.findMany({
+      where: { id: { in: [...itemIds] }, collectionId },
+      select: { id: true, photos: { select: { id: true, role: true, title: true, sortOrder: true } } },
     }),
     prisma.offer.findMany({
       where: { id: { in: [...offerIds] }, collectionId },
@@ -402,10 +438,21 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
   ]);
   const checklistById = new Map(checklists.map((row) => [row.id, row]));
   const stampById = new Map(stamps.map((row) => [row.id, row]));
-  const nameOf = (rows: { id: string; name: string }[]) => new Map(rows.map((row) => [row.id, row.name]));
-  const conditionName = nameOf(conditions);
-  const certificateName = nameOf(certificates);
-  const formatName = nameOf(formats);
+  const photosOf = new Map(
+    photoRows.map((row) => [
+      row.id,
+      row.photos
+        .map((photo): PhotoSummary => ({ ...photo, role: isSlotPhotoRole(photo.role) ? photo.role : null }))
+        .sort(sortPhotos),
+    ])
+  );
+  const dictionary = (rows: { id: string; name: string; abbreviation: string | null }[]) =>
+    new Map(rows.map((row) => [row.id, { name: row.name, label: row.abbreviation || row.name }]));
+  const names = {
+    condition: dictionary(conditions),
+    certificate: dictionary(certificates),
+    format: dictionary(formats),
+  };
   const membersOf = new Map(state.checklists.map((checklist) => [checklist.checklistId, new Set(checklist.stampIds)]));
 
   const offerRef = new Map<string, GeneratorOfferRef>();
@@ -421,38 +468,58 @@ async function nameLines(collectionId: string, state: GeneratorState): Promise<G
     });
   }
   const refs = (ids: string[]) => ids.flatMap((id) => (offerRef.has(id) ? [offerRef.get(id)!] : []));
-  const stampLabel = (stampId: string) => {
+  const copyCatalog = (stampId: string) => {
     const stamp = stampById.get(stampId);
-    if (!stamp) return "A stamp";
-    return [labeller.catalogNumbers(stamp)[0], stamp.name].filter(Boolean).join(" ") || "A stamp";
+    return stamp ? labeller.copy(stamp) : "Copy";
+  };
+  const combinationPart = (part: ReturnType<typeof generatorCombinationParts>[number]): GeneratorCombinationPart => {
+    if (part.id === null) return { ...part, label: "No condition", name: "No condition recorded" };
+    const known = names[part.axis].get(part.id);
+    return { ...part, label: known?.label ?? "?", name: known?.name ?? `Unknown ${part.axis}` };
   };
 
   return plan.lines.map((line): GeneratorLineView => {
-    const first = line.sets[0].copies[0];
-    const { conditionId, certificateStatusId, formatId } = line.combination;
-    const combinationLabels = [
-      conditionName.get(conditionId ?? "") ?? "Unknown condition",
-      certificateStatusId ? (certificateName.get(certificateStatusId) ?? "Unknown certificate") : "No certificate",
-      formatId ? (formatName.get(formatId) ?? "Unknown format") : "Single",
-    ];
+    const firstSet = line.sets[0].copies;
+    const first = firstSet[0];
+    const firstStamp = stampById.get(first.stampId);
     const checklist = line.checklistId ? checklistById.get(line.checklistId) : undefined;
     const members = line.checklistId ? membersOf.get(line.checklistId) : undefined;
+    const title = line.checklistId ? (checklist?.name ?? "A set") : (firstStamp?.name ?? "A stamp");
     return {
       id: line.id,
       kind: line.checklistId ? "series" : first.multiStamp ? "carrier" : "single",
-      title: line.checklistId ? (checklist?.name ?? "A set") : stampLabel(first.stampId),
-      subtitle: checklist?.issue?.name ?? null,
-      combinationLabels,
+      title,
+      subtitle: seriesSubtitle(title, checklist?.issue?.name),
+      combination: generatorCombinationParts(line.combination).map(combinationPart),
+      catalog: labeller.set({
+        title: null,
+        items: firstSet.flatMap((copy) => {
+          const stamp = stampById.get(copy.stampId);
+          return stamp ? [{ itemId: copy.itemId, sortOrder: null, item: { stamp } }] : [];
+        }),
+      }),
       variantLabels: members
-        ? [...new Set(line.sets[0].copies.filter((copy) => !members.has(copy.stampId)).map((copy) => stampLabel(copy.stampId)))]
+        ? [...new Set(firstSet.filter((copy) => !members.has(copy.stampId)).map((copy) => copyCatalog(copy.stampId)))]
         : [],
-      sets: line.sets.map((set) => set.copies.map((copy) => copy.itemNo)),
+      sets: line.sets.map((set) =>
+        set.copies.map((copy) => ({
+          itemId: copy.itemId,
+          itemNo: copy.itemNo,
+          catalog: copyCatalog(copy.stampId),
+          photos: photosOf.get(copy.itemId) ?? [],
+        }))
+      ),
       target: line.target,
       matches: refs(line.matches),
       biddingMatches: refs(line.biddingMatches),
       resultingSetCount: line.resultingSetCount,
     };
   });
+}
+
+/** The reserved photo slots (#112); any other stored role reads as none. */
+function isSlotPhotoRole(role: string | null): role is "front" | "back" | "main" {
+  return role === "front" || role === "back" || role === "main";
 }
 
 // ── The commit ─────────────────────────────────────────────────────────────────────────────────────

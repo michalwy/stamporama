@@ -1202,8 +1202,13 @@ Two choices:
     **active bidding** never receives sets: a new offer is made instead, and the preview says why.
   - **Separate offers** — every set becomes a new offer of its own, even where a similar offer exists.
 
-The preview lists every offer: what it holds, the copy numbers in each set, and whether it is a
-**new offer** or **added to #N** (with how many sets that offer will then have). Above the list it
+The preview lists every offer on **one line**: the checklist's name (or the stamp's), the condition
+in its colour — with the certificate status and format only when there is one — the set by its
+catalogue numbers, run together as a range where they follow on (`Mi·PL 865-870`), any variant
+standing in for its parent, how many sets (`×3`), and whether it is a **new offer** or **added to
+#N**. Hover *added to #N* for the offer's name and how many sets it will then have. Click a line to
+open it: each set's copies with their photos, inventory numbers and catalogue numbers, so a set can
+be checked against the stamps on the desk. Above the list it
 counts the copies it left out and why — already offered on the platform, not for sale, not in hand,
 set aside from the platform, in an offer in active bidding, or no longer held — and how many copies
 the other mode would list.

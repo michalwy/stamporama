@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import type { GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
+import type { GeneratorCombinationPart, GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
 import {
   generatorRequestParams,
   type GeneratorMode,
@@ -11,17 +11,21 @@ import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
+import { Icon } from "@/app/icons";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
+import { CertificateStatusChip, ConditionChip } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Callout, Empty, SkeletonBlock } from "@/app/c/[collectionSlug]/offers/lot-builder/lot-builder-chrome";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import { useCollectionItemNoPad } from "./use-inventory-query";
+import { PhotoThumb } from "./photo-thumb";
 
 // Generating offers in bulk (#1287): quick offer mode's platform and status (#537), applied to every
 // copy the collector can see in one pass instead of one click per offer. The dialog asks the two
 // questions the pass needs — complete series or singles, one multi-quantity offer or an offer per set —
-// and shows the whole plan before anything is written: every offer with its sets and copies, whether
-// it is new or added to an existing one, and the copies left out and why. Confirming sends the plan
+// and shows the whole plan before anything is written: every offer on one line, new or added to an
+// existing one (#1368), its copies a click away, and the copies left out and why. Confirming sends the plan
 // back only to be compared with a fresh one (#717).
 
 /** Which copies the pass is over: the ticked ones in view, or everything the list's filters show. */
@@ -89,13 +93,37 @@ const OPTION: React.CSSProperties = {
 
 const HINT: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-text-secondary)" };
 
+// Fixed columns, so fifty lines read as a table: toggle, name, combination, catalogue, quantity,
+// outcome (#1368).
 const LINE: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(12rem, 18rem)",
+  gridTemplateColumns: "1.25rem minmax(0, 1fr) 8rem minmax(0, 14rem) 2.5rem 13rem",
+  alignItems: "center",
   gap: "0.75rem",
-  padding: "0.5rem 0.75rem",
-  borderTop: "1px solid var(--color-border)",
+  padding: "0.375rem 0.75rem",
   fontSize: "0.8125rem",
+  cursor: "pointer",
+};
+
+const CELL: React.CSSProperties = {
+  display: "block",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const TOGGLE: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "1.25rem",
+  height: "1.25rem",
+  padding: 0,
+  border: "none",
+  background: "none",
+  color: "var(--color-text-secondary)",
+  cursor: "pointer",
 };
 
 const SELECT: React.CSSProperties = {
@@ -251,6 +279,7 @@ export function OfferGeneratorDialog({
                   {preview.lines.map((line, index) => (
                     <Line
                       key={line.id}
+                      collectionId={collectionId}
                       line={line}
                       first={index === 0}
                       pad={pad}
@@ -314,82 +343,168 @@ function offerOption(offer: GeneratorOfferRef): string {
   return `${formatEntityNo(offer.offerNo)} ${offer.label} (${OFFER_STATE_LABEL[offer.state]})`;
 }
 
+/** One proposed offer on one line (#1368): the name once, the combination short, what a set is by
+ * catalogue number, the quantity and the outcome — collapsed, so fifty offers read as fifty lines.
+ * Expanding it shows the copies with their photos and numbers, to check a set against the desk. */
 function Line({
+  collectionId,
   line,
   first,
   pad,
   disabled,
   onChooseTarget,
 }: {
+  collectionId: string;
   line: GeneratorLineView;
   first: boolean;
   pad: number;
   disabled: boolean;
   onChooseTarget: (offerId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const targetId = line.target.kind === "existing" ? line.target.offerId : null;
   const target = line.matches.find((offer) => offer.offerId === targetId) ?? null;
-  const perSet = line.sets[0]?.length ?? 0;
+  const name = line.subtitle ? `${line.title} — ${line.subtitle}` : line.title;
+  const catalog = line.variantLabels.length > 0 ? `${line.catalog}, with ${line.variantLabels.join(", ")}` : line.catalog;
   return (
-    <div style={{ ...LINE, ...(first ? { borderTop: "none" } : {}) }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
+    <div style={first ? undefined : { borderTop: "1px solid var(--color-border)" }}>
+      <div style={LINE} onClick={() => setOpen((o) => !o)}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={`${open ? "Hide" : "Show"} the copies of ${line.title}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
+          style={TOGGLE}
+        >
+          <Icon name={open ? "collapse" : "expand"} size="sm" />
+        </button>
+        <Tooltip content={name} style={CELL}>
           <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{line.title}</span>
-          {line.subtitle && <span style={HINT}>{line.subtitle}</span>}
+          {line.subtitle && <span style={HINT}> — {line.subtitle}</span>}
+        </Tooltip>
+        <span style={{ display: "inline-flex", gap: "0.2rem", minWidth: 0, overflow: "hidden" }}>
           {line.kind === "carrier" && <span style={ROW_CHIP}>Several stamps</span>}
-          {line.combinationLabels.map((label) => (
-            <span key={label} style={ROW_CHIP}>
-              {label}
-            </span>
+          {line.combination.map((part) => (
+            <CombinationChip key={part.axis} collectionId={collectionId} part={part} />
           ))}
-        </div>
-        {line.variantLabels.length > 0 && <div style={HINT}>With variants: {line.variantLabels.join(", ")}</div>}
-        <div style={{ ...HINT, fontVariantNumeric: "tabular-nums" }}>
-          {line.sets.length > 1 || perSet > 1
-            ? `${plural(line.sets.length, "set", "sets")}${perSet > 1 ? ` of ${perSet}` : ""}: `
-            : ""}
-          {line.sets.map((set) => set.map((itemNo) => formatItemNo(itemNo, pad)).join(" ")).join(" · ")}
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", alignItems: "flex-start", minWidth: 0 }}>
-        {target ? (
-          <>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
-              Added to {formatEntityNo(target.offerNo)} <OfferStateChip state={target.state} />
-            </span>
-            {line.matches.length > 1 ? (
-              <select
-                value={target.offerId}
-                onChange={(e) => onChooseTarget(e.target.value)}
-                disabled={disabled}
-                aria-label={`Offer receiving ${line.title}`}
-                style={SELECT}
-              >
-                {line.matches.map((offer) => (
-                  <option key={offer.offerId} value={offer.offerId}>
-                    {offerOption(offer)}
-                  </option>
-                ))}
-              </select>
+        </span>
+        <Tooltip content={catalog} style={{ ...CELL, fontVariantNumeric: "tabular-nums" }}>
+          {line.catalog}
+          {line.variantLabels.length > 0 && <span style={HINT}>, with {line.variantLabels.join(", ")}</span>}
+        </Tooltip>
+        <span style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--color-text-secondary)" }}>
+          {line.sets.length > 1 ? `×${line.sets.length}` : ""}
+        </span>
+        <span
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", minWidth: 0 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {target ? (
+            line.matches.length > 1 ? (
+              <>
+                <span style={{ flexShrink: 0 }}>Add to</span>
+                <select
+                  value={target.offerId}
+                  onChange={(e) => onChooseTarget(e.target.value)}
+                  disabled={disabled}
+                  aria-label={`Offer receiving ${line.title}`}
+                  style={{ ...SELECT, flex: 1, minWidth: 0 }}
+                >
+                  {line.matches.map((offer) => (
+                    <option key={offer.offerId} value={offer.offerId}>
+                      {offerOption(offer)}
+                    </option>
+                  ))}
+                </select>
+              </>
             ) : (
-              <span style={HINT}>{target.label}</span>
-            )}
-            <span style={HINT}>It will then have {plural(line.resultingSetCount, "set", "sets")}.</span>
-          </>
-        ) : (
-          <>
-            <span style={{ fontWeight: 600, color: "var(--color-accent)" }}>New offer</span>
-            {line.sets.length > 1 && <span style={HINT}>Quantity {line.sets.length}.</span>}
-            {line.biddingMatches.length > 0 && (
-              <span style={HINT}>
-                {line.biddingMatches.map((offer) => formatEntityNo(offer.offerNo)).join(", ")}{" "}
-                {line.biddingMatches.length === 1 ? "lists" : "list"} the same, but{" "}
-                {line.biddingMatches.length === 1 ? "is" : "are"} in active bidding, so nothing is added there.
-              </span>
-            )}
-          </>
-        )}
+              <Tooltip content={`${target.label} — it will then have ${plural(line.resultingSetCount, "set", "sets")}.`}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+                  Added to {formatEntityNo(target.offerNo)} <OfferStateChip state={target.state} />
+                </span>
+              </Tooltip>
+            )
+          ) : (
+            <>
+              <span style={{ fontWeight: 600, color: "var(--color-accent)" }}>New offer</span>
+              {line.biddingMatches.length > 0 && (
+                <Tooltip content={biddingNote(line.biddingMatches)}>
+                  <Icon name="warning" size="sm" color="var(--color-text-muted)" />
+                </Tooltip>
+              )}
+            </>
+          )}
+        </span>
       </div>
+      {open && <LineCopies collectionId={collectionId} line={line} target={target} pad={pad} />}
+    </div>
+  );
+}
+
+function biddingNote(offers: GeneratorOfferRef[]): string {
+  const one = offers.length === 1;
+  return `${offers.map((offer) => formatEntityNo(offer.offerNo)).join(", ")} ${one ? "lists" : "list"} the same, but ${one ? "is" : "are"} in active bidding, so nothing is added there.`;
+}
+
+/** Condition and certificate in the dictionary's own colours (#728); a format carries none. */
+function CombinationChip({ collectionId, part }: { collectionId: string; part: GeneratorCombinationPart }) {
+  if (part.axis === "condition") {
+    return <ConditionChip collectionId={collectionId} conditionId={part.id} label={part.label} tooltip={part.name} />;
+  }
+  if (part.axis === "certificate") {
+    return (
+      <CertificateStatusChip collectionId={collectionId} certificateStatusId={part.id} label={part.label} tooltip={part.name} />
+    );
+  }
+  return (
+    <Tooltip content={part.name}>
+      <span style={ROW_CHIP}>{part.label}</span>
+    </Tooltip>
+  );
+}
+
+/** The expanded line: every set's copies, each with its photos, inventory number and catalogue number. */
+function LineCopies({
+  collectionId,
+  line,
+  target,
+  pad,
+}: {
+  collectionId: string;
+  line: GeneratorLineView;
+  target: GeneratorOfferRef | null;
+  pad: number;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", padding: "0 0.75rem 0.625rem 2.5rem" }}>
+      {line.sets.map((set, index) => (
+        <div key={set.map((copy) => copy.itemId).join(",")} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+          {line.sets.length > 1 && (
+            <span style={{ ...HINT, width: "3rem", flexShrink: 0, paddingTop: "0.25rem" }}>Set {index + 1}</span>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            {set.map((copy) => (
+              <div key={copy.itemId} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.125rem", width: "4rem" }}>
+                <PhotoThumb collectionId={collectionId} photos={copy.photos} size="3.5rem" reserveWhenEmpty />
+                <span style={{ ...HINT, fontVariantNumeric: "tabular-nums" }}>{formatItemNo(copy.itemNo, pad)}</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-primary)", textAlign: "center", overflowWrap: "anywhere" }}>
+                  {copy.catalog}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {target && (
+        <div style={HINT}>
+          Added to {formatEntityNo(target.offerNo)} {target.label} — it will then have{" "}
+          {plural(line.resultingSetCount, "set", "sets")}.
+        </div>
+      )}
+      {!target && line.biddingMatches.length > 0 && <div style={HINT}>{biddingNote(line.biddingMatches)}</div>}
     </div>
   );
 }

@@ -284,7 +284,7 @@ describe("offer generator (#1287)", () => {
       preview.skipped.map((entry) => [entry.reason, entry.count]),
       [["gone", 1], ["not-for-sale", 1], ["not-in-hand", 1], ["set-aside", 1], ["offered", 1], ["in-bidding", 1]]
     );
-    assert.deepEqual(preview.lines.map((line) => line.sets), [[[await itemNo(available)]]]);
+    assert.deepEqual(preview.lines.map((line) => line.sets.map((set) => set.map((copy) => copy.itemNo))), [[[await itemNo(available)]]]);
   });
 
   it("reads the list's own filters when nothing is ticked", async () => {
@@ -299,7 +299,7 @@ describe("offer generator (#1287)", () => {
       filters: readItemFilters(new URLSearchParams(`areaIds=${otherArea}`)),
     });
     assert.equal(preview.askedCopies, 1);
-    assert.deepEqual(preview.lines.map((line) => line.sets), [[[await itemNo(wanted)]]]);
+    assert.deepEqual(preview.lines.map((line) => line.sets.map((set) => set.map((copy) => copy.itemNo))), [[[await itemNo(wanted)]]]);
   });
 
   it("refuses a plan gone stale, naming the copy, and writes nothing", async () => {

@@ -526,3 +526,34 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     targets,
   };
 }
+
+// ── How the preview states a line (#1368) ──────────────────────────────────────────────────────────
+
+/**
+ * The combination the way the copy count popover writes it (#1243): the condition always, the
+ * certificate and the format **only when they are not the default** — no certificate, single. Over
+ * fifty lines the defaults said nothing and took most of the room.
+ */
+export function generatorCombinationParts(combination: {
+  conditionId?: string | null;
+  certificateStatusId?: string | null;
+  formatId?: string | null;
+}): { axis: "condition" | "certificate" | "format"; id: string | null }[] {
+  const { conditionId, certificateStatusId, formatId } = combination;
+  return [
+    { axis: "condition" as const, id: conditionId ?? null },
+    ...(certificateStatusId ? [{ axis: "certificate" as const, id: certificateStatusId }] : []),
+    ...(formatId ? [{ axis: "format" as const, id: formatId }] : []),
+  ];
+}
+
+/**
+ * The issue a series belongs to, when it says something the checklist's name does not. A checklist
+ * is usually named after its issue, and the preview printed the one name twice (#1368).
+ */
+export function seriesSubtitle(title: string, issueName: string | null | undefined): string | null {
+  const issue = issueName?.trim();
+  if (!issue) return null;
+  const same = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base" }) === 0;
+  return same(issue, title.trim()) ? null : issue;
+}
