@@ -452,7 +452,7 @@ const SEARCH_BUDGET = 100_000;
  * free, which prunes nearly everything real.
  */
 export function fewestOffersToChange(
-  slots: readonly RecombinationSlot[],
+  slots: readonly { copies: readonly Pick<RecombinationCopy, "offerIds">[] }[],
   isLive: (offerId: string) => boolean
 ): OffersToChange {
   const forced: (readonly string[])[][] = [];
@@ -502,6 +502,81 @@ export function fewestOffersToChange(
   };
   visit(0);
   return search.best ?? { offerIds: [], liveCount: 0 };
+}
+
+// Choosing one of each (#1375) ------------------------------------------------------------------
+
+/** A candidate as the card holds it: what choosing one of each reads of it. */
+export interface PickableCopy {
+  itemId: string;
+  itemNo: number;
+  offerIds: readonly string[];
+}
+
+export interface PickableSlot {
+  stampId: string;
+  copies: readonly PickableCopy[];
+}
+
+/** The collector's choice so far, keyed by the slot's stamp. A pick naming no candidate of its slot
+ *  counts as no pick. */
+export type PartialSeriesPicks = Readonly<Record<string, string | undefined>>;
+
+function pickedCopy(slot: PickableSlot, picks: PartialSeriesPicks): PickableCopy | undefined {
+  const itemId = picks[slot.stampId];
+  return itemId === undefined ? undefined : slot.copies.find((copy) => copy.itemId === itemId);
+}
+
+/**
+ * The fewest offers composing would change **given what is already chosen** (#1375): a chosen slot
+ * counts only its copy, the rest the cheapest of theirs, as {@link fewestOffersToChange} reads it.
+ * With nothing chosen it is the card's *at least* figure; with everything chosen it is exact. One
+ * derivation for the card's heading and for {@link chooseOneOfEach}, so what the heading promises is
+ * what the one click picks.
+ */
+export function offersToChangeGiven(
+  slots: readonly PickableSlot[],
+  picks: PartialSeriesPicks,
+  isLive: (offerId: string) => boolean
+): OffersToChange {
+  return fewestOffersToChange(
+    slots.map((slot) => {
+      const copy = pickedCopy(slot, picks);
+      return { copies: copy ? [copy] : slot.copies };
+    }),
+    isLive
+  );
+}
+
+/**
+ * A copy for every slot **not chosen yet**, in one click (#1375, decided with the user on 2026-09-22).
+ * Returns only the new picks: a slot chosen by hand keeps its copy, and every pick stays changeable.
+ *
+ * Mechanical, not a quality judgement — conditions are not ranked (#570, ADR-0032), and the candidates
+ * of one card share condition, certificate and format by construction (#1265). A copy **not in any
+ * offer** first, so no listing has to change; otherwise a copy whose offers all lie in the
+ * {@link offersToChangeGiven} cover, the figure the card's heading reports, so the click changes no
+ * more offers than the heading said; among equals the **lowest inventory number**, the copy a
+ * collapsed line already names (#1266).
+ */
+export function chooseOneOfEach(
+  slots: readonly PickableSlot[],
+  picks: PartialSeriesPicks,
+  isLive: (offerId: string) => boolean
+): Record<string, string> {
+  const cover = new Set(offersToChangeGiven(slots, picks, isLive).offerIds);
+  const lowest = (copies: readonly PickableCopy[]) =>
+    copies.reduce<PickableCopy | undefined>((best, copy) => (!best || copy.itemNo < best.itemNo ? copy : best), undefined);
+  const out: Record<string, string> = {};
+  for (const slot of slots) {
+    if (pickedCopy(slot, picks)) continue;
+    const pick =
+      lowest(slot.copies.filter((copy) => copy.offerIds.length === 0)) ??
+      lowest(slot.copies.filter((copy) => copy.offerIds.every((id) => cover.has(id)))) ??
+      lowest(slot.copies);
+    if (pick) out[slot.stampId] = pick.itemId;
+  }
+  return out;
 }
 
 // Composing a series (#1211) --------------------------------------------------------------------
