@@ -11,10 +11,13 @@ import type {
   RecombinationTargetRef,
 } from "@/lib/series-recombination";
 import {
+  chooseOneOfEach,
   collapsedChoice,
   composeTargetOf,
   composeTargets,
   compositionOutcome,
+  isLiveForRecombination,
+  offersToChangeGiven,
   parseSeriesCriteria,
   SERIES_FILTER_PARAMS,
   SERIES_MIXING_PARAMS,
@@ -35,6 +38,7 @@ import {
   DialogActions,
   DialogBody,
   DialogPrimaryButton,
+  DialogSecondaryButton,
   DialogShell,
 } from "@/app/dialog-shell";
 import { OfferStateChip } from "../offer-badges";
@@ -49,7 +53,9 @@ import { useInvalidateOffers, useSeriesFromSingles } from "../use-offers-query";
 // available copy, or the single offer that holds one. Where there is more than one, the collector
 // picks (#1211) — nothing is pre-selected, since conditions are not ranked (#570, ADR-0032) — and the
 // card composes the series as one offer, after a dialog saying which offers lose a set, which of those
-// are live and which are withdrawn.
+// are live and which are withdrawn. **Choose one of each** fills every slot still unchosen in one
+// click (#1375) by a mechanical rule — available first, then the fewest offers changed, then the
+// lowest number — and every pick stays changeable.
 //
 // A card is one **combination** (#1265): by default one condition, one certificate status and one
 // format, named in its heading, so one checklist can be two cards. The *Copies* band steers it — four
@@ -370,6 +376,33 @@ function SeriesCard({
     return out;
   }, [series.slots, chosen]);
   const unchosen = series.slots.filter((slot) => !picks[slot.stamp.stampId]).length;
+  // What the pick rules read of the slots (#1375): where each candidate comes from, and which offers
+  // are live — the heading's figure and *Choose one of each* are one derivation over it.
+  const pickable = useMemo(
+    () =>
+      series.slots.map((slot) => ({
+        stampId: slot.stamp.stampId,
+        copies: slot.fillers.map((filler) => ({
+          itemId: filler.itemId,
+          itemNo: filler.itemNo,
+          offerIds: filler.offers.map((offer) => offer.offerId),
+        })),
+      })),
+    [series.slots]
+  );
+  const isLive = useMemo(() => {
+    const live = new Set(
+      series.slots.flatMap((slot) =>
+        slot.fillers.flatMap((filler) =>
+          filler.offers.filter((offer) => isLiveForRecombination(offer.state)).map((offer) => offer.offerId)
+        )
+      )
+    );
+    return (offerId: string) => live.has(offerId);
+  }, [series.slots]);
+  // Best case over the slots still open, exact once every slot is chosen.
+  const change = useMemo(() => offersToChangeGiven(pickable, picks, isLive), [pickable, picks, isLive]);
+  const chooseRest = () => setChosen((prev) => ({ ...prev, ...chooseOneOfEach(pickable, picks, isLive) }));
   const similarById = useMemo(
     () => new Map(series.similar.offers.map((offer) => [offer.offerId, offer])),
     [series.similar.offers]
@@ -390,7 +423,8 @@ function SeriesCard({
   const issueName = series.issue
     ? (series.issue.name ?? (series.issue.year !== null ? String(series.issue.year) : "Unnamed issue"))
     : null;
-  const offers = series.offersToChange === 1 ? "1 offer" : `${series.offersToChange} offers`;
+  const changeCount = change.offerIds.length;
+  const offers = changeCount === 1 ? "1 offer" : `${changeCount} offers`;
   return (
     <div style={SERIES_CARD}>
       <div style={SERIES_HEADING}>
@@ -411,8 +445,9 @@ function SeriesCard({
         ))}
         <span style={{ flex: 1 }} />
         <span style={{ ...NOTE, fontWeight: 400 }}>
-          {series.slots.length} stamps · at least {offers} would change
-          {series.offersToChange > 0 ? `, ${series.liveOffersToChange} of them live` : ""}
+          {series.slots.length} stamps · {unchosen > 0 ? "at least " : ""}
+          {offers} would change
+          {changeCount > 0 ? `, ${change.liveCount} of them live` : ""}
         </span>
       </div>
       {series.slots.map((slot, index) => {
@@ -510,6 +545,11 @@ function SeriesCard({
         <DialogPrimaryButton type="button" disabled={unchosen > 0} onClick={() => setComposing(true)}>
           <Icon name="newOffer" /> {proposedRef ? "Compose the series…" : "Compose one offer…"}
         </DialogPrimaryButton>
+        {unchosen > 0 ? (
+          <DialogSecondaryButton type="button" onClick={chooseRest}>
+            Choose one of each
+          </DialogSecondaryButton>
+        ) : null}
         {unchosen > 0 ? (
           <span style={NOTE}>
             {`Choose which copy fills ${unchosen === 1 ? "the stamp" : `each of the ${unchosen} stamps`} with more than one.`}

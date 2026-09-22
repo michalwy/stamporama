@@ -5,6 +5,7 @@ import type { LotChecklist } from "../../src/lib/lot-builder-rules";
 import {
   candidateKey,
   checkSeriesPicks,
+  chooseOneOfEach,
   collapseCandidates,
   collapsedChoice,
   combinationKey,
@@ -18,12 +19,15 @@ import {
   fewestOffersToChange,
   findRecombinableSeries,
   NO_MIXING,
+  offersToChangeGiven,
   parseComposeTargetPlan,
   parseSeriesCombination,
   parseSeriesCriteria,
   seriesCriteriaParams,
   singlyOfferedCopies,
   type ComposeTargetOffer,
+  type PickableCopy,
+  type PickableSlot,
   type RecombinationCopy,
   type RecombinationOfferSet,
   type RecombinationSlot,
@@ -206,6 +210,80 @@ describe("fewestOffersToChange (#1210)", () => {
       live(["o1"])
     );
     assert.deepEqual(result, { offerIds: [], liveCount: 0 });
+  });
+});
+
+describe("choosing one of each (#1375)", () => {
+  const copy = (itemId: string, itemNo: number, offerIds: string[] = []): PickableCopy => ({
+    itemId,
+    itemNo,
+    offerIds,
+  });
+  const slot = (stampId: string, ...copies: PickableCopy[]): PickableSlot => ({ stampId, copies });
+  const live = (ids: string[]) => (id: string) => ids.includes(id);
+
+  it("fills every unchosen slot and leaves a slot chosen by hand alone", () => {
+    const slots = [
+      slot("s1", copy("a", 5), copy("b", 2)),
+      slot("s2", copy("c", 7), copy("d", 3)),
+      slot("s3", copy("e", 1)),
+    ];
+    assert.deepEqual(chooseOneOfEach(slots, { s1: "a" }, live([])), { s2: "d", s3: "e" });
+  });
+
+  it("treats a pick naming no candidate of its slot as unchosen", () => {
+    const slots = [slot("s1", copy("a", 5), copy("b", 2))];
+    assert.deepEqual(chooseOneOfEach(slots, { s1: "gone" }, live([])), { s1: "b" });
+  });
+
+  it("prefers a copy in no offer over a lower-numbered one in an offer", () => {
+    const slots = [slot("s1", copy("offered", 1, ["o1"]), copy("free", 9))];
+    assert.deepEqual(chooseOneOfEach(slots, {}, live([])), { s1: "free" });
+  });
+
+  it("then keeps the number of offers changed lowest, not the inventory number", () => {
+    // s2 must come out of o2; taking s1 from o2 as well changes one offer rather than two.
+    const slots = [
+      slot("s1", copy("low", 1, ["o1"]), copy("high", 8, ["o2"])),
+      slot("s2", copy("only", 4, ["o2"])),
+    ];
+    assert.deepEqual(chooseOneOfEach(slots, {}, live([])), { s1: "high", s2: "only" });
+  });
+
+  it("counts an offer a hand-picked copy already changes as free", () => {
+    const slots = [
+      slot("s1", copy("x", 1, ["o1"]), copy("y", 2, ["o2"])),
+      slot("s2", copy("p", 3, ["o1"]), copy("q", 4, ["o2"])),
+    ];
+    assert.deepEqual(chooseOneOfEach(slots, { s1: "y" }, live([])), { s2: "q" });
+  });
+
+  it("breaks a tie on offers toward one not live, as the heading does", () => {
+    const slots = [slot("s1", copy("inLive", 1, ["live"]), copy("inDraft", 2, ["draft"]))];
+    assert.deepEqual(chooseOneOfEach(slots, {}, live(["live"])), { s1: "inDraft" });
+  });
+
+  it("among equals takes the lowest inventory number", () => {
+    const slots = [slot("s1", copy("c", 12, ["o1"]), copy("a", 3, ["o1"]), copy("b", 7, ["o1"]))];
+    assert.deepEqual(chooseOneOfEach(slots, {}, live([])), { s1: "a" });
+  });
+
+  it("leaves the heading's figure where it was, and makes it exact", () => {
+    const slots = [
+      slot("s1", copy("low", 1, ["o1"]), copy("high", 8, ["o2"])),
+      slot("s2", copy("only", 4, ["o2"])),
+      slot("s3", copy("free", 6), copy("in3", 2, ["o3"])),
+    ];
+    const before = offersToChangeGiven(slots, {}, live(["o2"]));
+    const after = offersToChangeGiven(slots, chooseOneOfEach(slots, {}, live(["o2"])), live(["o2"]));
+    assert.deepEqual(before, { offerIds: ["o2"], liveCount: 1 });
+    assert.deepEqual(after, before);
+  });
+
+  it("counts a hand pick in the heading's figure", () => {
+    const slots = [slot("s1", copy("free", 1), copy("in1", 2, ["o1"]))];
+    assert.deepEqual(offersToChangeGiven(slots, {}, live([])), { offerIds: [], liveCount: 0 });
+    assert.deepEqual(offersToChangeGiven(slots, { s1: "in1" }, live(["o1"])), { offerIds: ["o1"], liveCount: 1 });
   });
 });
 

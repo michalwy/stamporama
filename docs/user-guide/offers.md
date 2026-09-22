@@ -1408,7 +1408,9 @@ trade stands.
 The card's heading also says **how many offers would change** — *at least N, M of them live* (Active or
 Paused). Where more than one copy could fill a place, the figure assumes the cheapest choice in
 offers: an available copy first, since it changes no offer at all, then the fewest offers, and among
-those the fewest live ones. Choose differently and more offers change.
+those the fewest live ones. Choose differently and more offers change. The figure follows your
+choices as you make them: a copy you pick counts as itself, and once every place has a copy it drops
+the *at least* and is the exact number.
 
 ### Composing a series as one offer
 
@@ -1423,6 +1425,13 @@ composing the series offer afterwards.
   **lowest number**, and the line says so; open it with **Show all** to choose a different one — the
   line then says the copy was chosen from the group. The button stays disabled until every place has a
   copy.
+- **Or choose one of each.** While any place is still open, **Choose one of each** beside the button
+  fills **every open place** in one click. It never replaces a copy you picked yourself, and every
+  choice can still be changed afterwards. What it picks is mechanical, not a judgement of quality —
+  the copies of one card already share condition, certificate and format: a copy **not offered here
+  yet** first, so no offer has to change; otherwise the copy that keeps the heading's count of offers
+  that would change lowest; among equals, the **lowest number**, the copy a collapsed line names. The
+  photos down the card's left edge and the heading update at once, so look before composing.
 - **See the set.** Each stamp's row starts with the photo of the copy chosen for it (*Not chosen* until
   you pick), so the column down the card's left edge is the set you are putting together.
 - **See where it goes.** Once every place has a copy, the card says whether an offer on the platform
