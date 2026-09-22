@@ -9,16 +9,21 @@ import {
   collapsedChoice,
   combinationKey,
   combinationOf,
+  composeTargetDrift,
+  composeTargetOf,
+  composeTargets,
   compositionOutcome,
   copyMatchesCombination,
   DEFAULT_SERIES_CRITERIA,
   fewestOffersToChange,
   findRecombinableSeries,
   NO_MIXING,
+  parseComposeTargetPlan,
   parseSeriesCombination,
   parseSeriesCriteria,
   seriesCriteriaParams,
   singlyOfferedCopies,
+  type ComposeTargetOffer,
   type RecombinationCopy,
   type RecombinationOfferSet,
   type RecombinationSlot,
@@ -550,5 +555,95 @@ describe("collapsedChoice (#1266)", () => {
 
   it("keeps a copy chosen after expanding, so collapsing again does not change the choice", () => {
     assert.equal(collapsedChoice(group, "high"), "high");
+  });
+});
+
+describe("where a composed series goes (#1369)", () => {
+  const chosen = [
+    { itemId: "a1", stampId: "A", conditionId: "mnh" },
+    { itemId: "b1", stampId: "B", conditionId: "mnh" },
+  ];
+  const member = (offerId: string, set: string, itemId: string, stampId: string, conditionId = "mnh") => ({
+    offerId,
+    offerSetId: set,
+    itemId,
+    stampId,
+    conditionId,
+  });
+  const ref = (offerId: string, offerNo: number, extra: Partial<ComposeTargetOffer> = {}): ComposeTargetOffer => ({
+    offerId,
+    offerNo,
+    state: "active",
+    inActiveBidding: false,
+    setCount: 1,
+    ...extra,
+  });
+  const members = [
+    member("o7", "s7", "a7", "A"),
+    member("o7", "s7", "b7", "B"),
+    member("o3", "s3", "a3", "A"),
+    member("o3", "s3", "b3", "B"),
+    // A superset and another condition are not the same entry (#732).
+    member("o4", "s4", "a4", "A"),
+    member("o4", "s4", "b4", "B"),
+    member("o4", "s4", "c4", "C"),
+    member("o5", "s5", "a5", "A"),
+    member("o5", "s5", "b5", "B", "used"),
+    member("o9", "s9", "a9", "A"),
+    member("o9", "s9", "b9", "B"),
+  ];
+  const offers = new Map([
+    ["o7", ref("o7", 7)],
+    ["o3", ref("o3", 3)],
+    ["o4", ref("o4", 4)],
+    ["o5", ref("o5", 5)],
+    ["o9", ref("o9", 9, { inActiveBidding: true })],
+  ]);
+
+  it("matches by set equality, lowest number first, bidding offers apart", () => {
+    assert.deepEqual(composeTargets(chosen, members, offers), { matches: ["o3", "o7"], biddingMatches: ["o9"] });
+  });
+
+  it("proposes the lowest-numbered match, keeps a picked one, and honours asking for a new offer", () => {
+    const targets = { matches: ["o3", "o7"], biddingMatches: [] };
+    assert.equal(composeTargetOf(targets, undefined), "o3");
+    assert.equal(composeTargetOf(targets, "o7"), "o7");
+    assert.equal(composeTargetOf(targets, "o4"), "o3", "a pick that is no match falls back to the proposal");
+    assert.equal(composeTargetOf(targets, null), null);
+    assert.equal(composeTargetOf({ matches: [], biddingMatches: ["o9"] }, undefined), null);
+  });
+
+  it("names the offer a confirmed plan no longer describes", () => {
+    const fresh = { matches: ["o3", "o7"], biddingMatches: [] };
+    const plan = { offerId: "o3", matches: [ref("o3", 3), ref("o7", 7)] };
+    assert.equal(composeTargetDrift(plan, fresh, offers), null);
+    assert.equal(composeTargetDrift({ ...plan, matches: [ref("o3", 3)] }, fresh, offers), "o7", "a new match");
+    assert.equal(composeTargetDrift(plan, { matches: ["o3"], biddingMatches: [] }, offers), "o7", "a match gone");
+    assert.equal(
+      composeTargetDrift({ offerId: "o3", matches: [ref("o3", 3, { setCount: 2 }), ref("o7", 7)] }, fresh, offers),
+      "o3",
+      "the target's quantity changed"
+    );
+    assert.equal(
+      composeTargetDrift({ offerId: "o7", matches: [ref("o3", 3), ref("o7", 7, { state: "paused" })] }, fresh, offers),
+      "o7",
+      "the target's status changed"
+    );
+    assert.equal(
+      composeTargetDrift({ offerId: null, matches: [ref("o3", 3, { setCount: 5 }), ref("o7", 7)] }, fresh, offers),
+      null,
+      "a new offer asked for does not care about a match's quantity"
+    );
+  });
+
+  it("parses only a well-formed plan", () => {
+    assert.deepEqual(parseComposeTargetPlan({ offerId: null, matches: [] }), { offerId: null, matches: [] });
+    assert.deepEqual(parseComposeTargetPlan({ offerId: "o3", matches: [ref("o3", 3)] }), {
+      offerId: "o3",
+      matches: [ref("o3", 3)],
+    });
+    assert.equal(parseComposeTargetPlan(undefined), null);
+    assert.equal(parseComposeTargetPlan({ offerId: 3, matches: [] }), null);
+    assert.equal(parseComposeTargetPlan({ offerId: null, matches: [{ ...ref("o3", 3), state: "gone" }] }), null);
   });
 });

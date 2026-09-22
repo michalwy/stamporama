@@ -10,19 +10,35 @@ import { isOfferState, type OfferState } from "./offer-rules";
 import { findCommittedCopies } from "./trade-reservations";
 import type { CommittingTrade } from "./trade-reservation-rules";
 import { checklistSlots } from "./lot-builder-rules";
-import { createOffer, OfferActionBlockedError, syncGeneratedTexts } from "./offers";
+import {
+  addSetToOfferInTransaction,
+  collisionStampIds,
+  createOffer,
+  GenerationChangedError,
+  loadCollisionCandidates,
+  loadCollisionMembers,
+  OfferActionBlockedError,
+  syncGeneratedTexts,
+} from "./offers";
+import type { CollisionCopy, OfferMemberCopy } from "./offer-collision-rules";
+import type { DbTransaction } from "./db";
+import { formatEntityNo } from "./quick-jump";
 import { markListingContentChanged } from "./offer-listing-sync";
 import { formatItemNo } from "./item-number";
 import { sortPhotos, type PhotoSummary } from "./photos";
 import {
   checkSeriesPicks,
   collapseCandidates,
+  composeTargetDrift,
+  composeTargets,
   compositionOutcome,
   copyMatchesCombination,
   DEFAULT_SERIES_CRITERIA,
   findRecombinableSeries,
   RECOMBINABLE_OFFER_STATES,
   singlyOfferedCopies,
+  type ComposeTargetOffer,
+  type ComposeTargetPlan,
   type CompositionRefusal,
   type RecombinationCopy,
   type SeriesCombination,
@@ -85,6 +101,9 @@ export interface RecombinationFiller {
   variant: RecombinationStampName | null;
   /** The offers holding it singly on the platform. Empty: available — not offered there yet. */
   offers: RecombinationOfferRef[];
+  /** What the copy would be listed as (#732 with #1347) — the half of *is there a similar offer*
+   *  (#1369) the card asks once the collector's choice is complete. */
+  collision: CollisionCopy;
   /** The agreed trade the copy is promised in, if any (#639) — named, never a reason to leave it out. */
   promisedIn: CommittingTrade | null;
   /** The copy's own photos, front and back first (#1266) — which copy suits the set is judged by
@@ -132,6 +151,15 @@ export interface RecombinationSeriesView {
   offersToChange: number;
   /** Of those, how many are live (Active or Paused). */
   liveOffersToChange: number;
+  /** The offers on the platform the composed series could be added to instead of a new offer
+   *  (#1369), and every copy of their sets that could match — handed to `composeTargets` with the
+   *  chosen copies, so the card and the commit ask one rule of the same members. */
+  similar: { offers: RecombinationTargetRef[]; members: OfferMemberCopy[] };
+}
+
+/** An offer a composed series could be added to, named the way the offers list names it. */
+export interface RecombinationTargetRef extends ComposeTargetOffer {
+  label: string;
 }
 
 export interface SeriesRecombinationResult {
@@ -306,7 +334,10 @@ export async function findSeriesRecombinations(
   });
   if (found.length === 0) return { platformName: pool.platformName, series: [] };
 
-  return { platformName: pool.platformName, series: await nameSeries(collectionId, found) };
+  return {
+    platformName: pool.platformName,
+    series: await nameSeries(collectionId, platformId, found),
+  };
 }
 
 // ── Composing a series (#1211) ──────────────────────────────────────────────────────────────────
@@ -321,11 +352,18 @@ export interface ComposeSeriesInput {
   criteria?: SeriesCriteria;
   /** The copy chosen for every slot, keyed by the slot's stamp. */
   picks: SeriesPicks;
+  /** Where the series goes (#1369): a similar offer as a further set, or a new offer — with the
+   *  matches the screen showed, compared with a fresh read. */
+  target: ComposeTargetPlan;
 }
 
 export interface ComposeSeriesResult {
+  /** The offer now holding the series: the new one, or the similar offer it was added to. */
   offerId: string;
-  /** How many copies the new offer's one set holds. */
+  /** The number of the similar offer the series was added to as a further set (#1369); null when a
+   *  new offer was created. */
+  addedToOfferNo: number | null;
+  /** How many copies the series' set holds. */
   copies: number;
   /** Single offers never listed and left with nothing in them, and withdrawn. */
   withdrawnOffers: number;
@@ -337,7 +375,9 @@ export interface ComposeSeriesResult {
 }
 
 /**
- * Compose a listed series into one new offer, out of the copies the collector chose (#1211).
+ * Compose a listed series into one new offer, out of the copies the collector chose (#1211) — or,
+ * where an offer on the platform already lists that series, into **a further set of it** (#1369):
+ * `input.target`, checked against a fresh read of the similar offers (`composeTargetDrift`).
  *
  * **Re-reads; it is never handed a plan** (#717). The pool is read again exactly as the screen reads
  * it and the picks are checked against it (`checkSeriesPicks`): a copy that has since sold, gone
@@ -347,7 +387,8 @@ export interface ComposeSeriesResult {
  * Writes, all in one transaction (`createOffer`'s own, through its `inTransaction` hook):
  *
  * - a new **Preparing** offer on the platform holding **one set** with the chosen copies in the
- *   checklist's order — a series is one sellable unit (ADR-0013 §2), as the lot builder commits;
+ *   checklist's order — a series is one sellable unit (ADR-0013 §2), as the lot builder commits — or
+ *   that set added to the target, which a listed target is flagged for (#542);
  * - for every chosen copy that was offered singly, **its one-copy set is taken out** of each offer
  *   holding it that way; the offers' other sets stay;
  * - an offer **never listed** and left with no sets is withdrawn;
@@ -422,69 +463,150 @@ export async function composeSeriesOffer(
       "The offers changed while the series was being composed. Nothing was changed — open the screen again."
     );
 
-  const offerId = await createOffer(
-    ownerId,
-    collectionId,
-    {
-      platformId: input.platformId,
-      url: null,
-      // A draft states no figure yet, as the lot builder's commit does.
-      price: "0.00",
-      currency: "",
-      listingDate: null,
-      state: "preparing",
-    },
-    {
-      seedItemIds: itemIds,
-      inTransaction: async (tx, newOfferId) => {
-        // `createOffer` drops a copy that sold or left the collection since the check rather than
-        // refusing; for a series that is a hole, so it refuses here instead.
-        const seeded = await tx.offerSetItem.count({ where: { offerSet: { offerId: newOfferId } } });
-        if (seeded !== itemIds.length) throw changedSince();
+  // Where the series goes (#1369), asked again of a fresh read and compared with what the collector
+  // confirmed: a similar offer that appeared, went, or — being the target — changed refuses by name.
+  const targets = await readComposeTargets(collectionId, input.platformId, itemIds);
+  const drift = composeTargetDrift(input.target, targets.targets, targets.offers);
+  if (drift) throw await targetChanged(collectionId, drift);
+  const target = input.target.offerId ? targets.offers.get(input.target.offerId) : undefined;
 
-        const leaving = await tx.offerSet.findMany({
-          where: {
-            id: { in: setIds },
-            saleLines: { none: {} },
-            offer: {
-              collectionId,
-              platformId: input.platformId,
-              state: { in: [...RECOMBINABLE_OFFER_STATES] },
-              NOT: { state: "active", inActiveBidding: true },
-            },
-          },
-          select: { _count: { select: { items: true } } },
-        });
-        if (leaving.length !== setIds.length || leaving.some((set) => set._count.items !== 1)) {
-          throw changedSince();
-        }
-        await tx.offerSet.deleteMany({ where: { id: { in: setIds } } });
-
-        if (withdrawnIds.length > 0) {
-          const withdrawn = await tx.offer.updateMany({
-            where: { id: { in: withdrawnIds }, sets: { none: {} } },
-            // `closedAt` (#512) is stamped with the state, as on a withdrawal by hand.
-            data: { state: "withdrawn", closedAt: new Date() },
-          });
-          if (withdrawn.count !== withdrawnIds.length) throw changedSince();
-        }
-        await markListingContentChanged(keptIds, tx);
+  /** The chosen singles' one-copy sets out of their offers, the emptied drafts withdrawn and the live
+   *  offers flagged — inside whichever transaction receives the series. */
+  const takeSinglesOut = async (tx: DbTransaction) => {
+    const leaving = await tx.offerSet.findMany({
+      where: {
+        id: { in: setIds },
+        saleLines: { none: {} },
+        offer: {
+          collectionId,
+          platformId: input.platformId,
+          state: { in: [...RECOMBINABLE_OFFER_STATES] },
+          NOT: { state: "active", inActiveBidding: true },
+        },
       },
+      select: { _count: { select: { items: true } } },
+    });
+    if (leaving.length !== setIds.length || leaving.some((set) => set._count.items !== 1)) {
+      throw changedSince();
     }
-  );
+    await tx.offerSet.deleteMany({ where: { id: { in: setIds } } });
+
+    if (withdrawnIds.length > 0) {
+      const withdrawn = await tx.offer.updateMany({
+        where: { id: { in: withdrawnIds }, sets: { none: {} } },
+        // `closedAt` (#512) is stamped with the state, as on a withdrawal by hand.
+        data: { state: "withdrawn", closedAt: new Date() },
+      });
+      if (withdrawn.count !== withdrawnIds.length) throw changedSince();
+    }
+    await markListingContentChanged(keptIds, tx);
+  };
+
+  let offerId: string;
+  if (target) {
+    // A further set on the offer that already lists this series (#1369), as the generator adds one
+    // (#1287): its quantity grows by one, and a listed target is flagged as changed after listing.
+    try {
+      await addSetToOfferInTransaction(
+        ownerId,
+        collectionId,
+        {
+          offerId: target.offerId,
+          platformId: input.platformId,
+          itemIds,
+          expected: { state: target.state, setCount: target.setCount },
+        },
+        { beforeAdd: takeSinglesOut }
+      );
+    } catch (e) {
+      if (e instanceof GenerationChangedError) {
+        if (e.drift.kind === "offer") throw await targetChanged(collectionId, e.drift.offerId);
+        throw changedSince();
+      }
+      throw e;
+    }
+    offerId = target.offerId;
+  } else {
+    offerId = await createOffer(
+      ownerId,
+      collectionId,
+      {
+        platformId: input.platformId,
+        url: null,
+        // A draft states no figure yet, as the lot builder's commit does.
+        price: "0.00",
+        currency: "",
+        listingDate: null,
+        state: "preparing",
+      },
+      {
+        seedItemIds: itemIds,
+        inTransaction: async (tx, newOfferId) => {
+          // `createOffer` drops a copy that sold or left the collection since the check rather than
+          // refusing; for a series that is a hole, so it refuses here instead.
+          const seeded = await tx.offerSetItem.count({ where: { offerSet: { offerId: newOfferId } } });
+          if (seeded !== itemIds.length) throw changedSince();
+          await takeSinglesOut(tx);
+        },
+      }
+    );
+  }
 
   // The offers not withdrawn list fewer sets now — an emptied live one none; texts still following a
   // template say so, exactly as after a set is removed by hand. A withdrawn offer's texts are a record
-  // and stay.
-  for (const id of keptIds) await syncGeneratedTexts(ownerId, id);
+  // and stay. A target that also lost a single was synced with the set it received.
+  for (const id of keptIds) if (id !== target?.offerId) await syncGeneratedTexts(ownerId, id);
 
   return {
     offerId,
+    addedToOfferNo: target?.offerNo ?? null,
     copies: itemIds.length,
     withdrawnOffers: withdrawnIds.length,
     emptiedLiveOffers: outcome.filter((change) => change.emptied && change.live).length,
     changedLiveOffers: outcome.filter((change) => !change.emptied && change.live).length,
   };
+}
+
+/** The platform's open offers as a similar-offer read needs them. */
+async function readTargetOffers(
+  collectionId: string,
+  offerIds: readonly string[]
+): Promise<Map<string, ComposeTargetOffer>> {
+  if (offerIds.length === 0) return new Map();
+  const rows = await prisma.offer.findMany({
+    where: { id: { in: [...offerIds] }, collectionId, state: { in: [...RECOMBINABLE_OFFER_STATES] } },
+    select: { id: true, offerNo: true, state: true, inActiveBidding: true, _count: { select: { sets: true } } },
+  });
+  const out = new Map<string, ComposeTargetOffer>();
+  for (const row of rows) {
+    if (!isOfferState(row.state)) continue;
+    out.set(row.id, {
+      offerId: row.id,
+      offerNo: row.offerNo,
+      state: row.state,
+      inActiveBidding: row.inActiveBidding,
+      setCount: row._count.sets,
+    });
+  }
+  return out;
+}
+
+/** The similar offers on the platform for the chosen copies (#1369) — #732's rule over the members
+ *  the Copies list and the generator read, each copy as it would be listed (#1347). */
+async function readComposeTargets(collectionId: string, platformId: string, itemIds: readonly string[]) {
+  const candidates = await loadCollisionCandidates(collectionId, itemIds);
+  const members = await loadCollisionMembers(collectionId, collisionStampIds(candidates), { platformId });
+  const offers = await readTargetOffers(collectionId, [...new Set(members.map((member) => member.offerId))]);
+  return { targets: composeTargets(candidates, members, offers), offers };
+}
+
+async function targetChanged(collectionId: string, offerId: string): Promise<OfferActionBlockedError> {
+  const offer = await prisma.offer.findFirst({ where: { id: offerId, collectionId }, select: { offerNo: true } });
+  const ref = offer ? `Offer ${formatEntityNo(offer.offerNo)}` : "An offer";
+  return new OfferActionBlockedError(
+    "not-eligible",
+    `${ref} has changed since the screen was opened — it has come to hold this series or stopped holding it, or its status, its sets or its bidding changed. Nothing was changed — open the screen again.`
+  );
 }
 
 /** A refusal in the collector's words: the copy by its number, the slot by its stamp. */
@@ -516,6 +638,7 @@ async function describeRefusal(collectionId: string, refusal: CompositionRefusal
 /** The names behind the ids: checklists and their issues, slot stamps, copies, offers and trades. */
 async function nameSeries(
   collectionId: string,
+  platformId: string,
   found: ReturnType<typeof findRecombinableSeries>
 ): Promise<RecombinationSeriesView[]> {
   const itemIds = new Set<string>();
@@ -571,6 +694,21 @@ async function nameSeries(
     }
     return { labels, rank };
   };
+
+  // What every candidate would be listed as, and the platform's sets it could match (#1369) — the
+  // members read once for every card, then narrowed per card to the sets its copies could form.
+  const candidates = await loadCollisionCandidates(collectionId, [...itemIds]);
+  const candidateById = new Map(candidates.map((candidate) => [candidate.itemId, candidate]));
+  const members = await loadCollisionMembers(collectionId, collisionStampIds(candidates), { platformId });
+  const targetOffers = await readTargetOffers(collectionId, [...new Set(members.map((member) => member.offerId))]);
+  const membersBySet = new Map<string, OfferMemberCopy[]>();
+  for (const member of members) {
+    if (!targetOffers.has(member.offerId)) continue;
+    const set = membersBySet.get(member.offerSetId);
+    if (set) set.push(member);
+    else membersBySet.set(member.offerSetId, [member]);
+  }
+  for (const offerId of targetOffers.keys()) offerIds.add(offerId);
 
   const [checklists, stamps, items, offers, commitments, labeller] = await Promise.all([
     prisma.checklist.findMany({
@@ -634,6 +772,29 @@ async function nameSeries(
     });
   }
 
+  /** The sets a card's copies could form, whole: every member's stamp — recorded or listed — is one
+   *  its candidates are recorded on or listed under. Anything else can never be set-equal to a choice
+   *  made on the card, so it stays on the server. */
+  const similarFor = (series: (typeof found)[number]): RecombinationSeriesView["similar"] => {
+    const stampsHere = new Set<string>();
+    for (const slot of series.slots) {
+      for (const copy of slot.copies) {
+        const candidate = candidateById.get(copy.itemId);
+        stampsHere.add(copy.stampId);
+        if (candidate?.listedStampId) stampsHere.add(candidate.listedStampId);
+      }
+    }
+    const reachable = (member: OfferMemberCopy) =>
+      stampsHere.has(member.stampId) || (member.listedStampId ? stampsHere.has(member.listedStampId) : false);
+    const setMembers = [...membersBySet.values()].filter((set) => set.every(reachable)).flat();
+    const refs = [...new Set(setMembers.map((member) => member.offerId))].flatMap((offerId) => {
+      const offer = targetOffers.get(offerId);
+      const named = offerById.get(offerId);
+      return offer ? [{ ...offer, label: named?.label ?? `Offer ${formatEntityNo(offer.offerNo)}` }] : [];
+    });
+    return { offers: refs, members: setMembers };
+  };
+
   const stampName = (stampId: string): RecombinationStampName => {
     const stamp = stampById.get(stampId);
     return {
@@ -673,6 +834,11 @@ async function nameSeries(
               const offer = offerById.get(offerId);
               return offer ? [offer] : [];
             }),
+            collision: candidateById.get(copy.itemId) ?? {
+              itemId: copy.itemId,
+              stampId: copy.stampId,
+              conditionId: copy.conditionId,
+            },
             promisedIn: promisedIn.get(copy.itemId) ?? null,
             photos: (item?.photos ?? [])
               .map((photo): PhotoSummary => ({
@@ -685,6 +851,7 @@ async function nameSeries(
       })),
       offersToChange: series.offersToChange.offerIds.length,
       liveOffersToChange: series.offersToChange.liveCount,
+      similar: similarFor(series),
     };
   });
 

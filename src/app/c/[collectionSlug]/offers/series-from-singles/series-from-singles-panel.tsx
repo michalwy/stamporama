@@ -8,14 +8,18 @@ import type {
   RecombinationOfferRef,
   RecombinationSeriesView,
   RecombinationStampName,
+  RecombinationTargetRef,
 } from "@/lib/series-recombination";
 import {
   collapsedChoice,
+  composeTargetOf,
+  composeTargets,
   compositionOutcome,
   parseSeriesCriteria,
   SERIES_FILTER_PARAMS,
   SERIES_MIXING_PARAMS,
   seriesCriteriaParams,
+  type ComposeTargets,
   type CompositionOfferChange,
 } from "@/lib/series-recombination-rules";
 import { formatItemNo } from "@/lib/item-number";
@@ -57,6 +61,12 @@ import { useInvalidateOffers, useSeriesFromSingles } from "../use-offers-query";
 // that chooses the lowest-numbered copy and names it, and expands to pick another. Every candidate
 // shows its photo, and each slot's row leads with the photo of the copy chosen for it, so the column
 // down the card's left edge is the set being assembled.
+//
+// Where an offer on the platform already lists the same series (#1369; #732's rule, read as each copy
+// will be listed, #1347), composing **adds it there as a further set** rather than making a second
+// offer the marketplace would refuse: the card says *would be added to #N* once every slot is chosen,
+// and the dialog proposes the lowest-numbered such offer, lets another be picked, and keeps a new
+// offer as a choice. An offer in active bidding is named and never receives one (#334).
 
 /** The chosen copy's photo leading a slot's row, and a candidate's beside its line (#1266). */
 const CHOSEN_PHOTO = "4.5rem";
@@ -360,6 +370,22 @@ function SeriesCard({
     return out;
   }, [series.slots, chosen]);
   const unchosen = series.slots.filter((slot) => !picks[slot.stamp.stampId]).length;
+  const similarById = useMemo(
+    () => new Map(series.similar.offers.map((offer) => [offer.offerId, offer])),
+    [series.similar.offers]
+  );
+  // The similar offers for the copies chosen (#1369) — the commit asks the same rule of a fresh read.
+  const targets = useMemo(() => {
+    if (unchosen > 0) return null;
+    const chosenCopies = series.slots.flatMap((slot) => {
+      const filler = slot.fillers.find((f) => f.itemId === picks[slot.stamp.stampId]);
+      return filler ? [filler.collision] : [];
+    });
+    return composeTargets(chosenCopies, series.similar.members, similarById);
+  }, [unchosen, series.slots, series.similar.members, similarById, picks]);
+  const proposed = targets ? composeTargetOf(targets, undefined) : null;
+  const proposedRef = proposed ? similarById.get(proposed) : undefined;
+  const biddingRef = targets?.biddingMatches.length ? similarById.get(targets.biddingMatches[0]) : undefined;
 
   const issueName = series.issue
     ? (series.issue.name ?? (series.issue.year !== null ? String(series.issue.year) : "Unnamed issue"))
@@ -482,18 +508,38 @@ function SeriesCard({
         }}
       >
         <DialogPrimaryButton type="button" disabled={unchosen > 0} onClick={() => setComposing(true)}>
-          <Icon name="newOffer" /> Compose one offer…
+          <Icon name="newOffer" /> {proposedRef ? "Compose the series…" : "Compose one offer…"}
         </DialogPrimaryButton>
-        <span style={NOTE}>
-          {unchosen > 0
-            ? `Choose which copy fills ${unchosen === 1 ? "the stamp" : `each of the ${unchosen} stamps`} with more than one.`
-            : "One new Preparing offer holding the whole series as one set."}
-        </span>
+        {unchosen > 0 ? (
+          <span style={NOTE}>
+            {`Choose which copy fills ${unchosen === 1 ? "the stamp" : `each of the ${unchosen} stamps`} with more than one.`}
+          </span>
+        ) : proposedRef ? (
+          <span style={{ ...NOTE, display: "inline-flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+            Would be added to
+            <EntityNoChip entity="offer" no={proposedRef.offerNo} prefix="o" />
+            <Link href={`/c/${collectionSlug}/offers/${proposedRef.offerId}`} style={LINK}>
+              {proposedRef.label}
+            </Link>
+            <OfferStateChip state={proposedRef.state} />
+            as a further set — it already lists this series.
+          </span>
+        ) : biddingRef ? (
+          <span style={{ ...NOTE, display: "inline-flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+            One new Preparing offer:
+            <EntityNoChip entity="offer" no={biddingRef.offerNo} prefix="o" />
+            already lists this series but is in active bidding, so it receives nothing.
+          </span>
+        ) : (
+          <span style={NOTE}>One new Preparing offer holding the whole series as one set.</span>
+        )}
       </div>
       {composing ? (
         <ComposeSeriesDialog
           series={series}
           picks={picks}
+          targets={targets ?? { matches: [], biddingMatches: [] }}
+          similarById={similarById}
           collectionId={collectionId}
           collectionSlug={collectionSlug}
           platformId={platformId}
@@ -510,10 +556,16 @@ function SeriesCard({
  * What composing is about to do, and the commit (#1211). The outcome is the same pure
  * `compositionOutcome` the commit carries out, over the offers as the screen last read them; the
  * commit re-reads, so a copy that changed since is refused by name rather than composed around.
+ *
+ * Where the series goes is chosen here (#1369): the lowest-numbered similar offer is proposed, another
+ * can be picked, and a new offer stays a choice. What the card read of those offers goes back with the
+ * commit, which refuses by name if any of them changed.
  */
 function ComposeSeriesDialog({
   series,
   picks,
+  targets,
+  similarById,
   collectionId,
   collectionSlug,
   platformId,
@@ -523,6 +575,8 @@ function ComposeSeriesDialog({
 }: {
   series: RecombinationSeriesView;
   picks: Record<string, string>;
+  targets: ComposeTargets;
+  similarById: ReadonlyMap<string, RecombinationTargetRef>;
   collectionId: string;
   collectionSlug: string;
   platformId: string;
@@ -534,6 +588,11 @@ function ComposeSeriesDialog({
   const { invalidateAll } = useInvalidateOffers();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string>();
+  // Undefined: the proposal (the lowest-numbered match); null: a new offer, asked for.
+  const [picked, setPicked] = useState<string | null | undefined>(undefined);
+  const targetId = composeTargetOf(targets, picked);
+  const target = targetId ? similarById.get(targetId) : undefined;
+  const radioName = useId();
 
   const chosen = series.slots.flatMap((slot) => {
     const filler = slot.fillers.find((f) => f.itemId === picks[slot.stamp.stampId]);
@@ -556,7 +615,24 @@ function ComposeSeriesDialog({
         series.checklistId,
         series.combination,
         criteriaQuery,
-        picks
+        picks,
+        {
+          offerId: targetId,
+          matches: targets.matches.flatMap((offerId) => {
+            const offer = similarById.get(offerId);
+            return offer
+              ? [
+                  {
+                    offerId: offer.offerId,
+                    offerNo: offer.offerNo,
+                    state: offer.state,
+                    inActiveBidding: offer.inActiveBidding,
+                    setCount: offer.setCount,
+                  },
+                ]
+              : [];
+          }),
+        }
       );
       if (result.status === "success") {
         await invalidateAll(collectionId);
@@ -569,10 +645,75 @@ function ComposeSeriesDialog({
     <DialogShell title="Compose the series as one offer" onClose={onClose} maxWidth="40rem">
       <DialogBody>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem", fontSize: "0.875rem" }}>
-          <p style={{ margin: 0, color: "var(--color-text-primary)", lineHeight: 1.5 }}>
-            A new <strong>Preparing</strong> offer on {platformName} holding <strong>{series.checklistName}</strong>{" "}
-            as one set of {chosen.length} {chosen.length === 1 ? "copy" : "copies"}.
-          </p>
+          {target ? (
+            <p style={{ margin: 0, color: "var(--color-text-primary)", lineHeight: 1.5 }}>
+              <strong>{series.checklistName}</strong> as one more set of {chosen.length}{" "}
+              {chosen.length === 1 ? "copy" : "copies"} in the offer on {platformName} that already lists it —
+              its quantity goes from {target.setCount} to {target.setCount + 1}.
+            </p>
+          ) : (
+            <p style={{ margin: 0, color: "var(--color-text-primary)", lineHeight: 1.5 }}>
+              A new <strong>Preparing</strong> offer on {platformName} holding <strong>{series.checklistName}</strong>{" "}
+              as one set of {chosen.length} {chosen.length === 1 ? "copy" : "copies"}.
+            </p>
+          )}
+          {targets.matches.length > 0 ? (
+            <div role="radiogroup" aria-label="Where the series goes" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {targets.matches.map((offerId) => {
+                const offer = similarById.get(offerId);
+                if (!offer) return null;
+                const id = `${radioName}-${offerId}`;
+                return (
+                  <div key={offerId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <input
+                      id={id}
+                      type="radio"
+                      name={radioName}
+                      checked={targetId === offerId}
+                      onChange={() => setPicked(offerId)}
+                      style={{ margin: 0 }}
+                    />
+                    <label htmlFor={id} style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", cursor: "pointer" }}>
+                      <span>Add to</span>
+                      <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
+                      <span style={{ color: "var(--color-text-primary)" }}>{offer.label}</span>
+                      <OfferStateChip state={offer.state} />
+                      <span style={NOTE}>
+                        {offer.setCount === 1 ? "1 set" : `${offer.setCount} sets`} → {offer.setCount + 1}
+                      </span>
+                    </label>
+                    {targetId === offerId && (offer.state === "active" || offer.state === "paused") ? (
+                      <span style={{ ...NOTE, color: "var(--color-warning)" }}>
+                        Live: flagged as changed — update the listing on {platformName}.
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <input
+                  id={`${radioName}-new`}
+                  type="radio"
+                  name={radioName}
+                  checked={targetId === null}
+                  onChange={() => setPicked(null)}
+                  style={{ margin: 0 }}
+                />
+                <label htmlFor={`${radioName}-new`} style={{ cursor: "pointer" }}>
+                  Create a new <strong>Preparing</strong> offer instead
+                </label>
+              </div>
+            </div>
+          ) : null}
+          {targets.biddingMatches.map((offerId) => {
+            const offer = similarById.get(offerId);
+            return offer ? (
+              <span key={offerId} style={{ ...NOTE, display: "inline-flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+                <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
+                {offer.label} already lists this series but is in active bidding, so it receives nothing.
+              </span>
+            ) : null;
+          })}
           {outcome.length === 0 ? (
             <span style={NOTE}>Every chosen copy is available, so no other offer changes.</span>
           ) : (
@@ -598,7 +739,7 @@ function ComposeSeriesDialog({
         </div>
       </DialogBody>
       <DialogActions
-        actionLabel={pending ? "Composing…" : "Compose offer"}
+        actionLabel={pending ? "Composing…" : target ? "Add to the offer" : "Compose offer"}
         onCancel={onClose}
         onAction={commit}
         disabled={pending}

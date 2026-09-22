@@ -10,6 +10,8 @@ import {
   listComposeTargets,
 } from "../../src/lib/offers";
 import { previewOfferGeneration, type GeneratorInput } from "../../src/lib/offer-generator";
+import { findSeriesRecombinations } from "../../src/lib/series-recombination";
+import { composeTargetOf, composeTargets } from "../../src/lib/series-recombination-rules";
 
 // An umbrella offer and an offer on its cheapest variant are one Colnect listing (#1347).
 //
@@ -266,6 +268,52 @@ describe("umbrella collisions by listed variant (#1347)", () => {
       );
       assert.equal(preview.lines.length, 1);
       assert.equal(preview.lines[0].sets.length, 2);
+    });
+  });
+
+  describe("composing a series from singles (#1369)", () => {
+    it("proposes the offer listing the series under the variant the umbrella resolves to", async () => {
+      const { umbrella, one } = await tree();
+      const other = (
+        await prisma.stamp.create({
+          data: {
+            collectionId,
+            name: `Companion ${seq}`,
+            issuedYear: 1960,
+            stampAreaLinks: { create: [{ collectionAreaId: areaId, isPrimary: true }] },
+          },
+        })
+      ).id;
+      const issue = await prisma.issue.create({
+        data: { collectionId, issueNo: 9800 + seq, collectionAreaId: areaId, name: `Issue ${seq}`, year: 1960 },
+      });
+      const checklistId = (
+        await prisma.checklist.create({
+          data: {
+            collectionId,
+            issueId: issue.id,
+            name: "Complete set",
+            stamps: { create: [umbrella, other].map((stampId, sortOrder) => ({ stampId, sortOrder })) },
+          },
+        })
+      ).id;
+      // The umbrella copy is offered singly, the companion is available, and an offer already lists
+      // the series with a copy of `I` — which is what the umbrella is listed as, used.
+      const umbrellaCopy = await copy(umbrella, usedId);
+      await offer(colnectId, [[umbrellaCopy]]);
+      const otherCopy = await copy(other, usedId);
+      const listed = await offer(colnectId, [[await copy(one, usedId), await copy(other, usedId)]]);
+
+      const card = (await findSeriesRecombinations(userId, collectionId, colnectId)).series.find(
+        (series) => series.checklistId === checklistId
+      );
+      assert.ok(card, "the series is listed");
+      const picks: Record<string, string> = { [umbrella]: umbrellaCopy, [other]: otherCopy };
+      const chosen = card.slots.map((slot) => slot.fillers.find((f) => f.itemId === picks[slot.stamp.stampId])!.collision);
+      const offers = new Map(card.similar.offers.map((o) => [o.offerId, o]));
+      const targets = composeTargets(chosen, card.similar.members, offers);
+      assert.deepEqual(targets.matches, [listed]);
+      assert.equal(composeTargetOf(targets, undefined), listed);
     });
   });
 });

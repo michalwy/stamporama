@@ -6294,6 +6294,85 @@ export async function writeGeneratedOffers(
   return { createdOfferIds, changedOfferIds: additions.map((addition) => addition.offerId) };
 }
 
+/**
+ * Add one set to an existing offer **as part of a larger write** (#1369: a composed series going to
+ * the offer that already lists it, as a further set). The set is added exactly as `addOfferSet` adds
+ * one — its title from the platform's template, at the end of the offer's order, the texts and the
+ * category backfills after — and a listed offer is flagged as changed after listing (#542).
+ *
+ * The offer is asked again inside the transaction, **before** `beforeAdd` runs: still in the state and
+ * holding the number of sets it was read with, and not in active bidding (#334). After `beforeAdd` —
+ * which is where the caller takes the copies out of wherever they were — no copy may sit in an open
+ * offer on the platform, under a bid, or in a sale. Either refusal is a {@link GenerationChangedError}
+ * naming the offer or the copy, and rolls everything back.
+ */
+export async function addSetToOfferInTransaction(
+  ownerId: string,
+  collectionId: string,
+  input: { offerId: string; platformId: string; itemIds: string[]; expected: { state: OfferState; setCount: number } },
+  opts: { beforeAdd?: (tx: DbTransaction) => Promise<void> } = {}
+): Promise<void> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const offerChanged = () => new GenerationChangedError({ kind: "offer", offerId: input.offerId });
+  const ref = await assertOfferOwner(ownerId, input.offerId);
+  if (ref.collectionId !== collectionId || ref.platformId !== input.platformId || ref.state !== input.expected.state) {
+    throw offerChanged();
+  }
+  const addable = new Set(await assertAddableCopies(collectionId, input.itemIds));
+  const lost = input.itemIds.find((itemId) => !addable.has(itemId));
+  if (lost) throw new GenerationChangedError({ kind: "copy", itemId: lost });
+  await assertNotCommittedElsewhere(collectionId, ref.state, input.itemIds); // #639
+  const platform = await assertPlatform(collectionId, input.platformId);
+  const title = await generateConfiguredTitle(ownerId, collectionId, input.itemIds, platform.titleTemplate, platform.titleLanguage);
+
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.offer.findUnique({
+      where: { id: input.offerId },
+      select: { state: true, inActiveBidding: true, _count: { select: { sets: true } } },
+    });
+    if (
+      !row ||
+      row.state !== input.expected.state ||
+      row._count.sets !== input.expected.setCount ||
+      (row.state === "active" && row.inActiveBidding)
+    ) {
+      throw offerChanged();
+    }
+    await opts.beforeAdd?.(tx);
+    const taken = await tx.offerSetItem.findFirst({
+      where: {
+        itemId: { in: input.itemIds },
+        offerSet: {
+          offer: {
+            OR: [
+              { platformId: input.platformId, state: { notIn: [...CLOSED_OFFER_STATES] } },
+              { state: "active", inActiveBidding: true },
+            ],
+          },
+        },
+      },
+      select: { itemId: true },
+    });
+    const sold = taken ?? (await tx.saleLineItem.findFirst({ where: { itemId: { in: input.itemIds } }, select: { itemId: true } }));
+    if (sold) throw new GenerationChangedError({ kind: "copy", itemId: sold.itemId });
+
+    const last = await tx.offerSet.aggregate({ where: { offerId: input.offerId }, _max: { sortOrder: true } });
+    await tx.offerSet.create({
+      data: {
+        offerId: input.offerId,
+        title,
+        sortOrder: (last._max.sortOrder ?? -1) + 1,
+        items: { create: input.itemIds.map((itemId) => ({ itemId })) },
+      },
+    });
+    await markListingContentChanged(input.offerId, tx); // #542
+  });
+
+  await syncGeneratedTexts(ownerId, input.offerId); // #380/#365, as in addOfferSet
+  await backfillAllegroCategory(ownerId, input.offerId); // #494, as in addOfferSet
+  await backfillDelcampeCategory(input.offerId); // #609, as in addOfferSet
+}
+
 /** Reorder an offer's sets (#306). `setIds` must be a **full permutation** of the offer's current
  * sets — a partial list is rejected rather than silently applied, so a stale client (a set added or
  * removed in another tab) cannot half-write an order. Positions are rewritten dense and 0-based. */
