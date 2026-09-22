@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { parseQuickJump, QUICK_JUMP_PREFIXES } from "@/lib/quick-jump";
-import { RECENT_ENTITY_LABELS, type RecentEntityKind } from "@/lib/recent-entities";
+import {
+  RECENT_ENTITY_GROUP_HEADINGS,
+  groupRecentEntities,
+  type RecentEntityKind,
+} from "@/lib/recent-entities";
 import { useRecentEntities } from "./shared/use-recent-entities";
 import { Icon, type IconName } from "@/app/icons";
 import { sectionTintForHref } from "./nav-sections";
@@ -33,6 +37,10 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
  * record" by its number, or by having just been on it — and ⌘K is then the single gesture for
  * both. It is a *panel on focus* rather than a permanent list in the sidebar because the way back
  * to something is wanted at the moment one goes looking, not for the whole time one is reading.
+ *
+ * The panel is **grouped by kind** (#1370), each kind keeping its own few entries, so a session
+ * spent on offers cannot push the stamp one was on earlier out of it. The keyboard still walks it
+ * as one list, straight across the headings.
  */
 
 /** The icon each kind is marked with — the nav entry's own icon for the list it belongs to, so a
@@ -80,13 +88,17 @@ export function QuickJumpBox({
   // ago. It never competes with the jump — `o 42` still jumps on Enter, it simply also shows the
   // offers whose names contain that text.
   const needle = value.trim().toLowerCase();
-  const shown = needle
+  const matching = needle
     ? recents.filter(
         (e) =>
           e.label.toLowerCase().includes(needle) ||
           (e.sublabel?.toLowerCase().includes(needle) ?? false)
       )
     : recents;
+  // Grouped after narrowing, so a kind with nothing left to show loses its heading too (#1370).
+  // `shown` is the groups read top to bottom — the one list the keyboard walks, headings and all.
+  const groups = groupRecentEntities(matching);
+  const shown = groups.flatMap((g) => g.entries);
 
   // The highlight cannot survive a list that has changed under it — narrowing the panel to two rows
   // while the keyboard sat on the fifth would leave Enter pointing at nothing. Derived rather than
@@ -318,87 +330,103 @@ export function QuickJumpBox({
               </button>
             </div>
 
-            {shown.map((entry, i) => {
-              // The section the entry comes from, in the colour the sidebar already gives it
-              // (#1193), read off the entry's own link through the same tables the sidebar is drawn
-              // from. The sidebar's split, too: the icon carries the hue at full strength, and the
-              // kind label beside it the hue mixed back towards its text colour, so it stays text.
-              // An entry landing in no section keeps today's muted look — listed all the same.
-              const tint = sectionTintForHref(entry.href, `/c/${collectionSlug}`);
+            {groups.map((group) => {
+              // The section the group comes from, in the colour the sidebar already gives it
+              // (#1193), read off the entries' own links through the same tables the sidebar is
+              // drawn from. The sidebar's split, too: each row's icon carries the hue at full
+              // strength, and the heading naming the kind carries it mixed back towards its text
+              // colour, so it stays text. A group landing in no section keeps the muted look —
+              // listed all the same. One kind never spans two sections, so its first entry answers
+              // for all of them.
+              const tint = sectionTintForHref(group.entries[0].href, `/c/${collectionSlug}`);
               return (
-                <button
-                  key={`${entry.kind}:${entry.id}`}
-                  id={`quick-jump-recent-${i}`}
-                  type="button"
-                  role="option"
-                  aria-selected={i === active}
-                  // The field keeps the keyboard through the click: losing focus first would close
-                  // this panel out from under the press.
-                  onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => go(entry.href)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "0.375rem 0.5rem",
-                    border: "none",
-                    borderRadius: "0.375rem",
-                    background: i === active ? "var(--color-bg-muted)" : "transparent",
-                    cursor: "pointer",
-                    color: "var(--color-text-primary)",
-                  }}
+                <div
+                  key={group.kind}
+                  role="group"
+                  aria-labelledby={`quick-jump-group-${group.kind}`}
                 >
-                  <span
+                  <div
+                    id={`quick-jump-group-${group.kind}`}
                     style={{
-                      color: tint ? `var(--color-tag-${tint})` : "var(--color-text-muted)",
-                      flexShrink: 0,
-                      display: "flex",
-                    }}
-                  >
-                    <Icon name={KIND_ICON[entry.kind]} size="sm" />
-                  </span>
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span
-                      style={{
-                        display: "block",
-                        fontSize: "0.8125rem",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {entry.label}
-                    </span>
-                    {entry.sublabel && (
-                      <span
-                        style={{
-                          display: "block",
-                          fontSize: "0.6875rem",
-                          color: "var(--color-text-muted)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {entry.sublabel}
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    style={{
+                      padding: "0.375rem 0.5rem 0.125rem",
                       fontSize: "0.6875rem",
+                      fontWeight: 600,
                       color: tint
                         ? `color-mix(in srgb, var(--color-tag-${tint}) 55%, var(--color-text-muted))`
                         : "var(--color-text-muted)",
-                      flexShrink: 0,
                     }}
                   >
-                    {RECENT_ENTITY_LABELS[entry.kind]}
-                  </span>
-                </button>
+                    {RECENT_ENTITY_GROUP_HEADINGS[group.kind]}
+                  </div>
+                  {group.entries.map((entry) => {
+                    // The index runs across the groups: the keyboard walks one list (#1370).
+                    const i = shown.indexOf(entry);
+                    return (
+                      <button
+                        key={`${entry.kind}:${entry.id}`}
+                        id={`quick-jump-recent-${i}`}
+                        type="button"
+                        role="option"
+                        aria-selected={i === active}
+                        // The field keeps the keyboard through the click: losing focus first would
+                        // close this panel out from under the press.
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setActive(i)}
+                        onClick={() => go(entry.href)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "0.375rem 0.5rem",
+                          border: "none",
+                          borderRadius: "0.375rem",
+                          background: i === active ? "var(--color-bg-muted)" : "transparent",
+                          cursor: "pointer",
+                          color: "var(--color-text-primary)",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: tint ? `var(--color-tag-${tint})` : "var(--color-text-muted)",
+                            flexShrink: 0,
+                            display: "flex",
+                          }}
+                        >
+                          <Icon name={KIND_ICON[entry.kind]} size="sm" />
+                        </span>
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "0.8125rem",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {entry.label}
+                          </span>
+                          {entry.sublabel && (
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: "0.6875rem",
+                                color: "var(--color-text-muted)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {entry.sublabel}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
           </div>,

@@ -32,7 +32,7 @@ export type RecentEntityKind =
   | "auctionSale"
   | "trade";
 
-/** How a kind is named above its entries in the panel. */
+/** How one record of a kind is named. Also the set of kinds a stored entry may carry. */
 export const RECENT_ENTITY_LABELS: Record<RecentEntityKind, string> = {
   item: "Copy",
   stamp: "Stamp",
@@ -42,6 +42,21 @@ export const RECENT_ENTITY_LABELS: Record<RecentEntityKind, string> = {
   sale: "Sale",
   auctionSale: "Auction sale",
   trade: "Trade",
+};
+
+/** The heading a kind's group carries in the panel (#1370).
+ *
+ * Purchases are headed by the list they live on, *Intake documents*, because that list also holds
+ * the opening balances (#1323) and a heading reading *Purchases* over one of those would be wrong. */
+export const RECENT_ENTITY_GROUP_HEADINGS: Record<RecentEntityKind, string> = {
+  item: "Copies",
+  stamp: "Stamps",
+  issue: "Issues",
+  offer: "Offers",
+  purchase: "Intake documents",
+  sale: "Sales",
+  auctionSale: "Auction sales",
+  trade: "Trades",
 };
 
 /** One visited record.
@@ -64,19 +79,38 @@ export interface RecentEntity {
   at: number;
 }
 
-/** How many entries are kept.
+/** How many entries each kind keeps (#1370).
  *
- * Twelve, not fifty: this is "what I was just on", and a list long enough to need reading is one
- * more thing to search. It is also what fits under the box without the sidebar's nav scrolling
- * away. */
-export const RECENT_ENTITY_LIMIT = 12;
+ * The cap is **per kind**, not over the whole list. One shared cap (twelve, until #1370) let a
+ * working session spent on one kind of thing fill the list on its own: after a dozen offers every
+ * entry was an offer, and the stamp one was on half an hour earlier had been pushed out — so the
+ * list helped only with the thing being done right now, the one place a jump list is least needed.
+ * Kept per kind, another offer can displace only an older offer.
+ *
+ * Three, because the panel shows every kind at once: eight kinds of three is already twenty-four
+ * rows, and "what I was just on" is not a list meant to be read. */
+export const RECENT_ENTITY_GROUP_LIMIT = 3;
+
+/** Keep at most `limit` entries of each kind, in the order given, dropping the later ones. */
+function capPerKind(list: readonly RecentEntity[], limit: number): RecentEntity[] {
+  const counts = new Map<RecentEntityKind, number>();
+  const kept: RecentEntity[] = [];
+  for (const e of list) {
+    const n = counts.get(e.kind) ?? 0;
+    if (n >= limit) continue;
+    counts.set(e.kind, n + 1);
+    kept.push(e);
+  }
+  return kept;
+}
 
 /**
  * Record a visit against the list as it stands, returning the new list.
  *
- * Most recent first, one entry per record, capped. A revisit **moves** its entry to the front
- * rather than adding a second — the list is of records, not of visits, and a page kept open and
- * returned to would otherwise fill it on its own.
+ * Most recent first, one entry per record, capped **per kind** — a visit displaces only an older
+ * entry of its own kind. A revisit **moves** its entry to the front rather than adding a second —
+ * the list is of records, not of visits, and a page kept open and returned to would otherwise fill
+ * it on its own.
  *
  * The label is taken from the *new* visit, so a record renamed since it was last seen reads by its
  * current name.
@@ -84,10 +118,34 @@ export const RECENT_ENTITY_LIMIT = 12;
 export function recordRecentEntity(
   list: readonly RecentEntity[],
   entry: RecentEntity,
-  limit: number = RECENT_ENTITY_LIMIT
+  limit: number = RECENT_ENTITY_GROUP_LIMIT
 ): RecentEntity[] {
   const rest = list.filter((e) => !(e.kind === entry.kind && e.id === entry.id));
-  return [entry, ...rest].slice(0, Math.max(0, limit));
+  return capPerKind([entry, ...rest], Math.max(0, limit));
+}
+
+/** One kind's entries, as the panel shows them under a heading. */
+export interface RecentEntityGroup {
+  kind: RecentEntityKind;
+  /** Most recently visited first. Never empty. */
+  entries: RecentEntity[];
+}
+
+/**
+ * Split a most-recent-first list into its kinds (#1370), the groups ordered by their most recent
+ * visit — so the kind of thing just worked on is on top. A kind with no entries has no group.
+ *
+ * The list stays one flat, most-recent-first array in storage; grouping is how it is *shown*, so a
+ * stored list from before the groups reads straight into them.
+ */
+export function groupRecentEntities(list: readonly RecentEntity[]): RecentEntityGroup[] {
+  const groups = new Map<RecentEntityKind, RecentEntity[]>();
+  for (const e of list) {
+    const entries = groups.get(e.kind);
+    if (entries) entries.push(e);
+    else groups.set(e.kind, [e]);
+  }
+  return [...groups].map(([kind, entries]) => ({ kind, entries }));
 }
 
 function isRecentEntity(value: unknown): value is RecentEntity {
@@ -124,7 +182,7 @@ export function parseRecentEntities(raw: string | null): RecentEntity[] {
     return [];
   }
   if (!Array.isArray(parsed)) return [];
-  return parsed.filter(isRecentEntity).slice(0, RECENT_ENTITY_LIMIT);
+  return capPerKind(parsed.filter(isRecentEntity), RECENT_ENTITY_GROUP_LIMIT);
 }
 
 /** Write a list back out. */
