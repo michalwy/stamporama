@@ -19,7 +19,12 @@
 // alone" is asked of the same combination. Mixing is a switch per axis, and a mixed axis simply
 // stops splitting the copies.
 
-import { OPEN_OFFER_STATES, type OfferState } from "./offer-rules";
+import { isOfferState, OPEN_OFFER_STATES, type OfferState } from "./offer-rules";
+import {
+  collidingItemIdsByOffer,
+  type CollisionCopy,
+  type OfferMemberCopy,
+} from "./offer-collision-rules";
 import {
   checklistCoverage,
   checklistSlots,
@@ -603,4 +608,127 @@ export function compositionOutcome(
       live,
     };
   });
+}
+
+// Adding the series to a similar offer (#1369) ---------------------------------------------------
+
+/** An offer on the platform that already holds a set like the composed one, as it was read. */
+export interface ComposeTargetOffer {
+  offerId: string;
+  offerNo: number;
+  state: OfferState;
+  inActiveBidding: boolean;
+  /** Every set the offer holds — its quantity, which receiving the series raises by one. */
+  setCount: number;
+}
+
+export interface ComposeTargets {
+  /** Offers holding a set of exactly the composed series' stamps × conditions (#732, each stamp read
+   *  as what it will be listed as, #1347), lowest number first: the first is proposed. */
+  matches: string[];
+  /** Offers that match but are in active bidding, and so never receive a set (#334). */
+  biddingMatches: string[];
+}
+
+/**
+ * Where a composed series may go instead of a new offer (#1369): the offers it would duplicate on the
+ * marketplace. **The rule is `collidingItemIdsByOffer`, handed the same members** the Copies list and
+ * the offer generator hand it (#1287) — so the three give one answer about what "similar" is. Members
+ * of an offer not in `offers` are ignored; that map is what the caller read of the platform's open
+ * offers.
+ */
+export function composeTargets(
+  chosen: readonly CollisionCopy[],
+  members: readonly OfferMemberCopy[],
+  offers: ReadonlyMap<string, ComposeTargetOffer>
+): ComposeTargets {
+  const found = [...collidingItemIdsByOffer(chosen, members).keys()]
+    .flatMap((offerId) => {
+      const offer = offers.get(offerId);
+      return offer ? [offer] : [];
+    })
+    .sort((a, b) => a.offerNo - b.offerNo);
+  const bidding = (offer: ComposeTargetOffer) => offer.state === "active" && offer.inActiveBidding;
+  return {
+    matches: found.filter((offer) => !bidding(offer)).map((offer) => offer.offerId),
+    biddingMatches: found.filter(bidding).map((offer) => offer.offerId),
+  };
+}
+
+/** The offer a composed series goes to: the one the collector picked while it is still a match, else
+ *  the lowest-numbered match. `null` is a new offer — asked for, or the only choice there is. */
+export function composeTargetOf(targets: ComposeTargets, picked: string | null | undefined): string | null {
+  if (picked === null) return null;
+  if (picked !== undefined && targets.matches.includes(picked)) return picked;
+  return targets.matches[0] ?? null;
+}
+
+/** What the collector confirmed about where the series goes: the offer, and every match the screen
+ *  showed as it read them — what the commit compares with a fresh read (#717). */
+export interface ComposeTargetPlan {
+  /** The offer the series is added to as a further set; null: a new offer. */
+  offerId: string | null;
+  matches: readonly ComposeTargetOffer[];
+}
+
+/**
+ * The offer a confirmed target plan no longer describes, or null (#717: the commit re-reads, and
+ * refuses by name rather than repairing). An offer that has stopped matching or newly matches is
+ * named — a new match would have been proposed in place of what the collector confirmed — and so is
+ * a target whose status, quantity or bidding changed since it was read.
+ */
+export function composeTargetDrift(
+  plan: ComposeTargetPlan,
+  fresh: ComposeTargets,
+  offers: ReadonlyMap<string, ComposeTargetOffer>
+): string | null {
+  const seen = plan.matches.map((offer) => offer.offerId);
+  const gone = seen.find((offerId) => !fresh.matches.includes(offerId));
+  if (gone) return gone;
+  const added = fresh.matches.find((offerId) => !seen.includes(offerId));
+  if (added) return added;
+  if (plan.offerId === null) return null;
+  const was = plan.matches.find((offer) => offer.offerId === plan.offerId);
+  const now = offers.get(plan.offerId);
+  if (
+    !was ||
+    !now ||
+    was.state !== now.state ||
+    was.setCount !== now.setCount ||
+    was.inActiveBidding !== now.inActiveBidding
+  ) {
+    return plan.offerId;
+  }
+  return null;
+}
+
+/** A target plan as the client sent it, or null when it is not one. */
+export function parseComposeTargetPlan(value: unknown): ComposeTargetPlan | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { offerId, matches } = value as Record<string, unknown>;
+  if (offerId !== null && typeof offerId !== "string") return null;
+  if (!Array.isArray(matches)) return null;
+  const parsed: ComposeTargetOffer[] = [];
+  for (const entry of matches) {
+    if (typeof entry !== "object" || entry === null) return null;
+    const e = entry as Record<string, unknown>;
+    if (
+      typeof e.offerId !== "string" ||
+      typeof e.offerNo !== "number" ||
+      typeof e.state !== "string" ||
+      !isOfferState(e.state) ||
+      typeof e.inActiveBidding !== "boolean" ||
+      typeof e.setCount !== "number"
+    ) {
+      return null;
+    }
+    parsed.push({
+      offerId: e.offerId,
+      offerNo: e.offerNo,
+      state: e.state,
+      inActiveBidding: e.inActiveBidding,
+      setCount: e.setCount,
+    });
+  }
+  return { offerId, matches: parsed };
 }

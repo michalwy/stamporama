@@ -53,7 +53,11 @@ import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import { commitLotProposal, type MissingPinnedCopy } from "@/lib/lot-builder";
 import { composeSeriesOffer, type ComposeSeriesResult } from "@/lib/series-recombination";
-import { parseSeriesCombination, parseSeriesCriteria } from "@/lib/series-recombination-rules";
+import {
+  parseComposeTargetPlan,
+  parseSeriesCombination,
+  parseSeriesCriteria,
+} from "@/lib/series-recombination-rules";
 import { commitOfferGeneration, type OfferGeneratorResult } from "@/lib/offer-generator";
 import { parseGeneratorRequest, parsePlanFingerprint } from "@/lib/offer-generator-rules";
 import { readItemFilters } from "@/app/api/collections/[collectionId]/items/item-filters";
@@ -237,11 +241,14 @@ export type ComposeSeriesActionState =
   | { status: "error"; message: string };
 
 /**
- * Compose a series listed on *Series from singles* into one `preparing` offer (#1211).
+ * Compose a series listed on *Series from singles* into one `preparing` offer (#1211), or into a
+ * further set of the similar offer that already lists it (#1369).
  *
  * Takes the collector's **choice** — which copy fills each slot — with the card it was made on: its
- * combination and the screen's criteria as a query string (#1265). The domain re-reads both pools
- * under those criteria and refuses, by name, a chosen copy that stopped being a candidate (#717).
+ * combination and the screen's criteria as a query string (#1265) — and where the series goes, with
+ * the similar offers the card showed. The domain re-reads both pools under those criteria and the
+ * similar offers too, and refuses, by name, a chosen copy that stopped being a candidate or a similar
+ * offer that changed (#717).
  */
 export async function composeSeriesOfferAction(
   collectionId: string,
@@ -249,12 +256,14 @@ export async function composeSeriesOfferAction(
   checklistId: string,
   combination: unknown,
   criteriaQuery: string,
-  picks: Record<string, string>
+  picks: Record<string, string>,
+  target: unknown
 ): Promise<ComposeSeriesActionState> {
   const session = await getSession();
   // A malformed card identity refuses rather than reading as "every axis mixed".
   const parsed = parseSeriesCombination(combination);
-  if (!parsed) {
+  const targetPlan = parseComposeTargetPlan(target);
+  if (!parsed || !targetPlan) {
     return { status: "error", message: "This series could not be identified. Open the screen again." };
   }
   try {
@@ -264,6 +273,7 @@ export async function composeSeriesOfferAction(
       combination: parsed,
       criteria: parseSeriesCriteria(new URLSearchParams(criteriaQuery)),
       picks,
+      target: targetPlan,
     });
     return { status: "success", ...result };
   } catch (e) {

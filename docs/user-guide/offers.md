@@ -1425,12 +1425,23 @@ composing the series offer afterwards.
   copy.
 - **See the set.** Each stamp's row starts with the photo of the copy chosen for it (*Not chosen* until
   you pick), so the column down the card's left edge is the set you are putting together.
-- **Check the outcome.** The dialog says what is about to happen: a new **Preparing** offer on the
-  platform holding the series as **one set**, and every single offer that loses a set — whether it
+- **See where it goes.** Once every place has a copy, the card says whether an offer on the platform
+  **already lists this series** — the same stamps in the same conditions, counted the way the Copies
+  list warns about a similar offer, an umbrella stamp counted as the variant it will be listed as. If
+  one does, the card says **Would be added to #N**: composing adds the series to that offer as **one
+  more set**, so its quantity grows by one, instead of making a second offer the marketplace would
+  refuse. An offer in **active bidding** never receives a set; the card names it and proposes a new
+  offer instead.
+- **Check the outcome.** The dialog says what is about to happen: the series added to the offer that
+  already lists it — the **lowest-numbered** one when there are several, with a radio button to pick
+  another, and **Create a new Preparing offer instead** if you want them kept apart — or, when no offer
+  lists it, a new **Preparing** offer on the platform holding the series as **one set**. It also lists
+  every single offer that loses a set — whether it
   keeps other sets or is left with nothing, whether it is **live** (Active or Paused), and what
   happens to it: a live offer left empty says it **stays in its state and appears in Needs action**,
   one never listed says it is **withdrawn**.
-- **Compose.** The new offer opens, holding exactly the copies you chose — from a collapsed line or
+- **Compose.** The offer holding the series opens — the new one, or the one it was added to, which
+  is flagged **Changed since listed** if it is live — holding exactly the copies you chose — from a collapsed line or
   an opened one alike. For every chosen copy that came from a single offer, only **its
   own one-copy set** is taken out of that offer; the offer's other sets stay where they are.
 
@@ -1453,7 +1464,10 @@ chip on the Offers list to find them, then close their listings on the platform.
 **The copies are checked again when you compose.** If a chosen copy is no longer a candidate by then
 — it sold (even if its offer is still Active), went into active bidding, was put into another set, is
 no longer in the collection, or no longer matches the card's condition, certificate or format — the
-series is **not** composed: the message names the copy, and nothing is changed. Nothing is written
+series is **not** composed: the message names the copy, and nothing is changed. The same goes for the
+offers that already list the series: if one of them has appeared or gone since the screen was read, or
+the one you are adding to changed its status, its sets or its bidding, the message names that offer
+and nothing is changed. Nothing is written
 halfway, either: the new offer exists only together with the sets leaving their old offers.
 
 ## Bulk listing — posting a prepared batch

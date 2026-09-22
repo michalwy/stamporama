@@ -11,6 +11,11 @@ import {
   setOfferState,
 } from "../../src/lib/offers";
 import { composeSeriesOffer, findSeriesRecombinations } from "../../src/lib/series-recombination";
+import {
+  composeTargetOf,
+  composeTargets,
+  type ComposeTargetPlan,
+} from "../../src/lib/series-recombination-rules";
 import { formatItemNo } from "../../src/lib/item-number";
 import type { OfferState } from "../../src/lib/offer-rules";
 import { isEmptiedListing } from "../../src/lib/offer-listing-drift";
@@ -21,6 +26,9 @@ import { isEmptiedListing } from "../../src/lib/offer-listing-drift";
 // whole commit, with nothing written. Each case builds a series of its own.
 
 const ts = Date.now();
+
+/** Where the series goes when the screen showed no similar offer: a new one. */
+const NEW_OFFER: ComposeTargetPlan = { offerId: null, matches: [] };
 
 describe("compose a series offer out of single offers (#1211)", () => {
   let userId: string;
@@ -186,7 +194,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const result = await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId, combination: plain(),
+      checklistId: setId, combination: plain(), target: NEW_OFFER,
       picks: Object.fromEntries(ids.map((stampId, i) => [stampId, copies[i]])),
     });
 
@@ -234,7 +242,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId, combination: plain(),
+      checklistId: setId, combination: plain(), target: NEW_OFFER,
       picks: { [ids[0]]: first, [ids[1]]: second },
     });
 
@@ -271,7 +279,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const result = await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId, combination: plain(),
+      checklistId: setId, combination: plain(), target: NEW_OFFER,
       picks: { [ids[0]]: first, [ids[1]]: second },
     });
 
@@ -316,7 +324,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const result = await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId, combination: plain(),
+      checklistId: setId, combination: plain(), target: NEW_OFFER,
       picks: { [ids[0]]: singleFirst, [ids[1]]: second },
     });
 
@@ -345,7 +353,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     await composeSeriesOffer(userId, collectionId, {
       platformId,
-      checklistId: setId, combination: plain(),
+      checklistId: setId, combination: plain(), target: NEW_OFFER,
       picks: { [ids[0]]: availableFirst, [ids[1]]: second },
     });
 
@@ -372,7 +380,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
     await assert.rejects(
       composeSeriesOffer(userId, collectionId, {
         platformId,
-        checklistId: setId, combination: plain(),
+        checklistId: setId, combination: plain(), target: NEW_OFFER,
         picks: { [ids[0]]: bid, [ids[1]]: second },
       }),
       (error: Error) => error.message.includes(formatItemNo(itemNo)) && /Nothing was changed/.test(error.message)
@@ -390,7 +398,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     const before = await snapshot();
     await assert.rejects(
-      composeSeriesOffer(userId, collectionId, { platformId, checklistId: setId, combination: plain(), picks: { [ids[0]]: first } }),
+      composeSeriesOffer(userId, collectionId, { platformId, checklistId: setId, combination: plain(), target: NEW_OFFER, picks: { [ids[0]]: first } }),
       /Choose which copy fills/
     );
     assert.deepEqual(await snapshot(), before);
@@ -421,7 +429,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
       composeSeriesOffer(userId, collectionId, {
         platformId,
         checklistId: setId,
-        combination: plain(),
+        combination: plain(), target: NEW_OFFER,
         picks: { [ids[0]]: first, [ids[1]]: second },
       }),
       (error: Error) => error.message.includes(formatItemNo(itemNo)) && /Nothing was changed/.test(error.message)
@@ -443,11 +451,191 @@ describe("compose a series offer out of single offers (#1211)", () => {
       composeSeriesOffer(userId, collectionId, {
         platformId,
         checklistId: setId,
-        combination: plain(),
+        combination: plain(), target: NEW_OFFER,
         picks: { [ids[0]]: first, [ids[1]]: used },
       }),
       (error: Error) => error.message.includes(formatItemNo(itemNo))
     );
     assert.deepEqual(await snapshot(), before);
+  });
+
+  // ── A similar offer already exists (#1369) ─────────────────────────────────────────────────────
+
+  /** What the card sends for these picks: the similar offers it computes from the screen's own read,
+   *  and the target — the proposal, or `picked` (`null` for a new offer). */
+  async function screenPlan(
+    checklistId: string,
+    picks: Record<string, string>,
+    picked?: string | null
+  ): Promise<ComposeTargetPlan & { biddingMatches: string[] }> {
+    const card = (await findSeriesRecombinations(userId, collectionId, platformId)).series.find(
+      (series) => series.checklistId === checklistId
+    );
+    assert.ok(card, "the series is listed");
+    const chosen = card.slots.map((slot) => {
+      const filler = slot.fillers.find((f) => f.itemId === picks[slot.stamp.stampId]);
+      assert.ok(filler, "every pick is a candidate on the card");
+      return filler.collision;
+    });
+    const offers = new Map(card.similar.offers.map((o) => [o.offerId, o]));
+    const targets = composeTargets(chosen, card.similar.members, offers);
+    return {
+      offerId: composeTargetOf(targets, picked),
+      matches: targets.matches.map((offerId) => offers.get(offerId)!),
+      biddingMatches: targets.biddingMatches,
+    };
+  }
+
+  /** A series of two with one single on the platform, one available copy, and `similar` offers each
+   *  already listing the same series in the same condition. */
+  async function withSimilar(similar: OfferState[]) {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    const first = await copy(ids[0]);
+    const single = await offer([[first]], "active");
+    const second = await copy(ids[1]);
+    const similarIds: string[] = [];
+    for (const state of similar) {
+      similarIds.push(await offer([[await copy(ids[0]), await copy(ids[1])]], state));
+    }
+    return { ids, setId, first, second, single, similarIds, picks: { [ids[0]]: first, [ids[1]]: second } };
+  }
+
+  const offerNoOf = async (offerId: string) =>
+    (await prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { offerNo: true } })).offerNo;
+
+  it("adds the series to the offer already listing it, as a further set (#1369)", async () => {
+    const { setId, first, second, single, similarIds, picks } = await withSimilar(["active"]);
+    const [similar] = similarIds;
+    await prisma.offer.update({ where: { id: similar }, data: { listingContentChangedAt: null } });
+    const plan = await screenPlan(setId, picks);
+    assert.equal(plan.offerId, similar, "the card proposes the offer that already lists the series");
+    const offersBefore = await prisma.offer.count({ where: { collectionId } });
+
+    const result = await composeSeriesOffer(userId, collectionId, {
+      platformId,
+      checklistId: setId,
+      combination: plain(),
+      picks,
+      target: plan,
+    });
+
+    assert.equal(result.offerId, similar);
+    assert.equal(result.addedToOfferNo, await offerNoOf(similar));
+    assert.equal(await prisma.offer.count({ where: { collectionId } }), offersBefore, "no new offer");
+    const row = await offerRow(similar);
+    assert.equal(row.sets.length, 2, "its quantity grew by one");
+    assert.deepEqual(row.sets[1].items.map((item) => item.itemId), [first, second], "the series in slot order");
+    assert.equal(row.state, "active");
+    assert.ok(row.listingContentChangedAt, "a listed target is flagged as changed after listing (#542)");
+    assert.equal((await offerRow(single)).sets.length, 0, "the single still leaves its offer");
+  });
+
+  it("still creates a new offer when the collector asks for one (#1369)", async () => {
+    const { setId, similarIds, picks } = await withSimilar(["preparing"]);
+    const plan = await screenPlan(setId, picks, null);
+    assert.equal(plan.offerId, null);
+    assert.deepEqual(plan.matches.map((m) => m.offerId), similarIds, "the match is still shown");
+
+    const result = await composeSeriesOffer(userId, collectionId, {
+      platformId,
+      checklistId: setId,
+      combination: plain(),
+      picks,
+      target: plan,
+    });
+
+    assert.ok(!similarIds.includes(result.offerId), "a new offer");
+    assert.equal(result.addedToOfferNo, null);
+    assert.equal((await offerRow(result.offerId)).state, "preparing");
+    assert.equal((await offerRow(similarIds[0])).sets.length, 1, "the similar offer is untouched");
+  });
+
+  it("never adds to an offer in active bidding; a new offer is proposed instead (#334)", async () => {
+    const { setId, similarIds, picks } = await withSimilar(["active"]);
+    const [bidding] = similarIds;
+    await prisma.offer.update({ where: { id: bidding }, data: { inActiveBidding: true } });
+    const plan = await screenPlan(setId, picks);
+    assert.equal(plan.offerId, null, "nothing to add to");
+    assert.deepEqual(plan.matches, []);
+    assert.deepEqual(plan.biddingMatches, [bidding], "named as the reason");
+
+    await assert.rejects(
+      composeSeriesOffer(userId, collectionId, {
+        platformId,
+        checklistId: setId,
+        combination: plain(),
+        picks,
+        target: { offerId: bidding, matches: [] },
+      }),
+      (error: Error) => /has changed since the screen was opened/.test(error.message),
+      "a bid-on offer named as the target is refused"
+    );
+    const result = await composeSeriesOffer(userId, collectionId, {
+      platformId,
+      checklistId: setId,
+      combination: plain(),
+      picks,
+      target: plan,
+    });
+    assert.notEqual(result.offerId, bidding);
+    assert.equal((await offerRow(bidding)).sets.length, 1);
+  });
+
+  it("proposes the lowest-numbered of several matches, and adds to another when picked (#1369)", async () => {
+    const { setId, similarIds, picks } = await withSimilar(["ready", "preparing"]);
+    const [lower, higher] = similarIds;
+    assert.ok((await offerNoOf(lower)) < (await offerNoOf(higher)));
+    assert.equal((await screenPlan(setId, picks)).offerId, lower, "the lowest-numbered is proposed");
+
+    const plan = await screenPlan(setId, picks, higher);
+    assert.equal(plan.offerId, higher);
+    await composeSeriesOffer(userId, collectionId, { platformId, checklistId: setId, combination: plain(), picks, target: plan });
+
+    assert.equal((await offerRow(higher)).sets.length, 2, "the picked offer received the set");
+    assert.equal((await offerRow(lower)).sets.length, 1, "the proposed one did not");
+  });
+
+  it("refuses by number a target that changed since the screen was read (#717)", async () => {
+    const { setId, similarIds, picks } = await withSimilar(["active"]);
+    const [similar] = similarIds;
+    const plan = await screenPlan(setId, picks);
+    // Another set joins the target after the screen was read: its quantity is no longer what the card said.
+    await addOfferSet(userId, similar, [await copy((await stamps(1))[0])]);
+
+    const no = await offerNoOf(similar);
+    const before = await snapshot();
+    await assert.rejects(
+      composeSeriesOffer(userId, collectionId, { platformId, checklistId: setId, combination: plain(), picks, target: plan }),
+      (error: Error) => error.message.startsWith(`Offer #${no} has changed`) && /Nothing was changed/.test(error.message)
+    );
+    assert.deepEqual(await snapshot(), before, "nothing written");
+  });
+
+  it("refuses by number a similar offer that appeared after the screen was read (#717)", async () => {
+    const { ids, setId, picks } = await withSimilar([]);
+    const plan = await screenPlan(setId, picks);
+    assert.deepEqual(plan, { offerId: null, matches: [], biddingMatches: [] });
+    const appeared = await offer([[await copy(ids[0]), await copy(ids[1])]], "preparing");
+
+    const no = await offerNoOf(appeared);
+    const before = await snapshot();
+    await assert.rejects(
+      composeSeriesOffer(userId, collectionId, { platformId, checklistId: setId, combination: plain(), picks, target: plan }),
+      (error: Error) => error.message.startsWith(`Offer #${no} has changed`)
+    );
+    assert.deepEqual(await snapshot(), before);
+  });
+
+  it("does not call an offer of a subset or another condition similar (#732)", async () => {
+    const ids = await stamps(2);
+    const setId = await checklist(ids);
+    const first = await copy(ids[0]);
+    await offer([[first]], "active");
+    const second = await copy(ids[1]);
+    await offer([[await copy(ids[0]), await copy(ids[1], usedId)]], "active");
+    await offer([[await copy(ids[0]), await copy(ids[1]), await copy((await stamps(1))[0])]], "active");
+    const plan = await screenPlan(setId, { [ids[0]]: first, [ids[1]]: second });
+    assert.deepEqual(plan, { offerId: null, matches: [], biddingMatches: [] });
   });
 });
