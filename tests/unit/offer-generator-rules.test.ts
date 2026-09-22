@@ -6,10 +6,12 @@ import {
   assembleSets,
   findPlanDrift,
   fingerprintPlan,
+  generatorCombinationParts,
   generatorRequestParams,
   parseGeneratorRequest,
   parsePlanFingerprint,
   planOffers,
+  seriesSubtitle,
   skipReason,
   type GeneratorCopy,
   type GeneratorOffer,
@@ -381,5 +383,30 @@ describe("the generator request (#1287)", () => {
     const paused = new URLSearchParams(params);
     paused.set("state", "paused");
     assert.equal(parseGeneratorRequest(paused), null);
+  });
+});
+
+describe("how the preview states a line (#1368)", () => {
+  it("names the condition always, and the certificate and format only when they are not the default", () => {
+    assert.deepEqual(generatorCombinationParts({ conditionId: "mnh", certificateStatusId: null, formatId: null }), [
+      { axis: "condition", id: "mnh" },
+    ]);
+    assert.deepEqual(generatorCombinationParts({ conditionId: "mnh", certificateStatusId: "sig", formatId: "pair" }), [
+      { axis: "condition", id: "mnh" },
+      { axis: "certificate", id: "sig" },
+      { axis: "format", id: "pair" },
+    ]);
+    assert.deepEqual(generatorCombinationParts({ conditionId: null, certificateStatusId: null, formatId: "pair" }), [
+      { axis: "condition", id: null },
+      { axis: "format", id: "pair" },
+    ]);
+  });
+
+  it("drops the issue's name where the checklist already carries it", () => {
+    assert.equal(seriesSubtitle("Polish Castles", "Polish Castles"), null);
+    assert.equal(seriesSubtitle("Polish Castles", " polish castles "), null);
+    assert.equal(seriesSubtitle("Low values", "Polish Castles"), "Polish Castles");
+    assert.equal(seriesSubtitle("Low values", null), null);
+    assert.equal(seriesSubtitle("Low values", "  "), null);
   });
 });
