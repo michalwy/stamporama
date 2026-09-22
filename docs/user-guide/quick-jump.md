@@ -27,18 +27,25 @@ Press **Ctrl+K** (**⌘K** on a Mac) from anywhere in the collection to put the 
 ## Recently visited
 
 Clicking into the box — or pressing **⌘K** — also drops a **Recent** panel under it, listing the
-records you were last on: copies, stamps, issues, offers, purchases, sales, auction sales and trades, most
-recent first. Pick one to go back to it.
+records you were last on: copies, stamps, issues, offers, purchases, sales, auction sales and trades.
+Pick one to go back to it.
 
-- **↓** and **↑** walk the list, **Enter** opens the highlighted row, **Escape** closes the panel.
+The list is **grouped by kind of record** — *Offers*, *Stamps*, *Copies*, *Intake documents* and so
+on, each under its own heading. **Each group keeps its own last 3 records**, so a visit only ever
+pushes out an older record of the same kind: after an afternoon of offers, the stamp you were on
+before them is still there, under *Stamps*. The group you visited most recently is on top, each
+group lists its records most recent first, and a kind you have not visited has no group.
+
+- **↓** and **↑** walk the whole list as one, straight across the group headings; **Enter** opens
+  the highlighted row, **Escape** closes the panel.
 - Typing **narrows** the list by name, while what you typed is still read as a jump — so `o 42`
   jumps to offer `#42` on Enter, and at the same time shows the recent records whose names contain
   `o 42`.
-- The list keeps the last **12** records, one entry per record however often you return to it.
-- **Clear** empties it.
+- Each record has one entry however often you return to it.
+- **Clear** empties every group.
 
-Each entry is **coloured by the section of the sidebar it comes from** — its icon, and the word
-naming what it is (*Offer*, *Copy*, *Trade*) — in the same colour that section has in the
+Each group is **coloured by the section of the sidebar it comes from** — its heading, and the icon
+of every record under it — in the same colour that section has in the
 navigation: a stamp or an issue in Catalog's slate, a copy in Collection's green, an offer or a sale
 in Selling's blue, a purchase, an opening balance or an auction sale in Intake's amber, a trade in Partners' violet. So
 the list can be read at a glance by where each record lives. The colours are the navigation's own,
