@@ -498,7 +498,11 @@ export function OfferPlatformItemsCard({
   // shows `865a` is the one place that mismatch would be read as a bug.
   const handOver = useCallback(
     (item: OfferPlatformItem) =>
-      start(item.searchUrl!, item.catalogItemVariant ?? item.catalogNumbers[0] ?? item.label),
+      start(
+        item.searchUrl!,
+        item.catalogItemVariant ?? item.catalogNumbers[0] ?? item.label,
+        item.stampId
+      ),
     [start]
   );
 
@@ -523,6 +527,16 @@ export function OfferPlatformItemsCard({
     if (walking) advance();
   }, [invalidateAll, collectionId, walking, advance]);
   useAssistantMatchSignal(onMatched);
+
+  // The stamp the open handoff was for now carries its item-ID (#1380). The Assistant closes the
+  // Colnect tab once that match is saved, so the tab that would have said so is gone and this strip
+  // is where it is said — read off the re-read rows rather than off the doorbell, which never says
+  // which match landed.
+  const handoffLinked =
+    handoff?.state === "opened" &&
+    handoff.stampId !== null &&
+    items.some((i) => i.stampId === handoff.stampId) &&
+    items.every((i) => i.stampId !== handoff.stampId || !i.searchUrl);
 
   // The platform has no module, or the offer has no copies yet: there is nothing to look up.
   if (items.length === 0) return null;
@@ -703,8 +717,10 @@ export function OfferPlatformItemsCard({
           }}
         >
           <span>
-            {handoff.message ??
-              (handoff.label ? `Opening the search for ${handoff.label}…` : "Opening the search…")}
+            {handoffLinked
+              ? `Linked ${handoff.label ?? "the stamp"} on Colnect.`
+              : (handoff.message ??
+                (handoff.label ? `Opening the search for ${handoff.label}…` : "Opening the search…"))}
           </span>
           <button
             type="button"

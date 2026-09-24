@@ -52,6 +52,8 @@ import {
   runListingTask,
 } from "./listing";
 import { handleRegistrationClick } from "./registration";
+import { closeFinishedTab } from "./finished-tab";
+import { forgetLinkTab, getLinkTab, linkTabFinished, rememberLinkTab } from "./link-tabs";
 import { resumeColnectApply, runColnectApply } from "./colnect-apply";
 import { runColnectExport } from "./colnect-export";
 import { runColnectClose } from "./colnect-close";
@@ -188,7 +190,12 @@ async function handle(
     // A real run writes every match it rules `auto` — the window's **Write** button, and the usual
     // way a handed-over search ends (#1378). It rings exactly as a confirm does: a screen waiting on
     // the link cannot tell which of the two made it, and must not have to.
-    if (!msg.dryRun && wroteAMatch(results)) void broadcastMatched();
+    if (!msg.dryRun && wroteAMatch(results)) {
+      const written = results.flatMap((r) => (r.status === "auto" && r.written ? [r.stampId] : []));
+      // Not awaited: the window's Write waits on this answer, and the tab and the doorbell are
+      // nothing it needs. Written chunk by chunk, so the chunk carrying the Link's stamp closes it.
+      void matchWritten(msg.sourceTabId, written);
+    }
     return { ok: true, results };
   }
 
@@ -219,10 +226,18 @@ async function handle(
     attributes: msg.attributes,
   });
   if (outcome.ok) {
-    // The instance now knows something a screen of it may be showing. Ring the doorbell — not
-    // awaited, since the popup's answer must not wait on other tabs.
+    // The instance now knows something a screen of it may be showing. The Link's tab is closed first
+    // and awaited (#1380), because the window's answer is what tells it to go too; the doorbell is
+    // not, since the popup's answer must not wait on other tabs.
+    const finished = await finishLinkTab(msg.sourceTabId, [msg.stampId]).catch(() => false);
     void broadcastMatched();
-    return { ok: true, backfill: outcome.backfill, date: outcome.date, attributes: outcome.attributes };
+    return {
+      ok: true,
+      backfill: outcome.backfill,
+      date: outcome.date,
+      attributes: outcome.attributes,
+      finished,
+    };
   }
   if (outcome.conflict) {
     return { ok: false, error: "conflict", conflict: true, existingColnectId: outcome.existingColnectId };
@@ -349,7 +364,7 @@ chrome.runtime.onMessage.addListener((msg: BackgroundMessage, sender, sendRespon
   // origin that wrote it is one the collector registered — so it is answered ahead of the profile
   // check every matcher call goes through.
   if (msg?.type === "open-match") {
-    openMatch(msg.url, sender.tab)
+    openMatch(msg.url, msg.stampId ?? null, sender.tab)
       .then(() => sendResponse({ ok: true } satisfies OpenMatchResponse))
       .catch((e) =>
         sendResponse({
@@ -525,6 +540,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   resultCache.delete(tabId);
   void listingTabClosed(tabId);
+  void forgetLinkTab(tabId);
 });
 
 // Switching profile (#251) re-points everything: every cached result and every badge was computed
@@ -708,7 +724,11 @@ function tabLoaded(tabId: number): Promise<void> {
   });
 }
 
-async function openMatch(url: string, sourceTab: chrome.tabs.Tab | undefined): Promise<void> {
+async function openMatch(
+  url: string,
+  stampId: string | null,
+  sourceTab: chrome.tabs.Tab | undefined
+): Promise<void> {
   // Beside the page that asked, in its own window — the collector is coming back to the offer, and a
   // search opened somewhere else is a search they have to go and find.
   const created = await chrome.tabs.create({
@@ -718,12 +738,45 @@ async function openMatch(url: string, sourceTab: chrome.tabs.Tab | undefined): P
     ...(sourceTab?.index !== undefined ? { index: sourceTab.index + 1 } : {}),
   });
   if (created.id === undefined) throw new Error("The search tab could not be opened.");
+  // Written down before anything else can happen in it (#1380): this tab is the Assistant's to close
+  // once the stamp is linked, which is exactly what no tab the collector opened themselves ever is.
+  await rememberLinkTab({
+    tabId: created.id,
+    instanceTabId: sourceTab?.id ?? null,
+    stampId,
+    openedAt: Date.now(),
+  });
   await tabLoaded(created.id);
   // Re-read it: the tab now holds the loaded page, and `openAssistant` centres the window on the one
   // it is in. A tab closed while we waited is the collector changing their mind, not an error worth
   // reporting into their offer screen.
   const tab = await chrome.tabs.get(created.id).catch(() => null);
   if (tab) await openAssistant(tab);
+}
+
+/**
+ * A match was written from the page in `sourceTabId`: close that tab if it was a Link's and this was
+ * the match it was opened for (#1380), then ring the doorbell.
+ *
+ * In that order, and awaited: **Link all** advances on the ring, handing the next stamp over — and the
+ * next search opening in front must not then be pushed back behind the offer by this one closing.
+ */
+async function matchWritten(sourceTabId: number | undefined, stampIds: string[]): Promise<void> {
+  await finishLinkTab(sourceTabId, stampIds).catch(() => false);
+  await broadcastMatched();
+}
+
+/**
+ * Close the Link's tab when `stampIds` finish it (#1380), answering whether it was closed. Forgotten
+ * first either way, as a listing is: a Link finishes once, and with the option off the tab is the
+ * collector's own from here on.
+ */
+async function finishLinkTab(sourceTabId: number | undefined, stampIds: string[]): Promise<boolean> {
+  if (sourceTabId === undefined) return false;
+  const entry = await getLinkTab(sourceTabId, Date.now());
+  if (!entry || !linkTabFinished(entry, stampIds)) return false;
+  await forgetLinkTab(sourceTabId);
+  return closeFinishedTab(sourceTabId, entry.instanceTabId);
 }
 
 /**

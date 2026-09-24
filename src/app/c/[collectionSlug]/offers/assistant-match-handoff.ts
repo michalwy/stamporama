@@ -42,6 +42,12 @@ export interface MatchHandoff {
   requestId: string;
   /** What the collector pressed Link on, for the strip's own message. */
   label: string | null;
+  /**
+   * The stamp the search is for (#1380). Handed over so the Assistant can tell the match that
+   * finishes this Link — and close the tab it opened for it — from one landing on a neighbour on the
+   * same search page; kept here so the screen can say the stamp is linked once its row shows it.
+   */
+  stampId: string | null;
   /** The JSON the element carries. */
   payload: string;
   state: MatchHandoffState;
@@ -118,8 +124,9 @@ export function useAssistantMatch() {
     return () => observer.disconnect();
   }, [requestId]);
 
-  /** Hand one search over. `label` is only ever printed back at the collector. */
-  const start = useCallback((url: string, label: string | null) => {
+  /** Hand one search over. `label` is only ever printed back at the collector; `stampId` is what the
+   *  Link is for, and what says it is done (#1380). */
+  const start = useCallback((url: string, label: string | null, stampId: string | null = null) => {
     const requestId =
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
@@ -127,7 +134,12 @@ export function useAssistantMatch() {
     setHandoff({
       requestId,
       label,
-      payload: JSON.stringify({ v: 1, requestId, task: { url, ...(label ? { label } : {}) } }),
+      stampId,
+      payload: JSON.stringify({
+        v: 1,
+        requestId,
+        task: { url, ...(label ? { label } : {}), ...(stampId ? { stampId } : {}) },
+      }),
       state: "running",
       message: null,
     });

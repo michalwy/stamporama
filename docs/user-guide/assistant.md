@@ -90,6 +90,14 @@ on it; you match as usual — confirm a candidate or press **Write** — and the
 offer screen without reloading it. See
 [Filling the missing item-IDs](offers.md#filling-the-missing-item-ids-without-leaving-the-offer).
 
+Once the stamp you pressed Link on is matched, the Assistant **closes the Colnect tab it opened** and
+the window with it, and you are back on the offer, whose strip says the stamp is linked. With
+**Link all**, the next stamp's search then opens in its place. A match that lands only on some other
+stamp from the same search page leaves the tab open — the one you asked about is still owed — and so
+does a match that fails. A Colnect tab you opened yourself is never closed. If you'd rather look at
+Colnect's page afterwards, turn off **Close Colnect tabs when the job is done** in the extension's
+Options.
+
 Those buttons only appear on an instance the Assistant is connected to — connecting is what lets the
 extension read that page at all.
 
@@ -493,6 +501,14 @@ The report strip says so and links to the live listing.
 
 It closes the loop even if you have moved on: the offer is activated whether or not the Stamporama tab
 that started the listing is still open, or still showing that offer.
+
+Once the listing is safely recorded, the Assistant **closes the Colnect tab** it filled and brings the
+offer's tab back to the front, where the report strip shows the offer activated with its listing's
+address. A saved [update](#going-back-to-a-listing-that-is-already-live) closes its tab the same way.
+The tab stays open whenever something is left for you to look at: a listing whose address could not
+be recorded (the entry page is then the one place you can still copy it from), a form you have not
+posted, a check page Colnect put in front of the form. The switch in Options that keeps Link's tabs
+open keeps these open too.
 
 Two things it deliberately doesn't do:
 

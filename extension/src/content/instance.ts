@@ -216,6 +216,7 @@ async function pumpMatch(): Promise<void> {
       type: "open-match",
       url: handoff.task.url,
       requestId: handoff.requestId,
+      ...(handoff.task.stampId ? { stampId: handoff.task.stampId } : {}),
     } satisfies OpenMatchRequest)) as OpenMatchResponse;
   } catch (e) {
     // Reported and left alone, for the listing pump's reason exactly: the answer is written onto the

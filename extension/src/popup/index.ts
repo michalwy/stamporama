@@ -160,6 +160,12 @@ function setStatus(text: string, isError = false): void {
   statusEl.classList.toggle("err", isError);
 }
 
+/** Which page a write came from, for the worker to tell a Link's tab by (#1380). Omitted where this
+ *  window was not opened about a tab — nothing then is closed. */
+function sourceTabField(): { sourceTabId?: number } {
+  return sourceTabId === null ? {} : { sourceTabId };
+}
+
 function sendToBackground<R>(msg: BackgroundRequest): Promise<R> {
   return chrome.runtime.sendMessage(msg) as Promise<R>;
 }
@@ -634,7 +640,12 @@ async function runMatch(batch: ExtractedItem[], dryRun: boolean): Promise<MatchR
   const worker = async (): Promise<void> => {
     for (let i = next++; i < slices.length && failure === null; i = next++) {
       const slice = slices[i];
-      const res = await sendToBackground<MatchResponse>({ type: "match", items: slice, dryRun });
+      const res = await sendToBackground<MatchResponse>({
+        type: "match",
+        items: slice,
+        dryRun,
+        ...sourceTabField(),
+      });
       if (!res.ok) {
         failure ??= res.error;
         return;
@@ -927,6 +938,7 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
     catalogRefs: src?.catalogRefs,
     issuedOn: dating ? src?.issuedOn : undefined,
     attributes: attributing ? attributes : undefined,
+    ...sourceTabField(),
   });
   if (res.ok) {
     markWritten(colnectId, stamp, res.backfill, res.date, res.attributes);
@@ -942,6 +954,9 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
         extras.length ? `, added ${extras.join(" and ")}` : ""
       }.`
     );
+    // The page this window reads was a Link's, and that Link is done: its tab is closed and the
+    // collector is back on the offer (#1380), so a window about a tab that no longer exists goes too.
+    if (res.finished) window.close();
     return;
   }
   if (res.conflict) {
@@ -959,10 +974,12 @@ async function confirmOne(colnectId: string, stamp: Candidate, overwrite: boolea
       catalogRefs: src?.catalogRefs,
       issuedOn: dating ? src?.issuedOn : undefined,
       attributes: attributing ? attributes : undefined,
+      ...sourceTabField(),
     });
     if (retry.ok) {
       markWritten(colnectId, stamp, retry.backfill, retry.date, retry.attributes);
       setStatus(`Overwrote → #${colnectId}.`);
+      if (retry.finished) window.close();
     } else {
       setStatus(retry.error, true);
     }

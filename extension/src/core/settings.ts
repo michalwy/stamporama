@@ -6,6 +6,7 @@ export const CATALOG_BACKFILL = "catalogBackfill";
 export const ISSUE_DATE_SYNC = "issueDateSync";
 export const ATTRIBUTE_SYNC = "attributeSync";
 const SHOW_LINKED_DECISIONS = "showLinkedDecisions";
+const CLOSE_FINISHED_TABS = "closeFinishedTabs";
 
 /**
  * Whether to match a supported page automatically as it loads, so the toolbar badge can report how
@@ -87,4 +88,21 @@ export async function getShowLinkedDecisions(): Promise<boolean> {
 
 export async function setShowLinkedDecisions(shown: boolean): Promise<void> {
   await chrome.storage.local.set({ [SHOW_LINKED_DECISIONS]: shown });
+}
+
+/**
+ * Whether a marketplace tab the Assistant opened for a **Link** or a **List/Update via Assistant** is
+ * closed once that job is done, sending the collector back to the Stamporama tab they started from
+ * (#1380). Default on: across a session of listing offer after offer, closing each tab by hand is one
+ * extra step per offer. Switchable for a collector who wants to look at the marketplace's page
+ * afterwards. A tab that is *not* done — a failure, an unfinished form, an anti-bot page — is never
+ * closed either way, and neither is one the collector opened themselves.
+ */
+export async function getCloseFinishedTabs(): Promise<boolean> {
+  const data = await chrome.storage.local.get(CLOSE_FINISHED_TABS);
+  return data[CLOSE_FINISHED_TABS] !== false;
+}
+
+export async function setCloseFinishedTabs(enabled: boolean): Promise<void> {
+  await chrome.storage.local.set({ [CLOSE_FINISHED_TABS]: enabled });
 }

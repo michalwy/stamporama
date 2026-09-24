@@ -22,6 +22,19 @@ describe("parseMatchHandoff", () => {
     assert.equal(parsed?.task.label, undefined);
   });
 
+  it("reads the stamp the search is for, which is what says the Link is done (#1380)", () => {
+    const parsed = parseMatchHandoff(
+      JSON.stringify({ ...handoff, task: { ...handoff.task, stampId: " s_1 " } })
+    );
+    assert.equal(parsed?.task.stampId, "s_1");
+  });
+
+  it("reads a handoff with no stamp — a page predating #1380 is still a valid one", () => {
+    assert.equal(parseMatchHandoff(JSON.stringify(handoff))?.task.stampId, undefined);
+    const blank = { ...handoff, task: { ...handoff.task, stampId: "  " } };
+    assert.equal(parseMatchHandoff(JSON.stringify(blank))?.task.stampId, undefined);
+  });
+
   it("treats an empty or unparseable node as no handoff", () => {
     assert.equal(parseMatchHandoff(null), null);
     assert.equal(parseMatchHandoff("   "), null);

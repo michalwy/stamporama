@@ -13,10 +13,12 @@ import {
 import {
   getAttributeSync,
   getCatalogBackfill,
+  getCloseFinishedTabs,
   getIssueDateSync,
   getMatchOnLoad,
   setAttributeSync,
   setCatalogBackfill,
+  setCloseFinishedTabs,
   setIssueDateSync,
   setMatchOnLoad,
 } from "../core/settings";
@@ -36,6 +38,7 @@ const matchOnLoadEl = $<HTMLInputElement>("matchOnLoad");
 const catalogBackfillEl = $<HTMLInputElement>("catalogBackfill");
 const issueDateSyncEl = $<HTMLInputElement>("issueDateSync");
 const attributeSyncEl = $<HTMLInputElement>("attributeSync");
+const closeFinishedTabsEl = $<HTMLInputElement>("closeFinishedTabs");
 
 const fields = {
   name: $<HTMLInputElement>("name"),
@@ -219,6 +222,10 @@ void (async () => {
   catalogBackfillEl.checked = await getCatalogBackfill();
   catalogBackfillEl.addEventListener("change", () => {
     void setCatalogBackfill(catalogBackfillEl.checked).then(flashSaved);
+  });
+  closeFinishedTabsEl.checked = await getCloseFinishedTabs();
+  closeFinishedTabsEl.addEventListener("change", () => {
+    void setCloseFinishedTabs(closeFinishedTabsEl.checked).then(flashSaved);
   });
 
   const { profiles } = await getProfileStore();

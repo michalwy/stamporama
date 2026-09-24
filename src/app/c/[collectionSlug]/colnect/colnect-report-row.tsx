@@ -162,7 +162,7 @@ export function ColnectReportRowView({
    * where the Assistant is not scripting this origin — the button is then absent rather than dead,
    * and the Search chip beside it still takes the collector to the same page by hand.
    */
-  onLinkColnect: ((url: string, label: string | null) => void) | null;
+  onLinkColnect: ((url: string, label: string | null, stampId: string | null) => void) | null;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -306,7 +306,7 @@ export function ColnectReportRowView({
                 <Tooltip content="Open that search and match it in the Assistant, without leaving this report. The item-ID appears here on its own.">
                   <button
                     type="button"
-                    onClick={() => onLinkColnect(searchUrl, searchQuery)}
+                    onClick={() => onLinkColnect(searchUrl, searchQuery, row.stampId)}
                     style={LINK_BTN}
                   >
                     <Icon name="assistant" size="xs" /> Link
