@@ -46,7 +46,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
-import { RowQuickActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
+import { RowQuickActions, pickRowActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -67,6 +68,7 @@ import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { useCatalogNumberGrid } from "@/app/c/[collectionSlug]/shared/use-catalog-number-grid";
 import { Icon } from "@/app/icons";
+import { useIssueStampActions, type IssueStampActions } from "./use-issue-stamp-actions";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 
 // The issue detail screen (#519). Two things the list row cannot give: the stamp tree with enough
@@ -88,6 +90,11 @@ import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 // as, and **Manage…** opens the Issues row's own checklist editor over this issue — one editor, two
 // ways in. What the card itself does is read and narrow: a checklist clicked is the stamp tree's
 // checklist filter set to it.
+//
+// The **Stamps** card (#1381) adds, edits and removes the issue's stamps, through the Issues row's
+// own dialogs (`useIssueStampActions`): the tree is the relationship between the issue's stamps,
+// #630's line once more, and it had been the one thing on this screen that could only be changed
+// by going back to the list.
 
 const CELL: React.CSSProperties = {
   padding: "0.3rem 0.6rem",
@@ -141,14 +148,17 @@ export function IssueDetailPanel({
   );
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Adding, editing and removing the issue's stamps (#1381), through the Issues row's own dialogs.
+  const stampActions = useIssueStampActions({ collectionId, issue, maps });
   // Manual ordering (#549), the same mode the list row's tree carries. This page's members are a
   // server prop, so a saved reorder asks the route for fresh data; the optimistic order the hook
-  // holds is what the tree is drawn from until it arrives.
+  // holds is what the tree is drawn from until it arrives. It ends the way the card's other writes
+  // do, so the Issues list — which draws its tree in this order — is not left stale behind it.
   const treeReorder = useStampTreeReorder({
     collectionId,
     issueId: issue.id,
     members,
-    onSaved: () => router.refresh(),
+    onSaved: stampActions.afterWrite,
   });
   // The edit dialog this screen opens (#751) — the Issues list's own, over this issue.
   const [editing, setEditing] = useState(false);
@@ -273,9 +283,8 @@ export function IssueDetailPanel({
             <DetailCard
               title="Stamps"
               count={members.length || null}
-              // Absent when the issue holds nothing (#536). A tree the *filter* narrowed to nothing
-              // is a different thing and stays: the control that emptied it lives in this header.
-              empty={members.length === 0}
+              // Kept when the issue holds nothing: `DetailCard`'s named exception (#536), since its
+              // empty state carries the way to add the first stamp (#1381).
               actions={
                 // Also for a single checklist once the Checklists card has narrowed to it (#1278):
                 // a narrowed tree keeps the control that undoes it in its own header.
@@ -289,7 +298,9 @@ export function IssueDetailPanel({
                 ) : undefined
               }
             >
-              {tree.length === 0 ? (
+              {members.length === 0 ? (
+                <EmptyNote>No stamps in this issue yet — add one to start it.</EmptyNote>
+              ) : tree.length === 0 ? (
                 <EmptyNote>No stamp is on the checklists you picked.</EmptyNote>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column" }}>
@@ -308,6 +319,7 @@ export function IssueDetailPanel({
                         primaryVendorId={primaryVendorId}
                         reorder={treeReorder.reorder}
                         drag={drag}
+                        actions={stampActions}
                       />
                     )}
                   />
@@ -323,7 +335,23 @@ export function IssueDetailPanel({
                   paddingTop: "0.75rem",
                 }}
               >
-                <ReorderModeButton active={treeReorder.active} onToggle={treeReorder.toggle} />
+                {/* Put away while reordering, as the Variants card does (#630): the mode is for
+                    arranging what is there. */}
+                {!treeReorder.active && (
+                  <Tooltip content="Add a stamp to this issue, at the top of its tree. A variant is added from its base stamp's ⋮ menu.">
+                    <button
+                      type="button"
+                      style={DETAIL_BUTTON}
+                      onClick={stampActions.addStamp}
+                      disabled={stampActions.isPending}
+                    >
+                      <Icon name="add" size="sm" /> Add stamp
+                    </button>
+                  </Tooltip>
+                )}
+                {members.length > 1 && (
+                  <ReorderModeButton active={treeReorder.active} onToggle={treeReorder.toggle} />
+                )}
                 {treeReorder.error ? (
                   <span style={{ fontSize: "0.75rem", color: "var(--color-danger)" }}>
                     {treeReorder.error}
@@ -411,6 +439,8 @@ export function IssueDetailPanel({
           }
         />
       )}
+
+      {stampActions.dialog}
 
       {/* The Issues row's own checklist editor (#531), opened over this one issue (#1278). */}
       {managingChecklists && (
@@ -857,6 +887,7 @@ function TreeNode({
   primaryVendorId,
   reorder,
   drag,
+  actions,
 }: {
   node: StampTreeNodeData;
   depth: number;
@@ -870,9 +901,34 @@ function TreeNode({
   reorder: StampTreeReorder | null;
   /** This row's place in its sibling group's drag list, or null when it cannot move. */
   drag: StampNodeDragProps | null;
+  /** The tree's own operations (#1381), opened from this node. */
+  actions: IssueStampActions;
 }) {
   const [hovered, setHovered] = useState(false);
   const detailPage = useDetailPageAction("stamp", node.node.stampId);
+  const stamp = node.node;
+  // The Issues list's stamp row menu, less what stays on the list (move, reassign, copies, wants,
+  // prices): the entries and labels are that row's own, so one stamp is not offered the same act
+  // under two names depending on the screen.
+  const rowActions: RowAction[] = [
+    detailPage,
+    { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => actions.addChild(stamp) },
+    {
+      key: "add-variant-range",
+      label: "Add variant range…",
+      icon: "range",
+      onSelect: () => actions.addVariantRange(stamp),
+    },
+    { key: "edit", label: "Edit", icon: "edit", onSelect: () => actions.edit(stamp) },
+    {
+      key: "delete",
+      label: "Delete",
+      icon: "delete",
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => actions.remove(stamp),
+    },
+  ];
 
   return (
     <>
@@ -925,7 +981,13 @@ function TreeNode({
         {/* The same dimmed icon the lists carry, on the same hover rule — a row inside a detail
             card is still a row, and the way to a record should not be a different gesture here
             than it is on the list this card mirrors. */}
-        <RowQuickActions actions={[detailPage]} visible={hovered && !reorder} />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+          <RowQuickActions
+            actions={pickRowActions(rowActions, ["detail-page", "edit", "add-variant-range"])}
+            visible={hovered && !reorder}
+          />
+          <RowActionsMenu actions={rowActions} ariaLabel="Stamp actions" />
+        </span>
       </div>
       <StampTreeGroup
         nodes={node.children}
@@ -943,6 +1005,7 @@ function TreeNode({
             primaryVendorId={primaryVendorId}
             reorder={reorder}
             drag={childDrag}
+            actions={actions}
           />
         )}
       />

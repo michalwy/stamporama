@@ -200,7 +200,7 @@ several stamps the figure is measured but not offered, because the piece is a co
 ## The issue page
 
 *Left column:* Details, Checklists, Stamps, Catalog value. *Right column:* Completeness, Copies,
-Offers. Details and Checklists are always there.
+Offers. Details, Checklists and Stamps are always there.
 
 - **Identity** — the issue number, name and year, the declared catalog range, and the
   required/total stamp count. At the end of the line, **Edit** opens the issue dialog — the same one
@@ -229,6 +229,27 @@ Offers. Details and Checklists are always there.
   checklist — or you have picked its only one on the Checklists card — the card header holds a
   **Checklist** filter that narrows the tree to the set you pick — a parent whose variant matched stays as dimmed context, so a variant never loses the
   number it is read under.
+
+  This is also where the issue's stamps are **added, corrected and removed**, without going back to
+  the Issues list. Every one of these opens the dialog the Issues list opens for it, so nothing
+  here works differently from there:
+  - **Add stamp**, at the foot of the tree, opens the add-stamp form with this issue already chosen;
+    the new stamp joins the top of the tree. An issue with no stamps yet keeps the card, saying so,
+    so this is also how an empty issue gets its first stamp.
+  - Each stamp's `⋮` menu offers **Add child stamp** (the same form, with the stamp set as the parent
+    and its catalog numbers filled in for you to suffix, `309` → `309A`), **Add variant range…**
+    (a whole lettered run at once — see
+    [adding a range of variants](collections.md#adding-a-range-of-variants)), **Edit** (the stamp
+    form, including which of the issue's checklists the stamp is on) and **Delete**. Delete asks
+    exactly what it asks on the Issues list, including what to do with the stamp's variants.
+    *Open stamp page*, *Edit* and *Add variant range…* are also on the row as hover icons.
+  - **Reorder** turns on drag handles so the stamps can be put in
+    [your own order](collections.md#putting-the-stamps-in-your-own-order) — the same order the
+    Issues list's tree shows. It is offered once the issue has more than one stamp.
+
+  Moving a stamp to another issue, or under a different parent, is still done from the Issues list.
+  After each change the whole page catches up at once: the tree, the stamp counts, the Checklists
+  and Completeness cards, the catalog value and the copies.
 - **Copies** — every copy you hold from any stamp in the issue.
 - **Offers** — every offer holding a copy from this issue.
 
