@@ -29,7 +29,7 @@ import type {
   SearchResponse,
 } from "../core/messages";
 import type { MatchResult } from "../core/decisions";
-import { badgeTodo } from "../core/decisions";
+import { badgeTodo, wroteAMatch } from "../core/decisions";
 import {
   callConfirm,
   callMatch,
@@ -185,6 +185,10 @@ async function handle(
       issueDate,
       attributeSync
     );
+    // A real run writes every match it rules `auto` — the window's **Write** button, and the usual
+    // way a handed-over search ends (#1378). It rings exactly as a confirm does: a screen waiting on
+    // the link cannot tell which of the two made it, and must not have to.
+    if (!msg.dryRun && wroteAMatch(results)) void broadcastMatched();
     return { ok: true, results };
   }
 
@@ -724,9 +728,10 @@ async function openMatch(url: string, sourceTab: chrome.tabs.Tab | undefined): P
 
 /**
  * Tell every instance page that a match was written, so a screen showing item-IDs can re-read them
- * instead of waiting to be reloaded by hand. Sent for **every** confirmed match, including those the
- * collector started from the toolbar icon — those have no handoff to answer, and are exactly the
- * case a page-driven signal would miss.
+ * instead of waiting to be reloaded by hand. Sent for **every** match written, whether confirmed one
+ * by one or written in a batch by **Write** (#1378), and including those the collector started from
+ * the toolbar icon — those have no handoff to answer, and are exactly the case a page-driven signal
+ * would miss.
  *
  * Best-effort by design: a tab with no content script (an instance page open since before the
  * profile was registered) simply does not answer, and nothing depends on it having.

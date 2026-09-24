@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { badgeTodo, isAlreadyLinkedElsewhere, type Candidate, type MatchResult } from "./decisions";
+import {
+  badgeTodo,
+  isAlreadyLinkedElsewhere,
+  wroteAMatch,
+  type Candidate,
+  type MatchResult,
+} from "./decisions";
 
 // The filter behind "Show already linked elsewhere" (#305). It decides what disappears from the
 // decision list by default, so the free-candidate case is the one that must never be swallowed.
@@ -102,4 +108,24 @@ test("a page with nothing left says so — an empty count, not a missing one", (
     todo: 0,
     needsConfirm: 0,
   });
+});
+
+// ── When a batch write rings the doorbell (#1378) ────────────────────────────
+// A link written by the window's Write button must reach an open offer exactly as a confirmed one
+// does; only a new Colnect ID on a stamp is a ring.
+
+test("a batch that wrote an auto-match rings", () => {
+  assert.equal(wroteAMatch([auto("333", false, true), auto("222", true, false)]), true);
+});
+
+test("a batch that wrote no Colnect ID stays silent", () => {
+  assert.equal(wroteAMatch([]), false);
+  assert.equal(wroteAMatch([auto("222", false, false), auto("333", false, true)]), false);
+  assert.equal(
+    wroteAMatch([
+      needsConfirm("multiple-candidates", [candidate("s1", null)]),
+      { colnectId: "444", status: "skipped", reason: "no-candidates", refs: [] },
+    ]),
+    false
+  );
 });
