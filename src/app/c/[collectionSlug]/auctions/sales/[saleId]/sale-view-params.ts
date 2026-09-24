@@ -27,6 +27,7 @@
 import { COPY_SORT_KEYS, type CopySortKey } from "@/lib/copy-sort";
 import { LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { isAuctionLotOutcome, type AuctionLotOutcome } from "@/lib/auction-rules";
+import { byLotWithArrival } from "@/app/c/[collectionSlug]/shared/lot-arrival";
 
 /** Everything the toolbar over a sale's lots decides. */
 export interface AuctionSaleView {
@@ -271,4 +272,86 @@ export function auctionSaleViewUrlUpdates(
     if ((urlValue(param) ?? "") !== value) updates[param] = value;
   }
   return Object.keys(updates).length > 0 ? updates : null;
+}
+
+// ── The lot a link asked for (#1356) ────────────────────────────────────────────────────────────
+//
+// A `?lot=` arrival and a remembered view can disagree: the collector clicks a lot that is plainly
+// on the watchlist and lands on a parcel narrowed by a filter he set on an earlier visit, one that
+// hides the very lot he clicked. The band would say the parcel is narrowed; it would not say that
+// **the lot he came for is one of the ones being hidden**, which is the one thing he is looking for
+// at that moment.
+//
+// The answer, settled 2026-09-20, is that **the lot asked for is shown regardless of the narrowing,
+// and everything else stays narrowed**. The remembered view is a setting the collector made on
+// purpose, and a navigation does not switch it off — that would undo what #1353 was asked for. So
+// nothing here writes to the view: the exception is held beside it, by the panel, for as long as
+// the collector stays on the screen, and it is gone after a reload because `?lot=` has been consumed
+// out of the address by then.
+//
+// This is **deliberately not #911's answer** for purchase orders, where an arrival forces the
+// by-lot view. There the lot had no card in the other views at all, so the view had to give way;
+// here the lot has a card and only the narrowing keeps it away, so the narrower fix is available.
+// Where this screen *does* have #911's problem — **Group by → Lot** remembered off, so no lot has a
+// card — it takes #911's answer, through the same `byLotWithArrival` (collector's choice,
+// 2026-09-24).
+
+/**
+ * The lots on screen once the lot asked for is added back: what the filters left, plus that lot in
+ * its own place in the parcel's order, and **which lot, if any, is there only by exception**.
+ *
+ * `exception` is null whenever the filters did not hide the lot — including the common case, a
+ * `?lot=` the remembered view does not narrow out at all, which behaves exactly as it did before
+ * there was an exception to make. It is also null for a lot the parcel does not hold (#1015): that
+ * is a different failure, with no card to pin.
+ */
+export function withAskedForLot<L extends { id: string }>(
+  parcel: readonly L[],
+  shown: readonly L[],
+  askedForLotId: string | null
+): { lots: L[]; exception: L | null } {
+  if (!askedForLotId || shown.some((lot) => lot.id === askedForLotId)) {
+    return { lots: [...shown], exception: null };
+  }
+  const exception = parcel.find((lot) => lot.id === askedForLotId) ?? null;
+  if (!exception) return { lots: [...shown], exception: null };
+  const kept = new Set([...shown.map((lot) => lot.id), exception.id]);
+  return { lots: parcel.filter((lot) => kept.has(lot.id)), exception };
+}
+
+/**
+ * The view the screen draws while an arrival is holding it: the remembered one, with the lots on
+ * screen as cards (#911's rule, `byLotWithArrival`). Everything else — the filters above all — is
+ * the remembered view exactly; the lot asked for gets past the filters by {@link withAskedForLot},
+ * not by any of them being switched off.
+ */
+export function auctionSaleViewOnArrival(
+  view: AuctionSaleView,
+  arrivalHoldsView: boolean
+): AuctionSaleView {
+  const byLot = byLotWithArrival(view.group === "lot", arrivalHoldsView);
+  return byLot && view.group !== "lot" ? { ...view, group: "lot" } : view;
+}
+
+/**
+ * One press on the toolbar while an arrival may be holding the view: the patch to write, and
+ * whether the hold ends with it.
+ *
+ * **Touching *Group by* ends the hold** — #911's rule: the chip the collector presses is the choice
+ * he meant, and it is that choice that is remembered. And one press needs the lot view to be *his*:
+ * *Not described* is a filter over lots and is only in force while the remembered grouping is by
+ * lot (the note at the top of this file), so pressing it on a lot view the arrival is only borrowing
+ * would do nothing at all. It takes the grouping with it instead, which is what the collector is
+ * looking at when he presses it.
+ */
+export function auctionSaleViewPatchOnArrival(
+  patch: Partial<AuctionSaleView>,
+  view: AuctionSaleView,
+  arrivalHoldsView: boolean
+): { patch: Partial<AuctionSaleView>; endsHold: boolean } {
+  if ("group" in patch) return { patch, endsHold: true };
+  if (arrivalHoldsView && view.group === "none" && patch.notDescribed) {
+    return { patch: { ...patch, group: "lot" }, endsHold: true };
+  }
+  return { patch, endsHold: false };
 }

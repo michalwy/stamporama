@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -27,6 +27,12 @@ import { SaleStatusChip } from "../../auction-badges";
 import { SIGNALS } from "../../auction-controls";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { useAuctionSaleView } from "./use-auction-sale-view";
+import {
+  auctionSaleViewOnArrival,
+  auctionSaleViewPatchOnArrival,
+  type AuctionSaleView,
+} from "./sale-view-params";
+import { arrivalLotId } from "@/app/c/[collectionSlug]/shared/lot-arrival";
 import { formatBase, formatDay } from "../../auction-format";
 import { Icon } from "@/app/icons";
 
@@ -102,9 +108,29 @@ export function AuctionSaleDetailPanel({
   const pathname = usePathname();
   const router = useRouter();
   // Read once, on the render the screen opens on: the param is about to be taken out of the URL,
-  // and the flash must outlive that.
-  const [arrivedLotId, setArrivedLotId] = useState<string | null>(() => searchParams.get("lot"));
+  // and both the flash and the exception below must outlive that.
+  const [requestedLotId] = useState<string | null>(() => searchParams.get("lot"));
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
+  const { data: sale, isLoading } = useAuctionSaleDetail(collectionId, saleId);
+  const lotIds = useMemo(() => sale?.lots.map((l) => l.id) ?? [], [sale]);
+  // Only a lot **this sale holds** is an arrival (#1015) — the purchase order's rule (#911),
+  // through the same helper. A param naming anything else has nothing to point at, so it resolves
+  // to null and everything below, the consumption included, is conditional on that. The parcel is
+  // fetched in the browser, so until it has loaded nothing resolves at all.
+  const askedForLotId = arrivalLotId(requestedLotId, lotIds);
+  // The flash is over after a couple of seconds; the lot having been asked for is not (#1356).
+  const [flashDone, setFlashDone] = useState(false);
+  const arrivedLotId = flashDone ? null : askedForLotId;
+  // **An arrival shows its lot as a card** (#911's rule, taken here 2026-09-24): with *Group by →
+  // Lot* remembered off there is no card to scroll to or flash, so the lot view is borrowed for
+  // the visit. Never written to the remembered view, and ended by the collector's own press on
+  // *Group by* — see `auctionSaleViewPatchOnArrival`.
+  const [arrivalHolds, setArrivalHolds] = useState(true);
+  const arrivalHoldsView = arrivalHolds && askedForLotId !== null;
+  // Whether the address mirror should wait for the param to be consumed: while the parcel is still
+  // loading nobody knows yet, and once it has loaded only a param it answers is going anywhere.
+  const lotParam = searchParams.get("lot");
+  const arrivalPending = Boolean(lotParam) && (!sale || arrivalLotId(lotParam, lotIds) !== null);
   // **The whole toolbar over the lots, in the address and remembered across sales** (#1353) — the
   // status chips here, and grouping / *Only* / sort down in the cards view, all off one value.
   //
@@ -118,40 +144,51 @@ export function AuctionSaleDetailPanel({
   //
   // The derived states are computed here rather than fetched: the sale's lots are already in hand,
   // and the rules are pure.
-  const { view, setView, clearFilters } = useAuctionSaleView(
-    collectionId,
-    `/c/${collectionSlug}/auctions/sales/${saleId}`
+  const {
+    view: rememberedView,
+    setView: setRememberedView,
+    clearFilters,
+  } = useAuctionSaleView(collectionId, `/c/${collectionSlug}/auctions/sales/${saleId}`, arrivalPending);
+  const view = auctionSaleViewOnArrival(rememberedView, arrivalHoldsView);
+  const setView = useCallback(
+    (patch: Partial<AuctionSaleView>) => {
+      const next = auctionSaleViewPatchOnArrival(patch, rememberedView, arrivalHoldsView);
+      if (next.endsHold) setArrivalHolds(false);
+      setRememberedView(next.patch);
+    },
+    [rememberedView, arrivalHoldsView, setRememberedView]
   );
   const { signal, outcome } = view;
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateAuctions();
-  const { data: sale, isLoading } = useAuctionSaleDetail(collectionId, saleId);
 
-  // Take the param out of the address bar as soon as it has been read. A reload is then an
-  // ordinary sale screen — the provenance is spent, and re-flashing it minutes later would be
-  // telling the collector something that stopped being true the moment they arrived. That one
-  // param only, so anything else in the URL survives; `replace`, since undoing an arrival is not a
-  // step anyone walks back through; and `scroll: false`, or the navigation would jump the window
-  // to the top against the card scrolling itself into view.
+  // Take the param out of the address bar once it has been answered. A reload is then an ordinary
+  // sale screen — the provenance is spent, and re-flashing it minutes later would be telling the
+  // collector something that stopped being true the moment they arrived. That one param only, so
+  // anything else in the URL survives; `replace`, since undoing an arrival is not a step anyone
+  // walks back through; and `scroll: false`, or the navigation would jump the window to the top
+  // against the card scrolling itself into view.
   useEffect(() => {
-    if (!searchParams.get("lot")) return;
+    // Read back through the same rule the latch resolves with (#1015): the param is consumed
+    // **because** it was answered, and a `?lot=` naming no lot of this sale is answered by nothing
+    // — it stays in the address rather than being tidied away over a screen that did not react.
+    if (!arrivalLotId(searchParams.get("lot"), lotIds)) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete("lot");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [searchParams, pathname, router]);
+  }, [searchParams, lotIds, pathname, router]);
 
   // And release the mark once the flash is over, so a card that remounts later — the grouping
-  // toggled, a filter changed — does not replay an arrival from ten minutes ago. Gated on the
-  // parcel having loaded, because the cards mount with it and a timer started against the
+  // toggled, a filter changed — does not replay an arrival from ten minutes ago. Only resolved
+  // once the parcel has loaded, because the cards mount with it and a timer started against the
   // "Loading sale…" line would expire before anything was on screen.
-  const saleLoaded = Boolean(sale);
   useEffect(() => {
-    if (!arrivedLotId || !saleLoaded) return;
-    const timer = setTimeout(() => setArrivedLotId(null), ARRIVAL_FLASH_MS);
+    if (!arrivedLotId) return;
+    const timer = setTimeout(() => setFlashDone(true), ARRIVAL_FLASH_MS);
     return () => clearTimeout(timer);
-  }, [arrivedLotId, saleLoaded]);
+  }, [arrivedLotId]);
 
   function runLotAction(
     action: () => Promise<{ status: "success" } | { status: "error"; message: string }>
@@ -539,7 +576,8 @@ export function AuctionSaleDetailPanel({
           collectionId={collectionId}
           collectionSlug={collectionSlug}
           lots={visibleLots}
-          totalLotCount={sale.lots.length}
+          parcelLots={sale.lots}
+          askedForLotId={askedForLotId}
           view={view}
           onSetView={setView}
           onClearFilters={clearFilters}

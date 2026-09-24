@@ -116,7 +116,7 @@ import {
   usePersistentToggle,
   usePersistentString,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
-import { arrivalLotId, byLotWithArrival } from "./lot-arrival";
+import { arrivalLotId, byLotWithArrival } from "@/app/c/[collectionSlug]/shared/lot-arrival";
 import {
   usePurchaseCollapsedGroups,
   usePurchaseDispositionFilter,
@@ -339,8 +339,8 @@ export function PurchaseDetailPanel({
   const pathname = usePathname();
   // Only a lot **this order holds** is an arrival (#911). A param naming anything else has nothing
   // to point at, so it resolves to null — and everything below, the consumption included, is
-  // conditional on that. See `lot-arrival.ts` for why a param that pointed at nothing stays in the
-  // address bar rather than being tidied away over a screen that did not react.
+  // conditional on that. See `shared/lot-arrival.ts` for why a param that pointed at nothing stays
+  // in the address bar rather than being tidied away over a screen that did not react.
   const requestedLotId = searchParams.get("lot");
   const lotIds = useMemo(() => purchase.lots.map((l) => l.id), [purchase.lots]);
   // Read once, on the render the screen opens on: the param is about to be taken out of the URL,

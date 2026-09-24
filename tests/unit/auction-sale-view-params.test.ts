@@ -6,9 +6,12 @@ import {
   auctionSaleViewClearUpdates,
   auctionSaleViewNarrowings,
   auctionSaleViewNarrowsLots,
+  auctionSaleViewOnArrival,
+  auctionSaleViewPatchOnArrival,
   auctionSaleViewUpdatesFor,
   auctionSaleViewUrlUpdates,
   resolveAuctionSaleView,
+  withAskedForLot,
   type AuctionSaleView,
 } from "../../src/app/c/[collectionSlug]/auctions/sales/[saleId]/sale-view-params";
 
@@ -194,4 +197,134 @@ describe("auction sale view params (#1353)", () => {
       );
     });
   });
+});
+
+/**
+ * The lot a `?lot=` link asked for, against a remembered view (#1356).
+ *
+ * The regression: a lot clicked on the watchlist landed on a parcel narrowed by a filter set on an
+ * earlier visit — one that hid the very lot clicked — and nothing scrolled, nothing flashed. The
+ * answer is that the lot is shown whatever the filters say and everything else stays narrowed, and
+ * the half of it that is a rule rather than a render is here. What no test here can see is how long
+ * the exception lives — until the collector leaves the screen — which is component state in the
+ * panel, and its comments carry that.
+ */
+describe("the lot asked for (#1356)", () => {
+  const a = { id: "a" };
+  const b = { id: "b" };
+  const c = { id: "c" };
+  const d = { id: "d" };
+  const parcel = [a, b, c, d];
+
+  describe("which lots are on screen", () => {
+    it("adds the lot back when the filters hid it, in its own place in the parcel", () => {
+      const { lots, exception } = withAskedForLot(parcel, [a, d], "b");
+      assert.deepEqual(
+        lots.map((l) => l.id),
+        ["a", "b", "d"]
+      );
+      assert.equal(exception, b);
+    });
+
+    it("keeps everything else narrowed", () => {
+      // Only the one lot gets past; `c` is hidden by the same filter and stays hidden.
+      const { lots } = withAskedForLot(parcel, [a], "b");
+      assert.deepEqual(
+        lots.map((l) => l.id),
+        ["a", "b"]
+      );
+    });
+
+    it("makes no exception when the filters did not hide the lot", () => {
+      // The Done-when's last case: a `?lot=` the remembered view does not narrow out behaves
+      // exactly as it did — no clause in the band, nothing new on the screen.
+      const { lots, exception } = withAskedForLot(parcel, [a, b], "b");
+      assert.deepEqual(
+        lots.map((l) => l.id),
+        ["a", "b"]
+      );
+      assert.equal(exception, null);
+    });
+
+    it("shows the lot even when the filters leave nothing else", () => {
+      const { lots, exception } = withAskedForLot(parcel, [], "c");
+      assert.deepEqual(
+        lots.map((l) => l.id),
+        ["c"]
+      );
+      assert.equal(exception, c);
+    });
+
+    it("changes nothing without a lot asked for", () => {
+      const { lots, exception } = withAskedForLot(parcel, [a], null);
+      assert.deepEqual(
+        lots.map((l) => l.id),
+        ["a"]
+      );
+      assert.equal(exception, null);
+    });
+
+    it("makes no exception for a lot the parcel does not hold (#1015)", () => {
+      // A different failure: there is no card to pin, and the panel leaves the param in the address.
+      const { lots, exception } = withAskedForLot(parcel, [a], "z");
+      assert.deepEqual(
+        lots.map((l) => l.id),
+        ["a"]
+      );
+      assert.equal(exception, null);
+    });
+  });
+
+  describe("the grouping while an arrival holds the view", () => {
+    const flat: AuctionSaleView = { ...AUCTION_SALE_VIEW_DEFAULTS, group: "none", outcome: "won" };
+
+    it("draws the lots as cards when the remembered grouping is flat", () => {
+      // #911's answer, taken where this screen has #911's problem: flat, no lot has a card.
+      assert.equal(auctionSaleViewOnArrival(flat, true).group, "lot");
+    });
+
+    it("borrows the grouping only — the filters stay as remembered", () => {
+      assert.deepEqual(auctionSaleViewOnArrival(flat, true), { ...flat, group: "lot" });
+    });
+
+    it("changes nothing without a hold, or when the grouping is already by lot", () => {
+      assert.equal(auctionSaleViewOnArrival(flat, false), flat);
+      const byLot = { ...flat, group: "lot" as const };
+      assert.equal(auctionSaleViewOnArrival(byLot, true), byLot);
+    });
+
+    it("ends the hold on the collector's own press on Group by, and writes only that press", () => {
+      const { patch, endsHold } = auctionSaleViewPatchOnArrival({ group: "none" }, flat, true);
+      assert.deepEqual(patch, { group: "none" });
+      assert.equal(endsHold, true);
+    });
+
+    it("leaves the hold alone for any other press", () => {
+      const { patch, endsHold } = auctionSaleViewPatchOnArrival({ outcome: "lost" }, flat, true);
+      assert.deepEqual(patch, { outcome: "lost" });
+      assert.equal(endsHold, false);
+    });
+
+    it("makes the lot view the collector's when he presses Not described on a borrowed one", () => {
+      // Otherwise the press would write a filter the flat remembered grouping cannot hold, and the
+      // chip would do nothing at all.
+      const { patch, endsHold } = auctionSaleViewPatchOnArrival({ notDescribed: true }, flat, true);
+      assert.deepEqual(patch, { notDescribed: true, group: "lot" });
+      assert.equal(endsHold, true);
+      assert.equal(resolveAuctionSaleView(reader(auctionSaleViewUpdatesFor(patch))).notDescribed, true);
+    });
+
+    it("does not touch Not described when nothing is borrowed", () => {
+      const byLot = { ...flat, group: "lot" as const };
+      assert.deepEqual(auctionSaleViewPatchOnArrival({ notDescribed: true }, byLot, false), {
+        patch: { notDescribed: true },
+        endsHold: false,
+      });
+    });
+  });
+
+  /** A reader over a plain object, standing in for `usePersistedFilterParams`' own. */
+  function reader(params: Record<string, string>) {
+    return (key: string) => params[key] ?? null;
+  }
 });

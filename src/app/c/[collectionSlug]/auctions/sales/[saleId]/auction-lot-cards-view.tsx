@@ -24,6 +24,7 @@ import { SIGNALS } from "../../auction-controls";
 import {
   auctionSaleViewNarrowings,
   auctionSaleViewNarrowsLots,
+  withAskedForLot,
   type AuctionSaleNarrowing,
   type AuctionSaleView,
 } from "./sale-view-params";
@@ -536,8 +537,12 @@ interface AuctionLotCardsViewProps {
    * which is this toolbar's own filter and is applied here so its chip can still count what it
    * would hide. */
   lots: AuctionLotDetailView[];
-  /** Every lot in the parcel, for the band's *Showing N of M*. */
-  totalLotCount: number;
+  /** Every lot in the parcel, for the band's *Showing N of M* and for the lot asked for's place. */
+  parcelLots: AuctionLotDetailView[];
+  /** The lot a `?lot=` link asked for, for as long as the collector stays on the screen — shown
+   * whatever the filters say (#1356). Null when the sale was opened on its own, or the link named a
+   * lot this sale does not hold (#1015). */
+  askedForLotId: string | null;
   /** The whole toolbar's state, owned by the panel so it can live in the address (#1353). */
   view: AuctionSaleView;
   onSetView: (patch: Partial<AuctionSaleView>) => void;
@@ -572,7 +577,8 @@ export function AuctionLotCardsView({
   collectionId,
   collectionSlug,
   lots,
-  totalLotCount,
+  parcelLots,
+  askedForLotId,
   view,
   onSetView,
   onClearFilters,
@@ -595,35 +601,41 @@ export function AuctionLotCardsView({
   // Lots are collapsed by default (#382): a sale is read as "what is in this parcel", and a
   // lot's own composition is a second question. The two exceptions the hook covers are the lot
   // this screen was navigated to (#374's `?lot=`) and a lot added while it is open.
-  const expansion = useCardExpansion(
-    lots.map((l) => l.id),
-    arrivedLotId
-  );
-
   const {
     unpriced: onlyUnpriced,
     noPhoto: onlyNoPhoto,
     unknownVariant: onlyUnknownVariant,
     notDescribed: onlyNotDescribed,
   } = view;
+  // *Not described* is the one filter here that hides a whole **lot** (#1353) — a lot with nothing
+  // recorded in its composition (#353), which is the worklist of what is left to describe.
+  const filteredLots = onlyNotDescribed ? lots.filter((lot) => lot.lines.length === 0) : lots;
+  // **The lot a link asked for is on screen whatever the filters say** (#1356), in its own place in
+  // the parcel, and everything else stays narrowed. `exception` is that lot only where the filters
+  // would have hidden it — the band names it, and the band's figure stays the filters' own.
+  const { lots: shownLots, exception } = withAskedForLot(parcelLots, filteredLots, askedForLotId);
+
+  const expansion = useCardExpansion(
+    shownLots.map((l) => l.id),
+    arrivedLotId
+  );
   const lineFilterActive = onlyUnpriced || onlyNoPhoto || onlyUnknownVariant;
   const matches = (line: AuctionLotLineItem) =>
     (!onlyUnpriced || line.unpriced) &&
     (!onlyNoPhoto || line.photos.length === 0) &&
     (!onlyUnknownVariant || line.unknownVariant);
 
-  // The three counts are taken over the parcel as the chips above left it and **not** over each
-  // other, so a chip always says how many it would show rather than how many survive the filters
-  // already on — the flat watchlist's facets read the same way.
-  const allLines = useMemo(() => lots.flatMap((lot) => lot.lines), [lots]);
+  // The three counts are taken over the lots on screen and **not** over each other, so a chip
+  // always says how many it would show rather than how many survive the filters already on — the
+  // flat watchlist's facets read the same way. The lot asked for is among them (#1356): a line
+  // filter narrows every card on screen, that one's included.
+  const allLines = useMemo(() => shownLots.flatMap((lot) => lot.lines), [shownLots]);
   const unpricedCount = allLines.filter((l) => l.unpriced).length;
   const noPhotoCount = allLines.filter((l) => l.photos.length === 0).length;
   const unknownVariantCount = allLines.filter((l) => l.unknownVariant).length;
-  // *Not described* is the one filter here that hides a whole **lot** (#1353) — a lot with nothing
-  // recorded in its composition (#353), which is the worklist of what is left to describe. Counted
-  // before it is applied, for the same reason as the three above.
+  // Counted before *not described* is applied, for the same reason as the three above, and over
+  // the filters' own lots — it is a count of lots, like the band's.
   const notDescribedCount = lots.filter((lot) => lot.lines.length === 0).length;
-  const shownLots = onlyNotDescribed ? lots.filter((lot) => lot.lines.length === 0) : lots;
 
   // What is narrowing the parcel right now, decided by the pure rule in `sale-view-params.ts` so
   // that a control added to this toolbar cannot slip past the band without somebody having said
@@ -826,13 +838,22 @@ export function AuctionLotCardsView({
                 figure about the one unit they did not touch. */}
             {auctionSaleViewNarrowsLots(view) ? (
               <>
-                Showing <strong>{shownLots.length}</strong> of {totalLotCount} lot
-                {totalLotCount === 1 ? "" : "s"} —{" "}
+                Showing <strong>{filteredLots.length}</strong> of {parcelLots.length} lot
+                {parcelLots.length === 1 ? "" : "s"} —{" "}
               </>
             ) : (
               <>This view is narrowed — </>
             )}
             {narrowings.map(narrowingLabel).join(" · ")}
+            {/* The lot a link asked for, named beside the figure rather than counted into it
+                (#1356): counted in, clearing the filters would move the figure in a direction the
+                collector does not expect. */}
+            {exception && (
+              <>
+                {" "}
+                — plus the lot you opened, which the filters would hide
+              </>
+            )}
           </span>
           <button
             type="button"

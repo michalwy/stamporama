@@ -219,6 +219,26 @@ instead — the figures stay editable in place, the chips and the ⋮ menu
 keep their own behaviour — and selecting text on the row does not navigate. Hold ⌘ or Ctrl to open
 the sale in a new tab.
 
+**The lot you clicked is always on the screen**, even when the sale's screen comes back narrowed
+by filters you set on an earlier visit that would hide it (see
+[the parcel screen](#the-parcel-screen) below). Your filters stay exactly as you left
+them — the rest of the parcel is still narrowed — and only the lot you came for is let through, for
+as long as you stay on the screen; changing the filters, the grouping or the sort does not take it
+away, and a reload does. The line under the toolbar keeps the filters' own count and says so beside
+it:
+
+> Showing **3** of 12 lots — Won — plus the lot you opened, which the filters would hide
+
+If the screen was left with **Group by → Lot** switched off, there would be no card to bring into
+view, so arriving from a lot shows the lots as cards for that visit. That is not saved: press
+**Group by → Lot** yourself and your own choice takes over, and the next time you open a sale it
+comes back the way you left it.
+
+The same holds for every link that names a lot — from the watchlist, the market-value sections,
+a duplicate warning, the quick jump. **A link naming a lot the sale no longer holds** — deleted, or
+moved — opens the sale as it is and leaves the lot in the address bar, so you can see that the link
+asked for something that is not there rather than a page that quietly tidied itself.
+
 ### Bidding to your ceiling
 
 **Bid my ceiling** in the row's ⋮ menu records the largest bid that still fits inside your ceiling —
@@ -788,6 +808,10 @@ that one off, and **Clear filters** puts the whole parcel back in one press. The
 only when something is actually hiding lots; with just the line filters on, every lot is still there
 and the line reads *This view is narrowed* instead. **Group by**, **Issue** and **Sort lines** are
 never named and never cleared — they are how the parcel is arranged, not which of it you can see.
+
+A lot you arrived at from a link is the one exception to the filters: it stays on screen while you
+are there, and the line names it rather than counting it — see
+[the lots screen](#the-lots-screen) above.
 
 ## Settling a parcel into a purchase
 
