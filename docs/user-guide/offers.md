@@ -256,10 +256,21 @@ band's **Expand all** to open them. A set you add while the screen is open opens
 Group by **Set** or **Location**, optionally sub-group
 by **Issue**, and **sort** the copies — handy for pulling pieces off the shelf as you list them.
 Each copy row has a quick **+ catalog value** link (click the value to edit it) so you can fill in
-missing catalog prices without leaving the offer — which also feeds the suggested price. Hovering a
-row also shows two small icons: one opens that **copy's own page**, the other opens the **stamp
-editor** for the stamp behind it, for when the listing text you are writing turns up a wrong catalog
-number or a missing name. The copy itself is still edited from the Copies list — these rows read. The
+missing catalog prices without leaving the offer — which also feeds the suggested price. Each row's
+**⋮** menu gathers what you reach for next while writing the listing:
+
+- **Open copy page**, **Open stamp page** and **Open issue page** — real links, so Cmd/Ctrl-click or
+  the middle button opens them in a new tab and the offer stays where it is. A piece carrying
+  several stamps lists **Open stamp page** once per stamp, each named by its catalogue number; a
+  stamp filed in more than one issue lists **Open issue page** once per issue, each named. A stamp
+  filed in no issue keeps the entry greyed out, saying so.
+- **Edit copy** — the same copy editor the Copies list and the copy's own page open (condition,
+  certificate, format, photos…), and saving it does to this offer exactly what it would from there;
+  the rows and the generated texts re-read afterwards.
+- **Edit stamp** — the stamp editor, for when the listing text turns up a wrong catalog number or a
+  missing name.
+
+Hovering a row keeps two of these as small icons: the copy's page and **Edit stamp**. The
 **Only** filters — **Unpriced**, **No photo**, and **Unknown variant** — narrow the view to copies
 that still need a catalog value, a photo, or their variant identified, so you can clear them before
 listing.

@@ -1522,6 +1522,15 @@ export interface CarriedStamp {
   catalogNumbers: { catalogVendorId: string; number: string }[];
   areaId: string | null;
   issueId: string | null;
+  /** Every issue this stamp is filed in, `issueId`'s first — see {@link ItemListItem.issues}. */
+  issues: ItemIssueRef[];
+}
+
+/** One issue a copy's stamp is filed in, as a row menu names it (#1382). */
+export interface ItemIssueRef {
+  id: string;
+  name: string | null;
+  year: number | null;
 }
 
 export interface ItemListItem {
@@ -1554,6 +1563,12 @@ export interface ItemListItem {
   issueId: string | null;
   issueName: string | null;
   issueYear: number | null;
+  /** **Every** issue the copy's stamp is filed in (#1382), in the order `issueId` is picked from, so
+   *  the first entry is always the issue above. Membership is many-to-many, and the fields above
+   *  report one issue because a row is *listed under* one; a menu that opens an issue's page offers
+   *  each of them instead of silently choosing. Empty for a stamp filed in no issue, and for a
+   *  multi-stamp copy read `carriedStamps[].issues` instead. */
+  issues: ItemIssueRef[];
   /** The open wants recorded for this copy's stamp (#532), or null for none. Holding a copy does
    *  not close a want, so this is also the upgrade signal: *you have one, and are still after a
    *  better one*. */
@@ -1763,7 +1778,12 @@ const ITEM_LIST_SELECT = {
           name: true,
           catalogNumbers: { select: { catalogVendorId: true, number: true } },
           stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
-          issueMemberships: { ...FIRST_ISSUE_MEMBERSHIP, select: { issueId: true } },
+          // Every membership rather than the first (#1382), for the row menu's issue entries; the
+          // first is still the one `issueId` reports.
+          issueMemberships: {
+            orderBy: FIRST_ISSUE_MEMBERSHIP.orderBy,
+            select: { issue: { select: { id: true, name: true, year: true } } },
+          },
         },
       },
     },
@@ -1781,8 +1801,11 @@ const ITEM_LIST_SELECT = {
       variants: { select: VARIANT_FLAG_SELECT },
       // The copy's own stamp's subtype, for the row's chip (#340).
       subtype: { select: { name: true, isDefault: true } },
+      // Every membership rather than the first (#1382): the row is still listed under the first, and
+      // the rest are what the row menu offers beside it. A stamp is filed in one issue far more
+      // often than in two, so this is the same one narrow row almost always.
       issueMemberships: {
-        ...FIRST_ISSUE_MEMBERSHIP,
+        orderBy: FIRST_ISSUE_MEMBERSHIP.orderBy,
         select: { issue: { select: { id: true, name: true, year: true } } },
       },
     },
@@ -1854,6 +1877,7 @@ function toItemListItem(
     issueId: firstIssue?.id ?? null,
     issueName: firstIssue?.name ?? null,
     issueYear: firstIssue?.year ?? null,
+    issues: row.stamp.issueMemberships.map((m) => m.issue),
     wants,
     conditionId: row.condition.id,
     conditionName: row.condition.name,
@@ -1919,7 +1943,8 @@ function carriedStampOf(entry: ItemListRow["stamps"][number]): CarriedStamp {
     formatAbbreviation: entry.format?.abbreviation ?? null,
     catalogNumbers: entry.stamp.catalogNumbers,
     areaId: (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null,
-    issueId: entry.stamp.issueMemberships[0]?.issueId ?? null,
+    issueId: entry.stamp.issueMemberships[0]?.issue.id ?? null,
+    issues: entry.stamp.issueMemberships.map((m) => m.issue),
   };
 }
 
