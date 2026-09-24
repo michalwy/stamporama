@@ -182,3 +182,14 @@ export function badgeTodo(results: MatchResult[]): { todo: number; needsConfirm:
   ).length;
   return { todo: needsConfirm + pendingAuto, needsConfirm };
 }
+
+/**
+ * Whether a matcher run wrote a Colnect ID onto any stamp — the question the doorbell (#1378) rings
+ * on. A batch write from the window's **Write** button is how most links are made: the search a page
+ * hands over (#423) is one catalog number, which the matcher usually settles on its own, so the
+ * confirm path is the exception rather than the rule. Ringing only there is why an offer picked up
+ * a link *sometimes*. `alreadySet` is no write, and a dry run writes nothing by definition.
+ */
+export function wroteAMatch(results: MatchResult[]): boolean {
+  return results.some((r) => r.status === "auto" && r.written);
+}

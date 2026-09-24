@@ -1074,15 +1074,17 @@ for you:
   variant's own line and matches **that variant**, never the base stamp — matching the base stamp
   would be claiming it *is* that variant, which is the one thing you don't know about it.
 - **⚡ Link all (N)** in the card's heading — the same thing for every unmatched stamp in the offer,
-  one after another: as each match is confirmed, the next stamp's search opens by itself. **Stop
+  one after another: as each match is written, the next stamp's search opens by itself. **Stop
   linking** ends the walk; whatever was matched along the way is kept. Each stamp is offered once,
   so a row you deliberately leave unmatched does not come back round.
 
 The offer screen **updates itself** when a match is written — a stamp that was showing Search now
-shows its Catalog and Market links, with nothing reloaded by hand. That works however the match was
-made, including matching a Colnect page from the toolbar icon while the offer sits in another tab.
-And returning to the offer's tab re-reads it in any case, which covers a browser with no Assistant at
-all.
+shows its Catalog and Market links, the heading's *not matched* count drops, with nothing reloaded by
+hand. That works however the match was made — a candidate you confirmed, or an automatic match written
+with the window's **Write** button — including matching a Colnect page from the toolbar icon while
+the offer sits in another tab. And returning to the offer's tab re-reads it in any case, which covers
+a browser with no Assistant at all. A link the Assistant could not write says so in its own window,
+which is the one in front of you at the time.
 
 Without the extension neither button appears — Search is still there, and the rest of the job is
 manual, exactly as before.
