@@ -41,7 +41,7 @@ const buttonStyle: CSSProperties = {
 
 /** The promoted subset of a row's actions, in the order named. A key the row does not offer is
  * skipped silently — a promotable action is often conditional. */
-export function pickRowActions(actions: RowAction[], keys: string[]): RowAction[] {
+export function pickRowActions(actions: RowAction[], keys: readonly string[]): RowAction[] {
   return keys
     .map((key) => actions.find((a) => a.key === key))
     .filter((a): a is RowAction => a != null);

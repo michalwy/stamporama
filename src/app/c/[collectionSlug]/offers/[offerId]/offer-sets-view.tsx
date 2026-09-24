@@ -2,9 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import type { ItemListItem } from "@/lib/items";
+import type { ItemIssueRef, ItemListItem } from "@/lib/items";
+import { formatCatalogNumber } from "@/lib/catalog-number";
 import type { IssueHeader } from "@/lib/issues";
 import type { OfferDetailSet, OfferSetsTotals } from "@/lib/offers";
 import { formatEntityNo } from "@/lib/quick-jump";
@@ -18,6 +20,9 @@ import { sortCopies, COPY_SORT_KEYS, COPY_SORT_LABELS } from "@/app/c/[collectio
 import { useHydrated, usePersistentToggle, usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
+import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
 import {
   useReorderList,
@@ -28,7 +33,10 @@ import {
   type DragList,
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { useInvalidateOffers } from "../use-offers-query";
-import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import {
+  useCollectionCertificateStatuses,
+  useInvalidateInventory,
+} from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon, type IconName } from "@/app/icons";
 
@@ -138,9 +146,96 @@ interface CopyCtx {
   areaNameById: Map<string, string>;
   /** Opens the quick catalog-value editor for a copy (the "+ catalog value" link). */
   onSetPrice?: (item: ItemListItem) => void;
-  /** Opens the shared stamp editor for the stamp behind a copy (#676) — promoted onto the row even
-   *  though these rows are read-only, the stamp being a record this screen never owned. */
-  onEditStamp?: (item: ItemListItem) => void;
+  /** Opens the shared stamp editor for the stamp behind a copy (#676). */
+  onEditStamp: (item: ItemListItem) => void;
+  /** Opens the copy's own edit dialog — the one every other screen edits a copy with (#1382). */
+  onEditCopy: (item: ItemListItem) => void;
+}
+
+/** What a copy row keeps as icons: the two it has carried since #676. The menu beside them is
+ *  wider, but promoting *Edit copy* too would put a third icon on a row this screen reads far more
+ *  often than it edits. */
+const COPY_ROW_PROMOTED = ["detail-page", "edit-stamp"] as const;
+
+function issueLabel(issue: ItemIssueRef): string {
+  const name = issue.name || "Untitled issue";
+  return issue.year ? `${name} (${issue.year})` : name;
+}
+
+/**
+ * The copy row's `⋮` menu on an offer's sets (#1382): the copy's page, its stamp's page, its issue's
+ * page, and the two editors. The pages are **links** (`href`, #557), so the offer stays open in its
+ * own tab while something is looked up.
+ *
+ * Where the row stands for more than one record, the menu names each rather than picking one: a
+ * multi-stamp copy (#744) offers every stamp it carries, named by catalogue number, and a stamp
+ * filed in several issues offers every issue. A copy whose stamp is filed in no issue keeps the
+ * entry, disabled with the reason (#273).
+ */
+function useCopyRowActions(item: ItemListItem, ctx: CopyCtx): RowAction[] {
+  const { collectionSlug } = useParams<{ collectionSlug: string }>();
+  const copyPage = useDetailPageAction("copy", item.id);
+  const base = `/c/${collectionSlug}`;
+
+  // One entry per distinct stamp: a carrier may hold the same stamp twice (a single and a block).
+  const stamps = item.multiStamp
+    ? item.carriedStamps.filter((e, i, all) => all.findIndex((o) => o.stampId === e.stampId) === i)
+    : [];
+  const stampActions: RowAction[] = item.multiStamp
+    ? stamps.map((entry) => {
+        const primaryVendorId = entry.areaId ? ctx.primaryVendorByArea.get(entry.areaId) : undefined;
+        const number =
+          entry.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ??
+          entry.catalogNumbers[0] ??
+          null;
+        const vendor = number
+          ? ctx.vendorMapFor(entry.areaId, entry.issueId).get(number.catalogVendorId)
+          : undefined;
+        const name = number
+          ? vendor
+            ? formatCatalogNumber(vendor.vendorAbbreviation, vendor.prefix, number.number)
+            : number.number
+          : (entry.stampName ?? "Unnamed stamp");
+        return {
+          key: `stamp-page:${entry.stampId}`,
+          label: "Open stamp page",
+          icon: "stamps",
+          hint: name,
+          href: `${base}/stamps/${entry.stampId}`,
+        };
+      })
+    : [{ key: "stamp-page", label: "Open stamp page", icon: "stamps", href: `${base}/stamps/${item.stampId}` }];
+
+  // Every issue the row's stamps are filed in, in the order the row reports them, each once.
+  const issues = (item.multiStamp ? stamps.flatMap((e) => e.issues) : item.issues).filter(
+    (issue, i, all) => all.findIndex((o) => o.id === issue.id) === i
+  );
+  const issueActions: RowAction[] =
+    issues.length > 0
+      ? issues.map((issue) => ({
+          key: `issue-page:${issue.id}`,
+          label: "Open issue page",
+          icon: "issues",
+          hint: issueLabel(issue),
+          href: `${base}/issues/${issue.id}`,
+        }))
+      : [{
+          key: "issue-page",
+          label: "Open issue page",
+          icon: "issues",
+          disabled: true,
+          hint: item.multiStamp
+            ? "None of the stamps on this piece is filed in an issue."
+            : "This stamp is not filed in any issue.",
+        }];
+
+  return [
+    copyPage,
+    ...stampActions,
+    ...issueActions,
+    { key: "edit", label: "Edit copy", icon: "edit", separatorBefore: true, onSelect: () => ctx.onEditCopy(item) },
+    { key: "edit-stamp", label: "Edit stamp", icon: "stamp", onSelect: () => ctx.onEditStamp(item) },
+  ];
 }
 
 interface CopyGroup {
@@ -214,6 +309,7 @@ function CopyRow({
   const areaId = item.areaId;
   const primaryVendorId = areaId ? (ctx.primaryVendorByArea.get(areaId) ?? null) : null;
   const vendorMap = ctx.vendorMapFor(areaId, item.issueId);
+  const actions = useCopyRowActions(item, ctx);
   const row = (
     <InventoryItemRow
       collectionId={ctx.collectionId}
@@ -224,10 +320,10 @@ function CopyRow({
       primaryVendorId={primaryVendorId}
       vendorMap={vendorMap}
       isLast={isLast}
-      readOnly
+      actionsOverride={actions}
+      promote={COPY_ROW_PROMOTED}
       showCostBasis
       onSetCatalogPrice={ctx.onSetPrice ? () => ctx.onSetPrice!(item) : undefined}
-      onEditStamp={ctx.onEditStamp}
     />
   );
   if (!drag) return row;
@@ -911,6 +1007,11 @@ export function OfferSetsView({
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const [quickPriceItem, setQuickPriceItem] = useState<ItemListItem | null>(null);
   const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
+  const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
+  // The copy form's dictionaries, fetched here as the copy's own screen fetches them (#673): cached
+  // per collection and shared with every screen that opens the same dialog.
+  const { data: conditions = [] } = useCollectionConditions(collectionId);
+  const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
   const [isPending, startTransition] = useTransition();
   const [copyError, setCopyError] = useState<string | undefined>();
 
@@ -931,6 +1032,10 @@ export function OfferSetsView({
     onEditStamp: (item) => {
       setCopyError(undefined);
       setEditStampItem(item);
+    },
+    onEditCopy: (item) => {
+      setCopyError(undefined);
+      setEditCopyItem(item);
     },
   };
 
@@ -1262,9 +1367,47 @@ export function OfferSetsView({
         />
       )}
 
+      {/* The copy's own editor (#1382) — the dialog the Copies list and the copy's screen open, with
+          the same save. What an edit does to this offer's generated texts is the domain's answer, so
+          it is the same answer as anywhere else; this screen only re-reads the offer afterwards. */}
+      {editCopyItem && (
+        <InventoryItemFormDialog
+          mode="edit"
+          collectionId={collectionId}
+          areas={areas}
+          locations={locations}
+          conditions={conditions}
+          certificateStatuses={certificateStatuses}
+          item={editCopyItem}
+          isPending={isPending}
+          error={copyError}
+          onClose={() => {
+            if (!isPending) {
+              setEditCopyItem(null);
+              setCopyError(undefined);
+            }
+          }}
+          onSubmit={(fd) => {
+            const itemId = editCopyItem.id;
+            setCopyError(undefined);
+            startTransition(async () => {
+              const { updateItemAction } = await import("@/app/actions/items");
+              const r = await updateItemAction(itemId, fd);
+              if (r.status === "error") setCopyError(r.message);
+              else {
+                setEditCopyItem(null);
+                invalidateAll(collectionId); // the rows, and the listing text built off them
+                void invalidateInventory(collectionId);
+                void invalidateStampsAndIssues(collectionId);
+              }
+            });
+          }}
+        />
+      )}
+
       {/* The shared stamp editor (#54/#243), opened over the stamp a listed copy points at (#676):
           the numbers and the name in the listing text come off it, so this is where a wrong one is
-          noticed. The copy itself is still not editable from here — see `readOnly` on the rows. */}
+          noticed. */}
       {editStampItem && (
         <StampFormDialog
           mode="edit"

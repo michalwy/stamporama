@@ -422,6 +422,10 @@ interface InventoryItemRowProps {
   /** Replace the default edit/identify/history/delete menu with a custom action set
    * (used by the lot intake view, which offers "Remove from lot", #121). */
   actionsOverride?: RowAction[];
+  /** Which of the row's actions are promoted onto it as icons, by key — the Copies list's
+   * vocabulary when absent. For a screen whose menu is wider than what it repeats: the offer's sets
+   * (#1382) put five entries in the menu and keep the two icons they had. */
+  promote?: readonly string[];
   /** Extra chips appended to the last (condition/disposition) line — e.g. the lot
    * delivery state and cost-basis on the intake screen (#121). */
   trailingChips?: ReactNode;
@@ -501,6 +505,7 @@ export function InventoryItemRow({
   isLast,
   readOnly = false,
   actionsOverride,
+  promote,
   trailingChips,
   highlight = false,
   highlightTone = "error",
@@ -716,9 +721,9 @@ export function InventoryItemRow({
   //
   // Beside it, where the screen offers one, **Edit stamp** (#676). It does not break what read-only
   // means: the copy is still not edited from here — what it opens is the shared editor for the
-  // *stamp* behind it, a record this surface never claimed to own. The offer's sets are where a
-  // wrong catalog number is noticed while the listing is being written, and the alternative is two
-  // screens away. A screen that does not pass `onEditStamp` still shows the one icon.
+  // *stamp* behind it, a record this surface never claimed to own. The offer's sets asked for it
+  // first, and have since outgrown read-only altogether — a full menu of their own through
+  // `actionsOverride` (#1382). A screen that does not pass `onEditStamp` still shows the one icon.
   const actions = readOnly ? (
     <RowQuickActions
       actions={pickRowActions(menuActions, ["detail-page", "edit-stamp"])}
@@ -734,7 +739,7 @@ export function InventoryItemRow({
           the menu gets, so an overridden action list promotes whatever it actually offers and a
           screen that drops one simply shows one icon fewer. */}
       <RowQuickActions
-        actions={pickRowActions(rowActions, [
+        actions={pickRowActions(rowActions, promote ?? [
           "detail-page",
           // The lot builder's two acts (#760), promoted for the reason the offer verbs are: pinning
           // a copy and rejecting it is one decision made per row, ninety times in a sitting. They
