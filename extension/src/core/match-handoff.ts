@@ -32,6 +32,14 @@ export interface MatchTask {
   url: string;
   /** What the collector pressed Link on, for the message the page renders back. Cosmetic. */
   label?: string;
+  /**
+   * The stamp this search was opened to link (#1380). Not what is matched — the window matches the
+   * whole page, as it always has — but what says the job is **done**: the tab the Assistant opened
+   * for it is closed once a match lands on this stamp, and not on a neighbour the same page also
+   * happened to settle. Optional, so a page predating it is still a valid handoff; without it, the
+   * first match written from that tab is taken as the one it was opened for.
+   */
+  stampId?: string;
 }
 
 /**
@@ -86,10 +94,11 @@ export function parseMatchHandoff(raw: string | null | undefined): MatchHandoff 
   // and a `javascript:` one written into the page would otherwise be opened by us.
   if (!isHttpUrl(url)) return null;
 
+  const stampId = typeof t.stampId === "string" && t.stampId.trim() ? t.stampId.trim() : undefined;
   return {
     v: 1,
     requestId,
-    task: { url, label: typeof t.label === "string" ? t.label : undefined },
+    task: { url, label: typeof t.label === "string" ? t.label : undefined, stampId },
   };
 }
 

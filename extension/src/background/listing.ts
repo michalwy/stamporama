@@ -18,6 +18,7 @@ import {
   type PendingListing,
 } from "./pending-listings";
 import { postListedUrl, profileForListing } from "./listing-client";
+import { closeFinishedTab } from "./finished-tab";
 
 // The wiring around `listing-run.ts` (#409): the half that has a browser to drive.
 //
@@ -254,7 +255,7 @@ export async function captureListedUrl(tabId: number, url: string): Promise<void
   // Forgotten first: the entry page may fire more than one navigation event, and an offer is
   // activated once.
   await forgetPendingListing(tabId);
-  await deliverListedUrl(pending, listedUrl);
+  await finishListing(tabId, pending, listedUrl);
 }
 
 /**
@@ -287,13 +288,32 @@ export async function listedUrlReported(tabId: number | undefined, url: string):
     return;
   }
   await forgetPendingListing(tabId);
-  await deliverListedUrl(pending, url);
+  await finishListing(tabId, pending, url);
 }
 
 /** The filled form has been submitted, reported by the content script watching it (#412). */
 export async function listingSubmitted(tabId: number | undefined): Promise<void> {
   if (tabId === undefined) return;
   await markPendingListingSubmitted(tabId);
+}
+
+/**
+ * Deliver a listing read off the tab the Assistant filled, and — once it is safely home — close that
+ * tab and put the collector back on the offer (#1380). The offer's screen is where the result is then
+ * read: activated with its URL, or updated.
+ *
+ * A listing that did **not** get home keeps its tab: the marketplace's entry page is then the one
+ * place its address can still be read from, and closing it would hide exactly what the collector
+ * needs to record it by hand.
+ */
+async function finishListing(
+  tabId: number,
+  pending: PendingListing,
+  listedUrl: string
+): Promise<void> {
+  if (await deliverListedUrl(pending, listedUrl)) {
+    await closeFinishedTab(tabId, pending.instanceTabId);
+  }
 }
 
 /**
@@ -308,8 +328,15 @@ export async function listingSubmitted(tabId: number | undefined): Promise<void>
  *
  * A null `listedUrl` is the "submitted, URL unread" report: there is nothing to post, and the page is
  * simply told so.
+ *
+ * Answers whether the listing got **home** (#1380): a page took it, or the instance recorded it. An
+ * update no page took has not — nothing then clears the offer's "changed since listed" flag, which
+ * is something the collector still has to see to.
  */
-async function deliverListedUrl(pending: PendingListing, listedUrl: string | null): Promise<void> {
+async function deliverListedUrl(
+  pending: PendingListing,
+  listedUrl: string | null
+): Promise<boolean> {
   const update = pending.mode === "update";
   const notice: ListedNotice = {
     type: "listed",
@@ -333,13 +360,14 @@ async function deliverListedUrl(pending: PendingListing, listedUrl: string | nul
       taken = false; // the tab is gone, or on another origin now
     }
   }
-  if (taken || !listedUrl) return;
+  if (taken) return true;
+  if (!listedUrl) return false;
 
   // An **update** has nothing to write back (#462): the offer is already Active and already carries
   // this very URL — it is the address this run was sent to. The page is told, because a collector
   // watching the strip wants to know the edit was saved; nobody else needs to hear about it, and the
   // POST below exists solely to make a listing *exist* in Stamporama.
-  if (update) return;
+  if (update) return false;
 
   const profile = await profileForListing(pending.instanceOrigin, pending.collectionId);
   if (!profile) {
@@ -347,12 +375,14 @@ async function deliverListedUrl(pending: PendingListing, listedUrl: string | nul
     // (the collector may have disconnected it since). The listing stands; the offer is activated in
     // Stamporama, where a blank URL is already an accepted answer.
     console.warn("[assistant] no connection to record the listing with", pending.instanceOrigin);
-    return;
+    return false;
   }
   try {
     await postListedUrl(profile, pending.offerId, listedUrl);
+    return true;
   } catch (e) {
     console.warn("[assistant] could not record the listing's URL", message(e));
+    return false;
   }
 }
 

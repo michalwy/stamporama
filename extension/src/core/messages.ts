@@ -215,6 +215,9 @@ export interface MatchRequest {
   type: "match";
   items: ExtractedItem[];
   dryRun: boolean;
+  /** The page these items were read off (#1380): a write from a tab the Assistant opened for a Link
+   *  may be the one that finishes it, and the worker closes that tab. Absent means "no tab to close". */
+  sourceTabId?: number;
 }
 export type MatchResponse =
   | { ok: true; results: MatchResult[] }
@@ -233,6 +236,8 @@ export interface ConfirmRequest {
   issuedOn?: string;
   /** What the page states about the stamp (#739), travelling for the same reason again. */
   attributes?: ExtractedAttributes;
+  /** The page the item was read off — {@link MatchRequest.sourceTabId}'s reason (#1380). */
+  sourceTabId?: number;
 }
 export type ConfirmResponse =
   | {
@@ -240,6 +245,9 @@ export type ConfirmResponse =
       backfill: BackfillProposal[];
       date: DateProposal | null;
       attributes: AttributeProposal[];
+      /** The page this window was reading was a Link's, and this match finished it: the tab has been
+       *  closed and the collector sent back to Stamporama (#1380), so the window goes too. */
+      finished?: boolean;
     }
   | { ok: false; error: string; conflict?: boolean; existingColnectId?: string };
 
@@ -554,6 +562,9 @@ export interface OpenMatchRequest {
   url: string;
   /** The handoff this is, echoed straight back so the page can tell an answer from a leftover. */
   requestId: string;
+  /** The stamp the search is for, when the page said (#1380) — what makes a match written from the
+   *  opened tab the one it was opened for, and the tab done with. */
+  stampId?: string;
 }
 export type OpenMatchResponse = { ok: true } | { ok: false; error: string };
 

@@ -1078,6 +1078,11 @@ for you:
   linking** ends the walk; whatever was matched along the way is kept. Each stamp is offered once,
   so a row you deliberately leave unmatched does not come back round.
 
+When the stamp you asked about is matched, the Assistant closes the Colnect tab it opened and puts
+you back on this screen, where the strip under the heading says *Linked … on Colnect*. A tab where
+the match went wrong, or that only matched some other stamp on the same search page, stays open. See
+[Matching from an offer](assistant.md#matching-from-an-offer) for how to keep the tabs open instead.
+
 The offer screen **updates itself** when a match is written — a stamp that was showing Search now
 shows its Catalog and Market links, the heading's *not matched* count drops, with nothing reloaded by
 hand. That works however the match was made — a candidate you confirmed, or an automatic match written
@@ -1705,6 +1710,11 @@ its listing date stamped and that URL recorded — no Publish, and nothing paste
 says so, links to the live listing, and leaves the batch, opening the next offer as publishing always
 does.
 
+The marketplace's tab then **closes by itself** and the offer's tab is back in front, showing the
+result — one less step per offer across a listing session. It stays open whenever something is left
+to look at there (see [When you post it](assistant.md#when-you-post-it-the-offer-goes-live-by-itself)),
+and the Assistant's Options can keep it open every time.
+
 Until you post it, the offer is still **Ready** — the form was filled and not submitted. Abandon the
 form and nothing changes here. And if the Assistant can't make out the listing's address after you
 post it, it says so: **Publish** the offer here as usual, pasting the URL in or leaving it blank.
@@ -1759,7 +1769,8 @@ Everything else works as the first listing does. Nothing is submitted; you look 
 press the platform's own Save. Saving changes nothing in Stamporama — the offer was Active before the
 update and is Active after it, still carrying the same listing URL — so the report simply says the
 listing was updated — and it clears the offer's **Changed since listed** flag, the update having just
-put the current contents in front of buyers.
+put the current contents in front of buyers. The Colnect tab then closes and you are back on the offer,
+exactly as after a [first listing](assistant.md#when-you-post-it-the-offer-goes-live-by-itself).
 
 It is offered only where the platform's module can reach a live listing at all. **Colnect** can, since
 it serves the same form at an edit address. Allegro's Assistant form is entered on the way to a *new*
