@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import {
   arrivalLotId,
   byLotWithArrival,
-} from "../../src/app/c/[collectionSlug]/purchases/[purchaseId]/lot-arrival";
+} from "../../src/app/c/[collectionSlug]/shared/lot-arrival";
 
 /**
- * What a `?lot=` deep link into a purchase order resolves to (#911).
+ * What a `?lot=` deep link resolves to (#911) — on a purchase order, and since #1015 on an auction
+ * sale too, through the same helper.
  *
  * The defect these guard is a link that did something or nothing depending on how the collector
  * last left the screen: only the by-lot view draws lot cards, so in the flat and by-issue views

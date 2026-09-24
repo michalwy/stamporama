@@ -36,7 +36,10 @@ import {
 export function useAuctionSaleView(
   collectionId: string,
   /** Where the mirror writes — this sale's own path, so no other screen's address is touched. */
-  basePath: string
+  basePath: string,
+  /** `?lot=` is in the address and the panel is about to consume it — or cannot tell yet, because
+   * the parcel has not loaded. False for a param the sale cannot answer (#1015), which stays. */
+  arrivalPending: boolean
 ): {
   view: AuctionSaleView;
   /** Change one or more settings. Everything not named keeps the value in force. */
@@ -101,7 +104,6 @@ export function useAuctionSaleView(
     writeToUrlRef.current = writeToUrl;
   });
 
-  const arrivedParam = searchParams.get("lot");
   useEffect(() => {
     // The memory is read through `useSyncExternalStore` with a null server snapshot, so the first
     // render of a freshly loaded page sees no stored settings whether or not any exist; mirroring
@@ -111,11 +113,16 @@ export function useAuctionSaleView(
     // build on the same `searchParams` snapshot, so running them in one commit would have each
     // drop the other's edit and need a second pass to converge. Standing aside for one render
     // costs nothing — the panel's effect fires immediately, and this one runs again straight after.
-    if (arrivedParam) return;
+    //
+    // Only while the param is going to be consumed, though (#1015). One naming a lot the sale does
+    // not hold is left in the address on purpose, and standing aside for it would leave the view
+    // unwritten for as long as it sits there; `writeToUrl` keeps every param it does not name, so
+    // the mirror can write round it.
+    if (arrivalPending) return;
     const updates = auctionSaleViewUrlUpdates(view, (key) => searchParams.get(key));
     if (!updates) return;
     writeToUrlRef.current(updates);
-  }, [hydrated, arrivedParam, view, searchParams]);
+  }, [hydrated, arrivalPending, view, searchParams]);
 
   return { view, setView, clearFilters };
 }
