@@ -496,13 +496,22 @@ export function OfferPlatformItemsCard({
   // The handoff is named after the entry being matched, which for an umbrella is the **variant** its
   // search was built from — the strip saying "Opening the search for Mi·PL 865" while the window
   // shows `865a` is the one place that mismatch would be read as a bug.
+  //
+  // The stamp it hands over is the same entry, `matchStampId`, and never the row's own stamp: the
+  // Assistant closes its tab once a match lands on the stamp it was given (#1380), and on a row
+  // standing under a variant that match is written to the variant. Handing the umbrella over left
+  // that tab open on exactly those rows — every time, which read as "it stopped working" once the
+  // offers being linked were the ones listed under a cheapest variant.
+  const [handedRow, setHandedRow] = useState<string | null>(null);
   const handOver = useCallback(
-    (item: OfferPlatformItem) =>
+    (item: OfferPlatformItem) => {
+      setHandedRow(item.stampId);
       start(
         item.searchUrl!,
         item.catalogItemVariant ?? item.catalogNumbers[0] ?? item.label,
-        item.stampId
-      ),
+        item.matchStampId
+      );
+    },
     [start]
   );
 
@@ -528,15 +537,16 @@ export function OfferPlatformItemsCard({
   }, [invalidateAll, collectionId, walking, advance]);
   useAssistantMatchSignal(onMatched);
 
-  // The stamp the open handoff was for now carries its item-ID (#1380). The Assistant closes the
+  // The row the open handoff was for now carries its item-ID (#1380). The Assistant closes the
   // Colnect tab once that match is saved, so the tab that would have said so is gone and this strip
   // is where it is said — read off the re-read rows rather than off the doorbell, which never says
-  // which match landed.
+  // which match landed. Keyed on the row's own stamp rather than on the stamp handed over: once
+  // matched, a row no longer names a `matchStampId` at all.
   const handoffLinked =
     handoff?.state === "opened" &&
-    handoff.stampId !== null &&
-    items.some((i) => i.stampId === handoff.stampId) &&
-    items.every((i) => i.stampId !== handoff.stampId || !i.searchUrl);
+    handedRow !== null &&
+    items.some((i) => i.stampId === handedRow) &&
+    items.every((i) => i.stampId !== handedRow || !i.searchUrl);
 
   // The platform has no module, or the offer has no copies yet: there is nothing to look up.
   if (items.length === 0) return null;

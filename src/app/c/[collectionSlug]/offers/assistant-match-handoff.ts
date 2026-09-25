@@ -43,9 +43,10 @@ export interface MatchHandoff {
   /** What the collector pressed Link on, for the strip's own message. */
   label: string | null;
   /**
-   * The stamp the search is for (#1380). Handed over so the Assistant can tell the match that
-   * finishes this Link — and close the tab it opened for it — from one landing on a neighbour on the
-   * same search page; kept here so the screen can say the stamp is linked once its row shows it.
+   * The stamp the match is to be **written to** (#1380) — for a row standing under a variant, the
+   * variant, never the row's own umbrella. Handed over so the Assistant can tell the match that
+   * finishes this Link, and close the tab it opened for it, from one landing on a neighbour on the
+   * same search page.
    */
   stampId: string | null;
   /** The JSON the element carries. */
