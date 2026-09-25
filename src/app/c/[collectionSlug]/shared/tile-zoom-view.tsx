@@ -69,10 +69,9 @@ import {
 import {
   ZOOM_STEP,
   actualSizeViewport,
-  clampOffsets,
-  clampScale,
   fitViewport,
   panBy,
+  resizeViewport,
   toSheetPoint,
   zoomBy,
   type Viewport,
@@ -179,6 +178,13 @@ interface Props {
   onSize?: (reading: { size: StampSize; dpi: number } | null) => void;
   /** A snapshot was saved (#674) — for a screen that shows the photos it just gained. */
   onSnapshotSaved?: () => void;
+  /**
+   * The least height the picture keeps, however little room the surface around it leaves. 20rem by
+   * default, so a viewer sharing a panel with a form keeps a picture worth the name. The Measure and
+   * mark window passes `0` (#1388): the viewer *is* that window, whose height is the browser's, so on
+   * a short window it is the picture that gives way — never the toolbar or the readout under it.
+   */
+  minPictureHeight?: string;
   /** For the alt text, which is the only place a tile's position is named on this side of the
    * dialog. */
   position: number;
@@ -715,6 +721,7 @@ export function TileZoomView({
   subject = "tile",
   onSize,
   onSnapshotSaved,
+  minPictureHeight = "20rem",
 }: Props) {
   const noun = subject === "photo" ? "photo" : "tile";
   const [sideKey, setSideKey] = useState(() => sides[0]?.side ?? "front");
@@ -790,16 +797,19 @@ export function TileZoomView({
 
   // Fit is the default; a chosen zoom is only re-clamped. This runs on the picture changing as well
   // as on the viewport changing, which is what carries a zoom across the front/back flip: the two
-  // crops differ by a few pixels of card, so re-clamping is the whole of the adjustment.
+  // crops differ by a few pixels of card, so re-clamping is the whole of the adjustment. A viewport
+  // that changed size keeps the point at its centre where it was as well (#1388), so resizing the
+  // window under a zoomed-in picture does not slide what was being read out of view.
   // A layout effect, so the fit lands in the same commit as the measurement above rather than a
   // painted frame later.
+  const laidOutRef = useRef<ViewportSize>({ width: 0, height: 0 });
   useLayoutEffect(() => {
     if (!ready) return;
     const picture = { width: pictureWidth, height: pictureHeight };
+    const from = laidOutRef.current.width > 0 ? laidOutRef.current : size;
+    laidOutRef.current = size;
     setView((v) =>
-      fittedRef.current
-        ? fitViewport(picture, size)
-        : clampOffsets({ ...v, scale: clampScale(v.scale, picture, size) }, picture, size)
+      fittedRef.current ? fitViewport(picture, size) : resizeViewport(v, picture, from, size)
     );
   }, [pictureWidth, pictureHeight, ready, size]);
 
@@ -1657,7 +1667,7 @@ export function TileZoomView({
         }}
         style={{
           flex: 1,
-          minHeight: "20rem",
+          minHeight: minPictureHeight,
           position: "relative",
           overflow: "hidden",
           borderRadius: "0.375rem",

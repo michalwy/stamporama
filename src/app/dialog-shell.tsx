@@ -12,6 +12,20 @@ import {
 import { useEscapeLayer } from "@/app/escape-stack";
 import { Icon } from "@/app/icons";
 
+// ── The shell's own limits ──────────────────────────────────────────────────
+
+/**
+ * The most of the browser window a dialog may take: all of it, less a 2rem margin on every side.
+ *
+ * The height is the shell's own `maxHeight`, so no dialog — whatever it asks for — can push its
+ * header and its close button off the top of the window. The width is the same margin across, for a
+ * dialog that asks to be as wide as it can be. **A dialog whose work is the picture** takes both as
+ * its size (#1388, Measure and mark): every pixel of window it leaves unused is a pixel less to place
+ * a ruler's end with.
+ */
+export const DIALOG_MAX_HEIGHT = "calc(100vh - 4rem)";
+export const DIALOG_MAX_WIDTH = "calc(100vw - 4rem)";
+
 // ── Picker height ───────────────────────────────────────────────────────────
 
 /**
@@ -159,7 +173,7 @@ export function DialogShell({
           zIndex: zIndexBase + 1,
           width: "100%",
           maxWidth: maxWidth ?? "32rem",
-          maxHeight: "calc(100vh - 4rem)",
+          maxHeight: DIALOG_MAX_HEIGHT,
           height,
           minHeight,
           display: "flex",

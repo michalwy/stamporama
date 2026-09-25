@@ -173,6 +173,11 @@ opens in the same viewer a [scan tile](purchases.md#measuring-on-the-scan) has: 
 **Size** and **Perforation** tools, the **Watermark** view, and the
 [**Ring**, **Line** and **Snapshot**](purchases.md#marking-a-detail-and-keeping-a-snapshot) buttons.
 
+The viewer takes the whole browser window, less a narrow margin, wherever it is opened from — the
+larger the picture, the more exactly a ruler's ends land on the stamp's edges. Resize the browser
+window and the viewer follows it, keeping the zoom and the part of the picture you were looking at.
+If the window is very short, the picture gives up the room; the tools and the readout stay in view.
+
 The rules are the scan's rules:
 
 - **Every figure is shown with the resolution it was taken at**, and that resolution is filled in
