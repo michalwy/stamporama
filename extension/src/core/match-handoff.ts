@@ -33,10 +33,11 @@ export interface MatchTask {
   /** What the collector pressed Link on, for the message the page renders back. Cosmetic. */
   label?: string;
   /**
-   * The stamp this search was opened to link (#1380). Not what is matched — the window matches the
-   * whole page, as it always has — but what says the job is **done**: the tab the Assistant opened
-   * for it is closed once a match lands on this stamp, and not on a neighbour the same page also
-   * happened to settle. Optional, so a page predating it is still a valid handoff; without it, the
+   * The stamp the match is to be **written to** (#1380) — which for an offer row standing under a
+   * variant is that variant, not the row's own umbrella, since the variant is where the item-ID
+   * lands. Not what is matched — the window matches the whole page, as it always has — but what says
+   * the job is **done**: the tab the Assistant opened for it is closed once a match lands on this
+   * stamp, and not on a neighbour the same page also happened to settle. Optional, so a page predating it is still a valid handoff; without it, the
    * first match written from that tab is taken as the one it was opened for.
    */
   stampId?: string;
