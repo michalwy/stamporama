@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ConfirmDialog, DialogShell } from "@/app/dialog-shell";
+import {
+  ConfirmDialog,
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
+  DialogShell,
+} from "@/app/dialog-shell";
 import { useToast } from "@/app/toast-provider";
 import { setMeasuredStampSizeAction } from "@/app/actions/photo-measure";
 import type { PhotoSummary } from "@/lib/photos";
@@ -126,8 +131,12 @@ export function PhotoMeasureDialog({
     <DialogShell
       title={label}
       onClose={pending ? () => {} : onClose}
-      maxWidth="min(92vw, 84rem)"
-      height="90vh"
+      // All the room the window has, up to the shell's margin, in both directions (#1388): placing a
+      // ruler's ends, counting teeth and drawing marks are all as precise as the picture is large.
+      // The toolbar and the readout keep their own size, so what is gained goes to the picture — and
+      // as a size of the window, it follows the window when that is resized.
+      maxWidth={DIALOG_MAX_WIDTH}
+      height={DIALOG_MAX_HEIGHT}
       dismissable={!confirm}
     >
       <div
@@ -158,6 +167,7 @@ export function PhotoMeasureDialog({
           subject="photo"
           onSize={setReading}
           onSnapshotSaved={() => router.refresh()}
+          minPictureHeight="0"
         />
 
         {/* The write (#1290), under the viewer and only while a size stands on it: measuring and

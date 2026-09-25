@@ -13,6 +13,7 @@ import {
   regionKey,
   regionOnSheet,
   regionRequest,
+  resizeViewport,
   toSheetPoint,
   visibleRegion,
   zoomBy,
@@ -93,6 +94,34 @@ describe("clampOffsets", () => {
       panBy(zoomed, -100000, 0, CARD, SIZE).offsetX,
       SIZE.width - CARD.width
     );
+  });
+});
+
+describe("resizeViewport", () => {
+  // Zoomed in on a point well inside the card, so neither edge clamps it on either size.
+  const BIG = { width: 1800, height: 1100 };
+  const zoomed = zoomTo(fitViewport(CARD, SIZE), 1, { x: 600, y: 400 }, CARD, SIZE);
+
+  it("keeps the zoom when the window grows or shrinks", () => {
+    assert.equal(resizeViewport(zoomed, CARD, SIZE, BIG).scale, zoomed.scale);
+    assert.equal(resizeViewport(zoomed, CARD, BIG, SIZE).scale, zoomed.scale);
+  });
+
+  it("keeps the point in view at the centre of the view", () => {
+    const before = toSheetPoint(zoomed, SIZE.width / 2, SIZE.height / 2);
+    const grown = resizeViewport(zoomed, CARD, SIZE, BIG);
+    const after = toSheetPoint(grown, BIG.width / 2, BIG.height / 2);
+    assert.ok(Math.abs(after.x - before.x) < 1e-9);
+    assert.ok(Math.abs(after.y - before.y) < 1e-9);
+  });
+
+  it("changes nothing when the size does not change", () => {
+    assert.deepEqual(resizeViewport(zoomed, CARD, SIZE, SIZE), zoomed);
+  });
+
+  it("still stops the card at its own edge in the new size", () => {
+    const corner = { scale: 1, offsetX: 0, offsetY: 0 };
+    assert.deepEqual(resizeViewport(corner, CARD, SIZE, BIG), corner);
   });
 });
 

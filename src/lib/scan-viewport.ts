@@ -131,6 +131,34 @@ export function panBy(
   return clampOffsets({ ...v, offsetX: v.offsetX + dx, offsetY: v.offsetY + dy }, sheet, size);
 }
 
+/**
+ * A chosen zoom carried across the **viewport changing size** (#1388) — the window resized under a
+ * viewer that has been zoomed in on a perforation.
+ *
+ * The scale is kept, and so is **the point in view**: the sheet pixel at the centre of the old
+ * viewport is at the centre of the new one. Re-clamping the old offsets alone keeps the top-left
+ * corner still instead, so growing the window slides the stamp's edge the collector was reading off
+ * towards a corner of the panel. Both are then clamped to the new size, exactly as a zoom is.
+ */
+export function resizeViewport(
+  v: Viewport,
+  sheet: SheetSize,
+  from: ViewportSize,
+  to: ViewportSize
+): Viewport {
+  const centre = toSheetPoint(v, from.width / 2, from.height / 2);
+  const scale = clampScale(v.scale, sheet, to);
+  return clampOffsets(
+    {
+      scale,
+      offsetX: to.width / 2 - centre.x * scale,
+      offsetY: to.height / 2 - centre.y * scale,
+    },
+    sheet,
+    to
+  );
+}
+
 export function clampScale(scale: number, sheet: SheetSize, size: ViewportSize): number {
   const fit = fitScale(sheet, size);
   return clamp(scale, Math.min(fit * MIN_FIT_MULTIPLE, fit), MAX_SCALE);
