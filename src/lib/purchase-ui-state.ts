@@ -43,6 +43,8 @@ export interface PurchaseUiState {
   filter: string | null;
   /** The order-level disposition filter (#622); null when off. */
   disposition: string | null;
+  /** Which lots the order shows by their state (#1394): `open` or `closed`; null for both. */
+  lotState: string | null;
   /** The scans card (#566): whether it is open, its tile filter, whether set-aside batches show,
    * and the per-batch expansion choices keyed by batch number. */
   scans: {
@@ -61,6 +63,7 @@ export const EMPTY_PURCHASE_UI_STATE: PurchaseUiState = Object.freeze({
   groups: {},
   filter: null,
   disposition: null,
+  lotState: null,
   scans: Object.freeze({ open: false, filter: "all", showDone: false, batches: {} }),
 }) as PurchaseUiState;
 
@@ -168,6 +171,7 @@ export function parsePurchaseUiState(raw: string | null): PurchaseUiState {
     groups: stringArrayMap(o.groups),
     filter: typeof o.filter === "string" ? o.filter : null,
     disposition: typeof o.disposition === "string" ? o.disposition : null,
+    lotState: typeof o.lotState === "string" ? o.lotState : null,
     scans: {
       open: scans.open === true,
       filter: typeof scans.filter === "string" ? scans.filter : "all",
@@ -185,6 +189,7 @@ export function isEmptyPurchaseUiState(state: PurchaseUiState): boolean {
     Object.keys(state.groups).length === 0 &&
     state.filter === null &&
     state.disposition === null &&
+    state.lotState === null &&
     !state.scans.open &&
     !state.scans.showDone &&
     state.scans.filter === "all" &&

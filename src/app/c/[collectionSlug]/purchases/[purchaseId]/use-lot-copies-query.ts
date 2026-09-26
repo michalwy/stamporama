@@ -7,6 +7,7 @@ import type {
   LotCopySort,
   LotCopyFilter,
   LotIntakeSummary,
+  LotStateFilter,
   PurchaseIntakeSummary,
 } from "@/lib/items";
 import type { SetCompletenessByIssue } from "@/lib/lot-set-completeness";
@@ -28,7 +29,14 @@ export interface IntakeFilterParams {
   disposition?: CopyDispositionFilter;
 }
 
+/** What the order-level reads narrow by: the two axes, and the lot state (#1394). */
+export type OrderFilterParams = Pick<LotCopiesParams, "filter" | "disposition" | "lotState">;
+
 export interface LotCopiesParams extends IntakeFilterParams {
+  /** Open or closed lots only (#1394). Beside the two axes rather than one of them: it is read by
+   * the order-level list and summary alone, and a container a tick records never carries it — see
+   * `LotStateFilter`. Part of the key, as every filter is. */
+  lotState?: LotStateFilter;
   sort?: LotCopySort;
   sortDir?: "asc" | "desc";
   /** Photo slots that must be free, for a scan tile's assign list (#567). Part of the params, so it
@@ -60,7 +68,7 @@ export const lotCopiesKeys = {
   purchaseSummary: (
     collectionId: string,
     purchaseId: string,
-    filters: IntakeFilterParams,
+    filters: OrderFilterParams,
     groupBy: readonly IntakeGroupAxis[]
   ) => ["lot-copies", collectionId, "purchase", purchaseId, "summary", filters, groupBy] as const,
   purchaseReturn: (collectionId: string, purchaseId: string) =>
@@ -138,6 +146,7 @@ function buildCopyParams(params: LotCopiesParams, offset?: string): URLSearchPar
   if (params.sortDir) sp.set("sortDir", params.sortDir);
   if (params.filter) sp.set("filter", params.filter);
   if (params.disposition) sp.set("disposition", params.disposition);
+  if (params.lotState) sp.set("lotState", params.lotState);
   if (params.issueKey) sp.set("issueKey", params.issueKey);
   if (params.areaKey) sp.set("areaKey", params.areaKey);
   if (params.yearKey) sp.set("yearKey", params.yearKey);
@@ -247,7 +256,7 @@ export function useLotSummary(
 export function usePurchaseSummary(
   collectionId: string,
   purchaseId: string,
-  filters: IntakeFilterParams = {},
+  filters: OrderFilterParams = {},
   /** How the view is piled up (#1189) — see {@link useLotSummary}. */
   groupBy: readonly IntakeGroupAxis[] = [],
   enabled = true

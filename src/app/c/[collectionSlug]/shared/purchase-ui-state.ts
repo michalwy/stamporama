@@ -251,6 +251,19 @@ export function usePurchaseDispositionFilter(
   return [state.disposition, set];
 }
 
+/** The order-level lot-state filter (#1394): `open`, `closed`, or null for both. */
+export function usePurchaseLotStateFilter(
+  collectionId: string,
+  purchaseId: string
+): [string | null, (value: string | null) => void] {
+  const [state, update] = usePurchaseUiState(collectionId, purchaseId);
+  const set = useCallback(
+    (value: string | null) => update((prev) => ({ ...prev, lotState: value })),
+    [update]
+  );
+  return [state.lotState, set];
+}
+
 /** The scans card's own state (#566): open, tile filter, set-aside batches shown, and the
  * per-batch expansion choices. */
 export function usePurchaseScansUi(

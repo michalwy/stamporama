@@ -12,8 +12,9 @@
  *
  * Shared rather than copied (#1015), so the two screens cannot drift: the rules are the two answers
  * each screen needs and neither is about rendering — which lot is being pointed at, and how the
- * lots are grouped while that is true. What the auction sale adds on top — the lot asked for stays
- * on screen past a remembered filter (#1356) — is its own and lives in its `sale-view-params.ts`.
+ * lots are grouped while that is true. The third, that the lot asked for stays on screen past a
+ * remembered filter hiding whole lots, began on the auction sale (#1356) and moved here when the
+ * purchase order gained a filter of that kind — open or closed lots (#1394).
  */
 
 /** The lot the collector arrived to see, or null when there is nothing to point at.
@@ -48,4 +49,27 @@ export function arrivalLotId(
  */
 export function byLotWithArrival(storedByLot: boolean, arrivalHoldsView: boolean): boolean {
   return storedByLot || arrivalHoldsView;
+}
+
+/**
+ * The lots on screen once the lot asked for is added back: what the filters left, plus that lot in
+ * its own place in the parcel's order, and **which lot, if any, is there only by exception**.
+ *
+ * `exception` is null whenever the filters did not hide the lot — including the common case, a
+ * `?lot=` the remembered view does not narrow out at all, which behaves exactly as it did before
+ * there was an exception to make. It is also null for a lot the parcel does not hold (#1015): that
+ * is a different failure, with no card to pin.
+ */
+export function withAskedForLot<L extends { id: string }>(
+  parcel: readonly L[],
+  shown: readonly L[],
+  askedForLotId: string | null
+): { lots: L[]; exception: L | null } {
+  if (!askedForLotId || shown.some((lot) => lot.id === askedForLotId)) {
+    return { lots: [...shown], exception: null };
+  }
+  const exception = parcel.find((lot) => lot.id === askedForLotId) ?? null;
+  if (!exception) return { lots: [...shown], exception: null };
+  const kept = new Set([...shown.map((lot) => lot.id), exception.id]);
+  return { lots: parcel.filter((lot) => kept.has(lot.id)), exception };
 }

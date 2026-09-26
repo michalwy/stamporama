@@ -5,7 +5,11 @@ import {
   getPurchaseIntakePage,
   type LotCopySort,
 } from "@/lib/items";
-import { parseDispositionFilter, parseLotCopyFilter } from "@/lib/intake-filter-params";
+import {
+  parseDispositionFilter,
+  parseLotCopyFilter,
+  parseLotStateFilter,
+} from "@/lib/intake-filter-params";
 import { parseTilePhotoRoles } from "@/lib/tile-photo-roles";
 
 const VALID_SORT = new Set<LotCopySort>(["added", "year", "catalog", "price", "name"]);
@@ -38,6 +42,9 @@ export async function GET(
   // What the copies are kept for (#622) — a second, orthogonal filter axis, so it is read
   // alongside `filter` rather than folded into it.
   const disposition = parseDispositionFilter(sp.get("disposition"));
+  // Open or closed lots only (#1394) — the third axis, and an order-level one: the by-lot view
+  // hides whole cards instead, so the per-lot endpoint never takes it.
+  const lotState = parseLotStateFilter(sp.get("lotState"));
   const issueKey = sp.get("issueKey") || undefined;
   // The area and year headings a grouped view pages within (#1189). Validated no further than
   // this: they are matched against a derived reading of each copy, so an unknown key simply
@@ -56,6 +63,7 @@ export async function GET(
       sortDir,
       filter,
       disposition,
+      lotState,
       freePhotoSlots,
       issueKey,
       areaKey,

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getPurchaseIntakeSummary } from "@/lib/items";
-import { parseDispositionFilter, parseLotCopyFilter } from "@/lib/intake-filter-params";
+import {
+  parseDispositionFilter,
+  parseLotCopyFilter,
+  parseLotStateFilter,
+} from "@/lib/intake-filter-params";
 import { parseIntakeGroupAxes } from "@/lib/intake-groups";
 
 /** Whole-purchase aggregates for the order-level intake view (#172): the per-lot cost-estimate
@@ -24,6 +28,8 @@ export async function GET(
     const summary = await getPurchaseIntakeSummary(session.user.id, collectionId, purchaseId, {
       filter: parseLotCopyFilter(sp.get("filter")),
       disposition: parseDispositionFilter(sp.get("disposition")),
+      // Open or closed lots only (#1394): the headings are over what the list shows (#623).
+      lotState: parseLotStateFilter(sp.get("lotState")),
       // How the view is piled up (#1189) — the headings are not paged, so only the summary can
       // name them. Anything unrecognised drops out and the level is simply not grouped.
       groupBy: parseIntakeGroupAxes(sp.get("groupBy")),

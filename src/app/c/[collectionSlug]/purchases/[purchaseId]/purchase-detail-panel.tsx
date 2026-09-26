@@ -26,12 +26,18 @@ import type { LocationData } from "@/lib/locations";
 import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-select";
 import type { StampConditionData } from "@/lib/conditions";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
-import { parseDispositionFilter, parseLotCopyFilter } from "@/lib/intake-filter-params";
+import {
+  lotsInState,
+  parseDispositionFilter,
+  parseLotCopyFilter,
+  parseLotStateFilter,
+} from "@/lib/intake-filter-params";
 import type {
   CopyDispositionFilter,
   ItemListItem,
   LotCopyFilter,
   LotCopySort,
+  LotStateFilter,
 } from "@/lib/items";
 import type { IssueHeader } from "@/lib/issues";
 import type {
@@ -67,6 +73,7 @@ import {
   type BulkScopeClient,
   type IntakeFilterParams,
   type LotCopiesParams,
+  type OrderFilterParams,
 } from "./use-lot-copies-query";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
@@ -117,12 +124,17 @@ import {
   usePersistentToggle,
   usePersistentString,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
-import { arrivalLotId, byLotWithArrival } from "@/app/c/[collectionSlug]/shared/lot-arrival";
+import {
+  arrivalLotId,
+  byLotWithArrival,
+  withAskedForLot,
+} from "@/app/c/[collectionSlug]/shared/lot-arrival";
 import {
   usePurchaseCollapsedGroups,
   usePurchaseDispositionFilter,
   usePurchaseFilter,
   usePurchaseLotExpansion,
+  usePurchaseLotStateFilter,
 } from "@/app/c/[collectionSlug]/shared/purchase-ui-state";
 import { ORDER_GROUP_SCOPE } from "@/lib/purchase-ui-state";
 import { scanBatchName } from "@/lib/scan-batch-label";
@@ -217,6 +229,17 @@ const DISPOSITION_FILTERS: readonly {
   },
   { key: "for-sale", label: "For sale", hint: "Show only the copies kept as stock" },
   { key: "for-trade", label: "For trade", hint: "Show only the copies kept for trading" },
+];
+
+/** Which lots the order shows by their state (#1394): the ones still being worked, or the ones
+ * already closed — cost frozen, copies read-only (#571). Neither lit is both, which is the default. */
+const LOT_STATE_CHIPS: readonly { key: LotStateFilter; label: string; hint: string }[] = [
+  { key: "open", label: "Open", hint: "Show only the lots still being worked" },
+  {
+    key: "closed",
+    label: "Closed",
+    hint: "Show only the closed lots — their cost is frozen and their copies read-only",
+  },
 ];
 
 /** The *what still needs something* axis (`LotCopyFilter`) as toolbar chips (#743). Order-level
@@ -373,6 +396,25 @@ export function PurchaseDetailPanel({
     const timer = setTimeout(() => setArrivedLotId(null), ARRIVAL_FLASH_MS);
     return () => clearTimeout(timer);
   }, [arrivedLotId]);
+  // Which lots are shown by their state (#1394): open, closed, or — neither chosen — both. The
+  // third order-level filter, remembered per order with the other two and for the same reason.
+  //
+  // It is the one filter here that hides a whole **lot** rather than copies inside one, which
+  // gives it the problem the auction sale met in #1356: a copy's *Go to purchase* on a closed lot,
+  // landing on an order remembered as *Open*, would open, scroll to and flash nothing. The answer
+  // is that screen's — **the lot asked for is drawn whatever the filter says, and everything else
+  // stays narrowed**. Nothing is written to the filter for it; the lot is latched here for as long
+  // as the screen is open (unlike `arrivedLotId`, which lets go after the flash), and a reload has
+  // no `?lot=` left to latch.
+  const [storedLotState, setStoredLotState] = usePurchaseLotStateFilter(collectionId, purchase.id);
+  const lotState = parseLotStateFilter(storedLotState);
+  const [askedForLotId] = useState<string | null>(() => arrivalLotId(requestedLotId, lotIds));
+  const { lots: shownLots, exception: askedForLot } = withAskedForLot(
+    purchase.lots,
+    lotsInState(purchase.lots, lotState),
+    askedForLotId
+  );
+
   // Lot cards are collapsed by default (#382): an order is read as its lots, and a lot's copies
   // are a second question. A lot added while the screen is open opens itself, as does the one
   // that was navigated to.
@@ -380,7 +422,8 @@ export function PurchaseDetailPanel({
   // being clicked back into shape after every reload.
   const lotExpansionStore = usePurchaseLotExpansion(collectionId, purchase.id);
   const lotExpansion = useCardExpansion(
-    purchase.lots.map((l) => l.id),
+    // The cards on screen, so *Expand all* is about what the collector can see (#1394).
+    shownLots.map((l) => l.id),
     // The latched value, not the URL: the hook seeds the deep-linked card on its first render, and
     // the param is gone from the address bar by the second one.
     arrivedLotId,
@@ -479,11 +522,14 @@ export function PurchaseDetailPanel({
   // making the order pay for a second whole-order valuation. The holdings inside it are over every
   // copy whatever is filtered — the bar is about the order, not about the current view.
   const orderFilters: IntakeFilterParams = intakeFilterParams(filterMode, dispositionFilter);
+  // …plus the lot state for the read itself (#1394), which the containers a tick records never
+  // carry — see `LotStateFilter`.
+  const orderReadFilters: OrderFilterParams = { ...orderFilters, ...(lotState ? { lotState } : {}) };
   // One read for the whole screen: the bar's holdings, and the counts the toolbar chips carry
   // (#743). Those counts are over the whole order whatever is filtered, exactly as the lot cards'
   // are over the whole lot — a chip counting only what its own filter left would drop to zero the
   // moment it was pressed (#623).
-  const orderSummary = usePurchaseSummary(collectionId, purchase.id, orderFilters, groupAxes)
+  const orderSummary = usePurchaseSummary(collectionId, purchase.id, orderReadFilters, groupAxes)
     .data;
   const purchaseHoldings = orderSummary?.holdings;
 
@@ -1005,6 +1051,45 @@ export function PurchaseDetailPanel({
           </div>
         )}
 
+        {/* Open or closed lots (#1394). First of the filters, since it is the coarsest: it decides
+            which lots are on screen at all, and the two rows after it narrow the copies inside them
+            — *Open* with *to sort* is what is left to do. One value at a time, like *Kept for*;
+            neither lit is both. */}
+        {purchase.lots.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={TOOLBAR_LABEL}>Lot state</span>
+            {LOT_STATE_CHIPS.map(({ key, label, hint }) => {
+              const on = lotState === key;
+              return (
+                <Tooltip key={key} content={on ? "Click to show every lot again" : hint}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setStoredLotState(on ? null : key)}
+                    style={{
+                      ...CHIP,
+                      cursor: "pointer",
+                      fontWeight: on ? 600 : 500,
+                      color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
+                      borderColor: on ? "var(--color-accent)" : "var(--color-border)",
+                      background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                    }}
+                  >
+                    {on && <Icon name="check" size="xs" />} {label}
+                  </button>
+                </Tooltip>
+              );
+            })}
+            {/* Named rather than left to be noticed (#1356's band): a lit *Open* over a closed card
+                reads as a filter that is not working. */}
+            {byLot && askedForLot && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                plus the lot you opened
+              </span>
+            )}
+          </div>
+        )}
+
         {/* What still needs something (#743): the counts that used to sit on each lot header, as one
             order-level narrowing. A filing pass asks it of the parcel — "show me everything still
             unpriced" — and only the toolbar can answer that for the flat and by-issue views, which
@@ -1222,9 +1307,16 @@ export function PurchaseDetailPanel({
         <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
           No lots yet. Add a priced lot, then identify copies into it.
         </p>
+      ) : byLot && shownLots.length === 0 ? (
+        <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
+          {lotState === "open" ? "Every lot in this order is closed." : "No lot in this order is closed yet."}
+        </p>
       ) : byLot ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {purchase.lots.map((lot, idx) => (
+          {/* Mapped over every lot and not over `shownLots`: a card's index is its place in the
+              order, which is what names an untitled lot (*Lot 3*), and hiding a lot before it must
+              not renumber it. */}
+          {purchase.lots.map((lot, idx) => !shownLots.includes(lot) ? null : (
             <LotCard
               key={lot.id}
               index={idx}
@@ -1275,6 +1367,7 @@ export function PurchaseDetailPanel({
           sortDir={sortDir}
           filterMode={filterMode}
           dispositionFilter={dispositionFilter}
+          lotState={lotState}
           stickyTop={selectionBarHeight}
           isPending={isPending}
           selection={selection}
@@ -3336,6 +3429,7 @@ function OrderCopiesView({
   sortDir,
   filterMode,
   dispositionFilter,
+  lotState,
   stickyTop,
   isPending,
   selection,
@@ -3361,6 +3455,9 @@ function OrderCopiesView({
   /** The order-level *Kept for* filter (#622). Both axes are the same values the lot cards read, so
    * switching the grouping does not change what is on screen. */
   dispositionFilter: CopyDispositionFilter | null;
+  /** Open or closed lots only (#1394). Read by this view's list and summary, never by the
+   * containers its boxes record — see `LotStateFilter`. */
+  lotState: LotStateFilter | undefined;
   /** Where the pinned selection bar ends (#621), so the issue headers pin below it. */
   stickyTop: number;
   isPending: boolean;
@@ -3413,7 +3510,10 @@ function OrderCopiesView({
   // The same filters the panel reads this summary with, so both share one cached answer — and the
   // issue groups come back over the copies those filters show (#623).
   const intakeFilters: IntakeFilterParams = intakeFilterParams(filterMode, dispositionFilter);
-  const summary = usePurchaseSummary(collectionId, purchaseId, intakeFilters, groupAxes).data;
+  // The reads add the lot state (#1394); the heading boxes below keep `intakeFilters`, since a
+  // tick reaches open lots only whatever this says.
+  const readFilters: OrderFilterParams = { ...intakeFilters, ...(lotState ? { lotState } : {}) };
+  const summary = usePurchaseSummary(collectionId, purchaseId, readFilters, groupAxes).data;
   const groupTree = summary?.groupTree ?? [];
   // The same figure as the lot cards' (#563), but *from here* means "arrived in this parcel" —
   // these groups are merged across every lot of the order, which is what this view is for.
@@ -3426,7 +3526,7 @@ function OrderCopiesView({
   const listParams: LotCopiesParams = {
     sort: sortKey as LotCopySort,
     sortDir: sortDir as "asc" | "desc",
-    ...intakeFilters,
+    ...readFilters,
   };
 
   const renderRow = (it: ItemListItem) => {
@@ -3497,7 +3597,7 @@ function OrderCopiesView({
           stickyTop={stickyTop}
           collapsedGroups={collapsedGroups}
           onToggleGroup={toggleGroup}
-          countLabel={filterMode !== "none" || dispositionFilter ? "shown" : undefined}
+          countLabel={filterMode !== "none" || dispositionFilter || lotState ? "shown" : undefined}
           issueChrome={{
             issueHeaderById,
             areaNameById,
@@ -3547,7 +3647,11 @@ function OrderCopiesView({
                   ? "Every copy has a photo."
                   : dispositionFilter
                     ? "No copies in this order are kept for that."
-                    : "No copies identified into this order yet."
+                    : lotState === "open"
+                      ? "No copies in this order's open lots."
+                      : lotState === "closed"
+                        ? "No copies in this order's closed lots."
+                        : "No copies identified into this order yet."
           }
         />
       )}

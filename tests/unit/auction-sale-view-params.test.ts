@@ -11,9 +11,9 @@ import {
   auctionSaleViewUpdatesFor,
   auctionSaleViewUrlUpdates,
   resolveAuctionSaleView,
-  withAskedForLot,
   type AuctionSaleView,
 } from "../../src/app/c/[collectionSlug]/auctions/sales/[saleId]/sale-view-params";
+import { withAskedForLot } from "../../src/app/c/[collectionSlug]/shared/lot-arrival";
 
 /**
  * The toolbar over an auction sale's lots (#1353) — what it is called in the address, what survives
