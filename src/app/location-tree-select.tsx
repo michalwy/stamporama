@@ -70,6 +70,7 @@ export function LocationTreeSelect({
   buttonClassName = defaultTreeSelectButtonClassName,
   panelFooter,
   closeOnSelect = true,
+  extraOption,
 }: {
   locations: LocationData[];
   locationTree: LocationTreeItem[];
@@ -87,6 +88,10 @@ export function LocationTreeSelect({
   /** Whether picking a location dismisses the panel. See `useTreeSelect`; a filter passes `false`
    * so the `panelFooter` beside the pick can still be reached. */
   closeOnSelect?: boolean;
+  /** One choice that is not a location, drawn under the none option — the Copies filter's *Not
+   * filed* (`NO_LOCATION`, #1401), which the collection structure screen counts as a segment
+   * and so has to be able to show on the bar it opens. */
+  extraOption?: { id: string; label: string };
 }) {
   const buttonId = `${name}-button`;
   const searchId = `${name}-search`;
@@ -134,10 +139,13 @@ export function LocationTreeSelect({
 
   const handleKeyDown = buildHandleKeyDown(commitActive);
 
+  const extraSelected = !!extraOption && selectedId === extraOption.id;
   const triggerLabel = selectedLocation
     ? getLocationPath(locations, selectedLocation.id)
-    : noneOptionLabel;
-  const hasSelection = Boolean(selectedLocation);
+    : extraSelected
+      ? extraOption.label
+      : noneOptionLabel;
+  const hasSelection = Boolean(selectedLocation) || extraSelected;
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -169,6 +177,21 @@ export function LocationTreeSelect({
           onNoneSelect={() => setSelected("")}
           onSearchChange={setSearchQuery}
         >
+          {extraOption && !searchQuery ? (
+            <button
+              aria-selected={extraSelected}
+              className={`mb-1 min-h-8 w-full rounded-md px-2 py-1 text-left text-sm italic transition ${
+                extraSelected
+                  ? "bg-[var(--color-accent-soft)] font-semibold text-[var(--color-text-primary)]"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]"
+              }`}
+              role="option"
+              type="button"
+              onClick={() => setSelected(extraOption.id)}
+            >
+              {extraOption.label}
+            </button>
+          ) : null}
           {visibleTree.length > 0 ? (
             <ol className="grid gap-0.5">
               {visibleTree.map((location) => (

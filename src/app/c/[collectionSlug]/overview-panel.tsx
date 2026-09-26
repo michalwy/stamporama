@@ -248,12 +248,20 @@ function HoldingsTile({ data, base }: { data: OverviewHoldings; base: string }) 
     );
   }
 
+  // The tile opens the collection structure screen (#1401) — the same counts, one level deeper and
+  // crossable — while every figure on it, the total included, still opens the Copies list under
+  // exactly its own filter (#1398).
   return (
     <div style={HOLDINGS_TILE_STYLE}>
-      <RowLink href={holdingsHref(base, total)} label="Copies" />
+      <RowLink href={`${base}/inventory/structure`} label="Collection structure" />
       <div style={HOLDINGS_GROUP_STYLE}>
         <div style={TILE_LABEL}>Copies</div>
-        <div style={HEADLINE_STYLE}>{data.total}</div>
+        <Link
+          href={holdingsHref(base, total)}
+          style={{ ...ROW_LINK_ABOVE, ...HEADLINE_STYLE, textDecoration: "none", width: "fit-content" }}
+        >
+          {data.total}
+        </Link>
         <div style={NOTE_STYLE}>Copies sold, traded away or no longer held are not counted.</div>
       </div>
       <div style={HOLDINGS_GROUP_STYLE}>

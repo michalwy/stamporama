@@ -85,6 +85,15 @@ export function appendTagFilterParams(params: URLSearchParams, filter: TagFilter
   }
 }
 
+/**
+ * The things carrying **no tag at all** (#1401) — a tickable value like `"none"` on the certificate
+ * filter or `"single"` on the format one, not the absence of the filter, which an empty selection
+ * already means. The collection structure screen counts a *No tags* segment beside the tags, and a
+ * count has to open a list showing exactly those copies. Tag ids are cuids, so the word cannot
+ * collide with one.
+ */
+export const NO_TAGS = "none";
+
 /** One `some` over a thing's own tag join table. The relation is called `tags` on `Issue`, `Stamp`
  *  and `Item` alike, and the join row's column is `tagId` on all three, which is what lets one
  *  builder serve the three lists. */
@@ -92,9 +101,15 @@ interface TagSomeWhere {
   tags: { some: { tagId: string | { in: string[] } } };
 }
 
+interface TagNoneWhere {
+  tags: { none: Record<string, never> };
+}
+
+type TagIdsWhere = TagSomeWhere | { AND: TagSomeWhere[] };
+
 /** What {@link tagFilterWhere} answers with: one clause for *any*, an `AND` of one clause per tag
- *  for *all*. */
-export type TagFilterWhere = TagSomeWhere | { AND: TagSomeWhere[] };
+ *  for *all*, and — with {@link NO_TAGS} ticked — the untagged things alone or ORed beside those. */
+export type TagFilterWhere = TagIdsWhere | TagNoneWhere | { OR: [TagNoneWhere, TagIdsWhere] };
 
 /**
  * The `where` fragment for a tag filter, or **null when the filter is off** — which is how a caller
@@ -112,9 +127,21 @@ export type TagFilterWhere = TagSomeWhere | { AND: TagSomeWhere[] };
  * same answer a tag nobody used gives.
  */
 export function tagFilterWhere(opts: TagFilterOpts): TagFilterWhere | null {
-  const ids = [...new Set(opts.tagIds ?? [])];
-  if (ids.length === 0) return null;
-  const mode = opts.tagMode ?? DEFAULT_TAG_FILTER_MODE;
+  const unique = [...new Set(opts.tagIds ?? [])];
+  if (unique.length === 0) return null;
+  // *No tags* (#1401) is a branch of its own, ORed beside whatever the real ids ask — under either
+  // mode, since *carrying every one of these and also none at all* is a question nobody means.
+  const ids = unique.filter((id) => id !== NO_TAGS);
+  const untagged: TagNoneWhere = { tags: { none: {} } };
+  if (ids.length < unique.length) {
+    if (ids.length === 0) return untagged;
+    return { OR: [untagged, tagIdsWhere(ids, opts.tagMode)] };
+  }
+  return tagIdsWhere(ids, opts.tagMode);
+}
+
+function tagIdsWhere(ids: string[], tagMode: TagFilterMode | undefined): TagIdsWhere {
+  const mode = tagMode ?? DEFAULT_TAG_FILTER_MODE;
   if (mode === "all" && ids.length > 1) {
     return { AND: ids.map((tagId) => ({ tags: { some: { tagId } } })) };
   }

@@ -5,6 +5,7 @@ import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { listItemAreaFacets } from "@/lib/items";
 import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
 import { readSearchParam } from "@/lib/text-input";
+import { readYearFilter } from "@/lib/list-area-year-filter";
 
 /** The area rail's counts (#843) — the mirror of `../years`: the same filters as the list, except
  *  that this one keeps `year` and drops the area selection, so each row says what selecting it
@@ -21,15 +22,6 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
-  const yearParam = sp.get("year");
-  const year =
-    yearParam === null || yearParam === ""
-      ? undefined
-      : yearParam === "none"
-        ? ("none" as const)
-        : Number.isFinite(Number(yearParam))
-          ? Number(yearParam)
-          : undefined;
 
   try {
     const areas = await listItemAreaFacets(session.user.id, collectionId, {
@@ -37,7 +29,7 @@ export async function GET(
       certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
       formatIds: readCsvParam(sp, "formatIds"),
       subtypeIds: readCsvParam(sp, "subtypeIds"),
-      year,
+      ...readYearFilter(sp.get("year")),
       search: readSearchParam(sp),
       catalogVendorId: sp.get("catalogVendorId") || undefined,
       catalogNumber: sp.get("catalogNumber") || undefined,

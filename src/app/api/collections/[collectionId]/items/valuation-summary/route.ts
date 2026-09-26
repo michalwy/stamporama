@@ -5,6 +5,7 @@ import { getHoldingsValuation } from "@/lib/items";
 import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { readSearchParam } from "@/lib/text-input";
+import { readYearFilter } from "@/lib/list-area-year-filter";
 
 /** Holdings valuation total over every copy matching the current filters (whole set,
  * not one page). Mirrors the list endpoint's disposition/condition/certificate filters
@@ -23,13 +24,6 @@ export async function GET(
 
   try {
     const areaIdsParam = sp.get("areaIds");
-    const yearParam = sp.get("year");
-    const year =
-      yearParam === "none"
-        ? ("none" as const)
-        : yearParam && /^\d+$/.test(yearParam)
-          ? parseInt(yearParam, 10)
-          : undefined;
     const total = await getHoldingsValuation(session.user.id, collectionId, {
       conditionIds: readConditionIds(sp),
       certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
@@ -41,7 +35,7 @@ export async function GET(
       catalogNumber: sp.get("catalogNumber") || undefined,
       issueId: sp.get("issueId") || undefined,
       locationId: sp.get("locationId") || undefined,
-      year,
+      ...readYearFilter(sp.get("year")),
       inCollection: boolParam(sp.get("inCollection")),
       forSale: boolParam(sp.get("forSale")),
       forTrade: boolParam(sp.get("forTrade")),
