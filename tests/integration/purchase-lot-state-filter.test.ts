@@ -97,6 +97,22 @@ describe("purchase order lot-state filter (#1394)", () => {
     closedIds = closed.itemIds;
     openIds = (await lotOf(2)).itemIds;
 
+    // A second order in the same collection, with a lot in each state. Without it the order's closed
+    // lots and the collection's are the same set, and a lot state that replaced the order clause
+    // instead of joining it would pass every test below.
+    const ownPurchaseId = purchaseId;
+    purchaseId = (
+      await createPurchase(userId, collectionId, {
+        purchasedAt: "2026-09-02",
+        currency: "EUR",
+        status: "arrived",
+      })
+    ).id;
+    const otherClosed = await lotOf(1);
+    assert.equal((await closeLot(userId, otherClosed.lotId)).ok, true);
+    await lotOf(1);
+    purchaseId = ownPurchaseId;
+
     // One copy of each lot waiting on the sort pass, the rest filed. Set outright rather than left to
     // intake, whose starting state follows the order's delivery status.
     await prisma.item.updateMany({
