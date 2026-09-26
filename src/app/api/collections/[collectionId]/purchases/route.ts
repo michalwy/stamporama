@@ -6,7 +6,7 @@ import {
   type PurchaseSortBy,
   type PurchaseStatus,
 } from "@/lib/purchases";
-import { isIntakeDocumentType } from "@/lib/purchase-kind";
+import { isIntakeDocumentType, parseIntakePartyIds } from "@/lib/purchase-kind";
 
 const VALID_SORT_BY = new Set<PurchaseSortBy>(["purchasedAt", "createdAt"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -31,6 +31,9 @@ export async function GET(
   const typeParam = sp.get("type");
   const type = isIntakeDocumentType(typeParam) ? typeParam : undefined;
   const contactId = sp.get("contactId") || undefined;
+  // Several of each, `none` among them for a document recorded without one (#1392).
+  const platformIds = parseIntakePartyIds(sp.get("platform"));
+  const supplierIds = parseIntakePartyIds(sp.get("supplier"));
   const sortByParam = sp.get("sortBy") as PurchaseSortBy | null;
   const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
   const sortDirParam = sp.get("sortDir");
@@ -45,6 +48,8 @@ export async function GET(
       type,
       status,
       contactId,
+      platformIds,
+      supplierIds,
       sortBy,
       sortDir,
       pageSize: 50,

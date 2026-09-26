@@ -185,10 +185,21 @@ opening value* rather than `0.00`, and when only some do, a chip says how many l
 - **Filter** by delivery status with the *Preparing* / *In transit* / *Arrived* toggles. A delivery
   status belongs to a purchase alone, so these never show an opening balance, and they are not
   offered while *Opening balances* is selected.
+- **Filter** by platform and by supplier. Each takes several at once, and each has a *No platform* /
+  *No supplier* option for documents recorded without one. An opening balance has neither, so it
+  shows under *No platform* and *No supplier* and never under a named one. The supplier filter has a
+  search box, since that list grows long. Only platforms and suppliers that appear on at least one
+  document are offered.
 - **Sort** by purchase date or by the date the record was added, ascending or descending.
 
-Your filter, sort, and scroll position are kept in the page URL, so you can bookmark or
-share a view. The list loads more rows as you scroll.
+**The list comes back as you left it.** Your filters and sort are remembered for the collection,
+so arriving from the sidebar, Quick jump or a purchase's screen shows the same view, and they are
+kept in the page URL too, so a reload, the Back button and a bookmarked or shared link all show it.
+The scroll position is not remembered.
+
+While any filter is narrowing the list, a band under the toolbar says so and names each one;
+**Clear filters** there switches them all off in one click and leaves the sort as it is. The list
+loads more rows as you scroll.
 
 ## Adding a purchase
 

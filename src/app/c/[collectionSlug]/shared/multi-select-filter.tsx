@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/app/icons";
+import { TextInput } from "./text-input";
 import {
   FILTER_MENU_HEADING_STYLE,
   FILTER_MENU_ITEM_STYLE,
@@ -40,6 +41,7 @@ export function MultiSelectFilter({
   footer,
   zIndex = FILTER_MENU_Z_INDEX,
   onOpenChange,
+  searchPlaceholder,
 }: {
   /** `group` puts the option under a heading in the menu (#846). Options carrying the same heading
    * must be **adjacent** — the menu draws a heading whenever the value changes, so the caller's
@@ -96,11 +98,23 @@ export function MultiSelectFilter({
    * from it: the menu has its own Escape listener and is not an escape layer (#361), so one Escape
    * would otherwise close the menu *and* the dialog under it. */
   onOpenChange?: (open: boolean) => void;
+  /** Draws a search box over the checklist, with this placeholder, for a filter whose options are
+   * the collector's own and grow without bound — the Intake documents list's suppliers (#1392). It
+   * narrows the **menu** by name and nothing else: a ticked option the search hides stays ticked, and
+   * the box empties each time the menu closes, so the next opening shows the whole list again. Left
+   * off, the menu is the plain checklist every other caller has. */
+  searchPlaceholder?: string;
 }) {
+  const [query, setQuery] = useState("");
   const { open, setOpen, pos, triggerRef, menuRef } = useFilterPopover<HTMLButtonElement>({
     disabled,
-    onOpenChange,
+    onOpenChange: (next) => {
+      if (!next) setQuery("");
+      onOpenChange?.(next);
+    },
   });
+  const needle = foldForSearch(query.trim());
+  const shown = needle ? options.filter((o) => foldForSearch(o.label).includes(needle)) : options;
 
   const chosen = new Set(selected);
   // One value names itself; several are counted, because a toolbar control that grows with the
@@ -154,6 +168,26 @@ export function MultiSelectFilter({
                with or without one, so there is one shape rather than two. */
             style={{ ...filterMenuStyle(pos, zIndex), overflowY: "hidden" }}
           >
+            {searchPlaceholder !== undefined && (
+              <TextInput
+                type="search"
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                style={{
+                  flexShrink: 0,
+                  margin: "0.1rem 0.1rem 0.3rem",
+                  padding: "0.35rem 0.5rem",
+                  border: "1px solid var(--color-border-strong)",
+                  borderRadius: "0.3rem",
+                  fontSize: "0.8125rem",
+                  background: "var(--color-bg-elevated)",
+                  color: "var(--color-text-primary)",
+                }}
+              />
+            )}
             <div
               role="listbox"
               aria-multiselectable
@@ -183,9 +217,9 @@ export function MultiSelectFilter({
               >
                 {clearLabel ?? allLabel}
               </button>
-              {options.map((o, i) => (
+              {shown.map((o, i) => (
                 <Fragment key={o.id}>
-                  {o.group && o.group !== options[i - 1]?.group && (
+                  {o.group && o.group !== shown[i - 1]?.group && (
                     <span style={FILTER_MENU_HEADING_STYLE}>{o.group}</span>
                   )}
                   <label
@@ -207,6 +241,11 @@ export function MultiSelectFilter({
                   </label>
                 </Fragment>
               ))}
+              {shown.length === 0 && (
+                <span style={{ ...FILTER_MENU_ITEM_STYLE, color: "var(--color-text-muted)" }}>
+                  No matches
+                </span>
+              )}
             </div>
             {footer ? (
               <div
@@ -228,4 +267,9 @@ export function MultiSelectFilter({
         )}
     </>
   );
+}
+
+/** A label or a search as compared: case and diacritics folded, so `gdansk` finds `Gdańsk`. */
+function foldForSearch(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
