@@ -89,3 +89,27 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     multiStamp: asMultiStampFilter(sp.get("multiStamp")),
   };
 }
+
+/**
+ * The area rail's filter set (#843): the list's own, less the area selection, so each area's count
+ * is what selecting it would list. Read through {@link readItemFilters} rather than beside it — the
+ * route had its own copy of the parser, which never learned the tag filter (#1182) or *this location
+ * only* (#385), so a tagged list's rail counted every tag's copies (#1404).
+ */
+export function readAreaFacetFilters(sp: URLSearchParams): Omit<ItemListFiltersPaginated, "areaIds"> {
+  const filters = readItemFilters(sp);
+  delete filters.areaIds;
+  return filters;
+}
+
+/** The year rail's filter set (#142): the list's own, less the year — one year, the no-year bucket
+ *  or a decade's span alike — for the reason {@link readAreaFacetFilters} gives. */
+export function readYearFacetFilters(
+  sp: URLSearchParams
+): Omit<ItemListFiltersPaginated, "year" | "yearFrom" | "yearTo"> {
+  const filters = readItemFilters(sp);
+  delete filters.year;
+  delete filters.yearFrom;
+  delete filters.yearTo;
+  return filters;
+}

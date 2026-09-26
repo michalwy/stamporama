@@ -9,6 +9,11 @@ import {
   tagFilterTriggerLabel,
   tagFilterWhere,
 } from "../../src/lib/tag-filter";
+import {
+  readAreaFacetFilters,
+  readItemFilters,
+  readYearFacetFilters,
+} from "../../src/app/api/collections/[collectionId]/items/item-filters";
 
 // The tag filter's two readings (#1182). Everything here is the half that goes wrong silently: an
 // `all` that is really an `any` returns a *superset*, which looks like a working filter until the
@@ -143,5 +148,39 @@ describe("tagFilterTriggerLabel", () => {
   it("names the mode once it has one, since the list cannot", () => {
     assert.equal(tagFilterTriggerLabel(["Birds", "To check"], "any"), "Any of 2 tags");
     assert.equal(tagFilterTriggerLabel(["Birds", "To check"], "all"), "All of 2 tags");
+  });
+});
+
+describe("the Copies list's rails read the list's own filters (#1404)", () => {
+  // The area and year rails each had a parser of their own beside the list's, and neither learned the
+  // tag filter: a tagged list's rails kept counting every copy. Each rail is now the list's filter set
+  // less its own axis, and nothing else — held here as equality, so a filter the list learns later
+  // cannot miss the rails.
+  const sp = new URLSearchParams(
+    "tagIds=a,none,b&tagMode=all&areaIds=x,y&year=1950s&conditionIds=c" +
+      "&locationId=l&locationExact=true&forSale=true&multiStamp=only&includeGone=true"
+  );
+
+  it("the area rail is the list less the area selection", () => {
+    const expected = readItemFilters(sp);
+    delete expected.areaIds;
+    const got = readAreaFacetFilters(sp);
+    assert.deepEqual(got, expected);
+    assert.deepEqual(got.tagIds, ["a", "none", "b"]);
+    assert.equal(got.tagMode, "all");
+    assert.equal(got.yearFrom, 1950);
+  });
+
+  it("the year rail is the list less the year, a decade's span included", () => {
+    const expected = readItemFilters(sp);
+    delete expected.year;
+    delete expected.yearFrom;
+    delete expected.yearTo;
+    const got = readYearFacetFilters(sp);
+    assert.deepEqual(got, expected);
+    assert.deepEqual(got.tagIds, ["a", "none", "b"]);
+    assert.deepEqual(got.areaIds, ["x", "y"]);
+    assert.equal("yearFrom" in got, false);
+    assert.equal("year" in readYearFacetFilters(new URLSearchParams("year=1920")), false);
   });
 });

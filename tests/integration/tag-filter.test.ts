@@ -4,7 +4,19 @@ import { prisma } from "../../src/lib/db";
 import { createTag, listTags, setIssueTags, setItemTags, setStampTags } from "../../src/lib/tags";
 import { listIssuesPaginated, listIssueYearFacets } from "../../src/lib/issues";
 import { listStampsPaginated } from "../../src/lib/stamps";
-import { createItem, listItemsPaginated } from "../../src/lib/items";
+import {
+  createItem,
+  getHoldingsValuation,
+  listItemAreaFacets,
+  listItemsPaginated,
+  listItemYearFacets,
+} from "../../src/lib/items";
+import { costBasisCopyCount } from "../../src/lib/valuation";
+import {
+  readAreaFacetFilters,
+  readItemFilters,
+  readYearFacetFilters,
+} from "../../src/app/api/collections/[collectionId]/items/item-filters";
 
 // Filtering a list by tag, *any* and *all* (#1182).
 //
@@ -25,6 +37,7 @@ describe("filtering the lists by tag (#1182)", () => {
   let userId: string;
   let collectionId: string;
   let conditionId: string;
+  let areaId: string;
 
   /** The three tags: two the rows carry, and one nothing carries. */
   let birdsId: string;
@@ -65,7 +78,7 @@ describe("filtering the lists by tag (#1182)", () => {
     const catalog = await prisma.catalogName.create({
       data: { vendorId: vendor.id, name: "Michel Polska", currency: "EUR" },
     });
-    const areaId = (
+    areaId = (
       await prisma.collectionArea.create({
         data: {
           collectionId,
@@ -280,6 +293,54 @@ describe("filtering the lists by tag (#1182)", () => {
       all.map((f) => [f.year, f.count]),
       [[1922, 1]]
     );
+  });
+
+  it("narrows the Copies list's summary bar and both rails exactly as it narrows the rows (#1404)", async () => {
+    // Read the way the routes read them — the query string through the list's own parser — because
+    // the bug was there: the rails' routes had parsers of their own that never learned the tag
+    // filter, so a tagged list's area counts described every copy. Each figure is held to the list
+    // under the same query, for *any*, *all* and *No tags*.
+    const cases: [query: string, expected: string[]][] = [
+      [`tagIds=${birdsId},${checkId}`, ["birds", "both", "check"]],
+      [`tagIds=${birdsId},${checkId}&tagMode=all`, ["both"]],
+      ["tagIds=none", ["none"]],
+      [`tagIds=none,${checkId}&tagMode=all`, ["both", "check", "none"]],
+    ];
+    const years = new Map(["birds", "check", "both", "none"].map((key, i) => [copies[key], 1920 + i]));
+    for (const [query, expected] of cases) {
+      const sp = new URLSearchParams(query);
+      const list = await listItemsPaginated(userId, collectionId, readItemFilters(sp));
+      const listed = list.items.map((item) => item.id);
+      assert.equal(listed.length, expected.length, query);
+      assert.deepEqual(
+        listed.map((id) => Object.entries(copies).find(([, v]) => v === id)![0]).sort(),
+        expected,
+        query
+      );
+
+      const summary = await getHoldingsValuation(userId, collectionId, readItemFilters(sp));
+      assert.equal(
+        costBasisCopyCount(summary.cost) + costBasisCopyCount(summary.openingValue),
+        expected.length,
+        `summary bar under ${query}`
+      );
+
+      const areas = await listItemAreaFacets(userId, collectionId, readAreaFacetFilters(sp));
+      assert.deepEqual(areas, [{ areaId, count: expected.length }], `area rail under ${query}`);
+      const inArea = await listItemsPaginated(
+        userId,
+        collectionId,
+        readItemFilters(new URLSearchParams(`${query}&areaIds=${areaId}`))
+      );
+      assert.equal(inArea.items.length, areas[0].count, `the area's own list under ${query}`);
+
+      const yearRail = await listItemYearFacets(userId, collectionId, readYearFacetFilters(sp));
+      assert.deepEqual(
+        yearRail.map((f) => [f.year, f.count]),
+        listed.map((id) => [years.get(id), 1]).sort((a, b) => a[0]! - b[0]!),
+        `year rail under ${query}`
+      );
+    }
   });
 
   it("matches nothing for a tag id that is not this collection's", async () => {
