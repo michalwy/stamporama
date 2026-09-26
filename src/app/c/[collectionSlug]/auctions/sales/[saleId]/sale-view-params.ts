@@ -296,33 +296,14 @@ export function auctionSaleViewUrlUpdates(
 // card — it takes #911's answer, through the same `byLotWithArrival` (collector's choice,
 // 2026-09-24).
 
-/**
- * The lots on screen once the lot asked for is added back: what the filters left, plus that lot in
- * its own place in the parcel's order, and **which lot, if any, is there only by exception**.
- *
- * `exception` is null whenever the filters did not hide the lot — including the common case, a
- * `?lot=` the remembered view does not narrow out at all, which behaves exactly as it did before
- * there was an exception to make. It is also null for a lot the parcel does not hold (#1015): that
- * is a different failure, with no card to pin.
- */
-export function withAskedForLot<L extends { id: string }>(
-  parcel: readonly L[],
-  shown: readonly L[],
-  askedForLotId: string | null
-): { lots: L[]; exception: L | null } {
-  if (!askedForLotId || shown.some((lot) => lot.id === askedForLotId)) {
-    return { lots: [...shown], exception: null };
-  }
-  const exception = parcel.find((lot) => lot.id === askedForLotId) ?? null;
-  if (!exception) return { lots: [...shown], exception: null };
-  const kept = new Set([...shown.map((lot) => lot.id), exception.id]);
-  return { lots: parcel.filter((lot) => kept.has(lot.id)), exception };
-}
+// `withAskedForLot` — the rule itself — lives in `shared/lot-arrival.ts` since #1394, where the
+// purchase order reads it too: its lot-state filter hides whole lots the same way *Not described*
+// does here.
 
 /**
  * The view the screen draws while an arrival is holding it: the remembered one, with the lots on
  * screen as cards (#911's rule, `byLotWithArrival`). Everything else — the filters above all — is
- * the remembered view exactly; the lot asked for gets past the filters by {@link withAskedForLot},
+ * the remembered view exactly; the lot asked for gets past the filters by `withAskedForLot`,
  * not by any of them being switched off.
  */
 export function auctionSaleViewOnArrival(

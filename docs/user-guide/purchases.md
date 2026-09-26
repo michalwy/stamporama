@@ -1685,8 +1685,8 @@ thousands of positions shows every copy, and ticking a whole lot or a whole issu
 **every copy the list is showing** — resolved on the server, not just the rows you have loaded.
 
 **The lots toolbar.** One row above the lots carries everything about how they are shown and how
-new ones are made: the **Lots** heading, **Group by**, **Still needs**, **Kept for**, **Sort
-copies**, **Expand all**, and — at the right-hand end — **Add lot** and **Add lot with stamps**.
+new ones are made: the **Lots** heading, **Group by**, **Lot state**, **Still needs**, **Kept
+for**, **Sort copies**, **Expand all**, and — at the right-hand end — **Add lot** and **Add lot with stamps**.
 
 **Grouping the copies view.** On that row, a **Group by** control has four toggles —
 **Lot**, **Area**, **Year** and **Issue** — that shape how the whole order's copies are shown.
@@ -1726,6 +1726,23 @@ that way puts **Lot** on for you. It is on **for that visit only**: your remembe
 untouched, pressing *Lot* off leaves it off, and opening the order from the Purchases list gives
 you the view you left.
 
+**Showing only open or only closed lots.** A **Lot state** control on the same row has two chips —
+**Open** and **Closed**. Press **Open** to see only the lots still being worked, **Closed** to see
+only the ones already closed (their cost frozen, their copies read-only); press the lit chip again
+to see both, which is how an order opens until you choose. It applies in **every** view: grouped by
+lot it hides whole lot cards, and in the by-issue and flat views it hides the copies that belong to
+lots in the other state. It works **together with** the two filters below — **Open** with **N to
+sort** is what is left to do on the order. An untitled lot keeps its number while others are
+hidden, so *Lot 3* is still *Lot 3*.
+
+If you arrive from a copy's **Go to purchase** and its lot is one the chip is hiding, that lot is
+shown anyway — the row says *plus the lot you opened* — and everything else stays as you left it.
+The chip itself is not changed; opening the order again from the Purchases list shows only the lots
+you chose.
+
+Ticking works as it always has: only copies of **open** lots can be ticked, so **Closed** shows lots
+with nothing to tick, and a selection you made earlier is kept.
+
 **Showing only what still needs something.** A **Still needs** control on the same row has up to
 three chips — **N to sort**, **⚠ N unpriced**, **N no photos** — counting the whole order. Press one
 to show only those copies, press it again to show everything. A chip with nothing behind it is not
@@ -1742,7 +1759,7 @@ here and **N to sort** there. A copy can be kept for more than one purpose, so *
 
 While a filter is narrowing the list, every heading counts what it is **showing** (`12 shown`
 rather than `12 in lot`), and headings left with nothing to show drop out of the view entirely
-instead of appearing as an empty group. Both chip rows are **remembered for that order** — a filing
+instead of appearing as an empty group. All three chip rows are **remembered for that order** — a filing
 pass runs over several sittings, and re-narrowing the screen each time was work you should not have
 to repeat. A chip stays lit for as long as it is
 on, so an order that looks short is showing you why in the same row.

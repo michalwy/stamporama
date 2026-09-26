@@ -2952,6 +2952,18 @@ export function matchesDispositionFilter(
   return true;
 }
 
+/**
+ * *Which lots the order's copies come from, by their state* (#1394) — a third axis beside
+ * {@link LotCopyFilter} and {@link CopyDispositionFilter}, `AND`-ed with both. Absent means both
+ * states, which is the default: nothing is hidden until the collector asks.
+ *
+ * Only the **order-level** reads take it. The by-lot view hides whole cards and does that from the
+ * lots it already holds, so a lot's own reads never need to be told; and it never enters a
+ * selection, because the bulk write reaches open lots only (`onlyOpenLots`, #571) — so *Open* names
+ * the same copies a tick already did, and *Closed* leaves nothing a tick could reach.
+ */
+export type LotStateFilter = "open" | "closed";
+
 export interface LotIntakePageOptions {
   sort?: LotCopySort;
   sortDir?: "asc" | "desc";
@@ -2959,6 +2971,8 @@ export interface LotIntakePageOptions {
   /** Narrow to copies kept for one purpose (#622). Orthogonal to `filter` — both may be set, and
    * the read means their intersection. */
   disposition?: CopyDispositionFilter;
+  /** Narrow to copies of open or of closed lots (#1394). Read by the order-level page alone. */
+  lotState?: LotStateFilter;
   /** Restrict to copies that could take a scan tile carrying these photo roles (#567) — i.e. copies
    * holding **none** of them. Separate from `filter` because it is parameterised by the tile in
    * hand rather than being one of the header chips; see {@link freePhotoSlotsWhere}. */
@@ -3135,7 +3149,14 @@ export async function getPurchaseIntakePage(
   purchaseId: string,
   opts: LotIntakePageOptions = {}
 ): Promise<PaginatedItemsResult> {
-  return getIntakePage(ownerId, collectionId, { lot: { purchaseId } }, opts);
+  // The lot state rides in the scope's own `lot` clause rather than beside it: both are about the
+  // copy's lot, and a second `lot` key spread into the same `where` would replace the first.
+  return getIntakePage(
+    ownerId,
+    collectionId,
+    { lot: { purchaseId, ...(opts.lotState ? { status: opts.lotState } : {}) } },
+    opts
+  );
 }
 
 /**
@@ -3148,6 +3169,8 @@ export async function getPurchaseIntakePage(
 export interface IntakeFilterOptions {
   filter?: LotCopyFilter;
   disposition?: CopyDispositionFilter;
+  /** Open or closed lots only (#1394); the order summary is the one reader. */
+  lotState?: LotStateFilter;
   /** How the list is piled up (#1189), outermost axis first — `[]` for a flat list. The summary
    * takes it for the same reason it takes the filters: the headings are the one part of the screen
    * that is not paged, so a summary that did not know how the list is grouped could not name
@@ -3159,6 +3182,7 @@ export interface IntakeFilterOptions {
  * is why `unpriced` — a valuation no column carries — costs nothing here. */
 function matchesIntakeFilters(item: ItemListItem, opts: IntakeFilterOptions): boolean {
   if (!matchesDispositionFilter(item, opts.disposition)) return false;
+  if (opts.lotState && item.lotStatus !== opts.lotState) return false;
   if (opts.filter === "unpriced") return isBlockingCopy(item);
   if (opts.filter === "to-sort") return item.deliveryState === TO_SORT_DELIVERY_STATE;
   if (opts.filter === "no-photos") return item.photos.length === 0;

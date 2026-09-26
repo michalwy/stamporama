@@ -103,6 +103,7 @@ describe("parsePurchaseUiState", () => {
       groups: { lot1: ["iss1"], order: ["iss2"] },
       filter: "to-sort",
       disposition: "for-sale",
+      lotState: "open",
       scans: { open: true, filter: "unidentified", showDone: true, batches: { "3": false } },
     };
     assert.deepEqual(parsePurchaseUiState(JSON.stringify(written)), written);
@@ -121,6 +122,7 @@ describe("parsePurchaseUiState", () => {
         groups: { lot1: ["a", 2], lot2: "nope", lot3: [] },
         filter: 9,
         disposition: 42,
+        lotState: true,
         scans: { open: "yes", filter: 3, showDone: true, batches: { "1": true, "2": "no" } },
       })
     );
@@ -129,6 +131,7 @@ describe("parsePurchaseUiState", () => {
     assert.deepEqual(parsed.groups, { lot1: ["a"] });
     assert.equal(parsed.filter, null);
     assert.equal(parsed.disposition, null);
+    assert.equal(parsed.lotState, null);
     assert.equal(parsed.scans.open, false);
     assert.equal(parsed.scans.filter, "all");
     assert.equal(parsed.scans.showDone, true);
@@ -147,6 +150,7 @@ describe("isEmptyPurchaseUiState", () => {
     assert.equal(isEmptyPurchaseUiState(state({ groups: { lot1: ["iss"] } })), false);
     assert.equal(isEmptyPurchaseUiState(state({ filter: "unpriced" })), false);
     assert.equal(isEmptyPurchaseUiState(state({ disposition: "for-sale" })), false);
+    assert.equal(isEmptyPurchaseUiState(state({ lotState: "closed" })), false);
     assert.equal(
       isEmptyPurchaseUiState(state({ scans: { ...EMPTY_PURCHASE_UI_STATE.scans, open: true } })),
       false

@@ -24,11 +24,11 @@ import { SIGNALS } from "../../auction-controls";
 import {
   auctionSaleViewNarrowings,
   auctionSaleViewNarrowsLots,
-  withAskedForLot,
   type AuctionSaleNarrowing,
   type AuctionSaleView,
 } from "./sale-view-params";
 import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
+import { withAskedForLot } from "@/app/c/[collectionSlug]/shared/lot-arrival";
 import { issueLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { AuctionLotRow } from "../../auction-lot-row";
 import { BaseAmount } from "../../auction-base-amount";
