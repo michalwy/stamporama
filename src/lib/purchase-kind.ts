@@ -42,6 +42,24 @@ export function intakeDocumentType(p: { kind: string; tradeId: string | null }):
   return p.tradeId ? "trade" : "purchase";
 }
 
+/**
+ * The id the list's platform and supplier filters use for **a document recorded without one**
+ * (#1392). A filter that could not select what is missing would hide those documents for good, so
+ * *No platform* and *No supplier* are tickable values beside the named ones — and an opening
+ * balance, which carries neither field, is matched by them and by nothing else.
+ */
+export const INTAKE_PARTY_NONE = "none";
+
+/**
+ * A platform or supplier filter as the address and the list route carry it — comma-separated ids,
+ * {@link INTAKE_PARTY_NONE} among them — read back into a list: blanks dropped, each id once, in the
+ * order written.
+ */
+export function parseIntakePartyIds(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return [...new Set(raw.split(",").map((id) => id.trim()).filter(Boolean))];
+}
+
 /** The ceiling on an opening balance's title — a name for a document, not a description of it. */
 export const OPENING_BALANCE_TITLE_MAX = 120;
 

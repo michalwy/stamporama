@@ -10,6 +10,7 @@ import { summarizePurchaseReturn, type PurchaseReturn, type ReturnBasis } from "
 import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
 import { roundAmount } from "./decimal-input";
 import {
+  INTAKE_PARTY_NONE,
   intakeDocumentType,
   isOpeningBalance,
   normalizeOpeningBalanceTitle,
@@ -144,6 +145,11 @@ export interface PurchaseListFilters {
   /** Delivery status — a purchase's alone, so it narrows to purchases (an opening balance has none). */
   status?: PurchaseStatus;
   contactId?: string;
+  /** Platforms (#1392), any of them — {@link INTAKE_PARTY_NONE} for documents recorded without one,
+   *  which includes every opening balance. Empty or absent is no filter. */
+  platformIds?: string[];
+  /** Suppliers (#1392), on the same terms as {@link platformIds}. */
+  supplierIds?: string[];
   /** One document kind (#1390) — the agent API reads purchases and never an opening balance. */
   kind?: PurchaseKind;
   /** Inclusive bounds on the purchase date, `yyyy-mm-dd` (#1390). */
@@ -330,11 +336,65 @@ function buildPurchaseListWhere(
       // status, so it must not answer the *Arrived* chip (#1323).
       filters.status ? { status: filters.status, kind: "purchase" } : {},
       filters.kind ? { kind: filters.kind } : {},
+      partyWhere("platformId", filters.platformIds),
+      partyWhere("contactId", filters.supplierIds),
     ],
     ...(filters.contactId ? { contactId: filters.contactId } : {}),
     ...(purchasedAt ? { purchasedAt } : {}),
     ...(filters.purchaseNo !== undefined ? { purchaseNo: filters.purchaseNo } : {}),
   };
+}
+
+/**
+ * One platform or supplier filter (#1392): the named ones, or no party at all where
+ * {@link INTAKE_PARTY_NONE} is ticked — the two ORed, since `null` is never a member of an `in`
+ * (the Copies list's format and certificate filters, #343/#428). Nothing ticked is no filter.
+ *
+ * An opening balance stores both columns as `null` whatever its form sent (`resolveHeader`), so it
+ * answers *none* and never a named party, which is what the issue asks for without a word here
+ * about kinds.
+ */
+function partyWhere(
+  field: "platformId" | "contactId",
+  ids: readonly string[] | undefined
+): Prisma.PurchaseWhereInput {
+  if (!ids || ids.length === 0) return {};
+  const named = ids.filter((id) => id !== INTAKE_PARTY_NONE);
+  const branches: Prisma.PurchaseWhereInput[] = [];
+  if (named.length > 0) branches.push({ [field]: { in: named } });
+  if (named.length < ids.length) branches.push({ [field]: null });
+  return branches.length === 1 ? branches[0] : { OR: branches };
+}
+
+/**
+ * The platforms and suppliers that appear on at least one intake document, for the list's two
+ * filters (#1392) — off the documents rather than the contacts table, `listAuctionParties`' reason:
+ * a contact never bought from would only be noise in a filter that can never narrow anything, and a
+ * collection's supplier list grows long enough as it is.
+ */
+export async function listIntakeParties(
+  ownerId: string,
+  collectionId: string
+): Promise<{ platforms: { id: string; name: string }[]; suppliers: { id: string; name: string }[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.purchase.findMany({
+    where: { collectionId, OR: [{ platformId: { not: null } }, { contactId: { not: null } }] },
+    select: {
+      platform: { select: { id: true, name: true } },
+      contact: { select: { id: true, name: true } },
+    },
+  });
+  const platforms = new Map<string, string>();
+  const suppliers = new Map<string, string>();
+  for (const row of rows) {
+    if (row.platform) platforms.set(row.platform.id, row.platform.name);
+    if (row.contact) suppliers.set(row.contact.id, row.contact.name);
+  }
+  const sort = (m: Map<string, string>) =>
+    [...m.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  return { platforms: sort(platforms), suppliers: sort(suppliers) };
 }
 
 /** How many documents the list's filters match — the full total a page of them is out of. */

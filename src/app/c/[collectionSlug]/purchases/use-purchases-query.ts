@@ -17,6 +17,10 @@ interface PurchasesPage {
 export interface PurchaseFilters {
   type?: IntakeDocumentType;
   status?: PurchaseStatus;
+  /** Platform ids, `none` among them for documents without one (#1392). */
+  platformIds?: string[];
+  /** Supplier ids, on the same terms. */
+  supplierIds?: string[];
   sortBy?: PurchaseSortBy;
   sortDir?: "asc" | "desc";
 }
@@ -38,6 +42,8 @@ export function usePurchasesInfinite(
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.type) params.set("type", filters.type);
       if (filters.status) params.set("status", filters.status);
+      if (filters.platformIds?.length) params.set("platform", filters.platformIds.join(","));
+      if (filters.supplierIds?.length) params.set("supplier", filters.supplierIds.join(","));
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(
@@ -48,6 +54,20 @@ export function usePurchasesInfinite(
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
+/** The platforms and suppliers that appear on intake documents, for the list's two filters (#1392).
+ * Under the list's own key, so a save that invalidates the list refreshes them too — a new supplier
+ * typed into the edit dialog is in the filter the moment the row is. */
+export function useIntakeParties(collectionId: string) {
+  return useQuery<{ platforms: { id: string; name: string }[]; suppliers: { id: string; name: string }[] }>({
+    queryKey: ["purchases", collectionId, "parties"] as const,
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/purchases/parties`);
+      if (!res.ok) throw new Error("Failed to fetch intake parties");
+      return res.json();
+    },
   });
 }
 
