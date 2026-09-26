@@ -107,7 +107,7 @@ catalogues: a number written as Fischer's is never quietly answered with the Mic
 number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
 everywhere else in the app. A **read only** token can do all of this.
 
-**A read-and-write token can change things, and there are two places where that is now true.**
+**A read-and-write token can change things, and there are three places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
 for it, and write or re-generate its title and description — all of it inside Stamporama, on a
@@ -125,6 +125,33 @@ series' checklists are still missing.
 **What it cannot do on an exchange is anything your partner would see.** It does not share the
 list, make the link, agree the trade, answer what they wrote on it, or close it. A trade it builds
 sits on your trades screen as a draft until you look at it.
+
+On **purchases**, it can enter an order you paste or forward to it — an order confirmation, an
+auction invoice, a seller's email — so you do not retype it. It can:
+
+- **find a purchase** by seller, by date or by its number (*p12*), and read one with its lots,
+  expenses and what it all cost — in the currency you paid and in your base currency, exactly as the
+  purchase screen shows it. When no exchange rate is recorded for a foreign purchase it says so
+  rather than giving you a zero. A **read only** token can do this much;
+- **enter a purchase**: the seller, the marketplace it came through, the date, the currency and the
+  shipping — and **correct** any of those later;
+- **add lots**, give them a title and a price, rename or reprice one while it is open, and **remove
+  a lot that is still empty**;
+- **add, change and remove expenses** — the things bought with the stamps that are not stock, like a
+  magnifier or a catalogue;
+- **add the seller to your Contacts** when you have never bought from them. It always looks for them
+  first, by the name they are filed under or their full name, and uses the contact you already have.
+  If the name is close to somebody you already know — *Kowalsky* when you have a *Kowalski* — it is
+  told so and must say it really is a different person before a new contact is made. A new contact
+  gets a name and, for a marketplace seller, their login, and nothing else.
+
+**What it cannot do on a purchase is anything about the stamps themselves, or anything you cannot
+take back.** It never adds, identifies, moves or removes a copy — the purchase arrives with empty
+lots, and you identify the stamps into them as you always do. It does not close or reopen a lot,
+mark an order in transit or arrived, or delete a purchase, and it will not remove a lot that already
+holds copies or has closed. It does not touch the order a closed trade created, and it never sees or
+changes a contact's email, phone, address or notes, nor edits or deletes a contact you already have.
+Everything it writes is on the purchase's own screen, where you can change it back.
 
 **And there is one thing it can answer about a stamp you do not own and have not recorded: what a
 lot at auction would be worth bidding.** Tell it what the auctioneer says the lot holds — the
