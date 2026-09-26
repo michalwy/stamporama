@@ -87,6 +87,7 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
 import { PurchaseFormDialog } from "@/app/c/[collectionSlug]/purchases/purchase-form-dialog";
 import { AttachCopiesDialog } from "./attach-copies-dialog";
+import { PurchaseExpensesCard } from "./purchase-expenses-card";
 import { ScansCard } from "@/app/c/[collectionSlug]/shared/scans-card";
 import {
   TileIdentifyChainDialogs,
@@ -900,6 +901,20 @@ export function PurchaseDetailPanel({
         openingValue={purchase.openingValue ?? undefined}
         storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
       />
+
+      {/* The order's non-inventory lines (#1390), right under the bar whose *Price* row counts them.
+          A purchase's only: an opening balance paid for nothing. */}
+      {!openingBalance && (
+        <PurchaseExpensesCard
+          purchaseId={purchase.id}
+          currency={purchase.currency}
+          expenses={purchase.expenses}
+          isPending={isPending}
+          error={error}
+          run={run}
+          clearError={() => setError(undefined)}
+        />
+      )}
 
       {/* Card scans (#566, moved here by #586). **Above the lots**, because that is the order the
           pass runs in and the level the card exists at: a parcel arrives, its cards are scanned and

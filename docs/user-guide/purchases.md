@@ -44,6 +44,7 @@ The order's line items are managed separately, during **lot intake**:
 - **Expenses** — the *non-inventory* lines. Something bought alongside the stamps that is
   not itself stock — a magnifier, a catalogue, a stockbook: a label and a price. An expense
   absorbs its fair share of the shipping cost so it does not inflate the value of the stamps.
+  They have their own card on the purchase's screen — see [Expenses](#expenses).
 
 So a freshly recorded purchase has no lines at all — you add them during intake, and its
 list total grows as you do.
@@ -271,6 +272,15 @@ A lot's **⋮** menu lets you **Edit lot** (title and price), **Close** or **Reo
 **Delete** it. Deleting a lot also deletes **all of its copies** — they exist only to
 populate the lot, so they are removed with it (you are warned how many when confirming). A
 lot's price can only be edited while it is open.
+
+### Expenses
+
+Right under the values bar, a purchase has an **Expenses** card listing its non-inventory lines, each
+with its label and price in the purchase's currency. **Add expense** asks for a label and a price;
+each line's **⋮** menu lets you **Edit expense** or **Delete expense**. An expense takes its share of
+the order's shipping by price, exactly as a lot does, so adding one lowers the shipping share of every
+open lot — a closed lot's copies keep the cost they were closed with. An opening balance has no
+Expenses card: nothing was paid for it.
 
 **What the order cost.** (An opening balance opens with its opening value instead — see
 [The values bar on an opening balance](#the-values-bar-on-an-opening-balance).) The values bar at

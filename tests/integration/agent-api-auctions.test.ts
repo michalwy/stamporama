@@ -353,9 +353,16 @@ describe("auction reads (#1036)", () => {
       "refresh",
     ]);
     const AUCTION_WORDS = new Set(["auction", "auctions", "lot", "lots", "sale", "sales", "bid", "watchlist"]);
+    // **A purchase's lot is not an auction's** (#1390). `add_purchase_lot` adds a priced line to an
+    // order the collector already bought, which the agent is allowed to write; the watchlist's lots
+    // are what it only reads. `lot` alone cannot tell the two apart, so a name about a purchase is
+    // judged by its other words — `add_purchase_auction_lot` would still be caught.
     const writeShaped = (name: string) => {
       const words = name.split("_");
-      return WRITE_VERBS.has(words[0]) && words.some((word) => AUCTION_WORDS.has(word));
+      const auctionWords = words.includes("purchase")
+        ? words.filter((word) => word !== "lot" && word !== "lots")
+        : words;
+      return WRITE_VERBS.has(words[0]) && auctionWords.some((word) => AUCTION_WORDS.has(word));
     };
 
     it("carries no write-shaped auction operation, checked against the registry rather than asserted", () => {
@@ -381,6 +388,11 @@ describe("auction reads (#1036)", () => {
       for (const name of ["recommend_bid", "list_auction_watchlist", "find_tracked_auction_lots", "summarize_auction_exposure"]) {
         assert.ok(!writeShaped(name), `${name} is a read and must not be caught`);
       }
+      // A purchase's lot is not the watchlist's, and a purchase name about an auction still is.
+      for (const name of ["add_purchase_lot", "update_purchase_lot", "remove_purchase_lot"]) {
+        assert.ok(!writeShaped(name), `${name} writes a purchase, not the watchlist`);
+      }
+      assert.ok(writeShaped("add_purchase_auction_lot"), "a purchase name about an auction must be caught");
     });
 
     it("answers all three to a read-only token", async () => {

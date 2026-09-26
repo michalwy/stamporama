@@ -144,6 +144,13 @@ export interface PurchaseListFilters {
   /** Delivery status — a purchase's alone, so it narrows to purchases (an opening balance has none). */
   status?: PurchaseStatus;
   contactId?: string;
+  /** One document kind (#1390) — the agent API reads purchases and never an opening balance. */
+  kind?: PurchaseKind;
+  /** Inclusive bounds on the purchase date, `yyyy-mm-dd` (#1390). */
+  purchasedFrom?: string;
+  purchasedTo?: string;
+  /** One document by its short number (#432, #1390). */
+  purchaseNo?: number;
   sortBy?: PurchaseSortBy;
   sortDir?: "asc" | "desc";
   pageSize?: number;
@@ -243,14 +250,7 @@ export async function listPurchasesPaginated(
     sortBy === "createdAt" ? [{ createdAt: dir }] : [{ purchasedAt: dir }, { createdAt: dir }];
 
   const rows = await prisma.purchase.findMany({
-    where: {
-      collectionId,
-      ...(filters.type ? documentTypeWhere(filters.type) : {}),
-      // A delivery status is a purchase's own: an opening balance is stored `arrived` and shows no
-      // status, so it must not answer the *Arrived* chip (#1323).
-      ...(filters.status ? { status: filters.status, kind: "purchase" } : {}),
-      ...(filters.contactId ? { contactId: filters.contactId } : {}),
-    },
+    where: buildPurchaseListWhere(collectionId, filters),
     orderBy,
     take: pageSize + 1,
     skip: offset,
@@ -305,6 +305,46 @@ export async function listPurchasesPaginated(
 
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
+}
+
+/**
+ * The `where` behind the list, shared with {@link countPurchases} so a page and its total cannot
+ * narrow differently (#1390 — `countTrades`' reason, #712).
+ */
+function buildPurchaseListWhere(
+  collectionId: string,
+  filters: PurchaseListFilters
+): Prisma.PurchaseWhereInput {
+  const purchasedAt =
+    filters.purchasedFrom || filters.purchasedTo
+      ? {
+          ...(filters.purchasedFrom ? { gte: toDate(filters.purchasedFrom) } : {}),
+          ...(filters.purchasedTo ? { lte: toDate(filters.purchasedTo) } : {}),
+        }
+      : undefined;
+  return {
+    collectionId,
+    AND: [
+      filters.type ? documentTypeWhere(filters.type) : {},
+      // A delivery status is a purchase's own: an opening balance is stored `arrived` and shows no
+      // status, so it must not answer the *Arrived* chip (#1323).
+      filters.status ? { status: filters.status, kind: "purchase" } : {},
+      filters.kind ? { kind: filters.kind } : {},
+    ],
+    ...(filters.contactId ? { contactId: filters.contactId } : {}),
+    ...(purchasedAt ? { purchasedAt } : {}),
+    ...(filters.purchaseNo !== undefined ? { purchaseNo: filters.purchaseNo } : {}),
+  };
+}
+
+/** How many documents the list's filters match — the full total a page of them is out of. */
+export async function countPurchases(
+  ownerId: string,
+  collectionId: string,
+  filters: PurchaseListFilters = {}
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.purchase.count({ where: buildPurchaseListWhere(collectionId, filters) });
 }
 
 /** The `where` that files a document under one of the list's types (#1323). */

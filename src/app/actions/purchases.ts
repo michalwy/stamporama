@@ -14,6 +14,12 @@ import {
 } from "@/lib/purchases";
 import { isPurchaseKind } from "@/lib/purchase-kind";
 import {
+  createPurchaseExpense,
+  deletePurchaseExpense,
+  updatePurchaseExpense,
+  type PurchaseExpenseInput,
+} from "@/lib/purchase-expenses";
+import {
   createLot,
   createLotWithStamps,
   updateLot,
@@ -310,6 +316,65 @@ export async function deleteLotAction(lotId: string): Promise<PurchaseActionStat
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to delete lot. Please try again.",
+    };
+  }
+}
+
+/** An expense's label and price from its dialog (#1390): both are required, and the price is an
+ * amount like any other on the order. */
+function parseExpense(formData: FormData): PurchaseExpenseInput | string {
+  const label = str(formData, "label");
+  if (!label) return "An expense needs a label.";
+  const price = parseMoney(str(formData, "price"));
+  if (price === null) return "Enter a valid amount.";
+  return { label, price };
+}
+
+export async function createPurchaseExpenseAction(
+  purchaseId: string,
+  formData: FormData
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  const input = parseExpense(formData);
+  if (typeof input === "string") return { status: "error", message: input };
+  try {
+    const id = await createPurchaseExpense(session.user.id, purchaseId, input);
+    return { status: "success", id };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to add expense. Please try again.",
+    };
+  }
+}
+
+export async function updatePurchaseExpenseAction(
+  expenseId: string,
+  formData: FormData
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  const input = parseExpense(formData);
+  if (typeof input === "string") return { status: "error", message: input };
+  try {
+    await updatePurchaseExpense(session.user.id, expenseId, input);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to update expense. Please try again.",
+    };
+  }
+}
+
+export async function deletePurchaseExpenseAction(expenseId: string): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await deletePurchaseExpense(session.user.id, expenseId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to delete expense. Please try again.",
     };
   }
 }

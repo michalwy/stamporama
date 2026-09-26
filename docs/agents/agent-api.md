@@ -8,16 +8,18 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
-track has landed**, #1036 last; both wrappers exist and the registry carries **thirty
-operations** — #708's vocabulary read, #710's six reads over the collection, #711's six offer verbs,
-#712's two want reads, checklist gap and nine trade verbs, #1036's three auction reads, #1168's bid
-recommendation, and #1037's catalog-number resolver. Three counts are quoted rather than deleted,
-because each was true when it was written: *the registry carries twenty-five operations* (from #712
-until #1168), *the registry carries twenty-six operations* (from #1168 until #1037) and *the
-registry carries twenty-seven operations* (from #1037 until #1036).
+track has landed**, #1036 last, and #1390 has since added purchases; both wrappers exist and the
+registry carries **forty-one operations** — #708's vocabulary read, #710's six reads over the
+collection, #711's six offer verbs, #712's two want reads, checklist gap and nine trade verbs,
+#1036's three auction reads, #1390's eleven purchase operations, #1168's bid recommendation, and
+#1037's catalog-number resolver. Four counts are quoted rather than deleted, because each was true
+when it was written: *the registry carries twenty-five operations* (from #712 until #1168), *the
+registry carries twenty-six operations* (from #1168 until #1037), *the registry carries
+twenty-seven operations* (from #1037 until #1036) and *the registry carries thirty operations* (from
+#1036 until #1390).
 
-**Eight of them write**, which is the change #712 made to this page and which neither #1168, #1037
-nor #1036 moved: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
+**Seventeen of them write** since #1390 added nine; *eight of them write* was the count from #712
+until then, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
 below). Two earlier sentences are
@@ -121,6 +123,7 @@ src/lib/agent-api/
   trade-reads.ts    the trade, line and balance responses and their projections (#712)
   bid-reads.ts      the bid-recommendation response and its projections (#1168)
   auction-reads.ts  the watchlist, exposure and tracked-listing responses (#1036)
+  purchase-reads.ts the purchase responses, the seller match and the close-name rule (#1390)
   catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
@@ -137,10 +140,11 @@ src/lib/agent-api/
     trades.ts       the nine trade verbs (#712)                         ← server-side
     bids.ts         recommend_bid (#1168)                                ← server-side
     auctions.ts     the three auction reads (#1036)                      ← server-side
+    purchases.ts    the eleven purchase operations (#1390)               ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1345,6 +1349,82 @@ query parameter is split on commas (#706), so a link with a comma in its query s
 The parameter tells the agent to send a link without its query string, where the offer number never
 is.
 
+## Entering purchases
+
+**Eleven operations** (#1390): an order the agent has in front of it as text — an order
+confirmation, an auction invoice, a seller's email — entered without the collector retyping it. Nine
+of them write.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_purchases` | no | purchases, narrowed to a seller, a span of dates or one purchase number |
+| `get_purchase` | no | one purchase with its lots, its expenses and what it cost in both currencies |
+| `create_seller` | yes | a contact for a seller the collection has never bought from |
+| `create_purchase` | yes | the header: seller, platform, date, currency, shipping |
+| `update_purchase` | yes | correct the header; only what is sent changes, `clear` empties a field |
+| `add_purchase_lot` | yes | an open, empty, priced lot |
+| `update_purchase_lot` | yes | rename or reprice an **open** lot |
+| `remove_purchase_lot` | yes | take off a lot that is open, empty and on no other record |
+| `add_purchase_expense` / `update_purchase_expense` / `remove_purchase_expense` | yes | the non-inventory lines |
+
+**The boundary is the collector's, set on 2026-09-26: the purchase, and nothing past it.** No copies —
+they enter the collection's counts, wants and values, which is the larger and riskier step — and
+nothing irreversible: no closing or reopening a lot (closing freezes the cost basis, ADR-0009 §3.5),
+no delivery status (arriving moves copies to *to sort*), no deleting a purchase. It is held the way
+the other boundaries are, by absence, and checked by `tests/unit/agent-api-operation-boundary.test.ts`
+(the imports) and `tests/integration/agent-api-purchases.test.ts` (the exact list of purchase
+operations). **`deleteLot` is on the forbidden map although removing a lot is allowed**, because it
+deletes the lot's copies with it; `remove_purchase_lot` goes through `lots.ts`'s `deleteEmptyLot`,
+whose emptiness is part of the delete's own `where` rather than a check a copy could arrive after.
+
+**Expenses had no writer anywhere until this issue.** `PurchaseExpense` has been in the schema since
+ADR-0009 and the order total has counted it since #852, but nothing in the app could create one. The
+issue's *everything the assistant writes can be seen and undone on the purchase's own screen* would
+have been false for them, so the collector chose (2026-09-26) to give the order screen an Expenses
+card in the same change, over `src/lib/purchase-expenses.ts` — one module for both the card and the
+three verbs.
+
+**A seller is matched first and created only on purpose.** `resolvePurchaseContact`, behind the
+purchase form, creates a contact from any name it does not recognise — right for a person typing,
+wrong here, where a misspelling would quietly become a second person. So every seller parameter is
+resolved exactly by `resolveSeller` (an id, or a name or full name equal once case and space are set
+aside), an ambiguous one is refused with the ids in `accepted` and the names in the sentence, and an
+unknown one is refused with the **close** contacts named. `create_seller` is the separate act, and it
+refuses a name close to an existing contact unless the agent sends `different_person: true`; a name
+already filed is refused whatever it says. **Close** is `namesAreClose`: equal once accents and
+punctuation are off, one inside the other at five letters or more, or one or two letters apart
+scaled to the length — loose on purpose, because it only ever suggests and never resolves.
+`resolvePurchaseContact` is on the forbidden map for that reason.
+
+**A contact is two fields.** A marketplace seller is filed under their login (#463), so
+`create_seller` writes the login as `name` and the name it was given as `fullName`; without a login,
+the name is the name. Nothing reads or writes `email`, `phone` or `notes` (a contact has no address
+field), and `updateContact` and `deleteContact` are on the forbidden map. The integration suite gives
+a seller all three private fields and searches every answer it received for them.
+
+**Money is the purchase screen's.** `get_purchase` states `PurchaseDetail.spend` and each
+`LotSummary.spend` (#852) as `paid` and `base`; an order in a foreign currency with no frozen rate
+has `base: null` and a `baseMissing` sentence, never a zero. Amounts are taken as strings to the
+cent (`"12.50"`), the offer surface's convention, and a third decimal or a comma is refused rather
+than rounded behind the agent's back. **Writes on a lot or an expense answer with that line and the
+order's new `spend`**, not the whole purchase: an auction settlement can carry forty lots, and the
+shipping split every one of them moves is what the agent needs to read back.
+
+**The incoming half of a trade is read and never written.** Its lot prices are the carried-over
+cost basis of the copies that went the other way (#644), kept in step by `syncTradePurchasePool` —
+not money anybody paid — so every write refuses it and `get_purchase` says `editable: false`.
+**Opening balances are not reachable at all**: they are rows of the same table, and `assertPurchase`
+answers one as not found (#1321 is its own track).
+
+**`update_purchase` restates the delivery status as it stands.** `updatePurchase` replaces the whole
+header and would otherwise write `preparing` over an order in transit; the integration suite moves
+one to `in_transit` first and checks it stays there.
+
+**One guard elsewhere had to learn the difference between two lots.** `agent-api-auctions.test.ts`
+read any write verb beside the word `lot` as a write to the auction watchlist, which
+`add_purchase_lot` is not. A name carrying `purchase` is now judged by its other words, so
+`add_purchase_auction_lot` would still be caught, and the test says both.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and
@@ -1365,9 +1445,12 @@ exist cannot be.
   cost and whether a listing is tracked; it does not create a lot or a sale, bid, set a ceiling,
   describe, close or settle anything. The same pair of tests keeps it — see *Following the auctions
   already tracked* above.
+- **The agent never touches a copy through a purchase, never does anything to one that cannot be
+  undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
 
-Do not add a publish-shaped, send-shaped or auction-writing operation to the registry, whatever it
-is called. *Two boundaries* was this section's count until #1036 and is quoted rather than deleted.
+Do not add a publish-shaped, send-shaped, auction-writing or copy-touching operation to the
+registry, whatever it is called. *Two boundaries* was this section's count until #1036 and *three*
+until #1390, and both are quoted rather than deleted.
 
 ### The two boundaries are not the same shape
 
@@ -1591,7 +1674,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries thirty operations.** It was empty on #706, which shipped none; #708
+**The document carries forty-one operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -1599,7 +1682,11 @@ added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, 
 `list_trade_lines`, `get_trade_balance`, `add_trade_give_lines`, `serve_trade_requirement`,
 `add_trade_receive_lines` and `remove_trade_line`; #1168 added `recommend_bid`; #1037 added
 `resolve_catalog_numbers`; #1036 added `list_auction_watchlist`, `summarize_auction_exposure` and
-`find_tracked_auction_lots`. Six earlier sentences are quoted rather than deleted because each stood
+`find_tracked_auction_lots`; #1390 added `list_purchases`, `get_purchase`, `create_seller`,
+`create_purchase`, `update_purchase`, `add_purchase_lot`, `update_purchase_lot`,
+`remove_purchase_lot`, `add_purchase_expense`, `update_purchase_expense` and
+`remove_purchase_expense`. *The document carries thirty operations* stood here from #1036 until
+#1390. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

@@ -313,3 +313,78 @@ describe("the agent API's operation modules (#1036)", () => {
     }
   });
 });
+
+/**
+ * The domain functions the purchase operations must never reach (#1390), grouped by why.
+ *
+ * **A fourth map, for a fourth reason.** The collector allowed the agent to create and edit a
+ * purchase — its header, its empty lots and its expenses — and to create its seller, and drew the
+ * line at three things: **copies** (they enter the collection's counts, wants and values), **anything
+ * irreversible** (closing a lot freezes its cost basis, arriving moves copies, deleting a purchase
+ * is gone), and **existing contacts** (their details are the collector's). Each row below is one of
+ * those, and says which.
+ *
+ * `deleteLot` is here although removing an empty lot is allowed: it deletes the lot's copies with
+ * it. The operation goes through `deleteEmptyLot`, whose emptiness is part of the delete itself.
+ * `resolvePurchaseContact` is here although creating a seller is allowed: it creates a contact from
+ * any name it does not recognise, which is the silent duplicate `create_seller` exists to prevent.
+ */
+const PURCHASE_BOUNDARY = new Map<string, { module: string; why: string }>([
+  // Copies.
+  ["intakeStamps", { module: "lots", why: "identifies copies into a lot" }],
+  ["createLotWithStamps", { module: "lots", why: "creates a lot together with its copies" }],
+  ["attachItemsToLot", { module: "lots", why: "moves existing copies into a lot" }],
+  ["removeLotItem", { module: "lots", why: "deletes a copy off its lot" }],
+  ["deleteLot", { module: "lots", why: "deletes a lot and every copy on it" }],
+  ["bulkUpdateLotItems", { module: "lots", why: "edits a lot's copies" }],
+  ["bulkUpdateLotItemsScoped", { module: "lots", why: "edits a lot's copies" }],
+  // Irreversible, or past the purchase itself.
+  ["closeLot", { module: "lots", why: "freezes a lot's cost basis onto its copies (ADR-0009 §3.5)" }],
+  ["reopenLot", { module: "lots", why: "returns a closed lot's copies to pending" }],
+  ["markPurchaseArrived", { module: "lots", why: "marks an order arrived, moving its copies to sort" }],
+  ["setPurchaseStatus", { module: "purchases", why: "moves an order's delivery status" }],
+  ["deletePurchase", { module: "purchases", why: "deletes a purchase" }],
+  // Existing contacts.
+  ["updateContact", { module: "contacts", why: "edits a contact, its private details included" }],
+  ["deleteContact", { module: "contacts", why: "deletes a contact" }],
+  ["resolvePurchaseContact", { module: "contacts", why: "creates a contact from any unknown name, silently" }],
+]);
+
+describe("the agent API's operation modules (#1390)", () => {
+  it("reach no domain function that touches copies, cannot be undone, or edits a contact", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        const rule = PURCHASE_BOUNDARY.get(name);
+        if (rule) {
+          breaches.push(
+            `${path.relative(ROOT, file)} imports \`${name}\` from "${from}" — it ${rule.why}`
+          );
+        }
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `The agent creates and edits purchases, their empty lots and expenses, and their sellers — never copies, nothing irreversible, no existing contact (#1390).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("would notice one, because the walk sees the writes the purchase module is allowed", () => {
+    const fixture = path.join(AGENT_API, "operations/purchases.ts");
+    const names = importedBindings(fixture).map((binding) => binding.name);
+    for (const allowed of ["createPurchase", "updatePurchase", "createLot", "updateLot", "deleteEmptyLot", "createContact"]) {
+      assert.ok(names.includes(allowed), `the walk did not see \`${allowed}\` in operations/purchases.ts`);
+    }
+    // Every name on the map is a real export of the module it names, so a renamed function cannot
+    // leave a row here guarding nothing.
+    for (const [name, { module }] of PURCHASE_BOUNDARY) {
+      const domain = readFileSync(path.join(ROOT, `src/lib/${module}.ts`), "utf8");
+      assert.match(
+        domain,
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of src/lib/${module}.ts any more`
+      );
+    }
+  });
+});

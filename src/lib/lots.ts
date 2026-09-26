@@ -37,6 +37,7 @@ import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake"
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { roundAmount } from "./decimal-input";
 import { intakeDocumentName, isOpeningBalance, type PurchaseKind } from "./purchase-kind";
+import type { PurchaseExpenseData } from "./purchases";
 
 // Server-side domain logic for the lot intake + open/close lifecycle (ADR-0009 §3/§5,
 // #121). A `PurchaseLot` is a priced inventory line that resolves into `Item`s over
@@ -179,6 +180,9 @@ export interface PurchaseDetail {
   status: string;
   lots: LotSummary[];
   expenseCount: number;
+  /** The order's non-inventory lines, oldest first (#1390) — the card they are added, restated and
+   *  removed on. Empty on an opening balance, which has none. */
+  expenses: PurchaseExpenseData[];
   /** lots + expenses + shipping, transaction currency (2 dp). */
   total: string;
   /** What the whole order cost, in both currencies, broken into its priced lines and its
@@ -276,7 +280,7 @@ export async function getPurchaseDetail(
         },
         orderBy: { id: "asc" },
       },
-      expenses: { select: { id: true, price: true } },
+      expenses: { select: { id: true, label: true, price: true }, orderBy: { id: "asc" } },
     },
   });
   if (!row || row.collection.ownerId !== ownerId) return null;
@@ -382,6 +386,7 @@ export async function getPurchaseDetail(
     status: row.status,
     lots,
     expenseCount: row.expenses.length,
+    expenses: row.expenses.map((e) => ({ id: e.id, label: e.label, price: e.price.toFixed(2) })),
     total: total.toFixed(2),
     spend,
     openingValue: openingValueOf(
@@ -510,6 +515,22 @@ export async function deleteLot(ownerId: string, lotId: string): Promise<void> {
     await tx.item.deleteMany({ where: { lotId, collectionId } });
     await tx.purchaseLot.delete({ where: { id: lotId } });
   });
+}
+
+/**
+ * Delete a lot **only if it holds no copies** (#1390), and say whether it did.
+ *
+ * `deleteLot` takes the lot's copies with it, which is right for the collector confirming a dialog
+ * that names how many, and wrong for the agent API, which never touches copies. The emptiness is
+ * part of the delete's own `where`, so a copy identified into the lot between a caller's check and
+ * this call leaves the lot standing rather than being deleted with it.
+ */
+export async function deleteEmptyLot(ownerId: string, lotId: string): Promise<boolean> {
+  await assertLotOwner(ownerId, lotId);
+  const { count } = await prisma.purchaseLot.deleteMany({
+    where: { id: lotId, items: { none: {} } },
+  });
+  return count === 1;
 }
 
 /** Remove a copy from its lot. Copies are created by intake purely to populate the lot

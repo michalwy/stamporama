@@ -8,7 +8,8 @@
 // checklist gap and the nine trade verbs — twelve operations, five of which write — taking the array
 // to twenty-five; #1168 added `recommend_bid`, taking it to twenty-six; #1037 added
 // `resolve_catalog_numbers`, taking it to twenty-seven; #1036 added the three auction reads, taking
-// it to **thirty**. Each one is an entry here
+// it to thirty; #1390 added the eleven purchase operations, nine of which write, taking it to
+// **forty-one**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -24,7 +25,8 @@
 // this counterparty have that answers it, what is this set still missing, then the trade itself,
 // built one side at a time and read back as a verdict — then the auctions already followed (#1036),
 // in the order a morning's mail is read against them: what is open, what it can cost, and whether a
-// listing in the mail is one of them. **`recommend_bid` is last because it is the
+// listing in the mail is one of them — then purchases (#1390), in the order an order confirmation
+// is entered: is it already here, who sold it, the purchase, its lots, its expenses. **`recommend_bid` is last because it is the
 // one operation that is not about the collection at all** (#1168): it answers *is this auction worth
 // looking at*, about a lot nothing here records, and an agent reaches it having decided to ask a
 // question the four workflows above cannot. It is what the generated document lists them in and what
@@ -88,6 +90,19 @@ import {
   removeTradeLineOperation,
   serveTradeRequirementOperation,
 } from "./operations/trades";
+import {
+  addPurchaseExpenseOperation,
+  addPurchaseLotOperation,
+  createPurchaseOperation,
+  createSellerOperation,
+  getPurchaseOperation,
+  listPurchasesOperation,
+  removePurchaseExpenseOperation,
+  removePurchaseLotOperation,
+  updatePurchaseExpenseOperation,
+  updatePurchaseLotOperation,
+  updatePurchaseOperation,
+} from "./operations/purchases";
 import { matchPathTemplate, parsePathTemplate, templateSpecificity } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
@@ -122,6 +137,17 @@ export const OPERATIONS: readonly Operation[] = [
   listAuctionWatchlistOperation,
   summarizeAuctionExposureOperation,
   findTrackedAuctionLotsOperation,
+  listPurchasesOperation,
+  getPurchaseOperation,
+  createSellerOperation,
+  createPurchaseOperation,
+  updatePurchaseOperation,
+  addPurchaseLotOperation,
+  updatePurchaseLotOperation,
+  removePurchaseLotOperation,
+  addPurchaseExpenseOperation,
+  updatePurchaseExpenseOperation,
+  removePurchaseExpenseOperation,
   recommendBidOperation,
 ];
 
