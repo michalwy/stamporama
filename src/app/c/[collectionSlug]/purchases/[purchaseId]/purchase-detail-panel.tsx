@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1344,6 +1345,7 @@ export function PurchaseDetailPanel({
               arrived={lot.id === arrivedLotId}
               expanded={lotExpansion.isExpanded(lot.id)}
               onToggleExpanded={() => lotExpansion.toggle(lot.id)}
+              onCollapse={() => lotExpansion.collapse(lot.id)}
               issueHeaderById={issueHeaderById}
               collectionId={collectionId}
               purchaseId={purchase.id}
@@ -1648,6 +1650,8 @@ interface LotCardProps {
    * one collapsed-by-default rule and a lot added here opens by itself. */
   expanded: boolean;
   onToggleExpanded: () => void;
+  /** Shut this card — what a successful close does to it (#1405). */
+  onCollapse: () => void;
   issueHeaderById: Record<string, IssueHeader>;
   collectionId: string;
   /** The order this lot belongs to — the card's own remembered view state (its collapsed groups)
@@ -2623,6 +2627,7 @@ function LotCard({
   arrived,
   expanded,
   onToggleExpanded,
+  onCollapse,
   issueHeaderById,
   collectionId,
   purchaseId,
@@ -2687,6 +2692,30 @@ function LotCard({
   // headers can pin just beneath it.
   const { sentinelRef: headerSentinelRef, stuck: headerStuck } = useStuck(stickyTop);
   const [headerRef, headerHeight] = useMeasuredHeight<HTMLDivElement>();
+
+  // A closed lot shuts itself (#1405): there is nothing left to do in it, and it would otherwise
+  // hold the space the next lot needs. The header's viewport position is taken just before, and
+  // the window is scrolled after the commit so the header is still there. That matters only when
+  // the header is pinned — the collector is down among this lot's copies, the card's top is above
+  // the viewport, and without the correction the collapse would leave the scroll offset pointing
+  // somewhere below the lot. With the header unpinned the difference is zero and nothing moves.
+  //
+  // Not the compensation #885 rejected for the selection bar: that one scrolled *down* and clamped
+  // on a short page. This one scrolls *up*, by at most the part of the card above the viewport,
+  // which the scroll offset always has room for.
+  const collapseAnchorRef = useRef<number | null>(null);
+  function collapseKeepingHeader() {
+    if (!expanded) return;
+    collapseAnchorRef.current = headerRef.current?.getBoundingClientRect().top ?? null;
+    onCollapse();
+  }
+  useLayoutEffect(() => {
+    const before = collapseAnchorRef.current;
+    if (expanded || before == null) return;
+    collapseAnchorRef.current = null;
+    const after = headerRef.current?.getBoundingClientRect().top;
+    if (after != null && after !== before) window.scrollBy(0, after - before);
+  }, [expanded, headerRef]);
 
   // Held until the persisted view preferences have been read: both the scroll and the flash fire
   // on this flag, and a card that is still collapsed at that moment is scrolled to at a height it
@@ -3442,7 +3471,11 @@ function LotCard({
         }
         return r;
       },
-      () => setDialog("none")
+      // Only on success: a refused close keeps the card open, so what blocked it stays in view.
+      () => {
+        setDialog("none");
+        collapseKeepingHeader();
+      }
     );
   }
 }
