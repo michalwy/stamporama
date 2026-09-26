@@ -318,6 +318,33 @@ share of the order's shipping — the pool that gets split across its copies whe
 shipping row names the whole charge the share came out of, because a lot did not incur postage of
 its own: the order's shipping is spread across all its lines by price.
 
+**What fraction of catalogue you paid.** Beside the total, the same row says what it came to as a
+share of the copies' catalog value — *23% of catalog* — on the order's bar and on each lot's. Both
+sides are in your base currency, so an order paid in another currency is compared at the rate
+frozen on it, and a lot with no such rate has no percentage. It is rounded to a whole percent, and a
+cost too small to reach one reads `<1%` rather than `0%`.
+
+- **A lot's** percentage is its cost against its copies' catalog value. Once it is closed that is the
+  cost frozen onto its copies; while it is open it is the live estimate, marked as one — `~25% of
+  catalog`, in muted italic — because closing it is what fixes the figure.
+- **An open lot with copies still unpriced** says *at most 40% of catalog (3 unpriced)*: the lot's
+  whole cost against only the copies that have a price is an upper bound, and pricing the rest can
+  only bring it down.
+- **The order's** percentage adds up its lots' figures — only the lots that have one. A lot whose
+  figure is only an *at most*, or that has none, is left out, and the percentage then says how many
+  copies it is over (*over 812 of 1227 copies*). While any lot behind it is open, it is an estimate
+  too. Non-inventory expenses are not part of it: they are not what the copies cost.
+- **With no catalog value at all** there is no percentage — never `0%`.
+- A copy that **never arrived** is out of the figure; its share of the cost went to the others.
+
+Hover the percentage for the two amounts behind it.
+
+**A copy's own percentage appears only where it differs from its lot's.** A lot's cost is split
+across its copies by their catalog value, so every copy costs the same share of its catalogue as the
+lot as a whole — repeating that figure on every row would say nothing. A copy's cost chip adds its
+own percentage (*cost 5.00 EUR · 50% of catalog*) only on a closed lot, where its catalog value has
+changed since the lot was closed.
+
 **Catalog value vs. cost.** Under those rows, ruled off and labelled, the same bar shows the
 **catalog value / purchase cost** figures the [inventory holdings summary](inventory.md) does — the summed catalog value (in
 your base currency, using each copy's default display condition) next to what was actually paid, so

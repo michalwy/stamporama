@@ -46,6 +46,17 @@ import type {
 } from "@/lib/lot-set-completeness";
 import type { PurchaseDetail, LotSummary } from "@/lib/lots";
 import {
+  EMPTY_LOT_CATALOG_BASIS,
+  costPercent,
+  divergentCopyPercent,
+  formatCostPercent,
+  lotCostToCatalog,
+  orderCostToCatalog,
+  type CostToCatalog,
+  type CostToCatalogLot,
+  type LotCatalogBasis,
+} from "@/lib/cost-to-catalog";
+import {
   EMPTY_SELECTION,
   containerBoxState,
   dropDispositionContainers,
@@ -945,6 +956,14 @@ export function PurchaseDetailPanel({
         // under it would state something untrue. Its opening value leads instead (#1325).
         spend={openingBalance ? undefined : purchase.spend}
         openingValue={purchase.openingValue ?? undefined}
+        // What the order cost as a share of catalogue (#1395), over the lots whose own figure is one.
+        costToCatalog={
+          orderSummary && !openingBalance
+            ? orderCostToCatalog(
+                purchase.lots.map((l) => costToCatalogLot(l, orderSummary.lotCatalogBasis[l.id]))
+              )
+            : null
+        }
         storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
       />
 
@@ -2010,6 +2029,7 @@ function CopyRow({
   item,
   open,
   estimate,
+  lotRatio,
   highlight,
   baseCurrency,
   areas,
@@ -2022,6 +2042,8 @@ function CopyRow({
   item: ItemListItem;
   open: boolean;
   estimate: number | null;
+  /** The copy's lot's cost as a share of catalogue (#1395), which its own figure is held against. */
+  lotRatio: CostToCatalog | null;
   highlight: boolean;
   baseCurrency: string;
   areas: CollectionAreaData[];
@@ -2056,6 +2078,7 @@ function CopyRow({
           item={item}
           baseCurrency={baseCurrency}
           estimate={estimate}
+          lotRatio={lotRatio}
           onSetDeliveryState={
             open ? (state) => copy.runBulk([item.id], { deliveryState: state }) : undefined
           }
@@ -2103,6 +2126,17 @@ function CopyRow({
 // The pinned-header helpers this screen's cards use now live in `shared/sticky-header.ts` (#637):
 // the trade screen pins its sections and their group headings the same way, and two copies of "am I
 // stuck yet" would drift.
+
+/** A lot as the cost-to-catalogue figure reads it (#1395): its state and pool off the purchase's own
+ * read model — the same pool the live estimate splits — beside its copies' basis from the summary. */
+function costToCatalogLot(lot: LotSummary, basis: LotCatalogBasis | undefined): CostToCatalogLot {
+  return {
+    open: lot.status === "open",
+    valued: lot.price != null,
+    poolBase: lot.poolBase != null ? Number(lot.poolBase) : null,
+    basis: basis ?? EMPTY_LOT_CATALOG_BASIS,
+  };
+}
 
 /** A copy's live cost-basis estimate for an open lot: its share of the base-currency pool by
  * catalog-price weight, using the whole-lot weight denominator from the summary (#172). Never
@@ -2727,6 +2761,10 @@ function LotCard({
   // Denominator for the live per-copy cost estimate (Σ positive base weight over staying copies).
   const weightBase = summary?.estimateWeightBase ?? 0;
   const groupTree = summary?.groupTree ?? [];
+  // What the lot cost as a share of catalogue (#1395) — on its bar, and what a copy's own figure is
+  // held against. Never on an opening balance, whose lots cost nothing.
+  const lotRatio =
+    summary && !openingBalance ? lotCostToCatalog(costToCatalogLot(lot, summary.catalogBasis)) : null;
 
   // Live cost-basis estimate for an open lot needs the base-currency pool, so it is unavailable
   // when no FX rate is known.
@@ -2763,6 +2801,7 @@ function LotCard({
         item={it}
         open={open}
         estimate={estimateFor(it, poolBaseNum, weightBase, open)}
+        lotRatio={lotRatio}
         highlight={blockedIds.has(it.id)}
         baseCurrency={baseCurrency}
         areas={areas}
@@ -3085,6 +3124,7 @@ function LotCard({
                   spend={openingBalance ? undefined : lot.spend}
                   // An opening balance's lot leads with its own opening value instead (#1325).
                   openingValue={lot.openingValue ?? undefined}
+                  costToCatalog={lotRatio}
                   storageKey={`stamporama:purchase:lotSummaryExpanded:${collectionId}`}
                 />
               </div>
@@ -3515,6 +3555,16 @@ function OrderCopiesView({
   const readFilters: OrderFilterParams = { ...intakeFilters, ...(lotState ? { lotState } : {}) };
   const summary = usePurchaseSummary(collectionId, purchaseId, readFilters, groupAxes).data;
   const groupTree = summary?.groupTree ?? [];
+  // Each lot's cost as a share of catalogue (#1395), which a copy's own figure is held against.
+  const lotRatioByLot = useMemo(() => {
+    const m = new Map<string, CostToCatalog | null>();
+    if (summary) {
+      for (const l of lots) {
+        m.set(l.id, lotCostToCatalog(costToCatalogLot(l, summary.lotCatalogBasis[l.id])));
+      }
+    }
+    return m;
+  }, [lots, summary]);
   // The same figure as the lot cards' (#563), but *from here* means "arrived in this parcel" —
   // these groups are merged across every lot of the order, which is what this view is for.
   const setCompleteness = usePurchaseSetCompleteness(
@@ -3540,6 +3590,7 @@ function OrderCopiesView({
         item={it}
         open={open}
         estimate={estimateFor(it, poolBase, weightBase, open)}
+        lotRatio={lotRatioByLot.get(lotId) ?? null}
         highlight={false}
         baseCurrency={baseCurrency}
         areas={areas}
@@ -4059,12 +4110,14 @@ function LotCopyChips({
   item,
   baseCurrency,
   estimate,
+  lotRatio,
   onSetDeliveryState,
   onSetDisposition,
 }: {
   item: ItemListItem;
   baseCurrency: string;
   estimate: number | null;
+  lotRatio: CostToCatalog | null;
   onSetDeliveryState?: (state: string) => void;
   onSetDisposition?: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
 }) {
@@ -4073,6 +4126,17 @@ function LotCopyChips({
     token: deliveryStateToken(item.deliveryState),
   };
   const chipStyle = tintChip(delivery.token, delivery.label).style;
+
+  // The copy's own cost as a share of catalogue (#1395), **only where it differs from its lot's**:
+  // the pool is split by the very value this compares against, so every copy shares its lot's
+  // figure until its catalogue value moves after the lot was closed.
+  const ownPercent = divergentCopyPercent(
+    {
+      costBasis: item.costBasis != null ? Number(item.costBasis) : null,
+      catalogValue: item.value.baseAmount,
+    },
+    lotRatio
+  );
 
   // Next step along the happy-path progression, for the per-copy quick-advance button (#159).
   // Null at "delivered" and on the exception outcomes, where the button is hidden.
@@ -4145,9 +4209,16 @@ function LotCopyChips({
       )}
 
       {item.costBasis != null ? (
-        <Tooltip content="Frozen cost-basis (base currency)">
+        <Tooltip
+          content={
+            ownPercent != null && lotRatio
+              ? `Frozen cost-basis (base currency) — ${formatCostPercent(ownPercent)} of this copy's catalog value, where its lot as a whole cost ${formatCostPercent(costPercent(lotRatio))}: its catalog value has changed since the lot was closed.`
+              : "Frozen cost-basis (base currency)"
+          }
+        >
           <span style={{ ...CHIP, fontVariantNumeric: "tabular-nums" }}>
             cost {item.costBasis} {baseCurrency}
+            {ownPercent != null ? ` · ${formatCostPercent(ownPercent)} of catalog` : ""}
           </span>
         </Tooltip>
       ) : item.lotValued === false ? (
