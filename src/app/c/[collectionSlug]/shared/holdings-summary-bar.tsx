@@ -5,6 +5,7 @@ import type { CostBasisTotal } from "@/lib/cost-basis";
 import type { OpeningValue } from "@/lib/opening-value";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { PurchaseSpend } from "@/lib/purchase-spend";
+import { costPercent, formatCostPercent, type CostToCatalog } from "@/lib/cost-to-catalog";
 import {
   NOT_APPLICABLE,
   NOT_WORKED_OUT,
@@ -380,6 +381,7 @@ function SpendRow({
   part,
   emphasis,
   prefix,
+  suffix,
   children,
 }: {
   label: string;
@@ -388,6 +390,8 @@ function SpendRow({
   part: "total" | "price" | "shipping";
   emphasis: "headline" | "breakdown";
   prefix?: string;
+  /** Said after the base-currency note, in the same column. */
+  suffix?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const headline = emphasis === "headline";
@@ -398,14 +402,74 @@ function SpendRow({
       <span style={headline ? HEADLINE_AMOUNT_STYLE : BREAKDOWN_AMOUNT_STYLE}>
         {amount} {spend.tx.currency}
       </span>
-      {(prefix || note) && (
+      {(prefix || note || suffix) && (
         <span style={note?.style ?? NOTE_STYLE}>
           {prefix ? `${prefix}${note ? " · " : ""}` : ""}
           {note?.text ?? ""}
+          {suffix && (
+            <>
+              {prefix || note ? " · " : ""}
+              {suffix}
+            </>
+          )}
         </span>
       )}
       {children}
     </div>
+  );
+}
+
+/**
+ * What the scope cost as a share of its copies' catalogue value (#1395) — *what fraction of
+ * catalogue did I pay* — on the headline row, since it is a question about the very total that row
+ * states and the collapsed bar is that row alone.
+ *
+ * An estimate is marked as one in #238's vocabulary, `~` and muted italic: an open lot's cost has not
+ * been frozen onto its copies. An open lot with unpriced copies is only an **upper bound** and says
+ * *at most*, with how many are unpriced; a figure over fewer copies than the scope holds says how
+ * many it is over. The amounts behind it are in the tooltip.
+ */
+function CostToCatalogNote({
+  ratio,
+  lot,
+  currency,
+}: {
+  ratio: CostToCatalog;
+  lot: boolean;
+  /** The base currency, which both sides of the figure are in. */
+  currency: string;
+}) {
+  const pct = formatCostPercent(costPercent(ratio));
+  const settled = ratio.kind === "settled";
+  const figure =
+    ratio.kind === "at_most"
+      ? `at most ${pct} of catalog`
+      : `${settled ? "" : "~"}${pct} of catalog`;
+  const coverage =
+    ratio.kind === "at_most"
+      ? `${ratio.unpricedCount} unpriced`
+      : ratio.coveredCount < ratio.copyCount
+        ? `over ${ratio.coveredCount} of ${ratio.copyCount} ${copiesWord(ratio.copyCount)}`
+        : null;
+  const amounts = `${ratio.cost.toFixed(2)} ${currency} against ${ratio.value.toFixed(2)} ${currency} of catalog value`;
+  const scope = lot ? "this lot" : "this order";
+  const tooltip =
+    ratio.kind === "at_most"
+      ? `An upper bound: ${ratio.unpricedCount} ${copiesWord(ratio.unpricedCount)} in ${scope} have no catalog price yet, and pricing them can only bring it down — ${amounts}.`
+      : ratio.kind === "estimate"
+        ? `An estimate: ${lot ? "the lot is" : "some of its lots are"} still open, so the cost is not yet frozen onto copies — ${amounts}.`
+        : `What ${scope} cost as a share of its copies' catalog value — ${amounts}.`;
+  const partial =
+    ratio.kind !== "at_most" && ratio.coveredCount < ratio.copyCount
+      ? ` Only copies with a catalog value${lot ? "" : ", in lots with every copy priced or closed,"} are counted.`
+      : "";
+  return (
+    <Tooltip content={tooltip + partial}>
+      <span style={{ color: "var(--color-text-muted)" }}>
+        <span style={settled ? undefined : { fontStyle: "italic" }}>{figure}</span>
+        {coverage ? ` (${coverage})` : ""}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -743,6 +807,7 @@ export function HoldingsSummaryBar({
   itemCount,
   spend,
   openingValue,
+  costToCatalog,
 }: {
   total: HoldingsSummary | undefined;
   ret?: PurchaseReturn;
@@ -792,6 +857,12 @@ export function HoldingsSummaryBar({
    * no breakdown under it, and catalog value moves inside the expander just the same.
    */
   openingValue?: OpeningValue;
+  /**
+   * What the scope cost as a share of its copies' catalogue value (#1395), said beside `spend` on
+   * the headline row. Null — or absent — draws nothing: with no catalogue value there is no figure,
+   * never `0%` or `∞`.
+   */
+  costToCatalog?: CostToCatalog | null;
 }) {
   const [expanded, setExpanded] = usePersistedFlag(storageKey);
   // Whether something other than catalog value leads, which displaces catalog value into its group.
@@ -846,6 +917,15 @@ export function HoldingsSummaryBar({
           spend={spend}
           part="total"
           emphasis="headline"
+          suffix={
+            costToCatalog ? (
+              <CostToCatalogNote
+                ratio={costToCatalog}
+                lot={spend.scope === "lot"}
+                currency={spend.baseCurrency}
+              />
+            ) : undefined
+          }
         >
           {toggle}
         </SpendRow>

@@ -119,6 +119,11 @@ import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-ro
 import { buildLocationPath } from "./location-path";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { copyIdsByAreaSubtree, copyIdsOutsideSubtrees } from "./value-snapshot-rules";
+import {
+  lotCatalogBasis,
+  type CatalogBasisCopy,
+  type LotCatalogBasis,
+} from "./cost-to-catalog";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -3287,6 +3292,9 @@ export interface LotIntakeSummary {
   /** Catalog value vs. actual purchase cost over the lot's copies (#179), for the CV-vs-cost
    * bar. Same shape/aggregators as the holdings bar (#134). */
   holdings: HoldingsSummary;
+  /** What the lot's cost is read against as a fraction of catalogue (#1395), over the whole lot
+   * whatever is filtered — the screen sets it beside the lot's pool (`lotCostToCatalog`). */
+  catalogBasis: LotCatalogBasis;
 }
 
 /** Every count but `filteredCount` and the issue groups is over the **whole** lot on purpose: the
@@ -3331,6 +3339,17 @@ export async function getLotIntakeSummary(
     derivedLabel: deriveLotLabel(all, maps),
     groupTree: buildGroupTree(matching, filters, areas),
     holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
+    catalogBasis: lotCatalogBasis(all.map(catalogBasisCopyOf)),
+  };
+}
+
+/** A copy as the cost-to-catalogue figure reads it (#1395): its frozen cost and the catalogue value
+ * the lot's pool is split by (`closeLot` weighs by the same `value.baseAmount`). */
+function catalogBasisCopyOf(i: ItemListItem): CatalogBasisCopy {
+  return {
+    deliveryState: i.deliveryState,
+    costBasis: i.costBasis == null ? null : Number(i.costBasis),
+    catalogValue: i.value.baseAmount,
   };
 }
 
@@ -3362,6 +3381,10 @@ export interface PurchaseIntakeSummary {
   /** Catalog value vs. actual purchase cost over the whole order's copies (#179), for the
    * order-level CV-vs-cost bar. Same shape/aggregators as the holdings bar (#134). */
   holdings: HoldingsSummary;
+  /** lot id → what that lot's cost is read against as a fraction of catalogue (#1395), over all its
+   * copies whatever is filtered. A lot with no copies is absent. The order's own figure is these
+   * read against each lot's pool (`orderCostToCatalog`). */
+  lotCatalogBasis: Record<string, LotCatalogBasis>;
 }
 
 export async function getPurchaseIntakeSummary(
@@ -3400,6 +3423,16 @@ export async function getPurchaseIntakeSummary(
 
   const staying = all.filter((i) => i.deliveryState !== "not_delivered");
 
+  const copiesByLot = new Map<string, CatalogBasisCopy[]>();
+  for (const it of all) {
+    if (!it.lotId) continue;
+    const copies = copiesByLot.get(it.lotId) ?? [];
+    copies.push(catalogBasisCopyOf(it));
+    copiesByLot.set(it.lotId, copies);
+  }
+  const lotCatalogBases: Record<string, LotCatalogBasis> = {};
+  for (const [lotId, copies] of copiesByLot) lotCatalogBases[lotId] = lotCatalogBasis(copies);
+
   return {
     totalCount: all.length,
     filteredCount: matching.length,
@@ -3409,6 +3442,7 @@ export async function getPurchaseIntakeSummary(
     lotWeightBase,
     groupTree: buildGroupTree(matching, filters, areas),
     holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
+    lotCatalogBasis: lotCatalogBases,
   };
 }
 
