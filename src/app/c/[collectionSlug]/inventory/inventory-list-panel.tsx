@@ -17,6 +17,7 @@ import {
   describeCopyGrouping,
 } from "@/lib/copy-grouping";
 import type { LocationGroupBy } from "@/lib/location-groups";
+import { DISPOSITION_FILTERS, REMEMBERED_FILTER_KEYS } from "./copies-list-filters";
 import { isDelivered } from "@/lib/delivery-state";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -158,12 +159,6 @@ function isListableCopy(item: ItemListItem): boolean {
  * nobody would connect to the first. */
 const EXCLUDED_OPTION_PREFIX = "excluded:";
 
-const DISPOSITION_FILTERS = [
-  { key: "inCollection", label: "In collection" },
-  { key: "forSale", label: "For sale" },
-  { key: "forTrade", label: "For trade" },
-] as const;
-
 /**
  * The four switches that share one control (#846). They were four chips and between them the width
  * of a third of the filter bar, for questions asked once in a while: *has this copy a photo yet*,
@@ -181,32 +176,6 @@ const SPARE_FILTERS = [
   { key: "missingCatalogValue", label: "Missing catalog value", group: "Show only" },
   { key: "includeGone", label: "Include sold & traded", group: "Also include" },
   { key: "includeDisposed", label: "Include no longer held", group: "Also include" },
-] as const;
-
-/** The filters this list remembers per collection (#693) — every one of them except the search box,
- * which is a lookup one finishes rather than a way of working (a list silently narrowed to a phrase
- * typed last week is the failure that rule avoids). The area and the year are absent because
- * `use-collection-filter-store` already carries them across every list screen (#143), the sort
- * because `usePersistedSort` does (#325), and the platform worklist because #275 remembers it on its
- * own — and its *review* half (#506) is deliberately never remembered, so it is not here either.
- * Grouping mode and its axes are a client preference of their own and never travel in the URL. */
-const REMEMBERED_FILTER_KEYS = [
-  // The tag filter's two halves (#1182), remembered together: the mode alone says nothing, and a
-  // remembered set of ids read back under the other reading would be a list nobody asked for.
-  "tagIds",
-  "tagMode",
-  "conditionIds",
-  "formatIds",
-  "subtypeIds",
-  "certificateStatusIds",
-  "deliveryStates",
-  "locationId",
-  "noPhotos",
-  "missingCatalogValue",
-  "includeGone",
-  "includeDisposed",
-  "multiStamp",
-  ...DISPOSITION_FILTERS.map((f) => f.key),
 ] as const;
 
 const SORT_OPTIONS: SortOption[] = [

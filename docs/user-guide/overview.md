@@ -1,12 +1,32 @@
 # Overview
 
 The **Overview** is the collection's front page — open it from **Overview** at the top of the
-sidebar, or by navigating to the collection itself. It answers two questions on one screen:
-**what is the collection worth** and **how far along is it**.
+sidebar, or by navigating to the collection itself. It answers three questions on one screen:
+**what does the collection hold**, **what is it worth** and **how far along is it**.
 
 Every tile is a link. Clicking one takes you to the list screen that holds the underlying rows,
 with the matching filter already applied — the Overview states sums, and the list screens stay
 the place where the detail lives. A tile with nothing behind it yet says what would fill it.
+
+## Holdings
+
+The first tile says how many copies the collection holds — the same count the
+[Copies list](inventory.md) states with no filter on. Copies you have sold, traded away or marked as
+no longer held are not counted, and a cover or block carrying several stamps is one copy. Beside the
+total, two groups:
+
+- **Disposition** — how many copies are **In collection**, **For sale** and **For trade**. A copy
+  can be several of these at once — kept in the collection and offered for sale, say — so the three
+  do not add up to the total, and the tile says so.
+- **In intake** — how many copies are **Ordered**, **In transit** and waiting **To sort**. Each copy
+  is in one of these or none, so these never overlap.
+
+Every figure is a link to the Copies list filtered to exactly those copies, so the list always shows
+the number the tile does. To make sure it does, the link **replaces whatever filters the Copies list
+was remembering** — condition, tags, location, area, year and the rest are cleared, and only the
+filter the figure is about is applied. Set them again on the list if you want them back.
+
+The tile shows counts only; what the copies are worth is the Value section's job.
 
 ## Choosing the areas
 

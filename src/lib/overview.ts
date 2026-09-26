@@ -2,6 +2,7 @@ import "server-only";
 import { lotCostInputs } from "./cost-basis";
 import { prisma } from "./db";
 import {
+  countItems,
   getHoldingsValuation,
   getHoldingsValuationOutsideAreas,
   listIssueGroupCompleteness,
@@ -19,12 +20,15 @@ import { costBasisCopyCount } from "./valuation";
 import {
   buildGrowthSeries,
   classifyPurchaseReturns,
+  HOLDINGS_FIGURES,
+  holdingsFigureFilters,
   resolveAreaBreakdown,
   rollUpAreaCoverage,
   tallyChecklists,
   type AreaCoverageRollup,
   type ChecklistTally,
   type GrowthMonth,
+  type HoldingsFigureKey,
   type PurchaseRecoupTally,
 } from "./overview-rules";
 import { buildValueHistory, type ValueHistory } from "./value-history-rules";
@@ -54,6 +58,31 @@ async function assertCollectionOwner(
     throw new Error("Collection not found or access denied.");
   }
   return { baseCurrency: collection.baseCurrency };
+}
+
+// ── Holdings (#1398) ─────────────────────────────────────────────────────────
+
+/** How many copies the collection holds, by disposition and by where they are in intake. */
+export type OverviewHoldings = Record<HoldingsFigureKey, number>;
+
+/**
+ * The holdings tile (#1398): every figure is `countItems` — the count the Copies list's own summary
+ * bar states — under the filter the figure's link opens, so the tile cannot count a copy the list
+ * would not show. Counts only: what the copies are worth is the Value section's.
+ */
+export async function getOverviewHoldings(
+  ownerId: string,
+  collectionId: string
+): Promise<OverviewHoldings> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const counts = await Promise.all(
+    HOLDINGS_FIGURES.map((figure) =>
+      countItems(ownerId, collectionId, holdingsFigureFilters(figure))
+    )
+  );
+  return Object.fromEntries(
+    HOLDINGS_FIGURES.map((figure, i) => [figure.key, counts[i]])
+  ) as OverviewHoldings;
 }
 
 // ── Value (#650) ─────────────────────────────────────────────────────────────
