@@ -5,17 +5,27 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
-import type { OverviewProgress, OverviewValue } from "@/lib/overview";
+import type { OverviewHoldings, OverviewProgress, OverviewValue } from "@/lib/overview";
+import {
+  HOLDINGS_FIGURES,
+  holdingsFigureParams,
+  type HoldingsFigure,
+} from "@/lib/overview-rules";
+import { exactCopiesListHref } from "./inventory/copies-list-filters";
 import { OverviewAreasDialog } from "./overview-areas-dialog";
 import { RowLink, ROW_LINK_ABOVE } from "./shared/row-link";
-import { useOverviewProgress, useOverviewValue } from "./use-overview-query";
+import {
+  useOverviewHoldings,
+  useOverviewProgress,
+  useOverviewValue,
+} from "./use-overview-query";
 import { ValueHistoryChart } from "./value-history-chart";
 
 /**
  * The Overview screen (#649–#651, #653; decided in #397): a financial and progress picture of the
- * collection on one screen. Two sections — **Value** (what it is worth, what it cost, what it
- * returned) and **Progress** (coverage, growth, gaps) — each a grid of tiles, and **every tile is
- * a link** into the list screen that holds the underlying rows with the filter applied: the
+ * collection on one screen. **Holdings** (how many copies, #1398) leads, then **Value** (what it is
+ * worth, what it cost, what it returned) and **Progress** (coverage, growth, gaps) — each a grid of
+ * tiles, and **every tile is a link** into the list screen that holds the underlying rows with the filter applied: the
  * Overview is an entry point, never a dead end, and the list screens stay where detail lives.
  *
  * An empty tile says what would fill it, not "0" (#649); an unconvertible or unpriced row is a
@@ -159,6 +169,108 @@ function SectionSkeleton() {
       <TileSkeleton />
       <TileSkeleton />
       <TileSkeleton />
+    </div>
+  );
+}
+
+// ── Holdings (#1398) ─────────────────────────────────────────────────────────
+
+/** One wide tile rather than a grid: the total, then the two groups side by side, so the counts
+ * the collector opens the app for are read in one line of sight. */
+const HOLDINGS_TILE_STYLE: CSSProperties = {
+  ...TILE_STYLE,
+  display: "grid",
+  gridTemplateColumns: "minmax(10rem, 1fr) minmax(14rem, 1.5fr) minmax(14rem, 1.5fr)",
+  columnGap: "2rem",
+  rowGap: "1rem",
+  alignItems: "start",
+  minHeight: 0,
+};
+
+const HOLDINGS_GROUP_STYLE: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.25rem",
+};
+
+const HOLDINGS_ROW_STYLE: CSSProperties = {
+  ...ROW_LINK_ABOVE,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "1rem",
+  maxWidth: "16rem",
+  ...LINE_STYLE,
+  textDecoration: "none",
+};
+
+const HOLDINGS_ROW_LABEL_STYLE: CSSProperties = {
+  textDecoration: "underline",
+  textDecorationColor: "var(--color-border)",
+  textUnderlineOffset: "0.2em",
+};
+
+const HOLDINGS_COUNT_STYLE: CSSProperties = {
+  fontWeight: 600,
+  color: "var(--color-text-primary)",
+};
+
+function holdingsHref(base: string, figure: HoldingsFigure): string {
+  return exactCopiesListHref(base, holdingsFigureParams(figure));
+}
+
+function HoldingsRow({
+  base,
+  figure,
+  count,
+}: {
+  base: string;
+  figure: HoldingsFigure;
+  count: number;
+}) {
+  return (
+    <Link href={holdingsHref(base, figure)} style={HOLDINGS_ROW_STYLE}>
+      <span style={HOLDINGS_ROW_LABEL_STYLE}>{figure.label}</span>
+      <span style={count === 0 ? undefined : HOLDINGS_COUNT_STYLE}>{count}</span>
+    </Link>
+  );
+}
+
+function HoldingsTile({ data, base }: { data: OverviewHoldings; base: string }) {
+  const [total, ...rest] = HOLDINGS_FIGURES;
+  const dispositions = rest.filter((figure) => figure.group === "disposition");
+  const intake = rest.filter((figure) => figure.group === "intake");
+
+  if (data.total === 0) {
+    return (
+      <Tile href={holdingsHref(base, total)} label="Copies">
+        <TileEmpty>Add copies to see what the collection holds.</TileEmpty>
+      </Tile>
+    );
+  }
+
+  return (
+    <div style={HOLDINGS_TILE_STYLE}>
+      <RowLink href={holdingsHref(base, total)} label="Copies" />
+      <div style={HOLDINGS_GROUP_STYLE}>
+        <div style={TILE_LABEL}>Copies</div>
+        <div style={HEADLINE_STYLE}>{data.total}</div>
+        <div style={NOTE_STYLE}>Copies sold, traded away or no longer held are not counted.</div>
+      </div>
+      <div style={HOLDINGS_GROUP_STYLE}>
+        <div style={TILE_LABEL}>Disposition</div>
+        {dispositions.map((figure) => (
+          <HoldingsRow key={figure.key} base={base} figure={figure} count={data[figure.key]} />
+        ))}
+        <div style={NOTE_STYLE}>
+          A copy can be in more than one of these, so they do not add up to the total.
+        </div>
+      </div>
+      <div style={HOLDINGS_GROUP_STYLE}>
+        <div style={TILE_LABEL}>In intake</div>
+        {intake.map((figure) => (
+          <HoldingsRow key={figure.key} base={base} figure={figure} count={data[figure.key]} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -539,6 +651,7 @@ export function OverviewPanel({
   areas: CollectionAreaData[];
   initialAreaIds: string[];
 }) {
+  const holdings = useOverviewHoldings(collectionId);
   const value = useOverviewValue(collectionId);
   const progress = useOverviewProgress(collectionId);
   const queryClient = useQueryClient();
@@ -557,6 +670,16 @@ export function OverviewPanel({
           void queryClient.invalidateQueries({ queryKey: ["overview", collectionId] });
         }}
       />
+      <section style={SECTION_STYLE}>
+        <h3 style={SECTION_LABEL}>Holdings</h3>
+        {holdings.data ? (
+          <HoldingsTile data={holdings.data} base={base} />
+        ) : holdings.isError ? (
+          <div style={ERROR_STYLE}>The holdings could not be loaded.</div>
+        ) : (
+          <TileSkeleton />
+        )}
+      </section>
       <section style={SECTION_STYLE}>
         <h3 style={SECTION_LABEL}>Value</h3>
         {value.data ? (

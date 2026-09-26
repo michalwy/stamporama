@@ -1,10 +1,11 @@
 # Overview Screen
 
-The collection Overview at `/c/[collectionSlug]` — the financial and progress picture (#397;
-built by #649–#651).
+The collection Overview at `/c/[collectionSlug]` — the holdings, financial and progress picture
+(#397; built by #649–#651, holdings #1398).
 
-- **The screen is an entry point, never a reports area** (#397). Two sections on one screen —
-  **Value** (money) and **Progress** (coverage, growth, gaps) — as tile grids, and **every tile
+- **The screen is an entry point, never a reports area** (#397). Three sections on one screen —
+  **Holdings** (how many copies, #1398), **Value** (money) and **Progress** (coverage, growth,
+  gaps) — as tiles, and **every tile
   links into the list screen that holds the underlying rows with the filter applied**. No
   `/reports` tree, no new sidebar section, and nothing operational: the action-items bell (#367)
   already aggregates what needs doing, and a dashboard repeating it would be a second version of
@@ -22,14 +23,40 @@ built by #649–#651).
   shared URL filter: the screen's default scope is every sale, and both it and the tile read
   `listSaleProfitRows` (`sales.ts`).
 
-- **Aggregate here, detail elsewhere** (#397). The two reads — `getOverviewValue` /
-  `getOverviewProgress` in `src/lib/overview.ts`, one API route each under
-  `overview/value|progress` so each section loads and skeletons on its own — are compositions of
+- **Aggregate here, detail elsewhere** (#397). The section reads — `getOverviewHoldings`,
+  `getOverviewValue` and `getOverviewProgress` in `src/lib/overview.ts`, one API route each under
+  `overview/holdings|value|progress` so each section loads and skeletons on its own — are compositions of
   reads that already exist (`getHoldingsValuation`, `offersSummary`, `auctionLotExposure`,
   `realizedProfit`, `summarizePurchaseReturn`, `listIssueGroupCompleteness`,
   `wantCatalogRange` via `openWantGapSummary`), never re-derived arithmetic. The tile arithmetic that is new (growth series, checklist tally,
   area rollup, purchase classification) is pure in `src/lib/overview-rules.ts`, unit-tested
   without Prisma.
+
+- **Holdings is counts, and every count is the Copies list's own** (#1398). The collector wanted
+  what he simply *has* — how many copies, in collection, for sale, for trade, on their way in — as
+  the first thing on the screen, so it is its own section above Value, one wide tile rather than a
+  grid: the total, then *Disposition* (in collection, for sale, for trade) and *In intake* (ordered,
+  in transit, to sort). **No values** — what the copies are worth is the Value section's, and a
+  second figure for it would drift. The figures are declared once, `HOLDINGS_FIGURES`
+  (`overview-rules.ts`), each a narrowing of the Copies list; `getOverviewHoldings` counts each with
+  **`countItems`** — the list's own count — over the list's default scope (`holdingsFigureFilters`:
+  `excludeGone`, disposed hidden), so the rules every count keeps (no longer held left out, #396; a
+  multi-stamp piece is one copy, #745) come with the list rather than being restated. **The
+  dispositions overlap** — a copy can be in the collection and for sale at once — and the tile says
+  so under them, #519's point on the issue page's completeness card; the intake rows are one
+  delivery state each and cannot. Its own route and query (`overview/holdings`), like the other two
+  sections.
+  - **The links are exact, overriding the Copies list's remembered filters** — settled with the
+    collector on 2026-09-26. The list reads a filter from the URL where the URL names it and from
+    memory otherwise (#693, #143), so a link naming only `forSale=true` would open onto whatever
+    condition, tag or area was left set, and the figure would disagree with the rows. So
+    `exactCopiesListHref` (`inventory/copies-list-filters.ts`, beside the `REMEMBERED_FILTER_KEYS`
+    it moved out of the panel to hold) names every remembered filter empty, the platform worklist
+    empty and area and year `all` — the list's own *Reset filters* spelling — at the cost of the
+    remembered narrowing, which the collector accepted. `tests/unit/overview-holdings.test.ts`
+    reads every figure's link back through `readItemFilters` and compares it with what was counted.
+    **The other tiles' links still name only their own filter**; the choice was asked about this
+    tile, not extended to them.
 
 - **One allocation pass, grouped** — `realizedProceedsByGroup` (`sales.ts`) exists for the
   purchase-ROI tile: the per-purchase question over every purchase at once, where calling

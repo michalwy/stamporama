@@ -7,6 +7,9 @@
  * tile arithmetic unit-tests without Prisma; `overview.ts` owns the I/O.
  */
 
+import { DELIVERY_STATE_META, type DeliveryState } from "./delivery-state";
+import type { ItemListFiltersPaginated } from "./items";
+
 // ── Growth ────────────────────────────────────────────────────────────────────
 
 /** One month's count as the raw SQL hands it back: `month` is `YYYY-MM` in UTC. */
@@ -364,4 +367,67 @@ export function classifyPurchaseReturns(returns: PurchaseReturnFigures[]): Purch
     spent: (spentCents / 100).toFixed(2),
     realized: (realizedCents / 100).toFixed(2),
   };
+}
+
+// ── Holdings (#1398) ─────────────────────────────────────────────────────────
+
+/** How a holdings figure narrows the Copies list: one disposition, or one delivery state. */
+interface HoldingsNarrowing {
+  inCollection?: true;
+  forSale?: true;
+  forTrade?: true;
+  deliveryStates?: DeliveryState[];
+}
+
+export interface HoldingsFigure {
+  key: string;
+  label: string;
+  /** `disposition` rows overlap — a copy can be in the collection and for sale at once — so they
+   * do not add up to the total; `intake` rows are one delivery state each and do not overlap. */
+  group: "total" | "disposition" | "intake";
+  narrowing: HoldingsNarrowing;
+}
+
+function intakeFigure(key: string, state: DeliveryState): HoldingsFigure {
+  return {
+    key,
+    label: DELIVERY_STATE_META[state].label,
+    group: "intake",
+    narrowing: { deliveryStates: [state] },
+  };
+}
+
+/**
+ * The holdings tile's figures (#1398): how many copies the collection holds, by disposition and by
+ * where they are in intake. **Each is a Copies list filter**, counted by the list's own count and
+ * linked to the list with the same filter, so the tile and the list cannot disagree — the rules of
+ * every other count (copies no longer held left out, #396; a copy carrying several stamps is one
+ * copy, #745) come with the list rather than being restated here.
+ */
+export const HOLDINGS_FIGURES = [
+  { key: "total", label: "Copies", group: "total", narrowing: {} },
+  { key: "inCollection", label: "In collection", group: "disposition", narrowing: { inCollection: true } },
+  { key: "forSale", label: "For sale", group: "disposition", narrowing: { forSale: true } },
+  { key: "forTrade", label: "For trade", group: "disposition", narrowing: { forTrade: true } },
+  intakeFigure("ordered", "ordered"),
+  intakeFigure("inTransit", "in_transit"),
+  intakeFigure("toSort", "to_sort"),
+] as const satisfies readonly HoldingsFigure[];
+
+export type HoldingsFigureKey = (typeof HOLDINGS_FIGURES)[number]["key"];
+
+/** The count's filters: the figure's narrowing over the Copies list's **default** scope — copies
+ * sold or traded away hidden (`excludeGone`), copies no longer held hidden (the absent
+ * `includeDisposed`). */
+export function holdingsFigureFilters(figure: HoldingsFigure): ItemListFiltersPaginated {
+  return { excludeGone: true, ...figure.narrowing };
+}
+
+/** The same narrowing as the Copies list's URL parameters, for the figure's link. */
+export function holdingsFigureParams(figure: HoldingsFigure): Record<string, string> {
+  const { deliveryStates, ...dispositions } = figure.narrowing;
+  const params: Record<string, string> = {};
+  for (const key of Object.keys(dispositions)) params[key] = "true";
+  if (deliveryStates) params.deliveryStates = deliveryStates.join(",");
+  return params;
 }
