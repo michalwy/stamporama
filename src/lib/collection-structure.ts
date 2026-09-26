@@ -7,6 +7,7 @@ import {
   readStructureNarrowing,
   showsEmptySegments,
   structureSegments,
+  structureValuesOf,
   tabulateStructure,
   type StructureDimension,
   type StructureTable,
@@ -28,6 +29,9 @@ import { listTags } from "./tags";
  * routes' own parser, handed in by the route (`readItemFilters` lives beside those routes). So the
  * total is the list's count, and each segment — a narrowing the list can express — is counted among
  * the same copies its link opens.
+ *
+ * Each count comes with its copies' catalogue value, market value and cost (#1402), valued once for
+ * the whole screen and summed per segment over the copies the count counts.
  */
 
 export interface CollectionStructureRequest {
@@ -41,6 +45,8 @@ export interface CollectionStructureRequest {
 }
 
 export interface CollectionStructure extends StructureTable {
+  /** The currency every value is stated in — the collection's base currency. */
+  baseCurrency: string;
   rowDimension: StructureDimension;
   columnDimension: StructureDimension | null;
   /** Why the rows need not add up to the total, where a copy can be in several (#1399). */
@@ -86,7 +92,7 @@ export async function getCollectionStructure(
       catalogVendors: [...catalogVendors.values()],
     })
   );
-  const copies = await listItemStructureFacts(ownerId, collectionId, filters);
+  const { copies, summarize } = await listItemStructureFacts(ownerId, collectionId, filters);
 
   const vocab: StructureVocabulary = {
     conditions,
@@ -109,10 +115,12 @@ export async function getCollectionStructure(
     {
       rows: showsEmptySegments(request.rows),
       columns: columns ? showsEmptySegments(columns) : false,
-    }
+    },
+    (members) => structureValuesOf(summarize(members.map((copy) => copy.id)))
   );
   return {
     ...table,
+    baseCurrency: summarize([]).baseCurrency,
     rowDimension: request.rows,
     columnDimension: columns,
     rowOverlapNote: STRUCTURE_OVERLAP_NOTE[request.rows],

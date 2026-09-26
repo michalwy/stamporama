@@ -1,11 +1,18 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { countItems, createItem } from "../../src/lib/items";
+import { countItems, createItem, getHoldingsValuation } from "../../src/lib/items";
 import { setItemStamps } from "../../src/lib/item-stamps";
-import { getOverviewHoldings } from "../../src/lib/overview";
+import { createLot } from "../../src/lib/lots";
+import { createPurchase } from "../../src/lib/purchases";
+import { getOverviewHoldings, getOverviewValue } from "../../src/lib/overview";
 import { getCollectionStructure, type CollectionStructure } from "../../src/lib/collection-structure";
-import type { StructureDimension, StructureHeading } from "../../src/lib/collection-structure-rules";
+import {
+  structureValuesOf,
+  type StructureDimension,
+  type StructureHeading,
+  type StructureValues,
+} from "../../src/lib/collection-structure-rules";
 import { copiesListQueryParams } from "../../src/lib/copies-list-url";
 import { exactCopiesListHref } from "../../src/app/c/[collectionSlug]/inventory/copies-list-filters";
 import { readItemFilters } from "../../src/app/api/collections/[collectionId]/items/item-filters";
@@ -333,5 +340,297 @@ describe("collection structure (#1401)", () => {
         readItemFilters
       )
     );
+  });
+});
+
+// The values beside each count (#1402). A segment's catalogue value, market value and cost are the
+// figures the Copies list's own bar states at its link — `getHoldingsValuation` under the filters the
+// link opens — and with no filter the total's are the Overview's *Holdings value*.
+//
+// Base PLN, catalogue prices in EUR at 4.25, a fresh rate table seeded so nothing is fetched.
+
+describe("collection structure values (#1402)", () => {
+  let userId: string;
+  let collectionId: string;
+  const ids: Record<string, string> = {};
+
+  before(async () => {
+    userId = `test-user-structure-values-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: userId,
+        email: `${userId}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: {
+          slug: `col-structure-values-${ts}`,
+          name: `Collection structure-values-${ts}`,
+          baseCurrency: "PLN",
+          ownerId: userId,
+        },
+      })
+    ).id;
+    await prisma.exchangeRate.createMany({
+      data: [
+        ["EUR", "1"],
+        ["PLN", "4.25"],
+      ].map(([toCurrency, rate]) => ({
+        collectionId,
+        fromCurrency: "EUR",
+        toCurrency,
+        rate,
+        fetchedAt: new Date(),
+      })),
+    });
+    const vendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Michel", abbreviation: "Mi" },
+    });
+    const catalogNameId = (
+      await prisma.catalogName.create({
+        data: { vendorId: vendor.id, name: "Michel Europa", currency: "EUR" },
+      })
+    ).id;
+    const editionId = (await prisma.catalogEdition.create({ data: { catalogNameId, year: 2024 } })).id;
+    for (const [key, name, sortOrder] of [
+      ["mint", "Mint", 0],
+      ["used", "Used", 1],
+    ] as const) {
+      ids[key] = (
+        await prisma.stampCondition.create({
+          data: { collectionId, name, abbreviation: name[0], sortOrder },
+        })
+      ).id;
+    }
+    for (const name of ["birds", "check"]) {
+      ids[name] = (await prisma.tag.create({ data: { collectionId, name } })).id;
+    }
+    for (const name of ["Poland", "Asia"]) {
+      ids[name] = (
+        await prisma.collectionArea.create({
+          data: { collectionId, name, primaryCatalogNameId: catalogNameId },
+        })
+      ).id;
+    }
+
+    const stamp = async (key: string, area: string, prices: Record<string, string>) => {
+      ids[key] = (
+        await prisma.stamp.create({
+          data: {
+            collectionId,
+            name: key,
+            issuedYear: 1950,
+            stampAreaLinks: { create: [{ collectionAreaId: ids[area], isPrimary: true }] },
+          },
+        })
+      ).id;
+      for (const [condition, price] of Object.entries(prices)) {
+        await prisma.stampCatalogPrice.create({
+          data: {
+            stampId: ids[key],
+            catalogEditionId: editionId,
+            conditionId: ids[condition],
+            certificateStatusId: null,
+            formatId: null,
+            price,
+            currency: "EUR",
+          },
+        });
+      }
+    };
+    await stamp("priced", "Poland", { used: "10.00", mint: "20.00" });
+    await stamp("cheap", "Poland", { used: "2.00" });
+    await stamp("unpriced", "Asia", {});
+
+    const copy = async (
+      stampKey: string,
+      data: {
+        condition?: string;
+        tags?: string[];
+        forSale?: boolean;
+        deliveryState?: string;
+        costBasis?: string;
+        lotId?: string;
+      } = {}
+    ) => {
+      const { id } = await createItem(userId, collectionId, {
+        stampId: ids[stampKey],
+        conditionId: ids[data.condition ?? "used"],
+        forSale: data.forSale,
+        deliveryState: data.deliveryState,
+      });
+      await prisma.item.update({
+        where: { id },
+        data: { costBasis: data.costBasis ?? null, lotId: data.lotId ?? null },
+      });
+      for (const tag of data.tags ?? []) {
+        await prisma.itemTag.create({ data: { itemId: id, tagId: ids[tag] } });
+      }
+      return id;
+    };
+
+    const opening = await createPurchase(userId, collectionId, {
+      kind: "opening_balance",
+      title: "Opening",
+      purchasedAt: "2026-09-01",
+      currency: "PLN",
+    });
+    const openingLot = await createLot(userId, opening.id, 5, null);
+    const order = await createPurchase(userId, collectionId, {
+      purchasedAt: "2026-09-01",
+      currency: "PLN",
+    });
+    // An open lot with a price: its copy's cost is pending.
+    const openLot = await createLot(userId, order.id, 9, null);
+
+    // Catalogue 42.50, market 50.00, cost 30.00; tagged twice.
+    await copy("priced", { tags: ["birds", "check"], costBasis: "30.00" });
+    // Catalogue 85.00, no auction evidence for mint, no cost recorded.
+    await copy("priced", { condition: "mint", tags: ["birds"], forSale: true });
+    // Catalogue 8.50, from an opening balance valued at 5.00.
+    await copy("cheap", { costBasis: "5.00", lotId: openingLot });
+    // Catalogue 8.50, cost pending on the open lot.
+    await copy("cheap", { lotId: openLot });
+    // Unpriced, cost 7.00.
+    await copy("unpriced", { costBasis: "7.00" });
+    // Never arrived: counted, but not in hand, so in none of the figures.
+    await copy("priced", { deliveryState: "not_delivered", costBasis: "12.00" });
+    // No longer held (#396): not counted at all.
+    const lost = await copy("priced", { costBasis: "99.00" });
+    await prisma.item.update({
+      where: { id: lost },
+      data: { disposedAt: new Date(), disposalReason: "lost" },
+    });
+
+    // What copies like the first fetched at auction: one closed lot at 50.00.
+    const sellerId = (await prisma.contact.create({ data: { collectionId, name: "Seller", seller: true } })).id;
+    const platformId = (await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })).id;
+    const sale = await prisma.auctionSale.create({
+      data: { collectionId, sellerId, platformId, name: "Sale", currency: "PLN" },
+    });
+    await prisma.auctionLot.create({
+      data: {
+        auctionSaleId: sale.id,
+        auctionLotNo: 14020,
+        lotNo: "1",
+        endsAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        status: "closed",
+        finalPrice: "50.00",
+        lines: { create: [{ stampId: ids.priced, conditionId: ids.used, quantity: 1 }] },
+      },
+    });
+  });
+
+  after(async () => {
+    await prisma.auctionSale.deleteMany({ where: { collectionId } });
+    await prisma.item.deleteMany({ where: { collectionId } });
+    await prisma.collection.deleteMany({ where: { id: collectionId } });
+    await prisma.user.deleteMany({ where: { id: userId } });
+  });
+
+  const prefs = { includeSubAreas: true, includeSubLocations: true };
+
+  async function structure(
+    rows: StructureDimension,
+    columns: StructureDimension | null,
+    url: Record<string, string> = {}
+  ): Promise<CollectionStructure> {
+    return getCollectionStructure(
+      userId,
+      collectionId,
+      { url: new URLSearchParams(url), rows, columns, ...prefs },
+      readItemFilters
+    );
+  }
+
+  /** The held figures — the write-off's count is left out, since the list's bar lifts the disposal
+   *  exclusion into it (#396) and so counts copies the screen never shows. */
+  function figures(values: StructureValues | null) {
+    assert.ok(values, "values stated");
+    return {
+      catalogue: values.catalogue,
+      market: values.market,
+      cost: values.cost,
+      opening: values.opening,
+    };
+  }
+
+  /** The values the Copies list's own bar states at the address a heading links to. */
+  async function listed(url: Record<string, string>, segments: StructureHeading[]) {
+    const href = exactCopiesListHref("/c/x", Object.assign({}, url, ...segments.map((s) => s.params)));
+    const address = new URLSearchParams(href.slice(href.indexOf("?") + 1));
+    const areas = await prisma.collectionArea.findMany({
+      where: { collectionId },
+      select: { id: true, parentId: true },
+    });
+    const summary = await getHoldingsValuation(
+      userId,
+      collectionId,
+      readItemFilters(copiesListQueryParams(address, { areas, ...prefs, catalogVendors: [] }))
+    );
+    return figures(structureValuesOf(summary));
+  }
+
+  async function assertEveryValueIsTheList(view: CollectionStructure, url: Record<string, string> = {}) {
+    const where = `${view.rowDimension}×${view.columnDimension ?? "—"} ${JSON.stringify(url)}`;
+    assert.deepEqual(figures(view.totalValues), await listed(url, []), `${where} total`);
+    for (const row of view.rows) {
+      if (row.count > 0) {
+        assert.deepEqual(figures(row.values), await listed(url, [row]), `${where} row ${row.label}`);
+      }
+      for (const [j, column] of view.columns.entries()) {
+        if (row.cells[j] === 0) continue;
+        assert.deepEqual(
+          figures(row.cellValues[j]),
+          await listed(url, [row, column]),
+          `${where} cell ${row.label}×${column.label}`
+        );
+      }
+    }
+    for (const column of view.columns) {
+      if (column.count === 0) continue;
+      assert.deepEqual(figures(column.values), await listed(url, [column]), `${where} column ${column.label}`);
+    }
+  }
+
+  it("states the Overview's holdings value as its total, with no filter applied", async () => {
+    const view = await structure("disposition", null);
+    const { holdings } = await getOverviewValue(userId, collectionId);
+    assert.equal(view.baseCurrency, "PLN");
+    assert.deepEqual(figures(view.totalValues), figures(structureValuesOf(holdings)));
+    assert.deepEqual(figures(view.totalValues), {
+      catalogue: { amount: "144.50", unpriced: 1, unconvertible: 0 },
+      market: { amount: "50.00", noEvidence: 4 },
+      cost: { amount: "37.00", pending: 1, none: 1 },
+      opening: { amount: "5.00", copies: 1, pending: 0, none: 0 },
+    });
+    // The copy that never arrived is counted, and said to be out of every figure.
+    assert.equal(view.total, 6);
+    assert.equal(view.totalValues?.notHeld, 1);
+  });
+
+  it("carries a copy's values into every segment it is in, and into the total once", async () => {
+    const view = await structure("tags", null);
+    const byTag = Object.fromEntries(view.rows.map((r) => [r.label, r.values?.catalogue.amount]));
+    assert.deepEqual(byTag, { birds: "127.50", check: "42.50", "No tags": "17.00" });
+    assert.equal(view.totalValues?.catalogue.amount, "144.50");
+  });
+
+  it("states at every heading, cell and total what the Copies list's bar states at its link", async () => {
+    for (const [rows, columns] of [
+      ["condition", null],
+      ["tags", "condition"],
+      ["area", "disposition"],
+      ["disposition", "tags"],
+    ] as const) {
+      await assertEveryValueIsTheList(await structure(rows, columns));
+    }
+    const tagged = { tagIds: ids.birds };
+    await assertEveryValueIsTheList(await structure("condition", "area", tagged), tagged);
   });
 });

@@ -4057,12 +4057,17 @@ export async function listItemAreaFacets(
  * in memory: area, year and subtype live on the related stamp and tags on a join table, and a copy
  * counts in several segments of the dimensions that overlap. The area, year and subtype are the
  * **leading** stamp's, as the list's filters read them (settled with the collector on 2026-09-27).
+ *
+ * The same scan carries what a holdings summary is computed from (#1402), and `summarize` values the
+ * copies **once** and states any subset of them — the idiom the offer summary's platform slices use —
+ * so a segment's values cost an aggregation, not a valuation, and are the figures the Copies list's
+ * own bar states for the same copies.
  */
 export async function listItemStructureFacts(
   ownerId: string,
   collectionId: string,
   filters: ItemListFiltersPaginated
-): Promise<StructureCopy[]> {
+): Promise<{ copies: StructureCopy[]; summarize: (itemIds: string[]) => HoldingsSummary }> {
   await assertCollectionOwner(ownerId, collectionId);
   const locationIds = await resolveLocationScope(collectionId, filters);
   const where = await withMissingCatalogFilter(
@@ -4073,17 +4078,15 @@ export async function listItemStructureFacts(
   const rows = await prisma.item.findMany({
     where,
     select: {
+      ...HOLDINGS_ROW_SELECT,
       inCollection: true,
       forSale: true,
       forTrade: true,
-      deliveryState: true,
-      conditionId: true,
-      certificateStatusId: true,
-      formatId: true,
       locationId: true,
       tags: { select: { tagId: true } },
       stamp: {
         select: {
+          ...HOLDINGS_ROW_SELECT.stamp.select,
           subtypeId: true,
           issuedYear: true,
           stampAreaLinks: { select: { collectionAreaId: true } },
@@ -4091,7 +4094,9 @@ export async function listItemStructureFacts(
       },
     },
   });
-  return rows.map((row) => ({
+  const summarize = await makeHoldingsSummarizer(collectionId, rows);
+  const copies = rows.map((row) => ({
+    id: row.id,
     inCollection: row.inCollection,
     forSale: row.forSale,
     forTrade: row.forTrade,
@@ -4105,6 +4110,7 @@ export async function listItemStructureFacts(
     tagIds: row.tags.map((tag) => tag.tagId),
     locationId: row.locationId,
   }));
+  return { copies, summarize: (itemIds) => summarize(itemIds) };
 }
 
 /** Distinct issued years (of the linked stamps) present in the copy list for the

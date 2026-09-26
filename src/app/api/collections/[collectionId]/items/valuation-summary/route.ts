@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getHoldingsValuation } from "@/lib/items";
-import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
-import { asMultiStampFilter } from "@/lib/multi-stamp";
-import { readSearchParam } from "@/lib/text-input";
-import { readYearFilter } from "@/lib/list-area-year-filter";
+import { readItemFilters } from "../item-filters";
 
-/** Holdings valuation total over every copy matching the current filters (whole set,
- * not one page). Mirrors the list endpoint's disposition/condition/certificate filters
- * so the Copies screen total tracks what is being shown. */
+/** Holdings valuation total over every copy matching the current filters (whole set, not one
+ * page). The filters are read by the list routes' own parser, so the Copies screen's total values
+ * exactly the copies it shows — it read its own subset once and lost the tag filter and the
+ * location switch the list applies, so a tagged list stated the value of every tag's copies
+ * (#1402, whose structure screen links each value to the list). */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -20,45 +19,15 @@ export async function GET(
   }
 
   const { collectionId } = await params;
-  const sp = request.nextUrl.searchParams;
 
   try {
-    const areaIdsParam = sp.get("areaIds");
-    const total = await getHoldingsValuation(session.user.id, collectionId, {
-      conditionIds: readConditionIds(sp),
-      certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
-      formatIds: readCsvParam(sp, "formatIds"),
-      subtypeIds: readCsvParam(sp, "subtypeIds"),
-      areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
-      search: readSearchParam(sp),
-      catalogVendorId: sp.get("catalogVendorId") || undefined,
-      catalogNumber: sp.get("catalogNumber") || undefined,
-      issueId: sp.get("issueId") || undefined,
-      locationId: sp.get("locationId") || undefined,
-      ...readYearFilter(sp.get("year")),
-      inCollection: boolParam(sp.get("inCollection")),
-      forSale: boolParam(sp.get("forSale")),
-      forTrade: boolParam(sp.get("forTrade")),
-      noPhotos: boolParam(sp.get("noPhotos")),
-      missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
-      notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
-      excludedPlatformId: sp.get("excludedPlatformId") || undefined,
-      deliveryStates: readDeliveryStates(sp),
-      // Match the list: copies that have left — sold (#207) or traded away (#644) — are excluded
-      // unless includeGone=true, so the total tracks exactly what is shown.
-      excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
-      // The multi-stamp filter (#748), so the total sums the carriers exactly when the list shows them.
-      multiStamp: asMultiStampFilter(sp.get("multiStamp")),
-    });
+    const total = await getHoldingsValuation(
+      session.user.id,
+      collectionId,
+      readItemFilters(request.nextUrl.searchParams)
+    );
     return NextResponse.json(total);
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 }
-
-/** Only an explicit "true" narrows to that disposition; absence / any other value
- * means the filter is off (show all), matching the list endpoint. */
-function boolParam(value: string | null): boolean | undefined {
-  return value === "true" ? true : undefined;
-}
-

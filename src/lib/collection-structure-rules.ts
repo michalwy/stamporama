@@ -17,6 +17,11 @@
  *   them — settled with the collector on 2026-09-27. A cover carrying stamps from two areas sits in
  *   the area of the stamp that leads it, exactly where the list files it.
  *
+ * **The values (#1402) go where the count goes.** A segment's catalogue value, market value and cost
+ * are those of exactly the copies it counts, a copy in several segments carrying its values into
+ * each and the total holding it once — so a value, like a count, is the Copies list's own under the
+ * segment's link.
+ *
  * Pure: no Prisma, no React. `collection-structure.ts` reads the copies and the dictionaries.
  */
 
@@ -24,6 +29,7 @@ import { DELIVERY_STATE_META, type DeliveryState } from "./delivery-state";
 import { NO_AREA, decadeOf, decadeValue } from "./list-area-year-filter";
 import { DEFAULT_TAG_FILTER_MODE, NO_TAGS, tagFilterFromParams, type TagFilterMode } from "./tag-filter";
 import { copiesListAreaId, copiesListDecade, copiesListRailYear } from "./copies-list-url";
+import type { HoldingsSummary } from "./valuation";
 
 /** The copies filed nowhere — `location-groups.ts`' `NO_LOCATION`, spelled here so this module does
  *  not pull that one's sort helpers in with it. Held equal by the unit suite. */
@@ -88,6 +94,7 @@ export const DEFAULT_ROW_DIMENSION: StructureDimension = "disposition";
 
 /** What the screen needs to know about one copy — its own facts and its **leading** stamp's. */
 export interface StructureCopy {
+  id: string;
   inCollection: boolean;
   forSale: boolean;
   forTrade: boolean;
@@ -481,20 +488,116 @@ export function showsEmptySegments(dimension: StructureDimension): boolean {
   );
 }
 
+// ── Values (#1402) ───────────────────────────────────────────────────────────
+
+/**
+ * What a segment's copies are worth and cost, in the base currency — the Overview's *Holdings value*
+ * figures (#650) over the segment's copies, read off the holdings summary the Copies list's own bar
+ * is computed from, so nothing is valued differently here (#1402).
+ *
+ * **Cost is what was spent, and an opening value stands beside it** (#1324): settled with the
+ * collector on 2026-09-27, as the Overview states them, rather than the one cost basis profit and
+ * loss reads — so the screen's totals are the Overview's figures.
+ *
+ * Every figure says how many of the segment's copies it could not include and why, as the Overview
+ * does: a copy unpriced or unconvertible is left out of the catalogue value, one with no auction
+ * evidence out of the market value, one with its cost pending or unrecorded out of the cost — never
+ * read as zero. A copy the segment counts but the collector no longer has in hand (never arrived, or
+ * arrived damaged, #396) is in none of the three and counted apart as `notHeld`.
+ */
+export interface StructureValues {
+  catalogue: { amount: string; unpriced: number; unconvertible: number };
+  market: { amount: string; noEvidence: number };
+  cost: { amount: string; pending: number; none: number };
+  /** The copies from opening balances: their value, and the ones without one. `copies` is 0 where the
+   *  segment holds none, and the screen then says nothing about it. */
+  opening: { amount: string; copies: number; pending: number; none: number };
+  notHeld: number;
+}
+
+/** A holdings summary as the screen states it. */
+export function structureValuesOf(summary: HoldingsSummary): StructureValues {
+  const opening = summary.openingValue;
+  return {
+    catalogue: {
+      amount: summary.totalBaseAmount,
+      unpriced: summary.unpricedCount,
+      unconvertible: summary.unconvertibleCount,
+    },
+    market: { amount: summary.market.totalBaseAmount, noEvidence: summary.market.noEvidenceCount },
+    cost: {
+      amount: summary.cost.totalCostBasis,
+      pending: summary.cost.pendingCount,
+      none: summary.cost.noneCount,
+    },
+    opening: {
+      amount: opening.totalCostBasis,
+      copies: opening.knownCount + opening.pendingCount + opening.noneCount,
+      pending: opening.pendingCount,
+      none: opening.noneCount,
+    },
+    notHeld: summary.writeOff.count,
+  };
+}
+
+/** The figures a segment states, in the order the screen draws them. */
+export type StructureFigure = "catalogue" | "market" | "cost" | "opening";
+
+/**
+ * One figure's gaps: how many of the segment's copies it leaves out, and why in words — "2 unpriced,
+ * 1 no longer in hand" — empty where it covers every copy. The screen marks the figure with the
+ * number and says the reasons on hover (settled with the collector on 2026-09-27).
+ *
+ * A copy no longer in hand is left out of the three held figures; the opening value is stated only
+ * over the held copies that came from opening balances, so it names its own gaps alone.
+ */
+export function structureValueGaps(
+  values: StructureValues,
+  figure: StructureFigure
+): { count: number; reasons: string[] } {
+  const parts: [number, string][] =
+    figure === "catalogue"
+      ? [
+          [values.catalogue.unpriced, "unpriced"],
+          [values.catalogue.unconvertible, "priced in a currency with no exchange rate"],
+        ]
+      : figure === "market"
+        ? [[values.market.noEvidence, "with no auction results to value them by"]]
+        : figure === "cost"
+          ? [
+              [values.cost.pending, "with the cost pending on an open lot"],
+              [values.cost.none, "with no cost recorded"],
+            ]
+          : [
+              [values.opening.pending, "with the opening value pending"],
+              [values.opening.none, "with no opening value"],
+            ];
+  if (figure !== "opening") parts.push([values.notHeld, "no longer in hand"]);
+  const left = parts.filter(([n]) => n > 0);
+  return {
+    count: left.reduce((sum, [n]) => sum + n, 0),
+    reasons: left.map(([n, why]) => `${n} ${why}`),
+  };
+}
+
 // ── The table ────────────────────────────────────────────────────────────────
 
-/** A segment as the screen receives it: no `match`, and its count. */
+/** A segment as the screen receives it: no `match`, its count and its values. */
 export interface StructureHeading {
   key: string;
   label: string;
   noValue: boolean;
   params: Record<string, string>;
   count: number;
+  /** Null where the table was counted without values. */
+  values: StructureValues | null;
 }
 
 export interface StructureRow extends StructureHeading {
   /** One count per column, in the columns' order; empty with no column dimension. */
   cells: number[];
+  /** The values of each cell, beside {@link cells}. */
+  cellValues: (StructureValues | null)[];
 }
 
 export interface StructureTable {
@@ -502,6 +605,7 @@ export interface StructureTable {
   columns: StructureHeading[];
   /** Every copy on the screen, each once. */
   total: number;
+  totalValues: StructureValues | null;
   /** How many of them fall in no row — the copies filed on a narrowed area itself, say. */
   outsideRows: number;
   outsideColumns: number;
@@ -511,17 +615,22 @@ export interface StructureTable {
  * Count the copies into the rows, the columns and their crossings. A copy is counted in **every**
  * segment it belongs to and in the total **once** (#1399) — the counts are of copies, never of
  * copy-segment pairs, which is why the total is not a sum.
+ *
+ * `value`, when given, is asked for the values of each segment's copies, each crossing's and the
+ * total's (#1402) — over the same copies the count counts, so a value follows its count wherever a
+ * copy lands, the overlapping dimensions included.
  */
 export function tabulateStructure(
   copies: StructureCopy[],
   rows: StructureSegment[],
   columns: StructureSegment[] | null,
-  keepEmpty: { rows: boolean; columns: boolean }
+  keepEmpty: { rows: boolean; columns: boolean },
+  value?: (copies: StructureCopy[]) => StructureValues
 ): StructureTable {
   const cols = columns ?? [];
-  const rowCounts = rows.map(() => 0);
-  const colCounts = cols.map(() => 0);
-  const cells = rows.map(() => cols.map(() => 0));
+  const rowCopies: StructureCopy[][] = rows.map(() => []);
+  const colCopies: StructureCopy[][] = cols.map(() => []);
+  const cellCopies: StructureCopy[][][] = rows.map(() => cols.map(() => []));
   let outsideRows = 0;
   let outsideColumns = 0;
   for (const copy of copies) {
@@ -529,26 +638,35 @@ export function tabulateStructure(
     const inCols = cols.flatMap((segment, j) => (segment.match(copy) ? [j] : []));
     if (inRows.length === 0) outsideRows++;
     if (columns && inCols.length === 0) outsideColumns++;
-    for (const i of inRows) rowCounts[i]++;
-    for (const j of inCols) colCounts[j]++;
-    for (const i of inRows) for (const j of inCols) cells[i][j]++;
+    for (const i of inRows) rowCopies[i].push(copy);
+    for (const j of inCols) colCopies[j].push(copy);
+    for (const i of inRows) for (const j of inCols) cellCopies[i][j].push(copy);
   }
-  const colKept = cols.map((_, j) => keepEmpty.columns || colCounts[j] > 0);
-  const heading = (segment: StructureSegment, count: number): StructureHeading => ({
+  const valuesOf = (members: StructureCopy[]) => (value ? value(members) : null);
+  const colKept = cols.map((_, j) => keepEmpty.columns || colCopies[j].length > 0);
+  const heading = (segment: StructureSegment, members: StructureCopy[]): StructureHeading => ({
     key: segment.key,
     label: segment.label,
     noValue: segment.noValue,
     params: segment.params,
-    count,
+    count: members.length,
+    values: valuesOf(members),
   });
   return {
-    rows: rows.flatMap((segment, i) =>
-      keepEmpty.rows || rowCounts[i] > 0
-        ? [{ ...heading(segment, rowCounts[i]), cells: cells[i].filter((_, j) => colKept[j]) }]
-        : []
-    ),
-    columns: cols.flatMap((segment, j) => (colKept[j] ? [heading(segment, colCounts[j])] : [])),
+    rows: rows.flatMap((segment, i) => {
+      if (!keepEmpty.rows && rowCopies[i].length === 0) return [];
+      const kept = cellCopies[i].filter((_, j) => colKept[j]);
+      return [
+        {
+          ...heading(segment, rowCopies[i]),
+          cells: kept.map((members) => members.length),
+          cellValues: kept.map(valuesOf),
+        },
+      ];
+    }),
+    columns: cols.flatMap((segment, j) => (colKept[j] ? [heading(segment, colCopies[j])] : [])),
     total: copies.length,
+    totalValues: valuesOf(copies),
     outsideRows,
     outsideColumns,
   };

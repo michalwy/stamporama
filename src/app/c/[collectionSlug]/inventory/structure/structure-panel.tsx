@@ -19,8 +19,11 @@ import {
   encodeSteps,
   isStructureDimension,
   stepBackUpdates,
+  structureValueGaps,
   type StructureDimension,
+  type StructureFigure,
   type StructureHeading,
+  type StructureValues,
 } from "@/lib/collection-structure-rules";
 import {
   COPIES_LIST_RAIL_KEYS,
@@ -53,7 +56,8 @@ import {
  * **It states counts and never lists a copy** — that is the Copies list's job, and the rule that
  * keeps this screen from becoming a second one (ADR-0056 amends #397 on exactly that condition).
  * Clicking a heading or a cell narrows the screen to it; the count itself is a link to the Copies
- * list under exactly the filters that produce it.
+ * list under exactly the filters that produce it. Under each count stand its copies' catalogue
+ * value, market value and cost (#1402) — the figures the Copies list's own bar states at that link.
  *
  * **Everything is in the address, under the Copies list's own names**: the bar's filters, the rail's
  * area and year, the two dimensions and the drill-down steps. Nothing is remembered, so the screen
@@ -182,6 +186,23 @@ const COUNT_LINK: CSSProperties = {
 };
 
 const EMPTY_COUNT: CSSProperties = { color: "var(--color-text-muted)" };
+
+const VALUES_STYLE: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-end",
+  marginTop: "0.125rem",
+  fontSize: "0.6875rem",
+  lineHeight: 1.35,
+  color: "var(--color-text-muted)",
+  whiteSpace: "nowrap",
+};
+
+const GAP_MARK: CSSProperties = {
+  marginLeft: "0.25rem",
+  color: "var(--color-warning)",
+  cursor: "help",
+};
 
 const NOTE_STYLE: CSSProperties = {
   margin: 0,
@@ -547,6 +568,12 @@ export function StructurePanel({
               <div style={MESSAGE_STYLE}>No copies match these filters.</div>
             ) : (
               <>
+                <p style={NOTE_STYLE}>
+                  Under each count, what those copies are worth and cost in {data.baseCurrency}: Cat
+                  is catalogue value, Mkt market value and Cost what was paid, with the value of
+                  copies from an opening balance beside it as Opening. A figure marked +N leaves N of
+                  the copies out — hover it for why.
+                </p>
                 <div style={{ overflowX: "auto" }}>
                   <StructureTable
                     data={data}
@@ -607,23 +634,67 @@ function outsideNode(
 
 function Count({
   count,
+  values,
   href,
   bold,
 }: {
   count: number;
+  values: StructureValues | null;
   href: string;
   bold?: boolean;
 }) {
   if (count === 0) return <span style={EMPTY_COUNT}>0</span>;
   return (
-    <Link
-      href={href}
-      style={{ ...COUNT_LINK, ...(bold ? { fontWeight: 600 } : null) }}
-      // The count opens the Copies list; the cell around it drills down. Two acts, one click each.
-      onClick={(e: MouseEvent) => e.stopPropagation()}
-    >
-      {count}
-    </Link>
+    <>
+      <Link
+        href={href}
+        style={{ ...COUNT_LINK, ...(bold ? { fontWeight: 600 } : null) }}
+        // The count opens the Copies list; the cell around it drills down. Two acts, one click each.
+        onClick={(e: MouseEvent) => e.stopPropagation()}
+      >
+        {count}
+      </Link>
+      {values && <Values values={values} />}
+    </>
+  );
+}
+
+const FIGURE_LABEL: Record<StructureFigure, string> = {
+  catalogue: "Cat",
+  market: "Mkt",
+  cost: "Cost",
+  opening: "Opening",
+};
+
+/**
+ * A count's copies in money (#1402): catalogue value, market value and cost, and the opening value
+ * where some of them came from an opening balance (#1324) — the Overview's own figures. What a figure
+ * could not include is never read as zero: it is marked with how many copies it leaves out, and the
+ * reasons are on hover (settled with the collector on 2026-09-27).
+ */
+function Values({ values }: { values: StructureValues }) {
+  const figures: [StructureFigure, string][] = [
+    ["catalogue", values.catalogue.amount],
+    ["market", values.market.amount],
+    ["cost", values.cost.amount],
+    ...(values.opening.copies > 0 ? [["opening", values.opening.amount] as [StructureFigure, string]] : []),
+  ];
+  return (
+    <span style={VALUES_STYLE}>
+      {figures.map(([figure, amount]) => {
+        const gaps = structureValueGaps(values, figure);
+        return (
+          <span key={figure}>
+            {FIGURE_LABEL[figure]} {amount}
+            {gaps.count > 0 && (
+              <Tooltip content={`Leaves out ${gaps.reasons.join(", ")}.`} align="end">
+                <span style={GAP_MARK}>+{gaps.count}</span>
+              </Tooltip>
+            )}
+          </span>
+        );
+      })}
+    </span>
   );
 }
 
@@ -689,12 +760,12 @@ function StructureTable({
                   style={{ ...CELL, cursor: count > 0 ? "pointer" : "default" }}
                   onClick={count > 0 ? () => onDrill(row, column) : undefined}
                 >
-                  <Count count={count} href={copiesHref(row, column)} />
+                  <Count count={count} values={row.cellValues[j] ?? null} href={copiesHref(row, column)} />
                 </td>
               );
             })}
             <td style={TOTAL_CELL}>
-              <Count count={row.count} href={copiesHref(row)} bold />
+              <Count count={row.count} values={row.values} href={copiesHref(row)} bold />
             </td>
           </tr>
         ))}
@@ -706,11 +777,11 @@ function StructureTable({
           </th>
           {data.columns.map((column) => (
             <td key={column.key} style={FOOT_CELL}>
-              <Count count={column.count} href={copiesHref(column)} bold />
+              <Count count={column.count} values={column.values} href={copiesHref(column)} bold />
             </td>
           ))}
           <td style={{ ...FOOT_CELL, borderLeft: "1px solid var(--color-border)" }}>
-            <Count count={data.total} href={copiesHref()} bold />
+            <Count count={data.total} values={data.totalValues} href={copiesHref()} bold />
           </td>
         </tr>
       </tfoot>

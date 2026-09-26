@@ -4,8 +4,8 @@
 
 Accepted and implemented in #1401. Designed in #1399 with the collector on 2026-09-26; one question
 the design left open was settled on 2026-09-27 (§5). The value measures — catalogue value, market
-value and cost per segment — follow in #1402 on the same screen. **Amends #397's decision** that the
-Overview is one screen with no reports area (§1).
+value and cost per segment — were added in #1402 on the same screen (§6). **Amends #397's decision**
+that the Overview is one screen with no reports area (§1).
 
 ## Context
 
@@ -97,6 +97,26 @@ one promise is that a count is the list it opens. Changing the list's reading in
 every reader of that filter — the Overview's value by area, the daily snapshots, the offer pickers —
 and was not asked for.
 
+### 6. Values beside the counts (#1402)
+
+Under every count stand its copies' catalogue value, market value and cost in the base currency —
+the Overview's *Holdings value* figures, read off the same holdings summary the Copies list's bar
+states, so nothing is valued differently here and a value, like a count, is the list's own at its
+link. With no filter the total's are the Overview's.
+
+A copy's values go into every segment the copy is counted in, and a total holds them once — §5's rule
+applied to money, so a multi-stamp copy's value follows its leading stamp as its count does.
+
+Settled with the collector on 2026-09-27: **cost is what was spent, with the opening value of copies
+from opening balances stated beside it** as the Overview states them, rather than the single cost
+basis profit and loss reads; and a figure that leaves copies out is **marked with how many, the
+reasons on hover**, rather than the reasons written into every cell. A copy counted but no longer in
+hand (never arrived, damaged) is in none of the three and named as such — never read as zero.
+
+This record says *counts* in §2 where it means the figures of a segment: the rule it states — nothing
+on the screen is a copy, and every figure opens the list that holds its copies — covers the values
+the same way.
+
 ## Consequences
 
 - The Copies list gained three values and a parameter: `decade` (`1950s`, applied while the rail
@@ -107,4 +127,7 @@ and was not asked for.
 - The screen follows the collector's two subtree switches (#385) as the list does. With *this area
   only*, a tree offers the node itself rather than its children, since a child would select copies
   the narrowed screen does not show.
-- #1402 adds the value measures to the same table.
+- #1402 added the value measures to the same table (§6). The Copies list's valuation route now reads
+  its filters with the list routes' own parser: it had its own subset, without the tag filter or the
+  location switch, so a tagged list's summary bar valued every copy the rest of the filters admitted
+  — a figure a structure value's link would have contradicted.
