@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { listItemYearFacets } from "@/lib/items";
-import { readConditionIds, readCsvParam, readDeliveryStates } from "../item-filters";
-import { readSearchParam } from "@/lib/text-input";
+import { readYearFacetFilters } from "../item-filters";
 
+/** The year rail's counts (#142) — the list's own filters less the year, read through the list's
+ *  parser so the rail cannot lag behind a filter the list learns (#1404). */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -16,45 +16,15 @@ export async function GET(
   }
 
   const { collectionId } = await params;
-  const sp = request.nextUrl.searchParams;
-  const areaIdsParam = sp.get("areaIds");
 
   try {
-    const years = await listItemYearFacets(session.user.id, collectionId, {
-      conditionIds: readConditionIds(sp),
-      certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
-      formatIds: readCsvParam(sp, "formatIds"),
-      subtypeIds: readCsvParam(sp, "subtypeIds"),
-      areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
-      search: readSearchParam(sp),
-      catalogVendorId: sp.get("catalogVendorId") || undefined,
-      catalogNumber: sp.get("catalogNumber") || undefined,
-      stampId: sp.get("stampId") || undefined,
-      issueId: sp.get("issueId") || undefined,
-      locationId: sp.get("locationId") || undefined,
-      inCollection: boolParam(sp.get("inCollection")),
-      forSale: boolParam(sp.get("forSale")),
-      forTrade: boolParam(sp.get("forTrade")),
-      noPhotos: boolParam(sp.get("noPhotos")),
-      missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
-      notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
-      excludedPlatformId: sp.get("excludedPlatformId") || undefined,
-      deliveryStates: readDeliveryStates(sp),
-      // Match the list: copies that have left — sold (#207) or traded away (#644) — are excluded
-      // unless includeGone=true, and copies no longer held unless includeDisposed=true (#395).
-      excludeGone: boolParam(sp.get("includeGone")) ? undefined : true,
-      includeDisposed: boolParam(sp.get("includeDisposed")),
-      // The multi-stamp filter (#748), which narrows the rail exactly as it narrows the rows.
-      multiStamp: asMultiStampFilter(sp.get("multiStamp")),
-    });
+    const years = await listItemYearFacets(
+      session.user.id,
+      collectionId,
+      readYearFacetFilters(request.nextUrl.searchParams)
+    );
     return NextResponse.json({ years });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 }
-
-/** Only an explicit "true" narrows to that disposition; mirrors the list endpoint. */
-function boolParam(value: string | null): boolean | undefined {
-  return value === "true" ? true : undefined;
-}
-
