@@ -16,6 +16,13 @@ interface YearFilterPanelProps {
   /** Active URL value: a numeric year string, "none", or null when unfiltered. */
   selectedYear: string | null;
   onSelect: (year: string | null) => void;
+  /**
+   * A span of years in force instead of one — the Copies list's decade (#1401), which the collection
+   * structure screen opens its year dimension by. Drawn as a selected row under *All years*, so a
+   * list narrowed to the fifties says so on the rail rather than showing every year unselected;
+   * *All years* clears it, and so does picking a single year.
+   */
+  span?: { label: string } | null;
 }
 
 /** The selection value a facet maps to in the URL. */
@@ -28,7 +35,9 @@ export function YearFilterPanel({
   isLoading,
   selectedYear,
   onSelect,
+  span,
 }: YearFilterPanelProps) {
+  const everyYear = !selectedYear && !span;
   return (
     <CollapsibleFilterPanel
       title="Year"
@@ -40,30 +49,45 @@ export function YearFilterPanel({
         type="button"
         onClick={() => onSelect(null)}
         onMouseEnter={(e) => {
-          if (selectedYear)
+          if (!everyYear)
             e.currentTarget.style.background = "var(--color-bg-muted)";
         }}
         onMouseLeave={(e) => {
-          if (selectedYear) e.currentTarget.style.background = "transparent";
+          if (!everyYear) e.currentTarget.style.background = "transparent";
         }}
         style={{
           display: "block",
           width: "100%",
           textAlign: "left",
           padding: "0.5rem 1rem",
-          background: !selectedYear ? "var(--color-accent-soft)" : "transparent",
+          background: everyYear ? "var(--color-accent-soft)" : "transparent",
           border: "none",
           borderBottom: "1px solid var(--color-border)",
           cursor: "pointer",
           fontSize: "0.875rem",
-          fontWeight: !selectedYear ? 600 : 400,
-          color: !selectedYear
+          fontWeight: everyYear ? 600 : 400,
+          color: everyYear
             ? "var(--color-text-primary)"
             : "var(--color-text-secondary)",
         }}
       >
         All years
       </button>
+
+      {span && (
+        <div
+          style={{
+            padding: "0.4rem 1rem",
+            background: "var(--color-accent-soft)",
+            borderBottom: "1px solid var(--color-border)",
+            fontSize: "0.8125rem",
+            fontWeight: 600,
+            color: "var(--color-accent)",
+          }}
+        >
+          {span.label}
+        </div>
+      )}
 
       {isLoading && (
         <div

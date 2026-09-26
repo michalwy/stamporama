@@ -6,6 +6,7 @@ import { Tooltip } from "./tooltip";
 import { useCollectionTags } from "./use-tags";
 import {
   DEFAULT_TAG_FILTER_MODE,
+  NO_TAGS,
   tagFilterTriggerLabel,
   type TagFilterMode,
 } from "@/lib/tag-filter";
@@ -47,6 +48,7 @@ export function TagFilterControl({
   mode,
   onChange,
   width,
+  noTagsOption = false,
 }: {
   collectionId: string;
   /** The ticked tags. Empty is *every tag* — the absence of the filter. */
@@ -59,6 +61,9 @@ export function TagFilterControl({
    *  control sizes to its own label — which is what the Issues and Stamps toolbars do with every
    *  control on them. */
   width?: string;
+  /** Offer *No tags* ({@link NO_TAGS}) as a tickable value (#1401) — the Copies list's, so the
+   *  collection structure screen's *No tags* segment opens a list that can say what it shows. */
+  noTagsOption?: boolean;
 }) {
   const { data: tags } = useCollectionTags(collectionId);
   // Nothing to offer until the dictionary has arrived, and nothing to offer at all in a collection
@@ -67,14 +72,22 @@ export function TagFilterControl({
   if (!tags || tags.length === 0) return null;
 
   const ticked = new Set(tagIds);
-  const selectedNames = tags.filter((t) => ticked.has(t.id)).map((t) => t.name);
+  const selectedNames = [
+    ...(noTagsOption && ticked.has(NO_TAGS) ? ["No tags"] : []),
+    ...tags.filter((t) => ticked.has(t.id)).map((t) => t.name),
+  ];
   // The mode has a say only once a second tag is ticked.
-  const modeApplies = ticked.size > 1;
+  // *No tags* is ORed beside the tags rather than read under the mode (`tagFilterWhere`), so only the
+  // real tags count towards the two the switch needs.
+  const modeApplies = [...ticked].filter((id) => id !== NO_TAGS).length > 1;
 
   const control = (
     <MultiSelectFilter
       fullWidth={!!width}
-      options={tags.map((t) => ({ id: t.id, label: t.name }))}
+      options={[
+        ...(noTagsOption ? [{ id: NO_TAGS, label: "No tags" }] : []),
+        ...tags.map((t) => ({ id: t.id, label: t.name })),
+      ]}
       selected={tagIds}
       onChange={(ids) => onChange({ tagIds: ids, mode })}
       allLabel="All tags"

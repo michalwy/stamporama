@@ -3,6 +3,7 @@ import { isDeliveryState } from "@/lib/delivery-state";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { readSearchParam } from "@/lib/text-input";
+import { readYearFilter } from "@/lib/list-area-year-filter";
 
 /** Only an explicit "true" narrows to that disposition; absence / any other value means the filter
  * is off (show all), matching the default "show all copies". */
@@ -45,7 +46,6 @@ export function readDeliveryStates(sp: URLSearchParams): string[] | undefined {
  */
 export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
   const areaIdsParam = sp.get("areaIds");
-  const yearParam = sp.get("year");
   return {
     // The collector's own labels (#1182), with the mode the link carries. Read through the one
     // parser the panel and the other two lists' routes use, so *any* and *all* cannot come to mean
@@ -67,12 +67,9 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     locationExact: boolParam(sp.get("locationExact")),
     // The exact in-location ref a filing group addresses (#421); `"none"` is the unlabelled bucket.
     locationRef: sp.get("locationRef") || undefined,
-    year:
-      yearParam === "none"
-        ? ("none" as const)
-        : yearParam && /^\d+$/.test(yearParam)
-          ? parseInt(yearParam, 10)
-          : undefined,
+    // One year, the no-year bucket, or a decade as a span (#1401) — the one parser every Copies route
+    // reads the year with.
+    ...readYearFilter(sp.get("year")),
     inCollection: boolParam(sp.get("inCollection")),
     forSale: boolParam(sp.get("forSale")),
     forTrade: boolParam(sp.get("forTrade")),

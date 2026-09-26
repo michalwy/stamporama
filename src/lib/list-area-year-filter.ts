@@ -29,6 +29,53 @@ export const YEAR_FILTER_PARAM = "year";
 /** An explicit *everything*, as distinct from an absent parameter that falls back to memory. */
 export const ALL_SENTINEL = "all";
 
+/**
+ * The copies whose stamp is filed in **no area** (#1401) — a value on the area axis, as `"none"` is
+ * on the year one, so the collection structure screen's *No area* segment opens a list showing
+ * exactly those copies. Only the Copies list offers it; a screen that does not recognise it drops it
+ * like any other area id it does not have (`knownAreaIds`).
+ */
+export const NO_AREA = "none";
+
+/**
+ * A decade on the year axis, spelled as it is read — `1950s` (#1401). The structure screen opens the
+ * year dimension by decade, and a decade's count has to open a Copies list narrowed to the same ten
+ * years. The spelling rides in the list filters' `year` field beside a year and `"none"`, so every
+ * route that already passes the year through carries it without a new parameter.
+ */
+const DECADE_PATTERN = /^(\d{3})0s$/;
+
+/** The decade a year value names, as its first year — or null when it names a year, `none` or nothing. */
+export function parseDecade(value: string | null | undefined): number | null {
+  const match = value ? DECADE_PATTERN.exec(value) : null;
+  return match ? Number(match[1]) * 10 : null;
+}
+
+/** The year value for a decade starting at `start`. */
+export function decadeValue(start: number): string {
+  return `${Math.floor(start / 10) * 10}s`;
+}
+
+/** The first year of the decade `year` falls in. */
+export function decadeOf(year: number): number {
+  return Math.floor(year / 10) * 10;
+}
+
+/**
+ * A list filter's `year` value as the domain reads it: one year, the no-year bucket, a decade as an
+ * inclusive span (#1401), or nothing. **The one parser** every Copies route reads its year with, so
+ * the rows, their count, the rail and the holdings bar cannot come to read a decade differently.
+ */
+export function readYearFilter(
+  value: string | null | undefined
+): { year?: number | "none"; yearFrom?: number; yearTo?: number } {
+  if (!value) return {};
+  if (value === "none") return { year: "none" };
+  const decade = parseDecade(value);
+  if (decade !== null) return { yearFrom: decade, yearTo: decade + 9 };
+  return /^\d+$/.test(value) ? { year: parseInt(value, 10) } : {};
+}
+
 /** A selection as the screen holds it: `null` on either half is "not narrowed by this". */
 export interface AreaYearFilter {
   /** Area id, or null for every area. */

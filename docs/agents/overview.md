@@ -23,6 +23,13 @@ The collection Overview at `/c/[collectionSlug]` — the holdings, financial and
   shared URL filter: the screen's default scope is every sale, and both it and the tile read
   `listSaleProfitRows` (`sales.ts`).
 
+  **The holdings tile opens the collection structure screen** (#1401,
+  [ADR-0056](../decisions/0056-collection-structure-screen.md)), `/inventory/structure` — the one
+  departure from #397's *one screen*, decided in #1399 and recorded in the ADR. It is kept from
+  becoming the second list #397 guarded against by one rule: **it states counts and never lists a
+  copy**, and every count is a link to the Copies list under exactly the filters that produce it. The
+  tile's own figures, its total included (an inner link since #1401), still open the Copies list.
+
 - **Aggregate here, detail elsewhere** (#397). The section reads — `getOverviewHoldings`,
   `getOverviewValue` and `getOverviewProgress` in `src/lib/overview.ts`, one API route each under
   `overview/holdings|value|progress` so each section loads and skeletons on its own — are compositions of
@@ -57,6 +64,43 @@ The collection Overview at `/c/[collectionSlug]` — the holdings, financial and
     reads every figure's link back through `readItemFilters` and compares it with what was counted.
     **The other tiles' links still name only their own filter**; the choice was asked about this
     tile, not extended to them.
+
+- **The structure screen counts through the Copies list's own query** (#1401; ADR-0056). The held
+  copies along one of nine dimensions (disposition with the intake stages, condition, certificate,
+  format, subtype, area, year of issue, tags, storage location), or two crossed, with a drill-down.
+  Where the pieces are:
+  - **The screen's address is a Copies list address.** Its filters, the rail's area and year, the
+    dimensions (`rows`, `cols`) and the drill-down (`steps`) all ride in the URL under the list's own
+    names, and nothing is remembered — so the screen opened from the tile shows the tile's total.
+    `copiesListQueryParams` (`copies-list-url.ts`, pure) translates such an address into what a Copies
+    route reads (`areaId` into a subtree under the *+ sub-areas* switch, a decade into the year
+    filter, `locationExact` from the location switch, the catalogue number out of the search box), the
+    same translation the panel's filter memo makes; the route hands the list routes' own
+    `readItemFilters` to `getCollectionStructure` (`collection-structure.ts`), since `src/lib` does not
+    import from `src/app`.
+  - **One scan, counted in memory** (`listItemStructureFacts`, `items.ts`, through `buildItemWhere`),
+    the facets' reason: area, year and subtype live on the stamp and tags on a join table, and a copy
+    counts in several segments of the overlapping dimensions. The arithmetic is pure in
+    `collection-structure-rules.ts`: `structureSegments` builds each dimension's segments, each with a
+    `match` and the Copies list `params` that select it; `tabulateStructure` counts a copy in every
+    segment it matches and in the total once.
+  - **A segment only ever narrows what the screen shows** — the invariant that makes a count equal its
+    link. A dimension the screen is filtered on offers the values the filter admits; a tree offers the
+    levels under the node in force (with *this area only*, the node itself — a child would select
+    copies the screen does not show); an *all-of-several* tag filter's segments restate the filter.
+    `tests/integration/collection-structure.test.ts` follows every heading, cell and total of every
+    view it builds to its link and counts the list there — break a segment's `match` or `params` and
+    it fails (checked when it was written).
+  - **A multi-stamp copy is read off its leading stamp** for area, year and subtype, as the list's
+    filters are — settled with the collector on 2026-09-27 against #1399's wording, because the
+    alternative was changing what the list's area filter means for everything else that reads it.
+  - **A drill-down step is a filter.** It writes the parameters the bar would and records what they
+    replaced (`StructureStep.prev`), so the breadcrumb undoes a step exactly (`stepBackUpdates`).
+  - **What it cannot link, it says in words**: the overlap note on disposition, area and tags
+    (`STRUCTURE_OVERLAP_NOTE`), and a sentence when some copies fall in no row (copies filed on a
+    narrowed area itself). Never a number — "the rest" is no filter the list can apply, the reason
+    *Other* is not a link on the Value chart.
+  - Its queries sit under the `inventory` root, not `overview`, so a copy edit refreshes it.
 
 - **One allocation pass, grouped** — `realizedProceedsByGroup` (`sales.ts`) exists for the
   purchase-ROI tile: the per-purchase question over every purchase at once, where calling

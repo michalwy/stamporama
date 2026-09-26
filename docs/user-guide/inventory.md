@@ -126,6 +126,14 @@ than it says. Clear them from the area panel (**All areas**) and the year panel.
   every list with an area panel — Issues, Stamps, Copies and the stamp picker — so they always
   agree about what an area selection means. The counts follow it: with **+ sub-areas** a parent
   shows its whole subtree, with **this area only** just what is filed on it directly.
+  Under **All areas**, **No area** lists the copies whose stamp is filed in no area at all. It is
+  there only while you have some — or while it is the filter in force.
+- **Year** — the panel beside the areas lists the years your copies' stamps were issued in; pick one
+  to show only those copies, or **No year** for stamps with none. A link from the
+  [collection structure](overview.md#collection-structure) screen can narrow the list to a whole
+  **decade** instead: the year panel then shows the span, *1950–1959*, as the selection under
+  **All years**. Clicking **All years** or any single year replaces it. The decade is not remembered
+  for your next visit the way the year is.
 
 The rest sit in the toolbar, and they are listed here in the order they appear on it — left to
 right, from *which copies* to *how they are shown*.
@@ -196,7 +204,9 @@ right, from *which copies* to *how they are shown*.
   ticked tags, on it shows only the copies carrying *all* of them, and the closed control says which
   reading is in force — *Any of 2 tags* or *All of 2 tags*. With one tag ticked the switch has
   nothing to say and is greyed out. These are the **copy's own** tags: a tag on the stamp a copy is
-  linked to is not on the copy, so it will not bring the copy into this list. The filter appears only
+  linked to is not on the copy, so it will not bring the copy into this list. **No tags**, at the top
+  of the panel, shows the copies carrying no tag at all; ticked beside some tags, it shows those
+  copies as well. The filter appears only
   once your collection defines tags, and it is remembered between visits like the ones beside it.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
@@ -208,7 +218,7 @@ right, from *which copies* to *how they are shown*.
   The dropdown **stays open when you pick a location**, so you can pick and then set the scope
   without reopening it — the list behind it updates as you go. Press Escape or click outside to
   close it. Like the area one, the switch is remembered, and the holdings totals and year panel
-  follow the filter.
+  follow the filter. **Not filed**, just under *All locations*, shows the copies with no location.
 - **More filters** — four switches that used to be four buttons across the toolbar. They are in one
   dropdown now, under two headings, because **two of them narrow the list and two widen it**:
   - *Show only* — **No photos** shows only copies with no [photo](#photos) attached, so you can

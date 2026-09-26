@@ -29,6 +29,8 @@ interface ListFilterSidebarProps {
   /** Active year: a numeric string, "none" (no-year bucket), or null when unset. */
   selectedYear: string | null;
   onSelectYear: (year: string | null) => void;
+  /** A span of years in force instead of one (#1401) — see `YearFilterPanel`. */
+  yearSpan?: { label: string } | null;
 
   /** "page" (default): panels manage their own full-height / sticky layout.
    *  "dialog": each panel is wrapped in a bounded scroll box so long trees scroll
@@ -55,6 +57,7 @@ export function ListFilterSidebar({
   yearsLoading,
   selectedYear,
   onSelectYear,
+  yearSpan,
   variant = "page",
 }: ListFilterSidebarProps) {
   const area = (
@@ -73,6 +76,7 @@ export function ListFilterSidebar({
       isLoading={yearsLoading}
       selectedYear={selectedYear}
       onSelect={onSelectYear}
+      span={yearSpan}
     />
   );
 

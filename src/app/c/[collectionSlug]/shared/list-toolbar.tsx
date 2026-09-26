@@ -86,6 +86,8 @@ export interface ListToolbarProps {
   sortBy: string;
   sortDir: "asc" | "desc";
   onSortChange: (sortBy: string, sortDir: "asc" | "desc") => void;
+  /** Empty for a screen with nothing to order — the collection structure screen (#1401), whose rows
+   *  follow their dimension's own order — and the bar then draws no sort control at all. */
   sortOptions: SortOption[];
   catalogVendors?: CatalogVendorOption[];
   catalogVendorId?: string;
@@ -268,11 +270,12 @@ export function ListToolbar({
       )}
     </div>
   );
-  const sortControl = sortDisabled ? (
-    <Tooltip content={sortDisabledReason}>{sortGroup}</Tooltip>
-  ) : (
-    sortGroup
-  );
+  const sortControl =
+    sortOptions.length === 0 ? null : sortDisabled ? (
+      <Tooltip content={sortDisabledReason}>{sortGroup}</Tooltip>
+    ) : (
+      sortGroup
+    );
 
   return (
     <div

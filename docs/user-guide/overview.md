@@ -6,7 +6,9 @@ sidebar, or by navigating to the collection itself. It answers three questions o
 
 Every tile is a link. Clicking one takes you to the list screen that holds the underlying rows,
 with the matching filter already applied — the Overview states sums, and the list screens stay
-the place where the detail lives. A tile with nothing behind it yet says what would fill it.
+the place where the detail lives. A tile with nothing behind it yet says what would fill it. The holdings tile
+opens [Collection structure](#collection-structure) instead, a breakdown of its counts, while each
+figure on it still opens the Copies list.
 
 ## Holdings
 
@@ -21,12 +23,57 @@ total, two groups:
 - **In intake** — how many copies are **Ordered**, **In transit** and waiting **To sort**. Each copy
   is in one of these or none, so these never overlap.
 
-Every figure is a link to the Copies list filtered to exactly those copies, so the list always shows
-the number the tile does. To make sure it does, the link **replaces whatever filters the Copies list
+**Clicking the tile anywhere but on a figure** opens the
+[collection structure](#collection-structure) screen, which breaks these counts down further.
+**Every figure** — the total too — is a link to the Copies list filtered to exactly those copies, so
+the list always shows the number the tile does. To make sure it does, the link **replaces whatever filters the Copies list
 was remembering** — condition, tags, location, area, year and the rest are cleared, and only the
 filter the figure is about is applied. Set them again on the list if you want them back.
 
 The tile shows counts only; what the copies are worth is the Value section's job.
+
+## Collection structure
+
+The holdings tile opens **Collection structure**: the copies you hold, counted along one of the
+collection's dimensions, or two of them crossed — *how much of what is for sale is used*, *how many
+certified copies there are, by area*. It is a screen for looking at the shape of the collection; it
+never lists a copy. Every count is a link to the [Copies list](inventory.md) showing exactly those
+copies.
+
+- **Rows and Columns** — pick what the rows count by, and optionally what the columns do:
+  **Disposition** (in collection, for sale, for trade, and the intake stages ordered, in transit and
+  to sort, as on the tile), **Condition**, **Certificate**, **Format**, **Subtype**, **Area**, **Year
+  of issue**, **Tags** or **Storage location**. With columns, each cell counts the copies in both its
+  row and its column, and the **Total** row and column count each dimension on its own. The screen
+  opens counting by disposition, so it first shows what the tile shows, one level deeper.
+- **Click a heading or a cell to look closer.** The whole screen narrows to it, and you can then pick
+  any dimensions again — *Used*, then count by certificate; *No certificate*, then count by area.
+  Areas and storage locations open into what is nested inside them, and years go by decade, a decade
+  opening into its years. The way you came is shown above the table (*Top level › Used › No
+  certificate*); click any step to go back to it. The browser's back button steps back too.
+- **Click the number itself to see the copies.** It opens the Copies list with exactly the filters
+  that produce it, so the list shows that many copies. Like the tile's links, it replaces whatever
+  the Copies list was remembering.
+- **The filter bar is the Copies list's own**, with the area and year panels beside it, and a click
+  on the table lands on it as a filter — narrow the screen with it the same way. Everything, the
+  dimensions and the way you came included, is kept in the page address, so a view can be
+  bookmarked. **Reset filters** clears it all.
+
+What is counted is what the Copies list counts: copies sold, traded away or no longer held are left
+out, and a cover or block carrying several stamps is one copy. For such a piece, its area, year and
+subtype are those of the stamp listed first on it — the same stamp the Copies list's filters go by.
+
+**A copy is counted in every row it belongs to, and in the total once.** A copy can be in the
+collection and for sale at once, can carry several tags, and its stamp can be filed in several areas,
+so for **Disposition**, **Tags** and **Area** the rows can add up to more than the total — the screen
+says so under the table. Every dimension also has a row for copies without a value on it — *No
+certificate*, *Single*, *No subtype*, *No area*, *No year*, *No tags*, *Not filed*. Where some copies
+fall in no row at all — those filed on an area itself rather than in one of its sub-areas, say — the
+screen says that too.
+
+The **+ sub-areas / this area only** and **+ sub-locations / this location only** switches work here
+as they do on the Copies list. With *this area only*, a picked area counts just what is filed on it
+directly, so the Area rows show that area alone rather than what is nested in it.
 
 ## Choosing the areas
 

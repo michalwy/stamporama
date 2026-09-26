@@ -71,6 +71,8 @@ import {
 } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
+import { NO_AREA } from "./list-area-year-filter";
+import type { StructureCopy } from "./collection-structure-rules";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
 import { getCollectionAreas, type CollectionAreaData } from "./areas";
 import { buildAreaVendorMaps, deriveLotLabel } from "./area-vendor";
@@ -1210,7 +1212,11 @@ function buildItemWhere(
       filters.issueId === NO_ISSUE ? { none: {} } : { some: { issueId: filters.issueId } };
   }
   if (filters.areaIds && filters.areaIds.length > 0) {
-    stampWhere.stampAreaLinks = { some: { collectionAreaId: { in: filters.areaIds } } };
+    // `NO_AREA` is a value on this axis, as `NO_ISSUE` is on the issue one (#1401): the copies whose
+    // stamp is filed nowhere, which the structure screen counts as its *No area* segment.
+    stampWhere.stampAreaLinks = filters.areaIds.includes(NO_AREA)
+      ? { none: {} }
+      : { some: { collectionAreaId: { in: filters.areaIds } } };
   }
   if (filters.year !== undefined) {
     stampWhere.issuedYear = filters.year === "none" ? null : filters.year;
@@ -4031,11 +4037,74 @@ export async function listItemAreaFacets(
   });
   const counts = new Map<string, number>();
   for (const row of rows) {
-    for (const link of row.stamp.stampAreaLinks) {
-      counts.set(link.collectionAreaId, (counts.get(link.collectionAreaId) ?? 0) + 1);
-    }
+    // A copy whose stamp is filed nowhere is counted under `NO_AREA` (#1401), the rail's *No area*
+    // entry — an id no tree holds, so the roll-up (`rollUpAreaCounts`) never draws it as an area.
+    const areaIds =
+      row.stamp.stampAreaLinks.length > 0
+        ? row.stamp.stampAreaLinks.map((link) => link.collectionAreaId)
+        : [NO_AREA];
+    for (const areaId of areaIds) counts.set(areaId, (counts.get(areaId) ?? 0) + 1);
   }
   return [...counts.entries()].map(([areaId, count]) => ({ areaId, count }));
+}
+
+/**
+ * The facts the collection structure screen segments by (#1401), for every copy the Copies list
+ * would show under `filters` — through the list's own three calls, so the screen's total is the
+ * list's count.
+ *
+ * One narrow scan rather than a `groupBy` per dimension, for the reason the facets above are counted
+ * in memory: area, year and subtype live on the related stamp and tags on a join table, and a copy
+ * counts in several segments of the dimensions that overlap. The area, year and subtype are the
+ * **leading** stamp's, as the list's filters read them (settled with the collector on 2026-09-27).
+ */
+export async function listItemStructureFacts(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated
+): Promise<StructureCopy[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const locationIds = await resolveLocationScope(collectionId, filters);
+  const where = await withMissingCatalogFilter(
+    collectionId,
+    filters,
+    buildItemWhere(collectionId, filters, locationIds)
+  );
+  const rows = await prisma.item.findMany({
+    where,
+    select: {
+      inCollection: true,
+      forSale: true,
+      forTrade: true,
+      deliveryState: true,
+      conditionId: true,
+      certificateStatusId: true,
+      formatId: true,
+      locationId: true,
+      tags: { select: { tagId: true } },
+      stamp: {
+        select: {
+          subtypeId: true,
+          issuedYear: true,
+          stampAreaLinks: { select: { collectionAreaId: true } },
+        },
+      },
+    },
+  });
+  return rows.map((row) => ({
+    inCollection: row.inCollection,
+    forSale: row.forSale,
+    forTrade: row.forTrade,
+    deliveryState: row.deliveryState,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    formatId: row.formatId,
+    subtypeId: row.stamp.subtypeId,
+    issuedYear: row.stamp.issuedYear,
+    areaIds: row.stamp.stampAreaLinks.map((link) => link.collectionAreaId),
+    tagIds: row.tags.map((tag) => tag.tagId),
+    locationId: row.locationId,
+  }));
 }
 
 /** Distinct issued years (of the linked stamps) present in the copy list for the
