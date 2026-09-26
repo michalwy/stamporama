@@ -23,6 +23,9 @@ import { useMemo, useState } from "react";
 export interface CardExpansion {
   isExpanded(id: string): boolean;
   toggle(id: string): void;
+  /** Shut one card, and leave it shut if it already was — for a card whose work is done (#1405),
+   * where a toggle would open a collapsed one. */
+  collapse(id: string): void;
   /** True when every card is open — what the Collapse all / Expand all control reads. */
   allExpanded: boolean;
   toggleAll(): void;
@@ -82,6 +85,13 @@ export function useCardExpansion(
         const next = new Set(prev);
         if (next.has(id)) next.delete(id);
         else next.add(id);
+        return next;
+      }),
+    collapse: (id) =>
+      setExpanded((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
         return next;
       }),
     allExpanded,

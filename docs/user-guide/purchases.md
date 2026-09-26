@@ -1808,7 +1808,7 @@ one with its **caret**, or the toolbar's **Expand all** (which becomes **Collaps
 all are). Two open by themselves — a lot you add while the screen is open, and the lot you arrived
 at from a copy's [**Go to purchase**](inventory.md#going-to-a-copys-purchase) (the card that
 flashed — and the view switches to **Lot** so that there is a card to open). Either can be closed
-by hand afterwards. **Lot management** (add stamps,
+by hand afterwards. One shuts by itself: a lot you [close](#closing-a-lot). **Lot management** (add stamps,
 edit price, close/reopen, delete) lives only in a **by-lot** view. Sorting is not lot management,
 so **Store** and **Move to location** work in every view — the issue-only and flat views are for
 sweeping through copies and sorting them, and that is exactly what those two acts are for.
@@ -2055,6 +2055,11 @@ distributed across its copies in proportion to each copy's **primary-catalog pri
 condition (and certificate), and each copy's share is **frozen** as its cost-basis. Closing
 works even if the shipment has not physically arrived yet.
 
+A lot you close while it is open on screen **collapses** once the close has gone through — there is
+nothing left to do in it, and the next lot gets its space. Its header stays where it was, so if you
+were scrolled down among its copies the lot below moves up to you rather than the page jumping
+away. A close that is refused leaves the lot open, with what blocked it in view.
+
 If any copies are still unsorted (ordered / to sort / in transit), the confirm dialog **warns
 you** — but you can still close (sorting first is just recommended, not required). This warning
 is deliberately wider than the **N to sort** count: a lot whose copies are all still *ordered* has
@@ -2090,7 +2095,8 @@ the paper catalogue is still open at the stamp. A copy priced there is never amo
 
 **Reopen lot** flips a closed lot back to open and returns every copy's cost-basis to
 pending, so you can add, remove, or re-price copies. Close it again to re-run the allocation
-with the corrected membership.
+with the corrected membership. Reopening does not open the card; expand it when you mean to work
+in it.
 
 Cost-basis is **frozen at close** and is not recomputed automatically afterwards. If you later
 correct a copy's variant or condition, or edit a catalog price, a closed lot's snapshots stay
