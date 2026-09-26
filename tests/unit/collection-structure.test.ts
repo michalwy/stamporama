@@ -8,8 +8,11 @@ import {
   readStructureNarrowing,
   stepBackUpdates,
   structureSegments,
+  structureValueGaps,
+  structureValuesOf,
   tabulateStructure,
   type StructureCopy,
+  type StructureValues,
   type StructureStep,
   type StructureVocabulary,
 } from "../../src/lib/collection-structure-rules";
@@ -17,14 +20,18 @@ import { copiesListQueryParams } from "../../src/lib/copies-list-url";
 import { readYearFilter } from "../../src/lib/list-area-year-filter";
 import { NO_LOCATION } from "../../src/lib/location-groups";
 import { tagFilterWhere } from "../../src/lib/tag-filter";
+import type { HoldingsSummary } from "../../src/lib/valuation";
 
 // The collection structure screen's pure half (#1401): the segments each dimension offers, the
 // counting, the drill-down steps, and the Copies list values the screen needed the list to learn
 // (a decade, *No area*, *No tags*). That each count equals the list its link opens is held against a
 // database in `tests/integration/collection-structure.test.ts`.
 
+let copyNo = 0;
+
 function copy(overrides: Partial<StructureCopy> = {}): StructureCopy {
   return {
+    id: `c${++copyNo}`,
     inCollection: true,
     forSale: false,
     forTrade: false,
@@ -213,6 +220,141 @@ describe("tabulateStructure (#1401)", () => {
       ["Single", 3],
       ["Pair", 0],
     ]);
+  });
+});
+
+describe("the values beside each count (#1402)", () => {
+  const copies = [
+    copy({ id: "a", conditionId: "mint", forSale: true, tagIds: ["birds", "check"] }),
+    copy({ id: "b", conditionId: "used", tagIds: ["birds"] }),
+    copy({ id: "c", conditionId: "used", inCollection: false }),
+  ];
+
+  /** Values that name the copies they were asked about, so each figure shows whose it is. */
+  function whose(members: StructureCopy[]): StructureValues {
+    const ids = members.map((m) => m.id).sort().join(",");
+    return {
+      catalogue: { amount: ids, unpriced: 0, unconvertible: 0 },
+      market: { amount: ids, noEvidence: 0 },
+      cost: { amount: ids, pending: 0, none: 0 },
+      opening: { amount: "0.00", copies: 0, pending: 0, none: 0 },
+      notHeld: 0,
+    };
+  }
+
+  it("values every heading, cell and total over exactly the copies it counts", () => {
+    const table = tabulateStructure(
+      copies,
+      structureSegments("tags", copies, vocab, narrowing()),
+      structureSegments("condition", copies, vocab, narrowing()),
+      { rows: false, columns: true },
+      whose
+    );
+    const rows = Object.fromEntries(table.rows.map((r) => [r.label, r]));
+    // A copy with two tags carries its values into both, and the total holds it once.
+    assert.equal(rows.birds.values?.catalogue.amount, "a,b");
+    assert.equal(rows["to check"].values?.catalogue.amount, "a");
+    assert.equal(rows["No tags"].values?.catalogue.amount, "c");
+    assert.deepEqual(
+      rows.birds.cellValues.map((v) => v?.catalogue.amount),
+      ["a", "b"]
+    );
+    assert.deepEqual(
+      rows["No tags"].cellValues.map((v) => v?.catalogue.amount),
+      ["", "c"]
+    );
+    assert.deepEqual(
+      table.columns.map((c) => c.values?.catalogue.amount),
+      ["a", "b,c"]
+    );
+    assert.equal(table.totalValues?.catalogue.amount, "a,b,c");
+  });
+
+  it("states no values where the table was counted without them", () => {
+    const table = tabulateStructure(
+      copies,
+      structureSegments("condition", copies, vocab, narrowing()),
+      null,
+      { rows: true, columns: false }
+    );
+    assert.equal(table.totalValues, null);
+    assert.ok(table.rows.every((r) => r.values === null));
+  });
+
+  const summary: HoldingsSummary = {
+    baseCurrency: "PLN",
+    totalBaseAmount: "120.00",
+    pricedCount: 5,
+    unpricedCount: 2,
+    unconvertibleCount: 1,
+    uncertainCount: 0,
+    uncertainBaseAmount: "0.00",
+    cost: {
+      baseCurrency: "PLN",
+      totalCostBasis: "40.00",
+      knownCount: 3,
+      pendingCount: 1,
+      noneCount: 2,
+      noOpeningValueCount: 0,
+    },
+    openingValue: {
+      baseCurrency: "PLN",
+      totalCostBasis: "15.00",
+      knownCount: 1,
+      pendingCount: 0,
+      noneCount: 1,
+      noOpeningValueCount: 1,
+    },
+    writeOff: {
+      cost: {
+        baseCurrency: "PLN",
+        totalCostBasis: "9.00",
+        knownCount: 1,
+        pendingCount: 0,
+        noneCount: 0,
+        noOpeningValueCount: 0,
+      },
+      count: 1,
+    },
+    market: { baseCurrency: "PLN", totalBaseAmount: "80.00", valuedCount: 4, noEvidenceCount: 4 },
+  };
+
+  it("states the Overview's figures, opening value apart from cost", () => {
+    assert.deepEqual(structureValuesOf(summary), {
+      catalogue: { amount: "120.00", unpriced: 2, unconvertible: 1 },
+      market: { amount: "80.00", noEvidence: 4 },
+      cost: { amount: "40.00", pending: 1, none: 2 },
+      opening: { amount: "15.00", copies: 2, pending: 0, none: 1 },
+      notHeld: 1,
+    });
+  });
+
+  it("counts what each figure leaves out, and says why, never reading it as zero", () => {
+    const values = structureValuesOf(summary);
+    assert.deepEqual(structureValueGaps(values, "catalogue"), {
+      count: 4,
+      reasons: ["2 unpriced", "1 priced in a currency with no exchange rate", "1 no longer in hand"],
+    });
+    assert.deepEqual(structureValueGaps(values, "market"), {
+      count: 5,
+      reasons: ["4 with no auction results to value them by", "1 no longer in hand"],
+    });
+    assert.deepEqual(structureValueGaps(values, "cost"), {
+      count: 4,
+      reasons: ["1 with the cost pending on an open lot", "2 with no cost recorded", "1 no longer in hand"],
+    });
+    // The opening value is stated over the held copies from opening balances alone.
+    assert.deepEqual(structureValueGaps(values, "opening"), {
+      count: 1,
+      reasons: ["1 with no opening value"],
+    });
+    const whole = structureValuesOf({
+      ...summary,
+      unpricedCount: 0,
+      unconvertibleCount: 0,
+      writeOff: { ...summary.writeOff, count: 0 },
+    });
+    assert.deepEqual(structureValueGaps(whole, "catalogue"), { count: 0, reasons: [] });
   });
 });
 

@@ -101,6 +101,23 @@ The collection Overview at `/c/[collectionSlug]` — the holdings, financial and
     narrowed area itself). Never a number — "the rest" is no filter the list can apply, the reason
     *Other* is not a link on the Value chart.
   - Its queries sit under the `inventory` root, not `overview`, so a copy edit refreshes it.
+  - **Every count carries its copies' values** (#1402): catalogue value, market value and cost, with
+    the opening value beside the cost where some copies came from an opening balance. The same scan
+    selects `HOLDINGS_ROW_SELECT`, and `listItemStructureFacts` hands back `makeHoldingsSummarizer`'s
+    summarize — the copies valued once, any subset stated by aggregation — so a segment's figures are
+    the ones the Copies list's own bar (`getHoldingsValuation`) states at its link, and with no filter
+    the total's are the Overview's *Holdings value* (the held sets agree: `isHeld` rejects what the
+    list's default hides and more). `tabulateStructure` takes the values as a function of the copies
+    a count counts, so a value follows its count into every overlapping segment and the total holds
+    it once. The integration suite compares every heading, cell and total with `getHoldingsValuation`
+    under its link, less the write-off count, which that read widens with the disposed copies (#396).
+  - **Cost is money spent, the opening value apart** — settled with the collector on 2026-09-27
+    against #1402's *"the cost basis used for profit and loss"*, which would have added the two and
+    disagreed with the Overview wherever an opening balance exists (#1324).
+  - **A gap is a number and a reason, never a zero**: each figure is marked `+N` with the copies it
+    leaves out and says why on hover (`structureValueGaps`) — settled with the collector on
+    2026-09-27 over writing the reasons into every cell. A copy counted but not in hand (never
+    arrived, damaged) is in none of the three and named as such.
 
 - **One allocation pass, grouped** — `realizedProceedsByGroup` (`sales.ts`) exists for the
   purchase-ROI tile: the per-purchase question over every purchase at once, where calling

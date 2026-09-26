@@ -71,6 +71,21 @@ certificate*, *Single*, *No subtype*, *No area*, *No year*, *No tags*, *Not file
 fall in no row at all — those filed on an area itself rather than in one of its sub-areas, say — the
 screen says that too.
 
+**Under every count, what those copies are worth and cost**, in the collection's base currency:
+
+- **Cat** — their catalogue value, **Mkt** — their market value, and **Cost** — what was paid for
+  them. Where some came from an [opening balance](purchases.md#opening-balances), their opening value stands beside
+  the cost as **Opening**, kept apart because it was never spent. These are the same figures the
+  Value section's *Holdings value* tile gives — with no filter on, the total's are exactly the
+  tile's — and the same the Copies list's summary bar states when you click the count.
+- **A figure never counts a copy it could not value as zero.** When some copies are left out of one,
+  it is marked **+N** with the number left out; hover the mark for why — unpriced, priced in a
+  currency with no exchange rate, no auction results to value them by, cost pending on an open lot,
+  no cost recorded, or never arrived or arrived damaged and so no longer in hand.
+- **A copy's values go wherever the copy is counted.** A copy with two tags carries its whole value
+  into both tag rows, and into the total once — so where the rows overlap, their values add up to
+  more than the total, just as their counts do.
+
 The **+ sub-areas / this area only** and **+ sub-locations / this location only** switches work here
 as they do on the Copies list. With *this area only*, a picked area counts just what is filed on it
 directly, so the Area rows show that area alone rather than what is nested in it.
