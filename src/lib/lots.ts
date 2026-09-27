@@ -404,6 +404,97 @@ export async function getPurchaseDetail(
   };
 }
 
+/** What a write on the order screen says it touched (#1409) — see {@link resolveTouchedLots}. */
+export interface IntakeWriteTouched {
+  /** Lots written to directly: closed, reopened, re-priced, taken a copy. */
+  lotIds?: string[];
+  /** Copies written to; the lots they sit in are touched. */
+  itemIds?: string[];
+  /** Stamps whose catalogue record was written — a price, a number, a name. */
+  stampIds?: string[];
+}
+
+/**
+ * **Which lots of this order a write touched** (#1409): the lots whose own figures — the header
+ * counts, the value, the label — can have changed, so the order screen re-reads those and no
+ * others. Before, every write re-read every lot, and an operation on one lot of a two-hundred-lot
+ * order paid for two hundred.
+ *
+ * A written lot or copy touches its own lot, and nothing else: a lot's figures are made of its own
+ * copies. A written **stamp** is wider, because a lot's value is made of catalogue prices, and a
+ * price is read by more copies than the stamp's own (ADR-0010 §3): an unknown-variant copy is
+ * valued at the lowest of its variants, so a price set on a variant moves every copy of the stamps
+ * above it. And the intake step prices the variants *below* the stamp being identified (#1337), so
+ * the stamp's whole subtree counts too. The lots holding a copy of any of those are touched.
+ *
+ * Only this order's lots are answered: the screen asking holds no other.
+ */
+export async function resolveTouchedLots(
+  ownerId: string,
+  purchaseId: string,
+  touched: IntakeWriteTouched
+): Promise<string[]> {
+  const { collectionId } = await assertPurchaseOwner(ownerId, purchaseId);
+  const lotIds = new Set<string>();
+
+  if (touched.lotIds?.length) {
+    const own = await prisma.purchaseLot.findMany({
+      where: { purchaseId, id: { in: touched.lotIds } },
+      select: { id: true },
+    });
+    for (const l of own) lotIds.add(l.id);
+  }
+
+  const stampIds = touched.stampIds?.length
+    ? await stampLineage(collectionId, touched.stampIds)
+    : [];
+  const itemIds = touched.itemIds ?? [];
+  if (itemIds.length > 0 || stampIds.length > 0) {
+    const rows = await prisma.item.findMany({
+      where: {
+        collectionId,
+        lot: { purchaseId },
+        OR: [
+          ...(itemIds.length > 0 ? [{ id: { in: itemIds } }] : []),
+          ...(stampIds.length > 0 ? [{ stampId: { in: stampIds } }] : []),
+        ],
+      },
+      select: { lotId: true },
+      distinct: ["lotId"],
+    });
+    for (const id of distinctLotIds(rows)) lotIds.add(id);
+  }
+  return [...lotIds];
+}
+
+/** The stamps whose copies a catalogue write on these stamps can revalue: each stamp, every stamp
+ *  above it, and every stamp below it. Walked a generation at a time — a variant tree is a few
+ *  levels deep. */
+async function stampLineage(collectionId: string, stampIds: string[]): Promise<string[]> {
+  const seen = new Set(stampIds);
+
+  let frontier = [...seen];
+  while (frontier.length > 0) {
+    const parents = await prisma.stamp.findMany({
+      where: { collectionId, id: { in: frontier }, parentId: { not: null } },
+      select: { parentId: true },
+    });
+    frontier = parents.map((p) => p.parentId!).filter((id) => !seen.has(id));
+    for (const id of frontier) seen.add(id);
+  }
+
+  frontier = [...stampIds];
+  while (frontier.length > 0) {
+    const children = await prisma.stamp.findMany({
+      where: { collectionId, parentId: { in: frontier } },
+      select: { id: true },
+    });
+    frontier = children.map((c) => c.id).filter((id) => !seen.has(id));
+    for (const id of frontier) seen.add(id);
+  }
+  return [...seen];
+}
+
 // The enriched per-copy rows for a lot come from `listLotCopies` (items.ts), which reuses
 // the same valuation pipeline as the Copies screen so lot rows render identically.
 
@@ -1426,16 +1517,16 @@ export async function bulkUpdateLotItems(
   changes: LotBulkChanges
 ): Promise<BulkUpdateResult> {
   const ids = [...new Set(itemIds.filter((id) => id))];
-  if (ids.length === 0) return { count: 0, delivered: [] };
+  if (ids.length === 0) return { count: 0, delivered: [], lotIds: [] };
   if (changes.deliveryState && !isDeliveryState(changes.deliveryState)) {
     throw new Error("Unknown delivery state.");
   }
   assertRefHasLocation(changes);
-  if (isNoopBulk(changes)) return { count: 0, delivered: [] };
+  if (isNoopBulk(changes)) return { count: 0, delivered: [], lotIds: [] };
 
   const rows = await prisma.item.findMany({
     where: { id: { in: ids } },
-    select: { collectionId: true, collection: { select: { ownerId: true } } },
+    select: { collectionId: true, lotId: true, collection: { select: { ownerId: true } } },
   });
   if (rows.length !== ids.length || rows.some((r) => r.collection.ownerId !== ownerId)) {
     throw new Error("One or more copies were not found or access denied.");
@@ -1450,7 +1541,12 @@ export async function bulkUpdateLotItems(
   await assertVariantDictionaries(collectionId, changes);
 
   const delivered = await applyLotBulkChanges(collectionId, { id: { in: ids } }, changes);
-  return { count: ids.length, delivered };
+  return { count: ids.length, delivered, lotIds: distinctLotIds(rows) };
+}
+
+/** The lots a set of copies sits in, each once — what a bulk change reports it touched (#1409). */
+function distinctLotIds(rows: { lotId: string | null }[]): string[] {
+  return [...new Set(rows.map((r) => r.lotId).filter((id): id is string => id != null))];
 }
 
 /** A server-resolved bulk target — every copy matching the scope is updated, so "mark all
@@ -1462,6 +1558,10 @@ export async function bulkUpdateLotItems(
 export interface BulkUpdateResult {
   count: number;
   delivered: ArrivingCopy[];
+  /** The lots the targeted copies sit in (#1409), so the order screen re-reads those and leaves
+   *  every other lot alone. A scoped change reaches copies the client never enumerated, so only
+   *  the server can say which lots they were in. */
+  lotIds: string[];
 }
 
 /**
@@ -1659,15 +1759,18 @@ export async function bulkUpdateLotItemsScoped(
     throw new Error("Unknown delivery state.");
   }
   assertRefHasLocation(changes);
-  if (isNoopBulk(changes)) return { count: 0, delivered: [] };
+  if (isNoopBulk(changes)) return { count: 0, delivered: [], lotIds: [] };
   if (changes.locationId) await assertLocationAssignable(collectionId, changes.locationId);
   await assertVariantDictionaries(collectionId, changes);
 
   const where = await resolveLotBulkScope(collectionId, scope);
-  const count = await prisma.item.count({ where });
-  if (count === 0) return { count: 0, delivered: [] };
+  // Counted per lot, and **before** the write: a scope ticked under a chip (`to sort`) stops
+  // matching the copies the write has just sorted, so afterwards it would name no lot at all.
+  const perLot = await prisma.item.groupBy({ by: ["lotId"], where, _count: { _all: true } });
+  const count = perLot.reduce((sum, g) => sum + g._count._all, 0);
+  if (count === 0) return { count: 0, delivered: [], lotIds: [] };
   const delivered = await applyLotBulkChanges(collectionId, where, changes);
-  return { count, delivered };
+  return { count, delivered, lotIds: distinctLotIds(perLot) };
 }
 
 /** The scope as a fully-resolved `where`, including the one filter no column carries. */

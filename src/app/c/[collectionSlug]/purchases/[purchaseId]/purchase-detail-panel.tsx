@@ -87,6 +87,8 @@ import {
   type LotCopiesParams,
   type OrderFilterParams,
 } from "./use-lot-copies-query";
+import type { IntakeWriteScope } from "./lot-copies-keys";
+import type { PurchaseActionState } from "@/app/actions/purchases";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
@@ -346,7 +348,7 @@ export function PurchaseDetailPanel({
   // pass never can. The server-rendered list stands in until the first read answers, so the first
   // paint is unchanged.
   const locations = useCollectionLocations(collectionId).data ?? serverLocations;
-  const { invalidateLotCopies } = useInvalidateLotCopies();
+  const { invalidateLotCopies, invalidateLotCopiesAfter } = useInvalidateLotCopies();
   // The purchase list is a client-side infinite query with a 30s stale time, so it survives a
   // back-navigation from here and would keep showing the pre-edit delivery status (#440).
   const { invalidateList: invalidatePurchaseList } = useInvalidatePurchases();
@@ -642,18 +644,49 @@ export function PurchaseDetailPanel({
    * keeps the runner and the error slot; the chain keeps where it is and what it is carrying. */
   const tileChain = useTileIdentifyChain({ setError });
 
+  /** Re-read what a write on one lot or copy can have moved (#1409): the lots it touched, the
+   *  order's own figures, and the rows of the cards that are open — never every lot's header. A
+   *  written copy or stamp is turned into lots by the server, which alone knows where the copies
+   *  sit and which of them a stamp's price reaches. Should it fail to say, everything is re-read. */
+  async function refreshTouchedLots(scope: IntakeWriteScope) {
+    let lotIds: Set<string> | null = new Set(scope.lotIds ?? []);
+    if (scope.itemIds?.length || scope.stampIds?.length) {
+      const { resolveTouchedLotsAction } = await import("@/app/actions/purchases");
+      const r = await resolveTouchedLotsAction(purchase.id, {
+        lotIds: scope.lotIds,
+        itemIds: scope.itemIds,
+        stampIds: scope.stampIds,
+      });
+      lotIds = r.status === "success" ? new Set(r.lotIds) : null;
+    }
+    await invalidateLotCopiesAfter(collectionId, lotIds);
+  }
+
   function run(
-    fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
+    fn: () => Promise<{
+      status: string;
+      message?: string;
+      id?: string;
+      copies?: ArrivingCopy[];
+      refresh?: IntakeWriteScope;
+    }>,
     onDone?: (result: { status: string; message?: string; id?: string }) => void
   ) {
     setError(undefined);
     startTransition(async () => {
       const result = await fn();
       if (result.status === "success") {
-        router.refresh();
+        // A write that says what it touched re-reads that (#1409); one that does not is about the
+        // whole order, and re-reads all of it.
+        const scope = result.refresh;
+        // The server render carries the lots' own lines — status, price, copy count — and the
+        // issue headings; a write that moved none of them leaves it, and every lot card with it,
+        // alone.
+        if (!scope || scope.orderChanged) router.refresh();
         // Copies stream in via paginated client queries (#172), so a server refresh alone
         // won't reflect copy/lot mutations — invalidate the lot-copies pages and summaries too.
-        invalidateLotCopies(collectionId);
+        if (scope) void refreshTouchedLots(scope);
+        else invalidateLotCopies(collectionId);
         invalidatePurchaseList(collectionId);
         // …and everything the **catalogue** side says about the stamps these copies point at: the
         // copies-held badge and want marker on every picker row (#348/#532), the holdings line in
@@ -1703,10 +1736,24 @@ interface LotCardProps {
 }
 
 type RunFn = (
-  /** `copies` is what an intake returns (#532) — the panel's `run` takes the want review from it. */
-  fn: () => Promise<{ status: string; message?: string; id?: string; copies?: ArrivingCopy[] }>,
+  /** `copies` is what an intake returns (#532) — the panel's `run` takes the want review from it.
+   *  `refresh` is what the write touched (#1409); absent, the whole order is re-read. */
+  fn: () => Promise<{
+    status: string;
+    message?: string;
+    id?: string;
+    copies?: ArrivingCopy[];
+    refresh?: IntakeWriteScope;
+  }>,
   onDone?: (result: { status: string; message?: string; id?: string }) => void
 ) => void;
+
+/** A bulk write's result, carrying the lots its copies sit in as what it touched (#1409). A result
+ *  without them — an error, or a server that did not say — carries nothing, so the whole order is
+ *  re-read. */
+function withTouchedLots(r: PurchaseActionState) {
+  return r.status === "success" && r.lotIds ? { ...r, refresh: { lotIds: r.lotIds } } : r;
+}
 
 /** A bulk-action target: either an explicit id list (a single copy from its row menu) or a
  * server-resolved scope with its copy count (a whole lot/issue, which may exceed one page and
@@ -1761,7 +1808,7 @@ function useCopyEditing(ctx: {
         const { bulkUpdateLotItemsAction } = await import("@/app/actions/purchases");
         const r = await bulkUpdateLotItemsAction(fd);
         if (r.status === "error") setCopyError(r.message);
-        return r;
+        return withTouchedLots(r);
       },
       () => {
         setBulkMove(null);
@@ -1784,7 +1831,7 @@ function useCopyEditing(ctx: {
         const { bulkUpdateLotItemsScopedAction } = await import("@/app/actions/purchases");
         const r = await bulkUpdateLotItemsScopedAction(fd);
         if (r.status === "error") setCopyError(r.message);
-        return r;
+        return withTouchedLots(r);
       },
       () => {
         setBulkMove(null);
@@ -1800,10 +1847,12 @@ function useCopyEditing(ctx: {
     else runScopedBulk(target.scope, changes);
   }
 
-  function removeCopy(itemId: string) {
+  function removeCopy(item: ItemListItem) {
     run(async () => {
       const { removeLotItemAction } = await import("@/app/actions/purchases");
-      return removeLotItemAction(itemId);
+      const r = await removeLotItemAction(item.id);
+      // The lot it left, named here: once off the lot, the copy no longer says which it was.
+      return { ...r, refresh: { lotIds: item.lotId ? [item.lotId] : [], orderChanged: true } };
     });
   }
 
@@ -1843,7 +1892,8 @@ function useCopyEditing(ctx: {
                   entries
                 );
                 if (r.status === "error") setCopyError(r.message);
-                return r;
+                // A price is the stamp's, so it reaches every lot holding a copy it values.
+                return { ...r, refresh: { stampIds: [it.stampId] } };
               },
               () => setQuickPriceItem(null)
             );
@@ -1870,13 +1920,16 @@ function useCopyEditing(ctx: {
           }}
           onSubmit={(fd) => {
             const itemId = editCopyItem.id;
+            // A copy re-pointed at another stamp can fall under another issue heading, which the
+            // server render supplies.
+            const restamped = fd.get("stampId") !== editCopyItem.stampId;
             setCopyError(undefined);
             run(
               async () => {
                 const { updateItemAction } = await import("@/app/actions/items");
                 const r = await updateItemAction(itemId, fd);
                 if (r.status === "error") setCopyError(r.message);
-                return r;
+                return { ...r, refresh: { itemIds: [itemId], orderChanged: restamped } };
               },
               () => setEditCopyItem(null)
             );
@@ -1913,7 +1966,7 @@ function useCopyEditing(ctx: {
                 const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
                 const r = await updateStampWithCatalogAction(stampId, fd);
                 if (r.status === "error") setCopyError(r.message);
-                return r;
+                return { ...r, refresh: { stampIds: [stampId] } };
               },
               () => setEditStampItem(null)
             );
@@ -1935,13 +1988,18 @@ function useCopyEditing(ctx: {
           }}
           onSubmit={(fd) => {
             const itemId = identifyItem.id;
+            const stampId = identifyItem.stampId;
             setCopyError(undefined);
             run(
               async () => {
                 const { resolveItemVariantAction } = await import("@/app/actions/items");
                 const r = await resolveItemVariantAction(itemId, fd);
                 if (r.status === "error") setCopyError(r.message);
-                return r;
+                // The stamp too: the variants under it may have been priced on the way.
+                return {
+                  ...r,
+                  refresh: { itemIds: [itemId], stampIds: [stampId], orderChanged: true },
+                };
               },
               () => setIdentifyItem(null)
             );
@@ -2120,7 +2178,7 @@ function CopyRow({
           icon: "remove",
           danger: true,
           separatorBefore: true,
-          onSelect: () => copy.removeCopy(item.id),
+          onSelect: () => copy.removeCopy(item),
         },
       ]}
     />
@@ -3267,12 +3325,16 @@ function LotCard({
             setCopyError(undefined);
             if (pending.kind === "stamp") fd.set("stampId", pending.stampId);
             else fd.set("checklistId", pending.checklistId);
+            const pendingNow = pending;
             onRun(
               async () => {
                 const { intakeStampsAction } = await import("@/app/actions/purchases");
                 const r = await intakeStampsAction(lot.id, fd);
                 if (r.status === "error") setCopyError(r.message);
-                return r;
+                // The stamp as well as the lot: the intake step prices the stamp and its variants
+                // (#593, #1337), and those prices reach every lot holding a copy they value.
+                const stampIds = pendingNow.kind === "stamp" ? [pendingNow.stampId] : [];
+                return { ...r, refresh: { lotIds: [lot.id], stampIds, orderChanged: true } };
               },
               () => {
                 setDialog("none");
@@ -3322,7 +3384,9 @@ function LotCard({
                 const { updateLotAction } = await import("@/app/actions/purchases");
                 const r = await updateLotAction(lot.id, fd);
                 if (r.status === "error") setCopyError(r.message);
-                return r;
+                // Every lot's pool moves with a price — the shipping is split by it — and the pools
+                // arrive with the server render, so that is what is re-read beyond this lot.
+                return { ...r, refresh: { lotIds: [lot.id], orderChanged: true } };
               },
               () => setDialog("none")
             )
@@ -3440,7 +3504,7 @@ function LotCard({
                 const { reopenLotAction } = await import("@/app/actions/purchases");
                 const r = await reopenLotAction(lot.id);
                 if (r.status === "error") setCopyError(r.message);
-                return r;
+                return { ...r, refresh: { lotIds: [lot.id], orderChanged: true } };
               },
               () => setDialog("none")
             )
@@ -3469,7 +3533,7 @@ function LotCard({
           setBlockMessage(undefined);
           setBlockedIds(new Set());
         }
-        return r;
+        return { ...r, refresh: { lotIds: [lot.id], orderChanged: true } };
       },
       // Only on success: a refused close keeps the card open, so what blocked it stays in view.
       () => {
