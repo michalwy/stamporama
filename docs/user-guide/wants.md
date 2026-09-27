@@ -323,6 +323,10 @@ button. It opens the same dialog as the Issue list below, over that one checklis
 one open want for every stamp on that checklist you do not hold and do not already have an
 open want for, and it says how many before it writes anything.
 
+A checklist that [spans several issues](collections.md#checklists-that-span-several-issues)
+offers the same dialog from its row on the **Checklists** screen: **⋮ → Add missing to want
+list…**.
+
 Left on its defaults, the wants it creates accept **anything** — a gap only says the stamp is
 absent, and it cannot know on what terms you would buy it. State the terms and the priority in
 the dialog, or edit each want afterwards.

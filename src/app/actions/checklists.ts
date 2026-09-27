@@ -14,15 +14,21 @@ import {
   getChecklistsForIssue,
   getRunChecklist,
   listSpanningChecklists,
+  addStampsToSpanningChecklist,
+  getChecklistUsage,
   type ChecklistData,
   type SpanningChecklistSummary,
 } from "@/lib/checklists";
+import {
+  getSpanningChecklistOverview,
+  type SpanningChecklistOverview,
+} from "@/lib/spanning-checklists";
 import type { RunChecklist } from "@/lib/issue-run";
 import type { TranslationValueMap } from "@/lib/translations";
 
-// Server actions for the checklists editor (#531). Scoped to one issue, because that is the only
-// place a checklist is edited from — ADR-0020 §7's rule, and the reason none of these take an
-// anchor the calling screen has already answered.
+// Server actions for the checklists editors: an issue's own (#531), scoped to that issue — ADR-0020
+// §7's rule, and the reason those take no anchor the calling screen has already answered — and the
+// Checklists screen's (#1416), for the ones that span issues and so have no issue to be scoped to.
 
 export type ChecklistActionState =
   | { status: "idle" }
@@ -65,7 +71,8 @@ export async function listSpanningChecklistsAction(
 
 export async function createChecklistAction(
   collectionId: string,
-  issueId: string,
+  /** Null creates a checklist that spans issues (#1416). */
+  issueId: string | null,
   name: string,
   translations?: TranslationValueMap
 ): Promise<ChecklistActionState> {
@@ -112,7 +119,7 @@ export async function deleteChecklistAction(
 
 export async function reorderChecklistsAction(
   collectionId: string,
-  issueId: string,
+  issueId: string | null,
   checklistIds: string[]
 ): Promise<ChecklistActionState> {
   const session = await getSession();
@@ -151,5 +158,69 @@ export async function reorderChecklistStampsAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to reorder the stamps. Please try again." };
+  }
+}
+
+/** The Checklists screen's rows (#1416): every checklist spanning issues, with its figures. */
+export async function getSpanningChecklistOverviewAction(
+  collectionId: string
+): Promise<SpanningChecklistOverview[]> {
+  const session = await getSession();
+  return getSpanningChecklistOverview(session.user.id, collectionId);
+}
+
+/** What deleting a checklist would take with it — the confirmation names it (#1416). */
+export async function getChecklistUsageAction(
+  checklistId: string
+): Promise<{ albums: { id: string; name: string }[] }> {
+  const session = await getSession();
+  return getChecklistUsage(session.user.id, checklistId);
+}
+
+export type AddStampsToChecklistState =
+  | { status: "success"; added: number }
+  | { status: "error"; message: string };
+
+/** The Issues list's ticked stamps (#808) put on a checklist spanning issues (#1416). */
+export async function addStampsToSpanningChecklistAction(
+  checklistId: string,
+  stampIds: string[]
+): Promise<AddStampsToChecklistState> {
+  const session = await getSession();
+  try {
+    const added = await addStampsToSpanningChecklist(session.user.id, checklistId, stampIds);
+    return { status: "success", added };
+  } catch (err) {
+    return {
+      status: "error",
+      message: err instanceof Error ? err.message : "Failed to add the stamps. Please try again.",
+    };
+  }
+}
+
+export type CreateSpanningChecklistState =
+  | { status: "success"; checklistId: string }
+  | { status: "error"; message: string };
+
+/** A new checklist spanning issues (#1416), answering with its id — the selection bar creates one
+ *  and fills it in the same gesture, so it needs to know what it made. */
+export async function createSpanningChecklistAction(
+  collectionId: string,
+  name: string,
+  translations?: TranslationValueMap
+): Promise<CreateSpanningChecklistState> {
+  const session = await getSession();
+  try {
+    const checklistId = await createChecklist(session.user.id, collectionId, {
+      issueId: null,
+      name,
+      translations,
+    });
+    return { status: "success", checklistId };
+  } catch (err) {
+    return {
+      status: "error",
+      message: err instanceof Error ? err.message : "Failed to create checklist. Please try again.",
+    };
   }
 }

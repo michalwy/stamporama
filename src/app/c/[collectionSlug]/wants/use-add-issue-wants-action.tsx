@@ -106,7 +106,8 @@ export function AddIssueWantsDialog({
   onClose,
 }: {
   collectionId: string;
-  issueId: string;
+  /** Null for a checklist that spans issues (#1416), which then names it in `checklistId`. */
+  issueId: string | null;
   /** Scope the run to this one checklist of the issue: no ticks, just its own counts. */
   checklistId?: string;
   onClose: () => void;
@@ -188,6 +189,9 @@ export function AddIssueWantsDialog({
   // Read over the whole issue either way — the gap is per checklist already — and narrowed here when
   // the card opened the dialog on one of them.
   const gaps = checklistId ? issueGaps?.filter((g) => g.checklistId === checklistId) : issueGaps;
+  // A checklist spanning issues (#1416) is the whole subject, so the messages name it rather than an
+  // issue it does not have.
+  const subject = issueId === null ? "this checklist" : "this issue";
   const selected =
     picked ?? new Set((gaps ?? []).filter((g) => g.toCreateStampIds.length > 0).map((g) => g.checklistId));
   const chosen = (gaps ?? []).filter((g) => selected.has(g.checklistId));
@@ -261,12 +265,14 @@ export function AddIssueWantsDialog({
     >
       <DialogBody>
         {isLoading ? (
-          <p style={MESSAGE_STYLE}>Checking what this issue is missing…</p>
+          <p style={MESSAGE_STYLE}>Checking what {subject} is missing…</p>
         ) : isError || !gaps ? (
-          <p style={MESSAGE_STYLE}>Could not read what this issue is missing.</p>
+          <p style={MESSAGE_STYLE}>Could not read what {subject} is missing.</p>
         ) : gaps.length === 0 ? (
           <p style={MESSAGE_STYLE}>
-            This issue has no checklists, so nothing is required of it yet.
+            {issueId === null
+              ? "This checklist is gone."
+              : "This issue has no checklists, so nothing is required of it yet."}
           </p>
         ) : (
           <>

@@ -114,7 +114,8 @@ Entries are checklists, in the order the album prints them. Drag a row to change
   stays where you put it. To take one out, use **Remove from album** — the checklist itself is
   untouched, you are only saying it is not in this binder.
 - A checklist that **spans several issues** has no area, so it cannot be gathered. Add one of those
-  by hand.
+  from the [Checklists](collections.md#checklists-that-span-several-issues) screen: **⋮ → Add to
+  album…** on its row.
 - **Own order** on a row means this album prints that checklist's stamps in an order of its own
   rather than the one set on the checklist. **Follow the checklist's order** puts it back.
 

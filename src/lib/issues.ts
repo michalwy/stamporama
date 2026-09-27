@@ -96,6 +96,7 @@ import {
   getCollectionBaseCurrency,
   resolveDisplayConditionId,
 } from "./pricing";
+import { foldChecklistPrices, type ChecklistPricePick } from "./catalog-price";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -603,7 +604,11 @@ const ISSUE_LIST_SELECT = {
  * (certificate = none). Stamps priced only on an older edition are handled the
  * same way as the list total: if any is priced on the current edition the
  * total uses only those, otherwise it falls back to older-edition prices.
- * `convertedAmount` is left null for the caller to fill after fetching rates.
+ *
+ * `primaryNameId` and `formatFactor` are one value for an issue's checklist — every member shares
+ * the issue's area — and a per-stamp lookup for a checklist spanning issues (#1416), whose stamps may
+ * each be read through a different area's leading catalogue. How several currencies then add up is
+ * `foldChecklistPrices`.
  */
 function computeChecklistPriceTotal(
   requiredMembers: {
@@ -616,24 +621,16 @@ function computeChecklistPriceTotal(
       }[];
     };
   }[],
-  primaryNameId: string | null,
+  primaryNameId: string | null | ((stampId: string) => string | null),
   baseCurrency: string,
   latestYearByName: Map<string, number>,
   displayConditionId: string | null,
   rates: Map<string, number | null>,
   variantPricesByStamp: Map<string, RawCatalogPrice[][]>,
   displayFormatId: string | null = null,
-  formatFactor: number | null = null
+  formatFactor: number | null | ((stampId: string) => number | null) = null
 ): IssuePriceTotal | null {
-  let sumCurrent = 0;
-  let currentCount = 0;
-  let estimatedCurrent = 0;
-  let derivedCurrent = 0;
-  let sumOlder = 0;
-  let olderCount = 0;
-  let estimatedOlder = 0;
-  let derivedOlder = 0;
-  let currency: string | null = null;
+  const picks: ChecklistPricePick[] = [];
   for (const m of requiredMembers) {
     // Each required member's headline price applies the unknown-variant rollup (#238): an
     // umbrella with no own price contributes its lowest variant child's price instead. When a
@@ -643,56 +640,103 @@ function computeChecklistPriceTotal(
       ownPrices: m.stamp.catalogPrices,
       variantPrices: variantPricesByStamp.get(m.stampId),
       isUmbrella: isUnknownVariantStamp(m.stamp),
-      primaryCatalogNameId: primaryNameId,
+      primaryCatalogNameId:
+        typeof primaryNameId === "function" ? primaryNameId(m.stampId) : primaryNameId,
       displayConditionId,
       displayFormatId,
-      formatFactor,
+      formatFactor: typeof formatFactor === "function" ? formatFactor(m.stampId) : formatFactor,
       baseCurrency,
       rates,
     });
     if (!main) continue;
-    currency = main.currency;
-    const isOlder = (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear;
-    if (isOlder) {
-      sumOlder += main.amount;
-      olderCount += 1;
-      if (uncertain) estimatedOlder += 1;
-      if (derived) derivedOlder += 1;
-    } else {
-      sumCurrent += main.amount;
-      currentCount += 1;
-      if (uncertain) estimatedCurrent += 1;
-      if (derived) derivedCurrent += 1;
-    }
+    picks.push({
+      amount: main.amount,
+      currency: main.currency,
+      older: (latestYearByName.get(main.catalogNameId) ?? main.editionYear) > main.editionYear,
+      estimated: uncertain,
+      derived,
+    });
   }
+  return foldChecklistPrices(picks, requiredMembers.length, baseCurrency, rates);
+}
 
-  const finish = (
-    amount: number,
-    pricedCount: number,
-    usesOlderEdition: boolean,
-    olderEditionExcludedCount: number,
-    estimatedCount: number,
-    derivedCount: number
-  ): IssuePriceTotal => ({
-    amount: amount.toFixed(2),
-    currency: currency!,
-    convertedAmount: applyConversion(amount, currency!, baseCurrency, rates),
-    baseCurrency,
-    pricedCount,
-    requiredCount: requiredMembers.length,
-    usesOlderEdition,
-    olderEditionExcludedCount,
-    estimatedCount,
-    derivedCount,
-  });
+/** A checklist spanning issues, valued (#1416) — `IssueChecklistTotals`' two figures. */
+export interface SpanningChecklistTotals {
+  priceTotal: IssuePriceTotal | null;
+  priceStale: boolean;
+}
 
-  if (currency && currentCount > 0) {
-    return finish(sumCurrent, currentCount, false, olderCount, estimatedCurrent, derivedCurrent);
+/**
+ * The catalogue value of checklists that span issues (#1416), by the rule an issue's checklist is
+ * valued by on the Issues list: each stamp's headline price on its leading catalogue at the
+ * collection's first condition, the single, the unknown-variant rollup (#238), the edition fallback.
+ *
+ * What differs is only **whose** leading catalogue: an issue's checklist is read through its issue's
+ * area, and a checklist spanning issues has none — so each stamp is read through its own primary
+ * area, as the Stamps list reads it. Several areas can mean several currencies, which
+ * `foldChecklistPrices` states in the base currency. One read for every checklist given, since the
+ * screen listing them lists them all.
+ *
+ * Not owner-checked: the caller has authorized the collection.
+ */
+export async function getSpanningChecklistTotals(
+  collectionId: string,
+  checklists: readonly { id: string; stampIds: readonly string[] }[]
+): Promise<Map<string, SpanningChecklistTotals>> {
+  const out = new Map<string, SpanningChecklistTotals>();
+  const stampIds = [...new Set(checklists.flatMap((c) => c.stampIds))];
+  if (stampIds.length === 0) {
+    for (const c of checklists) out.set(c.id, { priceTotal: null, priceStale: false });
+    return out;
   }
-  if (currency && olderCount > 0) {
-    return finish(sumOlder, olderCount, true, 0, estimatedOlder, derivedOlder);
+  const [primaryCatalogByArea, baseCurrency, latestYearByName, displayConditionId, stamps] =
+    await Promise.all([
+      buildEffectivePrimaryCatalogMap(collectionId),
+      getCollectionBaseCurrency(collectionId),
+      getLatestEditionYearByName(collectionId),
+      resolveDisplayConditionId(collectionId, null),
+      prisma.stamp.findMany({
+        where: { id: { in: stampIds }, collectionId },
+        select: {
+          id: true,
+          catalogPrices: { select: HEADLINE_PRICE_SELECT },
+          variants: { select: VARIANT_FLAG_SELECT },
+          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+        },
+      }),
+    ]);
+  const byId = new Map(stamps.map((s) => [s.id, s]));
+  const primaryNameOf = (stampId: string): string | null => {
+    const links = byId.get(stampId)?.stampAreaLinks ?? [];
+    const areaId = (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId;
+    return areaId ? (primaryCatalogByArea.get(areaId) ?? null) : null;
+  };
+  const { variantPricesByStamp, currencies: variantCurrencies } =
+    await loadVariantPricesForUmbrellas(
+      collectionId,
+      stamps.filter((s) => isUnknownVariantStamp(s)).map((s) => s.id)
+    );
+  const rates = await safeRateMap(collectionId, baseCurrency, [
+    ...stamps.flatMap((s) => s.catalogPrices.map((p) => p.currency)),
+    ...variantCurrencies,
+  ]);
+  for (const c of checklists) {
+    const members = c.stampIds
+      .map((id) => byId.get(id))
+      .filter((s): s is (typeof stamps)[number] => s !== undefined)
+      .map((stamp) => ({ stampId: stamp.id, stamp }));
+    const priceTotal = computeChecklistPriceTotal(
+      members,
+      primaryNameOf,
+      baseCurrency,
+      latestYearByName,
+      displayConditionId,
+      rates,
+      variantPricesByStamp
+    );
+    out.set(c.id, { priceTotal, priceStale: priceTotal?.usesOlderEdition ?? false });
   }
-  return null;
+  return out;
 }
 
 /**

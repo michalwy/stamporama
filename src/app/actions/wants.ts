@@ -155,7 +155,8 @@ export async function findWantsSatisfiedByAction(
  *  is re-read whenever they change rather than filtered in the browser. */
 export async function previewIssueMissingWantsAction(
   collectionId: string,
-  issueId: string,
+  /** Null: the checklists spanning issues (#1416). */
+  issueId: string | null,
   acceptance: WantAcceptanceInput,
   depth: WantDepth
 ): Promise<IssueWantGapChecklist[]> {
@@ -175,7 +176,8 @@ export async function previewIssueMissingWantsAction(
  *  `main`, the dialog's own cold start, rather than failing the run over a word. */
 export async function addIssueMissingToWantListAction(
   collectionId: string,
-  issueId: string,
+  /** Null: the checklists spanning issues (#1416). */
+  issueId: string | null,
   checklistIds: string[],
   acceptance: WantAcceptanceInput,
   priority: WantPriority,

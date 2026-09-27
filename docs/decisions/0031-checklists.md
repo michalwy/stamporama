@@ -50,6 +50,13 @@ the first migration so the later cross-issue editor needs no schema change; **on
 editor is built here**, because a cross-issue checklist has no home on any existing screen and
 inventing one was not this issue's question.
 
+> **Amended by #1416: the cross-issue editor exists.** A **Checklists** screen in the Catalog section
+> lists the checklists with no issue and is where they are made, named, ordered and deleted; stamps
+> join them from the Issues list's stamp selection (#808). §5 is unchanged — an issue's own
+> checklists are still edited on the issue, and the screen does not list them. The figures are an
+> issue checklist's, read by the same code, with each stamp valued through its own area's leading
+> catalogue and a total across currencies stated in the base currency.
+
 ### 3. Membership *is* required-ness
 
 There is no per-membership "required" flag on a checklist. A stamp that is an optional extra — a
@@ -212,7 +219,6 @@ model ChecklistStamp {
 
 ## Still open
 
-- **Cross-issue checklists have no editor.** The schema allows `issueId: null`; nothing creates one.
-  A home for them — a Catalog tab, a nav entry — is its own decision.
+- ~~**Cross-issue checklists have no editor.**~~ Settled by #1416 — see the amendment under §2.
 - **A checklist is not yet a filter.** "Show me what is missing from Basic" reads off the detail
   page's grid, not off the Copies or Issues list.

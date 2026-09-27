@@ -25,7 +25,7 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - The collection name, at the top, with the [Action items](action-items.md) bell beside it
 - **Overview**, pinned above everything else — the one screen about the collection as a whole
 - Five **sections**, each one a heading you can fold away: **Catalog** (Issues, Stamps and the
-  variant-price worklist under it, then Areas), **Collection** (Inventory, then
+  variant-price worklist under it, Checklists, then Areas), **Collection** (Inventory, then
   Locations and Albums), **Selling** (the Offers group, the Marketplaces group, Sales), **Intake** (Want list,
   Intake documents, Auctions) and **Partners** (Trades, Contacts, Colnect — the screens that serve buying
   and selling alike). A subject read through more than one screen carries the extra ones indented
@@ -516,7 +516,7 @@ Open **Checklists…** from the issue's **⋮** menu, or **Manage…** on the **
 - **Add** a checklist and give it a name (*Basic set*, *Imperforate*, *With tabs*).
 - **Choose stamps…** — tick the stamps the set is made of. The whole issue's stamp tree is listed, each row carrying the same catalog-number chips the issue's own rows do — `Mi·PL 200` rather than a bare `200`, so a stamp listed in three catalogs reads as three labelled numbers instead of three anonymous ones. Anything left unticked is an extra the issue holds but no set counts.
 - **Order stamps…** — drag the ⠿ grip to say what order the set reads in. It starts in catalog order, which is what every screen showed before, so nothing moves until you change it; change it where the catalogue's numbering is not how the set is laid out. Each drop is saved as you make it, and every screen that lists the checklist follows the order — the copies an intake creates from a whole set, the lines an auction lot or a trade takes it as, the stamps a set is still missing.
-- **Rename** or **Delete** a checklist. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures.
+- **Rename** or **Delete** a checklist. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures. If the checklist is in an [album](albums.md), the confirmation names the album: it loses its card for the checklist.
 - **Translate** a checklist's name with the 🌐 button beside it, when adding or renaming one. It is what an [album](albums.md#the-language-is-the-albums-own-and-it-changes-the-plan) printed in that language calls the checklist. A checklist still named after its issue needs nothing here: it uses the issue's own translation unless you give it one of its own.
 
 Names are **labels, not identifiers**: the same name may repeat freely across issues, and *Imperforate* on two different series is two unrelated checklists that never meet on one screen. Within **one** issue a repeated name is allowed too, but the field shows a **⚠** saying so — two checklists called the same thing read alike everywhere they are listed, and you can still save it if that is what you meant.
@@ -563,6 +563,22 @@ An issue with a single checklist gets no filter: there is nothing to choose betw
 - **Several** — the badge reads `3 checklists`; hover it to see each name, its size and its total. The row deliberately does not grow a line per set.
 
 The issue's own **detail page** is where several checklists get room: a **Checklists** card listing them all — click one to narrow the stamp tree to it, or **Manage…** to open the same editor as the row's **⋮ → Checklists…** — and one completeness grid and one catalog-value card each. See [The issue page](detail-pages.md#the-issue-page).
+
+### Checklists that span several issues
+
+Some sets are not one issue's: a thematic set, a definitive series printed over several years and several issues, *all Grosik 1928–1932*. Those live on the **Checklists** screen, in the **Catalog** section of the sidebar. It lists only the checklists that span issues — an issue's own checklists stay on the issue.
+
+- **New checklist** starts one and names it. The same ⚠ as on an issue warns when the name is already taken by another checklist on this screen; you can still save it.
+- **Adding stamps.** On the **Issues** list, tick the stamps on the expanded trees — across as many issues and areas as you like — and choose **Add to checklist…** in the selection bar. Pick the checklist, or **New checklist…** to start one from the ticked stamps. Only the stamps you ticked join, **not the variants a tick brings along**: a copy of a variant already counts for the stamp it is a variant of, so the set lists `309` and a `309A` in your album fills it. Stamps already on the checklist are left where they are, and new ones go after them.
+- **Stamps and order…** in a row's **⋮** menu lists what is on the checklist, each stamp with its catalogue numbers and the issue it comes from. Drag the ⠿ grip to set the order the set reads in, or take a stamp off with **−**. Each change is saved as you make it.
+- Each row shows the checklist's **size**, how many **issues** it reaches, how **complete** it is (stamps held over stamps on it, in any condition, and how many complete sets) and its **catalogue value** — read exactly as an issue's checklist is. Each stamp is priced on the leading catalogue of **its own area**; when those catalogues are in different currencies, the total is given in your base currency.
+- **Add missing to want list…** is the same dialog an issue's checklist opens, for this one checklist. See [Filling the list from a checklist](wants.md#filling-the-list-from-a-checklist).
+- **Add to album…** puts the checklist into an [album](albums.md) as one card, at the end. An album gathers only its own area's checklists, so this is how one spanning issues gets in.
+- **Apply size…** writes a width and height onto every stamp on it, as from an issue's checklist.
+- **Delete** asks first and names the albums the checklist is in. The stamps stay in their issues.
+- Drag the ⠿ grip on the list to put the checklists in your own order.
+
+A checklist spanning issues is also offered when a ticked run of scan tiles is identified as a set: it appears on the row of every issue it reaches.
 
 ### Elsewhere
 
