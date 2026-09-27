@@ -1002,6 +1002,8 @@ model AlbumTemplate {
   boxGapYMm           Float
   headingSpaceAboveMm Float
   headingSpaceBelowMm Float
+  /// Between a row of boxes and its labels (#1420). 0 is every page printed before it.
+  labelGapMm          Float @default(0)
 
   // ── Hawid margins (#765) ──
   // The clearances the box rule adds to a stamp. The **vertical** one is added before a strip is
@@ -1140,6 +1142,8 @@ model Album {
   boxGapYMm           Float
   headingSpaceAboveMm Float
   headingSpaceBelowMm Float
+  /// Between a row of boxes and its labels (#1420). 0 is every page printed before it.
+  labelGapMm          Float @default(0)
 
   verticalClearanceMm Float
   horizontalMarginMm  Float

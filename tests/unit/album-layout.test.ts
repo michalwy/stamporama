@@ -1679,3 +1679,105 @@ describe("planAlbumPages and a series started on its own line (#1421)", () => {
     );
   });
 });
+
+describe("planAlbumPages and the gap between a box and its label (#1420)", () => {
+  // The stand-in measurer sets an 8 pt label in 4 mm lines.
+  const labelled = (gap: number, over: Partial<AlbumRenderPreset> = {}) =>
+    live(
+      planAlbumPages(
+        [chapter("y", "", [block("a", "", [box(60, 20, "303"), box(60, 30, "304")])])],
+        preset({ labelGapMm: gap, ...over }),
+        "Album",
+        metrics
+      ).pages
+    )[0];
+
+  it("sets a label on the box's own edge by default, as every page before it was", () => {
+    assert.equal(DEFAULT_ALBUM_PRESET.labelGapMm, 0);
+    const page = labelled(DEFAULT_ALBUM_PRESET.labelGapMm);
+    const tallest = page.boxes[1];
+    assert.equal(tallest.label!.yMm, tallest.yMm + tallest.heightMm);
+  });
+
+  it("moves every label below the row by the gap, on one baseline", () => {
+    const before = labelled(0);
+    const after = labelled(2.5);
+    assert.deepEqual(
+      after.boxes.map((b) => b.yMm),
+      before.boxes.map((b) => b.yMm),
+      "the mounts stay where they were"
+    );
+    for (const [i, b] of after.boxes.entries()) {
+      assert.equal(b.label!.yMm, before.boxes[i].label!.yMm + 2.5);
+      assert.equal(b.label!.heightMm, before.boxes[i].label!.heightMm, "the label itself is no taller");
+    }
+  });
+
+  it("moves the mounts below labels set above them by the gap", () => {
+    const before = labelled(0, { labelPosition: "above" });
+    const after = labelled(3, { labelPosition: "above" });
+    for (const [i, b] of after.boxes.entries()) {
+      assert.equal(b.label!.yMm, before.boxes[i].label!.yMm, "the labels open the row");
+      assert.equal(b.yMm, before.boxes[i].yMm + 3);
+    }
+    const tallest = after.boxes[1];
+    assert.equal(tallest.yMm, tallest.label!.yMm + tallest.label!.heightMm + 3);
+  });
+
+  it("makes a labelled row taller, so the next row starts that much lower", () => {
+    const rows = (gap: number) =>
+      live(
+        planAlbumPages(
+          [chapter("y", "", [block("a", "", [box(120, 20, "303"), box(120, 20, "304")])])],
+          preset({ labelGapMm: gap }),
+          "Album",
+          metrics
+        ).pages
+      )[0].boxes.map((b) => b.yMm);
+    const [firstBefore, secondBefore] = rows(0);
+    const [firstAfter, secondAfter] = rows(4);
+    assert.equal(firstAfter, firstBefore);
+    assert.equal(secondAfter, secondBefore + 4);
+  });
+
+  it("reserves nothing on a row that prints no label", () => {
+    const rows = (gap: number, over: Partial<AlbumRenderPreset> = {}, label = "") =>
+      live(
+        planAlbumPages(
+          [chapter("y", "", [block("a", "", [box(120, 20, label), box(120, 20, label)])])],
+          preset({ labelGapMm: gap, ...over }),
+          "Album",
+          metrics
+        ).pages
+      )[0].boxes.map((b) => b.yMm);
+    assert.deepEqual(rows(10), rows(0), "blank labels");
+    assert.deepEqual(rows(10, { labelPosition: "none" }, "303"), rows(0, { labelPosition: "none" }, "303"));
+  });
+
+  it("keeps mounts sharing a band centred when only one of them carries a label above it", () => {
+    const [page] = live(
+      planAlbumPages(
+        [chapter("y", "", [block("a", "A", [box(30, 30, "303")]), block("b", "B", [box(30, 30)])])],
+        preset({ labelPosition: "above", labelGapMm: 5 }),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(page.boxes[0].yMm, page.boxes[1].yMm);
+    assert.equal(page.boxes[0].yMm, page.boxes[0].label!.yMm + page.boxes[0].label!.heightMm + 5);
+  });
+
+  it("re-plans the sheets: a wider gap can carry a block onto the next one", () => {
+    // Five blocks of two 16 mm rows with 4 mm labels, each 6 + 20 + 6 + 20 = 52 mm, fill one sheet.
+    // At 5 mm each is 62 mm, and the fifth no longer fits under the other four.
+    const blocks = Array.from({ length: 5 }, (_, i) =>
+      block(`b${i}`, "", [box(190, 16, "1"), box(190, 16, "2")])
+    );
+    const sheets = (gap: number) =>
+      live(planAlbumPages([chapter("y", "", blocks)], preset({ labelGapMm: gap }), "Album", metrics).pages);
+    assert.equal(sheets(0).length, 1);
+    const wider = sheets(5);
+    assert.equal(wider.length, 2);
+    assert.deepEqual(wider[1].blocks.map((b) => b.entryId), ["b4"]);
+  });
+});

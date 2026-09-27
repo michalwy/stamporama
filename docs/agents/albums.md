@@ -1137,6 +1137,25 @@ re-deriving:
   placed plan, and the integration suite reads a mount's translation back out of the PDF's content
   stream to hold them to it.
 
+### The gap between a box and its label (#1420)
+
+`labelGapMm` is an ordinary spacing value in the preset — template and album columns, parsed at
+`MIN_SPACING_MM`–`MAX_SPACING_MM` like its neighbours. What is worth not re-deriving:
+
+- **Today's gap was 0, and the default is 0.** A label's rect has always started on the row's mount
+  band edge; the air a reader sees above the letters is the face's own leading. So "tighten it on a
+  crowded page" has no room below the default. Asked on 2026-09-28, the collector chose **0–100 mm,
+  like the other spacing values, over a negative floor** that would let a label reach into the mount.
+- **It is per row, on `MeasuredRow.labelGapMm`, and only where the row prints a label.** A row whose
+  labels are all blank (or `labelPosition: "none"`) reserves nothing, for the same reason a blank
+  label reserves no line. Row height, the above/below placement and #779's band alignment all read
+  that one figure, so a labelled mount beside an unlabelled one still centres.
+- **It is layout, so it re-plans.** Rows grow, and a series can move to the next sheet; a printed
+  card reports it as a `template` divergence through the ordinary preset comparison.
+- **A card stored before #1420 reads as 0** — `parseAlbumSnapshot` fills it in, as it does
+  `verticalPlacement` (#1419). Without that every older card would report `Label gap (mm)` as changed
+  (`undefined !== 0`) the moment the build shipped.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`

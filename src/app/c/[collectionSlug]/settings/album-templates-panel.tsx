@@ -469,6 +469,12 @@ export function AlbumPresetForm({
             value={preset.headingSpaceBelowMm}
             disabled={isPending}
           />
+          <MmField
+            name="labelGapMm"
+            label="Between a box and its label (mm)"
+            value={preset.labelGapMm}
+            disabled={isPending}
+          />
         </div>
 
         <h3 style={SECTION_STYLE}>Hawid clearances</h3>

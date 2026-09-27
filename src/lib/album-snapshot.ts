@@ -223,14 +223,24 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   }
   // A card stored before #1419 has no vertical placement, and it was placed at the top — nothing
   // else existed. Filled in rather than bumping the version: the reading is certain, and refusing
-  // every card printed before today would be the opposite of what a stored result is for.
+  // every card printed before today would be the opposite of what a stored result is for. A card
+  // stored before #1420 has no label gap by the same reasoning, and its labels sat on the box's
+  // edge: 0, or every such card would report the new value as a template change.
   const stored = snapshot as AlbumPageSnapshot;
-  if (stored.preset.verticalPlacement !== undefined && stored.page.placement !== undefined) {
+  if (
+    stored.preset.verticalPlacement !== undefined &&
+    stored.preset.labelGapMm !== undefined &&
+    stored.page.placement !== undefined
+  ) {
     return stored;
   }
   return {
     ...stored,
-    preset: { ...stored.preset, verticalPlacement: stored.preset.verticalPlacement ?? "top" },
+    preset: {
+      ...stored.preset,
+      verticalPlacement: stored.preset.verticalPlacement ?? "top",
+      labelGapMm: stored.preset.labelGapMm ?? 0,
+    },
     page: { ...stored.page, placement: stored.page.placement ?? "top" },
   };
 }
