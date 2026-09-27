@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { costBasisCopyCount, type HoldingsSummary } from "@/lib/valuation";
 import type { CostBasisTotal } from "@/lib/cost-basis";
 import type { OpeningValue } from "@/lib/opening-value";
@@ -822,8 +823,12 @@ export function HoldingsSummaryBar({
    * wrong the other way — localStorage growing a key per record, and a newly opened lot reading
    * collapsed while its neighbour above it is expanded, for a preference that is really "do I want
    * lot detail today".
+   *
+   * **Absent, nothing is remembered**: the bar opens collapsed and holds the choice for as long as
+   * it is mounted. That is the purchase order's pinned copy (#1410), which must take its collapsed
+   * form each time it pins whatever the bar in the page says.
    */
-  storageKey: string;
+  storageKey?: string;
   /**
    * How many copies the scope holds, stated on the headline row (#845). A **call-site** figure, not
    * one derived from `total`: the Copies list is where "how many items are on this list" is a
@@ -864,7 +869,10 @@ export function HoldingsSummaryBar({
    */
   costToCatalog?: CostToCatalog | null;
 }) {
-  const [expanded, setExpanded] = usePersistedFlag(storageKey);
+  const [remembered, setRemembered] = usePersistedFlag(storageKey ?? "");
+  const [held, setHeld] = useState(false);
+  const expanded = storageKey ? remembered : held;
+  const setExpanded = storageKey ? setRemembered : setHeld;
   // Whether something other than catalog value leads, which displaces catalog value into its group.
   const ledByDocument = spend !== undefined || openingValue !== undefined;
 
