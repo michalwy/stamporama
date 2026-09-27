@@ -245,6 +245,70 @@ export function averageOf(values: number[]): number | null {
 }
 
 /** Convert an amount to the base currency using a rate map; null when same currency or no rate. */
+/** One stamp's headline price as a checklist total counts it — see {@link foldChecklistPrices}. */
+export interface ChecklistPricePick {
+  amount: number;
+  currency: string;
+  /** Priced only on an older edition of its catalogue than the newest one known. */
+  older: boolean;
+  /** Rolled up from the lowest variant child (#238). */
+  estimated: boolean;
+  /** Derived from the single by a format multiplier (#343). */
+  derived: boolean;
+}
+
+/**
+ * A checklist's catalogue value, summed from its stamps' picked prices.
+ *
+ * **Editions**: when any stamp is priced on its catalogue's current edition, the total counts only
+ * those and says how many older-only ones it left out; otherwise it falls back to the older prices
+ * and says so. That is the issue list's rule, unchanged.
+ *
+ * **Currencies**: an issue's checklist is read through one leading catalogue, so its prices share
+ * one currency and the total is stated in it, converted beside it. A checklist spanning issues
+ * (#1416) may reach areas led by different catalogues — Michel in euros beside Fischer in złoty — and
+ * adding those amounts as they stand would be a number in no currency at all. So when the counted
+ * prices are in more than one currency, each is converted and the total is stated **in the base
+ * currency**; a price with no rate to convert it by is left out of the count rather than added in
+ * the wrong unit, and `pricedCount` says so.
+ */
+export function foldChecklistPrices(
+  picks: readonly ChecklistPricePick[],
+  requiredCount: number,
+  baseCurrency: string,
+  rates: Map<string, number | null>
+): IssuePriceTotal | null {
+  const current = picks.filter((p) => !p.older);
+  const usesOlderEdition = current.length === 0;
+  let counted = usesOlderEdition ? picks.filter((p) => p.older) : current;
+  if (counted.length === 0) return null;
+
+  let currency = counted[counted.length - 1].currency;
+  let amount: number;
+  if (counted.every((p) => p.currency === currency)) {
+    amount = counted.reduce((sum, p) => sum + p.amount, 0);
+  } else {
+    currency = baseCurrency;
+    const rateOf = (c: string) => (c === baseCurrency ? 1 : (rates.get(c) ?? null));
+    counted = counted.filter((p) => rateOf(p.currency) !== null);
+    if (counted.length === 0) return null;
+    amount = counted.reduce((sum, p) => sum + p.amount * rateOf(p.currency)!, 0);
+  }
+
+  return {
+    amount: amount.toFixed(2),
+    currency,
+    convertedAmount: applyConversion(amount, currency, baseCurrency, rates),
+    baseCurrency,
+    pricedCount: counted.length,
+    requiredCount,
+    usesOlderEdition,
+    olderEditionExcludedCount: usesOlderEdition ? 0 : picks.length - current.length,
+    estimatedCount: counted.filter((p) => p.estimated).length,
+    derivedCount: counted.filter((p) => p.derived).length,
+  };
+}
+
 export function applyConversion(
   amount: number,
   currency: string,

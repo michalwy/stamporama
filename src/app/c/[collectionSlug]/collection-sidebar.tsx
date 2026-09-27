@@ -508,6 +508,15 @@ export function CollectionSidebar({
               nested
             />
           </NavGroup>
+          {/* Checklists that span issues (#1416) — a set collected across publications, which no issue
+              owns and so no issue's page can hold (ADR-0031). An issue's own checklists stay on
+              the issue. After Stamps, because what it lists are sets of them. */}
+          <NavItem
+            href={`${base}/checklists`}
+            icon={<Icon name="checklists" />}
+            label="Checklists"
+            active={isActive(`${base}/checklists`)}
+          />
           {/* Areas are how the catalogue is organised (#1234) — the tree issues and stamps hang on,
               and the facet every catalogue screen filters by — so the collector looks for them
               here. #775 moved them out of Settings on frequency, and that stands; it filed them

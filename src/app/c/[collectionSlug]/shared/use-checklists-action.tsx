@@ -8,7 +8,6 @@ import {
   DialogActions,
   DialogFooter,
   DialogPrimaryButton,
-  LabelWithError,
   ConfirmDialog,
 } from "@/app/dialog-shell";
 import {
@@ -37,21 +36,10 @@ import {
   showLineAt,
   dragStyle,
 } from "./reorder-list";
-import { NO_AUTOFILL } from "./no-autofill";
 import { ApplySizePresetDialog } from "./apply-size-preset-dialog";
-import { Tooltip } from "./tooltip";
-import { Icon } from "@/app/icons";
-import {
-  fillTranslationValues,
-  type TranslationField,
-  type TranslationValues,
-} from "./translations-dialog";
-import { TranslationsField } from "./translations-field";
-import { useTitleLanguages } from "./use-title-languages";
-import { parseTranslationValues } from "@/lib/translations";
-import { TextInput } from "./text-input";
-
-const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
+import type { TranslationValueMap } from "@/lib/translations";
+import { ChecklistNameDialog } from "./checklist-name-dialog";
+import { ChecklistUsageNote } from "./checklist-usage-note";
 
 // The checklists of one issue, edited from that issue's row (#531; ADR-0031). The anchor is never a
 // field: the screen this was opened from already answered "which issue", which is ADR-0020 §7's
@@ -60,18 +48,6 @@ const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name
 // Order is the collector's, and it is load-bearing rather than cosmetic — the **first** checklist is
 // the one a single-checklist row shows its badge and total for, and the one a new stamp joins when
 // the stamp form's box is ticked. So the list is drag-reorderable through the shared kit.
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%",
-  padding: "0.5rem 0.75rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.875rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
-};
 
 const FORM_STYLE: React.CSSProperties = {
   display: "flex",
@@ -182,59 +158,13 @@ export function ChecklistsDialog({
 
   const drag = useReorderList(checklists.length > 1 && !isPending, move, { handleOnly: true });
 
-  // The typed name, mirrored so the duplicate check can read it. The input itself stays
-  // uncontrolled, as the issue form's does — the value is read off the form on submit.
-  const [nameText, setNameText] = useState("");
-
-  // The name in other languages (#1308), staged in this form and saved with it, as the issue form
-  // stages its own. An album printing `{checklistName}` in its language reads these; a checklist
-  // still named after its issue follows the issue's translation until it is given one here.
-  const { titleLanguages } = useTitleLanguages(collectionId);
-  const [translations, setTranslations] = useState<TranslationValues>({});
-  const [translationsOpen, setTranslationsOpen] = useState(false);
-
-  function startEditingName(next: Editing & { kind: "add" | "rename" }) {
-    setNameText(next.kind === "rename" ? next.checklist.name : "");
-    setTranslations(
-      fillTranslationValues(
-        titleLanguages,
-        NAME_TRANSLATION_FIELDS,
-        next.kind === "rename" ? { name: next.checklist.nameByLanguage } : undefined
-      )
-    );
-    setEditing(next);
-  }
-
-  // Two checklists of one issue with the same name are indistinguishable everywhere they are
-  // listed — the badge tooltip, the filter, the stamp form's boxes, the price-details entries.
-  // Advisory rather than blocking, following #178's rule for duplicate issue names: the collector
-  // may have a reason, and the list behind this dialog already says what is there.
-  const duplicateName =
-    editing !== null &&
-    editing.kind !== "stamps" &&
-    editing.kind !== "order" &&
-    nameText.trim() !== "" &&
-    checklists.some(
-      (c) =>
-        c.id !== (editing.kind === "rename" ? editing.checklist.id : null) &&
-        c.name.trim().toLowerCase() === nameText.trim().toLowerCase()
-    );
-
-  function submitName(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const name = ((formData.get("name") as string | null) ?? "").trim();
-    if (!name) {
-      setError("A checklist needs a name.");
-      return;
-    }
-    const staged = parseTranslationValues(formData, ["name"]);
+  function submitName(name: string, translations: TranslationValueMap) {
     const current = editing;
     run(
       () =>
         current?.kind === "rename"
-          ? renameChecklistAction(current.checklist.id, name, staged)
-          : createChecklistAction(collectionId, issueId, name, staged),
+          ? renameChecklistAction(current.checklist.id, name, translations)
+          : createChecklistAction(collectionId, issueId, name, translations),
       () => setEditing(null)
     );
   }
@@ -333,7 +263,7 @@ export function ChecklistsDialog({
                           key: "rename",
                           label: "Rename…",
                           icon: "edit",
-                          onSelect: () => startEditingName({ kind: "rename", checklist }),
+                          onSelect: () => setEditing({ kind: "rename", checklist }),
                         },
                         {
                           key: "delete",
@@ -354,7 +284,7 @@ export function ChecklistsDialog({
 
           <button
             type="button"
-            onClick={() => startEditingName({ kind: "add" })}
+            onClick={() => setEditing({ kind: "add" })}
             disabled={isPending}
             style={{
               marginTop: "1rem",
@@ -378,95 +308,21 @@ export function ChecklistsDialog({
         </DialogBody>
       </DialogShell>
 
-      {editing && editing.kind !== "stamps" && editing.kind !== "order" && (
-        <DialogShell
+      {editing && (editing.kind === "add" || editing.kind === "rename") && (
+        <ChecklistNameDialog
+          collectionId={collectionId}
           title={editing.kind === "add" ? "Add checklist" : "Rename checklist"}
-          onClose={() => {
-            if (!isPending) {
-              setEditing(null);
-              setError(undefined);
-            }
+          initial={editing.kind === "rename" ? editing.checklist : undefined}
+          siblings={checklists}
+          siblingsLabel="on this issue"
+          isPending={isPending}
+          error={error}
+          onCancel={() => {
+            setEditing(null);
+            setError(undefined);
           }}
-          dismissable={!translationsOpen}
-        >
-          <form style={FORM_STYLE} onSubmit={submitName}>
-            <DialogBody>
-              <LabelWithError htmlFor="cl-name">Name</LabelWithError>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-                  <TextInput
-                    id="cl-name"
-                    name="name"
-                    autoFocus
-                    defaultValue={editing.kind === "rename" ? editing.checklist.name : ""}
-                    disabled={isPending}
-                    placeholder="e.g. Basic set, Imperforate, With tabs"
-                    style={{ ...INPUT_STYLE, paddingRight: duplicateName ? "2rem" : undefined }}
-                    onChange={(e) => setNameText(e.target.value)}
-                    {...NO_AUTOFILL}
-                  />
-                  {duplicateName && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        right: "0.5rem",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        display: "inline-flex",
-                      }}
-                    >
-                      <Tooltip
-                        align="end"
-                        content={
-                          <span>
-                            A checklist called{" "}
-                            <span style={{ fontWeight: 600 }}>{nameText.trim()}</span> is already on
-                            this issue. You can still save it, but the two will read alike wherever
-                            checklists are listed.
-                          </span>
-                        }
-                      >
-                        <span
-                          role="img"
-                          aria-label="A checklist with this name is already on this issue"
-                          style={{
-                            color: "var(--color-warning)",
-                            lineHeight: 1,
-                            cursor: "help",
-                          }}
-                        >
-                          <Icon name="warning" size="sm" />
-                        </span>
-                      </Tooltip>
-                    </span>
-                  )}
-                </div>
-                {titleLanguages.length > 0 && (
-                  <TranslationsField
-                    dialogTitle="Checklist name translations"
-                    description="What an album printed in that language calls this checklist. Left blank, a checklist still named after its issue uses the issue's translation."
-                    languages={titleLanguages}
-                    fields={[{ ...NAME_TRANSLATION_FIELDS[0], defaultValue: nameText }]}
-                    values={translations}
-                    onChange={setTranslations}
-                    onOpenChange={setTranslationsOpen}
-                    ariaLabel="Edit checklist name translations"
-                    disabled={isPending}
-                  />
-                )}
-              </div>
-            </DialogBody>
-            <DialogActions
-              actionLabel={isPending ? "Saving…" : "Save"}
-              onCancel={() => {
-                setEditing(null);
-                setError(undefined);
-              }}
-              disabled={isPending}
-              error={error}
-            />
-          </form>
-        </DialogShell>
+          onSubmit={submitName}
+        />
       )}
 
       {editing?.kind === "stamps" && (
@@ -528,6 +384,7 @@ export function ChecklistsDialog({
             <>
               Delete <strong>{deleting.name}</strong>? The stamps stay in the issue — only the goal
               they were a set for goes, along with its completeness figures.
+              <ChecklistUsageNote checklistId={deleting.id} />
             </>
           }
           actionLabel="Delete"
@@ -722,8 +579,9 @@ function StampCheckRow({
 }
 
 /** How a stamp is named on both of this editor's stamp lists: the same catalog-number chips the
- *  issue's own rows draw (#227), the leading catalogue accented, then whatever is left of the name. */
-function StampLabel({
+ *  issue's own rows draw (#227), the leading catalogue accented, then whatever is left of the name.
+ *  Exported for the Checklists screen's stamp list (#1416), which names stamps of several issues. */
+export function StampLabel({
   stamp,
   vendorMap,
   primaryVendorId,

@@ -51,6 +51,7 @@ import {
   ChevronRight,
   Circle,
   CircleSlash,
+  ClipboardList,
   Coins,
   Columns2,
   Copy,
@@ -151,6 +152,10 @@ const GLYPHS = {
   overview: House,
   issues: Rows3,
   stamps: Stamp,
+  /** Checklists that span issues (#1416) — a set collected across publications, on a screen of its
+   *  own. A clipboard with a list, deliberately not `selectionActions`' ticked list: that one acts
+   *  on the rows ticked on screen, and this is a subject in the sidebar. */
+  checklists: ClipboardList,
   inventory: Layers,
   /** The collection's own division of the philatelic world (#775) — countries and the territories
    *  under them, the tree an issue is filed into. A folded map, deliberately not the `locations`

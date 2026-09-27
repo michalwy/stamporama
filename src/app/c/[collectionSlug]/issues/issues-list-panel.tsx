@@ -66,6 +66,7 @@ import { useRowsInView } from "@/app/c/[collectionSlug]/inventory/use-rows-in-vi
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { ApplySizePresetDialog } from "@/app/c/[collectionSlug]/shared/apply-size-preset-dialog";
+import { AddToChecklistDialog } from "@/app/c/[collectionSlug]/shared/add-to-checklist-dialog";
 import {
   carriedByTick,
   describeStampSelection,
@@ -422,6 +423,9 @@ export function IssuesListPanel({
   // The preset apply over the selection (#809; ADR-0048 §4) — #806's dialog, handed the ticks in
   // view as a `stamps` subject. Its preview expands them through the same walk the bar's reach does.
   const [applyPresetOpen, setApplyPresetOpen] = useState(false);
+  // The ticks in view put on a checklist spanning issues (#1416) — the ticks alone, not what they
+  // carry: a set names `309`, and a copy of `309A` already counts for it (#661).
+  const [addToChecklistOpen, setAddToChecklistOpen] = useState(false);
   const stampSelection = useMemo<StampTreeSelection>(
     () => ({
       ticked,
@@ -671,6 +675,23 @@ export function IssuesListPanel({
                   <div
                     style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "auto" }}
                   >
+                    <Tooltip content="Put the ticked stamps — without the variants they bring along — on a checklist that spans issues, or start a new one from them.">
+                      <button
+                        type="button"
+                        onClick={() => setAddToChecklistOpen(true)}
+                        style={{
+                          ...FILTER_CONTROL_STYLE,
+                          cursor: "pointer",
+                          fontWeight: 600,
+                          color: "var(--color-text-secondary)",
+                          borderColor: "var(--color-border-strong)",
+                          background: "var(--color-bg-elevated)",
+                          padding: "0.375rem 0.75rem",
+                        }}
+                      >
+                        <Icon name="checklists" size="sm" /> Add to checklist…
+                      </button>
+                    </Tooltip>
                     {/* The fourth way of naming the stamps a preset is written onto (#809): stamps
                         that share a size without sharing an issue or a checklist. The same dialog,
                         preview and default as from an issue row; only the subject differs. */}
@@ -854,6 +875,15 @@ export function IssuesListPanel({
             onApplied: clearTicks,
           }}
           onClose={() => setApplyPresetOpen(false)}
+        />
+      )}
+
+      {addToChecklistOpen && tickedInView.length > 0 && (
+        <AddToChecklistDialog
+          collectionId={collectionId}
+          stampIds={tickedInView}
+          onAdded={clearTicks}
+          onClose={() => setAddToChecklistOpen(false)}
         />
       )}
 

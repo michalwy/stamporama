@@ -46,6 +46,24 @@ export async function getIssueCompleteness(
   collectionId: string,
   issueId: string
 ): Promise<IssueCompleteness> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return completenessOf(collectionId, { issueId });
+}
+
+/**
+ * The same grids for the collection's checklists that span issues (#1416) — the Checklists screen's
+ * figures, read by the rule an issue's own checklists are, so the two kinds cannot count a held copy
+ * differently. One `groupBy` for all of them, as for an issue's several.
+ */
+export async function getSpanningChecklistsCompleteness(
+  ownerId: string,
+  collectionId: string
+): Promise<IssueCompleteness> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return completenessOf(collectionId, { issueId: null });
+}
+
+async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
   const collection = await prisma.collection.findUnique({
     where: { id: collectionId },
     select: { ownerId: true },
@@ -53,10 +71,15 @@ export async function getIssueCompleteness(
   if (!collection || collection.ownerId !== ownerId) {
     throw new Error("Collection not found or access denied.");
   }
+}
 
+async function completenessOf(
+  collectionId: string,
+  scope: { issueId: string | null }
+): Promise<IssueCompleteness> {
   const [checklists, conditions, formats] = await Promise.all([
     prisma.checklist.findMany({
-      where: { collectionId, issueId },
+      where: { collectionId, issueId: scope.issueId },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true, stamps: { select: { stampId: true } } },
     }),
@@ -72,7 +95,7 @@ export async function getIssueCompleteness(
     }),
   ]);
 
-  // One `groupBy` for the whole issue, however many checklists it carries — the overlap between a
+  // One `groupBy` for the whole scope, however many checklists it carries — the overlap between a
   // basic set and its specialized counterpart is exactly the case that must not be counted twice.
   const stampIds = [...new Set(checklists.flatMap((c) => c.stamps.map((s) => s.stampId)))];
   const rollup = await loadChecklistVariantRollup(collectionId, stampIds);

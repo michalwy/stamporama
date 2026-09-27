@@ -1778,7 +1778,8 @@ export interface IssueWantGapChecklist {
 export async function previewIssueMissingWants(
   ownerId: string,
   collectionId: string,
-  issueId: string,
+  /** Null reads the checklists that span issues (#1416) — one of which the dialog then narrows to. */
+  issueId: string | null,
   acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
   depth: WantDepth | null = null
 ): Promise<IssueWantGapChecklist[]> {
@@ -1834,7 +1835,9 @@ export async function previewIssueMissingWants(
 export async function createWantsForIssue(
   ownerId: string,
   collectionId: string,
-  issueId: string,
+  /** Null scopes the run to checklists that span issues (#1416): the same gap, the same write, for
+   *  a set no one issue owns. */
+  issueId: string | null,
   checklistIds: string[],
   acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
   priority: WantPriority = "normal",
@@ -1844,11 +1847,16 @@ export async function createWantsForIssue(
   const terms = await validateAcceptance(collectionId, acceptance);
   const checklists = await prisma.checklist.findMany({
     // Scoped by issue as well as collection: a checklist id that belongs to another issue is not a
-    // goal of the issue this was raised from, whoever sent it.
+    // goal of the issue this was raised from, whoever sent it. Null matches only the checklists
+    // spanning issues, so an issue's own cannot be reached through that door either.
     where: { collectionId, issueId, id: { in: checklistIds } },
     select: { id: true, stamps: { select: { stampId: true } } },
   });
-  if (checklists.length === 0) throw new Error("No checklist of this issue was selected.");
+  if (checklists.length === 0) {
+    throw new Error(
+      issueId === null ? "The checklist was not found." : "No checklist of this issue was selected."
+    );
+  }
 
   const targets = await mapChecklistsToDepth(collectionId, checklists, depth);
   const gaps = await Promise.all(

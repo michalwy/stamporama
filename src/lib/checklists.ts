@@ -267,8 +267,7 @@ export interface SpanningChecklistSummary {
 /**
  * The collection's checklists that span issues (`issueId` null), each with the issues it covers —
  * so the run picker can offer one on the row of every issue it reaches (#1225), one query for the
- * whole picker rather than one per row. Nothing builds one from the screens yet (#531 decision 4),
- * so this is normally empty.
+ * whole picker rather than one per row. They are made on the Checklists screen (#1416).
  */
 export async function listSpanningChecklists(
   ownerId: string,
@@ -328,9 +327,9 @@ export function defaultChecklistName(issueName: string | null): string {
 }
 
 /**
- * Create a checklist. `issueId` null anchors it to nothing — a checklist spanning issues — which
- * the schema allows from the first migration though no editor builds one yet (#531 decision 4).
- * `sortOrder` lands it after the issue's existing checklists.
+ * Create a checklist. `issueId` null anchors it to nothing — a checklist spanning issues, made on
+ * the Checklists screen (#1416). `sortOrder` lands it after the issue's existing checklists, or after
+ * the other spanning ones.
  */
 export async function createChecklist(
   ownerId: string,
@@ -400,7 +399,8 @@ export async function deleteChecklist(ownerId: string, checklistId: string): Pro
 export async function reorderChecklists(
   ownerId: string,
   collectionId: string,
-  issueId: string,
+  /** Null reorders the checklists that span issues (#1416) among themselves. */
+  issueId: string | null,
   checklistIds: string[]
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
@@ -464,6 +464,75 @@ export async function setChecklistStamps(
         ]
       : []),
   ]);
+}
+
+/**
+ * Add stamps to a checklist that spans issues (#1416) — what the Issues list's selection bar does
+ * with the stamps ticked on its tree (#808). Additive: the stamps already on it keep their place and
+ * the new ones are appended in the order given, `setChecklistStamps`' rule for a stamp just ticked.
+ * One already on it is left where it is rather than moved to the end.
+ *
+ * **Spanning checklists only.** An issue's own checklist is edited on its issue (ADR-0020 §7,
+ * ADR-0031 §5), where the stamps offered are that issue's; a bulk add from a list of every issue is
+ * how a stamp of another publication would end up counted as one of its set. Stamps outside the
+ * collection are dropped. Returns how many were added.
+ */
+export async function addStampsToSpanningChecklist(
+  ownerId: string,
+  checklistId: string,
+  stampIds: string[]
+): Promise<number> {
+  const checklist = await prisma.checklist.findUnique({
+    where: { id: checklistId },
+    select: { collectionId: true, issueId: true },
+  });
+  if (!checklist) throw new Error("Checklist not found.");
+  await assertCollectionOwner(ownerId, checklist.collectionId);
+  if (checklist.issueId !== null) {
+    throw new Error("Stamps are added to an issue's checklist from the issue itself.");
+  }
+  const wanted = [...new Set(stampIds)];
+  if (wanted.length === 0) return 0;
+  const valid = new Set(
+    (
+      await prisma.stamp.findMany({
+        where: { id: { in: wanted }, collectionId: checklist.collectionId },
+        select: { id: true },
+      })
+    ).map((s) => s.id)
+  );
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.checklistStamp.findMany({
+      where: { checklistId },
+      select: { stampId: true, sortOrder: true },
+    });
+    const held = new Set(before.map((r) => r.stampId));
+    const joining = wanted.filter((id) => valid.has(id) && !held.has(id));
+    if (joining.length === 0) return 0;
+    const last = before.reduce((max, r) => Math.max(max, r.sortOrder), -1);
+    await tx.checklistStamp.createMany({
+      data: joining.map((stampId, i) => ({ checklistId, stampId, sortOrder: last + 1 + i })),
+      skipDuplicates: true,
+    });
+    return joining.length;
+  });
+}
+
+/** What would go with a checklist if it were deleted (#1416): the albums it is an entry of, whose
+ *  card for it the database cascades away. A run of scan tiles (#1225) holds no reference to the
+ *  checklist it was built on, so there is nothing else to name. */
+export async function getChecklistUsage(
+  ownerId: string,
+  checklistId: string
+): Promise<{ albums: { id: string; name: string }[] }> {
+  const collectionId = await resolveChecklistCollection(checklistId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const entries = await prisma.albumEntry.findMany({
+    where: { checklistId },
+    select: { album: { select: { id: true, name: true } } },
+    orderBy: { album: { name: "asc" } },
+  });
+  return { albums: entries.map((e) => e.album) };
 }
 
 /**
