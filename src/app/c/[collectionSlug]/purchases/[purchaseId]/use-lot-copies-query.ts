@@ -15,6 +15,7 @@ import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { CopyContainer } from "@/lib/lot-selection";
 import { formatTilePhotoRoles, type TilePhotoRole } from "@/lib/tile-photo-roles";
 import { formatIntakeGroupAxes, type IntakeGroupAxis } from "@/lib/intake-groups";
+import { lotCopiesKeys, staleAfterWrite } from "./lot-copies-keys";
 
 interface LotCopiesPage {
   items: ItemListItem[];
@@ -51,35 +52,7 @@ export interface LotCopiesParams extends IntakeFilterParams {
   yearKey?: string;
 }
 
-export const lotCopiesKeys = {
-  all: (collectionId: string) => ["lot-copies", collectionId] as const,
-  lot: (collectionId: string, lotId: string) =>
-    ["lot-copies", collectionId, lotId] as const,
-  list: (collectionId: string, lotId: string, params: LotCopiesParams) =>
-    ["lot-copies", collectionId, lotId, "list", params] as const,
-  summary: (
-    collectionId: string,
-    lotId: string,
-    filters: IntakeFilterParams,
-    groupBy: readonly IntakeGroupAxis[]
-  ) => ["lot-copies", collectionId, lotId, "summary", filters, groupBy] as const,
-  purchaseList: (collectionId: string, purchaseId: string, params: LotCopiesParams) =>
-    ["lot-copies", collectionId, "purchase", purchaseId, "list", params] as const,
-  purchaseSummary: (
-    collectionId: string,
-    purchaseId: string,
-    filters: OrderFilterParams,
-    groupBy: readonly IntakeGroupAxis[]
-  ) => ["lot-copies", collectionId, "purchase", purchaseId, "summary", filters, groupBy] as const,
-  purchaseReturn: (collectionId: string, purchaseId: string) =>
-    ["lot-copies", collectionId, "purchase", purchaseId, "return"] as const,
-  lotReturn: (collectionId: string, lotId: string) =>
-    ["lot-copies", collectionId, lotId, "return"] as const,
-  completeness: (collectionId: string, lotId: string) =>
-    ["lot-copies", collectionId, lotId, "completeness"] as const,
-  purchaseCompleteness: (collectionId: string, purchaseId: string) =>
-    ["lot-copies", collectionId, "purchase", purchaseId, "completeness"] as const,
-};
+export { lotCopiesKeys };
 
 /** A server-resolved bulk scope (#172/#571): the lot or purchase the screen is about, plus the
  * selection's own dimensions. Mirrors the server `LotBulkScope` minus the collection id. */
@@ -354,11 +327,16 @@ export function usePurchaseSetCompleteness(
 }
 
 /** Invalidate every lot-copies list and summary for a collection after a copy/lot mutation,
- * so paginated pages and their aggregates refetch together. */
+ * so paginated pages and their aggregates refetch together — or, given the lots a write touched,
+ * only what that write can have moved (#1409; `staleAfterWrite`). */
 export function useInvalidateLotCopies() {
   const queryClient = useQueryClient();
   return {
     invalidateLotCopies: (collectionId: string) =>
       queryClient.invalidateQueries({ queryKey: lotCopiesKeys.all(collectionId) }),
+    invalidateLotCopiesAfter: (collectionId: string, touchedLotIds: ReadonlySet<string> | null) =>
+      queryClient.invalidateQueries({
+        predicate: (query) => staleAfterWrite(query.queryKey, collectionId, touchedLotIds),
+      }),
   };
 }

@@ -33,6 +33,8 @@ import {
 } from "./reference-compare-dialog";
 import type { ScanTileData } from "@/lib/scan-sheets";
 import type { ArrivingCopy } from "@/lib/want-rules";
+import type { ScanActionState, TilesOutcomeActionState } from "@/app/actions/scans";
+import type { IntakeWriteScope } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/lot-copies-keys";
 import type { IdentifyHistoryAnswers } from "@/lib/tile-identify-history";
 import type { TileStampPick } from "./tile-identify-dialog";
 import type { IssueListItem } from "@/lib/issues";
@@ -359,6 +361,23 @@ export function useTileIdentifyChain(input: {
 }
 
 
+/**
+ * What identifying tiles touched (#1409): the copies it made or re-answered — their lot is the one
+ * the order re-reads — and the stamps they were identified as, since the condition step prices
+ * those and their variants on the way (#593, #1337) and a price reaches every lot holding a copy it
+ * values. The order's own figures move too: a lot's count, the tiles waiting, the issue headings.
+ */
+function identifiedScope(
+  itemIds: string[],
+  stampIds: (string | null | undefined)[]
+): IntakeWriteScope {
+  return {
+    itemIds,
+    stampIds: [...new Set(stampIds.filter((id): id is string => !!id))],
+    orderChanged: true,
+  };
+}
+
 export interface TileIdentifyChainDialogsProps {
   chain: TileIdentifyChainState;
   collectionId: string;
@@ -377,7 +396,14 @@ export interface TileIdentifyChainDialogsProps {
    * order and invalidates its copy pages. A tile's copy lands `ordered` or `to_sort`, so its want
    * review comes when it is stored rather than from `outcomes` (ADR-0032 §6b). */
   run: (
-    fn: () => Promise<{ status: string; message?: string; id?: string; outcomes?: ArrivingCopy[] }>,
+    fn: () => Promise<{
+      status: string;
+      message?: string;
+      id?: string;
+      outcomes?: ArrivingCopy[];
+      /** What the identification touched (#1409), so the order re-reads that lot and not all. */
+      refresh?: IntakeWriteScope;
+    }>,
     onDone?: (result: { status: string; message?: string; id?: string }) => void
   ) => void;
   /** Re-read the strip after a tile has become — or stopped being — a copy. Identifying touches
@@ -640,9 +666,14 @@ export function TileIdentifyChainDialogs({
                 // The same form either way, and the only thing that differs is what it lands on: a
                 // correction re-answers the copy the tile already became, an identification creates
                 // one. Both consume the same fields, which is what keeps the two one vocabulary.
-                const r = correction
-                  ? await scans.reidentifyTileAction(correction.tileId, fd)
-                  : await scans.identifyTilesAction(tileIds, fd);
+                let r: ScanActionState | TilesOutcomeActionState;
+                let made: ArrivingCopy[] = [];
+                if (correction) r = await scans.reidentifyTileAction(correction.tileId, fd);
+                else {
+                  const identified = await scans.identifyTilesAction(tileIds, fd);
+                  if (identified.status === "success") made = identified.outcomes;
+                  r = identified;
+                }
                 if (r.status === "error") setError(r.message);
                 // Identifying a tile touches **both** — it creates a copy *and* consumes the tile —
                 // so both namespaces are re-read: the shared runner invalidates the copies, and this
@@ -651,7 +682,17 @@ export function TileIdentifyChainDialogs({
                 // correction touches both for the same reason: the copy changed, and the tile's
                 // square is what says what it became.
                 else void onIdentified();
-                return r;
+                return {
+                  ...r,
+                  refresh: identifiedScope(
+                    correction ? [correction.itemId] : made.map((c) => c.itemId),
+                    [
+                      correction?.stampId,
+                      fd.get("stampId")?.toString(),
+                      ...(tileStamps ?? []).map((draft) => draft.stampId),
+                    ]
+                  ),
+                };
               },
               () => {
                 // Nothing is recorded here for the *next* tile to repeat (#757). What can be
@@ -728,7 +769,14 @@ export function TileIdentifyChainDialogs({
                 // Both namespaces, for `identifyTilesAction`'s reason: copies were created and
                 // tiles consumed.
                 else void onIdentified();
-                return r;
+                const made = r.status === "success" ? r.outcomes : [];
+                return {
+                  ...r,
+                  refresh: identifiedScope(
+                    made.map((c) => c.itemId),
+                    made.map((c) => c.stampId)
+                  ),
+                };
               },
               () => resetTileIntake()
             );

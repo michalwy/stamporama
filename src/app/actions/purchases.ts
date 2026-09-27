@@ -33,6 +33,8 @@ import {
   bulkUpdateLotItems,
   bulkUpdateLotItemsScoped,
   readLotBulkScope,
+  resolveTouchedLots,
+  type IntakeWriteTouched,
   type LotBulkChanges,
 } from "@/lib/lots";
 import type { ArrivingCopy } from "@/lib/want-rules";
@@ -45,7 +47,8 @@ export type PurchaseActionState =
    *  set to `delivered` (#532) — so the caller can ask which open wants they could satisfy
    *  (ADR-0032 §7). Deliberately **not** set by intake: a copy created as `ordered`, or as
    *  `to_sort` because the order has already landed, is not yet a copy to judge a want against. */
-  | { status: "success"; id?: string; copies?: ArrivingCopy[] }
+  /** `lotIds` is set by the bulk copy writes (#1409): the lots the copies they reached sit in. */
+  | { status: "success"; id?: string; copies?: ArrivingCopy[]; lotIds?: string[] }
   | { status: "error"; message: string };
 
 /** Create returns the new purchase's id so the caller can navigate straight to its
@@ -580,12 +583,12 @@ export async function bulkUpdateLotItemsAction(
     return { status: "error", message: "No copies selected." };
   }
   try {
-    const { delivered } = await bulkUpdateLotItems(
+    const { delivered, lotIds } = await bulkUpdateLotItems(
       session.user.id,
       itemIds,
       parseBulkChanges(formData)
     );
-    return { status: "success", copies: delivered.length > 0 ? delivered : undefined };
+    return { status: "success", copies: delivered.length > 0 ? delivered : undefined, lotIds };
   } catch (e) {
     return {
       status: "error",
@@ -610,17 +613,37 @@ export async function bulkUpdateLotItemsScopedAction(
     return { status: "error", message: "No lot selected." };
   }
   try {
-    const { delivered } = await bulkUpdateLotItemsScoped(
+    const { delivered, lotIds } = await bulkUpdateLotItemsScoped(
       session.user.id,
       collectionId,
       scope,
       parseBulkChanges(formData)
     );
-    return { status: "success", copies: delivered.length > 0 ? delivered : undefined };
+    return { status: "success", copies: delivered.length > 0 ? delivered : undefined, lotIds };
   } catch (e) {
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to update copies. Please try again.",
+    };
+  }
+}
+
+/** Which lots of this order a write on its screen touched (#1409), so the screen re-reads those
+ *  and leaves the rest alone — see `resolveTouchedLots`. */
+export async function resolveTouchedLotsAction(
+  purchaseId: string,
+  touched: IntakeWriteTouched
+): Promise<{ status: "success"; lotIds: string[] } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return {
+      status: "success",
+      lotIds: await resolveTouchedLots(session.user.id, purchaseId, touched),
+    };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to read what changed.",
     };
   }
 }
