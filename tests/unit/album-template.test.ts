@@ -127,6 +127,13 @@ describe("parseAlbumTemplateInput", () => {
     );
   });
 
+  it("reads each vertical placement and refuses a word it does not know (#1419)", () => {
+    for (const placement of ["top", "center", "justify", "center-justify"] as const) {
+      assert.equal(parsedOk({ verticalPlacement: placement }).verticalPlacement, placement);
+    }
+    assert.match(parseError({ verticalPlacement: "bottom" }), /Vertical placement is not a recognised/);
+  });
+
   it("reads an absent checkbox as off", () => {
     assert.equal(parsedOk({ printPhotos: "" }).printPhotos, false);
     assert.equal(parsedOk({ printPhotos: "on" }).printPhotos, true);

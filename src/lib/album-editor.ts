@@ -1,6 +1,6 @@
 import "server-only";
 import { albumRoleFace, type AlbumRect, type AlbumTextRole } from "./album-layout";
-import type { AlbumRenderPreset } from "./album-template-rules";
+import type { AlbumRenderPreset, AlbumVerticalPlacement } from "./album-template-rules";
 import { albumBaselineOffsetMm, albumTextMetrics, PT_TO_MM } from "./album-metrics";
 import { findAlbumFace } from "./album-fonts";
 import { hawidStripLabel } from "./hawid";
@@ -199,6 +199,20 @@ export interface AlbumEditorSheet {
   gaps: TitleFallback[];
   /** What has changed under this card since it was printed (#778). Empty for a live sheet. */
   divergences: AlbumDivergence[];
+  /** How the sheet's content sits vertically (#1419). `acted` is the placement as it acted on this
+   *  sheet — `justify` on a sheet of one band acts as `top`. `opener` is the block that opens the
+   *  sheet, which is where a page's own placement is kept; null on a printed sheet, where nothing is
+   *  set, and on a sheet with no block on it. */
+  placement: {
+    acted: AlbumVerticalPlacement;
+    opener: {
+      id: string;
+      kind: "entry" | "text";
+      name: string;
+      /** The page's own placement, or null where the sheet follows the album. */
+      override: AlbumVerticalPlacement | null;
+    } | null;
+  };
 }
 
 export interface AlbumEditorData {
@@ -423,6 +437,13 @@ export function liveSheet(
     ? context.textGaps(album.footerTemplate, pageStampIds)
     : [];
 
+  // The page's own placement is kept on the block that opens it (#1419) — whichever block the
+  // layout placed first, which is the one it read the override from.
+  const openerBlock = blocks[0];
+  const openerRow = openerBlock
+    ? (noteById.get(openerBlock.id) ?? entryById.get(openerBlock.id))
+    : undefined;
+
   return {
     position,
     range: page.range,
@@ -447,6 +468,18 @@ export function liveSheet(
       ...footerGaps,
     ]),
     divergences: [],
+    placement: {
+      acted: layout.placement ?? album.verticalPlacement,
+      opener:
+        openerBlock && openerRow
+          ? {
+              id: openerBlock.id,
+              kind: openerBlock.kind,
+              name: openerBlock.name,
+              override: openerRow.pagePlacement,
+            }
+          : null,
+    },
   };
 }
 
@@ -530,6 +563,7 @@ function printedSheet(
     blocks,
     gaps: [],
     divergences,
+    placement: { acted: layout.placement ?? "top", opener: null },
   };
 }
 

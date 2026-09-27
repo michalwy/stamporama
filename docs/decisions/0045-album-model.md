@@ -262,5 +262,10 @@ is a block the pairing has made worse.
   about the piece of hawid and is deleted and cleared by rules a break must not share. A break only
   adds a row — the row after it still wraps where the width runs out — and a block's natural width,
   which decides band pairing, is its widest hand-broken row.
+- #1419 added a sheet's **vertical placement** — a template value copied onto the album (decision 4),
+  and an override for one sheet. The override is the first correction that is *about a sheet*, and it
+  still hangs on a block for decision 3's reason: `pagePlacement` on the entry or note that **opens**
+  the sheet, so it follows that content through a re-flow. The placement only spends the space the
+  packing left at a sheet's foot, so it never changes which block is on which sheet.
 - Anyone reaching for a foreign key from `album` to `album_template`, or for an `album_page` table
   holding live pages, is undoing decisions 4 and 3 rather than tidying up. Read this file first.

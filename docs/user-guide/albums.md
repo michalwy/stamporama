@@ -77,6 +77,28 @@ The two gaps between boxes, and whether stamp photos are printed, can also be ch
 editor**, beside the sheet they are judged on — see below. They are the same values and come with the
 same warning about printed cards.
 
+### Where a page puts its content
+
+**Content on the page**, under *Page*, decides where a sheet that is not full puts its series:
+
+- **At the top** — the series start under the headings and whatever is left over stays at the foot.
+  This is how every page was set before the option existed, and it is what a new template starts at.
+- **Centred** — the series as a whole sit in the middle of the space, at their ordinary spacing.
+- **Justified** — the first series at the top of the space and the last at the bottom, with what is
+  left over shared equally into the gaps *between* series. No extra space above the first or below
+  the last.
+- **Centred and justified** — what is left over is shared equally into the gaps between series **and**
+  above the first and below the last, so every one of those gaps is the same.
+
+The **album's name at the top, the year and the footer never move** — only the series between them.
+On the first sheet of a year, the space is what is left under the year. Series side by side in one
+band move together, so their mounts stay lined up. With **a single series** on a sheet there is no
+gap between series, so *justified* sets it at the top and *centred and justified* centres it.
+
+Nothing about **which series lands on which sheet** changes: the sheet is filled exactly as before
+and only the space left at its foot is moved. A single sheet can also choose its own placement in the
+page editor — see below.
+
 ## The language is the album's own, and it changes the plan
 
 An album is printed in one language. Names, checklist headings and everything else resolve to that
@@ -215,6 +237,13 @@ What you can set:
   **re-plans the album** — boxes can move to another row and onto another sheet — and, like *Page
   template…*, you are first told how many printed cards that match today would stop matching. A
   printed card stays as printed and reports the difference.
+- **Where this sheet puts its content.** In the same panel, *Placement on this sheet* follows the
+  album's *Content on the page* unless you pick one of the four for **this sheet only**. The choice is
+  kept with the **series (or note) that opens the sheet**, and the panel names it — a sheet has no
+  identity of its own that would survive a re-flow, so if the pages re-flow the choice goes with that
+  series to wherever it now opens a sheet, and a sheet it no longer opens follows the album again.
+  Choose *As the album* to take it back. It is saved as you pick it, and the canvas and the PDF place
+  the sheet the same way.
 - **Whether stamp photos are printed.** In the same panel, *Print stamp photos in the boxes* shows or
   hides the pictures on every sheet of this album — on screen at once, and in the PDF. It is the same
   value as in *Page template…*, for this album only; how strongly the pictures print stays there. As
@@ -453,7 +482,10 @@ are shown on screen, before you print, and never go onto the paper.)
 - **Stamps** — the checklist gained or lost a slot, or would now print in a different order;
 - **Size** — a box would now be cut to a different size, or from a different strip;
 - **Text** — a renamed series or area, a corrected translation, a change of language;
-- **Template** — the album's page settings have moved since the card was set;
+- **Template** — the album's page settings have moved since the card was set, or the card's content
+  would now be placed differently on it (at the top, centred, justified). What is compared is how the
+  card would actually be placed, so a card that keeps its own placement, or holds a single series,
+  reports nothing when the album's placement changes in a way that would not move it;
 - **Picture** — a stamp has a photo the card prints an empty mount for, or the picture has changed.
 
 They are listed in that order, and **Picture** is deliberately last. It is a real difference and a

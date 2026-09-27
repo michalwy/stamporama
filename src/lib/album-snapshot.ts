@@ -221,5 +221,16 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   ) {
     throw new AlbumSnapshotError("This printed sheet's stored contents are incomplete.");
   }
-  return snapshot as AlbumPageSnapshot;
+  // A card stored before #1419 has no vertical placement, and it was placed at the top — nothing
+  // else existed. Filled in rather than bumping the version: the reading is certain, and refusing
+  // every card printed before today would be the opposite of what a stored result is for.
+  const stored = snapshot as AlbumPageSnapshot;
+  if (stored.preset.verticalPlacement !== undefined && stored.page.placement !== undefined) {
+    return stored;
+  }
+  return {
+    ...stored,
+    preset: { ...stored.preset, verticalPlacement: stored.preset.verticalPlacement ?? "top" },
+    page: { ...stored.page, placement: stored.page.placement ?? "top" },
+  };
 }

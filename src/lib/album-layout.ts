@@ -75,7 +75,10 @@
 // The forced break has no analogue in the sources to count — AlbumEasy paginates by hand, so his 198
 // `PAGE_START(` *are* the breaks and there is no `PAGE_BREAK` anywhere. It is ours.
 
-import type { AlbumRenderPreset } from "./album-template-rules";
+import type {
+  AlbumRenderPreset,
+  AlbumVerticalPlacement,
+} from "./album-template-rules";
 import { roundSizeMm } from "./stamp-size";
 
 /**
@@ -282,6 +285,16 @@ export interface AlbumBlockSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
    *  across none, since half a checklist on paper and half in the live plan is not a state anything
    *  could draw. */
   printedPageIds?: readonly string[] | null;
+  /** How a sheet **this block opens** places its content (#1419), overriding the album's
+   *  `verticalPlacement`; absent or null follows the album.
+   *
+   *  On the block rather than on a page for ADR-0045 §3's reason, which every correction here
+   *  shares: a live page has no row and its identity moves with its contents. Anchored to the block
+   *  that opens the sheet, the override follows that content through a re-flow — and a block that
+   *  stops opening a sheet stops placing one, rather than the choice landing on whatever content
+   *  arrived in its place. A block too tall for a sheet opens each of its continuation sheets too,
+   *  so they share its override. */
+  pagePlacement?: AlbumVerticalPlacement | null;
 }
 
 /** One chapter — a year group (#755). Its heading prints once, and it starts a page. */
@@ -377,6 +390,13 @@ export type AlbumPlannedPage<T extends AlbumBoxSpec = AlbumBoxSpec> =
       /** The area the blocks were packed into, so a renderer can draw a rule or a debug frame without
        *  re-deriving it. On a chapter's first page it starts below the chapter heading. */
       content: AlbumRect;
+      /** How the content was placed in {@link content} (#1419) — the opening block's override, else
+       *  the album's, **as it acted**: on a sheet of one band there are no gaps between series, so
+       *  `justify` reads as `top` and `center-justify` as `center`. Stated that way so a printed card
+       *  is compared on what its placement did rather than on a word that did nothing.
+       *
+       *  Absent on a sheet stored before placement existed, which was placed at the top. */
+      placement?: AlbumVerticalPlacement;
     };
 
 /** A whole album's plan. Pages in printing order, and there is deliberately **no page number**
@@ -890,6 +910,68 @@ interface OpenPage<T extends AlbumBoxSpec> {
   blocks: AlbumPlacedBlock[];
   /** How far down the page the pen has reached. */
   penMm: number;
+  /** Where each band placed on this page begins in {@link headings} and {@link boxes}, in order —
+   *  what the vertical placement moves (#1419). A band is one horizontal slice, so the blocks sharing
+   *  it move together and stay lined up (#779). */
+  bands: { headingStart: number; boxStart: number }[];
+  /** The override of the block that opened the page, once one has; `undefined` until then. */
+  opener: AlbumVerticalPlacement | null | undefined;
+}
+
+/**
+ * What a placement does on a sheet of `bandCount` bands (#1419). With a single band there is no gap
+ * between series to share anything into, so `justify` is `top` and `center-justify` is `center` —
+ * the space above and below is then the only space, and it is already equal. An empty sheet has
+ * nothing to place and reads as `top`.
+ */
+export function albumEffectivePlacement(
+  placement: AlbumVerticalPlacement,
+  bandCount: number,
+): AlbumVerticalPlacement {
+  if (bandCount === 0) return "top";
+  if (bandCount > 1) return placement;
+  if (placement === "justify") return "top";
+  if (placement === "center-justify") return "center";
+  return placement;
+}
+
+/**
+ * How far down each band of a sheet moves, given the space left under the last of them (#1419).
+ *
+ * **Only the leftover moves.** The sheet was packed first, from the top, exactly as it always was;
+ * this spends what was left at its foot. So no placement can push a block onto another sheet, and
+ * the four are four drawings of one plan. What each does with `leftoverMm` over `n` bands:
+ *
+ * - `top` — nothing: the leftover stays at the foot, as on every page before #1419;
+ * - `center` — every band moves by half of it;
+ * - `justify` — band `k` moves by `k / (n − 1)` of it, so the first stays at the top, the last ends at
+ *   the foot, and each gap between two bands grows by the same share;
+ * - `center-justify` — band `k` moves by `(k + 1) / (n + 1)` of it, so the space above the first,
+ *   each gap between two and the space below the last all grow by the same share.
+ *
+ * "At the top" means where `top` puts it — a block's own lead is part of its height wherever it lands
+ * (ADR-0045 §7) and is not collapsed here either. Offsets are rounded to the tenth the whole plan is
+ * rounded to, so two shares can differ by that tenth.
+ */
+export function albumBandOffsetsMm(
+  placement: AlbumVerticalPlacement,
+  bandCount: number,
+  leftoverMm: number,
+): number[] {
+  const effective = albumEffectivePlacement(placement, bandCount);
+  const spare = Math.max(0, leftoverMm);
+  return Array.from({ length: bandCount }, (_, k) => {
+    switch (effective) {
+      case "top":
+        return 0;
+      case "center":
+        return roundSizeMm(spare / 2);
+      case "justify":
+        return roundSizeMm((spare * k) / (bandCount - 1));
+      case "center-justify":
+        return roundSizeMm((spare * (k + 1)) / (bandCount + 1));
+    }
+  });
 }
 
 /**
@@ -947,6 +1029,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
     // sheets: the chapter opened a page, the sheets were emitted, and nothing was left for it.
     if (page.boxes.length === 0 && page.headings.length === 0 && !page.chapter)
       return;
+    const placement = placeContent(page, preset);
     pages.push({
       kind: "live",
       chapterKey: page.chapterKey,
@@ -957,6 +1040,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       blocks: page.blocks,
       footer: frame.footer,
       content: page.content,
+      placement,
     });
   };
 
@@ -970,6 +1054,8 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       boxes: [],
       blocks: [],
       penMm: content.yMm,
+      bands: [],
+      opener: undefined,
     };
   };
 
@@ -1248,6 +1334,8 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
       rowsThatFit(rest, fixedMm, spaceMm, preset.boxGapYMm),
     );
 
+    // Each sheet's share of a split block is a band of that sheet (#1419).
+    openBand(current);
     placeBlock(
       measured,
       heading,
@@ -1269,6 +1357,50 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
   }
 }
 
+/** Note that a band starts here, so the vertical placement can move it as one (#1419). */
+function openBand<T extends AlbumBoxSpec>(page: OpenPage<T>): void {
+  page.bands.push({
+    headingStart: page.headings.length,
+    boxStart: page.boxes.length,
+  });
+}
+
+/**
+ * Spend the space left at the foot of a finished sheet as its placement says (#1419), and return the
+ * placement as it acted.
+ *
+ * Moves the checklist headings, the boxes and their labels, band by band. The running head, the
+ * chapter heading and the footer are the frame, not the body, and are never touched — and nothing
+ * here changes which block is on which sheet, which was settled before this runs.
+ */
+function placeContent<T extends AlbumBoxSpec>(
+  page: OpenPage<T>,
+  preset: AlbumRenderPreset,
+): AlbumVerticalPlacement {
+  const chosen = page.opener ?? preset.verticalPlacement;
+  const leftoverMm = roundSizeMm(
+    page.content.yMm + page.content.heightMm - page.penMm,
+  );
+  const offsets = albumBandOffsetsMm(chosen, page.bands.length, leftoverMm);
+  page.bands.forEach((band, k) => {
+    const offsetMm = offsets[k];
+    if (!offsetMm) return;
+    const next = page.bands[k + 1];
+    const headingEnd = next?.headingStart ?? page.headings.length;
+    const boxEnd = next?.boxStart ?? page.boxes.length;
+    for (let h = band.headingStart; h < headingEnd; h += 1) {
+      const heading = page.headings[h];
+      heading.yMm = roundSizeMm(heading.yMm + offsetMm);
+    }
+    for (let b = band.boxStart; b < boxEnd; b += 1) {
+      const box = page.boxes[b];
+      box.yMm = roundSizeMm(box.yMm + offsetMm);
+      if (box.label) box.label.yMm = roundSizeMm(box.label.yMm + offsetMm);
+    }
+  });
+  return albumEffectivePlacement(chosen, page.bands.length);
+}
+
 /** Place a whole band at the pen, side by side, and advance the pen past the tallest of them. */
 function placeBand<T extends AlbumBoxSpec>(
   band: MeasuredBand<T>,
@@ -1276,6 +1408,7 @@ function placeBand<T extends AlbumBoxSpec>(
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
 ): void {
+  openBand(page);
   const top = page.penMm;
   for (let i = 0; i < band.blocks.length; i += 1) {
     // Every block in a band starts at the band's top, so two paired checklists read as one row of
@@ -1315,6 +1448,8 @@ function placeBlock<T extends AlbumBoxSpec>(
   metrics: AlbumTextMetrics,
   at: { xMm: number; widthMm: number },
 ): void {
+  // The block that opens a sheet decides how that sheet is placed (#1419).
+  if (page.blocks.length === 0) page.opener = measured.spec.pagePlacement ?? null;
   page.penMm = roundSizeMm(page.penMm + measured.leadMm);
 
   const role = blockRole(measured.spec);

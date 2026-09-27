@@ -10,10 +10,13 @@ import {
   asAlbumBorderStyle,
   asAlbumBoxBorderStyle,
   asAlbumLabelPosition,
+  asAlbumVerticalPlacement,
+  asAlbumPagePlacement,
   albumRenderPreset,
   DEFAULT_ALBUM_PRESET,
   type AlbumBoxGaps,
   type AlbumRenderPreset,
+  type AlbumVerticalPlacement,
 } from "./album-template-rules";
 import {
   asAlbumBlockBreak,
@@ -88,6 +91,7 @@ const PRESET_SELECT = {
   borderStyle: true,
   borderWidthMm: true,
   borderInsetMm: true,
+  verticalPlacement: true,
   boxGapXMm: true,
   boxGapYMm: true,
   headingSpaceAboveMm: true,
@@ -139,13 +143,14 @@ export interface AlbumData extends AlbumRenderPreset {
   dismissedNameSuggestion: string | null;
 }
 
-/** The three choice columns come back as `string`; everything else is already its own type. */
+/** The four choice columns come back as `string`; everything else is already its own type. */
 function toAlbumData(row: AlbumRow): AlbumData {
   return {
     ...row,
     borderStyle: asAlbumBorderStyle(row.borderStyle),
     boxBorderStyle: asAlbumBoxBorderStyle(row.boxBorderStyle),
     labelPosition: asAlbumLabelPosition(row.labelPosition),
+    verticalPlacement: asAlbumVerticalPlacement(row.verticalPlacement),
   };
 }
 
@@ -240,6 +245,7 @@ export async function createAlbum(
       borderStyle: asAlbumBorderStyle(template.borderStyle),
       boxBorderStyle: asAlbumBoxBorderStyle(template.boxBorderStyle),
       labelPosition: asAlbumLabelPosition(template.labelPosition),
+      verticalPlacement: asAlbumVerticalPlacement(template.verticalPlacement),
     };
   }
 
@@ -432,6 +438,10 @@ export interface AlbumEntryData {
   spaceBeforeMm: number;
   spaceAfterMm: number;
   breakBefore: AlbumBlockBreak;
+  /** How a page this block **opens** places its content (#1419), or null to follow the album. On the
+   *  block rather than the page because a live page has no row, and this way the override follows
+   *  the content through a re-flow. */
+  pagePlacement: AlbumVerticalPlacement | null;
   /** Per-box size corrections, by stamp (#769). Keyed inside the entry because a **box is a slot
    *  rather than a stamp** (ADR-0047 §2): one stamp on two checklists of one issue is two boxes, and
    *  correcting one must not correct the other. Absent means the box rule's own answer stands. */
@@ -460,6 +470,7 @@ const ENTRY_SELECT = {
   spaceBeforeMm: true,
   spaceAfterMm: true,
   breakBefore: true,
+  pagePlacement: true,
   stampOrder: { select: { stampId: true, sortOrder: true } },
   boxAdjustments: { select: { stampId: true, widthDeltaMm: true, heightDeltaMm: true } },
   rowBreaks: { select: { stampId: true } },
@@ -520,6 +531,7 @@ function toEntryData(row: EntryRow): AlbumEntryData {
     spaceBeforeMm: row.spaceBeforeMm,
     spaceAfterMm: row.spaceAfterMm,
     breakBefore: asAlbumBlockBreak(row.breakBefore),
+    pagePlacement: asAlbumPagePlacement(row.pagePlacement),
     boxAdjustments: Object.fromEntries(
       row.boxAdjustments.map((a) => [
         a.stampId,
@@ -735,6 +747,8 @@ export interface AlbumBlockLayoutInput {
   spaceBeforeMm?: number;
   spaceAfterMm?: number;
   breakBefore?: AlbumBlockBreak;
+  /** Null takes a page's own placement back, so it follows the album again (#1419). */
+  pagePlacement?: AlbumVerticalPlacement | null;
 }
 
 export async function setAlbumEntryLayout(
@@ -750,6 +764,7 @@ export async function setAlbumEntryLayout(
       ...(input.spaceBeforeMm === undefined ? {} : { spaceBeforeMm: input.spaceBeforeMm }),
       ...(input.spaceAfterMm === undefined ? {} : { spaceAfterMm: input.spaceAfterMm }),
       ...(input.breakBefore === undefined ? {} : { breakBefore: input.breakBefore }),
+      ...(input.pagePlacement === undefined ? {} : { pagePlacement: input.pagePlacement }),
     },
   });
 }
@@ -861,6 +876,7 @@ export interface AlbumTextBlockData {
   spaceBeforeMm: number;
   spaceAfterMm: number;
   breakBefore: AlbumBlockBreak;
+  pagePlacement: AlbumVerticalPlacement | null;
   /** The sheet it went onto, if it has been printed (#778). The plan steps over it there. */
   printedPageId: string | null;
 }
@@ -875,6 +891,7 @@ const TEXT_BLOCK_SELECT = {
   spaceBeforeMm: true,
   spaceAfterMm: true,
   breakBefore: true,
+  pagePlacement: true,
   printedPageId: true,
 } satisfies Prisma.AlbumTextBlockSelect;
 
@@ -886,6 +903,7 @@ function toTextBlockData(
     role: asAlbumTextRole(row.role),
     side: asAlbumTextBlockSide(row.side),
     breakBefore: asAlbumBlockBreak(row.breakBefore),
+    pagePlacement: asAlbumPagePlacement(row.pagePlacement),
   };
 }
 
@@ -1007,6 +1025,7 @@ export async function updateAlbumTextBlock(
       ...(input.spaceBeforeMm === undefined ? {} : { spaceBeforeMm: input.spaceBeforeMm }),
       ...(input.spaceAfterMm === undefined ? {} : { spaceAfterMm: input.spaceAfterMm }),
       ...(input.breakBefore === undefined ? {} : { breakBefore: input.breakBefore }),
+      ...(input.pagePlacement === undefined ? {} : { pagePlacement: input.pagePlacement }),
     },
   });
 }

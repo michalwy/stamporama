@@ -36,7 +36,11 @@
 // the second dividend of the range-as-identity decision (ADR-0045 §1). Nothing below reads an index
 // except to break a tie.
 
-import type { AlbumRenderPreset } from "./album-template-rules";
+import {
+  albumVerticalPlacementLabel,
+  type AlbumRenderPreset,
+  type AlbumVerticalPlacement,
+} from "./album-template-rules";
 
 /**
  * The kinds of divergence, **most serious first**. This order is the report's order.
@@ -104,6 +108,11 @@ export interface AlbumComparablePage {
   /** The language the sheet is set in, as a label a collector reads. */
   language: string;
   preset: AlbumRenderPreset;
+  /** How the sheet's content is placed vertically (#1419), **as it acted** — see
+   *  `AlbumPlannedPage.placement`. Compared in place of the preset's `verticalPlacement`, which says
+   *  what the album asks for and not what this sheet did: a page with its own override, or with one
+   *  band, would otherwise report a template change that moved nothing on it. */
+  placement: AlbumVerticalPlacement;
   blocks: AlbumComparableBlock[];
 }
 
@@ -208,11 +217,15 @@ export function albumPresetFieldLabel(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1) + unit;
 }
 
+/** Preset values compared as something other than a preset value. `verticalPlacement` is compared
+ *  as the sheet's own {@link AlbumComparablePage.placement} (#1419). */
+const COMPARED_ELSEWHERE: ReadonlySet<string> = new Set(["verticalPlacement"]);
+
 function presetDifferences(a: AlbumRenderPreset, b: AlbumRenderPreset): string[] {
   const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
   const left = a as unknown as Record<string, unknown>;
   const right = b as unknown as Record<string, unknown>;
-  return keys.filter((k) => left[k] !== right[k]);
+  return keys.filter((k) => !COMPARED_ELSEWHERE.has(k) && left[k] !== right[k]);
 }
 
 function textDivergence(what: string, before: string, after: string): AlbumDivergence | null {
@@ -389,6 +402,14 @@ export function compareAlbumPages(
         preset.length <= 3
           ? `The album's ${named} ${preset.length === 1 ? "has" : "have"} changed since this card was set.`
           : `${named} and ${preset.length - 3} other template values have changed since this card was set.`,
+    });
+  }
+  if (printed.placement !== reference.placement) {
+    found.push({
+      kind: "template",
+      detail: `The card's content would now be placed ${albumVerticalPlacementLabel(
+        reference.placement
+      ).toLowerCase()}; the card's is ${albumVerticalPlacementLabel(printed.placement).toLowerCase()}.`,
     });
   }
 

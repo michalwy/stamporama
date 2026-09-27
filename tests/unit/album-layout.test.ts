@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  albumBandOffsetsMm,
   albumContinuationHeading,
+  albumEffectivePlacement,
   planAlbumPages,
   wrapAlbumText,
   type AlbumBlockSpec,
@@ -1392,5 +1394,226 @@ describe("planAlbumPages and blocks sharing a band (#779)", () => {
     // line again and costs 11.
     assert.equal(page.headings[1].lines.length, 1);
     assert.equal(page.boxes[1].yMm, 78 + 8 + 11);
+  });
+});
+
+describe("planAlbumPages and the vertical placement of a sheet (#1419)", () => {
+  // A4, 10 mm margins, a 13 mm running head (26 pt) and a 4 mm footer band (8 pt): the body runs from
+  // 23 mm to 283 mm. A block headed "A" over one 190 × 30 mm box is 8 (lead) + 11 (heading and the
+  // space under it) + 30 = 49 mm tall, with its box 19 mm below the block's top.
+  const CONTENT_TOP = 23;
+  const CONTENT_BOTTOM = 283;
+  const series = (entryId: string, over: Partial<AlbumBlockSpec> = {}): AlbumBlockSpec => ({
+    entryId,
+    heading: "A",
+    boxes: [box(190, 30)],
+    printedPageIds: null,
+    ...over,
+  });
+  const onePage = (
+    blocks: AlbumBlockSpec[],
+    over: Partial<AlbumRenderPreset> = {},
+    chapterHeading = ""
+  ) => {
+    const pages = live(
+      planAlbumPages([chapter("y", chapterHeading, blocks)], preset(over), "Polska", metrics).pages
+    );
+    assert.equal(pages.length, 1, "every case here fits one sheet");
+    return pages[0];
+  };
+  const boxTops = (page: ReturnType<typeof onePage>) => page.boxes.map((b) => b.yMm);
+
+  it("keeps today's result exactly under top", () => {
+    const page = onePage([series("a"), series("b")], { verticalPlacement: "top" });
+    assert.deepEqual(boxTops(page), [CONTENT_TOP + 19, CONTENT_TOP + 49 + 19]);
+    assert.deepEqual(
+      page.headings.map((h) => h.yMm),
+      [CONTENT_TOP + 8, CONTENT_TOP + 49 + 8]
+    );
+    assert.equal(page.placement, "top");
+    // The default template is top, so an album nobody has touched plans as it always has.
+    assert.deepEqual(onePage([series("a"), series("b")]), page);
+  });
+
+  it("centres the content as a whole, at its ordinary spacing", () => {
+    // Two series take 98 mm of 260: 162 mm are left, and half of it goes above.
+    const page = onePage([series("a"), series("b")], { verticalPlacement: "center" });
+    assert.deepEqual(boxTops(page), [CONTENT_TOP + 81 + 19, CONTENT_TOP + 81 + 49 + 19]);
+    const lastBottom = page.boxes[1].yMm + page.boxes[1].heightMm;
+    assert.equal(CONTENT_BOTTOM - lastBottom, 81, "as much space below as above");
+  });
+
+  it("justifies: the first series at the top, the last at the bottom, equal gaps between", () => {
+    // Three series take 147 mm, so 113 mm are shared into the two gaps between them.
+    const page = onePage([series("a"), series("b"), series("c")], {
+      verticalPlacement: "justify",
+    });
+    assert.deepEqual(boxTops(page), [
+      CONTENT_TOP + 19,
+      CONTENT_TOP + 49 + 56.5 + 19,
+      CONTENT_TOP + 98 + 113 + 19,
+    ]);
+    const last = page.boxes[2];
+    assert.equal(last.yMm + last.heightMm, CONTENT_BOTTOM, "the last series ends at the bottom");
+  });
+
+  it("centres and justifies: above the first, each gap between and below the last all equal", () => {
+    // Two series leave 162 mm, shared three ways.
+    const page = onePage([series("a"), series("b")], { verticalPlacement: "center-justify" });
+    assert.deepEqual(boxTops(page), [CONTENT_TOP + 54 + 19, CONTENT_TOP + 49 + 108 + 19]);
+    const [first, second] = page.headings;
+    const above = first.yMm - 8 - CONTENT_TOP;
+    const between = second.yMm - 8 - (page.boxes[0].yMm + 30);
+    const below = CONTENT_BOTTOM - (page.boxes[1].yMm + 30);
+    assert.deepEqual([above, between, below], [54, 54, 54]);
+  });
+
+  it("treats a single series under justify as top, and under centre and justify as centre", () => {
+    const top = onePage([series("a")], { verticalPlacement: "top" });
+    const centred = onePage([series("a")], { verticalPlacement: "center" });
+    const justified = onePage([series("a")], { verticalPlacement: "justify" });
+    const both = onePage([series("a")], { verticalPlacement: "center-justify" });
+    assert.deepEqual(boxTops(justified), boxTops(top));
+    assert.equal(justified.placement, "top");
+    assert.deepEqual(boxTops(both), boxTops(centred));
+    assert.equal(both.placement, "center");
+    // 260 − 49 = 211 left, half of it above.
+    assert.deepEqual(boxTops(centred), [CONTENT_TOP + 105.5 + 19]);
+  });
+
+  it("never moves the running head, the chapter heading or the footer", () => {
+    const blocks = [series("a"), series("b")];
+    const top = onePage(blocks, { verticalPlacement: "top" }, "1938");
+    for (const verticalPlacement of ["center", "justify", "center-justify"] as const) {
+      const placed = onePage(blocks, { verticalPlacement }, "1938");
+      assert.deepEqual(placed.title, top.title, verticalPlacement);
+      assert.deepEqual(placed.chapter, top.chapter, verticalPlacement);
+      assert.deepEqual(placed.footer, top.footer, verticalPlacement);
+      assert.deepEqual(placed.content, top.content, verticalPlacement);
+      assert.notDeepEqual(boxTops(placed), boxTops(top), verticalPlacement);
+    }
+  });
+
+  it("places the body below a chapter heading, in the space under it", () => {
+    // The year takes 8 + 12 + 5 = 25 mm, so the body is 235 mm and one series leaves 186.
+    const page = onePage([series("a")], { verticalPlacement: "center" }, "1938");
+    assert.equal(page.content.yMm, CONTENT_TOP + 25);
+    assert.deepEqual(boxTops(page), [CONTENT_TOP + 25 + 93 + 19]);
+  });
+
+  it("moves blocks sharing a band together, so their mounts stay lined up", () => {
+    const narrow = (entryId: string): AlbumBlockSpec => series(entryId, { boxes: [box(40, 30)] });
+    const page = onePage([narrow("a"), narrow("b"), series("c")], {
+      verticalPlacement: "justify",
+      blocksPerBand: 2,
+    });
+    const [a, b, c] = page.boxes;
+    assert.equal(a.yMm, b.yMm, "the paired blocks stay on one line");
+    assert.equal(a.yMm, CONTENT_TOP + 19, "the first band stays at the top");
+    assert.equal(c.yMm + c.heightMm, CONTENT_BOTTOM, "the last band ends at the bottom");
+    assert.equal(page.placement, "justify", "two bands are two series to justify");
+  });
+
+  it("does not change which block lands on which sheet", () => {
+    const blocks = Array.from({ length: 7 }, (_, i) => series(`s${i}`));
+    const plans = (["top", "center", "justify", "center-justify"] as const).map((verticalPlacement) =>
+      live(
+        planAlbumPages([chapter("y", "", blocks)], preset({ verticalPlacement }), "Polska", metrics)
+          .pages
+      ).map((page) => page.blocks.map((b) => b.entryId))
+    );
+    for (const plan of plans) assert.deepEqual(plan, plans[0]);
+    assert.equal(plans[0].length, 2, "seven 49 mm series need a second sheet");
+  });
+
+  it("places each sheet of a split series, the tail of it included", () => {
+    // Eight 30 mm rows: six fit the first sheet (8 + 11 + 6 × 30 + 5 × 6 = 229 mm), and the
+    // continuation carries two under its marked heading — 85 mm of 260, so 87.5 mm go above it.
+    const rows = Array.from({ length: 8 }, () => box(190, 30));
+    const pages = live(
+      planAlbumPages(
+        [chapter("y", "", [series("a", { boxes: rows })])],
+        preset({ verticalPlacement: "center" }),
+        "Polska",
+        metrics
+      ).pages
+    );
+    assert.equal(pages.length, 2);
+    assert.equal(pages[1].blocks[0].part, 2);
+    assert.equal(pages[1].placement, "center");
+    assert.equal(pages[1].boxes[0].yMm, CONTENT_TOP + 87.5 + 19);
+    assert.equal(pages[0].boxes[0].yMm, CONTENT_TOP + 15.5 + 19, "the full sheet moves by its 31 mm / 2");
+  });
+
+  it("lets the block that opens a sheet override the album's placement for that sheet", () => {
+    const page = onePage([series("a", { pagePlacement: "center" }), series("b")], {
+      verticalPlacement: "top",
+    });
+    assert.equal(page.placement, "center");
+    assert.deepEqual(boxTops(page), [CONTENT_TOP + 81 + 19, CONTENT_TOP + 81 + 49 + 19]);
+    // Null follows the album.
+    const following = onePage([series("a", { pagePlacement: null }), series("b")], {
+      verticalPlacement: "justify",
+    });
+    assert.equal(following.placement, "justify");
+  });
+
+  it("reads the override only from the block that opens the sheet", () => {
+    const page = onePage([series("z"), series("a", { pagePlacement: "center" })], {
+      verticalPlacement: "top",
+    });
+    assert.equal(page.placement, "top", "a block further down the sheet places nothing");
+  });
+
+  it("keeps the override with that block's content when the pages re-flow", () => {
+    // Before: the override's block opens the album's only sheet. After: a tall series is added in
+    // front of it, and the block now opens the second sheet — which is the one it places.
+    const flagged = series("a", { pagePlacement: "center" });
+    const before = live(
+      planAlbumPages([chapter("y", "", [flagged, series("b")])], preset(), "Polska", metrics).pages
+    );
+    assert.equal(before[0].placement, "center");
+
+    const tall = series("t", { boxes: [box(190, 200)] });
+    const after = live(
+      planAlbumPages([chapter("y", "", [tall, flagged, series("b")])], preset(), "Polska", metrics)
+        .pages
+    );
+    assert.equal(after.length, 2);
+    assert.equal(after[0].blocks[0].entryId, "t");
+    assert.equal(after[0].placement, "top", "the sheet the tall series opens follows the album");
+    assert.equal(after[1].blocks[0].entryId, "a");
+    assert.equal(after[1].placement, "center", "the override went with its block");
+  });
+});
+
+describe("albumBandOffsetsMm", () => {
+  it("moves nothing under top, and nothing when nothing is left over", () => {
+    assert.deepEqual(albumBandOffsetsMm("top", 3, 90), [0, 0, 0]);
+    assert.deepEqual(albumBandOffsetsMm("center-justify", 3, 0), [0, 0, 0]);
+  });
+
+  it("never moves anything up when a sheet overhangs", () => {
+    assert.deepEqual(albumBandOffsetsMm("center", 2, -12), [0, 0]);
+  });
+
+  it("shares the leftover the way each placement says", () => {
+    assert.deepEqual(albumBandOffsetsMm("center", 3, 90), [45, 45, 45]);
+    assert.deepEqual(albumBandOffsetsMm("justify", 3, 90), [0, 45, 90]);
+    assert.deepEqual(albumBandOffsetsMm("center-justify", 3, 90), [22.5, 45, 67.5]);
+  });
+
+  it("rounds to the tenth the plan is rounded to", () => {
+    assert.deepEqual(albumBandOffsetsMm("center-justify", 2, 10), [3.3, 6.7]);
+  });
+});
+
+describe("albumEffectivePlacement", () => {
+  it("reads justify as top and centre-and-justify as centre on a sheet of one band", () => {
+    assert.equal(albumEffectivePlacement("justify", 1), "top");
+    assert.equal(albumEffectivePlacement("center-justify", 1), "center");
+    assert.equal(albumEffectivePlacement("center", 1), "center");
+    assert.equal(albumEffectivePlacement("justify", 2), "justify");
+    assert.equal(albumEffectivePlacement("center", 0), "top");
   });
 });
