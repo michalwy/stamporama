@@ -438,6 +438,8 @@ export interface AlbumEntryData {
   spaceBeforeMm: number;
   spaceAfterMm: number;
   breakBefore: AlbumBlockBreak;
+  /** Start a band of its own rather than sit beside the block before it (#1421). */
+  bandBreakBefore: boolean;
   /** How a page this block **opens** places its content (#1419), or null to follow the album. On the
    *  block rather than the page because a live page has no row, and this way the override follows
    *  the content through a re-flow. */
@@ -470,6 +472,7 @@ const ENTRY_SELECT = {
   spaceBeforeMm: true,
   spaceAfterMm: true,
   breakBefore: true,
+  bandBreakBefore: true,
   pagePlacement: true,
   stampOrder: { select: { stampId: true, sortOrder: true } },
   boxAdjustments: { select: { stampId: true, widthDeltaMm: true, heightDeltaMm: true } },
@@ -531,6 +534,7 @@ function toEntryData(row: EntryRow): AlbumEntryData {
     spaceBeforeMm: row.spaceBeforeMm,
     spaceAfterMm: row.spaceAfterMm,
     breakBefore: asAlbumBlockBreak(row.breakBefore),
+    bandBreakBefore: row.bandBreakBefore,
     pagePlacement: asAlbumPagePlacement(row.pagePlacement),
     boxAdjustments: Object.fromEntries(
       row.boxAdjustments.map((a) => [
@@ -747,6 +751,8 @@ export interface AlbumBlockLayoutInput {
   spaceBeforeMm?: number;
   spaceAfterMm?: number;
   breakBefore?: AlbumBlockBreak;
+  /** Start a band of its own rather than sit beside the block before it (#1421). */
+  bandBreakBefore?: boolean;
   /** Null takes a page's own placement back, so it follows the album again (#1419). */
   pagePlacement?: AlbumVerticalPlacement | null;
 }
@@ -764,6 +770,7 @@ export async function setAlbumEntryLayout(
       ...(input.spaceBeforeMm === undefined ? {} : { spaceBeforeMm: input.spaceBeforeMm }),
       ...(input.spaceAfterMm === undefined ? {} : { spaceAfterMm: input.spaceAfterMm }),
       ...(input.breakBefore === undefined ? {} : { breakBefore: input.breakBefore }),
+      ...(input.bandBreakBefore === undefined ? {} : { bandBreakBefore: input.bandBreakBefore }),
       ...(input.pagePlacement === undefined ? {} : { pagePlacement: input.pagePlacement }),
     },
   });
@@ -876,6 +883,7 @@ export interface AlbumTextBlockData {
   spaceBeforeMm: number;
   spaceAfterMm: number;
   breakBefore: AlbumBlockBreak;
+  bandBreakBefore: boolean;
   pagePlacement: AlbumVerticalPlacement | null;
   /** The sheet it went onto, if it has been printed (#778). The plan steps over it there. */
   printedPageId: string | null;
@@ -891,6 +899,7 @@ const TEXT_BLOCK_SELECT = {
   spaceBeforeMm: true,
   spaceAfterMm: true,
   breakBefore: true,
+  bandBreakBefore: true,
   pagePlacement: true,
   printedPageId: true,
 } satisfies Prisma.AlbumTextBlockSelect;
@@ -1025,6 +1034,7 @@ export async function updateAlbumTextBlock(
       ...(input.spaceBeforeMm === undefined ? {} : { spaceBeforeMm: input.spaceBeforeMm }),
       ...(input.spaceAfterMm === undefined ? {} : { spaceAfterMm: input.spaceAfterMm }),
       ...(input.breakBefore === undefined ? {} : { breakBefore: input.breakBefore }),
+      ...(input.bandBreakBefore === undefined ? {} : { bandBreakBefore: input.bandBreakBefore }),
       ...(input.pagePlacement === undefined ? {} : { pagePlacement: input.pagePlacement }),
     },
   });

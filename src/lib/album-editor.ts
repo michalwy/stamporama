@@ -158,7 +158,16 @@ export interface AlbumEditorBlock {
     spaceBeforeMm: number;
     spaceAfterMm: number;
     breakBefore: "auto" | "always" | "avoid";
+    /** The block starts a band of its own rather than sitting beside the one before it (#1421). */
+    bandBreakBefore: boolean;
   } | null;
+  /** Whether *start on its own line* could mean anything here (#1421): true when the block's first
+   *  sheet sits **beside** the block before it, or when it has already been set so it can be set
+   *  back. False on a continuation sheet, which opens a sheet of its own anyway, and on a printed
+   *  sheet, where nothing is set. The canvas offers the tab and the panel the checkbox only where
+   *  this is true, so neither promises a line the layout would ignore — #1214's `rowBreakable`, one
+   *  level up. */
+  bandBreakable: boolean;
   /** True when this album prints the block's stamps in an order of its own rather than the
    *  checklist's (#764) — the presence of override rows, which is what says so. */
   ordersItsOwn: boolean;
@@ -336,6 +345,8 @@ export function liveSheet(
   for (const block of layout.blocks) {
     const entry = entryById.get(block.entryId);
     const note = noteById.get(block.entryId);
+    /** The row the block's corrections live on — a note's own, or the entry's. */
+    const corrected = note ?? entry;
     const slice = layout.boxes.slice(cursor, cursor + block.boxCount);
     cursor += block.boxCount;
 
@@ -409,14 +420,20 @@ export function liveSheet(
             spaceBeforeMm: note.spaceBeforeMm,
             spaceAfterMm: note.spaceAfterMm,
             breakBefore: note.breakBefore,
+            bandBreakBefore: note.bandBreakBefore,
           }
         : entry
           ? {
               spaceBeforeMm: entry.spaceBeforeMm,
               spaceAfterMm: entry.spaceAfterMm,
               breakBefore: entry.breakBefore,
+              bandBreakBefore: entry.bandBreakBefore,
             }
           : null,
+      bandBreakable:
+        !!corrected &&
+        block.part === 1 &&
+        (block.beside === true || corrected.bandBreakBefore),
       ordersItsOwn: entry?.ordersItsOwn ?? false,
       role: note?.role ?? "heading",
       text: note?.text ?? "",
@@ -536,6 +553,7 @@ function printedSheet(
       firstBoxIndex: first,
       boxCount: block.boxCount,
       correction: null,
+      bandBreakable: false,
       ordersItsOwn: false,
       role: "heading",
       text: "",

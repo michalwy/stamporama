@@ -782,6 +782,7 @@ function planPrintedCardReference(
         spaceBeforeMm: entry.spaceBeforeMm,
         spaceAfterMm: entry.spaceAfterMm,
         breakBefore: entry.breakBefore,
+        bandBreakBefore: entry.bandBreakBefore,
         pagePlacement: entry.pagePlacement,
       });
     }

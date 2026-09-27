@@ -1239,6 +1239,10 @@ model AlbumEntry {
   spaceBeforeMm Float  @default(0)
   spaceAfterMm  Float  @default(0)
   breakBefore   String @default("auto")
+  // Start a band of its own rather than sit beside the block before it (#1421). Only prevents that
+  // pairing: it is not a page break, and a block that no longer fits once it has moved down goes to
+  // the next page as any block does. The block after it may still pair with it.
+  bandBreakBefore Boolean @default(false)
   // A single page's own vertical placement (#1419), overriding the album's, or null to follow it.
   // Kept on the block that **opens** the page rather than on the page, for the reason every
   // correction here is: a live page has no row and its identity moves with its contents, so the
@@ -1391,6 +1395,7 @@ model AlbumTextBlock {
   spaceBeforeMm Float  @default(0)
   spaceAfterMm  Float  @default(0)
   breakBefore   String @default("auto")
+  bandBreakBefore Boolean @default(false)
   pagePlacement String?
 
   printedPageId String?
