@@ -194,7 +194,8 @@ export type VocabularyName =
   | "catalog vendor"
   | "catalog"
   | "platform"
-  | "exchange partner";
+  | "exchange partner"
+  | "size preset";
 
 /** Trim and case-fold, so that `"mnh"`, `" MNH "` and `"MNH"` are one value. */
 function fold(value: string): string {

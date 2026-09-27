@@ -8,18 +8,19 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
-track has landed**, #1036 last, and #1390 has since added purchases; both wrappers exist and the
-registry carries **forty-one operations** — #708's vocabulary read, #710's six reads over the
-collection, #711's six offer verbs, #712's two want reads, checklist gap and nine trade verbs,
-#1036's three auction reads, #1390's eleven purchase operations, #1168's bid recommendation, and
-#1037's catalog-number resolver. Four counts are quoted rather than deleted, because each was true
-when it was written: *the registry carries twenty-five operations* (from #712 until #1168), *the
-registry carries twenty-six operations* (from #1168 until #1037), *the registry carries
-twenty-seven operations* (from #1037 until #1036) and *the registry carries thirty operations* (from
-#1036 until #1390).
+track has landed**, #1036 last, #1390 has since added purchases and #1415 stamp sizes; both
+wrappers exist and the registry carries **forty-eight operations** — #708's vocabulary read, #710's
+six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
+trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
+operations, #1168's bid recommendation, and #1037's catalog-number resolver. Five counts are quoted
+rather than deleted, because each was true when it was written: *the registry carries twenty-five
+operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
+#1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
+carries thirty operations* (from #1036 until #1390) and *the registry carries forty-one operations*
+(from #1390 until #1415).
 
-**Seventeen of them write** since #1390 added nine; *eight of them write* was the count from #712
-until then, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
+**Twenty-one of them write** since #1415 added four; *seventeen of them write* was the count from
+#1390 until then, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
 below). Two earlier sentences are
@@ -125,6 +126,7 @@ src/lib/agent-api/
   auction-reads.ts  the watchlist, exposure and tracked-listing responses (#1036)
   purchase-reads.ts the purchase responses, the seller match and the close-name rule (#1390)
   catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
+  size-reads.ts     the size figure grammar, the size source, the apply report (#1415)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -141,10 +143,11 @@ src/lib/agent-api/
     bids.ts         recommend_bid (#1168)                                ← server-side
     auctions.ts     the three auction reads (#1036)                      ← server-side
     purchases.ts    the eleven purchase operations (#1390)               ← server-side
+    sizes.ts        the seven stamp-size and preset operations (#1415)  ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `purchase-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1425,6 +1428,61 @@ read any write verb beside the word `lot` as a write to the auction watchlist, w
 `add_purchase_lot` is not. A name carrying `purchase` is now judged by its other words, so
 `add_purchase_auction_lot` would still be caught, and the test says both.
 
+## Stamp sizes and presets
+
+**Seven operations** (#1415): a size an assistant reads in a catalogue or a dealer's list, put on a
+series without retyping it stamp by stamp. Four of them write.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_size_presets` | no | the presets, in the collector's dragged order |
+| `get_stamp_size` | no | one stamp's own figures and where its size comes from |
+| `create_size_preset` / `update_size_preset` | yes | a preset, under the Settings panel's rules (#804) |
+| `set_stamp_size` | yes | one stamp, through the album editor's one-box write (#1309) |
+| `preview_stamp_size_apply` | no | the apply dialog's counts, writing nothing (`GET /stamp-sizes/apply`) |
+| `apply_stamp_size` | yes | the apply dialog's write, to an issue, a checklist or a list (`POST` on the same path) |
+
+**Every write is the app's, and that is the safety argument.** A preset goes through
+`stamp-size-presets.ts`, one stamp through `writeMeasuredStampSize` — whose *a stated size is never
+replaced silently* is a server-side gate (#1290), so `overwrite` is its `replace` — and an apply
+through `applyStampSizePreset` / `applyStampSize`, with the dialog's skip-by-default, variant
+subtree and counts (ADR-0048 §6, §7). Nothing here decides which stamps a write reaches. The
+preview is its own operation rather than a flag on the apply because `writes` is per operation, and
+the collector wanted a `read` token able to ask for one; it answers with
+`describeStampSizePresetApply`'s own sentences, so the counts an agent reports are the dialog's.
+
+**The issue expected a source this schema does not have.** #1415 asked for a read that tells
+*stated*, *measured at a scale* and *inherited* apart, and for the assistant's writes to be recorded
+*as typed, never as measured*. There is no *measured* flag — #763 refused one and ADR-0048 §1 a
+preset reference — so a figure measured, typed or applied is the same two columns. `get_stamp_size`
+says `stated`, `inherited` or `none`, and a written size is an ordinary stated one, which is all
+*recorded as typed* can mean. Adding the flag would be a schema decision against two ADRs, not
+something this surface could quietly grow.
+
+**An inherited size is answered per checklist.** `get_stamp_size` runs `resolveStampSize` over each
+checklist the stamp is on, in catalog sort order — `album-plan.ts`'s ordering, so it reads the
+figure an album page built from that checklist draws — and returns one row for each that lends a
+figure, naming the stamp it is borrowed from. A stamp on two checklists can borrow two figures, and
+picking one would be a rule the album does not have. Half a size is not a size (#763): a stamp
+stating only a width is `inherited` or `none`, its half figure beside the answer.
+
+**Stamps are named by id or catalogue number, through #1037's resolver.** `resolveCatalogStrings`
+was lifted out of `resolve_catalog_numbers` for this, so a number cannot resolve one way there and
+another here. A number that is not exactly one stamp refuses the **whole** call, every failure named
+and every ambiguous candidate's id in `accepted` (`unresolvedStamps`); a list of forty with three
+bad entries is corrected in one turn, and nothing is written from the other thirty-seven.
+
+**Figures are strings to a tenth, refused rather than rounded** — `"21.5"`, a comma read as a point
+as the form reads one. `parseSizeMm` rounds a second decimal away, which is right for a field the
+collector sees and wrong for an agent that would report the unrounded figure as written; it is the
+purchase surface's convention for amounts (#1390).
+
+**No preset is deleted or reordered.** Deleting was not asked for and is a decision for the screen,
+and the dragged order is the collector's muscle memory (ADR-0048). `SIZE_PRESET_BOUNDARY` in
+`tests/unit/agent-api-operation-boundary.test.ts` keeps `deleteStampSizePreset` and
+`reorderStampSizePresets` out of every operation module, and
+`tests/integration/agent-api-sizes.test.ts` pins the exact list of size operations.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and
@@ -1447,10 +1505,11 @@ exist cannot be.
   already tracked* above.
 - **The agent never touches a copy through a purchase, never does anything to one that cannot be
   undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
+- **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
 
 Do not add a publish-shaped, send-shaped, auction-writing or copy-touching operation to the
-registry, whatever it is called. *Two boundaries* was this section's count until #1036 and *three*
-until #1390, and both are quoted rather than deleted.
+registry, whatever it is called, nor one that deletes a size preset. *Two boundaries* was this
+section's count until #1036 and *three* until #1390, and both are quoted rather than deleted.
 
 ### The two boundaries are not the same shape
 
@@ -1674,7 +1733,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries forty-one operations.** It was empty on #706, which shipped none; #708
+**The document carries forty-eight operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -1685,8 +1744,10 @@ added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, 
 `find_tracked_auction_lots`; #1390 added `list_purchases`, `get_purchase`, `create_seller`,
 `create_purchase`, `update_purchase`, `add_purchase_lot`, `update_purchase_lot`,
 `remove_purchase_lot`, `add_purchase_expense`, `update_purchase_expense` and
-`remove_purchase_expense`. *The document carries thirty operations* stood here from #1036 until
-#1390. Six earlier sentences are quoted rather than deleted because each stood
+`remove_purchase_expense`; #1415 added `list_size_presets`, `get_stamp_size`, `create_size_preset`,
+`update_size_preset`, `set_stamp_size`, `preview_stamp_size_apply` and `apply_stamp_size`. *The
+document carries thirty operations* stood here from #1036 until #1390, and *forty-one* from #1390
+until #1415. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

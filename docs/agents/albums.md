@@ -315,6 +315,10 @@ through `src/lib/stamp-size.ts`. A stamp stating no size of its own borrows a ch
 **at read time**, and anything drawn from a borrowed figure has to say so: a collector cutting to an
 inherited number as if it had been measured is the failure this whole track is arranged against.
 
+An assistant reads and writes sizes too (#1415): `get_stamp_size` reports the same `stated` /
+`inherited` resolution per checklist, and its writes are `writeMeasuredStampSize` and the preset
+apply, unchanged — see `agent-api.md`, *Stamp sizes and presets*.
+
 ## The album and its page plan (#767, ADR-0045)
 
 `Album` is anchored on a `CollectionArea`, carries a name, a language and the 40 render columns

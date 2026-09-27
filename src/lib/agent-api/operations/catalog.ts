@@ -143,6 +143,32 @@ export async function readCatalogResolutions(
   // Paged over the **strings asked about**, `match_wants`' own answer to the same shape: the caller
   // chose the set, so `total` is what it sent and the cursor walks its own list back to it in order.
   const asked = inputs.slice(window.offset, window.offset + window.limit);
+  const rows = await resolveCatalogStrings(context, asked, { vendors, statedVendorId });
+  return listResponse(rows, inputs.length, window);
+}
+
+/**
+ * The resolution itself, over strings already chosen — one row per string, in order.
+ *
+ * **Lifted out of the operation so that a writing operation naming stamps by number resolves them
+ * through this and nothing else** (#1415): the size operations take a catalogue number wherever they
+ * take a stamp, and a second matcher there would be the one that answered `Mi 123` differently from
+ * this. `vendors` is the caller's when it already read them; otherwise it is read here.
+ */
+export async function resolveCatalogStrings(
+  context: OperationContext,
+  inputs: readonly string[],
+  options: { readonly vendors?: readonly Vendor[]; readonly statedVendorId?: string | null } = {}
+): Promise<AgentCatalogResolution[]> {
+  if (inputs.length === 0) return [];
+  const vendors: readonly Vendor[] =
+    options.vendors ??
+    (await prisma.catalogVendor.findMany({
+      where: { collectionId: context.collectionId },
+      select: { id: true, name: true, abbreviation: true },
+      orderBy: { name: "asc" },
+    }));
+  const statedVendorId = options.statedVendorId ?? null;
 
   const [header, areaRows, issuePrefixes, labelling] = await Promise.all([
     loadCollectionHeader(context),
@@ -164,7 +190,7 @@ export async function readCatalogResolutions(
   const vendorAbbr = new Map(vendors.map((vendor) => [vendor.id, vendor.abbreviation]));
   const vendorName = new Map(vendors.map((vendor) => [vendor.id, vendor.name]));
 
-  const parsed = asked.map((input) => parseForeignCatalogNumber(input, vendors, prefixKeys));
+  const parsed = inputs.map((input) => parseForeignCatalogNumber(input, vendors, prefixKeys));
   // **An unresolved catalogue word is never looked up**, which is `catalog-resolve.ts`'s stated
   // ordering: an agent that wrote `Fi 456` said *Fischer*, and a `Mi 456` that happens to exist
   // would look exactly like a right answer.
@@ -172,7 +198,7 @@ export async function readCatalogResolutions(
 
   const stamps = lookedUp.length === 0 ? [] : await loadCandidateStamps(context.collectionId, lookedUp);
 
-  const rows = parsed.map((entry) => {
+  return parsed.map((entry) => {
     const vendorId = entry.vendorId ?? statedVendorId;
     const hits =
       entry.unknownVendorToken !== null
@@ -185,12 +211,10 @@ export async function readCatalogResolutions(
       number: entry.number ?? undefined,
       vendorToken: entry.unknownVendorToken ?? undefined,
       acceptedVendors:
-        entry.unknownVendorToken !== null ? acceptedNames(vendors) : undefined,
+        entry.unknownVendorToken !== null ? acceptedNames([...vendors]) : undefined,
       stamps: hits,
     }) as AgentCatalogResolution;
   });
-
-  return listResponse(rows, inputs.length, window);
 }
 
 /**

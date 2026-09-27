@@ -9,7 +9,8 @@
 // to twenty-five; #1168 added `recommend_bid`, taking it to twenty-six; #1037 added
 // `resolve_catalog_numbers`, taking it to twenty-seven; #1036 added the three auction reads, taking
 // it to thirty; #1390 added the eleven purchase operations, nine of which write, taking it to
-// **forty-one**. Each one is an entry here
+// forty-one; #1415 added the seven size operations, four of which write, taking it to
+// **forty-eight**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -26,7 +27,10 @@
 // built one side at a time and read back as a verdict — then the auctions already followed (#1036),
 // in the order a morning's mail is read against them: what is open, what it can cost, and whether a
 // listing in the mail is one of them — then purchases (#1390), in the order an order confirmation
-// is entered: is it already here, who sold it, the purchase, its lots, its expenses. **`recommend_bid` is last because it is the
+// is entered: is it already here, who sold it, the purchase, its lots, its expenses — then stamp
+// sizes (#1415), in the order a size read off a catalogue is put on a series: the presets already
+// kept, one stamp's size and where it comes from, a new or corrected preset, one stamp, and the
+// apply, previewed before it is run. **`recommend_bid` is last because it is the
 // one operation that is not about the collection at all** (#1168): it answers *is this auction worth
 // looking at*, about a lot nothing here records, and an agent reaches it having decided to ask a
 // question the four workflows above cannot. It is what the generated document lists them in and what
@@ -103,6 +107,15 @@ import {
   updatePurchaseLotOperation,
   updatePurchaseOperation,
 } from "./operations/purchases";
+import {
+  applyStampSizeOperation,
+  createSizePresetOperation,
+  getStampSizeOperation,
+  listSizePresetsOperation,
+  previewStampSizeApplyOperation,
+  setStampSizeOperation,
+  updateSizePresetOperation,
+} from "./operations/sizes";
 import { matchPathTemplate, parsePathTemplate, templateSpecificity } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
@@ -148,6 +161,13 @@ export const OPERATIONS: readonly Operation[] = [
   addPurchaseExpenseOperation,
   updatePurchaseExpenseOperation,
   removePurchaseExpenseOperation,
+  listSizePresetsOperation,
+  getStampSizeOperation,
+  createSizePresetOperation,
+  updateSizePresetOperation,
+  setStampSizeOperation,
+  previewStampSizeApplyOperation,
+  applyStampSizeOperation,
   recommendBidOperation,
 ];
 

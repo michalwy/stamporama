@@ -388,3 +388,51 @@ describe("the agent API's operation modules (#1390)", () => {
     }
   });
 });
+
+/**
+ * The size-preset writes the size operations must never reach (#1415).
+ *
+ * **A fifth map, for a fifth reason**: the collector asked for presets to be read, created and
+ * corrected, and deleting one was left out on purpose — it was not asked for, and removing a preset
+ * is a decision better made on the screen. Reordering is here too: the collector's dragged order is
+ * muscle memory (ADR-0048), and nothing in #1415 asked for an assistant to move it.
+ */
+const SIZE_PRESET_BOUNDARY = new Map<string, string>([
+  ["deleteStampSizePreset", "deletes a size preset"],
+  ["reorderStampSizePresets", "rewrites the collector's dragged order of presets"],
+]);
+
+describe("the agent API's operation modules (#1415)", () => {
+  it("reach no domain function that deletes or reorders a size preset", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        const why = SIZE_PRESET_BOUNDARY.get(name);
+        if (why) {
+          breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}" — it ${why}`);
+        }
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `The agent reads, creates and corrects size presets, and never deletes or reorders one (#1415).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("would notice one, because the walk sees the preset writes that are allowed", () => {
+    const fixture = path.join(AGENT_API, "operations/sizes.ts");
+    const names = importedBindings(fixture).map((binding) => binding.name);
+    for (const allowed of ["createStampSizePreset", "updateStampSizePreset", "applyStampSizePreset", "writeMeasuredStampSize"]) {
+      assert.ok(names.includes(allowed), `the walk did not see \`${allowed}\` in operations/sizes.ts`);
+    }
+    const domain = readFileSync(path.join(ROOT, "src/lib/stamp-size-presets.ts"), "utf8");
+    for (const name of SIZE_PRESET_BOUNDARY.keys()) {
+      assert.match(
+        domain,
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of src/lib/stamp-size-presets.ts any more`
+      );
+    }
+  });
+});
