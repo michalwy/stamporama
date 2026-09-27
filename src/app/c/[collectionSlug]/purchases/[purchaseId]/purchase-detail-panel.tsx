@@ -2763,6 +2763,23 @@ function CopyGroupSection({
   );
 }
 
+/** Whether a single-line, ellipsised element is currently cutting its text short (#1412) — so the
+ *  full text is offered on hover only when some of it is actually hidden. Re-read on every resize,
+ *  since a window made narrower is what shortens it, and whenever the text itself changes. */
+function useOverflowing<T extends HTMLElement>(text: string) {
+  const ref = useRef<T>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setOverflowing(el.scrollWidth > el.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text]);
+  return [ref, overflowing] as const;
+}
 
 function LotCard({
   scanDpi,
@@ -2944,6 +2961,7 @@ function LotCard({
   // when no FX rate is known.
   const poolBaseNum = lot.poolBase != null ? Number(lot.poolBase) : null;
   const lotName = lot.title ?? summary?.derivedLabel ?? `Lot ${index + 1}`;
+  const [lotNameRef, lotNameCut] = useOverflowing<HTMLSpanElement>(lotName);
   const statusChip = open ? tintChip("accent", "Open") : tintChip("success", "Closed");
 
   const listParams: LotCopiesParams = {
@@ -3149,18 +3167,34 @@ function LotCard({
         >
           <Icon name={expanded ? "collapse" : "expand"} size="sm" />
         </button>
+        {/* The title takes the width the row has and is shortened only when it genuinely does not
+            fit (#1412): a title copied off an auction is long, and the end a fixed cap cut off is
+            usually what tells two lots apart. It is the one item on this row that gives way — the
+            chips and the price beside it never wrap (`nowrap`), so they keep their place — and a
+            title it had to shorten is shown whole on hover. */}
         <Tooltip
-          content={lot.title ? undefined : "Derived from the lot's copies — add a title to name it"}
+          content={
+            lot.title
+              ? lotNameCut
+                ? lotName
+                : undefined
+              : lotNameCut
+                ? `${lotName} — derived from the lot's copies; add a title to name it`
+                : "Derived from the lot's copies — add a title to name it"
+          }
+          maxWidth="32rem"
+          style={{ minWidth: 0 }}
         >
           <span
+            ref={lotNameRef}
             style={{
               fontWeight: 600,
               color: "var(--color-text-primary)",
               fontStyle: lot.title ? undefined : "italic",
+              minWidth: 0,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
-              maxWidth: "22rem",
             }}
           >
             {lotName}
@@ -3195,14 +3229,19 @@ function LotCard({
         {lot.price == null ? (
           // No opening value (#1323): said in words, never `0.00` (#1184).
           <Tooltip content="This lot has no opening value, so its copies' cost is not applicable">
-            <span style={{ fontSize: "0.8125rem", fontStyle: "italic", color: "var(--color-text-muted)" }}>
+            <span style={{ fontSize: "0.8125rem", fontStyle: "italic", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
               No opening value
             </span>
           </Tooltip>
         ) : (
           <Tooltip content={openingBalance ? "Opening value" : "Lot price"}>
             <span
-              style={{ fontSize: "0.875rem", fontVariantNumeric: "tabular-nums", color: "var(--color-text-secondary)" }}
+              style={{
+                fontSize: "0.875rem",
+                fontVariantNumeric: "tabular-nums",
+                color: "var(--color-text-secondary)",
+                whiteSpace: "nowrap",
+              }}
             >
               {lot.price} {currency}
             </span>

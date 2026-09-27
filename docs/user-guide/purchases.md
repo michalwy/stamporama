@@ -270,7 +270,8 @@ lot is labelled automatically from its copies' **catalog numbers** (with the usu
 prefixes) — up to three, with *+N more* beyond that — falling back to *Lot 1*, *Lot 2*, …
 while it is still empty. Each lot shows:
 
-- its **title** (or the derived label),
+- its **title** (or the derived label), using as much of the row as it has room for — it is
+  shortened only when it does not fit, and then shows in full when you hover over it,
 - its **price** (in the purchase's transaction currency),
 - its **status** — **Open** while you are still identifying copies, **Closed** once its cost
   has been allocated,
