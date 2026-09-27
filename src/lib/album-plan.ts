@@ -553,6 +553,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
         spaceBeforeMm: entry.spaceBeforeMm,
         spaceAfterMm: entry.spaceAfterMm,
         breakBefore: entry.breakBefore,
+        bandBreakBefore: entry.bandBreakBefore,
         pagePlacement: entry.pagePlacement,
       });
       for (const note of notesAt.get(slot(entry.id, "after")) ?? [])
@@ -577,6 +578,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
       spaceBeforeMm: entry.spaceBeforeMm,
       spaceAfterMm: entry.spaceAfterMm,
       breakBefore: entry.breakBefore,
+      bandBreakBefore: entry.bandBreakBefore,
       pagePlacement: entry.pagePlacement,
     });
 
@@ -596,6 +598,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
           spaceBeforeMm: entry.spaceBeforeMm,
           spaceAfterMm: entry.spaceAfterMm,
           breakBefore: entry.breakBefore,
+          bandBreakBefore: entry.bandBreakBefore,
           pagePlacement: entry.pagePlacement,
         });
       }
@@ -655,6 +658,7 @@ export function albumNoteBlock(
     spaceBeforeMm: note.spaceBeforeMm,
     spaceAfterMm: note.spaceAfterMm,
     breakBefore: note.breakBefore,
+    bandBreakBefore: note.bandBreakBefore,
     pagePlacement: note.pagePlacement,
   };
 }

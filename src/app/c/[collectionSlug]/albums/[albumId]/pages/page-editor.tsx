@@ -437,6 +437,19 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     run(() => setAlbumRowBreakAction(entryId, stampId, on));
   }
 
+  /** Start a block on its own line rather than beside the one before it, or stop (#1421) — from the
+   *  canvas's tab or the panel's checkbox. One field, for {@link commitSpace}'s reason: an open
+   *  panel's other numbers must not ride along and overwrite a correction made on the canvas. */
+  function commitBandBreak(block: Pick<AlbumEditorBlock, "id" | "kind">, on: boolean) {
+    const form = new FormData();
+    form.set("bandBreakBefore", on ? "true" : "false");
+    run(() =>
+      block.kind === "text"
+        ? updateAlbumTextBlockAction(block.id, form)
+        : setAlbumEntryLayoutAction(block.id, form)
+    );
+  }
+
   /**
    * A stamp dropped onto another stamp of the same block.
    *
@@ -759,6 +772,10 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               onReorder={reorderStamps}
               onReorderBlocks={reorderBlocks}
               onToggleRowBreak={commitRowBreak}
+              onToggleBandBreak={(blockId, on) => {
+                const block = drawnSheet.blocks.find((b) => b.id === blockId);
+                if (block) commitBandBreak(block, on);
+              }}
               onOpenGaps={(text, at) => setGapPopover({ gaps: text.gaps, at })}
             />
           ) : (
@@ -831,6 +848,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                       : setAlbumEntryLayoutAction(selectedBlock.id, form)
                   );
                 }}
+                onBandBreak={(on) => commitBandBreak(selectedBlock, on)}
                 onClearStampOrder={() =>
                   run(() => clearAlbumEntryStampOrderAction(selectedBlock.id))
                 }
@@ -1852,6 +1870,7 @@ function BlockPanel({
   disabled,
   onPreview,
   onSave,
+  onBandBreak,
   onClearStampOrder,
   onClearBoxes,
   onDelete,
@@ -1865,6 +1884,9 @@ function BlockPanel({
    *  feeds, which is what makes typing and dragging one interface rather than two. */
   onPreview: (kind: "space" | "spaceAfter", dyMm: number) => void;
   onSave: (form: FormData) => void;
+  /** Start on its own line rather than beside the block before it, or stop (#1421). Saved on the
+   *  click: a switch has no half-typed state. */
+  onBandBreak: (on: boolean) => void;
   onClearStampOrder: () => void;
   onClearBoxes: () => void;
   onDelete: () => void;
@@ -1881,6 +1903,7 @@ function BlockPanel({
     spaceBeforeMm: 0,
     spaceAfterMm: 0,
     breakBefore: "auto" as const,
+    bandBreakBefore: false,
   };
   const [before, setBefore] = useState(String(correction.spaceBeforeMm));
   const [after, setAfter] = useState(String(correction.spaceAfterMm));
@@ -2078,6 +2101,35 @@ function BlockPanel({
           ))}
         </select>
       </div>
+
+      {block.bandBreakable && (
+        <div>
+          <PanelHeading>Line</PanelHeading>
+          <label
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              alignItems: "center",
+              fontSize: "0.8125rem",
+              cursor: disabled ? "default" : "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={correction.bandBreakBefore}
+              disabled={disabled}
+              onChange={(e) => onBandBreak(e.target.checked)}
+            />
+            Start on its own line, not beside the one before
+          </label>
+          <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+            It moves below instead of sharing the line, and stays that way when the album re-flows.{" "}
+            <strong>It is not a page break</strong>: if it no longer fits on this sheet it goes to
+            the next, as any series does. What follows it may still sit beside it. The corner tab on
+            the sheet does the same.
+          </p>
+        </div>
+      )}
 
       <button type="button" onClick={save} disabled={disabled} style={BTN}>
         Save these numbers

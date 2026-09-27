@@ -374,6 +374,7 @@ export function albumPreviewEntries(): AlbumEntryData[] {
     spaceBeforeMm: 0,
     spaceAfterMm: 0,
     breakBefore: "auto",
+    bandBreakBefore: false,
     pagePlacement: null,
     boxAdjustments: {},
     rowBreaks: [],

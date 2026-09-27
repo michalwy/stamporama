@@ -1617,3 +1617,65 @@ describe("albumEffectivePlacement", () => {
     assert.equal(albumEffectivePlacement("center", 0), "top");
   });
 });
+
+describe("planAlbumPages and a series started on its own line (#1421)", () => {
+  const corrected = (
+    entryId: string,
+    heading: string,
+    boxes: AlbumBoxSpec[],
+    over: Partial<AlbumBlockSpec> = {}
+  ): AlbumBlockSpec => ({ entryId, heading, boxes, printedPageIds: null, ...over });
+  /** Two one-stamp checklists: exactly what the collector pairs. 8 + 11 + 36 = 55 mm each. */
+  const narrow = (entryId: string, over: Partial<AlbumBlockSpec> = {}) =>
+    corrected(entryId, entryId.toUpperCase(), [box(30, 36)], over);
+  /** 190 mm rows, so it never pairs: 8 + 11 + 5 × 30 + 4 × 6 = 193 mm. */
+  const filler = corrected("f", "F", Array.from({ length: 5 }, () => box(190, 30)));
+  const plan = (blocks: AlbumBlockSpec[]) =>
+    live(planAlbumPages([chapter("y", "", blocks)], preset(), "Album", metrics).pages);
+  const order = (pages: ReturnType<typeof plan>) =>
+    pages.map((p) => p.blocks.map((b) => b.entryId));
+
+  it("puts a series below the one before it instead of beside it", () => {
+    const paired = plan([narrow("a"), narrow("b")]);
+    assert.equal(paired[0].headings[0].yMm, paired[0].headings[1].yMm, "beside by default");
+    assert.equal(paired[0].blocks[1].beside, true);
+    assert.equal(paired[0].blocks[0].beside, undefined, "the first of a band is beside nothing");
+
+    const broken = plan([narrow("a"), narrow("b", { bandBreakBefore: true })]);
+    assert.equal(broken.length, 1, "a line of its own, not a page of its own");
+    assert.equal(broken[0].headings[0].yMm, 31);
+    // A ends at 23 + 55; B's own lead of 8 puts its heading at 86, across the full width.
+    assert.equal(broken[0].headings[1].yMm, 86);
+    assert.equal(broken[0].headings[1].widthMm, broken[0].content.widthMm);
+    assert.equal(broken[0].blocks[1].beside, undefined);
+  });
+
+  it("only prevents the pairing with the series before — the next one may still sit beside it", () => {
+    const pages = plan([narrow("a"), narrow("b", { bandBreakBefore: true }), narrow("c")]);
+    assert.equal(pages.length, 1);
+    const [a, b, c] = pages[0].headings;
+    assert.ok(b.yMm > a.yMm, "B went below A");
+    assert.equal(c.yMm, b.yMm, "and C pairs with B on B's line");
+    assert.equal(pages[0].blocks[2].beside, true);
+  });
+
+  it("sends a series that no longer fits once it has moved down to the next sheet", () => {
+    // F (193) and the A–B band (55) make 248 of the 260 mm sheet. Below A, B needs 55 more.
+    assert.deepEqual(order(plan([filler, narrow("a"), narrow("b")])), [["f", "a", "b"]]);
+
+    const pages = plan([filler, narrow("a"), narrow("b", { bandBreakBefore: true })]);
+    assert.deepEqual(order(pages), [["f", "a"], ["b"]]);
+    // At the top of an ordinary sheet, as any block that moved whole: y 23 + its own lead of 8.
+    assert.equal(pages[1].headings[0].yMm, 31);
+  });
+
+  it("changes nothing on a series that opens its band anyway", () => {
+    const plain = plan([filler, narrow("a")]);
+    const flagged = plan([filler, narrow("a", { bandBreakBefore: true })]);
+    assert.deepEqual(flagged, plain);
+    assert.deepEqual(
+      plan([narrow("a", { bandBreakBefore: true }), narrow("b")]),
+      plan([narrow("a"), narrow("b")])
+    );
+  });
+});

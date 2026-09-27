@@ -884,6 +884,26 @@ A printed card is untouched: the snapshot stores placed geometry and copies box 
 flag reaches it, and the divergence report compares facts rather than coordinates, so a break set
 later is not reported against a card. The PDF needs nothing — it draws the plan.
 
+**A series on its own line is the row break one level up** (#1421). `bandBreakBefore` is a presence-only
+column on `album_entry` and `album_text_block`, and `measureBand` ends a band's run at a block carrying
+it, exactly where it already ended one at `breakBefore: always`. Three things worth not re-deriving:
+
+- **It removes one pairing and adds nothing else.** The block opens the next band, where the block
+  *after* it may still pair with it; it is not a page break, so a block that no longer fits once it
+  has moved down goes to the next sheet whole by the ordinary rule — no branch of the packer knows
+  about it beyond `measureBand`.
+- **Offered only where it means something**, as `rowBreakable` is: `AlbumPlacedBlock.beside` records
+  that `placeBand` put a block beside another, and the editor's `bandBreakable` is *beside, or already
+  set* (so it can be set back), never on a continuation sheet and never on paper. `beside` rides into
+  a new card's snapshot with the other placement facts; nothing compares it.
+- **The canvas tab sits on the block's own top-left corner** — its heading's, else its first box's —
+  with #1214's visual language: a bracket when set, a hollow or filled square on the selected block.
+  The write sends the one field, for the reason every canvas gesture here does.
+
+A printed card is untouched for the row break's reasons, and the reference a card is compared against
+carries the flag like any other correction, so only a change of *facts* on the card — a series pushed
+off it — would be reported.
+
 **A reorder is carried in state and drawn; the mark and the drop read one function** (#816). The
 three millimetre gestures ride in `CanvasDrag` and the canvas draws them, but reordering was held in
 a `useRef` — which by design does not re-render, so between press and release nothing knew a drag was

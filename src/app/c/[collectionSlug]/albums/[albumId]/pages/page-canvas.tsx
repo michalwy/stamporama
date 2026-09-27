@@ -152,6 +152,7 @@ const NO_DRAG_END: (drag: CanvasDrag) => void = () => {};
 const NO_REORDER: (blockId: string, from: string, to: string) => void = () => {};
 const NO_REORDER_BLOCKS: (from: string, to: string) => void = () => {};
 const NO_ROW_BREAK: (entryId: string, stampId: string, on: boolean) => void = () => {};
+const NO_BAND_BREAK: (blockId: string, on: boolean) => void = () => {};
 const NO_OPEN_GAPS: (
   text: AlbumEditorText,
   at: { left: number; bottom: number }
@@ -183,6 +184,9 @@ interface AlbumPageCanvasInteractive extends AlbumPageCanvasBase {
   /** Called when the selected box's row-break tab is clicked (#1214): start a new row at this box,
    *  or stop doing so. The panel's checkbox writes the same thing. */
   onToggleRowBreak: (entryId: string, stampId: string, on: boolean) => void;
+  /** Called when the selected block's line tab is clicked (#1421): start it on its own line rather
+   *  than beside the block before it, or stop doing so. The panel's checkbox writes the same thing. */
+  onToggleBandBreak: (blockId: string, on: boolean) => void;
   /** Opens the translation editor for a text that fell back to the default language (#298/#300). */
   onOpenGaps: (text: AlbumEditorText, at: { left: number; bottom: number }) => void;
 }
@@ -218,6 +222,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
   const onReorder = props.interactive === false ? NO_REORDER : props.onReorder;
   const onReorderBlocks = props.interactive === false ? NO_REORDER_BLOCKS : props.onReorderBlocks;
   const onToggleRowBreak = props.interactive === false ? NO_ROW_BREAK : props.onToggleRowBreak;
+  const onToggleBandBreak = props.interactive === false ? NO_BAND_BREAK : props.onToggleBandBreak;
   const onOpenGaps = props.interactive === false ? NO_OPEN_GAPS : props.onOpenGaps;
   /** A printed sheet may be looked at and selected but not changed (#778); a preview may only be
    *  looked at. Everything that writes reads this; everything that only highlights reads
@@ -732,6 +737,51 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
         );
       })}
 
+      {sheet.blocks.map((block) => {
+        // **A block starts its own line by hand** (#1421) — #1214's row-break language one level up,
+        // drawn at the block's top-left corner rather than a box's: a bracket when it is set, and on
+        // the selected block the tab that turns it over, filled when set and hollow when not. Offered
+        // only where it could mean anything (`bandBreakable`), so the tab never promises a line the
+        // layout would ignore.
+        if (!block.bandBreakable) return null;
+        const corner = blockCornerMm(sheet, block.id);
+        if (!corner) return null;
+        const on = block.correction?.bandBreakBefore === true;
+        const chosen = selection?.kind === "block" && selection.id === block.id;
+        const y = corner.yMm + spaceOffset(block.id);
+        if (chosen && !readOnly) {
+          return (
+            <rect
+              key={`band-${block.id}`}
+              x={corner.xMm - 1.6}
+              y={y - 1.6}
+              width={3.2}
+              height={3.2}
+              fill={on ? HANDLE : PAPER}
+              stroke={HANDLE}
+              strokeWidth={0.4 * MM}
+              style={{ cursor: "pointer" }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleBandBreak(block.id, !on);
+              }}
+            />
+          );
+        }
+        if (!on) return null;
+        return (
+          <path
+            key={`band-${block.id}`}
+            d={`M ${corner.xMm - 1.2} ${y + 4} V ${y - 1.2} H ${corner.xMm + 4}`}
+            fill="none"
+            stroke={HANDLE}
+            strokeWidth={0.5 * MM}
+            pointerEvents="none"
+          />
+        );
+      })}
+
       {!readOnly && selection?.kind === "block" && (
         // The two space handles for the selected block: grips in the left margin at its own top and
         // bottom edges, dragged down to open a gap and up to close one. Their own component, because
@@ -851,6 +901,27 @@ function blockBottomMm(sheet: AlbumEditorSheet, blockId: string): number | null 
         )
       )
     );
+  }
+  return null;
+}
+
+/** The top-left corner of a block on this sheet: its heading's if it has one — the heading spans the
+ *  block's own column — otherwise its first box's. Where the line tab hangs (#1421). */
+function blockCornerMm(
+  sheet: AlbumEditorSheet,
+  blockId: string
+): { xMm: number; yMm: number } | null {
+  const withHeadings = sheet.blocks.filter((b) => b.heading);
+  const headingIndex = withHeadings.findIndex((b) => b.id === blockId);
+  const heading = headingIndex >= 0 ? sheet.headings[headingIndex] : undefined;
+  if (heading) return { xMm: heading.xMm, yMm: heading.yMm };
+  let cursor = 0;
+  for (const block of sheet.blocks) {
+    if (block.id === blockId) {
+      const box = sheet.boxes[cursor];
+      return box ? { xMm: box.xMm, yMm: box.yMm } : null;
+    }
+    cursor += block.boxCount;
   }
   return null;
 }

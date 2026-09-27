@@ -198,7 +198,7 @@ left and the panel of numbers on the right stay where they are while you move do
 you are working on and what you are working with are never both off screen at once.
 
 Everything you set there is a **correction**, not a position: *this box 2 mm wider*, *5 mm more
-before this series*, *break here*, *a new row from this stamp*, these stamps in this order. That distinction is the whole reason
+before this series*, *break here*, *a new row from this stamp*, *this series on its own line*, these stamps in this order. That distinction is the whole reason
 the automatic layout goes on running underneath — add a stamp to a checklist and the page re-flows
 with every one of your corrections still in place. Nothing has to be re-done after an acquisition.
 
@@ -229,6 +229,15 @@ What you can set:
   leaves it where you put it. It only ever **adds** a row: if what follows is still wider than the page,
   it wraps as usual. The first box of a checklist already starts a row, so it offers nothing. A
   checklist broken into short rows is also narrower, so it may now sit side by side with the next one.
+- **A series on its own line instead of beside the one before it.** Two short series that fit side by
+  side are put next to each other, each under its own heading. To start one below instead, select it
+  by its heading and tick *Start on its own line, not beside the one before*, or click the small
+  square on its heading's top-left corner; a series set this way carries a blue bracket round that
+  corner. The setting belongs to **that series**, so it stays with it when the album re-flows. It only
+  stops that one pairing — the series after it may still sit beside it — and it is **not a page
+  break**: if the series no longer fits on the sheet once it has moved down, it goes to the next sheet
+  like any other. It is offered only on a series that sits beside another, or that already has it set.
+  Notes can be set the same way.
 - **The spacing between boxes**, across a row and between rows. Click the paper outside any block
   and the sheet's panel has both, in millimetres. They are **this album's own values**, the same two
   that *Page template…* calls *Between boxes, across* and *Between rows*: they apply to **every sheet

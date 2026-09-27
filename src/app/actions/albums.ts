@@ -579,6 +579,8 @@ function readBlockLayout(
   );
   if (!after.ok) return after;
   const breakRaw = raw("breakBefore");
+  // Start a band of its own (#1421): absent leaves it alone, like every field here.
+  const bandBreakRaw = raw("bandBreakBefore");
   // A page's own placement (#1419): absent leaves it alone, blank takes it back so the page follows
   // the album again, and a word this build does not know is refused rather than read as blank.
   const placementRaw = raw("pagePlacement");
@@ -595,6 +597,7 @@ function readBlockLayout(
       spaceBeforeMm: before.value,
       spaceAfterMm: after.value,
       breakBefore: breakRaw === null ? undefined : asAlbumBlockBreak(breakRaw),
+      bandBreakBefore: bandBreakRaw === null ? undefined : bandBreakRaw === "true",
       pagePlacement: placementRaw === null ? undefined : pagePlacement,
     },
   };

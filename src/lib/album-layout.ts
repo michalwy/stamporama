@@ -60,8 +60,8 @@
 //
 // #769 lets the collector overrule the packing: extra space before or after a block, a forced break
 // and a forced *no* break, a text block of their own, a box a couple of millimetres bigger — and
-// #1214 a row of boxes ended early, *a new row starts at this stamp*. Every one
-// of them arrives on the specs this function is given and is packed **with** the automatic layout
+// #1214 a row of boxes ended early, *a new row starts at this stamp*, and #1421 a series set below
+// the one before it rather than beside it. Every one of them arrives on the specs this function is given and is packed **with** the automatic layout
 // rather than applied to the plan afterwards. That is what makes a correction survive a content
 // change: adding a stamp re-flows the page and the deltas are still the deltas.
 //
@@ -276,6 +276,14 @@ export interface AlbumBlockSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
   spaceAfterMm?: number;
   /** Whether the collector has forced, or forbidden, a page break above this block (#769). */
   breakBefore?: AlbumBlockBreak;
+  /** The collector has asked for this block to **start a band of its own** rather than sit beside
+   *  the block before it (#1421). Absent means it pairs wherever {@link measureBand} lets it.
+   *
+   *  It only prevents that one pairing. It is not a page break — a block that no longer fits once it
+   *  has moved down goes to the next sheet exactly as any block does — and the block after it may
+   *  still pair with it. On the block rather than on a position, like every correction here, so it
+   *  stays with the series it was set on when the album re-flows. */
+  bandBreakBefore?: boolean;
   /** The printed sheets this block is already on (#778), in printing order, or null while it is
    *  live. A block naming any is **not planned**: the sheets exist and the plan steps over them.
    *
@@ -343,6 +351,11 @@ export interface AlbumPlacedBlock {
   /** Index of the block's first box on this page, into the block's own box list. */
   firstBoxIndex: number;
   boxCount: number;
+  /** True when this block was placed **beside** the one before it, sharing its band — what the page
+   *  editor offers *start on its own line* on (#1421), so the control is never shown where it would
+   *  change nothing. Absent on a block that opens its band, and on a placement stored before it
+   *  existed. */
+  beside?: boolean;
   /** True when this block asked **not** to be separated from what is above it (#769) and the packer
    *  could not grant it — it opens a sheet, so what it wanted to stay with is on the one before.
    *
@@ -819,13 +832,16 @@ function measureBand<T extends AlbumBoxSpec>(
   // Only an unbroken run of live blocks can share a band: a printed sheet is a page boundary. So is
   // a **forced break** (#769) — a band is one horizontal slice of one page, so pairing a block that
   // has been told to start a sheet of its own with the block above it would quietly overrule the
-  // collector rather than the packer.
+  // collector rather than the packer. And a block told to **start its own band** (#1421) ends the run
+  // the same way, one level down: it opens the next band, where it may pair with what follows it.
   let available = 0;
   while (
     available < cap &&
     from + available < blocks.length &&
     !blocks[from + available].printedPageIds?.length &&
-    (available === 0 || blocks[from + available].breakBefore !== "always")
+    (available === 0 ||
+      (blocks[from + available].breakBefore !== "always" &&
+        !blocks[from + available].bandBreakBefore))
   ) {
     available += 1;
   }
@@ -1430,6 +1446,7 @@ function placeBand<T extends AlbumBoxSpec>(
         widthMm: band.blockWidthMm,
       },
     );
+    if (i > 0) page.blocks[page.blocks.length - 1].beside = true;
   }
   page.penMm = roundSizeMm(top + band.heightMm);
 }

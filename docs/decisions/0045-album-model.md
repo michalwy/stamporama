@@ -267,5 +267,10 @@ is a block the pairing has made worse.
   still hangs on a block for decision 3's reason: `pagePlacement` on the entry or note that **opens**
   the sheet, so it follows that content through a re-flow. The placement only spends the space the
   packing left at a sheet's foot, so it never changes which block is on which sheet.
+- #1421 added **start on its own line**: `bandBreakBefore` on the entry or note, which stops that block
+  sharing a band with the block before it. It is the band-level twin of #1214's row break — on the
+  block for decision 3's reason, it only removes one pairing (the block after it may still pair with
+  it), and it is not a page break: a block that no longer fits once it has moved down goes to the next
+  sheet whole, by the ordinary rule.
 - Anyone reaching for a foreign key from `album` to `album_template`, or for an `album_page` table
   holding live pages, is undoing decisions 4 and 3 rather than tidying up. Read this file first.
