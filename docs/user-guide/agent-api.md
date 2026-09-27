@@ -107,7 +107,7 @@ catalogues: a number written as Fischer's is never quietly answered with the Mic
 number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
 everywhere else in the app. A **read only** token can do all of this.
 
-**A read-and-write token can change things, and there are three places where that is now true.**
+**A read-and-write token can change things, and there are four places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
 for it, and write or re-generate its title and description — all of it inside Stamporama, on a
@@ -152,6 +152,27 @@ mark an order in transit or arrived, or delete a purchase, and it will not remov
 holds copies or has closed. It does not touch the order a closed trade created, and it never sees or
 changes a contact's email, phone, address or notes, nor edits or deletes a contact you already have.
 Everything it writes is on the purchase's own screen, where you can change it back.
+
+On **stamp sizes** — the figures your album pages cut hawid strips to — it can put a size it reads
+in a catalogue or a dealer's list onto your stamps, so you do not type it stamp by stamp. It can:
+
+- **read your size presets**, and **read a stamp's size with where it comes from**: stated on the
+  stamp itself, or borrowed from its nearest neighbour on the same checklist, the way an album page
+  borrows one — naming the stamp it is borrowed from. A **read only** token can do this much;
+- **save a new preset and correct one** — its width, its height or its name — under the same rules
+  as Settings. As there, correcting a preset does not change the stamps already sized from it;
+- **set one stamp's size**;
+- **apply a preset, or a width and height, to a series** — a whole issue, one checklist, or a list of
+  stamps — including the variants under them, exactly as the *Apply size* dialog does. It first asks
+  what the apply would do and can tell you in the dialog's own words — *17 stamps have no size and
+  will get 25 × 30 mm; 3 already state one* — and a **read only** token can ask that too.
+
+**It never replaces a size a stamp already states unless it is told to**, and the same goes for a
+stamp that states only a width or only a height. A stated size may be one you measured, and the
+assistant cannot measure anything; if one is wrong, say so and it will overwrite it. A size it writes
+is an ordinary size on the stamp, like one you typed. It names stamps by their catalogue numbers, and
+a number that fits more than one of your stamps is refused with the candidates rather than guessed.
+It **cannot delete a preset** or change their order — that stays in Settings.
 
 **And there is one thing it can answer about a stamp you do not own and have not recorded: what a
 lot at auction would be worth bidding.** Tell it what the auctioneer says the lot holds — the
