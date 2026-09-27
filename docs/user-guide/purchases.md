@@ -375,6 +375,15 @@ their own choice separately**: opening the order's detail does not open every lo
 bar on the page shares one setting, because "do I want lot detail today" is the question being
 answered rather than "do I want it for lot 3".
 
+**The header and the order's bar stay in view.** Once you scroll past them into the lots, the
+order's header — who it is from, its status and its buttons — and its values bar are shown again,
+pinned at the top of the window, so a figure can be checked without scrolling back up. Pinned, the
+bar is always **collapsed to its total line**, whatever you chose for it at the top of the page;
+**More** still opens it there, and it closes again the next time it pins. The pinned area never
+takes more than a quarter of the window — an opened bar scrolls inside it instead — and nothing on
+the page moves when it appears or goes. The selection bars and the lot and issue headers pin
+**below** it. An opening balance behaves the same way.
+
 **Spent vs. realized.** Once a copy in view has been **sold** ([Sales](sales.md)), three more rows
 appear on that same bar — under a rule, because the rows above are what these copies are *worth* and
 the rows below what they have *made*. Both levels answer it for their own copies: the order-level
@@ -1951,10 +1960,10 @@ does not respect lot boundaries — copies from three lots go onto one transport
 so the selection spans lots, and the bar is pressed once rather than once per card. Changing
 **Group by** or the sort order is a change of view and leaves what you picked standing.
 
-The bar **stays at the top of the window** while you scroll, so **Store** and **Move to
-location** are where you left them however far down the order the last tick was. The lot header
-and the issue header pin **below** it rather than under it — the three read as one stack, and
-none of them covers a copy.
+The bar **stays at the top of the window**, under the pinned order header, while you scroll, so
+**Store** and **Move to location** are where you left them however far down the order the last tick
+was. The lot header and the issue header pin **below** it rather than under it — they read as one
+stack, and none of them covers a copy.
 
 You can also edit **a single copy** right on its row: its **delivery chip** is a dropdown for
 setting the status (Ordered, In transit, To sort, Delivered, …) with a **→** button beside it

@@ -25,6 +25,10 @@ export const STUCK_SHADOW = "0 6px 8px -6px rgba(0, 0, 0, 0.28)";
  * A zero-height sentinel is rendered just **above** the sticky element; once that sentinel scrolls
  * past the pin line (`topOffset` from the viewport top) the header is stuck. Place the returned ref
  * on the sentinel and read `stuck` for the shadow.
+ *
+ * Only a sentinel **above** the line counts: one still below the viewport's foot is not
+ * intersecting either, and on a short window that is where a tall block's lower edge starts
+ * (#1410, whose pinned order header is shown off exactly this reading).
  */
 export function useStuck(topOffset: number) {
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -33,7 +37,11 @@ export function useStuck(topOffset: number) {
     const el = sentinelRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setStuck(!entry.isIntersecting),
+      ([entry]) =>
+        setStuck(
+          !entry.isIntersecting &&
+            entry.boundingClientRect.top < (entry.rootBounds?.top ?? Math.max(0, topOffset))
+        ),
       { rootMargin: `-${Math.max(0, Math.round(topOffset))}px 0px 0px 0px`, threshold: 0 }
     );
     observer.observe(el);

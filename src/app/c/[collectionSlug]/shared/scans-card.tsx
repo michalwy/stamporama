@@ -172,6 +172,9 @@ interface Props {
    * that re-answers that copy instead of creating one. */
   onReidentifyTile: (piece: IdentifiedPiece, copy: NonNullable<ScanTileData["item"]>) => void;
   onChanged: () => void;
+  /** How far down the viewport the tile selection bar pins (#606): the height of whatever the page
+   *  keeps pinned above this card — the purchase order's header and value summary (#1410). */
+  stickyTop: number;
   /** The collection's stated scan resolution (#598) — the tile dialog's viewer measures with it. */
   scanDpi: number;
 }
@@ -198,6 +201,7 @@ export function ScansCard({
   onReidentifyTile,
   onRepeatIdentification,
   onChanged,
+  stickyTop,
 }: Props) {
   /** The card's own view state, remembered per order so an identification pass resumes where it
    * stopped — which section was open, what the strip was narrowed to, whether the worked-through
@@ -921,6 +925,7 @@ export function ScansCard({
           busy={uploading || pending || detecting}
           onOpen={() => setSelectionOpen(true)}
           onClear={() => setSelected(new Set())}
+          stickyTop={stickyTop}
         />
       )}
 
@@ -2437,6 +2442,7 @@ function TileSelectionBar({
   busy,
   onOpen,
   onClear,
+  stickyTop,
 }: {
   /** Ticked **and on screen** — what the button acts on. */
   count: number;
@@ -2445,17 +2451,19 @@ function TileSelectionBar({
   busy: boolean;
   onOpen: () => void;
   onClear: () => void;
+  stickyTop: number;
 }) {
   const hidden = tickedCount - count;
-  const { barRef, stuck } = useStuck();
+  const { barRef, stuck } = useStuck(stickyTop);
   return (
     <div
       ref={barRef}
       style={{
         position: "sticky",
-        // The whole page scrolls, so this is the app's own top edge (`STICKY_TOOLBAR_STYLE`). The
+        // The whole page scrolls, so this is measured from the app's own top edge
+        // (`STICKY_TOOLBAR_STYLE`), under whatever the page pins above the card (#1410). The
         // z-index sits above the tiles but below the portalled menus and dialogs that must cover it.
-        top: 0,
+        top: stickyTop,
         zIndex: 5,
         display: "flex",
         alignItems: "center",
@@ -2524,11 +2532,12 @@ function TileSelectionBar({
  * Whether the selection bar is currently pinned, so the drop shadow appears only then — at rest it
  * is one more box in the column and needs no lift.
  *
- * The bar watches itself against a viewport shortened by one pixel at the top: while it flows with
- * the column it is fully inside that box, and the moment it pins to `top: 0` that pixel is cut off.
- * No sentinel element, which in this flex column would have carried a gap of its own.
+ * The bar watches itself against a viewport shortened at the top to one pixel past its pin line:
+ * while it flows with the column it is fully inside that box, and the moment it pins at
+ * `stickyTop` that pixel is cut off. No sentinel element, which in this flex column would have
+ * carried a gap of its own.
  */
-function useStuck() {
+function useStuck(stickyTop: number) {
   const barRef = useRef<HTMLDivElement>(null);
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
@@ -2538,11 +2547,11 @@ function useStuck() {
       ([entry]) => setStuck(entry.intersectionRatio < 1),
       // The bottom edge is pushed far out of the way so a bar scrolling up into view from below —
       // clipped by the viewport's foot, not pinned at its head — is not mistaken for a stuck one.
-      { threshold: [1], rootMargin: "-1px 0px 9999px 0px" }
+      { threshold: [1], rootMargin: `-${Math.max(0, Math.round(stickyTop)) + 1}px 0px 9999px 0px` }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [stickyTop]);
   return { barRef, stuck };
 }
 

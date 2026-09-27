@@ -200,6 +200,11 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
  * sale's arrival uses the same figure for the same reason (#850). */
 const ARRIVAL_FLASH_MS = 2400;
 
+/** The most of the window the pinned order header may take (#1410). Collapsed it is two short
+ *  cards, well inside this on a laptop; opened, the value bar scrolls inside the cap rather than
+ *  pushing the stack under it halfway down the screen. */
+const PINNED_HEADER_MAX_HEIGHT = "25vh";
+
 /** The label in front of a group of toolbar controls ("Group by", "Sort copies") — the same shape
  *  the offer and auction-sale toolbars use, which is what lets the three read as one control row. */
 const TOOLBAR_LABEL: React.CSSProperties = {
@@ -611,10 +616,15 @@ export function PurchaseDetailPanel({
   // a `useState` setter the compiler could recognise.
   const clearSelection = () => setSelection(EMPTY_SELECTION);
 
-  // The pinned selection bar (#621) and what pins under it: its height is the top offset every lot
-  // header takes, and each lot header's own height is added again for the issue headers inside it.
+  // The pinned order header (#1410) heads the stack: its height is where everything else pins, and
+  // it shows once the foot of the value bar in the page has passed under that line. The pinned
+  // selection bar (#621) comes next, and its height is added for every lot header, whose own height
+  // is added again for the issue headers inside it.
+  const [pinnedHeaderRef, pinnedHeaderHeight] = useMeasuredHeight<HTMLDivElement>();
+  const { sentinelRef: headerEndRef, stuck: headerPinned } = useStuck(pinnedHeaderHeight);
   const [selectionBarRef, selectionBarHeight] = useMeasuredHeight<HTMLDivElement>();
-  const { sentinelRef: selectionBarSentinelRef, stuck: selectionBarStuck } = useStuck(0);
+  const { sentinelRef: selectionBarSentinelRef, stuck: selectionBarStuck } =
+    useStuck(pinnedHeaderHeight);
 
   /** *Select the whole order* under both filter axes (#622/#743): what the bar offers is what the
    *  screen is showing, so with a chip on it means every copy that chip leaves, not every copy. */
@@ -782,8 +792,264 @@ export function PurchaseDetailPanel({
   // its title, and has no supplier, platform, shipping or delivery status to show or to set.
   const openingBalance = purchase.kind === "opening_balance";
 
+  // The order's header row and its value bar, each drawn twice (#1410): where they sit, and again in
+  // the pinned layer once the page has scrolled them away. One element and one set of props, so the
+  // pinned copy cannot drift from the one it stands in for.
+  const headerRow = (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+      <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+        {openingBalance ? purchase.title : purchase.contactName ?? "No supplier"}
+      </h2>
+      {openingBalance && (
+        <Tooltip content="Stamps brought into the collection without being bought. Its copies are in hand from the start, and a lot's opening value, when it has one, is split across the copies as a purchase price would be.">
+          <span style={CHIP}>Opening balance</span>
+        </Tooltip>
+      )}
+      {!openingBalance && purchase.platformName && (
+        <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+          via {purchase.platformName}
+        </span>
+      )}
+      {/* Where this order came from, when it was settled from a parcel of won lots (#28). The
+          bidding record outlives this purchase — deleting it only clears the link — so it is
+          worth a way back to. */}
+      {purchase.auctionSale && (
+        <Tooltip content="Settled from this auction sale — the bids, the lots that were lost, and what each one went for.">
+          <Link
+            href={`/c/${collectionSlug}/auctions/sales/${purchase.auctionSale.id}`}
+            style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
+          >
+            <Icon name="auctionSale" size="sm" /> {purchase.auctionSale.name}
+          </Link>
+        </Tooltip>
+      )}
+      {/* …and where it came from when it came from an exchange (#644). Worth saying more loudly
+          than the auction link, because it changes how every figure below should be read: no
+          money was spent here. The lot prices are the cost basis of the copies that went the
+          other way, carried over rather than paid, so the trade is where they came from. */}
+      {purchase.trade && (
+        <Tooltip content="This order is the incoming half of a trade. No money was spent: each lot is priced at the cost basis of the copies that went the other way, carried over so nothing is invented as profit.">
+          <Link
+            href={`/c/${collectionSlug}/trades/${purchase.trade.id}`}
+            style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
+          >
+            <Icon name="trades" size="sm" /> Traded with {purchase.trade.partnerName} · #
+            {purchase.trade.tradeNo}
+          </Link>
+        </Tooltip>
+      )}
+      {/* The order date, moved up out of a row of its own (#852). That second row held the
+          date, the currency, a shipping chip and the order total; the last two are now rows of
+          the values table below and the currency rides on every amount there, so the whole row
+          went and the header is a line shorter for it. */}
+      <Tooltip content={openingBalance ? "The date of this opening balance" : "When this order was placed"}>
+        <span style={CHIP}>{purchase.purchasedAt}</span>
+      </Tooltip>
+      <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        {!openingBalance && (() => {
+          const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
+          return (
+            <>
+            <Tooltip content="Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow.">
+              <select
+                aria-label="Purchase status"
+                value={purchase.status}
+                disabled={isPending}
+                onChange={(e) => applyStatus(e.target.value)}
+                style={{
+                  ...tintChip(s.token, s.label).style,
+                  // Use longhand border props so toggling between muted (no borderColor)
+                  // and tinted (borderColor set) statuses doesn't mix the `border`
+                  // shorthand with `borderColor` and trip React's rerender warning.
+                  border: undefined,
+                  borderWidth: "1px",
+                  borderStyle: "solid",
+                  borderColor:
+                    s.token === "muted"
+                      ? "var(--color-border)"
+                      : `var(--color-${s.token}-border, var(--color-border))`,
+                  cursor: "pointer",
+                  paddingRight: "1.25rem",
+                  appearance: "auto",
+                }}
+              >
+                {PURCHASE_STATUS_ORDER.map((v) => (
+                  <option key={v} value={v}>
+                    {PURCHASE_STATUS[v]?.label ?? v}
+                  </option>
+                ))}
+              </select>
+            </Tooltip>
+            {/* One-click advance to the next step in the fixed progression (#159). Hidden at
+                the terminal "arrived" status. */}
+            {nextStatus && (
+              <Tooltip
+                content={`Advance to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
+              >
+                <button
+                  type="button"
+                  aria-label={`Advance status to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
+                  onClick={() => applyStatus(nextStatus)}
+                  disabled={isPending}
+                  style={{
+                    ...CHIP,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: isPending ? "default" : "pointer",
+                    fontWeight: 600,
+                    lineHeight: 1,
+                    padding: "0.25rem 0.5rem",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  →
+                </button>
+              </Tooltip>
+            )}
+            </>
+          );
+        })()}
+        {/* The header's own edit (#752): the fields printed on this card and in the line
+            below it — supplier, platform, date, currency, shipping — through the Purchases
+            list's own dialog, so there is still exactly one editor per order. It sits with the
+            status control because that is the other thing on this card that changes the order
+            itself rather than its lots. */}
+        <Tooltip
+          content={
+            openingBalance
+              ? "Edit the title, date and currency. The lots below are edited on their own cards."
+              : "Edit this order's header — supplier, platform, date, currency and shipping. The lots below are edited on their own cards."
+          }
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setError(undefined);
+              setEditingHeader(true);
+            }}
+            disabled={isPending}
+            style={{
+              ...CHIP,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.25rem",
+              cursor: isPending ? "default" : "pointer",
+              fontWeight: 600,
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <Icon name="edit" size="sm" /> Edit header
+          </button>
+        </Tooltip>
+        {!openingBalance && purchase.status !== "arrived" && (
+          <Tooltip content="Mark the whole order arrived: its copies move to “to sort”, ready to be filed">
+            <button
+              type="button"
+              onClick={() => {
+                setError(undefined);
+                setArriving(true);
+              }}
+              disabled={isPending}
+              style={{
+                ...INPUT_STYLE,
+                width: "auto",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "#fff",
+                background: "var(--color-action-primary)",
+                border: "none",
+                padding: "0.375rem 0.875rem",
+              }}
+            >
+              Mark arrived
+            </button>
+          </Tooltip>
+        )}
+      </span>
+    </div>
+  );
+  const orderSummaryBar = {
+    total: purchaseHoldings,
+    ret: purchaseReturn,
+    // What the order cost, in its own currency and in the base one (#852) — the figure the header
+    // used to state in part and never in whole. It leads the bar, so it is on screen collapsed; the
+    // price/shipping breakdown is behind the expander, those two being what the collector already
+    // had separately.
+    // Not on an opening balance (#1323): nothing was paid, so an order total with a shipping row
+    // under it would state something untrue. Its opening value leads instead (#1325).
+    spend: openingBalance ? undefined : purchase.spend,
+    openingValue: purchase.openingValue ?? undefined,
+    // What the order cost as a share of catalogue (#1395), over the lots whose own figure is one.
+    costToCatalog:
+      orderSummary && !openingBalance
+        ? orderCostToCatalog(
+            purchase.lots.map((l) => costToCatalogLot(l, orderSummary.lotCatalogBasis[l.id]))
+          )
+        : null,
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* The order's header and value bar, pinned (#1410). A large order is a long page, and once
+          its lots are being worked the figures a check needs — what it cost, what it is worth, how
+          far it is accounted — had scrolled away with the header that says which order it is.
+
+          A **layer of its own rather than the header made sticky**, because pinned, the bar takes
+          its collapsed form: a sticky element that shrank on pinning would give its height back to
+          the flow and every row beneath would jump by it — the shift the Copies list's banners were
+          taken apart over (#848, #884, #885). So the header and the bar stay exactly where they
+          are, and a copy of both is shown over the page once they have scrolled under it. The
+          layer is out of the flow — zero height, sticky at the top of this column, its content
+          hung beneath it — so appearing, disappearing and expanding move nothing.
+
+          It is **always rendered and only hidden** until needed, for the reason the selection bar's
+          slot is: what pins below it (the selection bar, the tile bar, the lot and group headers)
+          measures its height, and a layer that mounted on demand would report nothing until the
+          first time it showed. The height is the same whether it shows or not, so nothing pinned
+          below it moves when it comes and goes either.
+
+          The pinned bar opens collapsed every time — its own state, not the remembered choice of
+          the bar in the page, and remounted on each pin — and can be opened there; the layer is
+          capped at a share of the window and the bar scrolls inside it past that, since a pinned
+          block that eats half a laptop screen defeats the point. The negative margin hands back
+          the column gap a zero-height item would otherwise still claim. */}
+      <div style={{ position: "sticky", top: 0, height: 0, marginBottom: "-1.25rem", zIndex: 6 }}>
+        <div
+          ref={pinnedHeaderRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            visibility: headerPinned ? "visible" : "hidden",
+            maxHeight: PINNED_HEADER_MAX_HEIGHT,
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.5rem",
+            padding: "0.5rem 0",
+            // Opaque, because the lots scroll beneath it.
+            background: "var(--color-bg-page)",
+            boxShadow: STUCK_SHADOW,
+          }}
+        >
+          <div
+            style={{
+              flex: "0 0 auto",
+              border: "1px solid var(--color-border)",
+              borderRadius: "0.75rem",
+              background: "var(--color-bg-elevated)",
+              padding: "0.625rem 1rem",
+            }}
+          >
+            {headerRow}
+          </div>
+          <div style={{ flex: "0 1 auto", minHeight: 0, overflowY: "auto" }}>
+            <HoldingsSummaryBar key={headerPinned ? "pinned" : "resting"} {...orderSummaryBar} />
+          </div>
+        </div>
+      </div>
+
       {/* Header summary */}
       <div
         style={{
@@ -793,178 +1059,7 @@ export function PurchaseDetailPanel({
           padding: "1.25rem 1.5rem",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-            {openingBalance ? purchase.title : purchase.contactName ?? "No supplier"}
-          </h2>
-          {openingBalance && (
-            <Tooltip content="Stamps brought into the collection without being bought. Its copies are in hand from the start, and a lot's opening value, when it has one, is split across the copies as a purchase price would be.">
-              <span style={CHIP}>Opening balance</span>
-            </Tooltip>
-          )}
-          {!openingBalance && purchase.platformName && (
-            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              via {purchase.platformName}
-            </span>
-          )}
-          {/* Where this order came from, when it was settled from a parcel of won lots (#28). The
-              bidding record outlives this purchase — deleting it only clears the link — so it is
-              worth a way back to. */}
-          {purchase.auctionSale && (
-            <Tooltip content="Settled from this auction sale — the bids, the lots that were lost, and what each one went for.">
-              <Link
-                href={`/c/${collectionSlug}/auctions/sales/${purchase.auctionSale.id}`}
-                style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
-              >
-                <Icon name="auctionSale" size="sm" /> {purchase.auctionSale.name}
-              </Link>
-            </Tooltip>
-          )}
-          {/* …and where it came from when it came from an exchange (#644). Worth saying more loudly
-              than the auction link, because it changes how every figure below should be read: no
-              money was spent here. The lot prices are the cost basis of the copies that went the
-              other way, carried over rather than paid, so the trade is where they came from. */}
-          {purchase.trade && (
-            <Tooltip content="This order is the incoming half of a trade. No money was spent: each lot is priced at the cost basis of the copies that went the other way, carried over so nothing is invented as profit.">
-              <Link
-                href={`/c/${collectionSlug}/trades/${purchase.trade.id}`}
-                style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
-              >
-                <Icon name="trades" size="sm" /> Traded with {purchase.trade.partnerName} · #
-                {purchase.trade.tradeNo}
-              </Link>
-            </Tooltip>
-          )}
-          {/* The order date, moved up out of a row of its own (#852). That second row held the
-              date, the currency, a shipping chip and the order total; the last two are now rows of
-              the values table below and the currency rides on every amount there, so the whole row
-              went and the header is a line shorter for it. */}
-          <Tooltip content={openingBalance ? "The date of this opening balance" : "When this order was placed"}>
-            <span style={CHIP}>{purchase.purchasedAt}</span>
-          </Tooltip>
-          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            {!openingBalance && (() => {
-              const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
-              return (
-                <>
-                <Tooltip content="Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow.">
-                  <select
-                    aria-label="Purchase status"
-                    value={purchase.status}
-                    disabled={isPending}
-                    onChange={(e) => applyStatus(e.target.value)}
-                    style={{
-                      ...tintChip(s.token, s.label).style,
-                      // Use longhand border props so toggling between muted (no borderColor)
-                      // and tinted (borderColor set) statuses doesn't mix the `border`
-                      // shorthand with `borderColor` and trip React's rerender warning.
-                      border: undefined,
-                      borderWidth: "1px",
-                      borderStyle: "solid",
-                      borderColor:
-                        s.token === "muted"
-                          ? "var(--color-border)"
-                          : `var(--color-${s.token}-border, var(--color-border))`,
-                      cursor: "pointer",
-                      paddingRight: "1.25rem",
-                      appearance: "auto",
-                    }}
-                  >
-                    {PURCHASE_STATUS_ORDER.map((v) => (
-                      <option key={v} value={v}>
-                        {PURCHASE_STATUS[v]?.label ?? v}
-                      </option>
-                    ))}
-                  </select>
-                </Tooltip>
-                {/* One-click advance to the next step in the fixed progression (#159). Hidden at
-                    the terminal "arrived" status. */}
-                {nextStatus && (
-                  <Tooltip
-                    content={`Advance to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
-                  >
-                    <button
-                      type="button"
-                      aria-label={`Advance status to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
-                      onClick={() => applyStatus(nextStatus)}
-                      disabled={isPending}
-                      style={{
-                        ...CHIP,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: isPending ? "default" : "pointer",
-                        fontWeight: 600,
-                        lineHeight: 1,
-                        padding: "0.25rem 0.5rem",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      →
-                    </button>
-                  </Tooltip>
-                )}
-                </>
-              );
-            })()}
-            {/* The header's own edit (#752): the fields printed on this card and in the line
-                below it — supplier, platform, date, currency, shipping — through the Purchases
-                list's own dialog, so there is still exactly one editor per order. It sits with the
-                status control because that is the other thing on this card that changes the order
-                itself rather than its lots. */}
-            <Tooltip
-              content={
-                openingBalance
-                  ? "Edit the title, date and currency. The lots below are edited on their own cards."
-                  : "Edit this order's header — supplier, platform, date, currency and shipping. The lots below are edited on their own cards."
-              }
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setError(undefined);
-                  setEditingHeader(true);
-                }}
-                disabled={isPending}
-                style={{
-                  ...CHIP,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.25rem",
-                  cursor: isPending ? "default" : "pointer",
-                  fontWeight: 600,
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                <Icon name="edit" size="sm" /> Edit header
-              </button>
-            </Tooltip>
-            {!openingBalance && purchase.status !== "arrived" && (
-              <Tooltip content="Mark the whole order arrived: its copies move to “to sort”, ready to be filed">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(undefined);
-                    setArriving(true);
-                  }}
-                  disabled={isPending}
-                  style={{
-                    ...INPUT_STYLE,
-                    width: "auto",
-                    cursor: "pointer",
-                    fontWeight: 600,
-                    color: "#fff",
-                    background: "var(--color-action-primary)",
-                    border: "none",
-                    padding: "0.375rem 0.875rem",
-                  }}
-                >
-                  Mark arrived
-                </button>
-              </Tooltip>
-            )}
-          </span>
-        </div>
+        {headerRow}
         {purchase.fxRateToBase == null && purchase.currency !== purchase.baseCurrency && (
           <p style={{ margin: "0.75rem 0 0", fontSize: "0.75rem", color: "var(--color-warning, var(--color-text-muted))" }}>
             No exchange rate to {purchase.baseCurrency} is known for this purchase yet, so
@@ -979,27 +1074,18 @@ export function PurchaseDetailPanel({
           expanded lot — so the expanded/collapsed choice is keyed by **role** rather than shared
           (#845). The order's values and a lot's values are different questions, opened for
           different reasons, and one key would have made them open and close together. */}
-      <HoldingsSummaryBar
-        total={purchaseHoldings}
-        ret={purchaseReturn}
-        // What the order cost, in its own currency and in the base one (#852) — the figure the
-        // header used to state in part and never in whole. It leads the bar, so it is on screen
-        // collapsed; the price/shipping breakdown is behind the expander, those two being what the
-        // collector already had separately.
-        // Not on an opening balance (#1323): nothing was paid, so an order total with a shipping row
-        // under it would state something untrue. Its opening value leads instead (#1325).
-        spend={openingBalance ? undefined : purchase.spend}
-        openingValue={purchase.openingValue ?? undefined}
-        // What the order cost as a share of catalogue (#1395), over the lots whose own figure is one.
-        costToCatalog={
-          orderSummary && !openingBalance
-            ? orderCostToCatalog(
-                purchase.lots.map((l) => costToCatalogLot(l, orderSummary.lotCatalogBasis[l.id]))
-              )
-            : null
-        }
-        storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
-      />
+      <div style={{ position: "relative" }}>
+        <HoldingsSummaryBar
+          {...orderSummaryBar}
+          storageKey={`stamporama:purchase:summaryExpanded:${collectionId}`}
+        />
+        {/* Where the pinned layer takes over: once the foot of this bar has passed under it. */}
+        <div
+          ref={headerEndRef}
+          aria-hidden
+          style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 0 }}
+        />
+      </div>
 
       {/* The order's non-inventory lines (#1390), right under the bar whose *Price* row counts them.
           A purchase's only: an opening balance paid for nothing. */}
@@ -1040,6 +1126,7 @@ export function PurchaseDetailPanel({
         onIdentifyIssueRun={tileChain.onIdentifyIssueRun}
         onRepeatIdentification={tileChain.onRepeatIdentification}
         onChanged={() => router.refresh()}
+        stickyTop={pinnedHeaderHeight}
       />
 
       {/* Lots — heading, grouping, sorting and the two ways in, on **one** row (#588). The three
@@ -1333,7 +1420,7 @@ export function PurchaseDetailPanel({
         style={{
           display: selectionTarget ? "block" : "none",
           position: "sticky",
-          top: 0,
+          top: pinnedHeaderHeight,
           // Above both pinned headers: they slide beneath this bar, never over it.
           zIndex: 5,
           boxShadow: selectionTarget && selectionBarStuck ? STUCK_SHADOW : undefined,
@@ -1398,7 +1485,7 @@ export function PurchaseDetailPanel({
               sortDir={sortDir}
               filterMode={filterMode}
               dispositionFilter={dispositionFilter}
-              stickyTop={selectionBarHeight}
+              stickyTop={pinnedHeaderHeight + selectionBarHeight}
               selection={selection}
               setSelection={setSelection}
               onRun={run}
@@ -1422,7 +1509,7 @@ export function PurchaseDetailPanel({
           filterMode={filterMode}
           dispositionFilter={dispositionFilter}
           lotState={lotState}
-          stickyTop={selectionBarHeight}
+          stickyTop={pinnedHeaderHeight + selectionBarHeight}
           isPending={isPending}
           selection={selection}
           setSelection={setSelection}
