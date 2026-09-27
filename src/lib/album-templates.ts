@@ -75,6 +75,7 @@ const TEMPLATE_SELECT = {
   boxGapYMm: true,
   headingSpaceAboveMm: true,
   headingSpaceBelowMm: true,
+  labelGapMm: true,
   verticalClearanceMm: true,
   horizontalMarginMm: true,
   titleFace: true,

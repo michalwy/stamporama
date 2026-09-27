@@ -526,6 +526,9 @@ interface MeasuredRow<T extends AlbumBoxSpec> {
   boxHeightMm: number;
   /** The tallest label in the row, so every label in a row shares one baseline. */
   labelHeightMm: number;
+  /** The template's space between the mounts and the labels (#1420) — 0 on a row that prints no
+   *  label, which reserves nothing for one. */
+  labelGapMm: number;
   widthMm: number;
   heightMm: number;
 }
@@ -661,7 +664,7 @@ function alignBandMounts<T extends AlbumBoxSpec>(
     if (!first) return null;
     return {
       rowsTopMm: automaticLeadMm(block.heading, preset) + block.heading.costMm,
-      centreMm: (above ? first.labelHeightMm : 0) + first.boxHeightMm / 2,
+      centreMm: (above ? first.labelHeightMm + first.labelGapMm : 0) + first.boxHeightMm / 2,
     };
   });
   const present = anchors.filter((a) => a !== null);
@@ -731,6 +734,7 @@ function measureBlock<T extends AlbumBoxSpec>(
         boxes: [],
         boxHeightMm: 0,
         labelHeightMm: 0,
+        labelGapMm: 0,
         widthMm: box.widthMm,
         heightMm: 0,
       };
@@ -745,8 +749,10 @@ function measureBlock<T extends AlbumBoxSpec>(
       roundSizeMm(labelLines.length * labelLineMm),
     );
   }
-  for (const row of rows)
-    row.heightMm = roundSizeMm(row.boxHeightMm + row.labelHeightMm);
+  for (const row of rows) {
+    row.labelGapMm = row.labelHeightMm > 0 ? preset.labelGapMm : 0;
+    row.heightMm = roundSizeMm(row.boxHeightMm + row.labelGapMm + row.labelHeightMm);
+  }
 
   return {
     spec: block,
@@ -1505,11 +1511,11 @@ function placeBlock<T extends AlbumBoxSpec>(
     let x = roundSizeMm(at.xMm + (at.widthMm - row.widthMm) / 2);
     const above = preset.labelPosition === "above";
     const boxTop = above
-      ? roundSizeMm(page.penMm + row.labelHeightMm)
+      ? roundSizeMm(page.penMm + row.labelHeightMm + row.labelGapMm)
       : page.penMm;
     const labelTop = above
       ? page.penMm
-      : roundSizeMm(page.penMm + row.boxHeightMm);
+      : roundSizeMm(page.penMm + row.boxHeightMm + row.labelGapMm);
 
     for (const { box, labelLines } of row.boxes) {
       page.boxes.push({

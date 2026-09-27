@@ -134,6 +134,14 @@ describe("parseAlbumTemplateInput", () => {
     assert.match(parseError({ verticalPlacement: "bottom" }), /Vertical placement is not a recognised/);
   });
 
+  it("reads the gap between a box and its label, from nothing up to the other spacings' ceiling (#1420)", () => {
+    assert.equal(parsedOk({ labelGapMm: "1,5" }).labelGapMm, 1.5);
+    assert.equal(parsedOk({ labelGapMm: "0" }).labelGapMm, 0);
+    assert.match(parseError({ labelGapMm: "-1" }), /Space between a box and its label/);
+    assert.match(parseError({ labelGapMm: "100.5" }), /Space between a box and its label/);
+    assert.match(parseError({ labelGapMm: "" }), /Space between a box and its label is required/);
+  });
+
   it("reads an absent checkbox as off", () => {
     assert.equal(parsedOk({ printPhotos: "" }).printPhotos, false);
     assert.equal(parsedOk({ printPhotos: "on" }).printPhotos, true);

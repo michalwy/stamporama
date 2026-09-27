@@ -1021,7 +1021,13 @@ is not an evening of retyping page sizes and font names. One template covers:
 - **Page** — size and the four margins in millimetres, and an optional decorative border with its
   weight and inset.
 - **Spacing** — how many checklists may share one horizontal **band** and the gap between two that
-  do, then the space between boxes across a row, between rows, and above and below a heading.
+  do, then the space between boxes across a row, between rows, above and below a heading, and
+  **between a box and its label**.
+
+  The last one starts at 0 — the label set right on the edge of the box, as every page was before
+  the value existed — and applies on whichever side the label sits. It is layout, not decoration: a
+  larger gap makes each labelled row taller, so a series can move to the next sheet. A row whose
+  boxes print no label reserves nothing for it.
 
   A band is a slice of the page. Normally one checklist takes the full width; where two short ones
   would both fit, they can sit side by side, which is what your own pages do a few times per page.

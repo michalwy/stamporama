@@ -171,6 +171,9 @@ export interface AlbumRenderPreset {
   boxGapYMm: number;
   headingSpaceAboveMm: number;
   headingSpaceBelowMm: number;
+  /** The space between a row's boxes and its labels (#1420), on whichever side the labels sit. A
+   *  row with no label reserves none of it. */
+  labelGapMm: number;
 
   // Hawid clearances, fed to `planHawidBox` (#765)
   verticalClearanceMm: number;
@@ -240,6 +243,9 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   boxGapYMm: 6,
   headingSpaceAboveMm: 8,
   headingSpaceBelowMm: 5,
+  // No gap: a label has always started on the box's own edge, and the default is what every page
+  // printed before #1420 was set with. The line's own leading is the only air above the letters.
+  labelGapMm: 0,
 
   // The two numbers `STAMP_BOXES_SIZE_ADJUST(4)` becomes. Its single global figure is exactly what
   // #765 exists to replace, so the starting point is that figure on both axes and the collector
@@ -336,6 +342,7 @@ export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawI
     boxGapYMm: str("boxGapYMm"),
     headingSpaceAboveMm: str("headingSpaceAboveMm"),
     headingSpaceBelowMm: str("headingSpaceBelowMm"),
+    labelGapMm: str("labelGapMm"),
     verticalClearanceMm: str("verticalClearanceMm"),
     horizontalMarginMm: str("horizontalMarginMm"),
     titleFace: str("titleFace"),
@@ -528,6 +535,8 @@ export function parseAlbumRenderPreset(
     MAX_SPACING_MM
   );
   if (!headingSpaceBelowMm.ok) return headingSpaceBelowMm;
+  const labelGapMm = mm("labelGapMm", "Space between a box and its label", MIN_SPACING_MM, MAX_SPACING_MM);
+  if (!labelGapMm.ok) return labelGapMm;
 
   const verticalClearanceMm = mm(
     "verticalClearanceMm",
@@ -606,6 +615,7 @@ export function parseAlbumRenderPreset(
       ...boxGaps.value,
       headingSpaceAboveMm: headingSpaceAboveMm.value,
       headingSpaceBelowMm: headingSpaceBelowMm.value,
+      labelGapMm: labelGapMm.value,
       verticalClearanceMm: verticalClearanceMm.value,
       horizontalMarginMm: horizontalMarginMm.value,
       titleFace: titleFace.value,
