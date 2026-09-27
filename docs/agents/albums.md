@@ -1078,6 +1078,45 @@ reads the same column — and **only on or off**: `photoOpacityPercent` stays un
   the gate closed.
 - **Saved on the click**, where a gap waits for focus to leave: a switch has no half-typed state.
 
+### Where a sheet puts its content (#1419)
+
+`verticalPlacement` is a preset value — `top` | `center` | `justify` | `center-justify`, confirmed with
+the collector against a sketch of all four — and `pagePlacement` on `album_entry` and
+`album_text_block` overrides it for one sheet. `albumBandOffsetsMm` and `albumEffectivePlacement` in
+`album-layout.ts` are the rule; `placeContent` applies it as a sheet is emitted. What is worth not
+re-deriving:
+
+- **Only the leftover moves, after packing.** A sheet is filled exactly as before and the space left
+  at its foot is then spent, band by band. So no placement can move a block onto another sheet, `top`
+  is byte-for-byte the old plan, and the four options are four drawings of one plan. Packing against a
+  placement would have made "does not fit, so move it whole" depend on it.
+- **The unit that moves is a band, not a block.** Blocks sharing a band move together, or #779's
+  mount alignment would come apart under `justify`. Each sheet's share of a split block is a band of
+  that sheet (`openBand` in the splitter) — the one caller that is easy to leave out, and the unit
+  suite has a case that fails without it.
+- **The body is `content`, and the frame never moves**: the running head, the chapter heading (the
+  body of a chapter's first sheet starts under it) and the footer. A block's lead stays part of its
+  height (ADR-0045 §7), so "the first series at the top" means where `top` puts it.
+- **One band has no gap between series**, so `justify` acts as `top` and `center-justify` as `center`
+  — the issue's rule, and `AlbumPlannedPage.placement` records the placement *as it acted*.
+- **The override is on the block that opens the sheet**, never on the sheet, for ADR-0045 §3's
+  reason: a live sheet has no row. `page.blocks[0]` is the opener — the first block placed, which is
+  the left one of a band. A block that stops opening a sheet stops placing one; a split block opens
+  each of its continuation sheets too, and they share its override. The editor's sheet panel names the
+  opener so the collector knows what the choice travels with.
+- **A printed card is compared on its placement as it acted, not on the preset word.**
+  `verticalPlacement` is left out of the preset comparison (`COMPARED_ELSEWHERE` in
+  `album-divergence.ts`) and `AlbumComparablePage.placement` is compared instead, as a `template`
+  divergence. Otherwise a card holding one series, or opened by a block with its own override, would
+  report an album change that moves nothing on it — and #1215's count would say so before the save.
+- **A card stored before #1419 reads as `top`.** `parseAlbumSnapshot` fills the preset value and the
+  page's placement in rather than bumping `ALBUM_SNAPSHOT_VERSION`: the reading is certain, and a
+  version bump would refuse every card already in a binder.
+- **Not previewed on the canvas before the save**, as the gaps are not (#836): the leftover is the
+  server's to measure, and the re-plan on save is the preview. The PDF and the canvas both draw the
+  placed plan, and the integration suite reads a mount's translation back out of the PDF's content
+  stream to hold them to it.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`

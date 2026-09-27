@@ -989,6 +989,10 @@ model AlbumTemplate {
   borderStyle    String @default("none")
   borderWidthMm  Float
   borderInsetMm  Float
+  // Where a sheet's content sits vertically in the space between its headings and its footer
+  // (#1419): `top` | `center` | `justify` | `center-justify`. Only the leftover space moves; what
+  // lands on a sheet is packed exactly as before. `top` is every page printed before this existed.
+  verticalPlacement String @default("top")
 
   // ── Spacing ──
   // Between boxes, horizontally and vertically; then the space a checklist heading reserves above
@@ -1130,6 +1134,7 @@ model Album {
   borderStyle    String @default("none")
   borderWidthMm  Float
   borderInsetMm  Float
+  verticalPlacement String @default("top")
 
   boxGapXMm           Float
   boxGapYMm           Float
@@ -1234,6 +1239,11 @@ model AlbumEntry {
   spaceBeforeMm Float  @default(0)
   spaceAfterMm  Float  @default(0)
   breakBefore   String @default("auto")
+  // A single page's own vertical placement (#1419), overriding the album's, or null to follow it.
+  // Kept on the block that **opens** the page rather than on the page, for the reason every
+  // correction here is: a live page has no row and its identity moves with its contents, so the
+  // override follows the content that opens the page through a re-flow.
+  pagePlacement String?
 
   album             Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
   checklist         Checklist              @relation(fields: [checklistId], references: [id], onDelete: Cascade)
@@ -1376,10 +1386,12 @@ model AlbumTextBlock {
   role              String  @default("heading")
   text              String  @default("")
 
-  // The same three corrections an entry carries, and for the same reasons.
+  // The same corrections an entry carries, and for the same reasons — including the placement of a
+  // page this note opens (#1419).
   spaceBeforeMm Float  @default(0)
   spaceAfterMm  Float  @default(0)
   breakBefore   String @default("auto")
+  pagePlacement String?
 
   printedPageId String?
 

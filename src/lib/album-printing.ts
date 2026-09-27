@@ -782,6 +782,7 @@ function planPrintedCardReference(
         spaceBeforeMm: entry.spaceBeforeMm,
         spaceAfterMm: entry.spaceAfterMm,
         breakBefore: entry.breakBefore,
+        pagePlacement: entry.pagePlacement,
       });
     }
     for (const note of notesAt.get(`${entry.id}#after`) ?? [])
@@ -829,6 +830,8 @@ export function snapshotComparablePage(snapshot: AlbumPageSnapshot): AlbumCompar
     footer: snapshot.footer?.lines.join(" ") ?? "",
     language: languageLabel(snapshot.language),
     preset: snapshot.preset,
+    // A card stored before #1419 was placed at the top: nothing else existed.
+    placement: snapshot.page.placement ?? "top",
     blocks: snapshotBlocks(snapshot.page).map((block) => ({
       entryId: block.entryId,
       part: block.part,

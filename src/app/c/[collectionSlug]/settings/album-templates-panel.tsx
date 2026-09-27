@@ -20,6 +20,7 @@ import {
   ALBUM_BORDER_STYLES,
   ALBUM_BOX_BORDER_STYLES,
   ALBUM_LABEL_POSITIONS,
+  ALBUM_VERTICAL_PLACEMENTS,
   ALBUM_MM_STEP,
   ALBUM_PT_STEP,
   DEFAULT_ALBUM_PRESET,
@@ -398,7 +399,30 @@ export function AlbumPresetForm({
           </div>
           <MmField name="borderWidthMm" label="Border weight (mm)" value={preset.borderWidthMm} disabled={isPending} />
           <MmField name="borderInsetMm" label="Border inset (mm)" value={preset.borderInsetMm} disabled={isPending} />
+          <div>
+            <LabelWithError htmlFor="f-album-verticalPlacement">Content on the page</LabelWithError>
+            <select
+              id="f-album-verticalPlacement"
+              name="verticalPlacement"
+              defaultValue={preset.verticalPlacement}
+              disabled={isPending}
+              style={INPUT_STYLE}
+            >
+              {ALBUM_VERTICAL_PLACEMENTS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+        <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
+          Where a page that is not full puts its series. <strong>Justified</strong> puts the first at
+          the top and the last at the bottom with equal gaps between; <strong>centred and
+          justified</strong> makes the space above, between and below them all equal. The running
+          head, the year and the footer stay where they are, and a page can choose its own in the
+          page editor.
+        </p>
 
         <h3 style={SECTION_STYLE}>Spacing</h3>
         <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>

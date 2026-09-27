@@ -44,6 +44,7 @@ const page = (
   footer: range,
   language: "Polish (pl)",
   preset: DEFAULT_ALBUM_PRESET,
+  placement: "top",
   blocks: [{ entryId: "e1", part: 1, heading: "Wystawa", boxes }],
   ...over,
 });
@@ -201,6 +202,27 @@ describe("compareAlbumPages", () => {
     );
     assert.deepEqual(kinds(found), ["template"]);
     assert.match(found[0].detail, /Heading size \(pt\), Margin top \(mm\) have changed/);
+  });
+
+  it("reports a card whose content would now be placed differently (#1419)", () => {
+    const found = compareAlbumPages(
+      page("PL 1-1", [box("a")]),
+      page("PL 1-1", [box("a")], { placement: "center" })
+    );
+    assert.deepEqual(kinds(found), ["template"]);
+    assert.match(found[0].detail, /would now be placed centred; the card's is at the top/);
+  });
+
+  it("compares the placement a card acted on, not the album's word for it (#1419)", () => {
+    // The album moved to justify, but this card's own override — or its single series — keeps it at
+    // the top: nothing on it would move, so nothing is reported.
+    const found = compareAlbumPages(
+      page("PL 1-1", [box("a")]),
+      page("PL 1-1", [box("a")], {
+        preset: { ...DEFAULT_ALBUM_PRESET, verticalPlacement: "justify" },
+      })
+    );
+    assert.deepEqual(found, []);
   });
 
   it("ranks a picture that arrived after the fact below everything else", () => {

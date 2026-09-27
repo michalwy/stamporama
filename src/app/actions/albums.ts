@@ -46,6 +46,7 @@ import {
 } from "@/lib/album-corrections";
 import {
   albumRenderPreset,
+  asAlbumPagePlacement,
   parseAlbumBoxGaps,
   parseAlbumRenderPreset,
   readAlbumPresetFields,
@@ -578,12 +579,23 @@ function readBlockLayout(
   );
   if (!after.ok) return after;
   const breakRaw = raw("breakBefore");
+  // A page's own placement (#1419): absent leaves it alone, blank takes it back so the page follows
+  // the album again, and a word this build does not know is refused rather than read as blank.
+  const placementRaw = raw("pagePlacement");
+  const pagePlacement =
+    placementRaw === null || placementRaw.trim() === ""
+      ? null
+      : asAlbumPagePlacement(placementRaw.trim());
+  if (placementRaw !== null && placementRaw.trim() !== "" && pagePlacement === null) {
+    return { ok: false, message: "That is not a placement a page can have." };
+  }
   return {
     ok: true,
     value: {
       spaceBeforeMm: before.value,
       spaceAfterMm: after.value,
       breakBefore: breakRaw === null ? undefined : asAlbumBlockBreak(breakRaw),
+      pagePlacement: placementRaw === null ? undefined : pagePlacement,
     },
   };
 }

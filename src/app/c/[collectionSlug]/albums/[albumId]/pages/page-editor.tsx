@@ -51,7 +51,13 @@ import {
   updateAlbumTextBlockAction,
   type AlbumActionState,
 } from "@/app/actions/albums";
-import { MAX_SPACING_MM, MIN_SPACING_MM } from "@/lib/album-template-rules";
+import {
+  ALBUM_VERTICAL_PLACEMENTS,
+  albumVerticalPlacementLabel,
+  MAX_SPACING_MM,
+  MIN_SPACING_MM,
+  type AlbumVerticalPlacement,
+} from "@/lib/album-template-rules";
 import { languageLabel } from "@/lib/languages";
 import {
   blockBoxesOnSheet,
@@ -339,6 +345,24 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     if (isPending) return;
     setPhotoConfirm(null);
     setPhotosShown(album.printPhotos);
+  }
+
+  /**
+   * Give this sheet a placement of its own, or take it back (#1419). Written to the block that opens
+   * the sheet — an entry or a note, the same two rows every other correction here goes to — so it
+   * follows that content when the pages re-flow. Blank follows the album.
+   */
+  function savePagePlacement(
+    opener: NonNullable<AlbumEditorSheet["placement"]["opener"]>,
+    value: AlbumVerticalPlacement | ""
+  ) {
+    const form = new FormData();
+    form.set("pagePlacement", value);
+    run(() =>
+      opener.kind === "text"
+        ? updateAlbumTextBlockAction(opener.id, form)
+        : setAlbumEntryLayoutAction(opener.id, form)
+    );
   }
 
   function run(action: () => Promise<AlbumActionState>) {
@@ -859,6 +883,11 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                   onChange: (on) => savePhotos(on, null),
                   disabled: isPending,
                 }}
+                placement={{
+                  albumPlacement: album.verticalPlacement,
+                  onChange: (opener, value) => savePagePlacement(opener, value),
+                  disabled: isPending,
+                }}
               />
             )
           ) : null}
@@ -969,6 +998,7 @@ function SheetPanel({
   onSaved,
   gaps,
   photos,
+  placement,
 }: {
   sheet: AlbumEditorSheet;
   collectionId: string;
@@ -977,6 +1007,7 @@ function SheetPanel({
   onSaved: () => void;
   gaps: BoxGapFieldsProps;
   photos: PhotoSwitchProps;
+  placement: Omit<PagePlacementFieldProps, "sheet">;
 }) {
   const counts = new Map<string, number>();
   for (const box of sheet.boxes) {
@@ -1062,6 +1093,8 @@ function SheetPanel({
           />
         </div>
       )}
+
+      <PagePlacementField sheet={sheet} {...placement} />
 
       <BoxGapFields {...gaps} />
 
@@ -1197,6 +1230,63 @@ function PhotoSwitch({ on, onChange, disabled }: PhotoSwitchProps) {
         <strong>On every sheet of this album</strong> and in its PDF, and for this album alone — the
         template it came from is not touched. How strongly they print is under Page template…. A
         printed card stays as printed and reports the difference.
+      </p>
+    </div>
+  );
+}
+
+interface PagePlacementFieldProps {
+  sheet: AlbumEditorSheet;
+  /** The album's own placement, which a sheet without one of its own follows. */
+  albumPlacement: AlbumVerticalPlacement;
+  onChange: (
+    opener: NonNullable<AlbumEditorSheet["placement"]["opener"]>,
+    value: AlbumVerticalPlacement | ""
+  ) => void;
+  disabled: boolean;
+}
+
+/**
+ * Where this sheet's content sits vertically (#1419): the album's placement, or one of its own.
+ *
+ * **This sheet only**, unlike the gaps and the photos below it — and kept on the block that opens the
+ * sheet, because a live sheet has no row of its own to keep it on (ADR-0045 §3). The panel names that
+ * block, so the collector knows what the choice travels with when the pages re-flow.
+ *
+ * Saved on the change, as the photo switch is: a choice has no half-typed state. Nothing is drawn
+ * ahead of the save — the placement spends the space the plan left, which is the server's to measure.
+ */
+function PagePlacementField({ sheet, albumPlacement, onChange, disabled }: PagePlacementFieldProps) {
+  const opener = sheet.placement.opener;
+  if (!opener) return null;
+  const chosen = opener.override ?? albumPlacement;
+  return (
+    <div>
+      <PanelHeading>Placement on this sheet</PanelHeading>
+      <select
+        aria-label="Placement on this sheet"
+        value={opener.override ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(opener, e.target.value as AlbumVerticalPlacement | "")}
+        style={INPUT}
+      >
+        <option value="">As the album: {albumVerticalPlacementLabel(albumPlacement).toLowerCase()}</option>
+        {ALBUM_VERTICAL_PLACEMENTS.map((p) => (
+          <option key={p.key} value={p.key}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+      {sheet.placement.acted !== chosen && (
+        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+          With one band on this sheet there is no gap between series to share the space into, so
+          it is placed {albumVerticalPlacementLabel(sheet.placement.acted).toLowerCase()}.
+        </p>
+      )}
+      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+        Kept with <strong>{opener.name}</strong>, which opens this sheet, so it stays with that block
+        when the pages re-flow. The running head, the year and the footer do not move. The
+        album&apos;s own placement is under Page template….
       </p>
     </div>
   );

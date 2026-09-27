@@ -553,6 +553,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
         spaceBeforeMm: entry.spaceBeforeMm,
         spaceAfterMm: entry.spaceAfterMm,
         breakBefore: entry.breakBefore,
+        pagePlacement: entry.pagePlacement,
       });
       for (const note of notesAt.get(slot(entry.id, "after")) ?? [])
         chapter.blocks.push(noteBlock(note));
@@ -576,6 +577,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
       spaceBeforeMm: entry.spaceBeforeMm,
       spaceAfterMm: entry.spaceAfterMm,
       breakBefore: entry.breakBefore,
+      pagePlacement: entry.pagePlacement,
     });
 
     // The **continuation page** (#778): the stamps of this entry that are on no sheet yet, filed
@@ -594,6 +596,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
           spaceBeforeMm: entry.spaceBeforeMm,
           spaceAfterMm: entry.spaceAfterMm,
           breakBefore: entry.breakBefore,
+          pagePlacement: entry.pagePlacement,
         });
       }
     }
@@ -652,6 +655,7 @@ export function albumNoteBlock(
     spaceBeforeMm: note.spaceBeforeMm,
     spaceAfterMm: note.spaceAfterMm,
     breakBefore: note.breakBefore,
+    pagePlacement: note.pagePlacement,
   };
 }
 
@@ -935,6 +939,7 @@ export function albumComparablePage(
     // language, and comparing the row would report a renamed album as a changed template value —
     // twice over, since its name is already in the texts it renders.
     preset: albumRenderPreset(album),
+    placement: layout.placement ?? "top",
     blocks,
   };
 }

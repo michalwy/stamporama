@@ -102,6 +102,35 @@ export const ALBUM_LABEL_POSITIONS = [
 
 export type AlbumLabelPosition = (typeof ALBUM_LABEL_POSITIONS)[number]["key"];
 
+/**
+ * Where a sheet's content sits vertically in the space it has (#1419): the body between the headings
+ * and the footer, never the running head, the chapter heading or the footer themselves.
+ *
+ * `top` is every page before #1419 and leaves whatever is over at the foot. The other three spend
+ * that space: `center` moves the content as a whole into the middle, `justify` puts the first series
+ * at the top and the last at the bottom and shares the rest equally between the series, and
+ * `center-justify` shares it equally between the series **and** above the first and below the last.
+ * Four and not a free figure, confirmed with the collector against a sketch of all four on
+ * 2026-09-27.
+ *
+ * The packing does not move under any of them. What lands on a sheet is decided first, exactly as it
+ * always was, and only the space left over is redistributed — so a placement can never push a block
+ * onto the next sheet, and the four options are four drawings of one plan.
+ */
+export const ALBUM_VERTICAL_PLACEMENTS = [
+  { key: "top", label: "At the top" },
+  { key: "center", label: "Centred" },
+  { key: "justify", label: "Justified" },
+  { key: "center-justify", label: "Centred and justified" },
+] as const;
+
+export type AlbumVerticalPlacement = (typeof ALBUM_VERTICAL_PLACEMENTS)[number]["key"];
+
+/** A placement as a collector reads it, for the page editor and the divergence report. */
+export function albumVerticalPlacementLabel(key: AlbumVerticalPlacement): string {
+  return ALBUM_VERTICAL_PLACEMENTS.find((p) => p.key === key)?.label ?? key;
+}
+
 /** The five roles type is set for. Ordered as they appear down a page, which is the order the
  *  form shows them in. */
 export const ALBUM_TYPE_ROLES = [
@@ -133,6 +162,9 @@ export interface AlbumRenderPreset {
   borderStyle: AlbumBorderStyle;
   borderWidthMm: number;
   borderInsetMm: number;
+  /** Where each sheet's content sits vertically (#1419). A single page may override it — see
+   *  `AlbumBlockSpec.pagePlacement`. */
+  verticalPlacement: AlbumVerticalPlacement;
 
   // Spacing
   boxGapXMm: number;
@@ -199,6 +231,9 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   borderStyle: "double",
   borderWidthMm: 0.4,
   borderInsetMm: 5,
+  // His pages are all set from the top — AlbumEasy has no other way to set one — so a new template
+  // starts as the album he already prints, and an existing one keeps its pages exactly (#1419).
+  verticalPlacement: "top",
 
   // `ALBUM_PAGES_SPACING (1.0 6.0)` — horizontal, then vertical.
   boxGapXMm: 1,
@@ -296,6 +331,7 @@ export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawI
     borderStyle: str("borderStyle"),
     borderWidthMm: str("borderWidthMm"),
     borderInsetMm: str("borderInsetMm"),
+    verticalPlacement: str("verticalPlacement"),
     boxGapXMm: str("boxGapXMm"),
     boxGapYMm: str("boxGapYMm"),
     headingSpaceAboveMm: str("headingSpaceAboveMm"),
@@ -469,6 +505,12 @@ export function parseAlbumRenderPreset(
   if (!borderWidthMm.ok) return borderWidthMm;
   const borderInsetMm = mm("borderInsetMm", "Border inset", MIN_MARGIN_MM, MAX_MARGIN_MM);
   if (!borderInsetMm.ok) return borderInsetMm;
+  const verticalPlacement = parseChoice(
+    raw.verticalPlacement,
+    "Vertical placement",
+    ALBUM_VERTICAL_PLACEMENTS
+  );
+  if (!verticalPlacement.ok) return verticalPlacement;
 
   const boxGaps = parseAlbumBoxGaps(raw);
   if (!boxGaps.ok) return boxGaps;
@@ -560,6 +602,7 @@ export function parseAlbumRenderPreset(
       borderStyle: borderStyle.value,
       borderWidthMm: borderWidthMm.value,
       borderInsetMm: borderInsetMm.value,
+      verticalPlacement: verticalPlacement.value,
       ...boxGaps.value,
       headingSpaceAboveMm: headingSpaceAboveMm.value,
       headingSpaceBelowMm: headingSpaceBelowMm.value,
@@ -652,6 +695,20 @@ export function asAlbumBoxBorderStyle(raw: string): AlbumBoxBorderStyle {
 
 export function asAlbumLabelPosition(raw: string): AlbumLabelPosition {
   return coerce(raw, ALBUM_LABEL_POSITIONS, DEFAULT_ALBUM_PRESET.labelPosition);
+}
+
+export function asAlbumVerticalPlacement(raw: string): AlbumVerticalPlacement {
+  return coerce(raw, ALBUM_VERTICAL_PLACEMENTS, DEFAULT_ALBUM_PRESET.verticalPlacement);
+}
+
+/** A page's own placement (#1419), where null means *follow the album*. A stored word this build no
+ *  longer knows reads as null rather than as some other placement: following the album is what the
+ *  page did before the override existed. */
+export function asAlbumPagePlacement(raw: string | null): AlbumVerticalPlacement | null {
+  if (raw === null) return null;
+  return ALBUM_VERTICAL_PLACEMENTS.some((p) => p.key === raw)
+    ? (raw as AlbumVerticalPlacement)
+    : null;
 }
 
 /**
