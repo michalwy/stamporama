@@ -1018,18 +1018,20 @@ Pages you have already printed are paper.
 ## Album templates
 
 **Settings → Albums → Album templates** holds everything about how an album *looks*, so a new album
-is not an evening of retyping page sizes and font names. One template covers:
+is not an evening of retyping page sizes and font names. The dialog is split into sections, listed
+down its left side, and shows one at a time:
 
-- **Page** — size and the four margins in millimetres, and the page frame: no rule, one or two, with
-  its weight, its inset and the white between two rules, and an optional **corner ornament** at a
-  size you set — a built-in one or your own SVG. The frame is drawn in the margin and never moves a
-  series; see *The page frame* in the albums guide. The **album title** can be printed below the
-  frame or set **in the frame line**, which breaks around it with the gap you set on each side —
-  that one does move series, because the title stops taking a line of its own.
-- **Spacing** — how many checklists may share one horizontal **band** and the gap between two that
-  do, then the space between boxes across a row and between rows; the space **above and below the
-  album title**, **above and below a chapter heading** and above and below a checklist heading; and
-  **between a box and its label**.
+- **Page** — size and the four margins, and where a page that is not full puts its series.
+- **Frame** — the page frame: no rule, one or two, with its weight, its inset and the white between
+  two rules, and an optional **corner ornament** at a size you set — a built-in one or your own SVG.
+  The frame is drawn in the margin and never moves a series; see *The page frame* in the albums
+  guide. The **album title** can be printed below the frame or set **in the frame line**, which
+  breaks around it with the gap you set on each side — that one does move series, because the title
+  stops taking a line of its own.
+- **Headings** — whether the album title is printed as a **running head** on every page (your
+  Polska, Bohemia, Bayern and Deutsches Reich pages carry one and your Dansk pages do not, and the
+  ones that do not get those millimetres back for content), and the space **above and below the
+  album title**, **above and below a chapter heading** and above and below a checklist heading.
 
   The page headings' space starts where it always was: none around the album title, which sits on
   the top margin with the content straight under it, and for the chapter heading the checklist
@@ -1039,8 +1041,11 @@ is not an evening of retyping page sizes and font names. One template covers:
   the series under it, so a series can move to the next sheet. An album title that is not printed,
   or a blank chapter heading, reserves none of its space. With the content placed centred or
   justified, the headings stay at the top and the placed content starts under the space below them.
+- **Boxes & spacing** — how many checklists may share one horizontal **band** and the gap between two
+  that do, the space between boxes across a row and between rows, where a box's label sits and the
+  space **between a box and its label**, and the outline around a mount.
 
-  The last one starts at 0 — the label set right on the edge of the box, as every page was before
+  The label gap starts at 0 — the label set right on the edge of the box, as every page was before
   the value existed — and applies on whichever side the label sits. It is layout, not decoration: a
   larger gap makes each labelled row taller, so a series can move to the next sheet. A row whose
   boxes print no label reserves nothing for it.
@@ -1049,19 +1054,21 @@ is not an evening of retyping page sizes and font names. One template covers:
   would both fit, they can sit side by side, which is what your own pages do a few times per page.
   It is a ceiling and not a frame — the page is never divided into fixed columns and nothing ever
   runs off the side of one.
-- **Hawid clearances** — what a box adds to the stamp. Two numbers rather than one, because the two
-  axes are different: the vertical clearance is added *before a strip is chosen* (the stamp plus it
-  has to fit inside a strip's whole outer height), while the horizontal margin is the cut. Raise the
+- **Hawid** — what a box adds to the stamp. Two numbers rather than one, because the two axes are
+  different: the vertical clearance is added *before a strip is chosen* (the stamp plus it has to
+  fit inside a strip's whole outer height), while the horizontal margin is the cut. Raise the
   vertical one to move a stamp deliberately onto the next packet up. Together they replace
   AlbumEasy's single global 4 mm.
 - **Type** — a face and a size for each of the five roles: album title, chapter heading, checklist
-  heading, box label, footer. Sizes are in **points**, the unit type is set in. The album title also
-  has a switch for whether it is printed as a **running head** on every page — your Polska, Bohemia,
-  Bayern and Deutsches Reich pages carry one and your Dansk pages do not, and the ones that do not
-  get those millimetres back for content.
-- **Boxes and photos** — the outline around a mount and where its label sits, and whether a box
-  prints the photo it has, at what opacity.
+  heading, box label, footer. Sizes are in **points**, the unit type is set in.
+- **Photos** — whether a box prints the photo it has, and at what opacity.
 - **Texts** — the chapter heading, the checklist heading, the box label and the footer.
+
+Every value shows its unit beside it — **mm** for anything on the paper, **pt** for type, **%** for
+the photos' opacity. A section holding a value you have changed but not yet saved carries a **dot**
+in the list, so you can see what a save will send before you press it; change a value back and its
+dot goes. The dialog reopens on the section you had open last, so coming back to adjust the spacing
+does not start from *Page* again.
 
 A template is **copied** onto an album when the album is made. To change one album's values
 afterwards, edit them from that album — **Page template…** on its screen
@@ -1070,8 +1077,27 @@ and editing a template here never reaches an album that already exists.
 
 ### The page beside the fields
 
-The dialog draws the page those numbers produce, next to the fields, and redraws it as you type.
-Nothing on it can be clicked or dragged — it is a picture of a sheet, not the page editor.
+The dialog draws the page those numbers produce, next to the fields, and redraws it as you type —
+while you type, not only once you leave the field. Nothing on it can be clicked or dragged — it is a
+picture of a sheet, not the page editor.
+
+**It marks what the field in hand controls.** Point at a field, or click into it, and the page shows
+what that value moves, before you change anything:
+
+- a **distance** — a margin, a gap, a space above or below — is drawn as a dimension line with its
+  value, starting from the edge it is measured from: the top margin from the top of the sheet, the
+  space below a heading from under that heading, the gap between rows from the bottom of a row's
+  labels;
+- an **element** — the frame, the corner ornaments, a kind of heading, the box labels, the boxes —
+  is outlined, every one of it on the sheet, so a face chosen for the checklist headings is seen to
+  reach all of them.
+
+The marks are read off the page as it is drawn, the same placement the page editor and the PDF use,
+so what is marked is exactly what the value moves. A value that does nothing on the sheet shown
+marks nothing: the white between double rules on a single rule, the space above an album title set
+into the frame line, the gap between two checklists sharing a band on a sheet where none do. The
+two hawid clearances are added to the stamp before a box is cut, and the stamp is not on the sheet
+to measure from, so they outline the boxes they size.
 
 It is drawn the same way the printed card is: the same box rule, the same packing, the same type
 measured against the same embedded faces. So a change you can see here is a change that will be on

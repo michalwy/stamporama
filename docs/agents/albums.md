@@ -265,6 +265,49 @@ change a number and see it.
   counts changes — from the fields' own `onChange` *and* from the four text builders, which are React
   state written into hidden inputs and fire no `input` event of their own.
 
+### Sections, and the preview marking the field in hand (#1431)
+
+#795 made the numbers visible; it still left thirty-odd of them in one column, and a changed gap of a
+millimetre is easy to miss on a redrawn sheet. Settled with the collector against a wireframe on
+2026-09-28: the values in **eight sections** listed on the left, one shown at a time, and the preview
+**marking what the field under the pointer (or, failing that, in focus) controls** before anything
+is changed. `album-field-marks.ts` is the pure half — the sections and the marks — and is what the
+unit suite checks. What is worth not re-deriving:
+
+- **A hidden section stays mounted.** The fields are uncontrolled and a save reads the whole form's
+  `FormData`; a section taken out of the document would be values the save silently stops sending.
+  `hidden`, never a conditional render.
+- **Every preset value is in exactly one section, and has a mark case.** The suite fails on a value
+  no section holds, and `albumFieldMarks`'s switch is exhaustive over `keyof AlbumRenderPreset`, so a
+  value added by a later issue is a type error until someone decides where it goes and what it
+  marks. That is the issue's "new values go into these sections and get their own markings", made
+  something the tree enforces rather than something a session remembers.
+- **A mark reads the placed geometry; it never places anything.** Every distance starts on an edge
+  the plan (`album-layout.ts`) or the frame (`album-frame.ts`) put on the sheet — the top of a
+  heading, the bottom of a row's labels, the outer rule's inside — so the ornament outlines, for one,
+  are the frame's own matrices applied to the drawing's `viewBox`. The suite plans the sample with the
+  shipped measurer and asserts each distance **touches** the edge it claims, not merely that its
+  length is right: a line of the right length laid near the wrong gap passes a length check.
+- **A distance is drawn at the value's length from its anchor, not measured between two things.**
+  With the content justified (#1419), the gap between two series is the value *plus* the spread; a
+  line spanning the whole gap and labelled with the value would be wrong on exactly the pages that
+  are not full.
+- **A value that does nothing on this sheet marks nothing** — the gap between double rules on a
+  single rule, the space above a title set into the frame line, the pairing gap where nothing pairs.
+  The two hawid clearances outline the boxes: they are added to a stamp that is not on the sheet, and
+  the vertical one then rounds up to a strip, so no line on the page is that value.
+- **The marks are read off the sheet on screen, in the preset it was drawn with**, not off the value
+  being typed. While a newer sheet is being planned the old one stays up (faded), and a mark worked
+  out from the new value would land on a page set in the old one.
+- **The unsaved-change dots compare `readAlbumPresetFields` of the form now against the same read
+  taken as it opened** — the strings a save would send, so a value typed away and back is clean
+  again. Counted a frame after the change, because the four texts reach their hidden inputs only
+  once React has rendered.
+- **The last section open is a browser preference** (`localStorage`, one key for both dialogs), read
+  while initialising: the dialog only mounts after a click, so no server render can disagree.
+- **The section list is taken out of the fields' 49.5 rem, never out of the sheet's.** One section is
+  a screenful at most, so the grid can spare it; #978's arithmetic for the sheet is unchanged.
+
 ### Fonts are a fixed set (`src/lib/album-fonts.ts`)
 
 A face is a **family and a style** — the unit `ALBUM_DEFINE_FONT("Arial Bold Italic")` names — so

@@ -52,9 +52,11 @@ is yours.
 ## The album's own page template
 
 **Page template…**, at the top of an album's screen, opens every value the album took from its
-template — page and margins, spacing, hawid clearances, type, boxes and photos, and the four texts —
-with the album's own pages drawn beside them, redrawn as you type. It is the same form and the same
-preview as a template in Settings, pointed at this album.
+template — page, frame, headings, boxes and spacing, hawid clearances, type, photos, and the four
+texts, each a section of its own — with the album's own pages drawn beside them, redrawn as you type
+and marking what the field under the pointer controls. It is the same form and the same preview as
+a template in Settings, pointed at this album; see
+[The page beside the fields](collections.md#the-page-beside-the-fields).
 
 **What you change there applies to this album only.** The template it was made from is not touched,
 no other album started from that template changes, and the album does not become linked to anything.

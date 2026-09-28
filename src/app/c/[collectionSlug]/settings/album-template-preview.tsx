@@ -5,6 +5,7 @@ import { AlbumPageCanvas } from "@/app/c/[collectionSlug]/albums/[albumId]/pages
 import type { AlbumTemplatePreview } from "@/lib/album-preview";
 import type { AlbumSummary } from "@/lib/albums";
 import type { AlbumPreviewSource } from "@/app/actions/album-templates";
+import { albumFieldMarks, type AlbumPresetField } from "@/lib/album-field-marks";
 
 // The album template's live preview (#795): the page the thirty-odd numbers in the dialog beside
 // this actually produce.
@@ -102,6 +103,9 @@ interface AlbumTemplatePreviewPanelProps {
    *  imported, so the dialog's size stays one figure without this module importing the one that
    *  imports it. */
   dialogHeight: string;
+  /** The field under the pointer or holding the focus in the dialog, whose reach is marked on every
+   *  sheet drawn (#1431) — or null for none. */
+  markField: AlbumPresetField | null;
 }
 
 export function AlbumTemplatePreviewPanel({
@@ -110,6 +114,7 @@ export function AlbumTemplatePreviewPanel({
   revision,
   albumId,
   dialogHeight,
+  markField,
 }: AlbumTemplatePreviewPanelProps) {
   const [chosen, setChosen] = useState<AlbumPreviewSource>({ kind: "sample" });
   const source: AlbumPreviewSource = albumId ? { kind: "album", albumId } : chosen;
@@ -257,6 +262,9 @@ export function AlbumTemplatePreviewPanel({
             collectionId={collectionId}
             zoom={zoom}
             interactive={false}
+            // Read off the sheet on screen, set in the preset it was drawn with — so a mark and the
+            // page under it always agree, even while a newer page is still being planned.
+            marks={markField ? albumFieldMarks(markField, sheet) : undefined}
           />
         ))}
         {sheets.length === 0 && (
