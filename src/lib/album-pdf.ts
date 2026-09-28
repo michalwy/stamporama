@@ -17,6 +17,7 @@ import {
   setLineCap,
   setLineJoin,
   setLineWidth,
+  setStrokingColor,
   setStrokingRgbColor,
   type PDFFont,
   type PDFImage,
@@ -224,11 +225,33 @@ function drawText(
 }
 
 /** The page's frame (#766, #1427): its rules, and an ornament at each corner when it has one — all
- *  of it placed by `album-frame.ts`, which the canvas draws from too. The frame is paint and reserves
- *  nothing in the plan, so nothing here can move a block. */
-function drawFrame(page: PDFPage, preset: AlbumRenderPreset, ornament: AlbumOrnamentDrawing | null) {
-  const frame = albumFrame(preset, ornament);
+ *  of it placed by `album-frame.ts`, which the canvas draws from too, the top rule broken around a
+ *  title set into it (#1428). Nothing here decides where anything goes. */
+function drawFrame(
+  page: PDFPage,
+  preset: AlbumRenderPreset,
+  ornament: AlbumOrnamentDrawing | null,
+  title: AlbumRect | null
+) {
+  const frame = albumFrame(preset, ornament, title);
   for (const rect of frame.rects) strokeRect(page, preset, rect, frame.lineMm);
+  for (const points of frame.paths) {
+    // One stroke with mitred joins, so its corners meet as a rectangle's do; butt ends at the gap.
+    const ops: PDFOperator[] = [
+      pushGraphicsState(),
+      setStrokingColor(INK),
+      setLineWidth(frame.lineMm * MM_TO_PT),
+      setLineCap(LineCapStyle.Butt),
+      setLineJoin(LineJoinStyle.Miter),
+    ];
+    points.forEach((pt, i) => {
+      const x = pt.xMm * MM_TO_PT;
+      const y = fromTop(preset, pt.yMm);
+      ops.push(i === 0 ? moveTo(x, y) : lineTo(x, y));
+    });
+    ops.push(PDFOperator.of(PDFOperatorNames.StrokePath), popGraphicsState());
+    page.pushOperators(...ops);
+  }
   for (const line of frame.lines) {
     page.drawLine({
       start: { x: line.x1Mm * MM_TO_PT, y: fromTop(preset, line.y1Mm) },
@@ -452,7 +475,7 @@ export async function renderAlbumPdf(
     const { preset, page: layout } = sheet;
     const page = doc.addPage([preset.pageWidthMm * MM_TO_PT, preset.pageHeightMm * MM_TO_PT]);
 
-    drawFrame(page, preset, sheet.frameOrnament);
+    drawFrame(page, preset, sheet.frameOrnament, layout.title);
     if (layout.title) drawText(page, preset, layout.title, fontFor);
     if (layout.chapter) drawText(page, preset, layout.chapter, fontFor);
 

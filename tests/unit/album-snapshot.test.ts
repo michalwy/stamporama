@@ -42,3 +42,15 @@ describe("a card stored before ornamental frames (#1427)", () => {
     assert.equal(card.preset.frameOrnament, "rosette");
   });
 });
+
+describe("a card stored before the title could sit in the frame line (#1428)", () => {
+  const before: Record<string, unknown> = { ...DEFAULT_ALBUM_PRESET };
+  delete before.titlePlacement;
+  delete before.titleFrameGapMm;
+
+  it("reads as printed below the frame, with the migration's gap", () => {
+    const card = parseAlbumSnapshot(stored(before));
+    assert.equal(card.preset.titlePlacement, "below-frame");
+    assert.equal(card.preset.titleFrameGapMm, 5);
+  });
+});

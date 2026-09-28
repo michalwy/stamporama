@@ -15,6 +15,7 @@ import {
 } from "@/lib/album-drag";
 import { albumBoxFlag, type AlbumBoxFlag } from "@/lib/album-box-flag";
 import { albumFrame } from "@/lib/album-frame";
+import type { AlbumRect } from "@/lib/album-layout";
 import { albumOrnamentPathData, type AlbumOrnamentDrawing } from "@/lib/album-ornament-svg";
 import type { AlbumRenderPreset } from "@/lib/album-template-rules";
 import {
@@ -122,16 +123,18 @@ export const BOX_FLAGS = FLAG;
  * The page frame (#1427): what `album-frame.ts` places, drawn. Nothing is worked out here — the rule
  * this canvas lives under — so the preview and the PDF are one frame, and a double rule's gap on the
  * screen is the gap on the paper. The ornament is drawn from its outlines, never from the file the
- * collector uploaded.
+ * collector uploaded. A title set into the frame line (#1428) breaks the top rule around it.
  */
 function SheetFrame({
   preset,
   ornament,
+  title,
 }: {
   preset: AlbumRenderPreset;
   ornament: AlbumOrnamentDrawing | null;
+  title: AlbumRect | null;
 }) {
-  const frame = albumFrame(preset, ornament);
+  const frame = albumFrame(preset, ornament, title);
   return (
     <g pointerEvents="none">
       {frame.rects.map((r, i) => (
@@ -144,6 +147,17 @@ function SheetFrame({
           fill="none"
           stroke={INK}
           strokeWidth={frame.lineMm}
+        />
+      ))}
+      {frame.paths.map((points, i) => (
+        <polyline
+          key={`p${i}`}
+          points={points.map((pt) => `${pt.xMm},${pt.yMm}`).join(" ")}
+          fill="none"
+          stroke={INK}
+          strokeWidth={frame.lineMm}
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
         />
       ))}
       {frame.lines.map((l, i) => (
@@ -471,7 +485,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
       {/* The template's own frame — rules and corner ornaments, placed by `album-frame.ts`, which the
           PDF draws from too — and then the content frame, a drawing aid that is on no card, which is
           why it is the palest thing here. */}
-      <SheetFrame preset={preset} ornament={sheet.frameOrnament} />
+      <SheetFrame preset={preset} ornament={sheet.frameOrnament} title={sheet.title} />
       <rect
         x={sheet.content.xMm}
         y={sheet.content.yMm}

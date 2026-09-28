@@ -15,7 +15,12 @@ import {
   isAlbumBuiltinOrnament,
   isAlbumUploadedOrnamentId,
 } from "../../src/lib/album-ornaments";
-import { albumFrame, albumFrameCentreMm, type AlbumFramePreset } from "../../src/lib/album-frame";
+import {
+  albumFrame,
+  albumFrameCentreMm,
+  albumTitleInFrame,
+  type AlbumFramePreset,
+} from "../../src/lib/album-frame";
 
 // Ornamental page frames (#1427): the SVG reader an upload and the built-in set both go through, the
 // built-in set itself, and the frame geometry the PDF and the canvas both draw. All pure.
@@ -329,6 +334,8 @@ const A4: AlbumFramePreset = {
   borderInsetMm: 5,
   borderGapMm: 1.2,
   frameOrnamentSizeMm: 20,
+  titlePlacement: "below-frame",
+  titleFrameGapMm: 5,
 };
 
 /** A plain square ornament whose frame starts at 0 0: 10 units, so 2 mm a unit at 20 mm. */
@@ -423,5 +430,79 @@ describe("the page frame", () => {
   it("leaves out a rule the ornaments have eaten entirely", () => {
     const f = albumFrame({ ...A4, pageWidthMm: 40, frameOrnamentSizeMm: 30 }, SQUARE);
     assert.ok(f.lines.every((l) => l.x1Mm === l.x2Mm), "only the vertical rules are left");
+  });
+});
+
+describe("the page frame around a title set into its top line (#1428)", () => {
+  const IN_FRAME: AlbumFramePreset = { ...A4, titlePlacement: "in-frame", titleFrameGapMm: 5 };
+  // A 57.1 mm title centred on the sheet, as "Rzeczpospolita Polska" is on his PL-1928 card.
+  const TITLE = { xMm: 76.45, yMm: 2, widthMm: 57.1, heightMm: 7.6 };
+  const gapFrom = TITLE.xMm - 5;
+  const gapTo = TITLE.xMm + TITLE.widthMm + 5;
+  const top = (f: ReturnType<typeof albumFrame>, y: number) =>
+    f.lines.filter((l) => l.y1Mm === y && l.y2Mm === y).sort((a, b) => a.x1Mm - b.x1Mm);
+
+  it("breaks both rules of the pair between the ornaments, the gap wide each side of the title", () => {
+    const f = albumFrame(IN_FRAME, SQUARE, TITLE);
+    const reach = albumFrameCentreMm(A4) + 20;
+    const inner = 5 + 0.4 + 1.2;
+    for (const y of [5, inner]) {
+      const [left, right] = top(f, y);
+      close(left.x1Mm, reach);
+      close(left.x2Mm, gapFrom);
+      close(right.x1Mm, gapTo);
+      close(right.x2Mm, 210 - reach);
+      assert.equal(top(f, y).length, 2);
+    }
+    // The bottom rules and the sides are as they were.
+    assert.equal(f.lines.length, 10);
+    assert.equal(f.lines.filter((l) => l.y1Mm === 297 - 5).length, 1);
+  });
+
+  it("leaves the rule whole for a title below the frame, and for no title", () => {
+    assert.deepEqual(albumFrame(A4, SQUARE, TITLE), albumFrame(A4, SQUARE));
+    assert.deepEqual(albumFrame(IN_FRAME, SQUARE, null), albumFrame(A4, SQUARE));
+    assert.deepEqual(albumFrame(IN_FRAME, null, null), albumFrame(A4, null));
+  });
+
+  it("turns a frame of rules alone into one open stroke per rule, from the gap round to the gap", () => {
+    const f = albumFrame(IN_FRAME, null, TITLE);
+    assert.equal(f.rects.length, 0);
+    assert.equal(f.paths.length, 2);
+    for (const [path, r] of [
+      [f.paths[0], 5],
+      [f.paths[1], 5 + 0.4 + 1.2],
+    ] as const) {
+      const at = path.map((p) => [Number(p.xMm.toFixed(3)), Number(p.yMm.toFixed(3))]);
+      const q = (n: number) => Number(n.toFixed(3));
+      assert.deepEqual(at, [
+        [q(gapTo), q(r)],
+        [q(210 - r), q(r)],
+        [q(210 - r), q(297 - r)],
+        [q(r), q(297 - r)],
+        [q(r), q(r)],
+        [q(gapFrom), q(r)],
+      ]);
+    }
+  });
+
+  it("starts the stroke at a corner when the gap takes the whole top edge", () => {
+    const f = albumFrame({ ...IN_FRAME, borderStyle: "single" }, null, { ...TITLE, xMm: 0, widthMm: 210 });
+    assert.deepEqual(f.paths[0], [
+      { xMm: 205, yMm: 5 },
+      { xMm: 205, yMm: 292 },
+      { xMm: 5, yMm: 292 },
+      { xMm: 5, yMm: 5 },
+    ]);
+  });
+
+  it("has nothing to break on a sheet with no rule, ornaments or not", () => {
+    for (const over of [{ borderStyle: "none" as const }, { borderWidthMm: 0 }]) {
+      const preset = { ...IN_FRAME, ...over };
+      assert.equal(albumTitleInFrame(preset), false);
+      assert.deepEqual(albumFrame(preset, SQUARE, TITLE), albumFrame({ ...A4, ...over }, SQUARE));
+    }
+    assert.equal(albumTitleInFrame(IN_FRAME), true);
+    assert.equal(albumTitleInFrame({ ...IN_FRAME, borderStyle: "single" }), true);
   });
 });

@@ -156,6 +156,17 @@ describe("parseAlbumTemplateInput", () => {
     assert.match(parseError({ frameOrnamentSizeMm: "101" }), /Ornament size/);
   });
 
+  it("reads where the album title sits and the gap around it in the frame line (#1428)", () => {
+    for (const placement of ["below-frame", "in-frame"] as const) {
+      assert.equal(parsedOk({ titlePlacement: placement }).titlePlacement, placement);
+    }
+    assert.match(parseError({ titlePlacement: "above" }), /Album title placement is not a recognised/);
+    assert.equal(parsedOk({ titleFrameGapMm: "2,5" }).titleFrameGapMm, 2.5);
+    assert.equal(parsedOk({ titleFrameGapMm: "0" }).titleFrameGapMm, 0);
+    assert.match(parseError({ titleFrameGapMm: "-1" }), /Gap around the title in the frame line/);
+    assert.match(parseError({ titleFrameGapMm: "" }), /Gap around the title in the frame line/);
+  });
+
   it("starts a new template with his Classic frame's shape: a double rule and a 25 mm corner (#1427)", () => {
     assert.equal(DEFAULT_ALBUM_PRESET.borderStyle, "double");
     assert.equal(DEFAULT_ALBUM_PRESET.borderGapMm, 1.2);

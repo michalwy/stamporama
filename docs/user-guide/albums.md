@@ -134,6 +134,22 @@ a double rule. You can also use **your own**:
 The two rules used to be drawn 1.2 mm apart, and every existing album and template was given exactly
 that; the preview now shows the same gap the PDF prints.
 
+#### The album title in the frame line
+
+**Album title** under *Page* chooses where the album's name is printed: **below the frame**, as the
+first line inside the top margin — where it has always been, and still the default — or **in the
+frame line**. There the top rule breaks around the name, which is centred on the page and on the line
+(midway between two rules), and **Gap around the title in the line** is the white left on each side
+between the letters and where the rule stops. A double rule breaks in both of its rules, and it works
+the same with or without corner ornaments. 5 mm is what your own AlbumEasy cards leave.
+
+Unlike the rest of the frame, this one is **layout**: the name no longer takes a line of its own, so
+the page's content starts on the **top margin** — the room below it grows and a series can move back
+onto an earlier sheet. If a large name reaches below the top margin, the content starts under it
+instead, with the **space below the album title** between them; the space *above* the title is not
+used, since the name sits on the line. A page with **no border** has nothing to break, and the name is
+printed below as before. A printed card keeps the name where it was printed and reports the change.
+
 ## The language is the album's own, and it changes the plan
 
 An album is printed in one language. Names, checklist headings and everything else resolve to that

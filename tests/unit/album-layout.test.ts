@@ -1879,3 +1879,88 @@ describe("planAlbumPages and the space around the page headings (#1426)", () => 
     assert.deepEqual(sheets({ chapterSpaceBelowMm: 25 }), [["b0", "b1", "b2", "b3"], ["b4", "b5"]]);
   });
 });
+
+describe("planAlbumPages and a title set into the frame line (#1428)", () => {
+  const blocks = [block("a", "A", [box(60, 20)])];
+  // 10 pt in the stand-in measurer: a 5 mm line, 1 mm a character.
+  const first = (over: Partial<AlbumRenderPreset> = {}, title = "Polska") =>
+    live(
+      planAlbumPages(
+        [chapter("y", "1939", blocks)],
+        preset({ titleSizePt: 10, ...over }),
+        title,
+        metrics
+      ).pages
+    )[0];
+  const inFrame = (over: Partial<AlbumRenderPreset> = {}, title = "Polska") =>
+    first({ titlePlacement: "in-frame", ...over }, title);
+
+  it("defaults to below the frame, with his 5 mm gap ready for when it is not", () => {
+    assert.equal(DEFAULT_ALBUM_PRESET.titlePlacement, "below-frame");
+    assert.equal(DEFAULT_ALBUM_PRESET.titleFrameGapMm, 5);
+  });
+
+  it("centres the title on the frame's centre line and on the sheet, as wide as its text", () => {
+    const title = inFrame().title!;
+    // A double rule 0.4 mm heavy, inset 5 with 1.2 mm between: the centre line is at 5.8.
+    assert.equal(title.yMm + title.heightMm / 2, 5.8);
+    assert.equal(title.widthMm, 6, "six characters at 1 mm");
+    assert.equal(title.xMm, (210 - 6) / 2);
+    assert.deepEqual(title.lines, ["Polska"]);
+    // A single rule's centre line is the rule.
+    const single = inFrame({ borderStyle: "single" }).title!;
+    assert.equal(single.yMm + single.heightMm / 2, 5);
+  });
+
+  it("gives the title's line back: the content starts on the top margin", () => {
+    const below = first();
+    const page = inFrame();
+    assert.equal(below.chapter!.yMm, 10 + 5 + 8, "under the title, as before");
+    assert.equal(page.chapter!.yMm, 10 + 8, "on the margin, the chapter's own space above it");
+    assert.equal(page.content.yMm, below.content.yMm - 5);
+  });
+
+  it("does not read the space above the title, which has nothing to separate it from", () => {
+    assert.deepEqual(inFrame({ titleSpaceAboveMm: 12 }), inFrame());
+  });
+
+  it("starts the content under a title that reaches below the margin, the space below the title under it", () => {
+    // 26 pt: a 13 mm line centred on 5.8 runs to 12.3, past the 10 mm margin.
+    const tall = inFrame({ titleSizePt: 26 });
+    assert.equal(tall.chapter!.yMm, 12.3 + 8);
+    const spaced = inFrame({ titleSizePt: 26, titleSpaceBelowMm: 4 });
+    assert.equal(spaced.chapter!.yMm, 12.3 + 4 + 8);
+  });
+
+  it("keeps the space below the title as a floor, never a jump, where the title stays above the margin", () => {
+    // The 5 mm line runs to 8.3. With 1 mm below that is 9.3 — the margin wins; with 3 mm it is
+    // 11.3, and the content moves 1.3 mm rather than a whole spacing value.
+    assert.equal(inFrame({ titleSpaceBelowMm: 1 }).content.yMm, inFrame().content.yMm);
+    assert.equal(inFrame({ titleSpaceBelowMm: 3 }).chapter!.yMm, 11.3 + 8);
+  });
+
+  it("places the title below as today on a sheet with no rule to break", () => {
+    for (const over of [{ borderStyle: "none" as const }, { borderWidthMm: 0 }]) {
+      assert.deepEqual(inFrame(over), first(over));
+    }
+  });
+
+  it("changes nothing on a sheet that prints no title", () => {
+    assert.deepEqual(inFrame({ printTitle: false }), first({ printTitle: false }));
+  });
+
+  it("re-plans the sheets: the line it gives back can bring a block onto an earlier sheet", () => {
+    // Six 34 mm checklists at 40 mm each. Below the frame the 26 pt title's 13 mm line leaves a
+    // chapter's first sheet 235 mm and five fit. In the frame line the title runs to 12.3 mm, so the
+    // content starts there rather than on the 10 mm margin: 245.7 mm, and all six fit.
+    const six = Array.from({ length: 6 }, (_, i) => block(`b${i}`, "", [box(190, 34)]));
+    const sheets = (over: Partial<AlbumRenderPreset>) =>
+      live(planAlbumPages([chapter("y", "1939", six)], preset(over), "Album", metrics).pages).map(
+        (p) => p.blocks.map((b) => b.entryId)
+      );
+    assert.deepEqual(sheets({}), [["b0", "b1", "b2", "b3", "b4"], ["b5"]]);
+    assert.deepEqual(sheets({ titlePlacement: "in-frame" }), [
+      ["b0", "b1", "b2", "b3", "b4", "b5"],
+    ]);
+  });
+});

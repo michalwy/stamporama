@@ -1021,7 +1021,9 @@ is not an evening of retyping page sizes and font names. One template covers:
 - **Page** — size and the four margins in millimetres, and the page frame: no rule, one or two, with
   its weight, its inset and the white between two rules, and an optional **corner ornament** at a
   size you set — a built-in one or your own SVG. The frame is drawn in the margin and never moves a
-  series; see *The page frame* in the albums guide.
+  series; see *The page frame* in the albums guide. The **album title** can be printed below the
+  frame or set **in the frame line**, which breaks around it with the gap you set on each side —
+  that one does move series, because the title stops taking a line of its own.
 - **Spacing** — how many checklists may share one horizontal **band** and the gap between two that
   do, then the space between boxes across a row and between rows; the space **above and below the
   album title**, **above and below a chapter heading** and above and below a checklist heading; and

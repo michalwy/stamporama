@@ -1243,6 +1243,34 @@ What is worth not re-deriving:
   **new** template (and an album made without one) starts with the Rosette at 25 mm — his
   `Classic.txt` is `IMAGE_SCALE(0.12)` of a 212 px corner, 25.4 mm.
 
+### The album title in the frame line (#1428)
+
+`titlePlacement` (`below-frame` | `in-frame`) and `titleFrameGapMm` are template values. The one part
+of the frame that is **layout**, so it is split along the line #1427 drew: `pageFrame` in
+`album-layout.ts` places the title, and `albumFrame` breaks the rule around the rectangle it is handed.
+What is worth not re-deriving:
+
+- **The gap is measured, not invented.** His `_*.txt` includes lay a `white.jpg` over the rule
+  (`STAMP_ADD_IMG (73.0 10.0 …)`), each sized by hand per title, so the width in the source is not the
+  gap. Measured off the printed `PL-1928.pdf` at 600 dpi instead: the rule stops 67.0 mm apart around a
+  57.1 mm *Rzeczpospolita Polska* — **5 mm** each side, the default. The title's ink is centred on the
+  pair's midline to within 0.25 mm, which is what "centred on `albumFrameCentreMm`" reproduces.
+- **The title's rectangle is exactly its widest line**, centred on the sheet (not the content area —
+  the frame is symmetric about the sheet). The renderers centre each line inside it as always; the frame
+  reads the same rectangle, so the gap and the letters cannot disagree. A printed card stores the
+  rectangle in `page.title`, so a reprint breaks the rule where the card did.
+- **Where the content starts was the collector's call** (2026-09-28): the top margin, unless the title
+  reaches below it — then under the title with `titleSpaceBelowMm`. Built as the floor
+  `max(marginTop, titleBottom + spaceBelow)` rather than the conditional jump, so the content never moves
+  a whole spacing value for a tenth of a millimetre of title. `titleSpaceAboveMm` is not read.
+- **`albumTitleInFrame` is the one predicate**, shared by the plan and the frame: `in-frame` **and** a
+  rule with weight. No rule — ornaments alone included — places the title below exactly as before.
+- **A frame of rules alone turns into `paths`** when broken: one open stroke per rule from the gap round
+  to the gap, mitred, so its corners meet as the rectangle's did. Separate lines would leave butt-ended
+  notches at the corners. Without a gap it is still `rects`, byte for byte what it was.
+- **Divergence is the ordinary preset comparison** — the labels derive to *Title placement* and *Title
+  frame gap (mm)*. A card stored before #1428 reads `below-frame` and 5, the migration's values.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`

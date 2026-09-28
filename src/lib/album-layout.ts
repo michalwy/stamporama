@@ -80,6 +80,7 @@ import type {
   AlbumVerticalPlacement,
 } from "./album-template-rules";
 import { roundSizeMm } from "./stamp-size";
+import { albumFrameCentreMm, albumTitleInFrame } from "./album-frame";
 
 /**
  * How text is measured. The engine never measures anything itself — it asks.
@@ -445,6 +446,15 @@ interface PageFrame {
  * range, so a footer allowed to wrap would make the height of the content depend on the content: the
  * plan would be solving for its own output. The title may wrap — it is the album's name and knows
  * nothing about the page.
+ *
+ * **A title set into the frame line (#1428) takes no band.** It is centred on the frame's centre line
+ * and on the sheet, its rectangle exactly as wide as its widest line — the width `album-frame.ts`
+ * breaks the rule around — and the content starts on the top margin, as if there were no title.
+ * Unless the title reaches below that: then the content starts the title's space below under it.
+ * Decided with the collector on 2026-09-28 as the margin with a guard, and taken as a floor rather
+ * than a jump — `max(margin, title bottom + space below)` — so a title a tenth of a millimetre
+ * taller moves the content a tenth, never a whole spacing value. The space above has nothing to
+ * separate the title from and is not read.
  */
 function pageFrame(
   preset: AlbumRenderPreset,
@@ -479,12 +489,36 @@ function pageFrame(
     ? roundSizeMm(titleTop + titleHeight + preset.titleSpaceBelowMm)
     : preset.marginTopMm;
 
+  let titleRect: AlbumRect = {
+    xMm: contentX,
+    yMm: titleTop,
+    widthMm: contentW,
+    heightMm: titleHeight,
+  };
+  let contentTop = titleBandBottom;
+  if (titleLines.length && albumTitleInFrame(preset)) {
+    const widest = Math.max(
+      ...titleLines.map((line) => metrics.measureMm(line, titleFace.face, titleFace.sizePt)),
+    );
+    const widthMm = roundSizeMm(widest);
+    const yMm = roundSizeMm(albumFrameCentreMm(preset) - titleHeight / 2);
+    titleRect = {
+      xMm: roundSizeMm((preset.pageWidthMm - widthMm) / 2),
+      yMm,
+      widthMm,
+      heightMm: titleHeight,
+    };
+    contentTop = Math.max(
+      preset.marginTopMm,
+      roundSizeMm(yMm + titleHeight + preset.titleSpaceBelowMm),
+    );
+  }
+
   const footerFace = albumRoleFace(preset, "footer");
   const footerHeight = preset.footerTemplate.trim()
     ? roundSizeMm(metrics.lineHeightMm(footerFace.face, footerFace.sizePt))
     : 0;
 
-  const contentTop = titleBandBottom;
   const contentBottom = roundSizeMm(
     preset.pageHeightMm - preset.marginBottomMm - footerHeight,
   );
@@ -494,16 +528,7 @@ function pageFrame(
     contentW,
     contentTop,
     contentBottom,
-    title: titleLines.length
-      ? {
-          role: "title",
-          lines: titleLines,
-          xMm: contentX,
-          yMm: titleTop,
-          widthMm: contentW,
-          heightMm: titleHeight,
-        }
-      : null,
+    title: titleLines.length ? { role: "title", lines: titleLines, ...titleRect } : null,
     footer: footerHeight
       ? {
           xMm: contentX,
