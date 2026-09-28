@@ -105,7 +105,7 @@ import {
 } from "./page-canvas";
 import { AlbumNameSuggestion } from "../album-name-suggestion";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
-import { BTN, CHIP, FRAME, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
+import { BTN, CHIP, FRAME, Hint, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
 import {
   AddFreePageDialog,
   FreeElementPanel,
@@ -1002,6 +1002,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                 onAddNote={() => setAddingNote(true)}
                 onAddPage={() => setAddingPage(true)}
                 onSaved={() => router.refresh()}
+                printedCards={data.sheets.some((row) => row.printed)}
                 gaps={{
                   x: gapX,
                   y: gapY,
@@ -1148,6 +1149,7 @@ function SheetPanel({
   gaps,
   photos,
   placement,
+  printedCards,
 }: {
   sheet: AlbumEditorSheet;
   collectionId: string;
@@ -1155,6 +1157,9 @@ function SheetPanel({
   onAddNote: () => void;
   onAddPage: () => void;
   onSaved: () => void;
+  /** Whether any sheet of the album is on paper — the one case the album-wide settings' note about
+   *  printed cards concerns. */
+  printedCards: boolean;
   gaps: BoxGapFieldsProps;
   photos: PhotoSwitchProps;
   placement: Omit<PagePlacementFieldProps, "sheet">;
@@ -1189,8 +1194,7 @@ function SheetPanel({
               .filter((b) => b.separated)
               .map((b) => b.name)
               .join(", ")}{" "}
-            asked to stay with the block above and opens this sheet instead — nothing could hold
-            both.
+            asked to stay with the block above and opens this sheet — nothing could hold both.
           </div>
         </div>
       )}
@@ -1238,8 +1242,9 @@ function SheetPanel({
             language={language}
             gaps={sheet.gaps}
             onSaved={onSaved}
-            note="These words would print in the collection's default language on this card."
-            maxHeight="14rem"
+            note="Would print in the collection's default language until translated."
+            maxHeight="22rem"
+            stacked
           />
         </div>
       )}
@@ -1250,24 +1255,25 @@ function SheetPanel({
 
       <PhotoSwitch {...photos} />
 
-      <div>
-        <button type="button" onClick={onAddNote} style={BTN}>
-          <Icon name="add" size="sm" /> Add a note
-        </button>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          A block of your own words, set in one of the template&apos;s voices and filed after a
-          checklist so it travels with it.
+      {/* Said once, here, rather than under each album-wide control (#1459) — and only for an album
+          that has a card in the binder, the one case it concerns. The save asks first as well. */}
+      {printedCards && (
+        <p style={{ ...MUTED, fontSize: "0.75rem", margin: 0, lineHeight: 1.45 }}>
+          A printed card stays as printed and reports the difference.
         </p>
-      </div>
+      )}
 
-      <div>
-        <button type="button" onClick={onAddPage} style={BTN}>
-          <Icon name="add" size="sm" /> Add a page without stamps
-        </button>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          A title page, a section divider or a map: a sheet of its own inside the album&apos;s frame,
-          with pictures, headings and texts placed where you put them.
-        </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+        <Tooltip content="A block of your own words, set in one of the template's voices and filed before or after a checklist, so it travels with it.">
+          <button type="button" onClick={onAddNote} style={BTN}>
+            <Icon name="add" size="sm" /> Add a note
+          </button>
+        </Tooltip>
+        <Tooltip content="A title page, a section divider or a map: a sheet of its own inside the album's frame, with pictures, headings and texts placed where you put them.">
+          <button type="button" onClick={onAddPage} style={BTN}>
+            <Icon name="add" size="sm" /> Add a page without stamps
+          </button>
+        </Tooltip>
       </div>
 
       <p style={{ ...MUTED, margin: 0, lineHeight: 1.5 }}>
@@ -1330,7 +1336,7 @@ function BoxGapFields({ x, y, onChangeX, onChangeY, onSave, disabled }: BoxGapFi
 
   return (
     <div>
-      <PanelHeading>Spacing between boxes</PanelHeading>
+      <PanelHeading scope="album">Spacing between boxes</PanelHeading>
       <div
         style={{ display: "flex", gap: "0.5rem" }}
         onBlur={(e) => {
@@ -1340,11 +1346,9 @@ function BoxGapFields({ x, y, onChangeX, onChangeY, onSave, disabled }: BoxGapFi
         {field("box-gap-x", "Across, mm", x, onChangeX)}
         {field("box-gap-y", "Between rows, mm", y, onChangeY)}
       </div>
-      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-        <strong>For every sheet of this album</strong>, not this one only, and for this album alone —
-        the template it came from is not touched. Saving re-plans the pages, so boxes can move to
-        another row or another sheet. A printed card stays as printed and reports the difference.
-      </p>
+      <Hint more="Saving re-plans every sheet of the album, so a box can move to another row or onto another sheet.">
+        Boxes may move to another row or sheet.
+      </Hint>
     </div>
   );
 }
@@ -1368,7 +1372,7 @@ interface PhotoSwitchProps {
 function PhotoSwitch({ on, onChange, disabled }: PhotoSwitchProps) {
   return (
     <div>
-      <PanelHeading>Stamp photos</PanelHeading>
+      <PanelHeading scope="album">Stamp photos</PanelHeading>
       <label
         style={{
           display: "flex",
@@ -1386,11 +1390,7 @@ function PhotoSwitch({ on, onChange, disabled }: PhotoSwitchProps) {
         />
         Print stamp photos in the boxes
       </label>
-      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-        <strong>On every sheet of this album</strong> and in its PDF, and for this album alone — the
-        template it came from is not touched. How strongly they print is under Page template…. A
-        printed card stays as printed and reports the difference.
-      </p>
+      <Hint>How strongly they print is under Page template….</Hint>
     </div>
   );
 }
@@ -1422,7 +1422,7 @@ function PagePlacementField({ sheet, albumPlacement, onChange, disabled }: PageP
   const chosen = opener.override ?? albumPlacement;
   return (
     <div>
-      <PanelHeading>Placement on this sheet</PanelHeading>
+      <PanelHeading scope="sheet">Placement</PanelHeading>
       <select
         aria-label="Placement on this sheet"
         value={opener.override ?? ""}
@@ -1437,17 +1437,30 @@ function PagePlacementField({ sheet, albumPlacement, onChange, disabled }: PageP
           </option>
         ))}
       </select>
-      {sheet.placement.acted !== chosen && (
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          With one band on this sheet there is no gap between series to share the space into, so
-          it is placed {albumVerticalPlacementLabel(sheet.placement.acted).toLowerCase()}.
-        </p>
-      )}
-      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-        Kept with <strong>{opener.name}</strong>, which opens this sheet, so it stays with that block
-        when the pages re-flow. The running head, the year and the footer do not move. The
-        album&apos;s own placement is under Page template….
-      </p>
+      {/* One line: what the choice could not do here, when that is the case — without it the
+          select would look broken — else what it travels with. The rest is a hover away. */}
+      <Hint
+        more={
+          <>
+            {sheet.placement.acted !== chosen &&
+              "With one band on this sheet there is no gap between series to share the space into. "}
+            Kept with {opener.name}, which opens this sheet, so it stays with that block when the
+            pages re-flow. The running head, the year and the footer do not move. The album&apos;s own
+            placement is under Page template….
+          </>
+        }
+      >
+        {sheet.placement.acted !== chosen ? (
+          <>
+            Placed {albumVerticalPlacementLabel(sheet.placement.acted).toLowerCase()}: one band, no
+            gap to share.
+          </>
+        ) : (
+          <>
+            Kept with <strong>{opener.name}</strong>
+          </>
+        )}
+      </Hint>
     </div>
   );
 }
@@ -1470,10 +1483,11 @@ function PrintedSheetPanel({
         <p style={{ ...MUTED, margin: "0.25rem 0 0", lineHeight: 1.5 }}>
           {sheet.printedAt
             ? `Printed on ${new Date(sheet.printedAt).toLocaleDateString()}.`
-            : "A stored sheet."}{" "}
-          This draws what went onto the paper, in the faces and margins it was set in, whatever has
-          changed since.
+            : "A stored sheet."}
         </p>
+        <Hint more="This draws what went onto the paper, in the faces and margins it was set in, whatever has changed since.">
+          Drawn as it went onto the paper.
+        </Hint>
       </div>
 
       <div style={FRAME}>
@@ -1503,14 +1517,14 @@ function PrintedSheetPanel({
         )}
       </div>
 
-      <p style={{ ...MUTED, margin: 0, lineHeight: 1.6 }}>
-        A card is not corrected here. Putting one right is a decision rather than an edit — a{" "}
-        <strong>continuation page</strong> carrying the new stamps with a range of its own, or a{" "}
-        <strong>reprint</strong> of the whole card — and both are made on the album screen.
-      </p>
-      <Link href={albumHref} style={BTN}>
-        Printed cards on the album screen →
-      </Link>
+      <div>
+        <Link href={albumHref} style={BTN}>
+          Printed cards on the album screen →
+        </Link>
+        <Hint more="Putting a card right is a decision rather than an edit: a continuation page carrying the new stamps with a range of its own, or a reprint of the whole card.">
+          A card is not corrected here, but continued or reprinted there.
+        </Hint>
+      </div>
     </div>
   );
 }
@@ -1625,11 +1639,9 @@ function BoxPanel({
             />
           </div>
         </div>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          Millimetres on the piece, not on the box. The width is the cut and moves with what you
-          type; <strong>the height comes out of the drawer</strong> — it is the shortest strip the
-          piece fits into, so it moves in strip steps and may not move at all.
-        </p>
+        <Hint more="Millimetres on the piece, not on the box. The width is the cut and moves with what you type; the height is the shortest strip the piece fits into, so it may not move at all.">
+          The height moves in strip steps.
+        </Hint>
       </div>
 
       <div>
@@ -1653,18 +1665,13 @@ function BoxPanel({
             Start a new row at this box
           </label>
         ) : null}
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          {box.rowBreakable ? (
-            <>
-              The row before it ends here, and the break stays in front of this stamp when others
-              are added to the checklist or taken off it. <strong>It only adds a row</strong>: if
-              what follows is still wider than the page, it wraps as usual. The corner tab on the
-              sheet does the same.
-            </>
-          ) : (
-            "The first box of its checklist, so a row already starts here."
-          )}
-        </p>
+        {box.rowBreakable ? (
+          <Hint more="The row before it ends here, and the break stays in front of this stamp when others are added to the checklist or taken off it. It only adds a row: if what follows is still wider than the page, it wraps as usual. The corner tab on the sheet does the same.">
+            Stays with this stamp; only adds a row.
+          </Hint>
+        ) : (
+          <Hint>The first box of its checklist, so a row already starts here.</Hint>
+        )}
       </div>
 
       <button type="button" onClick={onSelectBlock} style={BTN}>
@@ -1829,10 +1836,11 @@ function StampSizeSection({ collectionId, box }: { collectionId: string; box: Al
             </div>
           ) : (
             <p style={{ ...MUTED, margin: 0, lineHeight: 1.5 }}>
+              {/* Which of the two reasons (#1309): *nothing to measure* reads the same as a
+                  feature that is missing. */}
               {sources.data.unmeasurable > 0
-                ? "Not offered: this stamp's photos, and its copies', were stored without the size they were taken at, so no scale can be known for them."
-                : "Not offered: neither this stamp nor any copy of it has a photo to measure on."}{" "}
-              Give it a size from a preset or type one below.
+                ? "Not offered: its photos were stored without a scale."
+                : "Not offered: it has no photo to measure on."}
             </p>
           )}
         </div>
@@ -1903,11 +1911,9 @@ function StampSizeSection({ collectionId, box }: { collectionId: string; box: Al
           </p>
         )}
       </form>
-      <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-        Written onto <strong>the stamp</strong>, not this box, so every album and every other screen
-        takes it, and the pages are re-planned. A size it already states is replaced only once you
-        say so. For a whole series, select its heading or shift-click several boxes.
-      </p>
+      <Hint more="Written onto the stamp, not this box, so every album and every other screen takes it, and the pages are re-planned. A size it already states is replaced only once you say so. For a whole series, select its heading or shift-click several boxes.">
+        Written onto the stamp, for every album.
+      </Hint>
 
       {measuring && sources.data && (
         <PhotoMeasureDialog
@@ -1988,12 +1994,9 @@ function BoxesPanel({
         <button type="button" onClick={onApplySize} style={BTN}>
           <Icon name="sizePreset" size="sm" /> Apply size…
         </button>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          One size, from a preset or typed, for these stamps and their variants — written onto the
-          stamps, so every album takes it. You see how many already state a size before anything is
-          written, and those are left alone unless you say otherwise. Measuring is one stamp at a
-          time: select a single box for that.
-        </p>
+        <Hint more="One size, from a preset or typed, for these stamps and their variants, so every album takes it. You see how many already state a size before anything is written, and those are left alone unless you say otherwise. Measuring is one stamp at a time: select a single box for that.">
+          Written onto the stamps and their variants.
+        </Hint>
       </div>
 
       <p style={{ ...MUTED, margin: 0, lineHeight: 1.5 }}>
@@ -2094,10 +2097,8 @@ function BlockPanel({
       {block.separated && (
         <div style={{ ...FRAME, borderLeft: "3px solid var(--color-warning)" }}>
           <div style={{ fontSize: "0.8125rem", lineHeight: 1.5 }}>
-            This block asked to stay with the one above it and could not: it opens a sheet, so what
-            it was to stay with is on the one before. Nothing is wrong with the page — the request
-            simply has no arrangement that satisfies it here, and it is said out loud rather than
-            dropped quietly.
+            Asked to stay with the block above and could not: it opens this sheet, and nothing could
+            hold both.
           </div>
         </div>
       )}
@@ -2166,13 +2167,9 @@ function BlockPanel({
               </select>
             </div>
           </div>
-          <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-            An anchor, not a place on a sheet: the note goes where its checklist goes.{" "}
-            <em>Before</em> and <em>after</em> are two different statements once the album is
-            reordered, which is why a note that opens a chapter is filed <em>before</em> its first
-            checklist rather than after the one that happens to precede it. Dragging its heading onto
-            another block files it before that one.
-          </p>
+          <Hint more="An anchor, not a place on a sheet. Before and after are two different statements once the album is reordered, which is why a note that opens a chapter is filed before its first checklist rather than after the one that happens to precede it. Dragging its heading onto another block files it before that one.">
+            It goes where its checklist goes.
+          </Hint>
         </div>
       )}
 
@@ -2218,10 +2215,9 @@ function BlockPanel({
             />
           </div>
         </div>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          Added to the space the layout already leaves. Negative closes the gap; it stops at nothing
-          rather than printing one block over another.
-        </p>
+        <Hint more="Negative closes the gap; it stops at nothing rather than printing one block over another.">
+          Added to the space the layout already leaves.
+        </Hint>
       </div>
 
       <div>
@@ -2264,12 +2260,9 @@ function BlockPanel({
             />
             Start on its own line, not beside the one before
           </label>
-          <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-            It moves below instead of sharing the line, and stays that way when the album re-flows.{" "}
-            <strong>It is not a page break</strong>: if it no longer fits on this sheet it goes to
-            the next, as any series does. What follows it may still sit beside it. The corner tab on
-            the sheet does the same.
-          </p>
+          <Hint more="It moves below instead of sharing the line, and stays that way when the album re-flows. If it no longer fits on this sheet it goes to the next, as any series does. What follows it may still sit beside it. The corner tab on the sheet does the same.">
+            Not a page break.
+          </Hint>
         </div>
       )}
 
@@ -2283,12 +2276,13 @@ function BlockPanel({
           <button type="button" onClick={onApplySize} disabled={disabled} style={BTN}>
             <Icon name="sizePreset" size="sm" /> Apply size to this block…
           </button>
-          <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-            One size, from a preset or typed, for{" "}
-            {block.boxCount === 1 ? "the stamp" : `the ${block.boxCount} stamps`} this checklist has
-            on this sheet — and their variants. Written onto the stamps, so every album takes it.
-            Stamps that already state a size are left alone unless you say otherwise.
-          </p>
+          <Hint
+            more={`One size, from a preset or typed, for ${
+              block.boxCount === 1 ? "the stamp" : `the ${block.boxCount} stamps`
+            } this checklist has on this sheet — and their variants. Written onto the stamps, so every album takes it. Stamps that already state a size are left alone unless you say otherwise.`}
+          >
+            Written onto the stamps and their variants.
+          </Hint>
         </div>
       )}
 
@@ -2313,10 +2307,9 @@ function BlockPanel({
               Later <Icon name="next" size="sm" />
             </button>
           </div>
-          <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-            The album&apos;s own order, so a checklist can move onto another sheet. Dragging a
-            heading onto another does the same thing.
-          </p>
+          <Hint more="The album's own order, so a checklist can move onto another sheet. Dragging a heading onto another does the same thing.">
+            One step in the album&apos;s order.
+          </Hint>
         </div>
       )}
 

@@ -1,6 +1,8 @@
 // The page editor's small shared shapes (#769), in a module of their own so the free page's panels
 // (#1429) draw with the same ones rather than a second copy of each.
 
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+
 export const MUTED: React.CSSProperties = {
   fontSize: "0.8125rem",
   color: "var(--color-text-muted)",
@@ -51,10 +53,41 @@ export function mm(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-export function PanelHeading({ children }: { children: React.ReactNode }) {
+/** Which reach a panel section's setting has (#1459). The one fact the old paragraphs under each
+ *  control mostly existed to state, so it is a tag on the heading rather than a sentence. */
+export type PanelScope = "sheet" | "album";
+
+const SCOPES: Record<PanelScope, { label: string; hint: string; style: React.CSSProperties }> = {
+  sheet: {
+    label: "This sheet",
+    hint: "Only this sheet. Every other sheet keeps the album's own setting.",
+    style: { borderColor: "var(--color-border-strong)", color: "var(--color-text-secondary)" },
+  },
+  album: {
+    label: "Whole album",
+    hint: "Every sheet of this album, and its PDF. This album alone — the template it was made from is not touched.",
+    style: {
+      borderColor: "var(--color-accent-border)",
+      background: "var(--color-accent-soft)",
+      color: "var(--color-accent)",
+    },
+  },
+};
+
+export function PanelHeading({
+  children,
+  scope,
+}: {
+  children: React.ReactNode;
+  scope?: PanelScope;
+}) {
   return (
     <div
       style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "0.5rem",
         fontSize: "0.6875rem",
         fontWeight: 700,
         textTransform: "uppercase",
@@ -63,7 +96,59 @@ export function PanelHeading({ children }: { children: React.ReactNode }) {
         marginBottom: "0.5rem",
       }}
     >
-      {children}
+      <span>{children}</span>
+      {scope && (
+        <Tooltip content={SCOPES[scope].hint} align="end">
+          <span
+            style={{
+              ...CHIP,
+              fontSize: "0.6875rem",
+              fontWeight: 600,
+              textTransform: "none",
+              letterSpacing: "normal",
+              cursor: "help",
+              ...SCOPES[scope].style,
+            }}
+          >
+            {SCOPES[scope].label}
+          </span>
+        </Tooltip>
+      )}
     </div>
+  );
+}
+
+const HINT_LINE: React.CSSProperties = {
+  ...MUTED,
+  fontSize: "0.75rem",
+  lineHeight: 1.45,
+  margin: "0.375rem 0 0",
+};
+
+/**
+ * The one short line a control may carry (#1459), and only where its name does not already say it.
+ * With `more`, the line is dotted and the longer explanation is a hover away — the album screen's
+ * shape (#1430) — the rest being the user guide's. A panel of paragraphs is a long read in which the
+ * controls get lost, so nothing longer than this goes under a control.
+ */
+export function Hint({ children, more }: { children: React.ReactNode; more?: React.ReactNode }) {
+  return (
+    <p style={HINT_LINE}>
+      {more ? (
+        <Tooltip content={more} align="end">
+          <span
+            style={{
+              textDecoration: "underline dotted",
+              textUnderlineOffset: "0.2em",
+              cursor: "help",
+            }}
+          >
+            {children}
+          </span>
+        </Tooltip>
+      ) : (
+        children
+      )}
+    </p>
   );
 }

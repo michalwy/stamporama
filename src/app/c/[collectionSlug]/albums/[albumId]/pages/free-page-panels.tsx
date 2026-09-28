@@ -37,7 +37,7 @@ import {
 } from "@/lib/album-corrections";
 import { deleteAlbumPictureAction } from "@/app/actions/albums";
 import { albumPictureUrl, type CanvasDrag } from "./page-canvas";
-import { BTN, FRAME, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
+import { BTN, FRAME, Hint, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
 
 // The page editor's panels for a page without stamps (#1429): the page itself — where it is filed and
 // which of the frame's heads it prints — one element on it, the dialog that adds a page, and the
@@ -240,10 +240,9 @@ export function FreePagePanel({
             <Icon name="add" size="sm" /> Picture…
           </button>
         </div>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          Set in the template&apos;s own faces. Drag anything on the sheet to move it, or its handle to
-          widen it; click it to type the millimetres.
-        </p>
+        <Hint more="Set in the template's own faces. Drag anything on the sheet to move it, or its handle to widen it; click it to type the millimetres.">
+          Drag it on the sheet, or click it to type.
+        </Hint>
       </div>
 
       <div>
@@ -253,10 +252,9 @@ export function FreePagePanel({
           {head("printChapter", "The chapter's heading", free.printChapter)}
           {head("printFooter", "The footer", free.printFooter)}
         </div>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          The frame itself always prints. The dashed rectangle is what these leave, and what
-          <em> centre</em> centres in.
-        </p>
+        <Hint more="The dashed rectangle on the sheet is what these leave, and what centring centres in.">
+          The frame itself always prints.
+        </Hint>
       </div>
 
       {anchor && (
@@ -307,10 +305,13 @@ export function FreePagePanel({
               </button>
             </div>
           )}
-          <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-            An anchor, not a place: the page goes where its checklist goes.
-            {siblings > 1 ? " Earlier and later order it among the pages filed at the same place." : ""}
-          </p>
+          <Hint
+            more={`An anchor, not a place on a sheet.${
+              siblings > 1 ? " Earlier and later order it among the pages filed at the same place." : ""
+            }`}
+          >
+            It goes where its checklist goes.
+          </Hint>
         </div>
       )}
 
@@ -552,12 +553,15 @@ export function FreeElementPanel({
             Centre down
           </button>
         </div>
-        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
-          {el.kind === "text"
-            ? `The height is the lines' own — ${mm(el.heightMm)} mm at this width.`
-            : `The height follows the picture's proportions — ${mm(el.heightMm)} mm at this width.`}{" "}
-          Centring uses the dashed rectangle on the sheet.
-        </p>
+        <Hint
+          more={`${
+            el.kind === "text"
+              ? "A text is as tall as its lines"
+              : "A picture is as tall as its proportions make it"
+          }, so there is no height to set. Centring uses the dashed rectangle on the sheet.`}
+        >
+          {mm(el.heightMm)} mm tall at this width.
+        </Hint>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>

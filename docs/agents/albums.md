@@ -1379,6 +1379,31 @@ the content area. What is worth not re-deriving:
 - **Divergence is the ordinary preset comparison** — *Footer placement*, *Footer offset (mm)*,
   *Footer frame gap (mm)*.
 
+### The side panel's words (#1459)
+
+The panel had grown a paragraph under every control, several saying the same thing, and a 20rem
+column in which the controls were lost among the text. It now follows the album screen's rule (#1430):
+**at most one short line under a control**, and only where the control's name does not already say
+it; the rest is a hover away and in `docs/user-guide/albums.md`. What is worth not re-deriving:
+
+- **Two shapes carry it, both in `editor-styles.tsx`.** `Hint` is the one line — dotted, with a
+  `Tooltip`, when it has `more` — and `PanelHeading`'s `scope` puts a *This sheet* / *Whole album* tag
+  on a section's heading, with the scope's own tooltip. The tag is the one fact the paragraphs mostly
+  existed to state; only the placement (`sheet`) and the two preset values (#836, #1307; `album`)
+  carry one, because only there is the reach a choice between the two. A new control here adds a
+  `Hint`, not a paragraph.
+- **The line kept visible is the one whose absence leads to a wrong action**, and that was the test
+  for each: the placement's *one band, no gap to share* (else the select looks broken — it then takes
+  the line, and the opener's name moves to the tooltip), *boxes may move to another row or sheet*,
+  *the height moves in strip steps*, *written onto the stamp* (a size is not a box correction), *not a
+  page break*, and the two reasons measuring is not offered (#1309).
+- **The printed-card note is said once**, under the album-wide controls, and only when the album has
+  a card in the binder (`printedCards`, off the sheet list). The save asks before any card would
+  diverge, so the line is the standing half of what the confirm says.
+- **Translation rows are stacked in the side panel only** (`TranslationGapsPanel`'s `stacked`): the
+  owner and the full default text on one wrapping line, the input at the panel's width below. The
+  offer dialogs keep the one-line row, which has the width for it.
+
 ## Pages without stamps (#1429, ADR-0058)
 
 A title page, a section divider, a map, a page of notes: `AlbumFreePage` filed like a note, and
