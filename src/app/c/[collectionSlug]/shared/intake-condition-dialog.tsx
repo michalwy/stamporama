@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -179,7 +180,7 @@ export interface IntakeConditionDialogProps {
    */
   pieces?: IdentifiedPiece[];
   /** The collection's stated scan resolution (#598), for the measuring tools inside that viewer. */
-  scanDpi: number;
+  scanning: ScanningSetup;
   /**
    * How many copies this submit is about to create (#596), when that is more than the selection
    * itself says — a run of tiles identified as one stamp. Stated in the summary box and on the
@@ -278,7 +279,7 @@ function IntakeConditionDialog({
   submitLabel,
   hidePhotos,
   pieces,
-  scanDpi,
+  scanning,
   copyCount,
   prefill,
   lotChoice,
@@ -536,7 +537,7 @@ function IntakeConditionDialog({
   // beside it, and nothing about the questions moves.
   const pieceAside =
     pieces && pieces.some((p) => p.sides.length > 0) ? (
-      <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
+      <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanning={scanning} />
     ) : undefined;
 
   return (
@@ -879,7 +880,7 @@ function IntakeConditionDialog({
             excludeItemId={correctedCopyId ?? null}
             pieces={pieces}
             previews={photos ? photoPreviews : []}
-            scanDpi={scanDpi}
+            scanning={scanning}
             onClose={() => setComparing(false)}
           />,
           document.body

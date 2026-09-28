@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import {
   useCallback,
   useEffect,
@@ -43,16 +44,26 @@ import { SnapshotDialog } from "./snapshot-dialog";
 import { useEscapeLayer } from "@/app/escape-stack";
 import type { TileSideView } from "@/lib/scan-tile-view";
 import {
+  DEFAULT_SCAN_DPI,
   MM_PER_INCH,
   formatGaugeAt,
   formatMillimetres,
   isPlausibleGauge,
+  meanPixelsPerMm,
   measureDistance,
   parseScanDpi,
   parseToothCount,
   perforationGauge,
   type ScanPoint,
 } from "@/lib/scan-measure";
+import {
+  initialProfileId,
+  profileLabel,
+  profileScale,
+  scaleForTurn,
+  typedScale,
+  type MeasureScale,
+} from "@/lib/scanning-profile";
 import {
   formatStampSize,
   sizeFromScanPixels,
@@ -131,9 +142,12 @@ import { TextInput } from "./text-input";
  * `useSheetRegion` has escalated to it. The zoom then affects only how precisely a mark can be
  * *placed*, which is why the bar says so below `1:1` rather than quietly returning a worse number.
  *
- * The **scale is stated and never inferred** (`scan-measure.ts`), and its field sits in the bar
- * beside the result: prefilled from the collection, corrected here for this sitting, and never
- * written back — see `docs/agents/purchases-and-intake.md` for why that asymmetry is the point.
+ * The **scale is stated and never inferred** (`scan-measure.ts`), and its control sits in the bar
+ * beside the result: a scanning profile (#1443), opened on the one the card was scanned with — or
+ * the collection's default — switchable for this sitting, with a typed resolution as the last
+ * resort, and never written back. See `docs/agents/purchases-and-intake.md` for why that asymmetry
+ * is the point. A profile's calibration is per axis, and a tile stood up by a quarter turn swaps
+ * the axes (`scaleForTurn`), since its marks are placed in the turned frame.
  * Nothing a measurement produces is stored anywhere.
  *
  * The **tooth count is read off the edge** when a perforation drag is released (#614,
@@ -177,7 +191,7 @@ interface Props {
    * it as the stamp's size, on `onGauge`'s terms: the viewer measures, and what a figure is for is
    * the caller's business. Always with the scale it was taken at.
    */
-  onSize?: (reading: { size: StampSize; dpi: number } | null) => void;
+  onSize?: (reading: { size: StampSize; scale: MeasureScale } | null) => void;
   /** A snapshot was saved (#674) — for a screen that shows the photos it just gained. */
   onSnapshotSaved?: () => void;
   /**
@@ -204,11 +218,11 @@ interface Props {
   /** For the alt text, which is the only place a tile's position is named on this side of the
    * dialog. */
   position: number;
-  /** What this collection scans at (#598) — the measuring bar's prefill, and the only scale in the
-   * app. Passed down rather than fetched here: it is one integer the page already loaded, and a
-   * viewer that read it for itself would be a second source for the one number that must not have
-   * two. */
-  scanDpi: number;
+  /** The collection's scanning profiles and its default (#1443) — what the measuring bar offers,
+   * opened on the profile the side's card was scanned with. Passed down rather than fetched here: the
+   * page already loaded them, and a viewer that read them for itself would be a second source for
+   * the one thing a measurement must not have two of. */
+  scanning: ScanningSetup;
   /**
    * The gauge currently on the bar, or null when there is not one (#740).
    *
@@ -292,7 +306,7 @@ const PIECE_NAV_BTN: CSSProperties = {
 export function IdentifiedPieceAside({
   collectionId,
   pieces,
-  scanDpi,
+  scanning,
   onGauge,
   onTurn,
   turning,
@@ -300,8 +314,8 @@ export function IdentifiedPieceAside({
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
-  /** The collection's stated scan resolution (#598), carried to whichever viewer this resolves to. */
-  scanDpi: number;
+  /** The collection's scanning profiles (#1443), carried to whichever viewer this resolves to. */
+  scanning: ScanningSetup;
   /** The gauge the open viewer is reading, passed straight through (#740). A run showing the grid
    * has no viewer and so no reading — which is right: the pieces were ticked as one stamp, but a
    * perforation is measured on **one** of them, and there is no run-wide answer to report. Opening
@@ -354,7 +368,7 @@ export function IdentifiedPieceAside({
         collectionId={collectionId}
         sides={shown[0].sides}
         position={shown[0].position}
-        scanDpi={scanDpi}
+        scanning={scanning}
         onGauge={onGauge}
         onTurn={onTurn ? (side, turn) => onTurn(shown[0].tileId, side, turn) : undefined}
         turning={turning}
@@ -425,7 +439,7 @@ export function IdentifiedPieceAside({
           collectionId={collectionId}
           sides={opened.sides}
           position={opened.position}
-          scanDpi={scanDpi}
+          scanning={scanning}
           onGauge={onGauge}
           onTurn={onTurn ? (side, turn) => onTurn(opened.tileId, side, turn) : undefined}
           turning={turning}
@@ -590,8 +604,8 @@ interface TextEdit {
  * - **No figure without a scale.** An unparseable resolution produces a sentence asking for one,
  *   never a reading against a fallback. A number taken at a scale nobody stated is exactly the
  *   thing that gets written down as a variant's defining feature and is wrong.
- * - **A figure never appears without the scale it was taken at.** Both `text` values below come
- *   from `formatMillimetresAt` / `formatGaugeAt`, which cannot render one without the other.
+ * - **A figure never appears without what it was taken with** — the scale's own sentence, *Epson
+ *   V600, 1200 dpi (calibrated)* (#1443), after every figure below.
  *
  * A gauge outside what perforations actually occupy is reported as a mistake rather than quoted: at
  * that point the marks or the tooth count are wrong, and "47.32" said confidently is worse than
@@ -600,12 +614,13 @@ interface TextEdit {
 function describeReading(args: {
   tool: MeasureTool;
   marks: { a: ScanPoint; b: ScanPoint } | null;
-  dpi: number | null;
+  /** The scale in the picture's own frame — already turned with it — or null when none is stated. */
+  scale: MeasureScale | null;
   teeth: number | null;
   /** What the picture is called — *tile* or *photo*. */
   noun: string;
 }): { text: string; muted: boolean; detail?: string; gauge?: number; size?: StampSize } {
-  const { tool, marks, dpi, teeth, noun } = args;
+  const { tool, marks, scale, teeth, noun } = args;
   if (tool === "off") return { text: "", muted: true };
   // The marks say nothing numeric, so they need no scale and are not refused for the lack of one.
   if (tool === "ellipse") return { text: "Drag across a detail to ring it.", muted: true };
@@ -613,7 +628,7 @@ function describeReading(args: {
   if (tool === "text") {
     return { text: "Click where the note goes and type — click a note to edit it.", muted: true };
   }
-  if (dpi === null) {
+  if (scale === null) {
     return {
       text: "State the resolution you scan at — a measurement is only as good as it.",
       muted: true,
@@ -632,7 +647,7 @@ function describeReading(args: {
       muted: true,
     };
   }
-  const { px, mm } = measureDistance(marks.a, marks.b, dpi);
+  const { px, mm } = measureDistance(marks.a, marks.b, scale);
   if (px <= 0) {
     return { text: "One mark placed — drag to the second.", muted: true };
   }
@@ -641,12 +656,12 @@ function describeReading(args: {
     // line is the ruler's answer rather than a size of `0 × 25.4 mm` — so it is the prompt again.
     const w = Math.abs(marks.b.x - marks.a.x);
     const h = Math.abs(marks.b.y - marks.a.y);
-    const size = sizeFromScanPixels({ w, h }, dpi, MM_PER_INCH);
+    const size = sizeFromScanPixels({ w, h }, scale, MM_PER_INCH);
     if (!size) {
       return { text: "Drag a box around the stamp, corner to corner.", muted: true };
     }
     return {
-      text: `${formatStampSize(size)} at ${dpi} dpi`,
+      text: `${formatStampSize(size)} — ${scale.label}`,
       // Out beside the sentence, on `gauge`'s rule (#740): the one place that decided a reading is
       // real is the one place that hands it on, so nothing downstream can offer a figure this
       // function refused to state.
@@ -657,7 +672,7 @@ function describeReading(args: {
   }
   if (tool === "ruler" || tool === "rulerMark") {
     return {
-      text: `${formatMillimetres(mm)} mm at ${dpi} dpi`,
+      text: `${formatMillimetres(mm)} mm — ${scale.label}`,
       muted: false,
       detail: `${Math.round(px)} scan px`,
     };
@@ -674,7 +689,7 @@ function describeReading(args: {
     };
   }
   return {
-    text: `Perf ${formatGaugeAt(gauge, dpi)}`,
+    text: `Perf ${formatGaugeAt(gauge, scale.label)}`,
     // The figure itself rides out beside the sentence (#740), so the one place that decided a
     // reading is real is also the one place that hands it to whatever compares it. A caller cannot
     // arrive at a gauge this function called a mistake.
@@ -755,6 +770,9 @@ export interface ViewerState {
   tool: MeasureTool;
   marks: { a: ScanPoint; b: ScanPoint } | null;
   history: MarksHistory;
+  /** The scale picked on the bar (#1443) — a profile's id, the typed-resolution choice, or null while
+   * the viewer is still following the scan's own profile — and the typed resolution. */
+  scaleChoice: string | null;
   dpiText: string;
   teethText: string;
   teethSource: TeethSource;
@@ -765,7 +783,7 @@ export function TileZoomView({
   collectionId,
   sides,
   position,
-  scanDpi,
+  scanning,
   onGauge,
   onTurn,
   turning,
@@ -1032,11 +1050,30 @@ export function TileZoomView({
     [annotationStyle, editNote]
   );
 
-  /** The stated scale, as typed. Prefilled from the collection and **never written back**: a card
-   * scanned at 600 measured once is a fact about that card, not a new assumption for every later
-   * measurement. Changing what the collection assumes is a Settings act. */
-  const [dpiText, setDpiText] = useState(carried?.dpiText ?? String(scanDpi));
-  const dpi = parseScanDpi(dpiText);
+  /**
+   * The stated scale (#598, #1443): a scanning profile, or a resolution typed for the sitting.
+   *
+   * **Opened on what the card was scanned with** — the side's sheet's profile, else the collection's
+   * default — and switchable here for this sitting only, never written back: measuring one old card
+   * with another scanner's profile is a fact about that card, not a new assumption for every later
+   * measurement, and changing the default is a Settings act. `chosen` is null until the collector
+   * picks, so the flip to a back scanned on another scanner follows its own sheet. Both travel into
+   * the large window and back (#1442).
+   *
+   * The scale is then **turned with the picture** (`scaleForTurn`): a tile stood up by a quarter turn
+   * has its marks in the turned frame, where the scanner's x axis runs down the screen.
+   */
+  const [chosenScale, setChosenScale] = useState<string | null>(carried?.scaleChoice ?? null);
+  const [dpiText, setDpiText] = useState(carried?.dpiText ?? String(DEFAULT_SCAN_DPI));
+  const scaleChoice =
+    chosenScale ?? initialProfileId(scanning, current?.scanningProfileId) ?? TYPED_SCALE;
+  const typedDpi = parseScanDpi(dpiText);
+  const typing = !scanning.profiles.some((p) => p.id === scaleChoice);
+  const scale = useMemo((): MeasureScale | null => {
+    const profile = scanning.profiles.find((p) => p.id === scaleChoice);
+    const base = profile ? profileScale(profile) : typedDpi === null ? null : typedScale(typedDpi);
+    return base ? scaleForTurn(base, turn) : null;
+  }, [scanning.profiles, scaleChoice, typedDpi, turn]);
 
   /**
    * How many teeth lie **between the marks** — the field, and where the figure in it came from.
@@ -1268,7 +1305,7 @@ export function TileZoomView({
         // The stated scale bounds the candidates to counts a perforation could actually be — the
         // scale earning its keep a second time. Null when none has been stated, which widens the
         // search rather than stopping it.
-        runLengthMm: dpi === null ? null : measureDistance(m.a, m.b, dpi).mm,
+        runLengthMm: scale === null ? null : measureDistance(m.a, m.b, scale).mm,
       });
 
       if (!found.ok) {
@@ -1278,7 +1315,7 @@ export function TileZoomView({
       setTeethText(String(found.teeth));
       setTeethSource("counted");
     },
-    [dpi, loadPixels, pictureWidth]
+    [scale, loadPixels, pictureWidth]
   );
 
   // ── Reading a watermark (#625) ──────────────────────────────────────────────────────────────
@@ -1332,7 +1369,7 @@ export function TileZoomView({
     // fact, but keeping the filter's band on the millimetre scale a watermark occupies whatever the
     // scan's density. A wrong figure here costs a picture filtered slightly off-band, which the
     // strength control absorbs — so this falls back rather than refusing the way a reading does.
-    scanPixelsPerMm: dpi === null ? null : dpi / MM_PER_INCH,
+    scanPixelsPerMm: scale === null ? null : meanPixelsPerMm(scale),
     channel: watermarkChannel,
     strength: watermarkStrength,
   });
@@ -1428,7 +1465,7 @@ export function TileZoomView({
     // mark takes the scale on the bar with it — the one it was drawn at.
     // A click draws nothing: it is how a mark is selected instead.
     if (wasMarking && isAnnotationTool(tool) && tool !== "text" && line) {
-      const mark = clicked ? null : annotationFromDrag(tool, line.a, line.b, annotationStyle, dpi);
+      const mark = clicked ? null : annotationFromDrag(tool, line.a, line.b, annotationStyle, scale);
       if (mark) {
         setHistory((h) => changeMarks(h, [...h.marks, mark]));
         setSelected(null);
@@ -1463,7 +1500,7 @@ export function TileZoomView({
    * in state: it is a function of the marks, the scale and the tooth count, and a cached copy of it
    * is a copy that can be stale — which for a number quoted as a measurement is not a bug worth
    * risking to save an arithmetic. */
-  const reading = describeReading({ tool, marks, dpi, teeth, noun });
+  const reading = describeReading({ tool, marks, scale, teeth, noun });
   /** Whether this viewer's figures are the ones standing (#1442). While the large window is open over
    * the panel the window is the one measuring, and a second voice reporting the panel's older reading
    * beside it would be two figures for one piece; the window reports through the same channels, and
@@ -1485,19 +1522,20 @@ export function TileZoomView({
   // otherwise. Hooks, so they sit above the `current` guard with the gauge's.
   //
   // The **measured** figure is the size tool's reading and exists only while one stands.
-  usePublishSizeProposal("measured", reporting ? (reading.size ?? null) : null, dpi);
+  usePublishSizeProposal("measured", reporting ? (reading.size ?? null) : null, scale);
   // The **estimate** is the tile's own crop box divided by the stated scale, and it is always
   // there: the box was cut by #574's detector or by hand in the cut editor, and either way it is
   // the stamp plus whatever slack the cut carried. Good enough to propose, never good enough to
   // write — which is why it travels marked as an estimate and is offered as one.
   const box = current?.box ?? null;
   const cropSize = useMemo(() => {
-    if (!box || dpi === null) return null;
-    // Width and height as the piece stands on screen (#1006), not as it happened to lie on the card.
+    if (!box || scale === null) return null;
+    // Width and height as the piece stands on screen (#1006), not as it happened to lie on the card —
+    // and `scale` is turned the same way, so each still meets its own axis's resolution.
     const upright = isSideways(turn) ? { ...box, w: box.h, h: box.w } : box;
-    return sizeFromScanPixels(upright, dpi, MM_PER_INCH);
-  }, [box, dpi, turn]);
-  usePublishSizeProposal("estimated", reporting ? cropSize : null, dpi);
+    return sizeFromScanPixels(upright, scale, MM_PER_INCH);
+  }, [box, scale, turn]);
+  usePublishSizeProposal("estimated", reporting ? cropSize : null, scale);
 
   // The size on the bar, for a caller that writes one (#1290) — split like the gauge's, so the viewer
   // closing takes the figure with it.
@@ -1505,11 +1543,11 @@ export function TileZoomView({
   const sizeHeight = reporting ? (reading.size?.heightMm ?? null) : null;
   useEffect(() => {
     onSize?.(
-      sizeWidth === null || sizeHeight === null || dpi === null
+      sizeWidth === null || sizeHeight === null || scale === null
         ? null
-        : { size: { widthMm: sizeWidth, heightMm: sizeHeight }, dpi }
+        : { size: { widthMm: sizeWidth, heightMm: sizeHeight }, scale }
     );
-  }, [dpi, onSize, sizeHeight, sizeWidth]);
+  }, [scale, onSize, sizeHeight, sizeWidth]);
   useEffect(() => () => onSize?.(null), [onSize]);
 
   /** A snapshot being named before it is saved (#674): what was in view and what was drawn on it,
@@ -1533,6 +1571,7 @@ export function TileZoomView({
     tool: chosenTool,
     marks,
     history,
+    scaleChoice: chosenScale,
     dpiText,
     teethText,
     teethSource: teethSource === "counting" ? "typed" : teethSource,
@@ -1573,6 +1612,7 @@ export function TileZoomView({
     editNote(null);
     setSelected(null);
     setChosenTool(state.tool);
+    setChosenScale(state.scaleChoice);
     setDpiText(state.dpiText);
     setTeethText(state.teethText);
     setTeethSource(state.teethSource);
@@ -1932,7 +1972,7 @@ export function TileZoomView({
                 scale={view.scale}
               />
               {measuring && marks && tool !== "text" && (
-                <AnnotationShapes marks={[dragMark(tool, marks, dpi, annotationStyle)]} scale={view.scale} />
+                <AnnotationShapes marks={[dragMark(tool, marks, scale, annotationStyle)]} scale={view.scale} />
               )}
               {/* The selected mark (#1342), outlined on screen only — a snapshot never shows it. */}
               {selectedMark && <SelectionOutline box={annotationBounds(selectedMark, view.scale)} scale={view.scale} />}
@@ -2149,9 +2189,27 @@ export function TileZoomView({
             </label>
           )}
 
+          {/* The scale (#598, #1443): a scanning profile, opened on what the card was scanned with,
+              or a resolution typed for the sitting when no profile fits. Switching holds for this
+              sitting only — the scan keeps its profile and the collection its default. */}
           <Tooltip
-            content={`What this ${subject === "photo" ? "picture" : "card"} was scanned at. Correcting it here holds for this sitting only — the collection keeps its own setting, in Settings → General.`}
+            content={`What this ${subject === "photo" ? "picture" : "card"} was scanned with. Switching here holds for this sitting only — the ${subject === "photo" ? "collection keeps its default" : "scan keeps its profile"}, set in Settings → Scanning.`}
           >
+            <select
+              value={typing ? TYPED_SCALE : scaleChoice}
+              onChange={(e) => setChosenScale(e.target.value)}
+              aria-label="Scanning profile"
+              style={{ ...MEASURE_FIELD, textAlign: "left", maxWidth: "20rem" }}
+            >
+              {scanning.profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {profileLabel(p)}
+                </option>
+              ))}
+              <option value={TYPED_SCALE}>Another resolution…</option>
+            </select>
+          </Tooltip>
+          {typing && (
             <label style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
               <TextInput
                 value={dpiText}
@@ -2162,12 +2220,12 @@ export function TileZoomView({
                   ...MEASURE_FIELD,
                   width: "4rem",
                   borderColor:
-                    dpi === null ? "var(--color-error-border)" : "var(--color-border-strong)",
+                    typedDpi === null ? "var(--color-error-border)" : "var(--color-border-strong)",
                 }}
               />
               <span style={{ color: "var(--color-text-muted)" }}>dpi</span>
             </label>
-          </Tooltip>
+          )}
 
           {marks && (
             <ScanToolButton label="Clear" hint="Take the marks off (Esc)" onClick={() => setMarks(null)} />
@@ -2291,7 +2349,7 @@ export function TileZoomView({
           sides={sides}
           subject={subject}
           position={position}
-          scanDpi={scanDpi}
+          scanning={scanning}
           onGauge={onGauge}
           onSize={onSize}
           onSnapshotSaved={onSnapshotSaved}
@@ -2396,13 +2454,15 @@ function noteColour(style: AnnotationStyle) {
 function dragMark(
   tool: MeasureTool,
   marks: { a: ScanPoint; b: ScanPoint },
-  dpi: number | null,
+  scale: MeasureScale | null,
   style: AnnotationStyle
 ): SnapshotMark {
   const { a, b } = marks;
   if (tool === "ellipse" || tool === "line") return { kind: tool, a, b, style };
   if (tool === "rulerMark") {
-    return dpi === null ? { kind: "line", a, b, style } : { kind: "rulerMark", a, b, dpi, style };
+    return scale === null
+      ? { kind: "line", a, b, style }
+      : { kind: "rulerMark", a, b, scale: { x: scale.x, y: scale.y }, style };
   }
   if (tool === "size") return { kind: "box", a, b, label: "", style };
   return { kind: "distance", a, b, label: "", style };
@@ -2471,6 +2531,10 @@ const TOOL_BAR: React.CSSProperties = {
 };
 
 /** The two number fields in the measuring bar, which are one control wearing two labels. */
+/** The scale control's value for *a resolution typed for the sitting* rather than a profile. Not a
+ * cuid, so it cannot collide with a profile's id. */
+const TYPED_SCALE = "typed";
+
 const MEASURE_FIELD: React.CSSProperties = {
   padding: "0.25rem 0.375rem",
   border: "1px solid var(--color-border-strong)",

@@ -1373,6 +1373,20 @@ function StampAttributesTab({
   onPresetPickerOpenChange: (open: boolean) => void;
 }) {
   const proposals = useSizeProposals();
+  /** The measurement the size fields were last filled from, and the profile it was taken with
+   * (#1443). Sent with the form only while both fields still hold exactly those figures: a figure
+   * typed over afterwards is the collector's own, and must not be recorded as a scanner's. */
+  const [measuredWith, setMeasuredWith] = useState<{
+    profileId: string;
+    widthText: string;
+    heightText: string;
+  } | null>(null);
+  const measuredWithId =
+    measuredWith &&
+    values.widthMm === measuredWith.widthText &&
+    values.heightMm === measuredWith.heightText
+      ? measuredWith.profileId
+      : null;
   return (
     <div
       style={{
@@ -1476,6 +1490,9 @@ function StampAttributesTab({
                 />
               </div>
             ))}
+            {measuredWithId && (
+              <input type="hidden" name="sizeMeasuredWith" value={measuredWithId} />
+            )}
             <SizePresetControls
               collectionId={collectionId}
               widthText={values.widthMm}
@@ -1511,8 +1528,15 @@ function StampAttributesTab({
                     proposal={proposal}
                     disabled={disabled}
                     onUse={() => {
-                      setValue("widthMm", formatSizeMm(proposal.widthMm));
-                      setValue("heightMm", formatSizeMm(proposal.heightMm));
+                      const widthText = formatSizeMm(proposal.widthMm);
+                      const heightText = formatSizeMm(proposal.heightMm);
+                      setValue("widthMm", widthText);
+                      setValue("heightMm", heightText);
+                      setMeasuredWith(
+                        proposal.scale.profileId
+                          ? { profileId: proposal.scale.profileId, widthText, heightText }
+                          : null
+                      );
                     }}
                   />
                 );
@@ -1672,7 +1696,7 @@ function SizeProposalRow({
       <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
         {formatStampSize(proposal)}
       </span>
-      <span style={{ color: "var(--color-text-muted)" }}>at {proposal.dpi} dpi</span>
+      <span style={{ color: "var(--color-text-muted)" }}>— {proposal.scale.label}</span>
       {copy.estimate && (
         <span
           style={{

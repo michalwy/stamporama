@@ -11,12 +11,15 @@ import {
   formatMillimetres,
   formatMillimetresAt,
   isPlausibleGauge,
+  meanPixelsPerMm,
   measureDistance,
   nearestCatalogueGauge,
   parseScanDpi,
   parseToothCount,
   perforationGauge,
   scanPixelsToMm,
+  scanVectorToMm,
+  uniformScale,
 } from "../../src/lib/scan-measure";
 
 /** Two figures equal to within a tolerance the scan itself could not tell apart. */
@@ -81,9 +84,43 @@ describe("distanceInScanPixels / measureDistance", () => {
   });
 
   it("keeps the pixel count beside the millimetres", () => {
-    const { px, mm } = measureDistance({ x: 100, y: 100 }, { x: 1300, y: 100 }, 1200);
+    const { px, mm } = measureDistance({ x: 100, y: 100 }, { x: 1300, y: 100 }, uniformScale(1200));
     assert.equal(px, 1200);
     near(mm, 25.4);
+  });
+});
+
+describe("two axes (#1443)", () => {
+  const scale = { x: 1195, y: 1198 };
+
+  it("converts a line along each axis through that axis's own resolution", () => {
+    near(measureDistance({ x: 0, y: 0 }, { x: 1195, y: 0 }, scale).mm, 25.4);
+    near(measureDistance({ x: 0, y: 0 }, { x: 0, y: 1198 }, scale).mm, 25.4);
+    // The same 1195 px down the picture is a shorter distance, because that axis is denser.
+    near(measureDistance({ x: 0, y: 0 }, { x: 0, y: 1195 }, scale).mm, (1195 / 1198) * 25.4);
+  });
+
+  it("converts each component before taking a diagonal's length", () => {
+    const mm = scanVectorToMm({ x: 0, y: 0 }, { x: 1195, y: 1198 }, scale);
+    near(mm, Math.hypot(25.4, 25.4));
+  });
+
+  it("is #598's single dpi when both axes agree", () => {
+    const a = { x: 10, y: 20 };
+    const b = { x: 610, y: 820 };
+    near(scanVectorToMm(a, b, uniformScale(1200)), scanPixelsToMm(1000, 1200));
+  });
+
+  it("gauges a perforation along the axis the teeth run", () => {
+    // Twelve teeth over 1000 px down a vertical edge: the vertical resolution decides the gauge.
+    const down = perforationGauge(measureDistance({ x: 0, y: 0 }, { x: 0, y: 1000 }, { x: 1150, y: 1200 }).mm, 12);
+    const across = perforationGauge(measureDistance({ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1150, y: 1200 }).mm, 12);
+    near(down as number, 11.34, 0.005);
+    assert.ok((across as number) < 11);
+  });
+
+  it("gives the watermark filter the paper's scale taken from both axes", () => {
+    near(meanPixelsPerMm({ x: 1190, y: 1210 }), 1200 / 25.4);
   });
 });
 
@@ -99,7 +136,7 @@ describe("perforationGauge", () => {
   it("reads a real run measured at 1200 dpi", () => {
     // Twelve teeth spanning 1000 scan pixels at 1200 dpi: 21.17 mm, so 11.34 — a piece sitting
     // between 11¼ and 11½, which is exactly the case the raw figure exists to report.
-    const { mm } = measureDistance({ x: 0, y: 0 }, { x: 1000, y: 0 }, 1200);
+    const { mm } = measureDistance({ x: 0, y: 0 }, { x: 1000, y: 0 }, uniformScale(1200));
     const gauge = perforationGauge(mm, 12) as number;
     near(gauge, 11.34, 0.005);
     near(nearestCatalogueGauge(gauge), 11.25);
@@ -150,12 +187,13 @@ describe("formatGaugeStep", () => {
 });
 
 describe("stating the scale with the figure", () => {
-  it("never renders a measurement without the resolution it was taken at", () => {
-    assert.equal(formatMillimetresAt(25.4, 1200), "25.40 mm at 1200 dpi");
+  it("never renders a measurement without what it was taken with", () => {
+    const taken = "Epson V600, 1200 dpi (calibrated)";
+    assert.equal(formatMillimetresAt(25.4, taken), "25.40 mm — Epson V600, 1200 dpi (calibrated)");
     // The step first, because that is what a catalogue says; the measured figure beside it,
     // because that is what says how comfortably the piece sits on the step.
-    assert.equal(formatGaugeAt(11.63, 1200), "11¾ (11.63) at 1200 dpi");
-    assert.equal(formatGaugeAt(11.63, 600), "11¾ (11.63) at 600 dpi");
+    assert.equal(formatGaugeAt(11.63, taken), "11¾ (11.63) — Epson V600, 1200 dpi (calibrated)");
+    assert.equal(formatGaugeAt(11.63, "600 dpi (typed)"), "11¾ (11.63) — 600 dpi (typed)");
   });
 
   it("states figures at the precision the scan supports and no more", () => {

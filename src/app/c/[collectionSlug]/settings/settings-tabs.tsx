@@ -1,5 +1,7 @@
 "use client";
 
+import type { ScanningProfileListRow } from "@/lib/scanning-profile";
+import { ScanningProfilesPanel } from "./scanning-profiles-panel";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { SettingsPanel } from "./settings-panel";
@@ -141,8 +143,8 @@ interface SettingsTabsProps {
    * it defers to the instance — whose own answer, in words, is the second field. */
   scanSheetTtl: string | null;
   instanceScanSheetTtlLabel: string;
-  /** The resolution this collection's cards are scanned at (#598). */
-  scanDpi: number;
+  /** The collection's scanning profiles (#1443), each with what uses it. */
+  initialScanningProfiles: ScanningProfileListRow[];
   duplicateCatalogMode: DuplicateCatalogMode;
   photoStorageBytes: number;
   /** The local cache of remote storage objects (#591), shown beside the storage figure but never
@@ -155,6 +157,9 @@ interface SettingsTabsProps {
 
 const TABS = [
   { key: "general", label: "General" },
+  // The scanners measurements are taken with (#1443) — a tab rather than a General section since
+  // the resolution became profiles: a list with a calibration each is a dictionary, like the others.
+  { key: "scanning", label: "Scanning" },
   { key: "catalogs", label: "Catalogs" },
   { key: "conditions", label: "Conditions & formats" },
   { key: "subtypes", label: "Subtypes" },
@@ -252,7 +257,7 @@ export function SettingsTabs({
   instanceClosedOfferPhotoTtlLabel,
   scanSheetTtl,
   instanceScanSheetTtlLabel,
-  scanDpi,
+  initialScanningProfiles,
   duplicateCatalogMode,
   photoStorageBytes,
   storageCache,
@@ -266,6 +271,7 @@ export function SettingsTabs({
   const rawTab = searchParams.get("tab");
   const activeTab: TabKey =
     rawTab === "catalogs" ||
+    rawTab === "scanning" ||
     rawTab === "conditions" ||
     rawTab === "subtypes" ||
     rawTab === "attributes" ||
@@ -345,12 +351,14 @@ export function SettingsTabs({
           instanceClosedOfferPhotoTtlLabel={instanceClosedOfferPhotoTtlLabel}
           scanSheetTtl={scanSheetTtl}
           instanceScanSheetTtlLabel={instanceScanSheetTtlLabel}
-          scanDpi={scanDpi}
           photoStorageBytes={photoStorageBytes}
           storageCache={storageCache}
           appVersion={appVersion}
           appReleaseDate={appReleaseDate}
         />
+      )}
+      {activeTab === "scanning" && (
+        <ScanningProfilesPanel collectionId={collectionId} initialProfiles={initialScanningProfiles} />
       )}
       {activeTab === "catalogs" && (
         <CatalogPanel collectionId={collectionId} initialTree={initialTree} />

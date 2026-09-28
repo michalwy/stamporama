@@ -44,21 +44,16 @@ model Collection {
   // How many digits an internal copy number is padded to for display (#268). Purely a display
   // choice — the stored `Item.itemNo` is the bare integer — so changing it never touches a row.
   itemNoPad    Int      @default(5)
-  // The resolution this collection's cards are scanned at (#598), in dots per inch — the scale a
-  // measurement taken on a scan is converted with. **Stated, never inferred**: no EXIF is read
-  // anywhere, because #574's source corpus claimed a resolution its images did not have, and a
-  // gauge is an absolute claim where philately separates perf 11½ from perf 12 (under 4%).
+  // The scanning profile a measurement uses unless the collector picks another (#1443) — the
+  // successor of #598's `scanDpi`, which became this collection's first profile, uncalibrated, so
+  // nothing measured differently until the collector calibrated. **Stated, never inferred**: no EXIF
+  // is read anywhere (#574's corpus claimed a resolution its images did not have), and a gauge is an
+  // absolute claim where philately separates perf 11½ from perf 12 (under 4%).
   //
-  // A prefilled default rather than a fact about a file: one scanner profile is used almost always,
-  // so the field is right without being touched. It is edited **in the measuring tool**, where it
-  // is on view beside the result it produced — and a change made there holds for that sitting only.
-  // Writing this column is a Settings act, so one old scan measured once cannot silently redefine
-  // what every later measurement assumes.
-  //
-  // Not nullable: unlike the retention periods below, there is no instance-wide scanner and nothing
-  // for *I have no opinion* to defer to. 1200 dpi is what this app's own reference scans were made
-  // at and what a flatbed set up for stamps is usually left on.
-  scanDpi      Int      @default(1200)
+  // Nullable only because the two rows refer to each other: `createCollection` writes the default
+  // in the transaction that creates the collection, and the migration backfilled every existing
+  // one. It is chosen in Settings; the measuring tool's switch holds for the sitting only.
+  defaultScanningProfileId String? @unique
   // How long this collection's closed offers keep their generated listing images (#577), holding
   // **exactly** what `STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` holds — `off`/`never` for keep for
   // ever, `0` to purge at the next sweep, otherwise days — so one parser reads both and the two
@@ -117,6 +112,8 @@ model Collection {
   createdAt    DateTime @default(now())
 
   owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  defaultScanningProfile ScanningProfile? @relation("CollectionDefaultScanningProfile", fields: [defaultScanningProfileId], references: [id], onDelete: NoAction)
+  scanningProfiles ScanningProfile[] @relation("CollectionScanningProfiles")
   collectionAreas CollectionArea[]
   catalogVendors  CatalogVendor[]
   stamps          Stamp[]
@@ -2953,6 +2950,12 @@ model Stamp {
   // ordinary stated value.
   widthMm      Decimal? @db.Decimal(5, 1)
   heightMm     Decimal? @db.Decimal(5, 1)
+  // The scanning profile the size was measured with (#1443), or null — a size typed, applied from a
+  // preset, written by the assistant, or saved before profiles existed. Only the profile is recorded
+  // (collector's call, 2026-09-28), and a profile a size refers to cannot be deleted. Set by a write
+  // that carries a measurement, and cleared by any write that changes the size without one
+  // (`sizeProfileAfterWrite`), so it never names a scanner for a figure somebody typed.
+  sizeScanningProfileId String?
   issuedDay    Int?
   issuedMonth  Int?
   issuedYear   Int?
@@ -2980,6 +2983,7 @@ model Stamp {
   watermark         StampWatermark?       @relation(fields: [watermarkId], references: [id], onDelete: Restrict)
   paper             StampPaper?           @relation(fields: [paperId], references: [id], onDelete: Restrict)
   printing          StampPrinting?        @relation(fields: [printingId], references: [id], onDelete: Restrict)
+  sizeScanningProfile ScanningProfile?    @relation("StampSizeScanningProfile", fields: [sizeScanningProfileId], references: [id], onDelete: NoAction)
   variants          Stamp[]               @relation("StampVariants")
   stampAreaLinks    StampCollectionArea[]
   catalogNumbers    StampCatalogNumber[]
@@ -3016,6 +3020,7 @@ model Stamp {
   tags                   StampTag[]
 
   @@index([subtypeId])
+  @@index([sizeScanningProfileId])
   @@index([colorId])
   @@index([watermarkId])
   @@index([paperId])
@@ -3543,6 +3548,48 @@ model PurchaseLot {
 // Variants hang under `storageKey` as `<prefix>/{original,view}.<ext>`: `original` is the upload
 // untouched, `view` a FULL_MAX_EDGE-capped derivative the review editor displays, because a
 // browser cannot be handed a 30 Mpx image and the original must never be the thing on screen.
+// A scanner at a resolution, and how far it really is from that resolution (#1443).
+//
+// Chosen wherever a scan is measured, in place of #598's bare dpi. A scanner rarely delivers exactly
+// its nominal figure — 1200 may really be 1195 across the glass and 1198 along it — and on a 25 mm
+// stamp that is the few tenths of a millimetre the collector saw measurements come out large by. The
+// two axes are set by different parts (the sensor across, the carriage motor along), so each has its
+// own figure. The arithmetic is pure, in `scanning-profile.ts`; the reads and writes are
+// `scanning-profiles.ts`.
+//
+// **Uncalibrated is a real state**, and says so wherever a reading is shown: the profile then
+// measures at `nominalDpi` on both axes. A calibration is both figures or neither (a check in the
+// migration), derived from a ruler scanned and measured in Settings; the scan itself is never stored.
+//
+// **A profile in use cannot be deleted** (collector's call, 2026-09-28): the default, one a scan was
+// taken with, one a stamp's size was measured with. The references are `NoAction` so that a whole
+// collection, which cascades to all of them in one statement, still deletes.
+model ScanningProfile {
+  id             String   @id @default(cuid())
+  collectionId   String
+  /** The scanner, as the collector names it — *Epson V600*. The resolution is shown beside it
+   * wherever the profile is named, so the name need not carry it. */
+  name           String
+  /** The resolution the scanner was set to, in dots per inch — what an uncalibrated profile measures
+   * at, and what a calibration is checked against. */
+  nominalDpi     Int
+  /** The effective resolution across the scan (x) and along it (y), from a calibration — both or
+   * neither. A quotient, so two decimals rather than a whole number. */
+  calibratedDpiX Decimal? @db.Decimal(6, 2)
+  calibratedDpiY Decimal? @db.Decimal(6, 2)
+  createdAt      DateTime @default(now())
+
+  collection  Collection  @relation("CollectionScanningProfiles", fields: [collectionId], references: [id], onDelete: Cascade)
+  defaultOf   Collection? @relation("CollectionDefaultScanningProfile")
+  scanSheets  ScanSheet[]
+  scanUploads ScanUpload[]
+  stampSizes  Stamp[]     @relation("StampSizeScanningProfile")
+
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("scanning_profile")
+}
+
 model ScanSheet {
   id             String   @id @default(cuid())
   /** The collection the card belongs to (#725), carried directly so every read scopes by it
@@ -3601,10 +3648,15 @@ model ScanSheet {
    * moment, so the collection's storage total (#144) drops without any reader having to know this
    * column exists. */
   purgedAt       DateTime?
+  /** What the card was scanned with (#1443), chosen at upload and prefilled with the collection's
+   * default. Null on a sheet uploaded before profiles existed, which measures with the default —
+   * exactly what it measured with before, when the default was a bare dpi. */
+  scanningProfileId String?
   createdAt      DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  scanningProfile ScanningProfile? @relation(fields: [scanningProfileId], references: [id], onDelete: NoAction)
   frontTiles ScanTile[] @relation("ScanTileFrontSheet")
   backTiles  ScanTile[] @relation("ScanTileBackSheet")
 
@@ -3616,6 +3668,7 @@ model ScanSheet {
   @@index([collectionId])
   @@index([collectionId, batchNo])
   @@index([purchaseId])
+  @@index([scanningProfileId])
   @@map("scan_sheet")
 }
 
@@ -3763,6 +3816,10 @@ model ScanUpload {
   side           String
   batchNo        Int?
   label          String?
+  /** The profile chosen at the open (#1443), handed to the sheet at finalize. `SetNull`: an upload is
+   * staging, and an abandoned one must not stop a profile being deleted — the sheet then takes the
+   * default. */
+  scanningProfileId String?
   mime           String
   /** The size the client declared, checked against `MAX_UPLOAD_BYTES` before a byte is sent — a
    * scan too large is refused at the open rather than after 200 MB have crossed the wire. */
@@ -3784,6 +3841,7 @@ model ScanUpload {
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  scanningProfile ScanningProfile? @relation(fields: [scanningProfileId], references: [id], onDelete: SetNull)
 
   @@index([collectionId])
   @@index([purchaseId])

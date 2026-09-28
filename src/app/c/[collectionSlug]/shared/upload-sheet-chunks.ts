@@ -51,6 +51,8 @@ export async function uploadSheetInChunks(input: {
   side: "front" | "back";
   batchNo?: number;
   label?: string | null;
+  /** What the card was scanned with (#1443); null takes the collection's default. */
+  scanningProfileId?: string | null;
   onProgress: (progress: SheetUploadProgress) => void;
 }): Promise<UploadedSheet> {
   const openUrl = `${scansApiBase(input.collectionId, input.purchaseId)}/uploads`;
@@ -69,6 +71,7 @@ export async function uploadSheetInChunks(input: {
       side: input.side,
       batchNo: input.batchNo,
       label: input.label ?? null,
+      scanningProfileId: input.scanningProfileId ?? null,
       totalBytes: input.file.size,
     }),
   });

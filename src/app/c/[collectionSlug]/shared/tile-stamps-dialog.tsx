@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useState } from "react";
 import {
   DialogBody,
@@ -36,7 +37,7 @@ export function TileStampsDialog({
   collectionId,
   areas,
   pieces,
-  scanDpi,
+  scanning,
   formats,
   initialRows,
   onSave,
@@ -45,7 +46,7 @@ export function TileStampsDialog({
   collectionId: string;
   areas: CollectionAreaData[];
   pieces: IdentifiedPiece[];
-  scanDpi: number;
+  scanning: ScanningSetup;
   formats: StampFormatData[];
   /** The piece as the chain holds it — the stamp picked, or the list already described. */
   initialRows: ItemStampRow[];
@@ -56,7 +57,7 @@ export function TileStampsDialog({
   /** The picker the field opens takes Escape for itself; this dialog must not close under it. */
   const [pickerOpen, setPickerOpen] = useState(false);
   const aside = pieces.some((p) => p.sides.length > 0) ? (
-    <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
+    <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanning={scanning} />
   ) : undefined;
 
   return (

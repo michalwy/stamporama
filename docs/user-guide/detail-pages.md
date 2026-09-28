@@ -180,10 +180,11 @@ If the window is very short, the picture gives up the room; the tools and the re
 
 The rules are the scan's rules:
 
-- **Every figure is shown with the resolution it was taken at**, and that resolution is filled in
-  from **Settings → General → Scanner resolution**. If this picture came off a different scanner, or
-  was photographed rather than scanned, correct the figure on the measuring bar — it holds while you
-  are looking and does not change the collection's setting.
+- **Every figure names the [scanning profile](collections.md#scanning-profiles) it was taken with**,
+  and the measuring bar opens on the collection's default. If this picture came off a different
+  scanner, pick its profile on the bar; if it was photographed rather than scanned, or no profile
+  fits, choose **Another resolution…** and type one. Either holds while you are looking and changes
+  nothing else.
 - **The measurement is taken on the picture as you uploaded it**, even though what is kept on the
   server is a smaller copy of a very large upload. The scale stays exact; below **1:1** you are only
   placing the marks less precisely, and the viewer says so.
@@ -196,8 +197,10 @@ The rules are the scan's rules:
 height appear under the viewer with **Set as the stamp's size**. The ends of a box are hard to put
 exactly on a stamp's edges, so the width and height stand in two fields, filled in with what was
 measured, which you can correct before setting them — `21,5` and `21.5` both work. The measured
-figure and its resolution stay beside the fields, so a correction is read against what the picture
-said, and a new measurement fills the fields again. What is set is the size as the fields hold it. If
+figure and its profile stay beside the fields, so a correction is read against what the picture
+said, and a new measurement fills the fields again. What is set is the size as the fields hold it,
+recorded as measured with that profile — the stamp's page names it beside the size. A size measured
+at a typed resolution records no profile. If
 the stamp states no size yet, it is written straight away. If it already states one — whole or only half — you are shown that size and
 asked before it is replaced, since it may itself have been measured carefully. On a copy carrying
 several stamps the figure is measured but not offered, because the piece is a copy of none of them.

@@ -1914,7 +1914,7 @@ function StampSizeSection({ collectionId, box }: { collectionId: string; box: Al
           collectionId={collectionId}
           photo={measuring}
           label={`${where} · ${photoLabel(measuring)}`}
-          context={{ scanDpi: sources.data.scanDpi, stampId: box.stampId }}
+          context={{ scanning: sources.data.scanning, stampId: box.stampId }}
           onClose={() => {
             setMeasuring(null);
             // The dialog refreshes the page itself after a write; the stated figure above is read

@@ -132,4 +132,17 @@ describe("tileSideViews, without a recorded box", () => {
     // of somewhere else.
     assert.equal(sides[0].sheetId, null);
   });
+
+  it("carries each side's scanning profile, swept or not, so the tool opens on it (#1443)", () => {
+    const sides = tileSideViews(TILE, {
+      front: { id: "sheet-front", purged: true, scanningProfileId: "p-epson" },
+      back: { id: "sheet-back", purged: false, scanningProfileId: "p-canon" },
+    });
+    assert.deepEqual(
+      sides.map((s) => s.scanningProfileId),
+      ["p-epson", "p-canon"]
+    );
+    // A sheet from before profiles says nothing, which opens on the default.
+    assert.deepEqual(tileSideViews(TILE, SHEETS).map((s) => s.scanningProfileId), [null, null]);
+  });
 });

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { StampSize } from "@/lib/stamp-size";
+import type { MeasureScale } from "@/lib/scanning-profile";
 
 /**
  * The channel a size measured on a scan reaches the stamp form by (#763).
@@ -35,10 +36,10 @@ export interface SizeProposal extends StampSize {
    *   the cut carried*. A good first guess and a bad fact, so it is offered **marked as an
    *   estimate** and never presented as a reading. */
   source: "measured" | "estimated";
-  /** The scale it was taken at, which is the only form this app states a measurement in
-   * (`scan-measure.ts`). Quoted on the offer so a figure taken under a wrong dpi is refusable
-   * before it is accepted, not after. */
-  dpi: number;
+  /** What it was taken with, which is the only form this app states a measurement in
+   * (`scan-measure.ts`). Quoted on the offer so a figure taken under a wrong profile is refusable
+   * before it is accepted, not after — and its profile is what the stamp records if it is (#1443). */
+  scale: MeasureScale;
 }
 
 export type SizeProposalKind = SizeProposal["source"];
@@ -69,7 +70,8 @@ export function SizeProposalScope({ children }: { children: React.ReactNode }) {
         proposal &&
         current.widthMm === proposal.widthMm &&
         current.heightMm === proposal.heightMm &&
-        current.dpi === proposal.dpi
+        current.scale.label === proposal.scale.label &&
+        current.scale.profileId === proposal.scale.profileId
       ) {
         return prev;
       }
@@ -94,7 +96,7 @@ export function SizeProposalScope({ children }: { children: React.ReactNode }) {
 export function usePublishSizeProposal(
   kind: SizeProposalKind,
   size: StampSize | null,
-  dpi: number | null
+  scale: MeasureScale | null
 ) {
   const store = useContext(SizeProposalContext);
   const publish = store?.publish;
@@ -104,11 +106,11 @@ export function usePublishSizeProposal(
     if (!publish) return;
     publish(
       kind,
-      widthMm === null || heightMm === null || dpi === null
+      widthMm === null || heightMm === null || scale === null
         ? null
-        : { widthMm, heightMm, source: kind, dpi }
+        : { widthMm, heightMm, source: kind, scale }
     );
-  }, [publish, kind, widthMm, heightMm, dpi]);
+  }, [publish, kind, widthMm, heightMm, scale]);
   useEffect(() => {
     if (!publish) return;
     return () => publish(kind, null);

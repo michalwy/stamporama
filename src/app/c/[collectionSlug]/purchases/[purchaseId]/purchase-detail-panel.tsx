@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import {
   useCallback,
   useEffect,
@@ -322,7 +323,7 @@ interface PurchaseDetailPanelProps {
   collectionSlug: string;
   /** The resolution this collection's cards are scanned at (#598), carried down to the tile viewer
    * where the ruler and the perforation gauge live. */
-  scanDpi: number;
+  scanning: ScanningSetup;
   /** Today as yyyy-mm-dd, from the page's request-time clock — what the header dialog (#752)
    *  defaults a date to. Unused while editing an order that already has one. */
   today: string;
@@ -337,7 +338,7 @@ interface PurchaseDetailPanelProps {
 export function PurchaseDetailPanel({
   collectionId,
   collectionSlug,
-  scanDpi,
+  scanning,
   today,
   purchase,
   issueHeaderById,
@@ -1114,7 +1115,7 @@ export function PurchaseDetailPanel({
         // For the picker a parked tile's shortlist is built from (#607) — the same one this panel
         // opens for the identification itself.
         areas={areas}
-        scanDpi={scanDpi}
+        scanning={scanning}
         purchaseId={purchase.id}
         unidentifiedTileCount={purchase.unidentifiedTileCount}
         parkedTileCount={purchase.parkedTileCount}
@@ -1469,7 +1470,7 @@ export function PurchaseDetailPanel({
               issueHeaderById={issueHeaderById}
               collectionId={collectionId}
               purchaseId={purchase.id}
-              scanDpi={scanDpi}
+              scanning={scanning}
               currency={purchase.currency}
               baseCurrency={purchase.baseCurrency}
               openingBalance={openingBalance}
@@ -1523,7 +1524,7 @@ export function PurchaseDetailPanel({
         chain={tileChain}
         collectionId={collectionId}
         areas={areas}
-        scanDpi={scanDpi}
+        scanning={scanning}
         conditions={conditions}
         certificateStatuses={certificateStatuses}
         locations={locations}
@@ -1668,7 +1669,7 @@ export function PurchaseDetailPanel({
         <IntakeConditionDialog
           selection={wsSelection}
           collectionId={collectionId}
-          scanDpi={scanDpi}
+          scanning={scanning}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}
@@ -1779,7 +1780,7 @@ interface LotCardProps {
   purchaseId: string;
   /** The collection's stated scan resolution (#598), on its way to the tile viewer's measuring
    * tools through the condition dialog this card opens. */
-  scanDpi: number;
+  scanning: ScanningSetup;
   
   currency: string;
   baseCurrency: string;
@@ -2782,7 +2783,7 @@ function useOverflowing<T extends HTMLElement>(text: string) {
 }
 
 function LotCard({
-  scanDpi,
+  scanning,
   index,
   lot,
   justAdded,
@@ -3434,7 +3435,7 @@ function LotCard({
         <IntakeConditionDialog
           selection={pending}
           collectionId={collectionId}
-          scanDpi={scanDpi}
+          scanning={scanning}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}

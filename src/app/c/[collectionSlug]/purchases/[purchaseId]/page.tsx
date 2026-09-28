@@ -101,7 +101,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         collectionSlug={collectionSlug}
         // What this collection scans at (#598) — the scale the ruler and the perforation gauge in
         // the tile viewer convert with. One integer, loaded with the collection it belongs to.
-        scanDpi={collection.scanDpi}
+        scanning={collection.scanning}
         today={today}
         purchase={purchase}
         issueHeaderById={issueHeaderById}
