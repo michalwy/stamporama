@@ -12,7 +12,8 @@ import {
 import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
-import type { PurchaseListItem, PurchaseSortBy, PurchaseStatus } from "@/lib/purchases";
+import type { PurchaseListItem, PurchaseSortBy } from "@/lib/purchases";
+import { PURCHASE_STATUSES, PURCHASE_STATUS_META, type PurchaseStatus } from "@/lib/purchase-status";
 import {
   INTAKE_DOCUMENT_TYPES,
   INTAKE_PARTY_NONE,
@@ -36,11 +37,12 @@ type DialogState =
   | { kind: "edit"; purchase: PurchaseListItem }
   | { kind: "delete"; purchase: PurchaseListItem };
 
-const STATUS_FILTERS: { value: PurchaseStatus; label: string }[] = [
-  { value: "preparing", label: "Preparing" },
-  { value: "in_transit", label: "In transit" },
-  { value: "arrived", label: "Arrived" },
-];
+/** Every status, *Completed* included (#1449) — which is what makes *Arrived* mean *still being
+ *  sorted*: the filter is an exact match, so a completed order answers only its own chip. */
+const STATUS_FILTERS: { value: PurchaseStatus; label: string }[] = PURCHASE_STATUSES.map((value) => ({
+  value,
+  label: PURCHASE_STATUS_META[value].label,
+}));
 
 const SORT_OPTIONS: { value: PurchaseSortBy; label: string }[] = [
   { value: "purchasedAt", label: "Purchase date" },

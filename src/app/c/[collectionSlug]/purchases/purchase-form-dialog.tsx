@@ -10,6 +10,7 @@ import {
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { PurchaseListItem } from "@/lib/purchases";
+import { PURCHASE_STATUSES, PURCHASE_STATUS_META } from "@/lib/purchase-status";
 import { OPENING_BALANCE_TITLE_MAX, type PurchaseKind } from "@/lib/purchase-kind";
 import { PurchaseContactSelect } from "./purchase-contact-select";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
@@ -27,11 +28,6 @@ const INPUT_STYLE: React.CSSProperties = {
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
 
-const STATUS_OPTIONS = [
-  { value: "preparing", label: "Preparing" },
-  { value: "in_transit", label: "In transit" },
-  { value: "arrived", label: "Arrived" },
-] as const;
 
 /** The header fields this dialog edits, and nothing else (#752). Stated as its own shape rather
  *  than as `PurchaseListItem` because the order's **own screen** opens the same dialog and reads
@@ -193,9 +189,9 @@ export function PurchaseFormDialog({
                 disabled={isPending}
                 style={{ ...INPUT_STYLE, cursor: "pointer" }}
               >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
+                {PURCHASE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {PURCHASE_STATUS_META[s].label}
                   </option>
                 ))}
               </select>

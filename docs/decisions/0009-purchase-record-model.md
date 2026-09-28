@@ -295,3 +295,22 @@ not work out. Because disposed copies are hidden from the list by default, the v
 deliberately **lifts that one exclusion** and partitions the scope itself; a write-off summed over
 the visible set would read `0.00` in exactly the case it exists for. Sold copies stay out of it —
 a realised sale is not a write-off (#168).
+
+## Addendum: *Completed* after *Arrived* (#1449)
+
+`Purchase.status` gains a fourth value: `preparing | in_transit | arrived | completed`. Sorting a
+parcel takes days after it lands, and once it had arrived there was nothing left to mark, so
+*Arrived* held both the orders still being worked and the ones finished long ago. *Completed* is the
+collector saying the sorting is done. The vocabulary, and the two rules every reader needs, live in
+the pure `src/lib/purchase-status.ts`.
+
+- **Set by hand, only from *Arrived*, and suggested.** When nothing is left — no copy `to_sort`, no
+  scan tile waiting or parked, every lot closed — the order screen offers it. With something left
+  it still allows it, after saying what: a doubtful piece may be left for later on purpose.
+- **A completed order has arrived.** Every reader that asks *is the parcel in hand* goes through
+  `hasPurchaseArrived`, so a copy identified into a completed order lands `to_sort`, as it would on
+  an arrived one.
+- **It locks nothing and moves back to *Arrived*** with a bare status write. Closing a lot is what
+  freezes cost (§3), and that is unchanged.
+- **No migration.** The column is an unconstrained string; the valid set is closed in code, as it
+  always was. An opening balance still has no status of its own and stays `arrived` (ADR-0054).

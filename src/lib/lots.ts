@@ -22,6 +22,7 @@ import {
 import { parseDispositionFilter } from "./intake-filter-params";
 import { applyPhotoChangeSet, type PhotoChangeSet } from "./photos";
 import { isDeliveryState } from "./delivery-state";
+import { hasPurchaseArrived } from "./purchase-status";
 import type { ArrivingCopy } from "./want-rules";
 import {
   computeLotPool,
@@ -840,12 +841,13 @@ export async function intakeStamps(
   }
   const collectionId = lot.collectionId;
   // Once the order has arrived, copies identified during the sort pass skip `ordered` and
-  // land straight in `to_sort` — they are already in hand, just not filed yet (#121).
+  // land straight in `to_sort` — they are already in hand, just not filed yet (#121). A completed
+  // order has arrived too (#1449): a piece left for later still comes off the desk.
   const purchase = await prisma.purchase.findUniqueOrThrow({
     where: { id: lot.purchaseId },
     select: { status: true },
   });
-  const deliveryState = purchase.status === "arrived" ? "to_sort" : "ordered";
+  const deliveryState = hasPurchaseArrived(purchase.status) ? "to_sort" : "ordered";
 
   const conditionId = input.conditionId?.trim();
   if (!conditionId) throw new Error("A condition is required.");

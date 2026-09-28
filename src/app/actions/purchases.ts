@@ -8,11 +8,14 @@ import {
   createPurchase,
   updatePurchase,
   setPurchaseStatus,
+  markPurchaseCompleted,
+  reopenCompletedPurchase,
   deletePurchase,
   type PurchaseCreateInput,
   type PurchaseStatus,
 } from "@/lib/purchases";
 import { isPurchaseKind } from "@/lib/purchase-kind";
+import { isPurchaseStatus } from "@/lib/purchase-status";
 import {
   createPurchaseExpense,
   deletePurchaseExpense,
@@ -115,8 +118,6 @@ function parseLotPrice(formData: FormData): number | null | undefined {
   return parseMoney(raw) ?? undefined;
 }
 
-const VALID_STATUS = new Set<PurchaseStatus>(["preparing", "in_transit", "arrived"]);
-
 /** Parse the purchase header from the dialog form. The order's line items — inventory
  * lots and non-inventory expenses — are not captured here; they are managed during lot
  * intake (#121). */
@@ -125,8 +126,8 @@ function parseFields(formData: FormData): { data: PurchaseCreateInput; error?: s
   if (!purchasedAt) return { data: {} as PurchaseCreateInput, error: "A date is required." };
   const currency = str(formData, "currency");
   if (!currency) return { data: {} as PurchaseCreateInput, error: "A currency is required." };
-  const statusRaw = str(formData, "status") as PurchaseStatus;
-  const status = VALID_STATUS.has(statusRaw) ? statusRaw : "preparing";
+  const statusRaw = str(formData, "status");
+  const status: PurchaseStatus = isPurchaseStatus(statusRaw) ? statusRaw : "preparing";
   const kindRaw = str(formData, "kind");
   const kind = isPurchaseKind(kindRaw) ? kindRaw : "purchase";
 
@@ -199,6 +200,9 @@ export async function setPurchaseStatusAction(
   const session = await getSession();
   if (status === "arrived") {
     return { status: "error", message: "Use “Mark arrived” to mark a purchase arrived." };
+  }
+  if (status === "completed") {
+    return { status: "error", message: "Use “Mark completed” to mark a purchase completed." };
   }
   try {
     await setPurchaseStatus(session.user.id, purchaseId, status);
@@ -517,6 +521,37 @@ export async function markPurchaseArrivedAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to mark arrived. Please try again.",
+    };
+  }
+}
+
+/** Mark an arrived purchase completed — its sorting is done (#1449). Whatever is still left was
+ * stated on the screen before this was sent; it is never a refusal. */
+export async function markPurchaseCompletedAction(purchaseId: string): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await markPurchaseCompleted(session.user.id, purchaseId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to mark completed. Please try again.",
+    };
+  }
+}
+
+/** Move a completed purchase back to arrived (#1449). */
+export async function reopenCompletedPurchaseAction(
+  purchaseId: string
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await reopenCompletedPurchase(session.user.id, purchaseId);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to move the order back. Please try again.",
     };
   }
 }

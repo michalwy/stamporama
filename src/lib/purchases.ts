@@ -17,6 +17,7 @@ import {
   type IntakeDocumentType,
   type PurchaseKind,
 } from "./purchase-kind";
+import { isPurchaseStatus, type PurchaseStatus } from "./purchase-status";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -66,9 +67,9 @@ async function assertPurchaseOwner(
   };
 }
 
-/** Physical delivery status of the whole shipment (ADR-0009 §1). */
-export type PurchaseStatus = "preparing" | "in_transit" | "arrived";
-const VALID_STATUS = new Set<PurchaseStatus>(["preparing", "in_transit", "arrived"]);
+/** Physical delivery status of the whole shipment (ADR-0009 §1) — vocabulary in the pure
+ * `purchase-status.ts`, re-exported for the callers that always imported it from here. */
+export type { PurchaseStatus };
 
 export type PurchaseSortBy = "purchasedAt" | "createdAt";
 
@@ -215,7 +216,7 @@ function dateToIso(d: Date): string {
 }
 
 function normalizeStatus(status: PurchaseStatus | undefined): PurchaseStatus {
-  if (status && VALID_STATUS.has(status)) return status;
+  if (isPurchaseStatus(status)) return status;
   return "preparing";
 }
 
@@ -590,7 +591,8 @@ export async function updatePurchase(
 /** Set only a purchase's delivery status (#141) — a single-field update for the inline
  * control on the detail view, with none of the contact/currency/FX handling of a full edit.
  * Marking a purchase `arrived` has copy side-effects, so that transition goes through
- * `markPurchaseArrived` instead; this path is for `preparing` / `in_transit`. */
+ * `markPurchaseArrived` instead; this path is for `preparing` / `in_transit`. *Completed* has its
+ * own two doors below, because it follows arrival and this one would skip it. */
 export async function setPurchaseStatus(
   ownerId: string,
   purchaseId: string,
@@ -604,6 +606,42 @@ export async function setPurchaseStatus(
     where: { id: purchaseId },
     data: { status: normalizeStatus(status) },
   });
+}
+
+/**
+ * Mark an arrived purchase **Completed** (#1449): its sorting is finished. Only from *Arrived* —
+ * completing an order that has not arrived would skip what arriving does to its copies. Anything
+ * still outstanding (copies to sort, tiles, open lots) is the screen's to state and never a refusal
+ * here: the collector may leave a doubtful piece for later on purpose. Nothing is locked by it.
+ */
+export async function markPurchaseCompleted(ownerId: string, purchaseId: string): Promise<void> {
+  await moveCompletion(ownerId, purchaseId, "arrived", "completed", "Only an arrived order can be marked completed.");
+}
+
+/** Move a completed purchase back to **Arrived** (#1449) — a bare status write: a completed order
+ * has already been through arrival, so there are no copies for it to move. */
+export async function reopenCompletedPurchase(ownerId: string, purchaseId: string): Promise<void> {
+  await moveCompletion(ownerId, purchaseId, "completed", "arrived", "This order is not completed.");
+}
+
+async function moveCompletion(
+  ownerId: string,
+  purchaseId: string,
+  from: PurchaseStatus,
+  to: PurchaseStatus,
+  refusal: string
+): Promise<void> {
+  const { kind } = await assertPurchaseOwner(ownerId, purchaseId);
+  if (kind === "opening_balance") {
+    throw new Error("An opening balance has no delivery status.");
+  }
+  // Conditional on the status it moves from, so two tabs cannot complete an order that one of
+  // them has just sent back in transit.
+  const { count } = await prisma.purchase.updateMany({
+    where: { id: purchaseId, status: from },
+    data: { status: to },
+  });
+  if (count === 0) throw new Error(refusal);
 }
 
 /**

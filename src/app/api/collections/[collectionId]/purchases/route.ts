@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import {
-  listPurchasesPaginated,
-  type PurchaseSortBy,
-  type PurchaseStatus,
-} from "@/lib/purchases";
+import { listPurchasesPaginated, type PurchaseSortBy } from "@/lib/purchases";
 import { isIntakeDocumentType, parseIntakePartyIds } from "@/lib/purchase-kind";
+import { isPurchaseStatus } from "@/lib/purchase-status";
 
 const VALID_SORT_BY = new Set<PurchaseSortBy>(["purchasedAt", "createdAt"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
-const VALID_STATUS = new Set<PurchaseStatus>(["preparing", "in_transit", "arrived"]);
 
 export async function GET(
   request: NextRequest,
@@ -26,8 +22,8 @@ export async function GET(
 
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
-  const statusParam = sp.get("status") as PurchaseStatus | null;
-  const status = statusParam && VALID_STATUS.has(statusParam) ? statusParam : undefined;
+  const statusParam = sp.get("status");
+  const status = isPurchaseStatus(statusParam) ? statusParam : undefined;
   const typeParam = sp.get("type");
   const type = isIntakeDocumentType(typeParam) ? typeParam : undefined;
   const contactId = sp.get("contactId") || undefined;
