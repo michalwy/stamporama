@@ -373,7 +373,15 @@ describe("the want, checklist and trade operations (#712)", () => {
         "partner",
         "colnect",
       ]);
+      // **Named exceptions, each with its reason, rather than a narrower word list.** `colnect` is
+      // here for the list sync's *claim that a Colnect list is in step* (#689), and a new operation
+      // with the word in its name should still stop and be read.
+      //   - `set_stamp_colnect_id` (#1445) writes `Stamp.colnectId` in this collection, the one field
+      //     the collector's own item-ID box writes (#741). It sends nothing, claims nothing about a
+      //     list, and clears no report — `markColnectApplied` stays forbidden by the import guard.
+      const exempt = new Set(["set_stamp_colnect_id"]);
       const offenders = OPERATIONS.filter((operation) => {
+        if (exempt.has(operation.name)) return false;
         const words = operation.name.split("_");
         return forbiddenVerbs.has(words[0]) || words.some((word) => forbiddenWords.has(word));
       }).map((operation) => operation.name);

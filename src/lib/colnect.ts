@@ -1616,3 +1616,46 @@ export async function confirmColnectMatch(
   await applyBackfill(collectionId, pending);
   return { backfill: proposals, date, attributes };
 }
+
+/**
+ * The stamps in this collection, other than `exceptStampId`, that already carry `colnectId`. One
+ * Colnect item-ID names one stamp — the matcher never writes one onto a second (#250) — so a write
+ * that would give it to another is refused by whoever makes it; the agent API reads this to name the
+ * holder (#1445). Ordered by id, so a refusal names the same stamps every time.
+ */
+export async function findColnectIdHolders(
+  ownerId: string,
+  collectionId: string,
+  colnectId: string,
+  exceptStampId: string
+): Promise<string[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.stamp.findMany({
+    where: { collectionId, colnectId, id: { not: exceptStampId } },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  return rows.map((row) => row.id);
+}
+
+/**
+ * Take a stamp's Colnect item-ID off it, returning the id it carried (null when it carried none) so
+ * the caller can say what was removed and the collector can put it back. The stamp form clears one
+ * through its full edit write; this is the same one field, for a caller with nothing else to restate
+ * (#1445). Owner-authorized and collection-scoped, as {@link confirmColnectMatch} is.
+ */
+export async function clearColnectMatch(
+  ownerId: string,
+  collectionId: string,
+  stampId: string
+): Promise<string | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const stamp = await prisma.stamp.findFirst({
+    where: { id: stampId, collectionId },
+    select: { id: true, colnectId: true },
+  });
+  if (!stamp) throw new Error("Stamp not found in this collection.");
+  if (stamp.colnectId === null) return null;
+  await prisma.stamp.update({ where: { id: stamp.id }, data: { colnectId: null } });
+  return stamp.colnectId;
+}

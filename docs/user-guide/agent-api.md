@@ -208,6 +208,22 @@ or under another stamp, never merges two issues or moves one to another area, an
 order of an issue's stamps. Those stay on the issue's and the stamp's own screens, where everything
 it creates can be seen and corrected.
 
+**It can also record a stamp's Colnect item-ID** — the number in the stamp's Colnect address, which
+listing on Colnect, the Colnect links and the Colnect list sync all go by. An assistant reading a
+Colnect page or a Colnect export can put it on the stamp, change it, or take it off, and it takes
+the address as readily as the bare number. It is recorded exactly as the item-ID box on the stamp
+does it, so the listing and the links use it straight away. Two things hold:
+
+- **One item-ID belongs to one stamp.** An ID another of your stamps already has is refused, and the
+  assistant is told which stamp that is. If the ID sits on the wrong stamp, it has to be taken off
+  there first — the assistant never moves it on its own.
+- **A change or a removal names the ID it replaced**, so you can see what was there and put it back
+  on the stamp's screen.
+
+On a stamp with variants the item-ID is about that stamp itself. Listing a copy you have not
+identified down to the variant under its cheapest variant is worked out when you list it, and is
+never written onto the parent stamp.
+
 **And there is one thing it can answer about a stamp you do not own and have not recorded: what a
 lot at auction would be worth bidding.** Tell it what the auctioneer says the lot holds — the
 stamps, the grade, whether there is a certificate, whether it is a block rather than singles, how

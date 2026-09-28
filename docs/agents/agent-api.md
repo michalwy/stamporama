@@ -8,20 +8,22 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
-track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes and #1438 the
-catalogue writes; both wrappers exist and the registry carries **fifty-three operations** — #708's vocabulary read, #710's
+track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
+catalogue writes and #1445 a stamp's Colnect ID; both wrappers exist and the registry carries **fifty-four operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1168's bid recommendation, and #1037's catalog-number
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1168's bid recommendation, and #1037's catalog-number
 resolver. Six counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
 carries thirty operations* (from #1036 until #1390), *the registry carries forty-one operations*
-(from #1390 until #1415) and *the registry carries forty-eight operations* (from #1415 until #1438).
+(from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438)
+and *the registry carries fifty-three operations* (from #1438 until #1445).
 
-**Twenty-six of them write** since #1438 added five; *twenty-one of them write* was the count from
-#1415 until then, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
+**Twenty-seven of them write** since #1445 added one; *twenty-six of them write* was the count from
+#1438 until then, *twenty-one of them write* from
+#1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
 below). Two earlier sentences are
@@ -129,6 +131,7 @@ src/lib/agent-api/
   catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
   size-reads.ts     the size figure grammar, the size source, the apply report (#1415)
   catalog-edits.ts  the "key: value" entries, the date bounds, the duplicate refusal (#1438)
+  colnect-ids.ts    reading a Colnect item-ID, the answer, the refusal for one held (#1445)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -148,10 +151,11 @@ src/lib/agent-api/
     sizes.ts        the seven stamp-size and preset operations (#1415)  ← server-side
     stamp-refs.ts   naming a stamp by id or number, reading its labels   ← server-side
     catalog-edits.ts  the five catalogue writes (#1438)                  ← server-side
+    colnect-ids.ts  set_stamp_colnect_id (#1445)                        ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1555,6 +1559,48 @@ reorder-shaped name. New stamps take the issue's order as the dialogs' generatio
 **`resolveStampRefs` and `loadStampLabels` moved out of `sizes.ts` into `operations/stamp-refs.ts`**
 so the two modules share one way of naming a stamp and reading its numbers back.
 
+### A stamp's Colnect ID
+
+**One operation, and it writes** (#1445): `set_stamp_colnect_id` (`POST /stamp-colnect-id`) sets,
+changes or clears `Stamp.colnectId` (#247), the item-ID listing on Colnect, the Colnect links and the
+list sync all join on — supplied by an assistant with the stamp's Colnect page or a Colnect export in
+front of it. `get_stamp` already reported it as `colnectId`.
+
+**It is written the one way an item-ID is ever written**: `confirmColnectMatch`, the Assistant's
+match confirmation and the collector's own item-ID box (#741), with `allowOverwrite`. A clear is
+`clearColnectMatch` beside it, the same one field. No page numbers, date or attributes are filled —
+that is the Assistant's match walk, and an agent calling this has sent an ID, not a page. The value is
+read by `colnectItemIdInput`, the box's own reading, so a Colnect address works as well as the
+number; it is not validated further, for the box's reason (Colnect, not this app, knows which ids
+exist).
+
+**#1445's issue body said the ID is stored *as the Colnect catalogue's number on the stamp*, and the
+tree says otherwise**: it is the plain `Stamp.colnectId` column, not a `StampCatalogNumber` row. The
+decision it was stating — *stored the way the app stores it* — is what was built.
+
+**One ID names one stamp, and that is this operation's check**, not the column's: the index on
+`(collectionId, colnectId)` is deliberately non-unique (`schema.prisma`), and `confirmColnectMatch`
+does not look, because the matcher's own decision matrix never proposes a second holder (#250). So
+the operation asks `findColnectIdHolders` first and refuses with the holder named and its id in
+`accepted`; it never moves an ID off the other stamp. **Changing or clearing an ID the stamp itself
+carries needs no confirmation flag** — #1445 allowed it outright, unlike `set_stamp_size`'s
+`overwrite` — and the answer carries `replaced` so the collector can put it back.
+
+**A forgery is written like any stamp.** #1445 proposed refusing one, citing #1007; #1007 was closed
+on 2026-09-08 as contrary to ADR-0049 — a forgery is an ordinary variant, and nothing in the app
+recognises one — and the collector confirmed on 2026-09-28 that the operation makes no exception.
+
+**On an umbrella the ID is a claim about the umbrella itself.** An unknown-variant umbrella listed
+under its cheapest variant is resolved at listing time (#616, `listing-catalog-ids.ts`) and never
+written back; this operation writes only the ID it was sent onto the stamp it was named, and its
+description tells a model not to put a variant's ID on a parent to get a listing.
+
+**`colnect` is a forbidden word in #712's name guard**, which is there for *claiming a Colnect list is
+in step* (#689). `set_stamp_colnect_id` is exempted **by name, with its reason**, in
+`tests/integration/agent-api-trades.test.ts`, rather than by narrowing the word list or renaming the
+operation to slip past it: it sends nothing, claims nothing about a list and clears no report, and
+`markColnectApplied` stays out through the import guard.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and
@@ -1808,7 +1854,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries fifty-three operations.** It was empty on #706, which shipped none; #708
+**The document carries fifty-four operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -1821,9 +1867,10 @@ added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, 
 `remove_purchase_lot`, `add_purchase_expense`, `update_purchase_expense` and
 `remove_purchase_expense`; #1415 added `list_size_presets`, `get_stamp_size`, `create_size_preset`,
 `update_size_preset`, `set_stamp_size`, `preview_stamp_size_apply` and `apply_stamp_size`; #1438
-added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` and `update_stamp`.
+added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` and `update_stamp`;
+#1445 added `set_stamp_colnect_id`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, and *forty-eight* from #1415 until #1438. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, and *fifty-three* from #1438 until #1445. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries
