@@ -12,6 +12,8 @@ import {
   addStampToIssue,
   addStampRangeToIssue,
   addVariantRangeToStamp,
+  addVariantTreeToStamp,
+  getVariantTree,
   removeStampFromIssue,
   reorderIssueMembers,
   moveStampNode,
@@ -49,6 +51,7 @@ import {
   type CatalogNumberSpec,
 } from "@/lib/catalog-number";
 import { enforceCandidateCatalogDuplicates } from "@/lib/duplicate-catalog";
+import { resolveVariantTree, type ExistingVariant } from "@/lib/variant-tree";
 import { setIssueTagEntries, setStampTagEntries } from "@/lib/tags";
 import { parseTagEntries } from "@/lib/tag-entry";
 
@@ -731,6 +734,67 @@ export async function addVariantRangeAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to add variants. Please try again.",
+    };
+  }
+}
+
+/**
+ * The variant tree dialog's starting point (#1447): the stamp's number in the chosen catalogue and
+ * every variant already under it, in order.
+ */
+export async function getVariantTreeAction(
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  catalogVendorId: string
+): Promise<{ baseNumber: string; variants: ExistingVariant[] } | { error: string }> {
+  const session = await getSession();
+  try {
+    return await getVariantTree(session.user.id, collectionId, issueId, stampId, catalogVendorId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to load the variants." };
+  }
+}
+
+/**
+ * Enter a stamp's variant tree as indented text (#1447). The text is read again in the domain
+ * layer against the stored tree; here it is read once more only to find the numbers it would
+ * create, for the block-mode duplicate guard (#85) every other way of adding a stamp runs.
+ */
+export async function addVariantTreeAction(
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  input: { catalogVendorId: string; text: string; kinds: Record<string, string> }
+): Promise<IssueActionState> {
+  const session = await getSession();
+  if (!input.catalogVendorId) return { status: "error", message: "Select a catalog." };
+
+  try {
+    const { baseNumber, variants } = await getVariantTree(
+      session.user.id,
+      collectionId,
+      issueId,
+      stampId,
+      input.catalogVendorId
+    );
+    const tree = resolveVariantTree(input.text, variants, baseNumber);
+    const areaId = await getIssueAreaId(issueId);
+    const blockMessage = await enforceCandidateCatalogDuplicates(
+      session.user.id,
+      collectionId,
+      { areaId, issueId },
+      tree.created.map((n) => ({ catalogVendorId: input.catalogVendorId, number: n.number ?? "" }))
+    );
+    if (blockMessage) return { status: "error", message: blockMessage };
+
+    await addVariantTreeToStamp(session.user.id, collectionId, issueId, stampId, input);
+    return { status: "success", issueId };
+  } catch (e) {
+    // The refusals name the line or the choice that caused them, so they are worth saying.
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to add the variants. Please try again.",
     };
   }
 }

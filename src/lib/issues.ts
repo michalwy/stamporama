@@ -52,6 +52,12 @@ import { ensureIssueChecklist, putStampOnChecklists } from "./checklists";
 import { parseEntityNoSearch } from "./quick-jump";
 import { checkSiblingGroup, sortOrderAssignments } from "./issue-member-order";
 import { getStampSizePresetPair, type StampSizePresetPair } from "./stamp-size-presets";
+import {
+  levelsToReorder,
+  resolveVariantTree,
+  type ExistingVariant,
+  type VariantTreeNode,
+} from "./variant-tree";
 
 /** The issue's translatable fields (#295). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -1974,6 +1980,295 @@ export async function addVariantRangeToStamp(
   );
   await recomputeStampSortKeys(collectionId, stampIds);
   return stampIds;
+}
+
+/** A variant stored under a stamp, as the tree write needs it: {@link ExistingVariant} plus what
+ *  is dated from it and where it stands in the issue's order. */
+interface StoredVariant extends ExistingVariant {
+  issuedYear: number | null;
+  /** Whether the variant is a member of the tree's issue, which is what has an order (#549). */
+  onIssue: boolean;
+  children: StoredVariant[];
+}
+
+/**
+ * Every variant under `rootStampId`, at any depth, numbered in `catalogVendorId` — each level in
+ * the issue's order (#549), the way the grid and the stamp page read it (#618, #630): members by
+ * `sortOrder`, then any variant filed on some other issue, each group by id.
+ *
+ * A variant on another issue is still read, because its number is still taken and a line naming
+ * it must match it rather than make a second one.
+ */
+async function loadStoredVariants(
+  collectionId: string,
+  issueId: string,
+  rootStampId: string,
+  catalogVendorId: string
+): Promise<StoredVariant[]> {
+  const byParent = new Map<string, (StoredVariant & { sortOrder: number | null })[]>();
+  const seen = new Set<string>([rootStampId]);
+  let frontier = [rootStampId];
+  while (frontier.length > 0) {
+    const rows = await prisma.stamp.findMany({
+      where: { collectionId, parentId: { in: frontier } },
+      select: {
+        id: true,
+        parentId: true,
+        subtypeId: true,
+        issuedYear: true,
+        catalogNumbers: { where: { catalogVendorId }, select: { number: true } },
+        issueMemberships: { where: { issueId }, select: { sortOrder: true } },
+      },
+    });
+    frontier = [];
+    for (const r of rows) {
+      // Nothing at the database level forbids a cycle; a stamp is read once whatever the data says.
+      if (seen.has(r.id) || !r.parentId) continue;
+      seen.add(r.id);
+      frontier.push(r.id);
+      const node = {
+        stampId: r.id,
+        number: r.catalogNumbers[0]?.number ?? null,
+        subtypeId: r.subtypeId,
+        issuedYear: r.issuedYear,
+        onIssue: r.issueMemberships.length > 0,
+        sortOrder: r.issueMemberships[0]?.sortOrder ?? null,
+        children: [],
+      };
+      const list = byParent.get(r.parentId);
+      if (list) list.push(node);
+      else byParent.set(r.parentId, [node]);
+    }
+  }
+
+  const levelOf = (parentId: string): StoredVariant[] =>
+    (byParent.get(parentId) ?? [])
+      .sort(
+        (a, b) =>
+          (a.sortOrder === null ? 1 : 0) - (b.sortOrder === null ? 1 : 0) ||
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          a.stampId.localeCompare(b.stampId)
+      )
+      .map((v) => ({
+        stampId: v.stampId,
+        number: v.number,
+        subtypeId: v.subtypeId,
+        issuedYear: v.issuedYear,
+        onIssue: v.onIssue,
+        children: levelOf(v.stampId),
+      }));
+  return levelOf(rootStampId);
+}
+
+/** The stamp a tree is entered under, checked the way {@link addVariantRangeToStamp} checks it:
+ *  in the collection, and a member of the issue every tree operation is scoped to. */
+async function loadTreeBase(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  catalogVendorId: string
+) {
+  const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
+  if (issueCollection !== collectionId) throw new Error("Issue not found.");
+  await assertCollectionOwner(ownerId, collectionId);
+  const base = await prisma.stamp.findFirst({
+    where: { id: stampId, collectionId },
+    select: {
+      id: true,
+      issuedYear: true,
+      catalogNumbers: { where: { catalogVendorId }, select: { number: true } },
+      issueMemberships: { where: { issueId }, select: { issueId: true } },
+    },
+  });
+  if (!base) throw new Error("Base stamp not found.");
+  if (base.issueMemberships.length === 0) {
+    throw new Error("Base stamp is not a member of this issue.");
+  }
+  return {
+    collectionAreaId,
+    issuedYear: base.issuedYear,
+    baseNumber: base.catalogNumbers[0]?.number ?? "",
+  };
+}
+
+/**
+ * What the variant tree dialog (#1447) opens on: the stamp's number in the catalogue the tree is
+ * numbered in, and every variant already under it, at any depth, in order.
+ */
+export async function getVariantTree(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  catalogVendorId: string
+): Promise<{ baseNumber: string; variants: ExistingVariant[] }> {
+  const { baseNumber } = await loadTreeBase(ownerId, collectionId, issueId, stampId, catalogVendorId);
+  const strip = (v: StoredVariant): ExistingVariant => ({
+    stampId: v.stampId,
+    number: v.number,
+    subtypeId: v.subtypeId,
+    children: v.children.map(strip),
+  });
+  const stored = await loadStoredVariants(collectionId, issueId, stampId, catalogVendorId);
+  return { baseNumber, variants: stored.map(strip) };
+}
+
+/**
+ * Enter a stamp's whole variant tree at once, as indented text (#1447) — {@link
+ * addVariantRangeToStamp} for a tree instead of one level.
+ *
+ * The text is **read here**, against the tree as stored, rather than trusting the preview the
+ * dialog drew: which lines are new is a fact about stored stamps. Every line that names no stored
+ * variant becomes one, numbered its parent's number plus its suffix, carrying the kind the preview
+ * chose for it (`kinds`, by {@link variantPathKey}) or else the collection's default subtype — and
+ * otherwise exactly what a variant from the single dialog is: filed under `issueId`, dated from its
+ * parent (#360), no name, no checklist entry.
+ *
+ * **The lines' order is the variants' order** (#549): each level the text adds to, or reorders, is
+ * stored in the order it reads. Nothing stored is renamed or deleted.
+ *
+ * **All or nothing**: any mistake in the text refuses the whole tree, and the write is one
+ * transaction. Answers the created variants' ids, each after its parent.
+ */
+export async function addVariantTreeToStamp(
+  ownerId: string,
+  collectionId: string,
+  issueId: string,
+  stampId: string,
+  input: {
+    catalogVendorId: string;
+    text: string;
+    kinds?: Record<string, string>;
+  }
+): Promise<string[]> {
+  const { collectionAreaId, issuedYear, baseNumber } = await loadTreeBase(
+    ownerId,
+    collectionId,
+    issueId,
+    stampId,
+    input.catalogVendorId
+  );
+  if (!baseNumber) {
+    throw new Error("This stamp has no number in that catalogue, so a suffix has nothing to follow.");
+  }
+  const stored = await loadStoredVariants(collectionId, issueId, stampId, input.catalogVendorId);
+  const tree = resolveVariantTree(input.text, stored, baseNumber);
+  if (tree.problems.length > 0) {
+    const [first] = tree.problems;
+    throw new Error(`Line ${first.line}: ${first.message}`);
+  }
+  if (tree.created.length === 0) throw new Error("The text adds no variants.");
+
+  // Every kind resolved before anything is written: a subtype of another collection refuses the
+  // whole tree, and a variant with none takes the collection's default, as any new child does.
+  const kinds = input.kinds ?? {};
+  const chosen = [...new Set(tree.created.map((n) => kinds[n.key]).filter(Boolean))];
+  if (chosen.length > 0) {
+    const found = await prisma.stampSubtype.count({
+      where: { collectionId, id: { in: chosen } },
+    });
+    if (found !== chosen.length) throw new Error("Subtype not found in this collection.");
+  }
+  const defaultSubtypeId =
+    (
+      await prisma.stampSubtype.findFirst({
+        where: { collectionId, isDefault: true },
+        select: { id: true },
+      })
+    )?.id ?? null;
+
+  // The year and order each stored variant has, by id, for the write below.
+  const storedById = new Map<string, StoredVariant>();
+  const storedOrder = new Map<string, string[]>([[stampId, stored.map((v) => v.stampId)]]);
+  const index = (level: StoredVariant[]) => {
+    for (const v of level) {
+      storedById.set(v.stampId, v);
+      storedOrder.set(v.stampId, v.children.map((c) => c.stampId));
+      index(v.children);
+    }
+  };
+  index(stored);
+
+  const createdIds = await prisma.$transaction(
+    async (tx) => {
+      // Parents are created before their children (`created` is in that order), so a new line's
+      // parent always has an id by the time the line is written.
+      const idByKey = new Map<string, string>();
+      const yearByKey = new Map<string, number | null>();
+      const ids: string[] = [];
+      const parentOf = new Map<string, VariantTreeNode | null>();
+      const walk = (parent: VariantTreeNode | null, level: VariantTreeNode[]) => {
+        for (const node of level) {
+          parentOf.set(node.key, parent);
+          walk(node, node.children);
+        }
+      };
+      walk(null, tree.roots);
+
+      for (const node of tree.created) {
+        const parent = parentOf.get(node.key) ?? null;
+        const parentId = parent ? (parent.stampId ?? idByKey.get(parent.key)) : stampId;
+        if (!parentId) throw new Error("A variant's parent was not written.");
+        const year = !parent
+          ? issuedYear
+          : parent.stampId
+            ? (storedById.get(parent.stampId)?.issuedYear ?? null)
+            : (yearByKey.get(parent.key) ?? null);
+        const created = await tx.stamp.create({
+          data: {
+            collectionId,
+            issuedYear: year,
+            parentId,
+            subtypeId: kinds[node.key] || defaultSubtypeId,
+          },
+          select: { id: true },
+        });
+        idByKey.set(node.key, created.id);
+        yearByKey.set(node.key, year);
+        ids.push(created.id);
+      }
+
+      await tx.stampCollectionArea.createMany({
+        data: ids.map((id) => ({ stampId: id, collectionAreaId, isPrimary: true })),
+      });
+      await tx.stampCatalogNumber.createMany({
+        data: tree.created.map((node) => ({
+          stampId: idByKey.get(node.key) as string,
+          catalogVendorId: input.catalogVendorId,
+          number: node.number as string,
+        })),
+      });
+
+      // Each level that changes is stored in the order it now reads, densely over the variants
+      // this issue orders — `sortOrderAssignments`' own numbering, which is only ever read within
+      // one level (#549). A variant filed on some other issue has no order here to write.
+      const memberSortOrder = new Map<string, number>();
+      for (const { children } of levelsToReorder(tree.roots, stampId, storedOrder)) {
+        const ordered = children
+          .filter((n) => (n.stampId ? storedById.get(n.stampId)?.onIssue : true))
+          .map((n) => n.stampId ?? (idByKey.get(n.key) as string));
+        for (const { stampId: id, sortOrder } of sortOrderAssignments(ordered)) {
+          memberSortOrder.set(id, sortOrder);
+        }
+      }
+      const createdSet = new Set(ids);
+      await tx.issueMember.createMany({
+        data: ids.map((id) => ({ issueId, stampId: id, sortOrder: memberSortOrder.get(id) ?? 0 })),
+      });
+      for (const [id, sortOrder] of memberSortOrder) {
+        if (createdSet.has(id)) continue;
+        await tx.issueMember.update({
+          where: { issueId_stampId: { issueId, stampId: id } },
+          data: { sortOrder },
+        });
+      }
+      return ids;
+    },
+    { timeout: 60_000, maxWait: 10_000 }
+  );
+  await recomputeStampSortKeys(collectionId, createdIds);
+  return createdIds;
 }
 
 export async function updateIssue(

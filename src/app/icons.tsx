@@ -83,6 +83,7 @@ import {
   Unlink2,
   List,
   ListChecks,
+  ListTree,
   Lock,
   LockOpen,
   Pin,
@@ -238,6 +239,9 @@ const GLYPHS = {
   /** Puts a saved width and height onto stamps (#806; ADR-0048). Not `range` or `measure`, which
    *  share the plain ruler: this names a figure already known, not one being taken. */
   sizePreset: RulerDimensionLine,
+  /** Enters a stamp's whole variant tree as indented text (#1447) — a tree of lines, which is what
+   *  is typed. */
+  variantTree: ListTree,
   /** Hand-sorted order, and the way back to the derived one. */
   reorder: ArrowUpDown,
   /** Copies a figure into the field above it. */

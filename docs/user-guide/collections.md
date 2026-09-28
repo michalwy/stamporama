@@ -350,6 +350,37 @@ Pick the **Subtype** every stamp in the run should carry — it starts on the on
 
 Each variant comes out the way one added through the single dialog does: the base stamp as its parent, that subtype, the **base stamp's** year, no name, and — because a variant is not part of the issue's set — no [checklist](#checklists) tick. Everything else is filled in by editing the variants themselves.
 
+#### Entering a whole variant tree
+
+A catalogue often splits a stamp several levels deep — a watermark, under it the perforations, under each of those the colours — and irregularly: one watermark has three perforations, the other none. Building that with **Add variant range…** means one dialog for every variant that has variants of its own. **Enter variant tree…** in the stamp's **⋮** menu on the [issue's own page](detail-pages.md#the-issue-page), or **Enter tree** on the [stamp's own page](detail-pages.md#the-stamp-page), types the whole tree at once.
+
+Write **one variant per line — its suffix only — and indent it under the variant it belongs to**:
+
+```
+X
+  A
+    a
+    b
+  B
+  C
+    a
+Y
+```
+
+Under `123` that is `123X`, `123XA`, `123XAa`, `123XAb`, `123XB`, `123XC`, `123XCa` and `123Y`: **a variant's number is its parent's number with its suffix appended**. Indent with spaces or tabs — the first indented line sets how much one level is, so a tree pasted with four spaces reads the same as one typed with two. **Tab** and **Shift+Tab** indent and outdent the line you are on (or every line you have selected). Blank lines are ignored, and you can paste a tree prepared elsewhere or copied from a catalogue.
+
+Beside the text, a **preview** draws the tree as it will be: every variant's full number, whether it is **new** or already **exists**, and its kind, with the number of variants that will be created. Numbers are in your area's **primary catalog**, as in the range dialog.
+
+**The kind — watermark, perforation, colour: the [subtype](#stamp-subtypes) — is not typed.** Choose it from the dropdown on the variant in the preview. Choosing one also gives it to that variant's new siblings that have none yet, so a level's kind is chosen once; each can then be changed on its own. The kinds stay with their variants while you go on editing the text, and a line you add to a level whose kind is set starts with that kind. A variant left on **Default** gets the collection's default subtype, as any new child stamp does.
+
+**The text opens with the stamp's variants already in it**, and only lines that are not there yet are created — nothing is duplicated. Nothing already there is renamed or deleted from here either: removing a line leaves that variant exactly as it is (the preview shows it as **kept**), and deleting a variant stays with its own **⋮** menu. A variant whose number is not its parent's number plus a suffix — or that has no number in the primary catalog — cannot be written as a line, so it appears only in the preview, kept.
+
+**The order of the lines is the variants' order** under each parent — the order the issue's tree, the catalogue-number grid and the stamp's page show. A new line goes where you put it among its siblings, and moving existing lines around reorders those variants.
+
+Mistakes are shown before anything is saved, each with its line number: a line indented more than one level below the line above it, an indentation that lines up with no level, and a suffix used twice among siblings (which would give two variants one number). The same [duplicate check](duplicate-catalog-numbers.md) as the range dialog runs over the new numbers. **Add** stays unavailable while any mistake remains, and saving is all or nothing: the whole tree is created, or nothing is. At most 200 variants can be added in one go.
+
+Each new variant comes out the way one added through the single dialog does: its parent's year, no name, filed under the same issue, and no [checklist](#checklists) tick.
+
 ### Issue and stamp names in other languages
 
 The **Add issue** / **Edit issue** and **Add stamp** / **Edit stamp** dialogs each grow a 🌐 button beside their **Name** field, on the same terms as everything else translatable: only once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), one entry per language, blanks falling back to the name you typed, and everything written when you save the issue or stamp itself. They feed the `{issueName}` and `{name}` tokens in [listing titles](contacts.md#adding-and-editing).

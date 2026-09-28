@@ -147,6 +147,8 @@ Offers. Only Details is always there; the rest appear when the copy has them.
     suffix (`309` → `309A`). The new variant joins the issue named in the line above.
   - **Add range** adds a whole lettered run at once — `a-f` under `240` is six variants, saved
     together. See [adding a range of variants](collections.md#adding-a-range-of-variants).
+  - **Enter tree** types the whole variant tree, several levels deep, as indented text with a live
+    preview beside it. See [entering a whole variant tree](collections.md#entering-a-whole-variant-tree).
   - Each variant's `⋮` menu offers **Edit** — the same stamp form, subtype included — and
     **Delete**. *Open stamp page* and *Edit* are also on the row as hover icons.
   - **Reorder** turns on drag handles so the variants can be put in the order you want them listed,
@@ -247,7 +249,9 @@ Offers. Details, Checklists and Stamps are always there.
   - Each stamp's `⋮` menu offers **Add child stamp** (the same form, with the stamp set as the parent
     and its catalog numbers filled in for you to suffix, `309` → `309A`), **Add variant range…**
     (a whole lettered run at once — see
-    [adding a range of variants](collections.md#adding-a-range-of-variants)), **Edit** (the stamp
+    [adding a range of variants](collections.md#adding-a-range-of-variants)), **Enter variant
+    tree…** (the whole tree under the stamp, as indented text — see
+    [entering a whole variant tree](collections.md#entering-a-whole-variant-tree)), **Edit** (the stamp
     form, including which of the issue's checklists the stamp is on) and **Delete**. Delete asks
     exactly what it asks on the Issues list, including what to do with the stamp's variants.
     *Open stamp page*, *Edit* and *Add variant range…* are also on the row as hover icons.
