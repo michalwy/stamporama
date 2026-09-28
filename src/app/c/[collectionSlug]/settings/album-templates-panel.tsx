@@ -45,6 +45,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/template-builder";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { AlbumTemplatePreviewPanel } from "./album-template-preview";
+import { FrameOrnamentField } from "./album-ornaments-panel";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // The album templates (#766) — the ref-card panel's list-and-dialog scaffolding, with the listing
@@ -399,6 +400,24 @@ export function AlbumPresetForm({
           </div>
           <MmField name="borderWidthMm" label="Border weight (mm)" value={preset.borderWidthMm} disabled={isPending} />
           <MmField name="borderInsetMm" label="Border inset (mm)" value={preset.borderInsetMm} disabled={isPending} />
+          <MmField
+            name="borderGapMm"
+            label="Between double rules (mm)"
+            value={preset.borderGapMm}
+            disabled={isPending}
+          />
+          <FrameOrnamentField
+            collectionId={collectionId}
+            defaultValue={preset.frameOrnament}
+            disabled={isPending}
+            onChanged={bump}
+          />
+          <MmField
+            name="frameOrnamentSizeMm"
+            label="Ornament size (mm)"
+            value={preset.frameOrnamentSizeMm}
+            disabled={isPending}
+          />
           <div>
             <LabelWithError htmlFor="f-album-verticalPlacement">Content on the page</LabelWithError>
             <select
@@ -416,6 +435,11 @@ export function AlbumPresetForm({
             </select>
           </div>
         </div>
+        <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
+          The frame is drawn in the margin and never moves a series. A <strong>corner ornament</strong>{" "}
+          sits at each corner, mirrored to face into the page, and the rules run between them; its size
+          is its longer side. Your own can be uploaded as an SVG drawn for the top-left corner.
+        </p>
         <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
           Where a page that is not full puts its series. <strong>Justified</strong> puts the first at
           the top and the last at the bottom with equal gaps between; <strong>centred and

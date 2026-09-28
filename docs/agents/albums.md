@@ -321,7 +321,7 @@ apply, unchanged — see `agent-api.md`, *Stamp sizes and presets*.
 
 ## The album and its page plan (#767, ADR-0045)
 
-`Album` is anchored on a `CollectionArea`, carries a name, a language and the 40 render columns
+`Album` is anchored on a `CollectionArea`, carries a name, a language and the 46 render columns
 copied from a template, and holds `AlbumEntry` rows — **checklists** (#531, ADR-0031), gathered from
 that area's subtree in catalog order. A checklist with no issue has no area and cannot be gathered;
 it is added by hand, and that is the only exception in the model.
@@ -1178,6 +1178,36 @@ worth not re-deriving:
   values as 0 — `parseAlbumSnapshot` fills them in, as it does #1419's and #1420's. Filling the
   chapter values with the defaults instead would report a change on every card whose album had moved
   its heading space.
+
+### The page frame and its corner ornaments (#1427, ADR-0057)
+
+The frame is **paint, not layout**: `borderGapMm`, `frameOrnament` and `frameOrnamentSizeMm` move no
+block, so none of them re-plans a sheet — they still report on a printed card, as template values.
+What is worth not re-deriving:
+
+- **`album-frame.ts` places the whole frame, for the PDF and the canvas alike.** Before #1427 each drew
+  the double rule itself and they disagreed (1.2 mm on paper, 1 mm on screen) — the preview's
+  confident-wrong-answer family, sitting in plain sight in the one piece of paint nobody measured.
+  Anything added to the frame goes there, never into either renderer.
+- **The drawing carries its alignment**, decided with the collector against his `Classic` frame: the
+  ornament's (0, 0) sits on the frame's centre line (midway between a double rule's pair), the longer
+  side of its `viewBox` is the size, it is **mirrored** (not rotated) at the other corners, and the
+  rules stop at the far edges of its `viewBox`. So a built-in has to run an arm along each axis right
+  out to its `viewBox` edge — `tests/unit/album-ornament.test.ts` pins that for every built-in, and it
+  caught the vine's leaf spilling past its own frame while the set was being drawn.
+- **An upload is read once into four-command outlines** (`album-ornament-svg.ts`) and never parsed
+  again; both renderers draw the outlines, so nothing uploaded reaches a browser as markup. The reader
+  refuses what it would have to guess at (text, `<use>`, gradients, transparency, dashes, clipping) by
+  name — widen it only with a renderer for the thing, not by passing it over.
+- **A printed card copies the drawing** (`AlbumPageSnapshot.frameOrnament`); the preset keeps only the
+  name, which is what `presetDifferences` compares. The name must stay a primitive: that comparison is
+  `!==`, and an object in the preset would report every card diverged on every read.
+- **Uploads are immutable and deletion is refused while a template or album names one.** A live sheet
+  naming one that is nonetheless gone draws without it on screen and is **refused** by the PDF, the
+  face rule (ADR-0046 §5) applied to corners.
+- **Existing rows were migrated to `none`**, and a card stored earlier reads as `none` at 1.2 mm; a
+  **new** template (and an album made without one) starts with the Rosette at 25 mm — his
+  `Classic.txt` is `IMAGE_SCALE(0.12)` of a 212 px corner, 25.4 mm.
 
 ## The cutting list (#770)
 

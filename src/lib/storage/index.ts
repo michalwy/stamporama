@@ -27,6 +27,7 @@ export { describeCacheMax } from "./cache-rules";
 // cache coming with it (#861); re-exported here because every caller reaches it through `@/lib/storage`.
 export {
   extForMime,
+  ornamentKey,
   permanentPrefix,
   sheetPrefix,
   sheetVariantKey,

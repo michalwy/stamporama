@@ -16,6 +16,7 @@ import { getAlbumPageSnapshots } from "./album-printed-pages";
 import type { AlbumPageSnapshot, AlbumSnapshotBox } from "./album-snapshot";
 import { getAlbumPrintedReport } from "./album-printing";
 import type { AlbumDivergence } from "./album-divergence";
+import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import { resolveAlbumPhotos } from "./album-photos";
 import type { AlbumBoxAdjustmentValue } from "./album-corrections";
 import type { AlbumData, AlbumEntryData, AlbumTextBlockData } from "./albums";
@@ -73,7 +74,7 @@ import type { AlbumData, AlbumEntryData, AlbumTextBlockData } from "./albums";
  */
 export type AlbumSheetSource = Pick<
   AlbumPlanContext,
-  "album" | "entries" | "textBlocks" | "textGaps" | "titleGaps"
+  "album" | "entries" | "textBlocks" | "textGaps" | "titleGaps" | "frameOrnament"
 >;
 
 /** How a run of text is set, resolved once here so the canvas and the PDF put ink in the same place. */
@@ -197,6 +198,9 @@ export interface AlbumEditorSheet {
   /** The preset this sheet is set in — the **card's own** for a printed one, which an album that has
    *  since changed template no longer names anywhere (ADR-0047 §1). */
   preset: AlbumRenderPreset;
+  /** The ornament at the frame's corners (#1427) — the card's own copy for a printed sheet, the
+   *  album's for a live one — or null. The canvas draws it through `album-frame.ts`, as the PDF does. */
+  frameOrnament: AlbumOrnamentDrawing | null;
   content: AlbumRect;
   title: AlbumEditorText | null;
   chapter: AlbumEditorText | null;
@@ -469,6 +473,7 @@ export function liveSheet(
     printedAt: null,
     readOnly: false,
     preset: album,
+    frameOrnament: context.frameOrnament,
     content: layout.content,
     // The running head is the album's name, and falls back only as the name does (#1308).
     title: layout.title ? editorText(layout.title, album, context.titleGaps) : null,
@@ -572,6 +577,7 @@ function printedSheet(
     printedAt,
     readOnly: true,
     preset,
+    frameOrnament: snapshot.frameOrnament,
     content: layout.content,
     title: layout.title ? editorText(layout.title, preset, []) : null,
     chapter: layout.chapter ? editorText(layout.chapter, preset, []) : null,

@@ -140,6 +140,7 @@ model Collection {
   stampSizePresets StampSizePreset[]
   tags            Tag[]
   albumTemplates  AlbumTemplate[]
+  albumOrnaments  AlbumOrnament[]
   albums          Album[]
   lotBuilderPresets LotBuilderPreset[]
   items           Item[]
@@ -989,6 +990,16 @@ model AlbumTemplate {
   borderStyle    String @default("none")
   borderWidthMm  Float
   borderInsetMm  Float
+  // The page frame's ornament (#1427). `borderGapMm` is the white between the two rules of a double
+  // border, edge to edge — 1.2 mm is what every PDF was drawn with before it was a value.
+  // `frameOrnament` is `none`, a built-in ornament's key (`album-ornaments.ts`) or the id of one of
+  // the collection's own `AlbumOrnament` rows, drawn at each corner with its longer side
+  // `frameOrnamentSizeMm` long; the rules run between the ornaments. Paint, not layout: none of the
+  // three moves a block. A plain string rather than a foreign key, like every other preset column —
+  // a printed card copies the drawing itself (ADR-0047 §1), so no card depends on the row.
+  borderGapMm         Float  @default(1.2)
+  frameOrnament       String @default("none")
+  frameOrnamentSizeMm Float  @default(25)
   // Where a sheet's content sits vertically in the space between its headings and its footer
   // (#1419): `top` | `center` | `justify` | `center-justify`. Only the leftover space moves; what
   // lands on a sheet is packed exactly as before. `top` is every page printed before this existed.
@@ -1081,6 +1092,34 @@ model AlbumTemplate {
   @@map("album_template")
 }
 
+// A corner ornament the collector uploaded for his page frames (#1427). The file is kept in storage
+// as it came (`<collectionId>/ornaments/<id>/original.svg`); `drawing` is what it was read into — an
+// `AlbumOrnamentDrawing`, the outlines the PDF and the canvas both draw — so nothing ever reads the
+// SVG again to print it, and nothing the collector uploaded reaches a browser as markup.
+//
+// **Immutable once written.** A template or an album names one by id (`frameOrnament`), and a card
+// in a binder copies the drawing into its snapshot; replacing a drawing under an id would change
+// what a live page prints with nothing on the divergence report to say so. A different drawing is a
+// new upload. Deleting one is refused while a template or an album names it.
+model AlbumOrnament {
+  id             String   @id @default(cuid())
+  collectionId   String
+  // Picked by name in the template's frame field, so unique in the collection — the upload takes
+  // the file's name and numbers a second one.
+  name           String
+  storageKey     String
+  storageBackend String
+  sizeBytes      Int
+  drawing        Json
+  createdAt      DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("album_ornament")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Albums (#767) — the design is #755; ADR-0045 states the model and its reasoning.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1144,6 +1183,9 @@ model Album {
   borderStyle    String @default("none")
   borderWidthMm  Float
   borderInsetMm  Float
+  borderGapMm         Float  @default(1.2)
+  frameOrnament       String @default("none")
+  frameOrnamentSizeMm Float  @default(25)
   verticalPlacement String @default("top")
 
   boxGapXMm           Float

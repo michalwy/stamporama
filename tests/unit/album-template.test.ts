@@ -142,6 +142,27 @@ describe("parseAlbumTemplateInput", () => {
     assert.match(parseError({ labelGapMm: "" }), /Space between a box and its label is required/);
   });
 
+  it("reads the frame's gap, ornament and ornament size (#1427)", () => {
+    assert.equal(parsedOk({ borderGapMm: "2,5" }).borderGapMm, 2.5);
+    assert.match(parseError({ borderGapMm: "-1" }), /Gap between the rules/);
+    for (const key of ["none", "rosette", "vine", "art-deco", "square", "cmg1x2y3z4a5b6c7d8e9f0g1h"]) {
+      assert.equal(parsedOk({ frameOrnament: key }).frameOrnament, key);
+    }
+    // Blank is no ornament, the value a form that never rendered the field would send.
+    assert.equal(parsedOk({ frameOrnament: "" }).frameOrnament, "none");
+    assert.match(parseError({ frameOrnament: "Classic.png" }), /Corner ornament is not a recognised/);
+    assert.equal(parsedOk({ frameOrnamentSizeMm: "12.5" }).frameOrnamentSizeMm, 12.5);
+    assert.match(parseError({ frameOrnamentSizeMm: "0" }), /Ornament size/);
+    assert.match(parseError({ frameOrnamentSizeMm: "101" }), /Ornament size/);
+  });
+
+  it("starts a new template with his Classic frame's shape: a double rule and a 25 mm corner (#1427)", () => {
+    assert.equal(DEFAULT_ALBUM_PRESET.borderStyle, "double");
+    assert.equal(DEFAULT_ALBUM_PRESET.borderGapMm, 1.2);
+    assert.equal(DEFAULT_ALBUM_PRESET.frameOrnament, "rosette");
+    assert.equal(DEFAULT_ALBUM_PRESET.frameOrnamentSizeMm, 25);
+  });
+
   it("reads the space around the album title and the chapter heading as ordinary spacing (#1426)", () => {
     const fields = [
       ["titleSpaceAboveMm", /Space above the album title/],

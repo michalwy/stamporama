@@ -1,5 +1,6 @@
 "use server";
 
+import { AlbumOrnamentError } from "@/lib/album-ornament-store";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
@@ -83,6 +84,8 @@ async function getSession() {
  *  is worth a sentence rather than a "please try again". */
 function toErrorState(err: unknown, fallback: string): AlbumActionState {
   if (err instanceof AlbumNameTakenError) return { status: "error", message: err.message };
+  // An uploaded corner ornament that is no longer the collection's (#1427).
+  if (err instanceof AlbumOrnamentError) return { status: "error", message: err.message };
   // A printing refusal always says something the collector has to act on — a stale listing, half a
   // checklist chosen, a sheet already on paper — so its own words reach them rather than a "please
   // try again" they cannot act on.

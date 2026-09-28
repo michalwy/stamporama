@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { assertAlbumFrameOrnament } from "./album-ornament-store";
 import {
   asAlbumBorderStyle,
   asAlbumBoxBorderStyle,
@@ -70,6 +71,9 @@ const TEMPLATE_SELECT = {
   borderStyle: true,
   borderWidthMm: true,
   borderInsetMm: true,
+  borderGapMm: true,
+  frameOrnament: true,
+  frameOrnamentSizeMm: true,
   verticalPlacement: true,
   boxGapXMm: true,
   boxGapYMm: true,
@@ -145,6 +149,7 @@ export async function createAlbumTemplate(
   data: AlbumTemplateInput
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
+  await assertAlbumFrameOrnament(collectionId, data.frameOrnament);
   try {
     await prisma.albumTemplate.create({ data: { collectionId, ...data } });
   } catch (err) {
@@ -161,6 +166,7 @@ export async function updateAlbumTemplate(
 ): Promise<void> {
   const collectionId = await resolveTemplateCollection(templateId);
   await assertCollectionOwner(ownerId, collectionId);
+  await assertAlbumFrameOrnament(collectionId, data.frameOrnament);
   try {
     await prisma.albumTemplate.update({ where: { id: templateId }, data });
   } catch (err) {

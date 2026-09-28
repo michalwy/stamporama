@@ -78,9 +78,11 @@ applied one level down: #769's canvas draws the same plan, so anything worked ou
 something the canvas can work out differently, and the failure is a screen that shows a break the
 paper does not have.
 
-The one drawing convention that is the renderer's own — the white gap between the two rules of a
-`double` page border — is safe precisely because it reserves nothing: the content area is bounded by
-the template's margins, the border sits inside them, and moving that number cannot move a block.
+The one drawing convention that was the renderer's own — the white gap between the two rules of a
+`double` page border — was safe because it reserves nothing. It is a template value now
+(`borderGapMm`, #1427), and the frame — rules and corner ornaments — is placed by `album-frame.ts` for
+this file and the canvas alike, because the two had drawn that gap differently (1.2 mm here, 1 mm on
+screen). See ADR-0057.
 
 ### 4. The faces are embedded, and the measurer measures those same bytes
 

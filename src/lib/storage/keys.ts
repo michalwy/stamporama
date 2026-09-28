@@ -18,6 +18,10 @@ export function extForMime(mime: string): string {
       return "png";
     case "image/webp":
       return "webp";
+    // An uploaded corner ornament (#1427), kept as it came. Never served to a browser: what is drawn
+    // is the drawing read out of it.
+    case "image/svg+xml":
+      return "svg";
     default:
       throw new Error(`Unsupported mime for storage key: ${mime}`);
   }
@@ -63,4 +67,10 @@ export function sheetVariantKey(
   mime: string
 ): string {
   return `${prefix}/${variant}.${extForMime(mime)}`;
+}
+
+/** The key of an uploaded corner ornament's file (#1427): `<collectionId>/ornaments/<id>/original.svg`.
+ * Under the collection like every other permanent key, in a segment of its own. */
+export function ornamentKey(collectionId: string, ornamentId: string): string {
+  return `${collectionId}/ornaments/${ornamentId}/original.svg`;
 }
