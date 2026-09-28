@@ -11,6 +11,7 @@ import {
   resolveStampSize,
   roundSizeMm,
   sizeFromScanPixels,
+  sizeProfileAfterWrite,
   statedStampSize,
   type StampSizeEntry,
 } from "../../src/lib/stamp-size";
@@ -81,21 +82,29 @@ describe("formatting", () => {
 describe("sizeFromScanPixels", () => {
   it("converts a crop at a stated scale", () => {
     // 1000 x 1200 px at 1200 dpi is 21.2 x 25.4 mm.
-    assert.deepEqual(sizeFromScanPixels({ w: 1000, h: 1200 }, 1200), {
+    assert.deepEqual(sizeFromScanPixels({ w: 1000, h: 1200 }, { x: 1200, y: 1200 }), {
       widthMm: 21.2,
       heightMm: 25.4,
     });
   });
 
+  it("takes the width through the horizontal resolution and the height through the vertical (#1443)", () => {
+    // 1150 px across at 1150 dpi and 1200 px down at 1200 dpi are both an inch.
+    assert.deepEqual(sizeFromScanPixels({ w: 1150, h: 1200 }, { x: 1150, y: 1200 }), {
+      widthMm: 25.4,
+      heightMm: 25.4,
+    });
+  });
+
   it("refuses a degenerate box or an impossible scale, rather than reading 0 × 0", () => {
-    assert.equal(sizeFromScanPixels({ w: 0, h: 1200 }, 1200), null);
-    assert.equal(sizeFromScanPixels({ w: 1000, h: -1 }, 1200), null);
-    assert.equal(sizeFromScanPixels({ w: 1000, h: 1200 }, 0), null);
+    assert.equal(sizeFromScanPixels({ w: 0, h: 1200 }, { x: 1200, y: 1200 }), null);
+    assert.equal(sizeFromScanPixels({ w: 1000, h: -1 }, { x: 1200, y: 1200 }), null);
+    assert.equal(sizeFromScanPixels({ w: 1000, h: 1200 }, { x: 1200, y: 0 }), null);
   });
 
   it("refuses a box that converts to an impossible size", () => {
-    assert.equal(sizeFromScanPixels({ w: 2, h: 2 }, 1200), null);
-    assert.equal(sizeFromScanPixels({ w: 600000, h: 600000 }, 72), null);
+    assert.equal(sizeFromScanPixels({ w: 2, h: 2 }, { x: 1200, y: 1200 }), null);
+    assert.equal(sizeFromScanPixels({ w: 600000, h: 600000 }, { x: 72, y: 72 }), null);
   });
 });
 
@@ -186,5 +195,35 @@ describe("parseCorrectedSize (#1299)", () => {
     assert.equal(parseCorrectedSize("21.5", "  "), null);
     assert.equal(parseCorrectedSize("21.5.1", "26"), null);
     assert.equal(parseCorrectedSize("21.5", String(MAX_SIZE_MM + 1)), null);
+  });
+});
+
+describe("sizeProfileAfterWrite (#1443)", () => {
+  const measured = { widthMm: 21.5, heightMm: 25, profileId: "p-epson" };
+
+  it("records the profile a new size was measured with", () => {
+    assert.equal(
+      sizeProfileAfterWrite({ ...NO_STAMP_SIZE, profileId: null }, { widthMm: 21.5, heightMm: 25 }, "p-epson"),
+      "p-epson"
+    );
+  });
+
+  it("records nothing for a size changed without a measurement", () => {
+    assert.equal(sizeProfileAfterWrite(measured, { widthMm: 22, heightMm: 25 }, null), null);
+    assert.equal(sizeProfileAfterWrite(measured, { widthMm: 22 }, undefined), null);
+  });
+
+  it("keeps the record when a write leaves the size as it was", () => {
+    // Saving the stamp form for its name submits the same figures, or none at all.
+    assert.equal(sizeProfileAfterWrite(measured, { widthMm: 21.5, heightMm: 25 }, null), "p-epson");
+    assert.equal(sizeProfileAfterWrite(measured, {}, undefined), "p-epson");
+  });
+
+  it("takes a new measurement of the same size as the newer record", () => {
+    assert.equal(sizeProfileAfterWrite(measured, { widthMm: 21.5, heightMm: 25 }, "p-canon"), "p-canon");
+  });
+
+  it("records nothing once the size is gone", () => {
+    assert.equal(sizeProfileAfterWrite(measured, { widthMm: null, heightMm: null }, "p-epson"), null);
   });
 });

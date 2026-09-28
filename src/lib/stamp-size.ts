@@ -114,18 +114,20 @@ export function formatStampSize(fields: StampSizeFields | null | undefined): str
  * could have it wrong — the argument `scanPixelsToMm` already makes for a distance. Null for a
  * degenerate box or an impossible scale, rather than a `0 × 0` that would render as a reading.
  *
- * Deliberately takes the dpi rather than reaching for one: the scale is stated and never inferred
+ * Deliberately takes the scale rather than reaching for one: the scale is stated and never inferred
  * (`scan-measure.ts`), and a size taken at a resolution nobody stated is exactly the figure that
- * gets written down and cut to.
+ * gets written down and cut to. The width goes through the horizontal resolution and the height
+ * through the vertical (#1443) — a scanner's two axes need not agree, and a calibrated profile says
+ * by how much.
  */
 export function sizeFromScanPixels(
   box: { w: number; h: number },
-  dpi: number,
+  scale: { x: number; y: number },
   mmPerInch = 25.4
 ): StampSize | null {
-  if (!(dpi > 0) || !(box.w > 0) || !(box.h > 0)) return null;
-  const widthMm = roundSizeMm((box.w / dpi) * mmPerInch);
-  const heightMm = roundSizeMm((box.h / dpi) * mmPerInch);
+  if (!(scale.x > 0) || !(scale.y > 0) || !(box.w > 0) || !(box.h > 0)) return null;
+  const widthMm = roundSizeMm((box.w / scale.x) * mmPerInch);
+  const heightMm = roundSizeMm((box.h / scale.y) * mmPerInch);
   if (widthMm < MIN_SIZE_MM || heightMm < MIN_SIZE_MM) return null;
   if (widthMm > MAX_SIZE_MM || heightMm > MAX_SIZE_MM) return null;
   return { widthMm, heightMm };
@@ -229,4 +231,32 @@ export function parseCorrectedSize(widthText: string, heightText: string): Stamp
   const height = parseSizeMm(heightText);
   if (!width.ok || !height.ok || width.mm === null || height.mm === null) return null;
   return { widthMm: width.mm, heightMm: height.mm };
+}
+
+/**
+ * The scanning profile a stamp's size is recorded as measured with after a write (#1443).
+ *
+ * `next` holds the figures the write sets — a figure left `undefined` is one the write does not touch
+ * — and `measuredWith` the profile the figures were measured with, when the write carries a
+ * measurement at all.
+ *
+ * - A write that **changes** the size records `measuredWith`, or nothing: a figure typed, applied
+ *   from a preset or written by the assistant was measured with no scanner, and a profile left
+ *   standing beside it would name one.
+ * - A write that leaves the size as it was keeps what is recorded — saving the stamp form for its
+ *   name must not forget how the size was taken — unless it carries a measurement of that very size,
+ *   which is then the newer record.
+ * - A size that is no longer there records nothing.
+ */
+export function sizeProfileAfterWrite(
+  current: StampSizeFields & { profileId: string | null },
+  next: Partial<StampSizeFields>,
+  measuredWith: string | null | undefined
+): string | null {
+  const widthMm = next.widthMm !== undefined ? next.widthMm : current.widthMm;
+  const heightMm = next.heightMm !== undefined ? next.heightMm : current.heightMm;
+  if (widthMm === null && heightMm === null) return null;
+  const changed = widthMm !== current.widthMm || heightMm !== current.heightMm;
+  if (changed) return measuredWith ?? null;
+  return measuredWith ?? current.profileId;
 }

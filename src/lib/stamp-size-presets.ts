@@ -10,7 +10,7 @@ import { MAX_SIZE_MM, MIN_SIZE_MM, roundSizeMm } from "./stamp-size";
 // A collector planning an album page knows a stamp's size without having the stamp: an overprint run
 // is the same impression as the base issue he measured years ago, on another checklist. #763 gave a
 // stamp a size and two ways to obtain one, and **both need a scan** — the ruler in `TileZoomView`
-// through `Collection.scanDpi`, or an estimate off a `ScanTile`'s crop. Its fallback cannot reach
+// through a scanning profile (#1443), or an estimate off a `ScanTile`'s crop. Its fallback cannot reach
 // the figure either: `resolveStampSize` walks one checklist, and a new overprint run *is* its own
 // checklist, so every stamp in it resolves to nothing. A preset is the way to state a figure he
 // already knows, for a whole series at once, without measuring anything.
@@ -583,7 +583,9 @@ async function applyPairToSubject(
   // repeating the tenancy bound on the write is what keeps that true of the write itself.
   const { count } = await prisma.stamp.updateMany({
     where: { id: { in: targets }, collectionId },
-    data: { widthMm, heightMm },
+    // A preset's figure was measured with no scanner, so whatever profile an earlier measurement
+    // recorded goes with the size it described (#1443).
+    data: { widthMm, heightMm, sizeScanningProfileId: null },
   });
   result.written = count;
   return result;

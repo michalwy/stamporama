@@ -13,6 +13,7 @@ import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { getStampAttributeLists } from "@/lib/stamp-attributes";
 import { getStampSizePresets } from "@/lib/stamp-size-presets";
+import { listScanningProfiles } from "@/lib/scanning-profiles";
 import { getTags } from "@/lib/tags";
 import {
   getColnectMappings,
@@ -81,6 +82,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     subtypes,
     attributes,
     stampSizePresets,
+    scanningProfiles,
     tags,
     collageTemplates,
     refCardTemplates,
@@ -114,6 +116,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getStampSubtypes(session.user.id, collection.id),
     getStampAttributeLists(session.user.id, collection.id),
     getStampSizePresets(session.user.id, collection.id),
+    listScanningProfiles(session.user.id, collection.id),
     getTags(session.user.id, collection.id),
     getCollageTemplates(session.user.id, collection.id),
     getRefCardTemplates(session.user.id, collection.id),
@@ -166,9 +169,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           // default is *keep for ever* unless an operator says otherwise, which is exactly the
           // sentence a collector following the instance should be reading.
           instanceScanSheetTtlLabel={describeScanSheetTtl(instanceScanSheetTtlMs())}
-          // The scale a measurement on a scan is converted with (#598). Nothing to resolve
-          // server-side: it is the collection's own answer and there is no instance-wide scanner.
-          scanDpi={collection.scanDpi}
+          // The collection's scanning profiles (#1443), with what uses each — the Scanning tab.
+          initialScanningProfiles={scanningProfiles}
           collectionSlug={collectionSlug}
           initialAreas={areas}
           titleLanguages={titleLanguages}

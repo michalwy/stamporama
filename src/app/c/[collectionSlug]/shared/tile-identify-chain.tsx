@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useState } from "react";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
@@ -382,7 +383,7 @@ export interface TileIdentifyChainDialogsProps {
   chain: TileIdentifyChainState;
   collectionId: string;
   areas: CollectionAreaData[];
-  scanDpi: number;
+  scanning: ScanningSetup;
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   locations: LocationData[];
@@ -416,7 +417,7 @@ export function TileIdentifyChainDialogs({
   chain,
   collectionId,
   areas,
-  scanDpi,
+  scanning,
   conditions,
   certificateStatuses,
   locations,
@@ -507,7 +508,7 @@ export function TileIdentifyChainDialogs({
             <IdentifiedPieceAside
               collectionId={collectionId}
               pieces={tileIntake}
-              scanDpi={scanDpi}
+              scanning={scanning}
             />
           }
           asideWidth="26rem"
@@ -568,7 +569,7 @@ export function TileIdentifyChainDialogs({
         <IntakeConditionDialog
           selection={tileSelection}
           collectionId={collectionId}
-          scanDpi={scanDpi}
+          scanning={scanning}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}
@@ -717,7 +718,7 @@ export function TileIdentifyChainDialogs({
             <IdentifiedPieceAside
               collectionId={collectionId}
               pieces={tileIntake}
-              scanDpi={scanDpi}
+              scanning={scanning}
               runOrder
             />
           }
@@ -741,7 +742,7 @@ export function TileIdentifyChainDialogs({
         <IssueRunDialog
           collectionId={collectionId}
           areas={areas}
-          scanDpi={scanDpi}
+          scanning={scanning}
           conditions={conditions}
           certificateStatuses={certificateStatuses}
           locations={locations}
@@ -790,7 +791,7 @@ export function TileIdentifyChainDialogs({
           collectionId={collectionId}
           areas={areas}
           pieces={tileIntake}
-          scanDpi={scanDpi}
+          scanning={scanning}
           formats={formats}
           initialRows={currentDrafts().map(
             (draft): ItemStampRow => ({

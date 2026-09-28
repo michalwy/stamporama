@@ -1,4 +1,5 @@
 import "server-only";
+import { stampSizeProfileWrite } from "./scanning-profiles";
 import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
@@ -2329,6 +2330,8 @@ export async function addStampToIssue(
         colnectId: data.colnectId || null,
         // The six catalogue attributes (#736); an unsupplied one is simply not set.
         ...pickStampAttributeWrites(data),
+        // A size accepted from a measurement records what it was measured with (#1443).
+        ...(await stampSizeProfileWrite(tx, collectionId, null, data)),
       },
       select: { id: true },
     });

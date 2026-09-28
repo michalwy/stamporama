@@ -741,15 +741,18 @@ There are two ways not to type it, both of them offers rather than actions:
 - **Measured on the scan.** With a scanned piece beside the form — creating or editing a stamp from
   inside an [identification](purchases.md#identifying-stamps-intake) — the viewer's
   [**Size** tool](purchases.md#measuring-on-the-scan) draws a box around the stamp and reads its
-  width and height at the resolution on the measuring bar. Press **Use as size** to take it.
+  width and height with the scanning profile on the measuring bar. Press **Use as size** to take it.
 - **From the tile's crop**, marked **estimate**. The crop a tile was cut to is the stamp *plus
   whatever slack the cut carried*, so its dimensions are a good first guess and a poor fact. It is
   offered pre-computed and labelled, and it is written only when you press **Use as size** — a size
   nobody looked at becomes a wrongly cut hawid, and the material does not come back.
 
-Both offers quote the resolution they were taken at, because a measurement is only as good as the
-scale it was converted through — correct it on the measuring bar before taking the figure if the
-card was scanned at something other than the collection's setting.
+Both offers name the scanning profile they were taken with, because a measurement is only as good as
+the scale it was converted through — switch it on the measuring bar before taking the figure if the
+card was scanned with something else. A size taken from a measurement records that profile, and the
+stamp's page shows it beside the size (*21.5 × 25 mm — measured with Epson V600, 1200 dpi
+(calibrated)*). Typing a different figure afterwards, or applying a preset over it, drops the record:
+the profile describes a measurement, not a figure you typed.
 
 A stamp you did not measure while identifying it can still be measured afterwards, on a photo of a
 copy: **Measure and mark** under an enlarged photo on the copy's or the stamp's page, then the
@@ -1215,24 +1218,49 @@ Two things about it are worth knowing, and the line says both:
 - **It is not your data, and it is not part of the figure above.** Everything in the cache also exists in cloud storage. Emptying it costs nothing but a little time the next time those files are needed, which is why there is a plain **Clear this collection's copies** button and no confirmation.
 - **It is instance-wide.** The cache is shared by every collection on this Stamporama, and its size limit is set by whoever runs it, so the figure is shown as *used of limit* for the whole instance, with your collection's share of it named beside. It looks after itself: once it reaches the limit, the least recently used copies are dropped automatically.
 
-### What you scan your cards at
+### Scanning profiles
 
-**Settings → General → Scanner resolution** is the one number the ruler and the perforation gauge in
-the [tile viewer](purchases.md#measuring-on-the-scan) convert with — the resolution your flatbed is
-set to when you scan a stockbook card. It starts at **1200 dpi** and, on the scanner you always use,
-you can leave it alone.
+**Settings → Scanning** lists the scanners you measure scans with. A **scanning profile** is a scanner
+at one resolution — *Epson V600, 1200 dpi* — and it is what the ruler, the size tool and the
+perforation gauge in the [tile viewer](purchases.md#measuring-on-the-scan) convert with. Every
+collection starts with one, called *Scanner*, at **1200 dpi**, and it is the **default**: what a new
+scan is offered and what a photo is measured with. On the one scanner you always use, you can leave
+it alone. A collection that measured at another resolution before profiles existed has that
+resolution as its first profile instead, so nothing measures differently until you calibrate.
 
-Nothing else uses it. No scan is resampled and no file is opened to see what resolution it claims,
-which is deliberate: an image's stated resolution is frequently left over from an earlier edit and
-simply wrong, and perforation 11½ and 12 differ by less than 4%. A measurement taken at the wrong
-scale is not obviously wrong — it looks exactly like a right one — so Stamporama would rather be told
-than guess. Every reading it gives you is printed with the resolution it was taken at, for the same
-reason.
+**Add profile** for another scanner, or for the same scanner at another resolution — each is
+calibrated on its own. **Make default** in a profile's **⋮** menu changes what new scans are offered.
 
-If a single old card came off a different scanner, you can correct the figure in the measuring bar
-itself, beside the reading. That correction lasts as long as you are looking at that card and does
-**not** change this setting: one card measured at 600 dpi should not redefine what every later
-measurement assumes. Changing it for good is this field, here.
+**Why calibrate.** A scanner rarely delivers exactly the resolution it is set to. A nominal 1200 dpi
+may really be 1195 across the glass and 1198 along it — the sensor sets one and the motor that
+carries it sets the other — and on a 25 mm stamp that is the few tenths of a millimetre by which
+measurements come out too large. A calibrated profile measures with its real resolution, each axis on
+its own, so a line along the width reads the across figure and a perforation run down a vertical edge
+is gauged with the along figure.
+
+**How to calibrate.** Scan a good ruler on that scanner at the profile's resolution — one lying left
+to right and one top to bottom, or the same ruler twice. Choose **Calibrate** in the profile's **⋮**
+menu and pick the scan: it stays in your browser, and only the result is saved. With **Across**
+chosen, click one tick of the left-to-right ruler and then another at least **100 mm** further on —
+zoom with the wheel and drag to move the picture between the two clicks, so each end sits exactly on
+its tick — and type the true length between them. Do the same with **Along** on the top-to-bottom
+ruler. The effective resolution appears underneath with how far each axis is from nominal; **Save
+calibration** keeps it. A ruler lying a little askew is fine — the two stretches are solved
+together — but a result more than **3%** from nominal is refused as a probable mistake: a length
+typed wrong, or a stretch counted from the wrong tick. Clicking a stretch that already has both ends
+moves the nearer one.
+
+**Changing a profile's resolution removes its calibration**, since at another resolution the scanner
+is off by a different amount; **Remove calibration** does the same on purpose. Renaming keeps it.
+
+**A profile in use cannot be deleted** — the default, one a scan was taken with, or one a stamp's
+size was measured with. The profile's line says what uses it, and **Delete** stays unavailable until
+nothing does.
+
+Nothing reads a resolution out of a scan's own file, deliberately: an image's stated resolution is
+frequently left over from an earlier edit and simply wrong, and perforation 11½ and 12 differ by less
+than 4%. A measurement taken at the wrong scale looks exactly like a right one, so Stamporama would
+rather be told than guess — and every reading it gives you names the profile it was taken with.
 
 ### How long closed listings keep their images
 

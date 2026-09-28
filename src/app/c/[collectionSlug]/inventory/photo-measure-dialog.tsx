@@ -1,5 +1,6 @@
 "use client";
 
+import type { MeasureScale, ScanningSetup } from "@/lib/scanning-profile";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -26,13 +27,14 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 /**
  * What a screen tells a photo strip so that its photos can be measured (#1290).
  *
- * The scale is the collection's, prefilled and correctable in the viewer for the sitting, exactly as
- * on a scan tile (#598). The stamp is the one a measured size is written to — the copy's stamp, or
+ * The scale is one of the collection's scanning profiles (#1443) — the default, switchable in the
+ * viewer for the sitting, or a resolution typed when no profile fits a picture that was never
+ * scanned here. The stamp is the one a measured size is written to — the copy's stamp, or
  * the stamp whose screen it is — and null where a picture is of no one stamp (a piece carrying
  * several), which keeps the measuring and drops the writing.
  */
 export interface PhotoMeasureContext {
-  scanDpi: number;
+  scanning: ScanningSetup;
   stampId: string | null;
 }
 
@@ -70,11 +72,13 @@ export function PhotoMeasureDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [reading, setReading] = useState<{ size: StampSize; dpi: number } | null>(null);
+  const [reading, setReading] = useState<{ size: StampSize; scale: MeasureScale } | null>(null);
   /** The width and height as they stand in the fields (#1299), and the measurement they were filled
    * from. A new measurement refills them — adjusted while rendering, so the fields never show one
    * frame of the previous figures beside the new reading. */
-  const readingKey = reading ? `${reading.size.widthMm}×${reading.size.heightMm}@${reading.dpi}` : null;
+  const readingKey = reading
+    ? `${reading.size.widthMm}×${reading.size.heightMm}@${reading.scale.label}`
+    : null;
   const [fields, setFields] = useState<{ key: string | null; width: string; height: string }>({
     key: null,
     width: "",
@@ -90,7 +94,7 @@ export function PhotoMeasureDialog({
   const corrected = parseCorrectedSize(fields.width, fields.height);
   const [confirm, setConfirm] = useState<{
     size: StampSize;
-    dpi: number;
+    scale: MeasureScale;
     current: StampSizeFields;
   } | null>(null);
   const [error, setError] = useState<string | undefined>();
@@ -98,7 +102,7 @@ export function PhotoMeasureDialog({
 
   const stampId = context.stampId;
 
-  function writeSize(target: { size: StampSize; dpi: number }, replace: boolean) {
+  function writeSize(target: { size: StampSize; scale: MeasureScale }, replace: boolean) {
     if (!stampId) return;
     setError(undefined);
     startTransition(async () => {
@@ -106,14 +110,16 @@ export function PhotoMeasureDialog({
         stampId,
         target.size.widthMm,
         target.size.heightMm,
-        replace
+        replace,
+        // What the stamp records the size as measured with (#1443) — nothing for a typed resolution.
+        target.scale.profileId
       );
       if (state.status === "error") {
         setError(state.message);
         return;
       }
       if (state.status === "confirm") {
-        setConfirm({ size: state.size, dpi: target.dpi, current: state.current });
+        setConfirm({ size: state.size, scale: target.scale, current: state.current });
         return;
       }
       setConfirm(null);
@@ -121,7 +127,9 @@ export function PhotoMeasureDialog({
         toast({ message: `The stamp already states ${formatStampSize(state.size)}`, tone: "info" });
         return;
       }
-      toast({ message: `Stamp size set to ${formatStampSize(state.size)}, measured at ${target.dpi} dpi` });
+      toast({
+        message: `Stamp size set to ${formatStampSize(state.size)}, measured with ${target.scale.label}`,
+      });
       router.refresh();
     });
   }
@@ -160,10 +168,13 @@ export function PhotoMeasureDialog({
               frame: photo.measureFrame ?? null,
               turn: 0,
               sheetId: null,
+              // A photo was not scanned through this app, so nothing says what with: the viewer
+              // opens on the collection's default profile (#1443).
+              scanningProfileId: null,
             },
           ]}
           position={0}
-          scanDpi={context.scanDpi}
+          scanning={context.scanning}
           subject="photo"
           onSize={setReading}
           onSnapshotSaved={() => router.refresh()}
@@ -189,7 +200,7 @@ export function PhotoMeasureDialog({
           >
             <span style={{ fontVariantNumeric: "tabular-nums" }}>
               <span style={{ color: "var(--color-text-muted)" }}>Measured </span>
-              <strong>{formatStampSize(reading.size)}</strong> at {reading.dpi} dpi
+              <strong>{formatStampSize(reading.size)}</strong> — {reading.scale.label}
             </span>
             <span style={{ flex: 1 }} />
             {/* The correction (#1299): the measured figures, editable, beside the measurement they
@@ -217,7 +228,7 @@ export function PhotoMeasureDialog({
                   : "Give both a width and a height, in millimetres"
               }
               disabled={pending || !corrected}
-              onClick={() => corrected && writeSize({ size: corrected, dpi: reading.dpi }, false)}
+              onClick={() => corrected && writeSize({ size: corrected, scale: reading.scale }, false)}
             />
           </div>
         )}
@@ -232,7 +243,7 @@ export function PhotoMeasureDialog({
           message={
             <>
               The stamp states <strong>{formatStampSize(confirm.current)}</strong> now. Replace it
-              with <strong>{formatStampSize(confirm.size)}</strong>, measured at {confirm.dpi} dpi?
+              with <strong>{formatStampSize(confirm.size)}</strong>, measured with {confirm.scale.label}?
             </>
           }
           actionLabel="Replace"

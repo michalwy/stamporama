@@ -201,7 +201,7 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
           kind: "rulerMark",
           a: { x: 100, y: 1200 },
           b: { x: 1400, y: 1200 },
-          dpi: 1200,
+          scale: { x: 1200, y: 1200 },
           style: { colour: "blue", thickness: 5, fontSize: 32 },
         },
         { kind: "text", at: { x: 200, y: 200 }, text: "Flaw", style: { colour: "yellow", thickness: 1, fontSize: 32 } },
@@ -440,7 +440,9 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
   it("gives the page editor's box the stated size, the scale and the photos a size can be measured on (#1309)", async () => {
     const sources = await getStampSizeSources(userId, stampId);
     assert.deepEqual(sources.size, { widthMm: 22, heightMm: 26 });
-    assert.equal(sources.scanDpi, 1200);
+    // The collection's scanning profiles (#1443) — none on a collection made by hand here, which the
+    // viewer answers with a typed resolution.
+    assert.deepEqual(sources.scanning, { profiles: [], defaultProfileId: null });
     const front = sources.photos.find((p) => p.id === frontPhotoId);
     assert.ok(front, "a copy's photo is offered, as the stamp's own screen offers it");
     assert.deepEqual(front.measureFrame, { width: W, height: H });

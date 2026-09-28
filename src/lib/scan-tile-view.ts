@@ -21,6 +21,8 @@ export interface TileSheetRef {
    * *deliberately*, so this is not a fetch to try and recover from — it is the absence of a source,
    * known before anything is asked for. */
   purged: boolean;
+  /** What the card was scanned with (#1443) — the profile its tiles open the measuring tool on. */
+  scanningProfileId?: string | null;
 }
 
 /** What this module needs of a tile. `item` is the copy a `consumed` tile became, which owns the
@@ -57,6 +59,10 @@ export interface TileSideView {
   /** The retained scan to escalate to past the photo's own resolution, or null when there is none
    * to ask. */
   sheetId: string | null;
+  /** The scanning profile the side's card was scanned with (#1443), which the measuring tool opens
+   * on. Carried whether or not the bytes are still there — a swept card was still scanned with it —
+   * and null where nothing says, which opens on the collection's default. */
+  scanningProfileId: string | null;
 }
 
 /**
@@ -99,6 +105,7 @@ export function tileSideViews(
         // them, exactly as the box does.
         turn: (side === "front" ? tile.frontTurn : tile.backTurn) ?? 0,
         sheetId: deep ? sheet.id : null,
+        scanningProfileId: sheet?.scanningProfileId ?? null,
       } satisfies TileSideView;
     })
     .filter((v): v is TileSideView => v != null);

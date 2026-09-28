@@ -40,7 +40,7 @@ const VALID = {
   marks: [
     { kind: "ellipse", a: { x: 20, y: 30 }, b: { x: 60, y: 50 }, style: YELLOW },
     { kind: "distance", a: { x: 10, y: 20 }, b: { x: 110, y: 20 }, label: "4.23 mm at 1200 dpi", style: D },
-    { kind: "rulerMark", a: { x: 10, y: 60 }, b: { x: 110, y: 60 }, dpi: 1200, style: D },
+    { kind: "rulerMark", a: { x: 10, y: 60 }, b: { x: 110, y: 60 }, scale: { x: 1200, y: 1200 }, style: D },
     { kind: "text", at: { x: 30, y: 30 }, text: " Plate flaw ", style: { ...YELLOW, colour: "red" } },
   ],
   title: "  Plate flaw  ",
@@ -115,7 +115,11 @@ describe("annotations (#674)", () => {
     assert.equal(withMark({ kind: "distance", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }), null);
     // …and a ruler mark never without the scale it was drawn at (#1300).
     assert.equal(withMark({ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }), null);
-    assert.equal(withMark({ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 }, dpi: 12 }), null);
+    assert.equal(withMark({ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 }, dpi: 1200 }), null);
+    assert.equal(
+      withMark({ kind: "rulerMark", a: { x: 0, y: 0 }, b: { x: 1, y: 1 }, scale: { x: 1200, y: 12 } }),
+      null
+    );
     // A note of nothing is not a note.
     assert.equal(withMark({ kind: "text", at: { x: 0, y: 0 }, text: "  " }), null);
     assert.equal(withMark({ kind: "line", a: { x: Number.NaN, y: 0 }, b: { x: 1, y: 1 } }), null);
@@ -285,13 +289,16 @@ describe("annotation style (#1300)", () => {
 describe("ruler mark (#1300)", () => {
   it("needs a stated scale to be drawn at all", () => {
     assert.equal(annotationFromDrag("rulerMark", { x: 0, y: 0 }, { x: 100, y: 0 }, D, null), null);
-    assert.deepEqual(annotationFromDrag("rulerMark", { x: 0, y: 0 }, { x: 100, y: 0 }, D, 600), {
-      kind: "rulerMark",
-      a: { x: 0, y: 0 },
-      b: { x: 100, y: 0 },
-      dpi: 600,
-      style: D,
-    });
+    assert.deepEqual(
+      annotationFromDrag("rulerMark", { x: 0, y: 0 }, { x: 100, y: 0 }, D, { x: 600, y: 601 }),
+      {
+        kind: "rulerMark",
+        a: { x: 0, y: 0 },
+        b: { x: 100, y: 0 },
+        scale: { x: 600, y: 601 },
+        style: D,
+      }
+    );
   });
 
   it("chooses the finest graduation the zoom leaves room for", () => {
@@ -321,20 +328,20 @@ describe("ruler mark (#1300)", () => {
     // 600 px at 1200 dpi is 12.7 mm; at 600 dpi the same line is twice that. The scale measures the
     // mark but is not written on it (#1342).
     const prims = markPrimitives(
-      { kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, dpi: 1200, style: D },
+      { kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, scale: { x: 1200, y: 1200 }, style: D },
       PLACE_ON_SCREEN
     );
     const label = prims.find((p) => p.type === "text");
     assert.ok(label && label.type === "text");
     assert.equal(label.text, "12.70 mm");
     const at600 = markPrimitives(
-      { kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, dpi: 600, style: D },
+      { kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, scale: { x: 600, y: 600 }, style: D },
       PLACE_ON_SCREEN
     ).find((p) => p.type === "text");
     assert.ok(at600 && at600.type === "text");
     assert.equal(at600.text, "25.40 mm");
     const svg = snapshotOverlaySvg(
-      [{ kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, dpi: 1200, style: D }],
+      [{ kind: "rulerMark", a: { x: 0, y: 100 }, b: { x: 600, y: 100 }, scale: { x: 1200, y: 1200 }, style: D }],
       { x: 0, y: 0, w: 700, h: 200 },
       { width: 1400, height: 400 },
       2

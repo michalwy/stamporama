@@ -5,6 +5,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { prisma } from "./db";
 import { dataDir } from "./storage";
+import { assertCollectionProfile, ScanningProfileError } from "./scanning-profiles";
 import { isAcceptedMime, MAX_UPLOAD_BYTES } from "./photos/process";
 import { uploadTtlMs } from "./photos";
 import {
@@ -130,6 +131,8 @@ export async function openScanUpload(
     side: SheetSide;
     batchNo?: number;
     label?: string | null;
+    /** The profile chosen beside the file (#1443), carried to the sheet at finalize. */
+    scanningProfileId?: string | null;
     totalBytes: number;
   }
 ): Promise<OpenedScanUpload> {
@@ -159,6 +162,7 @@ export async function openScanUpload(
       side: input.side,
       batchNo: input.batchNo ?? null,
       label: input.label ?? null,
+      scanningProfileId: await chosenProfile(owner.collectionId, input.scanningProfileId),
       mime: input.mime,
       totalBytes: input.totalBytes,
       chunkBytes,
@@ -173,6 +177,22 @@ export async function openScanUpload(
   };
 }
 
+/** The profile an upload is opened with: one of this collection's, or null for the default. Checked
+ * at the open, where refusing costs nothing, rather than after 200 MB have arrived. */
+async function chosenProfile(
+  collectionId: string,
+  chosen: string | null | undefined
+): Promise<string | null> {
+  if (!chosen) return null;
+  try {
+    await assertCollectionProfile(prisma, collectionId, chosen);
+  } catch (err) {
+    if (err instanceof ScanningProfileError) throw new ScanValidationError(err.message);
+    throw err;
+  }
+  return chosen;
+}
+
 // ── Receiving a chunk ─────────────────────────────────────────────────────────────────────────
 
 interface UploadRow {
@@ -182,6 +202,7 @@ interface UploadRow {
   side: string;
   batchNo: number | null;
   label: string | null;
+  scanningProfileId: string | null;
   mime: string;
   totalBytes: number;
   chunkBytes: number;
@@ -199,6 +220,7 @@ async function loadUpload(ownerId: string, uploadId: string): Promise<UploadRow>
       side: true,
       batchNo: true,
       label: true,
+      scanningProfileId: true,
       mime: true,
       totalBytes: true,
       chunkBytes: true,
@@ -330,6 +352,7 @@ export async function finalizeScanUpload(
         side: upload.side as SheetSide,
         batchNo: upload.batchNo ?? undefined,
         label: upload.label,
+        scanningProfileId: upload.scanningProfileId,
       }
     );
   } finally {

@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { prisma } from "./db";
+import { resolveScanProfileId, ScanningProfileError } from "./scanning-profiles";
 import {
   getActiveStorage,
   getStorage,
@@ -228,10 +229,21 @@ export async function uploadSheet(
      * through {@link setBatchLabel}, because a card often turns out to need naming only once it
      * has been left for a week. */
     label?: string | null;
+    /** What the card was scanned with (#1443). Absent or null takes the collection's default, so a
+     * collector with one scanner is asked nothing new; a profile of another collection is refused. */
+    scanningProfileId?: string | null;
   }
 ): Promise<UploadedSheet> {
   const owner = await assertScanOwner(ownerId, ref);
   const { collectionId } = owner;
+
+  let scanningProfileId: string | null;
+  try {
+    scanningProfileId = await resolveScanProfileId(prisma, collectionId, input.scanningProfileId);
+  } catch (err) {
+    if (err instanceof ScanningProfileError) throw new ScanValidationError(err.message);
+    throw err;
+  }
 
   if ((await sourceSize(input.source)) > MAX_UPLOAD_BYTES) {
     throw new ScanValidationError("Scan is too large (max 200 MB).");
@@ -325,6 +337,7 @@ export async function uploadSheet(
           side: input.side,
           label,
           kind,
+          scanningProfileId,
           storageBackend: storage.backend,
           storageKey: prefix,
           mime,
@@ -1578,6 +1591,9 @@ export interface ScanSheetData {
    * batch still lists its tiles; what is gone is the ability to cut it again, which is why the
    * screen stops offering a re-cut rather than letting one fail. */
   purged: boolean;
+  /** What the card was scanned with (#1443), or null for a sheet uploaded before profiles existed —
+   * which the viewer measures with the collection's default, as it did then. */
+  scanningProfileId: string | null;
 }
 
 export interface ScanTileData {
@@ -1756,6 +1772,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         kind: true,
         batchDoneAt: true,
         purgedAt: true,
+        scanningProfileId: true,
         _count: { select: { frontTiles: true, backTiles: true } },
       },
       orderBy: { batchNo: "desc" },
@@ -1913,6 +1930,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       viewHeight: s.viewHeight,
       cut: (s.side === "back" ? s._count.backTiles : s._count.frontTiles) > 0,
       purged: s.purgedAt != null,
+      scanningProfileId: s.scanningProfileId,
     };
     const batch = batchOf(s.batchNo);
     if (data.side === "front") batch.front = data;

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -101,7 +102,7 @@ import { TextInput } from "./text-input";
 export interface IssueRunDialogProps {
   collectionId: string;
   areas: CollectionAreaData[];
-  scanDpi: number;
+  scanning: ScanningSetup;
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   locations: LocationData[];
@@ -179,7 +180,7 @@ const TAKE_OUT_BUTTON: React.CSSProperties = {
 export function IssueRunDialog({
   collectionId,
   areas,
-  scanDpi,
+  scanning,
   conditions,
   certificateStatuses,
   locations,
@@ -659,7 +660,7 @@ export function IssueRunDialog({
                     collectionId={collectionId}
                     sides={active.sides}
                     position={active.position}
-                    scanDpi={scanDpi}
+                    scanning={scanning}
                     onGauge={setGauge}
                   />
                 ) : (

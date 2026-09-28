@@ -1,5 +1,11 @@
 import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
+import {
+  SCANNING_PROFILE_SELECT,
+  stampSizeProfileWrite,
+  toScanningProfileView,
+} from "./scanning-profiles";
+import { profileLabel } from "./scanning-profile";
 import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
 import {
@@ -450,6 +456,9 @@ export interface StampListItem {
    *  Nothing is resolved through the checklist here: a list and a detail page report what the
    *  record holds, and the borrowed figure belongs to the surfaces that draw boxes with it. */
   size: StampSizeFields;
+  /** What the size was measured with (#1443) — the profile's own sentence, *Epson V600, 1200 dpi
+   *  (calibrated)* — or null for a size typed, applied, saved before profiles, or absent. */
+  sizeMeasuredWith: string | null;
 }
 
 export interface PaginatedStampsResult {
@@ -502,6 +511,7 @@ const STAMP_LIST_SELECT = {
   tags: TAG_SUMMARY_SELECT,
   ...STAMP_ATTRIBUTE_DISPLAY_SELECT,
   ...STAMP_SIZE_SELECT,
+  sizeScanningProfile: { select: SCANNING_PROFILE_SELECT },
 } as const;
 
 function toStampListItem(
@@ -535,6 +545,7 @@ function toStampListItem(
   } & StampAttributeDisplayRow & {
       widthMm: Prisma.Decimal | null;
       heightMm: Prisma.Decimal | null;
+      sizeScanningProfile: Parameters<typeof toScanningProfileView>[0] | null;
     },
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
@@ -622,6 +633,9 @@ function toStampListItem(
     tags: orderTagSummaries(stamp.tags),
     attributes: stampAttributeLabels(stamp),
     size: stampSizeFields(stamp),
+    sizeMeasuredWith: stamp.sizeScanningProfile
+      ? profileLabel(toScanningProfileView(stamp.sizeScanningProfile))
+      : null,
   };
 }
 
@@ -1424,6 +1438,8 @@ export async function updateStampWithCatalog(
         // The six catalogue attributes (#736), on the same rule: a key absent from `data` is a
         // field the caller's form did not render, and its stored value is not touched.
         ...pickStampAttributeWrites(data),
+        // What the size was measured with (#1443) — recorded, kept or cleared with the size.
+        ...(await stampSizeProfileWrite(tx, collectionId, stampId, data)),
         ...subtypeData,
       },
     });

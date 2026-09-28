@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useCallback, useState, useTransition } from "react";
 import { Icon } from "@/app/icons";
 import {
@@ -198,7 +199,7 @@ interface Props {
   areas: CollectionAreaData[];
   /** What this collection scans at (#598) — the scale the viewer's ruler and perforation gauge
    * convert with, prefilled into the measuring bar and correctable there for this sitting. */
-  scanDpi: number;
+  scanning: ScanningSetup;
   /** The intake document the card belongs to — the scope of the assign list, which narrows to the
    * parcel's copies. */
   purchaseId: string;
@@ -337,7 +338,7 @@ function assignParams(tile: ScanTileData | null): LotCopiesParams {
 export function TileIdentifyDialog({
   collectionId,
   areas,
-  scanDpi,
+  scanning,
   purchaseId,
   tiles,
   canIdentify,
@@ -722,7 +723,7 @@ export function TileIdentifyDialog({
         <IdentifiedPieceAside
           collectionId={collectionId}
           pieces={pieces}
-          scanDpi={scanDpi}
+          scanning={scanning}
           onGauge={onGauge}
           // Standing a sideways piece the right way up (#1006) — here, where the tile is still being
           // worked, and on no step after it. Not on a consumed tile: its pictures went to the copy
@@ -981,7 +982,7 @@ export function TileIdentifyDialog({
               gap: "0.625rem",
             }}
           >
-            <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
+            <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanning={scanning} />
             {/* The shortlist as it stands, beside the piece — which is what lets the picker stay
                 open across several picks: a stamp added is visibly added, so a second pick reads as
                 *and this one* rather than as a press that may not have registered. */}

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/app/icons";
@@ -176,7 +177,7 @@ interface Props {
    *  keeps pinned above this card — the purchase order's header and value summary (#1410). */
   stickyTop: number;
   /** The collection's stated scan resolution (#598) — the tile dialog's viewer measures with it. */
-  scanDpi: number;
+  scanning: ScanningSetup;
 }
 
 /** The editor's subject: a sheet, the boxes to open on, and the batch it belongs to. */
@@ -189,7 +190,7 @@ interface EditorTarget {
 export function ScansCard({
   collectionId,
   areas,
-  scanDpi,
+  scanning,
   purchaseId,
   unidentifiedTileCount,
   parkedTileCount,
@@ -314,6 +315,10 @@ export function ScansCard({
   /** The name to give the **next** card added (#587). Held here rather than remembered anywhere:
    * a name belongs to one card, and the last one typed is the wrong default for the next. */
   const [newLabel, setNewLabel] = useState("");
+  /** What the next scan is scanned with (#1443), prefilled with the collection's default and kept
+   * for the sitting — unlike the name, it is usually the same for every card of an evening. Offered
+   * only when there is more than one profile, so a collector with one scanner is asked nothing. */
+  const [newProfileId, setNewProfileId] = useState<string | null>(scanning.defaultProfileId);
   /** A detection pass in flight. Its own state rather than the transition's: it is the one wait in
    * this section that happens *before* a dialog opens, so the button that started it has to say so. */
   const [detecting, setDetecting] = useState(false);
@@ -516,6 +521,9 @@ export function ScansCard({
           side === "front"
             ? (normalizeBatchLabel(newLabel) ?? batchLabelFromFileName(file.name))
             : null,
+        // The profile beside the button (#1443), for a back as for a front: a back scanned on
+        // another scanner is the rare case, and the select is where it is said.
+        scanningProfileId: newProfileId,
         onProgress: setProgress,
       });
       if (side === "front") setNewLabel("");
@@ -792,6 +800,23 @@ export function ScansCard({
           disabled={uploading}
           style={LABEL_INPUT_STYLE}
         />
+        {scanning.profiles.length > 1 && (
+          <Tooltip content="What the scans you add are scanned with — the measuring tool opens on it. Profiles are set up in Settings → Scanning.">
+            <select
+              value={newProfileId ?? ""}
+              onChange={(e) => setNewProfileId(e.target.value || null)}
+              aria-label="Scanning profile for the scans being added"
+              disabled={uploading}
+              style={{ ...LABEL_INPUT_STYLE, width: "auto", maxWidth: "16rem" }}
+            >
+              {scanning.profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}, {p.nominalDpi} dpi
+                </option>
+              ))}
+            </select>
+          </Tooltip>
+        )}
         <UploadButton
           label="Add card scan"
           busy={uploading}
@@ -980,7 +1005,7 @@ export function ScansCard({
         <TileIdentifyDialog
           collectionId={collectionId}
           areas={areas}
-          scanDpi={scanDpi}
+          scanning={scanning}
           purchaseId={purchaseId}
           // One tile, or the ticked run — one dialog either way (#596), with the sides worked out
           // here: `ScanSheetData` already answers both questions the deep look asks (which scan, and

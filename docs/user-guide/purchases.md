@@ -521,6 +521,12 @@ Beside **Add card scan** there is an optional **name**: type one and it rides wi
 adding. Leave it blank and the card takes **the name of the file you upload**, without its extension
 — *Klaser Polska 1.jpg* becomes *Klaser Polska 1* — since that is usually the naming you already did
 at the scanner. (A file name too long to fit leaves the card unnamed rather than failing the upload.)
+
+With more than one [scanning profile](collections.md#scanning-profiles), a choice of profile sits
+beside the name too, set to the collection's default: the scans you add — fronts and backs — are
+recorded as scanned with it, and the measuring tool opens on it for their pieces. It stays as you left
+it for the rest of your visit, since an evening's cards usually come off one scanner. With a single
+profile nothing is asked.
 You can also name a card at any time afterwards — click the name (or *Name this card*) on the
 batch's own line — which is usually when you want to, since a card often turns out to need naming
 only once a parcel has been left half worked for a week and the thumbnails are the only clue.
@@ -771,17 +777,19 @@ resolution and the tooth count. <kbd>Esc</kbd> takes the marks off, and again pu
 Marks belong to the side they were placed on, so flipping front to back clears them; the zoom is
 kept as always.
 
-**Say what you scan at — the app never guesses.** Every reading is shown with the resolution it was
-taken at (*11½ (11.63) at 1200 dpi*), and the field it came from sits right beside it. It is filled
-in from **Settings → General → Scanner resolution**, so on the scanner you always use it is already
-right. A scan's file can claim a resolution it does not actually have — usually left over from an
-earlier edit — so nothing is read out of it: perf 11½ and perf 12 are less than 4% apart, and a
-number taken at the wrong scale looks exactly as convincing as a right one.
+**Say what you scanned with — the app never guesses.** Every reading names the
+[scanning profile](collections.md#scanning-profiles) it was taken with (*11½ (11.63) — Epson V600,
+1200 dpi (calibrated)*), and the choice sits right beside it on the measuring bar. It opens on the
+profile the card was scanned with, so on the scanner you always use it is already right. A calibrated
+profile measures each axis with its own real resolution — a turned tile included, whose width then
+lies along the scanner's other axis. A scan's file can claim a resolution it does not actually have —
+usually left over from an earlier edit — so nothing is read out of it: perf 11½ and perf 12 are less
+than 4% apart, and a number taken at the wrong scale looks exactly as convincing as a right one.
 
-If one particular card came off a different scanner, **change the figure in the bar** and the reading
-updates. That change lasts for as long as you are looking; it does **not** become the collection's
-setting, so measuring one old card at 600 dpi cannot quietly change what every later measurement
-assumes. Changing that for good is a Settings act.
+If one particular card came off a different scanner, **pick its profile on the bar** — or **Another
+resolution…** to type one — and the reading updates. That change lasts for as long as you are
+looking; it changes neither the card nor the collection's default. Those are changed where they are
+set.
 
 **Zoom in before you mark.** The reading is taken on the scan's own pixels however far out you are,
 but below **1:1** you are placing the marks to within more than one of those pixels — the toolbar
@@ -812,7 +820,7 @@ graduations and its length: *2.50 mm*. It is how a snapshot shows *this gap is 2
 as the zoom leaves room for — tenths of a millimetre close up, half and whole millimetres further
 out — with a longer tick on the round figures. Its length is taken at the resolution on the
 measuring bar when you draw it, and stays with it. While you draw, the measuring bar shows the
-length together with that resolution (*2.50 mm at 1200 dpi*); the label on the picture carries the
+length together with the profile (*2.50 mm — Epson V600, 1200 dpi (calibrated)*); the label on the picture carries the
 length alone. Like the Ruler, it is not offered on a picture that cannot be measured.
 
 **Text** — click where the note goes and type it; **Enter** or a click elsewhere keeps it, **Esc**

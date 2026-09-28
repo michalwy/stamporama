@@ -56,14 +56,26 @@ export async function setMeasuredStampSizeAction(
   stampId: string,
   widthMm: number,
   heightMm: number,
-  replace: boolean
+  replace: boolean,
+  /** The scanning profile the figures were measured with (#1443) — null for a figure typed, taken
+   * from a preset or measured at a resolution typed for the sitting. */
+  measuredWith: string | null = null
 ): Promise<MeasuredSizeActionState> {
   const session = await getSession();
   if (typeof widthMm !== "number" || typeof heightMm !== "number") {
     return { status: "error", message: "That is not a size a stamp can have." };
   }
+  if (measuredWith !== null && typeof measuredWith !== "string") {
+    return { status: "error", message: "That scanning profile could not be read." };
+  }
   try {
-    return await writeMeasuredStampSize(session.user.id, stampId, { widthMm, heightMm }, replace === true);
+    return await writeMeasuredStampSize(
+      session.user.id,
+      stampId,
+      { widthMm, heightMm },
+      replace === true,
+      measuredWith
+    );
   } catch (err) {
     if (err instanceof StampMeasuredSizeError) return { status: "error", message: err.message };
     return { status: "error", message: "Failed to save the size. Please try again." };

@@ -42,6 +42,7 @@ export async function POST(
     side?: unknown;
     batchNo?: unknown;
     label?: unknown;
+    scanningProfileId?: unknown;
     totalBytes?: unknown;
   };
 
@@ -67,6 +68,9 @@ export async function POST(
 
   // The card's name, given as it is added (#587). Optional and never a reason to refuse a scan.
   const label = typeof input.label === "string" ? input.label : null;
+  // What the card was scanned with (#1443). Absent takes the collection's default.
+  const scanningProfileId =
+    typeof input.scanningProfileId === "string" && input.scanningProfileId ? input.scanningProfileId : null;
 
   try {
     const opened = await openScanUpload(session.user.id, { purchaseId }, {
@@ -74,6 +78,7 @@ export async function POST(
       side,
       batchNo,
       label,
+      scanningProfileId,
       totalBytes: input.totalBytes,
     });
     return NextResponse.json(opened, { status: 201 });

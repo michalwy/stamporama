@@ -84,7 +84,7 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
         relatives={relatives}
         treeIssue={treeIssue}
         areas={areas}
-        scanDpi={collection.scanDpi}
+        scanning={collection.scanning}
         copyPhotos={copyPhotos}
       />
     </div>

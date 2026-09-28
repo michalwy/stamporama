@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useState } from "react";
 import {
   DialogBody,
@@ -74,7 +75,7 @@ export function HeldCopiesCompareDialog({
   excludeItemId,
   pieces,
   previews,
-  scanDpi,
+  scanning,
   onClose,
 }: {
   collectionId: string;
@@ -89,7 +90,7 @@ export function HeldCopiesCompareDialog({
   pieces?: IdentifiedPiece[];
   /** The photos added in the intake step, for an intake with no tile. */
   previews: PhotoEditorPreview[];
-  scanDpi: number;
+  scanning: ScanningSetup;
   onClose: () => void;
 }) {
   const { data, isLoading, isError } = useHeldCopyPictures(collectionId, stampId, excludeItemId);
@@ -114,7 +115,7 @@ export function HeldCopiesCompareDialog({
           collectionId={collectionId}
           pieces={hasPieces ? pieces : undefined}
           previews={previews}
-          scanDpi={scanDpi}
+          scanning={scanning}
         />
       }
       asideWidth="min(46vw, 38rem)"
@@ -184,19 +185,19 @@ function IncomingColumn({
   collectionId,
   pieces,
   previews,
-  scanDpi,
+  scanning,
 }: {
   collectionId: string;
   pieces?: IdentifiedPiece[];
   previews: PhotoEditorPreview[];
-  scanDpi: number;
+  scanning: ScanningSetup;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
       <h3 style={COLUMN_HEADING}>This piece</h3>
       {pieces ? (
-        <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanDpi={scanDpi} />
+        <IdentifiedPieceAside collectionId={collectionId} pieces={pieces} scanning={scanning} />
       ) : previews.length > 0 ? (
         <div
           style={{

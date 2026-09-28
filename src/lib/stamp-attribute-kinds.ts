@@ -135,6 +135,10 @@ export interface StampAttributeInput {
    * letting it arrive here as a null that would erase a real measurement. */
   widthMm?: number | null;
   heightMm?: number | null;
+  /** The scanning profile the size in the form was measured with (#1443) — sent by the stamp form
+   * only while its figures are still the measurement it accepted. Never a column write of its own:
+   * `stampSizeProfileWrite` turns it and the figures into `Stamp.sizeScanningProfileId`. */
+  sizeMeasuredWith?: string | null;
 }
 
 /** The two size columns, named where the six are so the eight read as one set at every call site
@@ -196,6 +200,8 @@ export function parseStampSizeInput(formData: FormData): {
     }
     input[field] = parsed.mm;
   }
+  const measuredWith = formData.get("sizeMeasuredWith");
+  if (typeof measuredWith === "string" && measuredWith) input.sizeMeasuredWith = measuredWith;
   return { input, error: null };
 }
 

@@ -7,7 +7,7 @@
 //
 // ## The scale is stated, never inferred
 //
-// Everything below takes `dpi` as an argument and nothing anywhere derives one. A scan's own
+// Everything below takes the scale as an argument and nothing anywhere derives one. A scan's own
 // metadata is not consulted: #574's source corpus claimed 1200 dpi in EXIF while the image was
 // 3841 px against an EXIF width of 5121 — stale metadata from an earlier edit — and it concluded
 // to ignore it. That mattered less there, because detection only needed *relative* geometry. A
@@ -15,10 +15,20 @@
 // scale taken from a field that can be stale yields a number that looks precise, is wrong, and is
 // then written down as a variant's defining feature.
 //
-// Which is also why every formatter here that states a figure takes the dpi and puts it in the
-// string ({@link formatMillimetresAt}, {@link formatGaugeAt}): *11½* is a claim, *11½ at 1200 dpi*
-// is a claim with its assumption attached, and the second one cannot quietly become a fact taken
-// under the wrong default.
+// Which is also why every formatter here that states a figure takes the scale's name and puts it in
+// the string ({@link formatMillimetresAt}, {@link formatGaugeAt}): *11½* is a claim, *11½ — Epson
+// V600, 1200 dpi (calibrated)* is a claim with its assumption attached, and the second one cannot
+// quietly become a fact taken under the wrong default.
+//
+// ## Two axes, not one (#1443)
+//
+// A scanner's resolution across the glass is set by its sensor and along it by the carriage motor,
+// and the two need not agree with each other or with the figure on the box. So a scale is a
+// {@link ScanScale} — an effective resolution per axis — and a distance is converted component by
+// component before its length is taken ({@link scanVectorToMm}). A line along either axis then reads
+// that axis's calibration, and a perforation run along a vertical edge is gauged against the vertical
+// one, which is what the issue asks of the gauge. Where the profile is uncalibrated both axes are the
+// nominal dpi and every figure is exactly what #598's single dpi gave.
 //
 // ## Measurements are read, never stored
 //
@@ -99,11 +109,40 @@ export function distanceInScanPixels(a: ScanPoint, b: ScanPoint): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
-/** Scan pixels to millimetres at a stated scale. The whole of the pixels → millimetres step, in one
- * place, so there is exactly one line in the app that could have it wrong. */
+/**
+ * A stated scale: the effective resolution of each axis of the picture, in dots per inch (#1443).
+ *
+ * `x` runs across the picture as it is drawn and `y` down it. For a tile stood the right way up by a
+ * quarter turn that is not the scanner's own x and y — `scaleForTurn` in `scanning-profile.ts` swaps
+ * them — so what reaches this module is always in the frame the marks were placed in.
+ */
+export interface ScanScale {
+  x: number;
+  y: number;
+}
+
+/** One resolution for both axes — a typed dpi, or a profile nobody has calibrated. */
+export function uniformScale(dpi: number): ScanScale {
+  return { x: dpi, y: dpi };
+}
+
+/** Scan pixels to millimetres at a stated scale. The whole of the pixels → millimetres step for one
+ * axis, in one place, so there is exactly one line in the app that could have it wrong. */
 export function scanPixelsToMm(px: number, dpi: number): number {
   if (!(dpi > 0)) return 0;
   return (px / dpi) * MM_PER_INCH;
+}
+
+/**
+ * The length of the line between two points, in millimetres, at a scale that may differ by axis.
+ *
+ * Each component is converted through its own axis before the length is taken — the only order that
+ * is right when the axes differ: a diagonal 100 px across and 100 px down is not 141 px at some
+ * average resolution, it is 100 px at one and 100 px at the other.
+ */
+export function scanVectorToMm(a: ScanPoint, b: ScanPoint, scale: ScanScale): number {
+  if (!(scale.x > 0) || !(scale.y > 0)) return 0;
+  return Math.hypot(scanPixelsToMm(b.x - a.x, scale.x), scanPixelsToMm(b.y - a.y, scale.y));
 }
 
 /** The ruler: two points and a stated scale, in millimetres — with the pixel count kept, because a
@@ -112,10 +151,16 @@ export function scanPixelsToMm(px: number, dpi: number): number {
 export function measureDistance(
   a: ScanPoint,
   b: ScanPoint,
-  dpi: number
+  scale: ScanScale
 ): { px: number; mm: number } {
   const px = distanceInScanPixels(a, b);
-  return { px, mm: scanPixelsToMm(px, dpi) };
+  return { px, mm: scanVectorToMm(a, b, scale) };
+}
+
+/** Scan pixels per millimetre, both axes taken together — for what needs only the paper's scale
+ * roughly (the watermark filter's band), never for a figure that is stated. */
+export function meanPixelsPerMm(scale: ScanScale): number {
+  return (scale.x + scale.y) / 2 / MM_PER_INCH;
 }
 
 /**
@@ -172,14 +217,16 @@ export function formatMillimetres(mm: number): string {
   return mm.toFixed(2);
 }
 
-/** A distance **with the scale it was taken at**, which is the only form this app states one in. */
-export function formatMillimetresAt(mm: number, dpi: number): string {
-  return `${formatMillimetres(mm)} mm at ${dpi} dpi`;
+/** A distance **with what it was taken with** — *21.84 mm — Epson V600, 1200 dpi (calibrated)* —
+ * which is the only form this app states one in. `taken` is the scale's own sentence
+ * (`scaleLabel` in `scanning-profile.ts`), so the resolution is always in it. */
+export function formatMillimetresAt(mm: number, taken: string): string {
+  return `${formatMillimetres(mm)} mm — ${taken}`;
 }
 
-/** A gauge with the scale it was taken at — *11½ at 1200 dpi*, never *11½*. The measured figure
- * rides along in parentheses: the step is what a catalogue says, the raw one is what says how
- * comfortably the piece sits on it. */
-export function formatGaugeAt(gauge: number, dpi: number): string {
-  return `${formatGaugeStep(nearestCatalogueGauge(gauge))} (${formatMeasuredGauge(gauge)}) at ${dpi} dpi`;
+/** A gauge with what it was taken with — *11½ (11.63) — Epson V600, 1200 dpi (calibrated)*, never
+ * *11½*. The measured figure rides along in parentheses: the step is what a catalogue says, the raw
+ * one is what says how comfortably the piece sits on it. */
+export function formatGaugeAt(gauge: number, taken: string): string {
+  return `${formatGaugeStep(nearestCatalogueGauge(gauge))} (${formatMeasuredGauge(gauge)}) — ${taken}`;
 }

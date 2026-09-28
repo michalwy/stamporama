@@ -1,5 +1,6 @@
 "use client";
 
+import type { ScanningSetup } from "@/lib/scanning-profile";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -102,7 +103,7 @@ export function CopyDetailPanel({
   areas,
   locations,
   sale,
-  scanDpi,
+  scanning,
 }: {
   collectionId: string;
   collectionSlug: string;
@@ -112,7 +113,7 @@ export function CopyDetailPanel({
   locations: LocationData[];
   sale: ItemSaleRecord | null;
   /** The collection's stated scan resolution (#598) — the measuring viewer's prefill (#1290). */
-  scanDpi: number;
+  scanning: ScanningSetup;
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
   const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
@@ -402,7 +403,7 @@ export function CopyDetailPanel({
                 collectionId={collectionId}
                 photos={item.photos}
                 size="7rem"
-                measure={{ scanDpi, stampId: item.multiStamp ? null : item.stampId }}
+                measure={{ scanning, stampId: item.multiStamp ? null : item.stampId }}
               />
             </DetailCard>
 

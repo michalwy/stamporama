@@ -33,8 +33,9 @@ import {
   MAX_SCAN_DPI,
   MIN_SCAN_DPI,
   formatMillimetres,
-  scanPixelsToMm,
+  scanVectorToMm,
   type ScanPoint,
+  type ScanScale,
 } from "./scan-measure";
 import { toSheetPoint, type Viewport, type ViewportSize } from "./scan-viewport";
 
@@ -43,8 +44,8 @@ import { toSheetPoint, type Viewport, type ViewportSize } from "./scan-viewport"
  *
  * - **ellipse** and **line** point at something and say nothing numeric (#674).
  * - **rulerMark** is a line with graduations and its length in millimetres (#1300). It carries the
- *   scale it was drawn at, so a later correction of the scale field does not silently re-measure a
- *   mark already on the picture. Its label is the length alone (#1342): the scale is said by the
+ *   scale it was drawn at — per axis since #1443 — so a later change of profile or of the typed
+ *   resolution does not silently re-measure a mark already on the picture. Its label is the length alone (#1342): the scale is said by the
  *   viewer while measuring, and on the picture it was clutter.
  * - **text** is a note, its top-left corner where it was placed (#1300).
  *
@@ -53,7 +54,7 @@ import { toSheetPoint, type Viewport, type ViewportSize } from "./scan-viewport"
  */
 export type Annotation =
   | { kind: "ellipse" | "line"; a: ScanPoint; b: ScanPoint; style: AnnotationStyle }
-  | { kind: "rulerMark"; a: ScanPoint; b: ScanPoint; dpi: number; style: AnnotationStyle }
+  | { kind: "rulerMark"; a: ScanPoint; b: ScanPoint; scale: ScanScale; style: AnnotationStyle }
   | { kind: "text"; at: ScanPoint; text: string; style: AnnotationStyle };
 
 export type AnnotationKind = Annotation["kind"];
@@ -197,13 +198,15 @@ export function annotationFromDrag(
   a: ScanPoint,
   b: ScanPoint,
   style: AnnotationStyle,
-  dpi: number | null = null
+  scale: ScanScale | null = null
 ): Annotation | null {
   const w = Math.abs(b.x - a.x);
   const h = Math.abs(b.y - a.y);
   if (kind === "ellipse") return w > 0 && h > 0 ? { kind, a, b, style } : null;
   if (Math.hypot(w, h) <= 0) return null;
-  if (kind === "rulerMark") return dpi === null ? null : { kind, a, b, dpi, style };
+  if (kind === "rulerMark") {
+    return scale === null ? null : { kind, a, b, scale: { x: scale.x, y: scale.y }, style };
+  }
   return { kind, a, b, style };
 }
 
@@ -497,8 +500,7 @@ export function markPrimitives(mark: SnapshotMark, place: MarkPlacement): Primit
       tick(a, majorHalf);
       tick(b, majorHalf);
 
-      const pictureLength = Math.hypot(mark.b.x - mark.a.x, mark.b.y - mark.a.y);
-      const lengthMm = scanPixelsToMm(pictureLength, mark.dpi);
+      const lengthMm = scanVectorToMm(mark.a, mark.b, mark.scale);
       const pxPerMm = len / lengthMm;
       for (const t of rulerTicks(lengthMm, pxPerMm / s).ticks) {
         tick({ x: a.x + u.x * t.mm * pxPerMm, y: a.y + u.y * t.mm * pxPerMm }, t.major ? majorHalf : minorHalf);
@@ -665,9 +667,9 @@ function parseMark(raw: unknown): SnapshotMark | null {
   if (raw.kind === "ellipse" || raw.kind === "line") return { kind: raw.kind, a, b, style };
   if (raw.kind === "rulerMark") {
     // A ruler mark never travels without the scale it was drawn at — its length is computed from it.
-    const { dpi } = raw;
-    if (!isWhole(dpi) || dpi < MIN_SCAN_DPI || dpi > MAX_SCAN_DPI) return null;
-    return { kind: "rulerMark", a, b, dpi, style };
+    const scale = parseScale(raw.scale);
+    if (!scale) return null;
+    return { kind: "rulerMark", a, b, scale, style };
   }
   if (raw.kind === "distance" || raw.kind === "box") {
     if (typeof raw.label !== "string") return null;
@@ -775,6 +777,19 @@ function escapeXml(text: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** A ruler mark's scale off the wire: each axis a resolution #598 would accept. Fractional since
+ * #1443 — a calibrated axis is a quotient. */
+function parseScale(value: unknown): ScanScale | null {
+  if (!value || typeof value !== "object") return null;
+  const { x, y } = value as { x?: unknown; y?: unknown };
+  for (const dpi of [x, y]) {
+    if (typeof dpi !== "number" || !Number.isFinite(dpi) || dpi < MIN_SCAN_DPI || dpi > MAX_SCAN_DPI) {
+      return null;
+    }
+  }
+  return { x: x as number, y: y as number };
 }
 
 function isWhole(value: unknown): value is number {
