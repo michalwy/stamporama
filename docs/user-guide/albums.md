@@ -333,6 +333,15 @@ corner and the millimetre appears in the panel; type the millimetre and the box 
 use, the sheet is re-planned when you let go or press Enter, so what you end up looking at is the
 plan and not a sketch of it.
 
+**The panel keeps its words short.** A setting whose reach is worth knowing says it on its heading:
+*This sheet*, or *Whole album* — every sheet of this album and its PDF, for this album only, the
+template it was made from untouched. Under a control there is at most one short line; where that
+line is dotted, hovering it gives the longer explanation, and everything else is on this page. None of
+these settings changes a printed card: it stays as printed and reports the difference, which the panel
+says once, under the album-wide settings, when the album has a card in the binder. A missing
+translation is listed with what it belongs to and its full text in the collection's default language,
+and the field for the translation under it, as wide as the panel.
+
 What you can set:
 
 - **Space before and after a block.** Added to the space the layout already leaves. Negative closes
@@ -372,9 +381,9 @@ What you can set:
   **re-plans the album** — boxes can move to another row and onto another sheet — and, like *Page
   template…*, you are first told how many printed cards that match today would stop matching. A
   printed card stays as printed and reports the difference.
-- **Where this sheet puts its content.** In the same panel, *Placement on this sheet* follows the
-  album's *Content on the page* unless you pick one of the four for **this sheet only**. The choice is
-  kept with the **series (or note) that opens the sheet**, and the panel names it — a sheet has no
+- **Where this sheet puts its content.** In the same panel, *Placement* (tagged *This sheet*) follows
+  the album's *Content on the page* unless you pick one of the four for **this sheet only**. The choice
+  is kept with the **series (or note) that opens the sheet**, and the panel names it — a sheet has no
   identity of its own that would survive a re-flow, so if the pages re-flow the choice goes with that
   series to wherever it now opens a sheet, and a sheet it no longer opens follows the album again.
   Choose *As the album* to take it back. It is saved as you pick it, and the canvas and the PDF place
@@ -403,8 +412,10 @@ checklist, so dropping it shades the block it would be filed against rather than
 Where you see no mark at all, dropping there does nothing — a box only reorders inside its own block,
 and a checklist dropped on a note has nowhere to go.
 
-The order the blocks themselves print in is the **Entries** list on the album screen — dragging
-there is what moves one checklist before another.
+The order the blocks themselves print in is the album's own — the **Entries** list on the album
+screen. In the editor, select a checklist and **Earlier** or **Later** under *Where it prints* moves it
+one step in that order, which can take it onto another sheet; dragging its heading onto another
+checklist does the same.
 
 The canvas also marks, in colour, the three things that are worth catching **before** a sheet goes
 into the printer and are worth nothing after: a box **sized from a neighbour** rather than measured,

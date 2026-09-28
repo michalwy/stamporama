@@ -72,6 +72,10 @@ interface GapRowProps {
    * generates. The gap then disappears from the list the caller re-reads. */
   onSaved: () => void;
   autoFocus?: boolean;
+  /** Owner and default text on a line of their own, wrapping, with the input at full width under
+   *  them (#1459). For a narrow side panel, where a row that also fits a label beside the input
+   *  leaves it a few characters wide — and the default text, the one being translated, cut off. */
+  stacked?: boolean;
 }
 
 /**
@@ -79,7 +83,7 @@ interface GapRowProps {
  * language. Saves on Enter or on blur, never on every keystroke — a half-typed translation is not
  * worth a write, and the save is a real entity mutation.
  */
-function GapRow({ collectionId, language, gap, onSaved, autoFocus }: GapRowProps) {
+function GapRow({ collectionId, language, gap, onSaved, autoFocus, stacked }: GapRowProps) {
   const [value, setValue] = useState("");
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | undefined>();
@@ -109,6 +113,81 @@ function GapRow({ collectionId, language, gap, onSaved, autoFocus }: GapRowProps
     }
   }
 
+  const owner = (
+    <>
+      <strong style={{ fontWeight: 600 }}>{gapLabel(gap)}</strong>{" "}
+      <span style={{ color: "var(--color-text-muted)" }}>{gap.defaultValue}</span>
+    </>
+  );
+  const input = (
+    <TextInput
+      value={value}
+      onChange={(e) => {
+        setValue(e.target.value);
+        setState("idle");
+      }}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        // The panel lives inside the compose dialog; Enter here means "save this field", not
+        // "submit the offer".
+        e.preventDefault();
+        e.stopPropagation();
+        void save();
+      }}
+      placeholder={gap.defaultValue}
+      aria-label={`${gapLabel(gap)} in ${languageLabel(language)}`}
+      disabled={state === "saving"}
+      autoFocus={autoFocus}
+      style={stacked ? INPUT_STYLE : { ...INPUT_STYLE, flex: 1, minWidth: 0 }}
+    />
+  );
+  const status = (
+    <Tooltip content={error} style={stacked ? { flexShrink: 0 } : { flex: "0 0 4.5rem" }}>
+      <span
+        style={{
+          fontSize: "0.6875rem",
+          color: state === "error" ? "var(--color-danger)" : "var(--color-text-muted)",
+        }}
+      >
+        {state === "saving" ? (
+          "Saving…"
+        ) : state === "saved" ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem" }}>
+            <Icon name="check" size="xs" /> Saved
+          </span>
+        ) : state === "error" ? (
+          "Failed"
+        ) : (
+          ""
+        )}
+      </span>
+    </Tooltip>
+  );
+
+  if (stacked) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: "0.75rem",
+              lineHeight: 1.4,
+              color: "var(--color-text-secondary)",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {owner}
+          </span>
+          {status}
+        </div>
+        {input}
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
       <span
@@ -122,50 +201,10 @@ function GapRow({ collectionId, language, gap, onSaved, autoFocus }: GapRowProps
         }}
         title={`${gapLabel(gap)} — ${gap.defaultValue}`}
       >
-        <strong style={{ fontWeight: 600 }}>{gapLabel(gap)}</strong>{" "}
-        <span style={{ color: "var(--color-text-muted)" }}>{gap.defaultValue}</span>
+        {owner}
       </span>
-      <TextInput
-        value={value}
-        onChange={(e) => {
-          setValue(e.target.value);
-          setState("idle");
-        }}
-        onBlur={save}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter") return;
-          // The panel lives inside the compose dialog; Enter here means "save this field", not
-          // "submit the offer".
-          e.preventDefault();
-          e.stopPropagation();
-          void save();
-        }}
-        placeholder={gap.defaultValue}
-        aria-label={`${gapLabel(gap)} in ${languageLabel(language)}`}
-        disabled={state === "saving"}
-        autoFocus={autoFocus}
-        style={{ ...INPUT_STYLE, flex: 1, minWidth: 0 }}
-      />
-      <Tooltip content={error} style={{ flex: "0 0 4.5rem" }}>
-        <span
-          style={{
-            fontSize: "0.6875rem",
-            color: state === "error" ? "var(--color-danger)" : "var(--color-text-muted)",
-          }}
-        >
-          {state === "saving" ? (
-            "Saving…"
-          ) : state === "saved" ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem" }}>
-              <Icon name="check" size="xs" /> Saved
-            </span>
-          ) : state === "error" ? (
-            "Failed"
-          ) : (
-            ""
-          )}
-        </span>
-      </Tooltip>
+      {input}
+      {status}
     </div>
   );
 }
@@ -181,6 +220,8 @@ export interface TranslationGapsPanelProps {
   note?: string;
   /** Cap on the visible rows before the list scrolls. */
   maxHeight?: string;
+  /** Each row stacked, input at full width — for a narrow side panel (#1459). */
+  stacked?: boolean;
 }
 
 /**
@@ -195,6 +236,7 @@ export function TranslationGapsPanel({
   onSaved,
   note,
   maxHeight = "9rem",
+  stacked = false,
 }: TranslationGapsPanelProps) {
   if (!language || gaps.length === 0) return null;
   return (
@@ -219,7 +261,7 @@ export function TranslationGapsPanel({
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: "0.375rem",
+          gap: stacked ? "0.625rem" : "0.375rem",
           marginTop: "0.375rem",
           maxHeight,
           overflowY: "auto",
@@ -232,6 +274,7 @@ export function TranslationGapsPanel({
             language={language}
             gap={gap}
             onSaved={onSaved}
+            stacked={stacked}
           />
         ))}
       </div>
