@@ -458,14 +458,40 @@ export function AlbumPresetForm({
           <MmField name="boxGapYMm" label="Between rows (mm)" value={preset.boxGapYMm} disabled={isPending} />
           <div />
           <MmField
+            name="titleSpaceAboveMm"
+            label="Above the album title (mm)"
+            value={preset.titleSpaceAboveMm}
+            disabled={isPending}
+          />
+          <MmField
+            name="titleSpaceBelowMm"
+            label="Below the album title (mm)"
+            value={preset.titleSpaceBelowMm}
+            disabled={isPending}
+          />
+          <div />
+          <MmField
+            name="chapterSpaceAboveMm"
+            label="Above a chapter heading (mm)"
+            value={preset.chapterSpaceAboveMm}
+            disabled={isPending}
+          />
+          <MmField
+            name="chapterSpaceBelowMm"
+            label="Below a chapter heading (mm)"
+            value={preset.chapterSpaceBelowMm}
+            disabled={isPending}
+          />
+          <div />
+          <MmField
             name="headingSpaceAboveMm"
-            label="Above a heading (mm)"
+            label="Above a checklist heading (mm)"
             value={preset.headingSpaceAboveMm}
             disabled={isPending}
           />
           <MmField
             name="headingSpaceBelowMm"
-            label="Below a heading (mm)"
+            label="Below a checklist heading (mm)"
             value={preset.headingSpaceBelowMm}
             disabled={isPending}
           />

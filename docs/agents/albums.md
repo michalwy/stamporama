@@ -1156,6 +1156,29 @@ re-deriving:
   `verticalPlacement` (#1419). Without that every older card would report `Label gap (mm)` as changed
   (`undefined !== 0`) the moment the build shipped.
 
+### The space around the page headings (#1426)
+
+`titleSpaceAboveMm` / `titleSpaceBelowMm` and `chapterSpaceAboveMm` / `chapterSpaceBelowMm` are
+ordinary spacing values — template and album columns, `MIN_SPACING_MM`–`MAX_SPACING_MM`. What is
+worth not re-deriving:
+
+- **The chapter heading had no space of its own; it borrowed the checklist heading's.** The issue
+  read it as fixed, and it was not: `headingSpaceAboveMm` / `headingSpaceBelowMm` moved both. The
+  collector chose four new values over two (2026-09-28), so the chapter heading is now decoupled. The
+  migration copies each row's own heading figures into its chapter columns and then drops the column
+  default, so nothing moves and every writer states all four. `DEFAULT_ALBUM_PRESET` gives 8/5, the
+  heading's own defaults.
+- **The title's space is part of the frame** (`pageFrame`), so it comes off every sheet, not only a
+  chapter's first — a page's content height has to be the same on every page. A title that is not
+  printed reserves none of it, as a blank chapter heading reserves none of its own.
+- **It composes with #1419 without a line of its own.** The headings are the frame and never move;
+  `content` already starts under the chapter band, space below included, so placement spends the
+  leftover inside that.
+- **A card stored before #1426 reads its chapter values from its own heading values**, and its title
+  values as 0 — `parseAlbumSnapshot` fills them in, as it does #1419's and #1420's. Filling the
+  chapter values with the defaults instead would report a change on every card whose album had moved
+  its heading space.
+
 ## The cutting list (#770)
 
 What the collector cuts for a card, and what the album still needs bought. `album-cutting-list.ts`

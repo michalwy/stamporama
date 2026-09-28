@@ -470,13 +470,21 @@ function pageFrame(
   const titleHeight = roundSizeMm(
     titleLines.length * metrics.lineHeightMm(titleFace.face, titleFace.sizePt),
   );
+  // The space around the name (#1426) belongs to the name: a sheet that prints none reserves none
+  // of it, as a blank chapter heading reserves none of its own.
+  const titleTop = titleLines.length
+    ? roundSizeMm(preset.marginTopMm + preset.titleSpaceAboveMm)
+    : preset.marginTopMm;
+  const titleBandBottom = titleLines.length
+    ? roundSizeMm(titleTop + titleHeight + preset.titleSpaceBelowMm)
+    : preset.marginTopMm;
 
   const footerFace = albumRoleFace(preset, "footer");
   const footerHeight = preset.footerTemplate.trim()
     ? roundSizeMm(metrics.lineHeightMm(footerFace.face, footerFace.sizePt))
     : 0;
 
-  const contentTop = roundSizeMm(preset.marginTopMm + titleHeight);
+  const contentTop = titleBandBottom;
   const contentBottom = roundSizeMm(
     preset.pageHeightMm - preset.marginBottomMm - footerHeight,
   );
@@ -491,7 +499,7 @@ function pageFrame(
           role: "title",
           lines: titleLines,
           xMm: contentX,
-          yMm: preset.marginTopMm,
+          yMm: titleTop,
           widthMm: contentW,
           heightMm: titleHeight,
         }
@@ -1117,9 +1125,9 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
     );
     const chapterBandMm = chapterLines.length
       ? roundSizeMm(
-          preset.headingSpaceAboveMm +
+          preset.chapterSpaceAboveMm +
             chapterTextMm +
-            preset.headingSpaceBelowMm,
+            preset.chapterSpaceBelowMm,
         )
       : 0;
 
@@ -1129,7 +1137,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
         role: "chapter",
         lines: chapterLines,
         xMm: frame.contentX,
-        yMm: roundSizeMm(frame.contentTop + preset.headingSpaceAboveMm),
+        yMm: roundSizeMm(frame.contentTop + preset.chapterSpaceAboveMm),
         widthMm: frame.contentW,
         heightMm: chapterTextMm,
       };

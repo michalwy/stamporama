@@ -1021,8 +1021,18 @@ is not an evening of retyping page sizes and font names. One template covers:
 - **Page** — size and the four margins in millimetres, and an optional decorative border with its
   weight and inset.
 - **Spacing** — how many checklists may share one horizontal **band** and the gap between two that
-  do, then the space between boxes across a row, between rows, above and below a heading, and
+  do, then the space between boxes across a row and between rows; the space **above and below the
+  album title**, **above and below a chapter heading** and above and below a checklist heading; and
   **between a box and its label**.
+
+  The page headings' space starts where it always was: none around the album title, which sits on
+  the top margin with the content straight under it, and for the chapter heading the checklist
+  heading's figures, which it shared until it had its own. Existing albums and templates were given
+  exactly that, so nothing moved; from now on changing a checklist heading's space leaves the
+  chapter heading where it is. Neither is decoration: more room around a heading is less room for
+  the series under it, so a series can move to the next sheet. An album title that is not printed,
+  or a blank chapter heading, reserves none of its space. With the content placed centred or
+  justified, the headings stay at the top and the placed content starts under the space below them.
 
   The last one starts at 0 — the label set right on the edge of the box, as every page was before
   the value existed — and applies on whichever side the label sits. It is layout, not decoration: a

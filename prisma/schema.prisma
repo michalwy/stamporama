@@ -1004,6 +1004,14 @@ model AlbumTemplate {
   headingSpaceBelowMm Float
   /// Between a row of boxes and its labels (#1420). 0 is every page printed before it.
   labelGapMm          Float @default(0)
+  /// Above and below the album's name at the head of every page (#1426). 0 is every page printed
+  /// before it: the name sat on the top margin and the content began under its last line.
+  titleSpaceAboveMm   Float @default(0)
+  titleSpaceBelowMm   Float @default(0)
+  /// Above and below the chapter heading (#1426). Seeded from the checklist heading's space, which
+  /// the chapter heading shared until then.
+  chapterSpaceAboveMm Float
+  chapterSpaceBelowMm Float
 
   // ── Hawid margins (#765) ──
   // The clearances the box rule adds to a stamp. The **vertical** one is added before a strip is
@@ -1144,6 +1152,14 @@ model Album {
   headingSpaceBelowMm Float
   /// Between a row of boxes and its labels (#1420). 0 is every page printed before it.
   labelGapMm          Float @default(0)
+  /// Above and below the album's name at the head of every page (#1426). 0 is every page printed
+  /// before it: the name sat on the top margin and the content began under its last line.
+  titleSpaceAboveMm   Float @default(0)
+  titleSpaceBelowMm   Float @default(0)
+  /// Above and below the chapter heading (#1426). Seeded from the checklist heading's space, which
+  /// the chapter heading shared until then.
+  chapterSpaceAboveMm Float
+  chapterSpaceBelowMm Float
 
   verticalClearanceMm Float
   horizontalMarginMm  Float

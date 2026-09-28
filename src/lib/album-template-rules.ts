@@ -174,6 +174,14 @@ export interface AlbumRenderPreset {
   /** The space between a row's boxes and its labels (#1420), on whichever side the labels sit. A
    *  row with no label reserves none of it. */
   labelGapMm: number;
+  /** Above and below the album's name at the head of every sheet (#1426). A name that is not
+   *  printed reserves neither. */
+  titleSpaceAboveMm: number;
+  titleSpaceBelowMm: number;
+  /** Above and below the chapter heading on a chapter's first sheet (#1426) — its own values, no
+   *  longer the checklist heading's. A blank chapter heading reserves neither. */
+  chapterSpaceAboveMm: number;
+  chapterSpaceBelowMm: number;
 
   // Hawid clearances, fed to `planHawidBox` (#765)
   verticalClearanceMm: number;
@@ -246,6 +254,13 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   // No gap: a label has always started on the box's own edge, and the default is what every page
   // printed before #1420 was set with. The line's own leading is the only air above the letters.
   labelGapMm: 0,
+  // The page headings' space is what they had before #1426 made it a value: the album's name sat on
+  // the top margin with the content straight under it, and the chapter heading took the checklist
+  // heading's figures.
+  titleSpaceAboveMm: 0,
+  titleSpaceBelowMm: 0,
+  chapterSpaceAboveMm: 8,
+  chapterSpaceBelowMm: 5,
 
   // The two numbers `STAMP_BOXES_SIZE_ADJUST(4)` becomes. Its single global figure is exactly what
   // #765 exists to replace, so the starting point is that figure on both axes and the collector
@@ -343,6 +358,10 @@ export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawI
     headingSpaceAboveMm: str("headingSpaceAboveMm"),
     headingSpaceBelowMm: str("headingSpaceBelowMm"),
     labelGapMm: str("labelGapMm"),
+    titleSpaceAboveMm: str("titleSpaceAboveMm"),
+    titleSpaceBelowMm: str("titleSpaceBelowMm"),
+    chapterSpaceAboveMm: str("chapterSpaceAboveMm"),
+    chapterSpaceBelowMm: str("chapterSpaceBelowMm"),
     verticalClearanceMm: str("verticalClearanceMm"),
     horizontalMarginMm: str("horizontalMarginMm"),
     titleFace: str("titleFace"),
@@ -537,6 +556,34 @@ export function parseAlbumRenderPreset(
   if (!headingSpaceBelowMm.ok) return headingSpaceBelowMm;
   const labelGapMm = mm("labelGapMm", "Space between a box and its label", MIN_SPACING_MM, MAX_SPACING_MM);
   if (!labelGapMm.ok) return labelGapMm;
+  const titleSpaceAboveMm = mm(
+    "titleSpaceAboveMm",
+    "Space above the album title",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!titleSpaceAboveMm.ok) return titleSpaceAboveMm;
+  const titleSpaceBelowMm = mm(
+    "titleSpaceBelowMm",
+    "Space below the album title",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!titleSpaceBelowMm.ok) return titleSpaceBelowMm;
+  const chapterSpaceAboveMm = mm(
+    "chapterSpaceAboveMm",
+    "Space above a chapter heading",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!chapterSpaceAboveMm.ok) return chapterSpaceAboveMm;
+  const chapterSpaceBelowMm = mm(
+    "chapterSpaceBelowMm",
+    "Space below a chapter heading",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!chapterSpaceBelowMm.ok) return chapterSpaceBelowMm;
 
   const verticalClearanceMm = mm(
     "verticalClearanceMm",
@@ -616,6 +663,10 @@ export function parseAlbumRenderPreset(
       headingSpaceAboveMm: headingSpaceAboveMm.value,
       headingSpaceBelowMm: headingSpaceBelowMm.value,
       labelGapMm: labelGapMm.value,
+      titleSpaceAboveMm: titleSpaceAboveMm.value,
+      titleSpaceBelowMm: titleSpaceBelowMm.value,
+      chapterSpaceAboveMm: chapterSpaceAboveMm.value,
+      chapterSpaceBelowMm: chapterSpaceBelowMm.value,
       verticalClearanceMm: verticalClearanceMm.value,
       horizontalMarginMm: horizontalMarginMm.value,
       titleFace: titleFace.value,

@@ -1781,3 +1781,101 @@ describe("planAlbumPages and the gap between a box and its label (#1420)", () =>
     assert.deepEqual(wider[1].blocks.map((b) => b.entryId), ["b4"]);
   });
 });
+
+describe("planAlbumPages and the space around the page headings (#1426)", () => {
+  const blocks = [block("a", "A", [box(60, 20)])];
+  const first = (over: Partial<AlbumRenderPreset> = {}, title = "Album") =>
+    live(planAlbumPages([chapter("y", "1939", blocks)], preset(over), title, metrics).pages)[0];
+
+  it("defaults to the spacing the headings had before it was a value", () => {
+    assert.equal(DEFAULT_ALBUM_PRESET.titleSpaceAboveMm, 0);
+    assert.equal(DEFAULT_ALBUM_PRESET.titleSpaceBelowMm, 0);
+    assert.equal(DEFAULT_ALBUM_PRESET.chapterSpaceAboveMm, DEFAULT_ALBUM_PRESET.headingSpaceAboveMm);
+    assert.equal(DEFAULT_ALBUM_PRESET.chapterSpaceBelowMm, DEFAULT_ALBUM_PRESET.headingSpaceBelowMm);
+
+    const page = first();
+    const title = page.title!;
+    assert.equal(title.yMm, DEFAULT_ALBUM_PRESET.marginTopMm, "the name sits on the top margin");
+    const chapter = page.chapter!;
+    assert.equal(chapter.yMm, title.yMm + title.heightMm + DEFAULT_ALBUM_PRESET.headingSpaceAboveMm);
+    assert.equal(page.content.yMm, chapter.yMm + chapter.heightMm + DEFAULT_ALBUM_PRESET.headingSpaceBelowMm);
+  });
+
+  it("moves the album title by the space above it, and everything under it by both", () => {
+    const before = first();
+    const after = first({ titleSpaceAboveMm: 3, titleSpaceBelowMm: 4 });
+    assert.equal(after.title!.yMm, before.title!.yMm + 3);
+    assert.equal(after.title!.heightMm, before.title!.heightMm);
+    assert.equal(after.chapter!.yMm, before.chapter!.yMm + 7);
+    assert.equal(after.content.yMm, before.content.yMm + 7);
+    assert.deepEqual(
+      after.boxes.map((b) => b.yMm),
+      before.boxes.map((b) => b.yMm + 7)
+    );
+  });
+
+  it("takes the title's space off every sheet, not only a chapter's first", () => {
+    const tall = Array.from({ length: 6 }, (_, i) => block(`b${i}`, "", [box(190, 40)]));
+    const sheets = (over: Partial<AlbumRenderPreset>) =>
+      live(planAlbumPages([chapter("y", "", tall)], preset(over), "Album", metrics).pages);
+    const [, before] = sheets({});
+    const [, after] = sheets({ titleSpaceBelowMm: 5 });
+    assert.equal(after.content.yMm, before.content.yMm + 5);
+  });
+
+  it("reserves nothing around a title that is not printed", () => {
+    const off = first({ printTitle: false });
+    const offSpaced = first({ printTitle: false, titleSpaceAboveMm: 9, titleSpaceBelowMm: 9 });
+    assert.equal(offSpaced.title, null);
+    assert.equal(offSpaced.chapter!.yMm, off.chapter!.yMm);
+    assert.equal(offSpaced.content.yMm, off.content.yMm);
+  });
+
+  it("moves the chapter heading and the content under it by the chapter's own values", () => {
+    const before = first({ chapterSpaceAboveMm: 8, chapterSpaceBelowMm: 5 });
+    const after = first({ chapterSpaceAboveMm: 2, chapterSpaceBelowMm: 12 });
+    assert.equal(after.title!.yMm, before.title!.yMm, "the name does not move");
+    assert.equal(after.chapter!.yMm, before.chapter!.yMm - 6);
+    assert.equal(after.content.yMm, before.content.yMm + 1);
+  });
+
+  it("no longer takes the chapter heading's space from the checklist headings", () => {
+    const before = first();
+    const after = first({ headingSpaceAboveMm: 20, headingSpaceBelowMm: 20 });
+    assert.equal(after.chapter!.yMm, before.chapter!.yMm);
+    assert.equal(after.content.yMm, before.content.yMm);
+    assert.notEqual(after.headings[0].yMm, before.headings[0].yMm, "the checklist heading still moves");
+  });
+
+  it("reserves nothing around a blank chapter heading", () => {
+    const blank = (over: Partial<AlbumRenderPreset>) =>
+      live(planAlbumPages([chapter("y", "", blocks)], preset(over), "Album", metrics).pages)[0];
+    assert.equal(
+      blank({ chapterSpaceAboveMm: 30, chapterSpaceBelowMm: 30 }).content.yMm,
+      blank({}).content.yMm
+    );
+  });
+
+  it("leaves the headings fixed under a vertical placement, which starts under the space below them", () => {
+    const top = first({ chapterSpaceBelowMm: 10 });
+    const centred = first({ chapterSpaceBelowMm: 10, verticalPlacement: "center" });
+    assert.equal(centred.title!.yMm, top.title!.yMm);
+    assert.equal(centred.chapter!.yMm, top.chapter!.yMm);
+    assert.equal(centred.content.yMm, top.content.yMm, "the placed content's area begins where it did");
+    assert.ok(centred.boxes[0].yMm > top.boxes[0].yMm, "and the content is placed inside it");
+  });
+
+  it("re-plans the sheets: more room for the headings can carry a block onto the next one", () => {
+    // Six 40 mm checklists, each 6 + 40 = 46 mm. Five (230 mm) fit the 235 mm a chapter's first
+    // sheet leaves under its heading; 20 mm more above the album title leaves 215, and the fifth
+    // moves on.
+    const six = Array.from({ length: 6 }, (_, i) => block(`b${i}`, "", [box(190, 40)]));
+    const sheets = (over: Partial<AlbumRenderPreset>) =>
+      live(planAlbumPages([chapter("y", "1939", six)], preset(over), "Album", metrics).pages).map(
+        (p) => p.blocks.map((b) => b.entryId)
+      );
+    assert.deepEqual(sheets({}), [["b0", "b1", "b2", "b3", "b4"], ["b5"]]);
+    assert.deepEqual(sheets({ titleSpaceAboveMm: 20 }), [["b0", "b1", "b2", "b3"], ["b4", "b5"]]);
+    assert.deepEqual(sheets({ chapterSpaceBelowMm: 25 }), [["b0", "b1", "b2", "b3"], ["b4", "b5"]]);
+  });
+});
