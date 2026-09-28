@@ -34,6 +34,11 @@
 import { parseHawidMillimetres, HAWID_MM_DECIMALS, HAWID_MM_STEP } from "./hawid";
 import { isAlbumFaceId, albumFaceLabel } from "./album-fonts";
 import {
+  NO_FRAME_ORNAMENT,
+  isAlbumBuiltinOrnament,
+  isAlbumUploadedOrnamentId,
+} from "./album-ornaments";
+import {
   renderTitleTemplate,
   type ListingTemplateContext,
   type TitleTemplateCopy,
@@ -68,10 +73,14 @@ export const MIN_TYPE_PT = 4;
 export const MAX_TYPE_PT = 96;
 export const MIN_OPACITY_PERCENT = 0;
 export const MAX_OPACITY_PERCENT = 100;
+/** A corner ornament's longer side (#1427). Wide rails: a 5 mm dot and a 60 mm flourish are both
+ *  frames somebody prints; past 100 mm it is no longer a corner. */
+export const MIN_ORNAMENT_MM = 1;
+export const MAX_ORNAMENT_MM = 100;
 
-/** The page's optional decorative border. Three values rather than a file of border art: what a
- *  printed album border actually is, on the pages this replaces, is one or two rules inset from the
- *  page edge. */
+/** The page's optional decorative border: one or two rules inset from the page edge — what a
+ *  printed album border is on the pages this replaces. An ornament at each corner is a separate
+ *  choice (#1427), because a frame of ornaments alone is a frame too. */
 export const ALBUM_BORDER_STYLES = [
   { key: "none", label: "None" },
   { key: "single", label: "Single rule" },
@@ -162,6 +171,14 @@ export interface AlbumRenderPreset {
   borderStyle: AlbumBorderStyle;
   borderWidthMm: number;
   borderInsetMm: number;
+  /** White between the two rules of a double border, edge to edge (#1427). */
+  borderGapMm: number;
+  /** The ornament drawn at each corner of the frame (#1427): `none`, a built-in's key
+   *  (`album-ornaments.ts`), or the id of one of the collection's own uploads. The rules stop at
+   *  it — `album-frame.ts` is where. */
+  frameOrnament: string;
+  /** The ornament's longer side. */
+  frameOrnamentSizeMm: number;
   /** Where each sheet's content sits vertically (#1419). A single page may override it — see
    *  `AlbumBlockSpec.pagePlacement`. */
   verticalPlacement: AlbumVerticalPlacement;
@@ -242,6 +259,13 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   borderStyle: "double",
   borderWidthMm: 0.4,
   borderInsetMm: 5,
+  // The white every double border was drawn with before it was a value.
+  borderGapMm: 1.2,
+  // His `Classic.txt` puts a 25.4 mm ornament at each corner (`IMAGE_SCALE(0.12)` of a 212 px
+  // image). The rosette is the built-in drawn in its spirit, so a new template starts as a frame
+  // like his; existing templates and albums were given `none` by their migration and keep theirs.
+  frameOrnament: "rosette",
+  frameOrnamentSizeMm: 25,
   // His pages are all set from the top — AlbumEasy has no other way to set one — so a new template
   // starts as the album he already prints, and an existing one keeps its pages exactly (#1419).
   verticalPlacement: "top",
@@ -352,6 +376,9 @@ export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawI
     borderStyle: str("borderStyle"),
     borderWidthMm: str("borderWidthMm"),
     borderInsetMm: str("borderInsetMm"),
+    borderGapMm: str("borderGapMm"),
+    frameOrnament: str("frameOrnament"),
+    frameOrnamentSizeMm: str("frameOrnamentSizeMm"),
     verticalPlacement: str("verticalPlacement"),
     boxGapXMm: str("boxGapXMm"),
     boxGapYMm: str("boxGapYMm"),
@@ -445,6 +472,21 @@ function parseChoice<T extends string>(
   return { ok: true, value: match.key };
 }
 
+/** The corner ornament a preset names. Only its **shape** is checked here — a built-in's key, or
+ *  something that could be an uploaded ornament's id. That the upload exists and belongs to the
+ *  collection is a database question, asked by the server before a save (`album-ornament-store.ts`). */
+function parseFrameOrnament(raw: string): FieldResult<string> {
+  const trimmed = raw.trim() || NO_FRAME_ORNAMENT;
+  if (
+    trimmed === NO_FRAME_ORNAMENT ||
+    isAlbumBuiltinOrnament(trimmed) ||
+    isAlbumUploadedOrnamentId(trimmed)
+  ) {
+    return { ok: true, value: trimmed };
+  }
+  return { ok: false, message: "Corner ornament is not a recognised setting." };
+}
+
 /**
  * Validates every raw field the Settings form submits, reporting the **first** problem found — the
  * collage and ref-card panels' idiom (#307/#569), surfaced inline in the dialog.
@@ -531,6 +573,17 @@ export function parseAlbumRenderPreset(
   if (!borderWidthMm.ok) return borderWidthMm;
   const borderInsetMm = mm("borderInsetMm", "Border inset", MIN_MARGIN_MM, MAX_MARGIN_MM);
   if (!borderInsetMm.ok) return borderInsetMm;
+  const borderGapMm = mm("borderGapMm", "Gap between the rules", MIN_SPACING_MM, MAX_SPACING_MM);
+  if (!borderGapMm.ok) return borderGapMm;
+  const frameOrnament = parseFrameOrnament(raw.frameOrnament);
+  if (!frameOrnament.ok) return frameOrnament;
+  const frameOrnamentSizeMm = mm(
+    "frameOrnamentSizeMm",
+    "Ornament size",
+    MIN_ORNAMENT_MM,
+    MAX_ORNAMENT_MM
+  );
+  if (!frameOrnamentSizeMm.ok) return frameOrnamentSizeMm;
   const verticalPlacement = parseChoice(
     raw.verticalPlacement,
     "Vertical placement",
@@ -658,6 +711,9 @@ export function parseAlbumRenderPreset(
       borderStyle: borderStyle.value,
       borderWidthMm: borderWidthMm.value,
       borderInsetMm: borderInsetMm.value,
+      borderGapMm: borderGapMm.value,
+      frameOrnament: frameOrnament.value,
+      frameOrnamentSizeMm: frameOrnamentSizeMm.value,
       verticalPlacement: verticalPlacement.value,
       ...boxGaps.value,
       headingSpaceAboveMm: headingSpaceAboveMm.value,

@@ -173,6 +173,7 @@ export async function markAlbumPagesPrinted(
       albumName: plan.album.name,
       language: plan.album.language,
       preset,
+      frameOrnament: plan.frameOrnament,
       photoIdFor: (stampId) => photos.get(stampId)?.id ?? null,
     });
     const rows = snapshotStampRows(snapshot).map((row) => ({
@@ -261,6 +262,7 @@ function buildAlbumPageSnapshot(
     albumName: string;
     language: string;
     preset: AlbumPageSnapshot["preset"];
+    frameOrnament: AlbumPageSnapshot["frameOrnament"];
     photoIdFor: (stampId: string) => string | null;
   }
 ): AlbumPageSnapshot {
@@ -276,6 +278,7 @@ function buildAlbumPageSnapshot(
     albumName: ctx.albumName,
     language: ctx.language,
     preset: ctx.preset,
+    frameOrnament: ctx.frameOrnament,
     range: page.range,
     chapterKey: layout.chapterKey,
     page: { ...layout, boxes },

@@ -13,6 +13,9 @@ import {
   type AlbumCarry,
   type AlbumDropMark,
 } from "@/lib/album-drag";
+import { albumFrame } from "@/lib/album-frame";
+import { albumOrnamentPathData, type AlbumOrnamentDrawing } from "@/lib/album-ornament-svg";
+import type { AlbumRenderPreset } from "@/lib/album-template-rules";
 import {
   isBoxSelected,
   toggleBoxSelection,
@@ -116,6 +119,67 @@ export function boxFlag(box: AlbumEditorBox): AlbumBoxFlag | null {
 }
 
 export const BOX_FLAGS = FLAG;
+
+/**
+ * The page frame (#1427): what `album-frame.ts` places, drawn. Nothing is worked out here — the rule
+ * this canvas lives under — so the preview and the PDF are one frame, and a double rule's gap on the
+ * screen is the gap on the paper. The ornament is drawn from its outlines, never from the file the
+ * collector uploaded.
+ */
+function SheetFrame({
+  preset,
+  ornament,
+}: {
+  preset: AlbumRenderPreset;
+  ornament: AlbumOrnamentDrawing | null;
+}) {
+  const frame = albumFrame(preset, ornament);
+  return (
+    <g pointerEvents="none">
+      {frame.rects.map((r, i) => (
+        <rect
+          key={`r${i}`}
+          x={r.xMm}
+          y={r.yMm}
+          width={r.widthMm}
+          height={r.heightMm}
+          fill="none"
+          stroke={INK}
+          strokeWidth={frame.lineMm}
+        />
+      ))}
+      {frame.lines.map((l, i) => (
+        <line
+          key={`l${i}`}
+          x1={l.x1Mm}
+          y1={l.y1Mm}
+          x2={l.x2Mm}
+          y2={l.y2Mm}
+          stroke={INK}
+          strokeWidth={frame.lineMm}
+          strokeLinecap="butt"
+        />
+      ))}
+      {ornament &&
+        frame.ornaments.map((o) => (
+          <g key={o.corner} transform={`matrix(${o.matrix.join(" ")})`}>
+            {ornament.paths.map((p, i) => (
+              <path
+                key={i}
+                d={albumOrnamentPathData(p.commands)}
+                fill={p.fill ?? "none"}
+                fillRule={p.fillRule}
+                stroke={p.stroke ?? "none"}
+                strokeWidth={p.strokeWidth}
+                strokeLinecap={p.lineCap}
+                strokeLinejoin={p.lineJoin}
+              />
+            ))}
+          </g>
+        ))}
+    </g>
+  );
+}
 
 /** What is selected on the canvas. A box is named by the pair that identifies **one box** — the
  *  entry and the stamp — because a box is a slot and one stamp can have two of them (ADR-0047 §2).
@@ -406,32 +470,10 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
       }}
       onPointerDown={() => onSelect(null)}
     >
-      {/* The template's own decorative border, and then the content frame — a drawing aid that is on
-          no card, which is why it is the palest thing here. */}
-      {preset.borderStyle !== "none" && preset.borderWidthMm > 0 && (
-        <>
-          <rect
-            x={preset.borderInsetMm}
-            y={preset.borderInsetMm}
-            width={preset.pageWidthMm - 2 * preset.borderInsetMm}
-            height={preset.pageHeightMm - 2 * preset.borderInsetMm}
-            fill="none"
-            stroke={INK}
-            strokeWidth={preset.borderWidthMm}
-          />
-          {preset.borderStyle === "double" && (
-            <rect
-              x={preset.borderInsetMm + preset.borderWidthMm + 1}
-              y={preset.borderInsetMm + preset.borderWidthMm + 1}
-              width={preset.pageWidthMm - 2 * (preset.borderInsetMm + preset.borderWidthMm + 1)}
-              height={preset.pageHeightMm - 2 * (preset.borderInsetMm + preset.borderWidthMm + 1)}
-              fill="none"
-              stroke={INK}
-              strokeWidth={preset.borderWidthMm}
-            />
-          )}
-        </>
-      )}
+      {/* The template's own frame — rules and corner ornaments, placed by `album-frame.ts`, which the
+          PDF draws from too — and then the content frame, a drawing aid that is on no card, which is
+          why it is the palest thing here. */}
+      <SheetFrame preset={preset} ornament={sheet.frameOrnament} />
       <rect
         x={sheet.content.xMm}
         y={sheet.content.yMm}

@@ -1,5 +1,27 @@
 import "server-only";
-import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import {
+  LineCapStyle,
+  LineJoinStyle,
+  PDFDocument,
+  PDFOperator,
+  PDFOperatorNames,
+  appendBezierCurve,
+  closePath,
+  concatTransformationMatrix,
+  lineTo,
+  moveTo,
+  popGraphicsState,
+  pushGraphicsState,
+  rgb,
+  setFillingRgbColor,
+  setLineCap,
+  setLineJoin,
+  setLineWidth,
+  setStrokingRgbColor,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage,
+} from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import sharp from "sharp";
 import {
@@ -21,6 +43,8 @@ import {
 } from "./album-photos";
 import { getAlbumPageSnapshots } from "./album-printed-pages";
 import type { AlbumSnapshotBox } from "./album-snapshot";
+import { albumFrame, type AlbumFrameMatrix } from "./album-frame";
+import type { AlbumOrnamentDrawing, AlbumOrnamentPath } from "./album-ornament-svg";
 import {
   albumPdfFileName,
   parseAlbumPageSelection,
@@ -85,17 +109,6 @@ import type { AlbumData } from "./albums";
 // renderer reaching for `album.marginTopMm` while drawing a snapshot would produce a sheet that is
 // neither the old card nor a new one. The album's own preset is simply the one a live page uses.
 
-/** Millimetres of white between the two rules of a `double` page border.
- *
- *  A drawing convention rather than a template value, and the only one in this file. #766 modelled
- *  the border as three numbers — style, weight, inset — because what a printed album border is, on
- *  the pages this replaces, is one or two rules inset from the edge; the gap between the pair is
- *  what makes it read as a double rule at all, and a fourth column for it would be a setting nobody
- *  has asked for. It is safe to state here because **the border reserves no space in the plan**:
- *  the content area is bounded by the template's margins (10 mm by default) and the border is inset
- *  5 mm, so moving this number can never move a block. */
-const DOUBLE_RULE_GAP_MM = 1.2;
-
 /** Dash pattern for a `dashed` box outline, in millimetres: mark then gap. Read at 0.2 mm weight,
  *  which is the default, this is a visible dash rather than a broken line. */
 const DASH_MM: [number, number] = [1.6, 1.0];
@@ -121,6 +134,9 @@ export class AlbumPdfError extends Error {}
  */
 interface DrawableSheet {
   preset: AlbumRenderPreset;
+  /** The corner ornament the frame prints: the album's for a live sheet, the card's own copy for a
+   *  stored one (#1427). */
+  frameOrnament: AlbumOrnamentDrawing | null;
   page: Extract<AlbumPlannedPage<{ widthMm: number; heightMm: number; label: string; stampId: string }>, { kind: "live" }>;
   footer: AlbumPlacedText | null;
   stored: boolean;
@@ -207,26 +223,87 @@ function drawText(
   });
 }
 
-/** The page's decorative border: nothing, one rule, or two. Inset from the sheet's edge and clear
- *  of the content by construction (see {@link DOUBLE_RULE_GAP_MM}). */
-function drawBorder(page: PDFPage, preset: AlbumRenderPreset) {
-  if (preset.borderStyle === "none" || preset.borderWidthMm <= 0) return;
-  const rule = (insetMm: number) =>
-    strokeRect(
-      page,
-      preset,
-      {
-        xMm: insetMm,
-        yMm: insetMm,
-        widthMm: preset.pageWidthMm - 2 * insetMm,
-        heightMm: preset.pageHeightMm - 2 * insetMm,
-      },
-      preset.borderWidthMm
-    );
-  rule(preset.borderInsetMm);
-  if (preset.borderStyle === "double") {
-    rule(preset.borderInsetMm + preset.borderWidthMm + DOUBLE_RULE_GAP_MM);
+/** The page's frame (#766, #1427): its rules, and an ornament at each corner when it has one — all
+ *  of it placed by `album-frame.ts`, which the canvas draws from too. The frame is paint and reserves
+ *  nothing in the plan, so nothing here can move a block. */
+function drawFrame(page: PDFPage, preset: AlbumRenderPreset, ornament: AlbumOrnamentDrawing | null) {
+  const frame = albumFrame(preset, ornament);
+  for (const rect of frame.rects) strokeRect(page, preset, rect, frame.lineMm);
+  for (const line of frame.lines) {
+    page.drawLine({
+      start: { x: line.x1Mm * MM_TO_PT, y: fromTop(preset, line.y1Mm) },
+      end: { x: line.x2Mm * MM_TO_PT, y: fromTop(preset, line.y2Mm) },
+      thickness: frame.lineMm * MM_TO_PT,
+      color: INK,
+      // Butt ends: a rule stops exactly where the ornament's frame starts.
+      lineCap: LineCapStyle.Butt,
+    });
   }
+  if (!ornament) return;
+  for (const placed of frame.ornaments) drawOrnament(page, preset, ornament, placed.matrix);
+}
+
+function hexToRgb(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255] as const;
+}
+
+const LINE_CAP = { butt: LineCapStyle.Butt, round: LineCapStyle.Round, square: LineCapStyle.Projecting };
+const LINE_JOIN = { miter: LineJoinStyle.Miter, round: LineJoinStyle.Round, bevel: LineJoinStyle.Bevel };
+
+/** How one outline is painted, as the PDF operator that ends it. */
+function paintOperator(path: AlbumOrnamentPath): PDFOperator {
+  const evenOdd = path.fillRule === "evenodd";
+  if (path.fill && path.stroke) {
+    return PDFOperator.of(evenOdd ? PDFOperatorNames.FillEvenOddAndStroke : PDFOperatorNames.FillNonZeroAndStroke);
+  }
+  if (path.fill) return PDFOperator.of(evenOdd ? PDFOperatorNames.FillEvenOdd : PDFOperatorNames.FillNonZero);
+  return PDFOperator.of(PDFOperatorNames.StrokePath);
+}
+
+/**
+ * One corner ornament, as vectors in true millimetres.
+ *
+ * The drawing is already four commands and nothing else (`album-ornament-svg.ts`), so it is written
+ * out as the PDF's own path operators under one transformation: the corner's placement from
+ * `album-frame.ts` — mirror included — composed with the millimetre-to-point, top-to-bottom map every
+ * other thing on the sheet goes through. Line weights are in the drawing's units and scale with it,
+ * as they do on the canvas.
+ */
+function drawOrnament(
+  page: PDFPage,
+  preset: AlbumRenderPreset,
+  drawing: AlbumOrnamentDrawing,
+  placement: AlbumFrameMatrix
+) {
+  const [a, b, c, d, e, f] = placement;
+  const k = MM_TO_PT;
+  const h = preset.pageHeightMm * k;
+  // [k 0 0 -k 0 h] ∘ placement: millimetres from the top-left to points from the bottom-left.
+  const ops: PDFOperator[] = [
+    pushGraphicsState(),
+    concatTransformationMatrix(k * a, -k * b, k * c, -k * d, k * e, h - k * f),
+  ];
+  for (const path of drawing.paths) {
+    if (path.fill) ops.push(setFillingRgbColor(...hexToRgb(path.fill)));
+    if (path.stroke) {
+      ops.push(
+        setStrokingRgbColor(...hexToRgb(path.stroke)),
+        setLineWidth(path.strokeWidth),
+        setLineCap(LINE_CAP[path.lineCap]),
+        setLineJoin(LINE_JOIN[path.lineJoin])
+      );
+    }
+    for (const cmd of path.commands) {
+      if (cmd[0] === "M") ops.push(moveTo(cmd[1], cmd[2]));
+      else if (cmd[0] === "L") ops.push(lineTo(cmd[1], cmd[2]));
+      else if (cmd[0] === "C") ops.push(appendBezierCurve(cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6]));
+      else ops.push(closePath());
+    }
+    ops.push(paintOperator(path));
+  }
+  ops.push(popGraphicsState());
+  page.pushOperators(...ops);
 }
 
 /** The outline around one mount, in the template's own style. `none` is a real choice: a hawid is
@@ -318,8 +395,18 @@ export async function renderAlbumPdf(
   );
   const pages: DrawableSheet[] = selected.map((planPage) => {
     if (planPage.layout.kind !== "printed") {
+      // A frame naming an upload the collection no longer has is refused by name, as a face this
+      // build no longer ships is: a card printed without the corners the collector chose is wrong
+      // in a way nobody sees until it is in the binder.
+      if (album.frameOrnament !== "none" && !plan.frameOrnament) {
+        throw new AlbumPdfError(
+          "This album's frame names a corner ornament the collection no longer has. " +
+            "Choose another in the album's own values before printing."
+        );
+      }
       return {
         preset: album,
+        frameOrnament: plan.frameOrnament,
         page: planPage.layout,
         footer: planPage.footer,
         stored: false,
@@ -331,7 +418,13 @@ export async function renderAlbumPdf(
         `The printed sheet ${planPage.range || "in this album"} has no stored contents and cannot be redrawn.`
       );
     }
-    return { preset: snapshot.preset, page: snapshot.page, footer: snapshot.footer, stored: true };
+    return {
+      preset: snapshot.preset,
+      frameOrnament: snapshot.frameOrnament,
+      page: snapshot.page,
+      footer: snapshot.footer,
+      stored: true,
+    };
   });
 
   const doc = await PDFDocument.create();
@@ -359,7 +452,7 @@ export async function renderAlbumPdf(
     const { preset, page: layout } = sheet;
     const page = doc.addPage([preset.pageWidthMm * MM_TO_PT, preset.pageHeightMm * MM_TO_PT]);
 
-    drawBorder(page, preset);
+    drawFrame(page, preset, sheet.frameOrnament);
     if (layout.title) drawText(page, preset, layout.title, fontFor);
     if (layout.chapter) drawText(page, preset, layout.chapter, fontFor);
 

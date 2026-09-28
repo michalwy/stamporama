@@ -32,6 +32,7 @@ import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
 import { HawidStockPanel } from "./hawid-stock-panel";
 import { AlbumTemplatesPanel } from "./album-templates-panel";
+import { AlbumOrnamentsPanel } from "./album-ornaments-panel";
 import { AssistantPanel } from "./assistant-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -490,6 +491,10 @@ export function SettingsTabs({
             collectionId={collectionId}
             initialTemplates={initialAlbumTemplates}
           />
+
+          {/* Last, because it only feeds the templates above: a frame's corner ornament (#1427). */}
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "2.5rem" }}>Corner ornaments</h2>
+          <AlbumOrnamentsPanel collectionId={collectionId} />
         </section>
       )}
       {activeTab === "shipping" && (

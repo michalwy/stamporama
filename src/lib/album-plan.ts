@@ -38,6 +38,8 @@ import { albumTextMetrics } from "./album-metrics";
 import { languageLabel, normalizeLanguage } from "./languages";
 import { resolveChecklistName } from "./checklist-name";
 import { albumNameState, type AlbumNameState } from "./album-name";
+import { resolveAlbumFrameOrnament } from "./album-ornament-store";
+import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import { getAlbumPrintedIndex, type AlbumPrintedIndex } from "./album-printed-pages";
 import { albumPlanFingerprint } from "./album-print-rules";
 import type { AlbumComparablePage } from "./album-divergence";
@@ -143,6 +145,9 @@ export interface AlbumPlanResult {
   /** The area's name in the album's language, offered in place of the default-language name the
    *  album still carries (#1311). Null when there is nothing to offer. */
   nameSuggestion: string | null;
+  /** The corner ornament the album's frame names, resolved (#1427) — what its live sheets print.
+   *  Null for a frame without one, or for an upload the collection no longer has. */
+  frameOrnament: AlbumOrnamentDrawing | null;
 }
 
 /** What a caller may substitute when asking *what would this album look like* — the preset (#795,
@@ -209,6 +214,9 @@ export interface AlbumPlanContext {
   textBlocks: AlbumTextBlockData[];
   printed: AlbumPrintedIndex;
   emptyStock: boolean;
+  /** The corner ornament the frame names, resolved once here for every sheet drawn from this
+   *  context (#1427) — under the override, so a preview draws the ornament being chosen. */
+  frameOrnament: AlbumOrnamentDrawing | null;
   /** The album's language as texts resolve in it — **null when it is the collection's default**, where
    *  nothing can fall back. */
   language: string | null;
@@ -272,7 +280,7 @@ export async function albumPlanContext(
     getAlbumTextBlocks(ownerId, albumId),
   ]);
 
-  const [stock, areas, issuePrefixes, toCopy, printed, collection] = await Promise.all([
+  const [stock, areas, issuePrefixes, toCopy, printed, collection, frameOrnament] = await Promise.all([
     getHawidStrips(ownerId, album.collectionId),
     getCollectionAreas(ownerId, album.collectionId),
     loadIssuePrefixMap(album.collectionId),
@@ -282,6 +290,7 @@ export async function albumPlanContext(
       where: { id: album.collectionId },
       select: { defaultLanguage: true },
     }),
+    resolveAlbumFrameOrnament(album.collectionId, album.frameOrnament),
   ]);
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
   // The language texts resolve in, normalised exactly as `makeTitleCopyMapper` normalises it: the
@@ -412,6 +421,7 @@ export async function albumPlanContext(
     textBlocks,
     printed,
     emptyStock: stock.length === 0,
+    frameOrnament,
     language,
     nameState,
     // The running head is the album's name itself rather than a template, so its gap is the name's.
@@ -630,6 +640,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
     printed,
     emptyStock: context.emptyStock,
     nameSuggestion: context.nameState.suggestion,
+    frameOrnament: context.frameOrnament,
   };
 }
 

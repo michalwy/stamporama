@@ -99,6 +99,41 @@ Nothing about **which series lands on which sheet** changes: the sheet is filled
 and only the space left at its foot is moved. A single sheet can also choose its own placement in the
 page editor — see below.
 
+### The page frame
+
+Under *Page*, a frame is drawn in the page margin: **no rule, one rule or two**, with the line's
+**weight**, its **inset** from the edge of the paper, and for two rules the **white between them**.
+A **corner ornament** can sit at each corner, at the **size** you set — its longer side, in
+millimetres. It is drawn for the top-left corner and **mirrored** at the other three, so it always
+faces into the page, and the rules run between the ornaments and stop where each one ends. An
+ornament also works on a frame with no rules: four corners on their own.
+
+The frame is **paint, not layout**. It never moves a series and never changes which series lands on
+which sheet, so choosing one re-plans nothing. A printed card still reports a change of frame, because
+the card would now look different.
+
+Four ornaments come built in — **Rosette**, **Vine**, **Art Deco** and **Square** — drawn for
+Stamporama in the spirit of a classic album frame; a new template starts with the Rosette at 25 mm on
+a double rule. You can also use **your own**:
+
+- **Upload SVG…** beside the ornament field, or under **Settings → Albums → Corner ornaments**, takes
+  an SVG drawing. It lands in the field straight away and is kept in the collection for every
+  template and album.
+- Draw it for the **top-left corner**. The drawing's point **0,0 sits on the frame's line** — on the
+  rule itself, or midway between two — and the rules run in to the **far right and bottom edges of its
+  viewBox**. So a drawing whose viewBox starts at `0 0` sits entirely inside the corner, and one that
+  starts at negative numbers reaches out past the line, towards the edge of the paper. Run an arm
+  along each axis out to those edges and the rules meet it.
+- It prints as **vectors**, sharp at any size. Solid colours only: a drawing with text, an embedded
+  picture, a gradient, transparency, dashed lines, clipping or `<use>` is refused with the reason,
+  rather than printed differently from how it looks in a drawing program.
+- An ornament a template or an album still uses **cannot be deleted**; you are told which ones use it.
+  A printed card keeps its own copy of the corners it was printed with, so deleting an ornament never
+  changes a card in your binder.
+
+The two rules used to be drawn 1.2 mm apart, and every existing album and template was given exactly
+that; the preview now shows the same gap the PDF prints.
+
 ## The language is the album's own, and it changes the plan
 
 An album is printed in one language. Names, checklist headings and everything else resolve to that
@@ -470,8 +505,8 @@ plan is not a state the album can hold.
 ### What a printed card keeps
 
 Everything that was on it: the headings and labels exactly as they read that day, every box's size in
-millimetres, which strip of hawid each box was cut from, the pictures, the catalog range, and the
-page settings the sheet was set under. From then on the album **draws that** — so reprinting the card
+millimetres, which strip of hawid each box was cut from, the pictures, the catalog range, the corner
+ornament of its frame, and the page settings the sheet was set under. From then on the album **draws that** — so reprinting the card
 in a year's time gives you the same sheet, whatever has changed in the collection since.
 
 That is why it is stored rather than simply flagged. A flag would stop the layout being re-planned

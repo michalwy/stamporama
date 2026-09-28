@@ -204,6 +204,15 @@ describe("compareAlbumPages", () => {
     assert.match(found[0].detail, /Heading size \(pt\), Margin top \(mm\) have changed/);
   });
 
+  it("reports a frame's new corner ornament as a template change, by name (#1427)", () => {
+    const found = compareAlbumPages(
+      page("PL 1-1", [box("a")], { preset: { ...DEFAULT_ALBUM_PRESET, frameOrnament: "none" } }),
+      page("PL 1-1", [box("a")], { preset: { ...DEFAULT_ALBUM_PRESET, frameOrnament: "vine" } })
+    );
+    assert.deepEqual(kinds(found), ["template"]);
+    assert.match(found[0].detail, /Frame ornament has changed/);
+  });
+
   it("reports a card whose content would now be placed differently (#1419)", () => {
     const found = compareAlbumPages(
       page("PL 1-1", [box("a")]),

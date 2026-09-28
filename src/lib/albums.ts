@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
+import { assertAlbumFrameOrnament } from "./album-ornament-store";
 import { areaSubtreeIds } from "./areas";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { orderedChecklistStampIds } from "./checklists";
@@ -91,6 +92,9 @@ const PRESET_SELECT = {
   borderStyle: true,
   borderWidthMm: true,
   borderInsetMm: true,
+  borderGapMm: true,
+  frameOrnament: true,
+  frameOrnamentSizeMm: true,
   verticalPlacement: true,
   boxGapXMm: true,
   boxGapYMm: true,
@@ -373,6 +377,7 @@ export async function updateAlbumPreset(
 ): Promise<void> {
   const collectionId = await resolveAlbumCollection(albumId);
   await assertCollectionOwner(ownerId, collectionId);
+  await assertAlbumFrameOrnament(collectionId, preset.frameOrnament);
   // `albumRenderPreset` so a caller holding a whole album row cannot write its id or its name.
   await prisma.album.update({ where: { id: albumId }, data: albumRenderPreset(preset) });
 }

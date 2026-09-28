@@ -13,6 +13,7 @@ import { renderAlbumText, type AlbumRenderPreset } from "./album-template-rules"
 import type { AlbumData } from "./albums";
 import { getHawidStrips } from "./hawid-stock";
 import { resolveAlbumPhotos } from "./album-photos";
+import { resolveAlbumFrameOrnament } from "./album-ornament-store";
 import {
   ALBUM_PREVIEW_ALBUM_NAME,
   ALBUM_PREVIEW_AREA_PREFIX,
@@ -100,7 +101,10 @@ export interface AlbumTemplatePreview {
  * plus an id, a name and a language (#766), which is exactly what makes this possible without a
  * second definition of what an album looks like.
  */
-function sampleSheetSource(preset: AlbumRenderPreset): AlbumSheetSource {
+function sampleSheetSource(
+  preset: AlbumRenderPreset,
+  frameOrnament: AlbumSheetSource["frameOrnament"],
+): AlbumSheetSource {
   const album: AlbumData = {
     ...preset,
     id: "album-template-preview",
@@ -120,6 +124,7 @@ function sampleSheetSource(preset: AlbumRenderPreset): AlbumSheetSource {
     // A sample resolves in no language, so nothing can have fallen back to a default one (#298).
     textGaps: () => [],
     titleGaps: [],
+    frameOrnament,
   };
 }
 
@@ -189,7 +194,10 @@ export async function albumTemplateSamplePreview(
   collectionId: string,
   preset: AlbumRenderPreset,
 ): Promise<AlbumTemplatePreview> {
-  const stock = await getHawidStrips(ownerId, collectionId);
+  const [stock, frameOrnament] = await Promise.all([
+    getHawidStrips(ownerId, collectionId),
+    resolveAlbumFrameOrnament(collectionId, preset.frameOrnament),
+  ]);
   const pages = finishSamplePages(
     preset,
     planAlbumPages(
@@ -201,7 +209,7 @@ export async function albumTemplateSamplePreview(
   );
   // No photos on the sample: a mount's picture is a fact about a stamp somebody owns, and the sample
   // stamps are not owned. The template's own photo settings are judged on a real album.
-  const { sheets } = drawSheets(pages, sampleSheetSource(preset), () => null);
+  const { sheets } = drawSheets(pages, sampleSheetSource(preset, frameOrnament), () => null);
   return {
     sheets,
     totalSheets: pages.length,

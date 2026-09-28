@@ -24,6 +24,12 @@ import {
   type AlbumTemplatePreview,
 } from "@/lib/album-preview";
 import { getAlbums, type AlbumSummary } from "@/lib/albums";
+import {
+  AlbumOrnamentError,
+  deleteAlbumOrnament,
+  getAlbumOrnaments,
+  type AlbumOrnamentData,
+} from "@/lib/album-ornament-store";
 
 // Server actions for the album templates (#766), `actions/ref-card-templates.ts`'s shape: `FormData`
 // in, a parse result out, the pure rules file doing every piece of the deciding.
@@ -57,7 +63,7 @@ function readForm(formData: FormData, nameFallback: string | null = null) {
 /** A duplicate name is reported in its own words: an album seeds from a template *by name*, so two
  *  of one name is worth a sentence rather than a "please try again". */
 function toErrorState(err: unknown, fallback: string): AlbumTemplateActionState {
-  if (err instanceof AlbumTemplateNameTakenError) {
+  if (err instanceof AlbumTemplateNameTakenError || err instanceof AlbumOrnamentError) {
     return { status: "error", message: err.message };
   }
   return { status: "error", message: fallback };
@@ -109,6 +115,28 @@ export async function deleteAlbumTemplateAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete the template. Please try again." };
+  }
+}
+
+// ── Corner ornaments (#1427) ─────────────────────────────────────────────────
+//
+// Uploading is a route (`/api/collections/[collectionId]/album-ornaments`), because it carries a
+// file. Listing and deleting are ordinary actions.
+
+export async function getAlbumOrnamentsAction(collectionId: string): Promise<AlbumOrnamentData[]> {
+  const session = await getSession();
+  return getAlbumOrnaments(session.user.id, collectionId);
+}
+
+export async function deleteAlbumOrnamentAction(
+  ornamentId: string
+): Promise<AlbumTemplateActionState> {
+  const session = await getSession();
+  try {
+    await deleteAlbumOrnament(session.user.id, ornamentId);
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Failed to delete the ornament. Please try again.");
   }
 }
 

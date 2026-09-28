@@ -25,7 +25,9 @@
 //   changes;
 // - the **render preset** the sheet was set under, copied whole, which is #308's rule at its
 //   strictest: an edit to a template may not reach into a card with stamps glued to it;
-// - the **picture** each mount printed, by `Photo.id`.
+// - the **picture** each mount printed, by `Photo.id`;
+// - the **corner ornament** the frame printed (#1427), as a drawing rather than a name: a built-in
+//   can be redrawn by a later build and an uploaded one deleted, and neither may reach a card.
 //
 // Nothing here needs a fallback and nothing here resolves. A printed page draws stored values.
 //
@@ -50,6 +52,7 @@ import type {
   AlbumPlacedText,
   AlbumPlannedPage,
 } from "./album-layout";
+import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import type { AlbumRenderPreset } from "./album-template-rules";
 
 /** The shape of a stored snapshot. Bumped when the stored shape changes in a way an older row does
@@ -110,6 +113,10 @@ export interface AlbumPageSnapshot {
   language: string;
   /** The render preset the sheet was set under, copied whole. */
   preset: AlbumRenderPreset;
+  /** The ornament drawn at the frame's corners, copied whole (#1427), or null for a frame without
+   *  one. The preset still says *which* ornament it was — that name is what the divergence report
+   *  compares — and this is what gets drawn. */
+  frameOrnament: AlbumOrnamentDrawing | null;
   /** The sheet's identity — its catalog range, `PL 303-309`. */
   range: string;
   /** The chapter it sits in, so the sequence still reads as chapters. */
@@ -227,7 +234,9 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   // stored before #1420 has no label gap by the same reasoning, and its labels sat on the box's
   // edge: 0, or every such card would report the new value as a template change. One stored before
   // #1426 has no space around its page headings: the album's name had none, and the chapter heading
-  // had the checklist heading's, which the card does carry.
+  // had the checklist heading's, which the card does carry. One stored before #1427 has no frame
+  // ornament, and its double rule was drawn 1.2 mm apart — the gap the PDF used before it was a
+  // value. The size is the migration's default, so an album that also has none reports nothing.
   const stored = snapshot as AlbumPageSnapshot;
   const preset = stored.preset;
   if (
@@ -237,6 +246,10 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
     preset.titleSpaceBelowMm !== undefined &&
     preset.chapterSpaceAboveMm !== undefined &&
     preset.chapterSpaceBelowMm !== undefined &&
+    preset.borderGapMm !== undefined &&
+    preset.frameOrnament !== undefined &&
+    preset.frameOrnamentSizeMm !== undefined &&
+    stored.frameOrnament !== undefined &&
     stored.page.placement !== undefined
   ) {
     return stored;
@@ -251,7 +264,11 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
       titleSpaceBelowMm: preset.titleSpaceBelowMm ?? 0,
       chapterSpaceAboveMm: preset.chapterSpaceAboveMm ?? preset.headingSpaceAboveMm,
       chapterSpaceBelowMm: preset.chapterSpaceBelowMm ?? preset.headingSpaceBelowMm,
+      borderGapMm: preset.borderGapMm ?? 1.2,
+      frameOrnament: preset.frameOrnament ?? "none",
+      frameOrnamentSizeMm: preset.frameOrnamentSizeMm ?? 25,
     },
+    frameOrnament: stored.frameOrnament ?? null,
     page: { ...stored.page, placement: stored.page.placement ?? "top" },
   };
 }

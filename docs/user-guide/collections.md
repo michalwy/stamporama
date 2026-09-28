@@ -1018,8 +1018,10 @@ Pages you have already printed are paper.
 **Settings → Albums → Album templates** holds everything about how an album *looks*, so a new album
 is not an evening of retyping page sizes and font names. One template covers:
 
-- **Page** — size and the four margins in millimetres, and an optional decorative border with its
-  weight and inset.
+- **Page** — size and the four margins in millimetres, and the page frame: no rule, one or two, with
+  its weight, its inset and the white between two rules, and an optional **corner ornament** at a
+  size you set — a built-in one or your own SVG. The frame is drawn in the margin and never moves a
+  series; see *The page frame* in the albums guide.
 - **Spacing** — how many checklists may share one horizontal **band** and the gap between two that
   do, then the space between boxes across a row and between rows; the space **above and below the
   album title**, **above and below a chapter heading** and above and below a checklist heading; and
@@ -1133,6 +1135,14 @@ mounted and glued into. If you want an existing album to follow a change, you ch
 
 The albums themselves live outside Settings, under **Collection → Albums** — see
 [Albums](albums.md). A template is configuration; an album is a binder being filled.
+
+## Corner ornaments
+
+**Settings → Albums → Corner ornaments** lists the corner ornaments you have uploaded for album page
+frames, each drawn as it prints. **Upload SVG…** adds one (the template's own ornament field has the
+same button); the row's menu deletes one, which is refused while a template or an album still uses it
+— you are told which. Printed cards keep the corners they were printed with either way. How to draw
+one so the rules meet it is in the albums guide, under *The page frame*.
 
 ## Stamp photos
 
