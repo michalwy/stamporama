@@ -255,15 +255,41 @@ change a number and see it.
   on the user's *bigger*. The fields keep the ~800 px (49.5 rem) they had at 52 rem, and the preview
   column grows from 22 rem to 38 rem (A4 at ~76%) into whatever is left — so a narrower window takes
   its width out of the sheet, never out of the three-column grid. At the 70 rem ceiling a sheet at
-  38 rem fits the preview's scroll area whole. The height's first term is **`DialogShell`'s own
-  `maxHeight`** rather than a smaller `vh` factor: the shell clamps to it on a short window, and the
-  preview's scroll area is computed from the figure passed in, so any other term would disagree with
-  the panel on exactly the laptop the change had to fit. The two-sheet limit and the zoom rule did
-  not move — a bigger window, not a different preview.
+  38 rem fits the preview's scroll area whole. The two-sheet limit and the zoom rule did not move —
+  a bigger window, not a different preview. **#1453 took the caps off**; see below.
 - **The fields stay uncontrolled.** The preview reads the same `FormData` the save reads, so there is
   no second copy of the preset that could disagree with what a save would store. The dialog only
   counts changes — from the fields' own `onChange` *and* from the four text builders, which are React
   state written into hidden inputs and fire no `input` event of their own.
+
+### The whole window, and a choice of fit (#1453)
+
+Raised by the collector on 2026-09-28: with the sections and the marks, the preview had become the
+way the dialog is used, and at 38 rem a millimetre's gap was still hard to see. What is worth not
+re-deriving:
+
+- **The dialog is `DIALOG_MAX_WIDTH` × `DIALOG_MAX_HEIGHT`**, the Measure and mark window's size
+  (#1388), for the same both-dialogs reason as ever (#1215). The fields keep their 49.5 rem floor and
+  **the sheet has no ceiling** — #978's 92 rem stopped it at A4 ~76% on the one monitor that had
+  room for it at 1:1. `ALBUM_PREVIEW_MAX_ZOOM` (never larger than life) still holds.
+- **The body does not scroll; the fields do, in their own column.** The form is the body's height
+  exactly, so the preview's column is the whole of it and the frame the sheets are drawn in is the
+  room on screen, measured by a `ResizeObserver` in both directions — not `dialogHeight - 15rem`,
+  the estimate it replaced, which no longer had a figure to be written against. Anything above the
+  fields (an album's own explanation) is the form's `intro`, in the fields' column, so it takes no
+  height from the sheet. The section list scrolls on its own too, for a window too short for eight
+  tabs.
+- **Two fits, chosen beside the sheet and remembered** (`localStorage`, one key for both dialogs, as
+  the section is). *Whole page* fits width and height; *Page width* fits the width alone and
+  scrolls. Asked before it was built, because on a landscape monitor they disagree: fitted whole, an
+  A4 sheet on a 1080-line screen is bounded by the height and comes out ~525 px wide — *narrower*
+  than #978's column — while fitted to the width it is 1:1 and takes the foot of the page, and a
+  footer's or a bottom margin's mark, out of view. The collector chose both. *Whole page* is the
+  default, since a mark is only useful in view. The arithmetic is `album-preview-fit.ts`, pure, in
+  the unit suite.
+- **The notes under the sheet keep their own height**; the frame is what gives way to a line
+  appearing there. A *Not redrawn* line therefore shrinks a whole-page sheet by a line's height while
+  it shows — accepted rather than reserving an empty line under every sheet.
 
 ### Sections, and the preview marking the field in hand (#1431)
 
@@ -306,7 +332,7 @@ unit suite checks. What is worth not re-deriving:
 - **The last section open is a browser preference** (`localStorage`, one key for both dialogs), read
   while initialising: the dialog only mounts after a click, so no server render can disagree.
 - **The section list is taken out of the fields' 49.5 rem, never out of the sheet's.** One section is
-  a screenful at most, so the grid can spare it; #978's arithmetic for the sheet is unchanged.
+  a screenful at most, so the grid can spare it, and the sheet keeps every rem the window gives it.
 
 ### Fonts are a fixed set (`src/lib/album-fonts.ts`)
 

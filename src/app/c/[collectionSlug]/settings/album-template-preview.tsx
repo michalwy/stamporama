@@ -6,6 +6,13 @@ import type { AlbumTemplatePreview } from "@/lib/album-preview";
 import type { AlbumSummary } from "@/lib/albums";
 import type { AlbumPreviewSource } from "@/app/actions/album-templates";
 import { albumFieldMarks, type AlbumPresetField } from "@/lib/album-field-marks";
+import {
+  ALBUM_PREVIEW_FITS,
+  albumPreviewZoom,
+  asAlbumPreviewFit,
+  type AlbumPreviewFit,
+} from "@/lib/album-preview-fit";
+import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 
 // The album template's live preview (#795): the page the thirty-odd numbers in the dialog beside
 // this actually produce.
@@ -27,8 +34,9 @@ import { albumFieldMarks, type AlbumPresetField } from "@/lib/album-field-marks"
 // a confident wrong answer.**
 //
 // The one thing this file works out for itself is the **zoom**, which is a scale factor rather than
-// a measurement: it asks how wide the drawing is on screen and never how wide a word is. The canvas
-// already reads its own frame the same way, and says so.
+// a measurement: it asks how much room the drawing has on screen and never how wide a word is. The
+// canvas already reads its own frame the same way, and says so. The rule is `album-preview-fit.ts`'s
+// (#1453): the whole page, or the page's width, as the collector chooses beside the sheet.
 //
 // ## Why it redraws as you type rather than behind a button
 //
@@ -45,23 +53,42 @@ import { albumFieldMarks, type AlbumPresetField } from "@/lib/album-field-marks"
  *  because a collector adjusting a margin holds the arrow key down. */
 const DEBOUNCE_MS = 260;
 
-/** CSS millimetres to CSS pixels. The canvas renders the sheet in `mm` units, so this is the
- *  conversion between the width this panel has and the zoom that fills it. */
-const PX_PER_MM = 96 / 25.4;
+/** Where the chosen fit is kept, in this browser (#1453). One key for both dialogs, as the section
+ *  is (#1431): how large a sheet is wanted is the collector's and his screen's, not a template's. */
+const FIT_KEY = "stamporama:album-preview-fit";
 
-/** Never larger than life. A page smaller than the panel is shown at 1:1 rather than blown up —
- *  a sheet of paper at 140% is not a thing the collector will ever hold. */
-const MAX_ZOOM = 1;
+function readStoredFit(): AlbumPreviewFit {
+  try {
+    return asAlbumPreviewFit(localStorage.getItem(FIT_KEY));
+  } catch {
+    return asAlbumPreviewFit(null);
+  }
+}
 
-/** The sheet's own border and shadow, which the zoom has to leave room for or a page fitted exactly
- *  to the panel grows a horizontal scrollbar under itself. */
-const SHEET_CHROME_PX = 4;
+function storeFit(fit: AlbumPreviewFit) {
+  try {
+    localStorage.setItem(FIT_KEY, fit);
+  } catch {
+    // ignore (private mode / disabled storage) — the preview then opens on the whole page
+  }
+}
 
+/** The whole height of the column it is given: the sheets' frame takes what the controls above it
+ *  and the notes below it leave, and that is the room the zoom fits the sheet to. */
 const PANEL_STYLE: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "0.625rem",
+  flex: 1,
   minWidth: 0,
+  minHeight: 0,
+};
+
+const NOTES_STYLE: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.625rem",
+  flexShrink: 0,
 };
 
 const CONTROL_STYLE: React.CSSProperties = {
@@ -99,10 +126,6 @@ interface AlbumTemplatePreviewPanelProps {
    *  nothing else: there is no sample to offer and no other album to point at, because the values
    *  in the form belong to this one. Absent — the template dialog — the source is chosen. */
   albumId?: string;
-  /** The dialog's own `height`, which the sheets' scroll area is written against. Passed rather than
-   *  imported, so the dialog's size stays one figure without this module importing the one that
-   *  imports it. */
-  dialogHeight: string;
   /** The field under the pointer or holding the focus in the dialog, whose reach is marked on every
    *  sheet drawn (#1431) — or null for none. */
   markField: AlbumPresetField | null;
@@ -113,7 +136,6 @@ export function AlbumTemplatePreviewPanel({
   formRef,
   revision,
   albumId,
-  dialogHeight,
   markField,
 }: AlbumTemplatePreviewPanelProps) {
   const [chosen, setChosen] = useState<AlbumPreviewSource>({ kind: "sample" });
@@ -125,7 +147,14 @@ export function AlbumTemplatePreviewPanel({
   const [preview, setPreview] = useState<AlbumTemplatePreview | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
-  const [frameWidth, setFrameWidth] = useState(0);
+  const [frame, setFrame] = useState({ width: 0, height: 0 });
+  /** The panel only ever mounts inside a dialog opened by a click, so reading the browser's storage
+   *  while initialising cannot disagree with a server render. */
+  const [fit, setFit] = useState<AlbumPreviewFit>(readStoredFit);
+  const chooseFit = (next: AlbumPreviewFit) => {
+    setFit(next);
+    storeFit(next);
+  };
   const frameRef = useRef<HTMLDivElement>(null);
   /** Which request the sheet on screen belongs to. A slow reply for an older preset must not land
    *  on top of a newer one — the collector holding an arrow key down produces exactly that race. */
@@ -150,16 +179,18 @@ export function AlbumTemplatePreviewPanel({
     };
   }, [collectionId, albumId]);
 
-  // How wide the sheet may be drawn. A scale factor off the rendered frame — see the module header.
+  // How much room the sheet has. A scale factor off the rendered frame — see the module header. The
+  // frame is sized by the dialog, never by the sheet in it, so its height is the room and not the
+  // drawing; and the dialog is a size of the window, so a resized browser lands here too.
   useEffect(() => {
     const el = frameRef.current;
     if (!el) return;
     const observer = new ResizeObserver(([entry]) => {
-      setFrameWidth(entry.contentRect.width);
+      setFrame({ width: entry.contentRect.width, height: entry.contentRect.height });
     });
 
     observer.observe(el);
-    setFrameWidth(el.getBoundingClientRect().width);
+    setFrame({ width: el.clientWidth, height: el.clientHeight });
     return () => observer.disconnect();
   }, []);
 
@@ -204,31 +235,36 @@ export function AlbumTemplatePreviewPanel({
   }, [draw, revision]);
 
   const sheets = preview?.sheets ?? [];
-  const pageWidthMm = sheets[0]?.preset.pageWidthMm ?? 0;
-  const zoom =
-    frameWidth > 0 && pageWidthMm > 0
-      ? Math.min(MAX_ZOOM, (frameWidth - SHEET_CHROME_PX) / (pageWidthMm * PX_PER_MM))
-      : MAX_ZOOM;
+  const zoom = albumPreviewZoom({
+    fit,
+    frameWidth: frame.width,
+    frameHeight: frame.height,
+    pageWidthMm: sheets[0]?.preset.pageWidthMm ?? 0,
+    pageHeightMm: sheets[0]?.preset.pageHeightMm ?? 0,
+  });
 
   return (
     <div style={PANEL_STYLE}>
-      {!albumId && (
-        <select
-          aria-label="What the preview draws"
-          value={sourceKey}
-          onChange={(e) =>
-            setChosen(e.target.value ? { kind: "album", albumId: e.target.value } : { kind: "sample" })
-          }
-          style={CONTROL_STYLE}
-        >
-          <option value="">Sample page</option>
-          {albums.map((album) => (
-            <option key={album.id} value={album.id}>
-              {album.name}
-            </option>
-          ))}
-        </select>
-      )}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "0.75rem", flexShrink: 0 }}>
+        {!albumId && (
+          <select
+            aria-label="What the preview draws"
+            value={sourceKey}
+            onChange={(e) =>
+              setChosen(e.target.value ? { kind: "album", albumId: e.target.value } : { kind: "sample" })
+            }
+            style={{ ...CONTROL_STYLE, flex: 1, minWidth: 0 }}
+          >
+            <option value="">Sample page</option>
+            {albums.map((album) => (
+              <option key={album.id} value={album.id}>
+                {album.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <Segmented label="Fit" value={fit} onChange={chooseFit} options={[...ALBUM_PREVIEW_FITS]} />
+      </div>
 
       <div
         ref={frameRef}
@@ -241,13 +277,12 @@ export function AlbumTemplatePreviewPanel({
           // nothing to stop relying on.
           alignItems: "safe center",
           gap: "0.75rem",
+          // Everything the controls and the notes leave (#1453). The sheets scroll here rather than
+          // in the dialog: the fields beside this scroll on their own, and a preview that scrolled
+          // away while a margin was being typed would be a preview of nothing.
+          flex: 1,
           minWidth: 0,
-          // The sheets scroll here rather than in the dialog: the form beside this is long, and a
-          // preview that scrolled away while a margin was being typed would be a preview of nothing.
-          // This is what is left of the dialog's height under the source picker and above the notes.
-          // Written against the dialog's own height rather than the viewport's, or on a tall window
-          // the sheet runs past the bottom of the panel it is stuck to.
-          maxHeight: `calc(${dialogHeight} - 15rem)`,
+          minHeight: 0,
           overflowY: "auto",
           // Faded while a newer sheet is being planned, rather than replaced by a spinner: what is on
           // screen is still a true page, just of the preset as it was a moment ago.
@@ -278,34 +313,37 @@ export function AlbumTemplatePreviewPanel({
         )}
       </div>
 
-      {preview && (
-        <p style={NOTE_STYLE}>
-          {source.kind === "sample"
-            ? "A sample page, built from your own AlbumEasy files: four mount heights, a run that fills a row and starts a second, two short checklists sharing a band, a heading that wraps, and a souvenir sheet no strip fits."
-            : albumId
-              ? `${preview.albumName}, drawn under the values beside it. Nothing changes on the album until you save.`
-              : `${preview.albumName}, drawn under this template. Nothing is saved to it.`}
-        </p>
-      )}
-      {preview && preview.totalSheets > sheets.length + preview.printedSheets && (
-        <p style={NOTE_STYLE}>
-          Showing the first {sheets.length} of {preview.totalSheets} sheets.
-        </p>
-      )}
-      {preview && preview.printedSheets > 0 && (
-        <p style={NOTE_STYLE}>
-          {preview.printedSheets === 1 ? "One sheet is" : `${preview.printedSheets} sheets are`}{" "}
-          already printed and set in the template they were printed under, so they are not drawn
-          here.
-        </p>
-      )}
-      {preview?.emptyStock && (
-        <p style={WARN_STYLE}>
-          This collection has no hawid stock described, so every box is a pocket and the vertical
-          clearance changes nothing. Add strips above and the boxes take their real heights.
-        </p>
-      )}
-      {problem && <p style={WARN_STYLE}>Not redrawn: {problem}</p>}
+      {/* Kept to their own height, so the frame above is what gives way to a line appearing here. */}
+      <div style={NOTES_STYLE}>
+        {preview && (
+          <p style={NOTE_STYLE}>
+            {source.kind === "sample"
+              ? "A sample page, built from your own AlbumEasy files: four mount heights, a run that fills a row and starts a second, two short checklists sharing a band, a heading that wraps, and a souvenir sheet no strip fits."
+              : albumId
+                ? `${preview.albumName}, drawn under the values beside it. Nothing changes on the album until you save.`
+                : `${preview.albumName}, drawn under this template. Nothing is saved to it.`}
+          </p>
+        )}
+        {preview && preview.totalSheets > sheets.length + preview.printedSheets && (
+          <p style={NOTE_STYLE}>
+            Showing the first {sheets.length} of {preview.totalSheets} sheets.
+          </p>
+        )}
+        {preview && preview.printedSheets > 0 && (
+          <p style={NOTE_STYLE}>
+            {preview.printedSheets === 1 ? "One sheet is" : `${preview.printedSheets} sheets are`}{" "}
+            already printed and set in the template they were printed under, so they are not drawn
+            here.
+          </p>
+        )}
+        {preview?.emptyStock && (
+          <p style={WARN_STYLE}>
+            This collection has no hawid stock described, so every box is a pocket and the vertical
+            clearance changes nothing. Add strips above and the boxes take their real heights.
+          </p>
+        )}
+        {problem && <p style={WARN_STYLE}>Not redrawn: {problem}</p>}
+      </div>
     </div>
   );
 }

@@ -1115,6 +1115,19 @@ The dialog draws the page those numbers produce, next to the fields, and redraws
 while you type, not only once you leave the field. Nothing on it can be clicked or dragged — it is a
 picture of a sheet, not the page editor.
 
+**The dialog takes the whole window**, less a narrow margin, and every bit of room past what the
+fields need goes to the page; resize the browser and the page follows. The fields scroll on their
+own, so the page stays where it is while you work down a section. **Fit**, above the page, chooses
+how large it is drawn:
+
+- **Whole page** — the whole sheet in view, as large as it fits. Every mark is on screen without
+  scrolling to it, which is why this is where it starts.
+- **Page width** — as wide as the space beside the fields, scrolling down the sheet. Larger on a wide
+  screen, at the cost of the foot of the page being out of view until you scroll to it.
+
+Either way the page is never drawn larger than life, and the choice is remembered in this browser,
+for a template in Settings and an album's own values alike.
+
 **It marks what the field in hand controls.** Point at a field, or click into it, and the page shows
 what that value moves, before you change anything:
 

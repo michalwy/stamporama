@@ -1212,13 +1212,6 @@ export function AlbumScreen({
             }}
           >
             <DialogBody>
-              <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "48rem" }}>
-                These are <strong>this album&apos;s own</strong> values, copied from a template when
-                it was made. Changing them here changes this album only: the template in Settings is
-                not touched, and no other album is. Unprinted sheets are re-planned under the new
-                values; printed cards stay exactly as printed and report the difference — you are
-                told how many before anything is saved.
-              </p>
               <AlbumPresetForm
                 collectionId={album.collectionId}
                 preset={album}
@@ -1227,6 +1220,16 @@ export function AlbumScreen({
                 formRef={presetFormRef}
                 previewAlbumId={album.id}
                 sampleLanguage={album.language}
+                // In the fields' column, so the preview beside it keeps the dialog's whole height.
+                intro={
+                  <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, flexShrink: 0 }}>
+                    These are <strong>this album&apos;s own</strong> values, copied from a template when
+                    it was made. Changing them here changes this album only: the template in Settings is
+                    not touched, and no other album is. Unprinted sheets are re-planned under the new
+                    values; printed cards stay exactly as printed and report the difference — you are
+                    told how many before anything is saved.
+                  </p>
+                }
               />
             </DialogBody>
             <DialogActions
