@@ -167,7 +167,7 @@ export function PhotoMeasureDialog({
           subject="photo"
           onSize={setReading}
           onSnapshotSaved={() => router.refresh()}
-          minPictureHeight="0"
+          largeWindow
         />
 
         {/* The write (#1290), under the viewer and only while a size stands on it: measuring and
