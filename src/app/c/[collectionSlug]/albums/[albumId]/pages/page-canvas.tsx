@@ -19,7 +19,8 @@ import { albumBoxFlag, type AlbumBoxFlag } from "@/lib/album-box-flag";
 import { albumFrame } from "@/lib/album-frame";
 import type { AlbumRect } from "@/lib/album-layout";
 import { albumOrnamentPathData, type AlbumOrnamentDrawing } from "@/lib/album-ornament-svg";
-import type { AlbumRenderPreset } from "@/lib/album-template-rules";
+import { ALBUM_MM_DECIMALS, type AlbumRenderPreset } from "@/lib/album-template-rules";
+import type { AlbumFieldMark } from "@/lib/album-field-marks";
 import {
   isBoxSelected,
   toggleBoxSelection,
@@ -95,6 +96,9 @@ const GUIDE = "#dcdcdc";
 /** Selection and the handles that are dragged. Blue because nothing else on a page is: it can never
  *  be mistaken for ink. */
 const HANDLE = "#2563eb";
+/** What the Page template dialog's field in hand controls (#1431). Not the handle's blue: the preview
+ *  draws a real album's corrected boxes in blue, and a mark must not read as one of them. */
+const MARK = "#c026d3";
 
 /**
  * What a box is flagged for, in the order the flags are worth reading.
@@ -298,6 +302,8 @@ interface AlbumPageCanvasInteractive extends AlbumPageCanvasBase {
  */
 interface AlbumPageCanvasStatic extends AlbumPageCanvasBase {
   interactive: false;
+  /** What the Page template dialog's field in hand controls on this sheet (#1431), drawn over it. */
+  marks?: readonly AlbumFieldMark[];
 }
 
 type AlbumPageCanvasProps = AlbumPageCanvasInteractive | AlbumPageCanvasStatic;
@@ -903,7 +909,98 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
           onStartDrag={startDrag}
         />
       )}
+
+      {props.interactive === false && props.marks && props.marks.length > 0 && (
+        <FieldMarks marks={props.marks} pageWidthMm={preset.pageWidthMm} />
+      )}
     </svg>
+  );
+}
+
+/**
+ * The Page template dialog's marks (#1431), drawn over the sheet: a dimension line with its value for
+ * a distance, an outline for an element. Where they go is `album-field-marks.ts`'s answer from the
+ * placed geometry; this only paints it, last, so nothing on the sheet covers it.
+ */
+function FieldMarks({
+  marks,
+  pageWidthMm,
+}: {
+  marks: readonly AlbumFieldMark[];
+  pageWidthMm: number;
+}) {
+  const TICK = 1.6;
+  const text = {
+    fontSize: 3.2,
+    fontWeight: 600,
+    fill: MARK,
+    // A white halo, so the figure reads over ink and rules alike.
+    stroke: PAPER,
+    strokeWidth: 0.9,
+    paintOrder: "stroke" as const,
+    style: { fontFamily: "system-ui, sans-serif" },
+  };
+  return (
+    <g pointerEvents="none">
+      {marks.map((mark, i) => {
+        if (mark.kind === "outline") {
+          // Outset, so the outline does not sit on a box's own rule and hide it.
+          const r = mark.rect;
+          return (
+            <rect
+              key={i}
+              x={r.xMm - 0.8}
+              y={r.yMm - 0.8}
+              width={r.widthMm + 1.6}
+              height={r.heightMm + 1.6}
+              fill={MARK}
+              fillOpacity={0.07}
+              stroke={MARK}
+              strokeWidth={0.45 * MM}
+            />
+          );
+        }
+        const label = `${Number(mark.valueMm.toFixed(ALBUM_MM_DECIMALS))} mm`;
+        const mid = (mark.fromMm + mark.toMm) / 2;
+        if (mark.axis === "x") {
+          return (
+            <g key={i}>
+              <line x1={mark.fromMm} y1={mark.atMm} x2={mark.toMm} y2={mark.atMm} stroke={MARK} strokeWidth={0.4 * MM} />
+              {[mark.fromMm, mark.toMm].map((x, j) => (
+                <line key={j} x1={x} y1={mark.atMm - TICK} x2={x} y2={mark.atMm + TICK} stroke={MARK} strokeWidth={0.4 * MM} />
+              ))}
+              <text
+                x={mid}
+                y={mark.atMm < 6 ? mark.atMm + TICK + 3.4 : mark.atMm - TICK - 0.8}
+                textAnchor="middle"
+                {...text}
+              >
+                {label}
+              </text>
+            </g>
+          );
+        }
+        // Beside the line, on whichever side has the room.
+        const leftward = mark.atMm > pageWidthMm - 22;
+        return (
+          <g key={i}>
+            <line x1={mark.atMm} y1={mark.fromMm} x2={mark.atMm} y2={mark.toMm} stroke={MARK} strokeWidth={0.4 * MM} />
+            {[mark.fromMm, mark.toMm].map((y, j) => (
+              <line key={j} x1={mark.atMm - TICK} y1={y} x2={mark.atMm + TICK} y2={y} stroke={MARK} strokeWidth={0.4 * MM} />
+            ))}
+            <text
+              x={leftward ? mark.atMm - TICK - 0.8 : mark.atMm + TICK + 0.8}
+              y={mid}
+              textAnchor={leftward ? "end" : "start"}
+              dominantBaseline="middle"
+              {...text}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+    </g>
   );
 }
 
