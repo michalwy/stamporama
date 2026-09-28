@@ -6,7 +6,7 @@ import {
   type AlbumBoxData,
   type AlbumPlanPage,
 } from "./album-plan";
-import { planAlbumPages, type AlbumPlan } from "./album-layout";
+import { albumPlacedFooter, planAlbumPages, type AlbumPlan } from "./album-layout";
 import { albumTextMetrics } from "./album-metrics";
 import { liveSheet, type AlbumEditorSheet, type AlbumSheetSource } from "./album-editor";
 import { renderAlbumText, type AlbumRenderPreset } from "./album-template-rules";
@@ -162,7 +162,7 @@ function finishSamplePages(
     return {
       range,
       layout: page,
-      footer: text ? { role: "footer", lines: [text], ...page.footer } : null,
+      footer: text ? albumPlacedFooter(preset, page.footer, text, albumTextMetrics) : null,
     };
   });
 }

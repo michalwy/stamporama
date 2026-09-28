@@ -92,6 +92,11 @@ built-in redrawn by a later build, or an upload deleted, never reaches a card.
   the title gives its line back to the content — so the plan places the title (on the centre line of
   §3) and `album-frame.ts` only breaks the rules around the rectangle it is handed, which for a printed
   card is the card's own. The frame module still decides nothing about the plan.
+- **Amended by #1457**: the footer can be set into the bottom line by the same rule, or placed inside
+  or below the frame at an offset from it. `album-frame.ts` reports the frame's inner and outer edges
+  and breaks the bottom rule around the footer as rendered — its text's width, which only the plan's
+  finish knows — and the plan does the placing. A rule broken at both ends is two strokes, each with
+  its corners joined.
 - A preset's comparison stays a comparison of primitives, so the divergence report needed nothing new.
 - A drawing too detailed (4 000 paths, 120 000 commands) or a file over 1 MB is refused at the upload,
   so a card's snapshot cannot grow by megabytes.

@@ -1007,6 +1007,15 @@ model AlbumTemplate {
   // of white each side. Layout: the title then takes no band of its own.
   titlePlacement  String @default("below-frame")
   titleFrameGapMm Float  @default(5)
+  // Where the page footer sits (#1457), positioned on its own rather than as the foot of the
+  // content: `inside-frame`, every page printed before this existed; `in-frame`, set into the
+  // frame's bottom line as the title is into the top one, `footerFrameGapMm` of white each side; or
+  // `below-frame`, between the frame and the paper's edge. `footerOffsetMm` is measured from the
+  // frame's line — up to the footer's foot inside it, down to its head below it. A page with no rule
+  // sets the footer on the bottom margin whichever is chosen.
+  footerPlacement  String @default("inside-frame")
+  footerOffsetMm   Float
+  footerFrameGapMm Float  @default(5)
 
   // ── Spacing ──
   // Between boxes, horizontally and vertically; then the space a checklist heading reserves above
@@ -1192,6 +1201,9 @@ model Album {
   verticalPlacement String @default("top")
   titlePlacement    String @default("below-frame")
   titleFrameGapMm   Float  @default(5)
+  footerPlacement   String @default("inside-frame")
+  footerOffsetMm    Float
+  footerFrameGapMm  Float  @default(5)
 
   boxGapXMm           Float
   boxGapYMm           Float

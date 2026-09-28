@@ -23,7 +23,7 @@
 // somewhere plausible would not be.
 
 import type { AlbumRect, AlbumTextRole } from "./album-layout";
-import { albumFrameCentreMm, albumTitleInFrame } from "./album-frame";
+import { albumFooterInFrame, albumFrameCentreMm, albumHasRule, albumTitleInFrame } from "./album-frame";
 import type { AlbumRenderPreset } from "./album-template-rules";
 
 export type AlbumPresetField = keyof AlbumRenderPreset;
@@ -60,6 +60,9 @@ export const ALBUM_PRESET_SECTIONS = [
       "frameOrnamentSizeMm",
       "titlePlacement",
       "titleFrameGapMm",
+      "footerPlacement",
+      "footerOffsetMm",
+      "footerFrameGapMm",
     ],
   },
   {
@@ -379,6 +382,27 @@ export function albumFieldMarks(field: AlbumPresetField, sheet: AlbumMarkSheet):
       return [
         distance("x", sheet.title.xMm - p.titleFrameGapMm, p.titleFrameGapMm, middleY(sheet.title)),
         distance("x", right(sheet.title), p.titleFrameGapMm, middleY(sheet.title)),
+      ];
+    case "footerPlacement":
+      return footerOutline();
+    case "footerOffsetMm": {
+      // Up from the rule's inside to the footer's foot, or down from its outside to the footer's
+      // head (#1457). In the frame line, and on a sheet with no rule, it places nothing.
+      const footer = sheet.footer;
+      if (!footer || !albumHasRule(p)) return [];
+      if (p.footerPlacement === "inside-frame") {
+        return [distance("y", bottom(footer), p.footerOffsetMm, middleX(footer))];
+      }
+      if (p.footerPlacement === "below-frame") {
+        return [distance("y", footer.yMm - p.footerOffsetMm, p.footerOffsetMm, middleX(footer))];
+      }
+      return [];
+    }
+    case "footerFrameGapMm":
+      if (!sheet.footer || !albumFooterInFrame(p)) return [];
+      return [
+        distance("x", sheet.footer.xMm - p.footerFrameGapMm, p.footerFrameGapMm, middleY(sheet.footer)),
+        distance("x", right(sheet.footer), p.footerFrameGapMm, middleY(sheet.footer)),
       ];
 
     // ── Headings ──

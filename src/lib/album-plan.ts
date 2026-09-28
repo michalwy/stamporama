@@ -47,6 +47,7 @@ import { getAlbumPrintedIndex, type AlbumPrintedIndex } from "./album-printed-pa
 import { albumPlanFingerprint } from "./album-print-rules";
 import { albumComparableFreeElements, type AlbumComparablePage } from "./album-divergence";
 import {
+  albumPlacedFooter,
   planAlbumPages,
   type AlbumPlan,
   type AlbumBoxSpec,
@@ -496,7 +497,7 @@ export async function albumPlanContext(
           // wrap would make the height of the page's content depend on the page's own contents — the
           // plan would be solving for its own output. A footer too long for the sheet overhangs,
           // visibly.
-          footer = text ? { role: "footer", lines: [text], ...page.footer } : null;
+          footer = text ? albumPlacedFooter(album, page.footer, text, albumTextMetrics) : null;
         }
         return { range, layout: page, footer };
       }),

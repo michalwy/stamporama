@@ -391,7 +391,7 @@ apply, unchanged — see `agent-api.md`, *Stamp sizes and presets*.
 
 ## The album and its page plan (#767, ADR-0045)
 
-`Album` is anchored on a `CollectionArea`, carries a name, a language and the 46 render columns
+`Album` is anchored on a `CollectionArea`, carries a name, a language and the 51 render columns
 copied from a template, and holds `AlbumEntry` rows — **checklists** (#531, ADR-0031), gathered from
 that area's subtree in catalog order. A checklist with no issue has no area and cannot be gathered;
 it is added by hand, and that is the only exception in the model.
@@ -1340,6 +1340,44 @@ What is worth not re-deriving:
   notches at the corners. Without a gap it is still `rects`, byte for byte what it was.
 - **Divergence is the ordinary preset comparison** — the labels derive to *Title placement* and *Title
   frame gap (mm)*. A card stored before #1428 reads `below-frame` and 5, the migration's values.
+
+### The footer placed on its own (#1457)
+
+`footerPlacement` (`inside-frame` | `in-frame` | `below-frame`), `footerOffsetMm` and
+`footerFrameGapMm` are template values, in the *Frame* section. Raised because the only way to print
+the footer below the frame was a bottom margin smaller than the frame's inset, and #1419's placement
+then spread the content down to the frame: the footer was the foot of the content, so moving it moved
+the content area. What is worth not re-deriving:
+
+- **The offset is measured from the frame's line, not from the margin** — the collector's call on
+  2026-09-28, asked as the one open point of the issue. Inside: up from the inner rule's inside
+  (`albumFrameInnerEdgeMm`) to the footer's foot. Below: down from the outer rule's outside
+  (`albumFrameOuterEdgeMm`) to its head. In the line it is not read. So a margin moves the content and
+  never the footer.
+- **One rule for the content's foot, whatever the placement**: `min(bottom margin, footer's head)`.
+  Inside the frame that is the footer "reserving its own height" — today's case, the footer's head
+  above the margin; below the frame and in the line it is only a guard, and the content area is the
+  page less its margins. A footer inside the frame that sits in the margin takes nothing.
+- **Today reproduced by migrating a per-row offset**, not by a special case: the migration gives each
+  template and album `marginBottomMm − innerEdge` (rounded to hundredths, floored at 0), which puts
+  the footer's foot back on the bottom margin. `albumFooterOffsetFromMarginMm` is the same arithmetic,
+  and `parseAlbumSnapshot` gives a card stored before #1457 its offset through it from the card's own
+  preset — a constant would report a divergence on every card whose album has another margin. A row
+  that used the smaller-margin workaround gets 0 and re-plans (its footer comes inside the frame): its
+  live pages were the ones the issue says are wrong, and its printed cards do not move.
+- **No rule means the margin, as before**, whichever placement: `albumHasRule` is the one predicate —
+  ornaments alone are not a line, as for the title.
+- **In the frame line the footer's rectangle is its text's width**, centred on the sheet, and only the
+  plan's `finish` can know it — the text names the page's range, rendered after the page is closed.
+  `albumPlacedFooter` (`album-layout.ts`) is the one function both finishes (`album-plan.ts`,
+  `album-preview.ts`) render through; inside and below it keeps the content-wide band byte for byte.
+  The renderers hand the **rendered** footer to `albumFrame`, never the plan's band, and a printed
+  card's is its snapshot's.
+- **A rule broken at top and bottom is two strokes** (`brokenRule` in `album-frame.ts`), down the right
+  side and up the left, each with its corners mitred. The walk starts after the first gap, so with
+  only the top broken it is still #1428's single stroke, point for point.
+- **Divergence is the ordinary preset comparison** — *Footer placement*, *Footer offset (mm)*,
+  *Footer frame gap (mm)*.
 
 ## Pages without stamps (#1429, ADR-0058)
 

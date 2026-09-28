@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { planAlbumPages } from "../../src/lib/album-layout";
+import { albumPlacedFooter, planAlbumPages } from "../../src/lib/album-layout";
 import { albumTextMetrics } from "../../src/lib/album-metrics";
 import { albumFrame } from "../../src/lib/album-frame";
 import {
@@ -294,6 +294,35 @@ describe("what a field marks on the preview", () => {
 
     const [below] = sheets({ ...over, titlePlacement: "below-frame" });
     assert.deepEqual(albumFieldMarks("titleFrameGapMm", below), []);
+  });
+
+  it("measures the footer's offset from the frame's line it is set against (#1457)", () => {
+    // Inside: up from the double rule's inside (6.8 mm from the edge) to the footer's foot.
+    const [inside] = sheets({ footerOffsetMm: 4 });
+    const up = only(albumFieldMarks("footerOffsetMm", inside));
+    near(up.fromMm, bottom(inside.footer!), "the offset starts on the footer's foot");
+    near(up.toMm, 297 - 6.8, "and ends on the rule's inside");
+    // Below: down from the outer rule's outside (4.8 mm) to the footer's head.
+    const [below] = sheets({ footerPlacement: "below-frame", footerOffsetMm: 2 });
+    const down = only(albumFieldMarks("footerOffsetMm", below));
+    near(down.fromMm, 297 - 4.8, "the offset starts on the rule's outside");
+    near(down.toMm, below.footer!.yMm, "and ends on the footer's head");
+    // In the line, and with no rule, the offset places nothing.
+    assert.deepEqual(albumFieldMarks("footerOffsetMm", sheets({ footerPlacement: "in-frame" })[0]), []);
+    assert.deepEqual(albumFieldMarks("footerOffsetMm", sheets({ borderStyle: "none" })[0]), []);
+    assert.equal(albumFieldMarks("footerPlacement", inside).length, 1);
+  });
+
+  it("spaces a footer in the frame line from the rule (#1457)", () => {
+    const [sheet] = sheets({ footerPlacement: "in-frame", footerFrameGapMm: 3 });
+    // The preview's footer is its text, narrowed as the plan's finish narrows it.
+    const footer = albumPlacedFooter(sheet.preset, sheet.footer!, "PL 1-19", albumTextMetrics);
+    const gaps = albumFieldMarks("footerFrameGapMm", { ...sheet, footer });
+    assert.equal(gaps.length, 2);
+    const [left, rightGap] = gaps as Extract<AlbumFieldMark, { kind: "distance" }>[];
+    near(left.toMm, footer.xMm, "the left gap ends on the footer");
+    near(rightGap.fromMm, right(footer), "the right gap starts after it");
+    assert.deepEqual(albumFieldMarks("footerFrameGapMm", sheets()[0]), []);
   });
 
   it("outlines every text a face reaches, and nothing else", () => {

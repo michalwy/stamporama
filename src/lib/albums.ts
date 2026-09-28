@@ -12,6 +12,7 @@ import {
   asAlbumBoxBorderStyle,
   asAlbumLabelPosition,
   asAlbumTitlePlacement,
+  asAlbumFooterPlacement,
   asAlbumVerticalPlacement,
   asAlbumPagePlacement,
   albumRenderPreset,
@@ -105,6 +106,9 @@ const PRESET_SELECT = {
   verticalPlacement: true,
   titlePlacement: true,
   titleFrameGapMm: true,
+  footerPlacement: true,
+  footerOffsetMm: true,
+  footerFrameGapMm: true,
   boxGapXMm: true,
   boxGapYMm: true,
   headingSpaceAboveMm: true,
@@ -161,7 +165,7 @@ export interface AlbumData extends AlbumRenderPreset {
   dismissedNameSuggestion: string | null;
 }
 
-/** The five choice columns come back as `string`; everything else is already its own type. */
+/** The six choice columns come back as `string`; everything else is already its own type. */
 function toAlbumData(row: AlbumRow): AlbumData {
   return {
     ...row,
@@ -170,6 +174,7 @@ function toAlbumData(row: AlbumRow): AlbumData {
     labelPosition: asAlbumLabelPosition(row.labelPosition),
     verticalPlacement: asAlbumVerticalPlacement(row.verticalPlacement),
     titlePlacement: asAlbumTitlePlacement(row.titlePlacement),
+    footerPlacement: asAlbumFooterPlacement(row.footerPlacement),
   };
 }
 
@@ -266,6 +271,7 @@ export async function createAlbum(
       labelPosition: asAlbumLabelPosition(template.labelPosition),
       verticalPlacement: asAlbumVerticalPlacement(template.verticalPlacement),
       titlePlacement: asAlbumTitlePlacement(template.titlePlacement),
+      footerPlacement: asAlbumFooterPlacement(template.footerPlacement),
     };
   }
 

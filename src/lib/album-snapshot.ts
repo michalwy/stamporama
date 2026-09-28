@@ -56,6 +56,7 @@ import type {
   AlbumPlacedText,
   AlbumPlannedPage,
 } from "./album-layout";
+import { albumFooterOffsetFromMarginMm } from "./album-frame";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import type { AlbumRenderPreset } from "./album-template-rules";
 
@@ -257,7 +258,9 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   // ornament, and its double rule was drawn 1.2 mm apart — the gap the PDF used before it was a
   // value. The size is the migration's default, so an album that also has none reports nothing.
   // One stored before #1428 printed its title below the frame, and the gap is the migration's
-  // default for the same reason.
+  // default for the same reason. One stored before #1457 printed its footer on the bottom margin,
+  // inside the frame: it reads the offset the migration gave its album, worked out from the card's
+  // own margin and frame, so a card whose album has not moved reports nothing.
   const stored = snapshot as AlbumPageSnapshot;
   const preset = stored.preset;
   if (
@@ -272,11 +275,15 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
     preset.frameOrnamentSizeMm !== undefined &&
     preset.titlePlacement !== undefined &&
     preset.titleFrameGapMm !== undefined &&
+    preset.footerPlacement !== undefined &&
+    preset.footerOffsetMm !== undefined &&
+    preset.footerFrameGapMm !== undefined &&
     stored.frameOrnament !== undefined &&
     stored.page.placement !== undefined
   ) {
     return stored;
   }
+  const borderGapMm = preset.borderGapMm ?? 1.2;
   return {
     ...stored,
     preset: {
@@ -287,11 +294,14 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
       titleSpaceBelowMm: preset.titleSpaceBelowMm ?? 0,
       chapterSpaceAboveMm: preset.chapterSpaceAboveMm ?? preset.headingSpaceAboveMm,
       chapterSpaceBelowMm: preset.chapterSpaceBelowMm ?? preset.headingSpaceBelowMm,
-      borderGapMm: preset.borderGapMm ?? 1.2,
+      borderGapMm,
       frameOrnament: preset.frameOrnament ?? "none",
       frameOrnamentSizeMm: preset.frameOrnamentSizeMm ?? 25,
       titlePlacement: preset.titlePlacement ?? "below-frame",
       titleFrameGapMm: preset.titleFrameGapMm ?? 5,
+      footerPlacement: preset.footerPlacement ?? "inside-frame",
+      footerOffsetMm: preset.footerOffsetMm ?? albumFooterOffsetFromMarginMm({ ...preset, borderGapMm }),
+      footerFrameGapMm: preset.footerFrameGapMm ?? 5,
     },
     frameOrnament: stored.frameOrnament ?? null,
     page: { ...stored.page, placement: stored.page.placement ?? "top" },

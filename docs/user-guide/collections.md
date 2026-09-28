@@ -1061,7 +1061,9 @@ down its left side, and shows one at a time:
   The frame is drawn in the margin and never moves a series; see *The page frame* in the albums
   guide. The **album title** can be printed below the frame or set **in the frame line**, which
   breaks around it with the gap you set on each side — that one does move series, because the title
-  stops taking a line of its own.
+  stops taking a line of its own. The **footer** can sit inside the frame, in its bottom line or below
+  it, at an offset from the frame you set; the margins, not the footer, decide the space the series
+  are spread over.
 - **Headings** — whether the album title is printed as a **running head** on every page (your
   Polska, Bohemia, Bayern and Deutsches Reich pages carry one and your Dansk pages do not, and the
   ones that do not get those millimetres back for content), and the space **above and below the

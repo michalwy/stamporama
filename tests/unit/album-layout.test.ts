@@ -4,6 +4,7 @@ import {
   albumBandOffsetsMm,
   albumContinuationHeading,
   albumEffectivePlacement,
+  albumPlacedFooter,
   planAlbumPages,
   wrapAlbumText,
   type AlbumBlockSpec,
@@ -1962,5 +1963,161 @@ describe("planAlbumPages and a title set into the frame line (#1428)", () => {
     assert.deepEqual(sheets({ titlePlacement: "in-frame" }), [
       ["b0", "b1", "b2", "b3", "b4", "b5"],
     ]);
+  });
+});
+
+describe("planAlbumPages and a footer placed on its own (#1457)", () => {
+  // A4 with 10 mm margins and his double rule: inset 5, 0.4 mm heavy, 1.2 mm between — the frame's
+  // inside is 6.8 mm from the edge, its outside 4.8, its centre line 5.8. The footer is 8 pt, a 4 mm
+  // line in the stand-in measurer.
+  const series = (entryId: string): AlbumBlockSpec => ({
+    entryId,
+    heading: "A",
+    boxes: [box(190, 30)],
+    printedPageIds: null,
+  });
+  const sheet = (over: Partial<AlbumRenderPreset> = {}, blocks = [series("a"), series("b")]) => {
+    const pages = live(planAlbumPages([chapter("y", "", blocks)], preset(over), "Polska", metrics).pages);
+    assert.equal(pages.length, 1);
+    return pages[0];
+  };
+  const contentBottom = (page: ReturnType<typeof sheet>) => page.content.yMm + page.content.heightMm;
+
+  it("defaults to inside the frame, its foot on the bottom margin exactly as before", () => {
+    assert.equal(DEFAULT_ALBUM_PRESET.footerPlacement, "inside-frame");
+    assert.equal(DEFAULT_ALBUM_PRESET.footerOffsetMm, 3.2);
+    assert.equal(DEFAULT_ALBUM_PRESET.footerFrameGapMm, 5);
+    const page = sheet();
+    assert.deepEqual(page.footer, { xMm: 10, yMm: 283, widthMm: 190, heightMm: 4 });
+    assert.equal(contentBottom(page), 283);
+    // A sheet with no rule sets the footer on the margin, which is where the offset puts it here.
+    assert.deepEqual(sheet({ borderStyle: "none" }), page);
+  });
+
+  it("inside the frame, stands the footer's foot the offset above the rule and keeps the content clear of it", () => {
+    const page = sheet({ footerOffsetMm: 5 });
+    assert.equal(page.footer!.yMm + page.footer!.heightMm, 297 - 6.8 - 5);
+    assert.equal(contentBottom(page), page.footer!.yMm);
+    // Lower, the footer still reaches above the 287 mm margin, and the content still stops on it.
+    const low = sheet({ footerOffsetMm: 0 });
+    assert.equal(low.footer!.yMm, 297 - 6.8 - 4);
+    assert.equal(contentBottom(low), low.footer!.yMm);
+  });
+
+  it("takes nothing from the content when the footer sits in the margin", () => {
+    // A 20 mm bottom margin ends the content at 277; the footer at 286.2 is below it.
+    const page = sheet({ marginBottomMm: 20, footerOffsetMm: 0 });
+    assert.equal(page.footer!.yMm, 286.2);
+    assert.equal(contentBottom(page), 277);
+  });
+
+  it("below the frame, sets the footer's head the offset under the rule, and the margins alone bound the content", () => {
+    const page = sheet({ footerPlacement: "below-frame", footerOffsetMm: 1 });
+    assert.equal(page.footer!.yMm, 297 - 4.8 + 1);
+    assert.equal(page.footer!.heightMm, 4);
+    assert.equal(contentBottom(page), 287);
+    // The offset moves the footer and nothing else.
+    const further = sheet({ footerPlacement: "below-frame", footerOffsetMm: 2 });
+    assert.equal(further.footer!.yMm, page.footer!.yMm + 1);
+    assert.deepEqual(further.content, page.content);
+    assert.deepEqual(further.boxes, page.boxes);
+  });
+
+  it("in the frame line, centres the footer on the bottom rule's centre line and reserves nothing", () => {
+    const page = sheet({ footerPlacement: "in-frame" });
+    assert.equal(page.footer!.yMm + page.footer!.heightMm / 2, 297 - 5.8);
+    assert.equal(contentBottom(page), 287);
+    // The offset is not read there.
+    assert.deepEqual(sheet({ footerPlacement: "in-frame", footerOffsetMm: 30 }), page);
+    // A single rule's centre line is the rule.
+    const single = sheet({ footerPlacement: "in-frame", borderStyle: "single" });
+    assert.equal(single.footer!.yMm + single.footer!.heightMm / 2, 297 - 5);
+  });
+
+  it("sets the footer on the bottom margin on a sheet with no rule, whichever placement is chosen", () => {
+    for (const over of [{ borderStyle: "none" as const }, { borderWidthMm: 0 }]) {
+      const today = sheet(over);
+      for (const footerPlacement of ["in-frame", "below-frame"] as const) {
+        assert.deepEqual(sheet({ ...over, footerPlacement, footerOffsetMm: 7 }), today);
+      }
+    }
+  });
+
+  it("spreads justified content over the content area alone, the same whichever placement", () => {
+    // Below the frame and in its line the content ends on the 287 mm margin; inside, on the
+    // footer's head. Either way the last series ends on the content's own bottom edge, and under
+    // center + justify there is as much above the first series as below the last.
+    for (const footerPlacement of ["inside-frame", "in-frame", "below-frame"] as const) {
+      const page = sheet({ footerPlacement, verticalPlacement: "justify" }, [
+        series("a"),
+        series("b"),
+        series("c"),
+      ]);
+      const last = page.boxes[page.boxes.length - 1];
+      assert.equal(last.yMm + last.heightMm, contentBottom(page), footerPlacement);
+
+      const even = sheet({ footerPlacement, verticalPlacement: "center-justify" });
+      const above = even.headings[0].yMm - 8 - even.content.yMm;
+      const lastBox = even.boxes[even.boxes.length - 1];
+      const below = contentBottom(even) - (lastBox.yMm + lastBox.heightMm);
+      assert.ok(Math.abs(above - below) < 0.11, `${footerPlacement}: ${above} above, ${below} below`);
+    }
+  });
+
+  it("no longer makes a smaller margin the way to print below the frame", () => {
+    // The old workaround: a 3 mm margin put the footer under the frame and spread the content down
+    // to 290 mm. Below the frame, a 10 mm margin keeps the content where the margin says.
+    assert.equal(contentBottom(sheet({ footerPlacement: "below-frame" })), 287);
+    assert.equal(contentBottom(sheet({ footerPlacement: "below-frame", marginBottomMm: 3 })), 294);
+  });
+
+  it("re-plans the sheets: the room a footer below the frame gives back can bring a block onto an earlier sheet", () => {
+    // The content runs from 23 mm (under the 13 mm title) to the footer's head at 283: 260 mm. Six
+    // heading-less checklists of a 37.5 mm box take 43.5 mm each, 261 in all — one too many. With
+    // the footer below the frame the content runs to the 287 mm margin, and they fit.
+    const six = Array.from({ length: 6 }, (_, i) => block(`b${i}`, "", [box(190, 37.5)]));
+    const sheets = (over: Partial<AlbumRenderPreset>) =>
+      live(planAlbumPages([chapter("y", "", six)], preset(over), "Polska", metrics).pages).map((p) =>
+        p.blocks.map((b) => b.entryId)
+      );
+    assert.equal(sheets({}).length, 2);
+    assert.equal(sheets({ footerPlacement: "below-frame" }).length, 1);
+  });
+});
+
+describe("albumPlacedFooter (#1457)", () => {
+  const band = { xMm: 10, yMm: 289.2, widthMm: 190, heightMm: 4 };
+
+  it("renders the text into the band inside and below the frame", () => {
+    for (const footerPlacement of ["inside-frame", "below-frame"] as const) {
+      assert.deepEqual(albumPlacedFooter(preset({ footerPlacement }), band, "PL 1-19", metrics), {
+        role: "footer",
+        lines: ["PL 1-19"],
+        ...band,
+      });
+    }
+  });
+
+  it("in the frame line, narrows the rectangle to the text and centres it on the sheet", () => {
+    // Seven characters at 8 pt: 5.6 mm.
+    const placed = albumPlacedFooter(preset({ footerPlacement: "in-frame" }), band, "PL 1-19", metrics);
+    assert.deepEqual(placed, {
+      role: "footer",
+      lines: ["PL 1-19"],
+      xMm: (210 - 5.6) / 2,
+      yMm: 289.2,
+      widthMm: 5.6,
+      heightMm: 4,
+    });
+  });
+
+  it("keeps the band on a sheet with no rule to set it into", () => {
+    const placed = albumPlacedFooter(
+      preset({ footerPlacement: "in-frame", borderStyle: "none" }),
+      band,
+      "PL 1-19",
+      metrics
+    );
+    assert.equal(placed.widthMm, 190);
   });
 });

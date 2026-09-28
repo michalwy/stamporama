@@ -235,14 +235,16 @@ function drawText(
 
 /** The page's frame (#766, #1427): its rules, and an ornament at each corner when it has one — all
  *  of it placed by `album-frame.ts`, which the canvas draws from too, the top rule broken around a
- *  title set into it (#1428). Nothing here decides where anything goes. */
+ *  title set into it (#1428) and the bottom one around a footer (#1457). Nothing here decides where
+ *  anything goes. */
 function drawFrame(
   page: PDFPage,
   preset: AlbumRenderPreset,
   ornament: AlbumOrnamentDrawing | null,
-  title: AlbumRect | null
+  title: AlbumRect | null,
+  footer: AlbumRect | null
 ) {
-  const frame = albumFrame(preset, ornament, title);
+  const frame = albumFrame(preset, ornament, title, footer);
   for (const rect of frame.rects) strokeRect(page, preset, rect, frame.lineMm);
   for (const points of frame.paths) {
     // One stroke with mitred joins, so its corners meet as a rectangle's do; butt ends at the gap.
@@ -519,7 +521,8 @@ export async function renderAlbumPdf(
     const { preset, page: layout } = sheet;
     const page = doc.addPage([preset.pageWidthMm * MM_TO_PT, preset.pageHeightMm * MM_TO_PT]);
 
-    drawFrame(page, preset, sheet.frameOrnament, layout.title);
+    // The footer as rendered, not the band: set into the frame line, it is its text's width (#1457).
+    drawFrame(page, preset, sheet.frameOrnament, layout.title, sheet.footer);
     if (layout.title) drawText(page, preset, layout.title, fontFor);
     if (layout.chapter) drawText(page, preset, layout.chapter, fontFor);
 

@@ -152,6 +152,32 @@ instead, with the **space below the album title** between them; the space *above
 used, since the name sits on the line. A page with **no border** has nothing to break, and the name is
 printed below as before. A printed card keeps the name where it was printed and reports the change.
 
+#### The footer: inside, in or below the frame
+
+**Footer** under *Frame* chooses where the footer — the page's catalog range, *PL 303-309* — is
+printed. It is placed **from the frame**, on its own, so wherever it goes the series are spread over
+the same space: the page less its margins.
+
+- **Inside the frame** — at the foot of the framed area, where it has always been and still the
+  default. **Footer offset from the frame** is the space from the frame's inside (the inner edge of
+  the inner rule) up to the foot of the footer. An existing album was given exactly the offset that
+  keeps its footer where it was printed.
+- **In the frame line** — the bottom rule breaks around the footer as the top one does around the
+  album title: centred on the page and on the line, with **Gap around the footer in the line** of
+  white on each side. Both rules of a double one break, with or without corner ornaments.
+- **Below the frame** — in the margin between the frame and the paper's edge. The offset is then the
+  space from the frame's outside (the outer edge of the outer rule) down to the top of the footer.
+
+The **margins alone decide where the series go**: the space ends on the bottom margin, so a footer
+below the frame or in its line takes nothing from it, and *justified* and *centred and justified*
+leave the foot of the page as even as its head. The one exception keeps a footer readable: a footer
+inside the frame that reaches above the bottom margin keeps the series clear of it, and the space ends
+on its top. You no longer need a bottom margin smaller than the frame to print the footer below it —
+and an album that did that now spreads its series to its margin, so set the footer *below the frame*
+and the margin back to what it should be. A page with **no border** prints the footer on the bottom
+margin, as before, whichever you choose. A printed card keeps its footer where it was printed and
+reports the change.
+
 ## The language is the album's own, and it changes the plan
 
 An album is printed in one language. Names, checklist headings and everything else resolve to that
