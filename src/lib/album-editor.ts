@@ -11,7 +11,10 @@ import {
   type AlbumBoxData,
   type AlbumPlanContext,
   type AlbumPlanPage,
+  type AlbumPlanResult,
 } from "./album-plan";
+import { albumBoxFlag } from "./album-box-flag";
+import { NO_ATTENTION, type AlbumSheetAttention } from "./album-screen-view";
 import { getAlbumPageSnapshots } from "./album-printed-pages";
 import type { AlbumPageSnapshot, AlbumSnapshotBox } from "./album-snapshot";
 import { getAlbumPrintedReport } from "./album-printing";
@@ -683,6 +686,126 @@ export async function getAlbumEditorData(
     untranslated,
     nameSuggestion: plan.nameSuggestion,
   };
+}
+
+// -- The album screen's rows (#1430) -----------------------------------------------
+//
+// The album screen shows every sheet with a thumbnail and with what needs attention before it is
+// printed. Both come from the sheet **as the editor draws it** — `liveSheet` for a live one, the
+// snapshot for a card — so a figure on the album screen and a flag in the editor are one claim, and
+// the thumbnail is a reduction of the drawing rather than a second drawing.
+
+/** A sheet reduced to what a thumbnail draws: the paper, a bar where each line of text sits and each
+ *  box. Millimetres, rounded to a tenth — far below what a thumbnail can show, and a sheet of forty
+ *  boxes stays a few hundred bytes. */
+export interface AlbumSheetSketch {
+  widthMm: number;
+  heightMm: number;
+  /** One bar per printed line, as wide as the line's own ink — measured here, on the server, by the
+   *  measurer the PDF uses, because the client does not measure (ADR-0045 §7). */
+  lines: AlbumRect[];
+  /** Each box, and whether the editor would flag it as a warning (never set on a printed card). */
+  boxes: (AlbumRect & { flagged: boolean })[];
+}
+
+export interface AlbumSheetSummary {
+  /** One-based position in the plan, as the album screen's listing numbers it. */
+  position: number;
+  sketch: AlbumSheetSketch | null;
+  attention: AlbumSheetAttention;
+}
+
+const tenth = (mm: number) => Math.round(mm * 10) / 10;
+
+function sheetSketch(sheet: AlbumEditorSheet): AlbumSheetSketch {
+  const texts = [
+    sheet.title,
+    sheet.chapter,
+    ...sheet.headings,
+    ...sheet.boxes.map((b) => b.label),
+    sheet.footer,
+  ].filter((t): t is AlbumEditorText => t !== null);
+  const lines: AlbumRect[] = [];
+  for (const text of texts) {
+    const { face } = text;
+    // The ink of a line runs from its baseline up to roughly the cap height; the bar is that band.
+    const inkMm = face.sizeMm * 0.7;
+    text.lines.forEach((line, i) => {
+      if (!line.trim()) return;
+      const widthMm = Math.min(text.widthMm, albumTextMetrics.measureMm(line, face.id, face.sizePt));
+      lines.push({
+        // Centred in its band, as both renderers set it.
+        xMm: tenth(text.xMm + (text.widthMm - widthMm) / 2),
+        yMm: tenth(text.yMm + i * face.lineHeightMm + face.baselineOffsetMm - inkMm),
+        widthMm: tenth(widthMm),
+        heightMm: tenth(inkMm),
+      });
+    });
+  }
+  return {
+    widthMm: sheet.preset.pageWidthMm,
+    heightMm: sheet.preset.pageHeightMm,
+    lines,
+    boxes: sheet.boxes.map((b) => {
+      const flag = sheet.readOnly ? null : albumBoxFlag(b);
+      return {
+        xMm: tenth(b.xMm),
+        yMm: tenth(b.yMm),
+        widthMm: tenth(b.widthMm),
+        heightMm: tenth(b.heightMm),
+        flagged: flag !== null && flag !== "corrected",
+      };
+    }),
+  };
+}
+
+/** What a live sheet needs looked at before it is printed — the editor's flags, counted. */
+function sheetAttention(sheet: AlbumEditorSheet): AlbumSheetAttention {
+  const out = { ...NO_ATTENTION, untranslated: untranslatedTexts(sheet) };
+  for (const box of sheet.boxes) {
+    const flag = albumBoxFlag(box);
+    if (flag === "unmeasured") out.unmeasured += 1;
+    else if (flag === "oversize") out.oversize += 1;
+    else if (flag === "inherited") out.inherited += 1;
+  }
+  return out;
+}
+
+/**
+ * Every sheet of a plan as the album screen lists it (#1430), from the context it was planned from.
+ *
+ * The live sheets are drawn exactly as `getAlbumEditorData` draws them for its album-wide figure —
+ * without their pictures — so the summary's *untranslated texts* is the editor's number. The cards
+ * are drawn from their snapshots, one read for all of them.
+ */
+export async function albumSheetSummaries(
+  context: AlbumPlanContext,
+  plan: AlbumPlanResult,
+): Promise<AlbumSheetSummary[]> {
+  const printedIds = plan.pages.flatMap((page) =>
+    page.layout.kind === "printed" ? [page.layout.printedPageId] : [],
+  );
+  const snapshots = await getAlbumPageSnapshots(context.album.id, printedIds);
+
+  return plan.pages.map((page, i) => {
+    const position = i + 1;
+    if (page.layout.kind === "printed") {
+      const snapshot = snapshots.get(page.layout.printedPageId);
+      return {
+        position,
+        sketch: snapshot
+          ? sheetSketch(printedSheet(snapshot, position, page.layout.printedPageId, null, []))
+          : null,
+        attention: NO_ATTENTION,
+      };
+    }
+    const drawn = liveSheet(page, position, context, () => null);
+    return {
+      position,
+      sketch: drawn ? sheetSketch(drawn) : null,
+      attention: drawn ? sheetAttention(drawn) : NO_ATTENTION,
+    };
+  });
 }
 
 /** Re-export so the editor's page component does not have to know which module a box's own type

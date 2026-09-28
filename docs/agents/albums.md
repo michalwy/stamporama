@@ -517,6 +517,40 @@ a **gap** (the area has no name in the album's language: the running head is fla
 - Resolved in the album's **effective** language — null for the collection's default, exactly as
   `makeTitleCopyMapper` normalises it — so an album in the default language is never offered anything.
 
+### The album screen: a summary, three tabs, chapters (#1430)
+
+The album's own screen was one narrow column — header, every entry, standing paragraphs, every
+sheet — with the things to fix before printing scattered through the sheet rows. It is now the full
+window: the actions in the header (*Page editor* primary), a **summary strip**, and **Sheets**
+(default) / **Entries** / **Printed cards** tabs, sheets and entries grouped into collapsible
+chapters. Settled with the collector against a wireframe. What is worth not re-deriving:
+
+- **Every figure is the page editor's, counted off the sheet as the editor draws it.**
+  `albumSheetSummaries` (`album-editor.ts`) draws each live sheet through `liveSheet` — the same call
+  `getAlbumEditorData` makes for its album-wide *untranslated* figure — and each card from its
+  snapshot, and returns per sheet a **sketch** (the thumbnail) and its **attention** counts. The box
+  flags come from `album-box-flag.ts`, which the canvas's `boxFlag` now delegates to: one flag per
+  box, *unmeasured* before *oversize* before *inherited*. `albumPlanOverview`'s own
+  `oversizeCount`/`inheritedSizeCount` count those independently (an unmeasured box is also stripless)
+  and are **not** what the screen shows. The strip is arithmetic over the rows
+  (`albumScreenSummary`, `album-screen-view.ts`), so a row, the strip and the editor cannot disagree.
+  The integration tests pin the untranslated sum against the editor's.
+- **A printed card carries no attention.** The *before printing* flags are about paper not yet cut;
+  a card reports through the divergence report instead, which is where *Out of date* comes from.
+- **The thumbnail is a reduction of the drawing, measured on the server.** One bar per printed line,
+  as wide as the line's own ink via `albumTextMetrics.measureMm` and centred as both renderers centre
+  it — the client does not measure (ADR-0045 §7) — and one rect per box, amber where the editor would
+  flag it. A tenth of a millimetre is the precision; a sheet is a few hundred bytes.
+- **Chapters are the plan's runs, not year buckets** (`albumChapterRuns`): interleaved years make two
+  chapters on paper and two here. A run's id is its year, then `~2` for a later run of the same year;
+  sheets and entries share ids, which is how an Entries chapter heading shows its sheets' attention
+  and how one folded set covers both tabs.
+- **The view is URL state**: `tab`, `sheets` (all / attention / live / printed), `cards` (all /
+  diverged — the Printed cards tab needed a filter for its summary figure to open onto) and `closed`
+  (folded chapter ids; open is the default). Defaults are left out of the address.
+- **The standing paragraphs became hints** (dotted text with a `Tooltip`) and user-guide text. The
+  *print at 100 %* reminder stays visible beside *Download PDF*.
+
 ## The PDF (#768, ADR-0046)
 
 `src/lib/album-pdf.ts` draws the plan and **decides nothing**. Three kinds of arithmetic and no
@@ -748,7 +782,7 @@ owns — a completion count, a valuation, an owned/wanted marker — because eve
 register as a divergence on every page carrying it.
 
 The distinction is *printed onto the card*, not *shown about the card*, and it is as easy to misapply
-in the other direction: the inherited-size and oversize flags on the album screen and in #769's editor
+in the other direction: the inherited-size, oversize and untranslated flags on the album screen and in #769's editor
 have the same staleness property and are shown deliberately, because they are shown on screen before
 printing and never reach the paper.
 

@@ -2,7 +2,8 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createAlbum, gatherAlbumEntries, getAlbumEntries } from "../../src/lib/albums";
-import { albumPlanOverview, planAlbum } from "../../src/lib/album-plan";
+import { albumPlanContext, albumPlanOverview, planAlbum, planAlbumFrom } from "../../src/lib/album-plan";
+import { albumSheetSummaries } from "../../src/lib/album-editor";
 import {
   cancelAlbumReprint,
   closeAlbumContinuation,
@@ -270,6 +271,14 @@ describe("printed album pages (#778)", () => {
     assert.equal(overview.pages[0].printedPageId !== null, true);
     assert.equal(overview.pages[0].range, "PL 303-305");
     assert.equal(overview.pages[0].boxCount, 0, "what is on the card is in its snapshot");
+
+    // The album screen's row draws the card from its snapshot, and flags nothing on it (#1430):
+    // what is on a card is on it.
+    const context = await albumPlanContext(userId, albumId);
+    const [card] = await albumSheetSummaries(context!, planAlbumFrom(context!));
+    assert.equal(card.sketch?.boxes.length, 3);
+    assert.ok(card.sketch!.boxes.every((b) => !b.flagged));
+    assert.deepEqual(card.attention, { unmeasured: 0, oversize: 0, inherited: 0, untranslated: 0 });
   });
 
   it("does not let a rename reach backwards into the card", async () => {

@@ -8,8 +8,12 @@ import {
   renameAlbum,
   updateAlbumPreset,
 } from "../../src/lib/albums";
-import { albumPlanOverview, planAlbum } from "../../src/lib/album-plan";
-import { getAlbumEditorData, type AlbumEditorSheet } from "../../src/lib/album-editor";
+import { albumPlanContext, albumPlanOverview, planAlbum, planAlbumFrom } from "../../src/lib/album-plan";
+import {
+  albumSheetSummaries,
+  getAlbumEditorData,
+  type AlbumEditorSheet,
+} from "../../src/lib/album-editor";
 import {
   countAlbumRenameDivergence,
   getAlbumPrintedReport,
@@ -251,6 +255,30 @@ describe("an album in its own language (#1308, #1311)", () => {
     );
     // Running head, two headings, three labels and a footer per sheet at the least.
     assert.ok(data!.untranslated.texts >= 6 + sheets.length);
+  });
+
+  it("gives the album screen the editor's own figure, sheet by sheet (#1430)", async () => {
+    const context = await albumPlanContext(userId, albumId);
+    const rows = await albumSheetSummaries(context!, planAlbumFrom(context!));
+    const data = await getAlbumEditorData(userId, albumId, 1);
+    assert.equal(
+      rows.reduce((n, r) => n + r.attention.untranslated, 0),
+      data!.untranslated.texts
+    );
+    assert.deepEqual(
+      rows.filter((r) => r.attention.untranslated > 0).map((r) => r.position),
+      data!.untranslated.sheets
+    );
+    // The thumbnail is the drawing reduced: a box for every box, and a bar for the lines of text.
+    const sheets = await liveSheets();
+    for (const sheet of sheets) {
+      const sketch = rows[sheet.position - 1].sketch!;
+      assert.equal(sketch.boxes.length, sheet.boxes.length);
+      assert.ok(sketch.lines.length >= sheet.headings.length);
+      for (const line of sketch.lines) {
+        assert.ok(line.widthMm > 0 && line.xMm >= 0 && line.xMm + line.widthMm <= sketch.widthMm);
+      }
+    }
   });
 
   it("an issue-named checklist prints the issue's translation, and the flag goes", async () => {
