@@ -919,6 +919,12 @@ function TreeNode({
       icon: "range",
       onSelect: () => actions.addVariantRange(stamp),
     },
+    {
+      key: "add-variant-tree",
+      label: "Enter variant tree…",
+      icon: "variantTree",
+      onSelect: () => actions.addVariantTree(stamp),
+    },
     { key: "edit", label: "Edit", icon: "edit", onSelect: () => actions.edit(stamp) },
     {
       key: "delete",

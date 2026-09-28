@@ -14,6 +14,7 @@ import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
+import { AddVariantTreeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-tree-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { ReorderModeButton } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import {
@@ -74,6 +75,7 @@ export function StampVariantsCard({
     | { kind: "none" }
     | { kind: "add" }
     | { kind: "add-range" }
+    | { kind: "add-tree" }
     | { kind: "edit"; child: StampListItem }
     | { kind: "delete"; child: StampListItem }
   >({ kind: "none" });
@@ -194,6 +196,16 @@ export function StampVariantsCard({
                   >
                     <Icon name="range" size="sm" />
                     Add range
+                  </button>
+                  {/* The whole tree, several levels at once, as indented text (#1447). */}
+                  <button
+                    type="button"
+                    onClick={() => setDialog({ kind: "add-tree" })}
+                    disabled={isPending}
+                    style={DETAIL_BUTTON}
+                  >
+                    <Icon name="variantTree" size="sm" />
+                    Enter tree
                   </button>
                 </>
               )}
@@ -344,6 +356,38 @@ export function StampVariantsCard({
                 treeIssue.id,
                 stamp.id,
                 fd
+              );
+              if (result.status === "success") onSaved();
+              else if (result.status === "error") setError(result.message);
+            })
+          }
+        />
+      )}
+
+      {dialog.kind === "add-tree" && treeIssue && (
+        <AddVariantTreeDialog
+          collectionId={collectionId}
+          issueId={treeIssue.id}
+          issueName={issueLabel(treeIssue)}
+          areaId={treeIssue.collectionAreaId}
+          parent={{
+            stampId: stamp.id,
+            name: stamp.name,
+            catalogNumbers: stamp.catalogNumbers,
+          }}
+          vendors={areaVendors}
+          primaryVendorId={maps.primaryVendorByArea.get(treeIssue.collectionAreaId) ?? null}
+          isPending={isPending}
+          error={error}
+          onClose={closeDialog}
+          onSubmit={(input) =>
+            startTransition(async () => {
+              const { addVariantTreeAction } = await import("@/app/actions/issues");
+              const result = await addVariantTreeAction(
+                collectionId,
+                treeIssue.id,
+                stamp.id,
+                input
               );
               if (result.status === "success") onSaved();
               else if (result.status === "error") setError(result.message);

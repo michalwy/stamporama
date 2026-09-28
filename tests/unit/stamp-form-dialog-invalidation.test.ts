@@ -25,11 +25,12 @@ import ts from "typescript";
 //
 // **Which dialogs, and why that list is derivable rather than arbitrary.** A dialog is on it when its
 // *opener* supplies the submit handler and reads the action's result — so the file that opens it owns
-// the write cycle, and is the only file that can invalidate on success. That is true of all four
-// catalogue-write dialogs: the two that write a stamp (`StampFormDialog`, `DeleteStampDialog`), the
-// two that write an issue (`IssueDialog`, `DeleteIssueDialog`), and the range dialog that writes
-// both (`AddVariantRangeDialog`). Their own definition files are not call sites and do not match:
-// this reads import declarations, and a module does not import what it exports.
+// the write cycle, and is the only file that can invalidate on success. That is true of every
+// catalogue-write dialog: the two that write a stamp (`StampFormDialog`, `DeleteStampDialog`), the
+// two that write an issue (`IssueDialog`, `DeleteIssueDialog`), and the range and tree dialogs that
+// write both (`AddVariantRangeDialog`, `AddVariantTreeDialog`, #1447). Their own definition files
+// are not call sites and do not match: this reads import declarations, and a module does not import
+// what it exports.
 //
 // **Keying on the write *actions* instead was measured and rejected**, not merely considered. Twenty
 // files call a stamp or issue write action and ten of them never invalidate — but most of those ten
@@ -56,6 +57,7 @@ const DIALOGS = [
   "IssueDialog",
   "DeleteIssueDialog",
   "AddVariantRangeDialog",
+  "AddVariantTreeDialog",
 ];
 const INVALIDATE = "invalidateStampsAndIssues";
 

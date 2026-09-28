@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
+import { AddVariantTreeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-tree-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import type { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -18,6 +19,7 @@ import { inventoryKeys } from "@/app/c/[collectionSlug]/inventory/use-inventory-
 // correcting or removing one here is not a second editor. And, as there, **not one field of its
 // own**: every write goes through the very dialog the Issues list's stamp row opens —
 // `StampFormDialog` to add and edit, `AddVariantRangeDialog` (#722) for a lettered run,
+// `AddVariantTreeDialog` (#1447) for a whole tree typed as indented text,
 // `DeleteStampDialog` to remove, with its own confirmation and rules — so there is still exactly one
 // editor per record, and nothing is removed here that could not be removed from the list.
 //
@@ -28,6 +30,7 @@ type Dialog =
   | { kind: "none" }
   | { kind: "add"; parent: StampNodeData | null }
   | { kind: "add-range"; parent: StampNodeData }
+  | { kind: "add-tree"; parent: StampNodeData }
   | { kind: "edit"; stamp: StampNodeData }
   | { kind: "delete"; stamp: StampNodeData };
 
@@ -43,6 +46,8 @@ export interface IssueStampActions {
   addChild: (parent: StampNodeData) => void;
   /** Add a whole lettered run under a stamp of the tree (#722). */
   addVariantRange: (parent: StampNodeData) => void;
+  /** Enter a stamp's whole variant tree as indented text (#1447). */
+  addVariantTree: (parent: StampNodeData) => void;
   edit: (stamp: StampNodeData) => void;
   remove: (stamp: StampNodeData) => void;
   /** Re-read everything the page draws from the tree. The dialogs call it on success; the tree's
@@ -163,6 +168,34 @@ export function useIssueStampActions({
         }
       />
     );
+  } else if (dialog.kind === "add-tree") {
+    const { parent } = dialog;
+    rendered = (
+      <AddVariantTreeDialog
+        collectionId={collectionId}
+        issueId={issue.id}
+        issueName={issueLabel(issue)}
+        areaId={issue.collectionAreaId}
+        parent={{
+          stampId: parent.stampId,
+          name: parent.name,
+          catalogNumbers: parent.catalogNumbers,
+        }}
+        vendors={areaVendors}
+        primaryVendorId={maps.primaryVendorByArea.get(issue.collectionAreaId) ?? null}
+        isPending={isPending}
+        error={error}
+        onClose={closeDialog}
+        onSubmit={(input) =>
+          startTransition(async () => {
+            const { addVariantTreeAction } = await import("@/app/actions/issues");
+            const result = await addVariantTreeAction(collectionId, issue.id, parent.stampId, input);
+            if (result.status === "success") onSaved();
+            else if (result.status === "error") setError(result.message);
+          })
+        }
+      />
+    );
   } else if (dialog.kind === "edit") {
     const { stamp } = dialog;
     rendered = (
@@ -225,6 +258,7 @@ export function useIssueStampActions({
     addStamp: () => open({ kind: "add", parent: null }),
     addChild: (parent) => open({ kind: "add", parent }),
     addVariantRange: (parent) => open({ kind: "add-range", parent }),
+    addVariantTree: (parent) => open({ kind: "add-tree", parent }),
     edit: (stamp) => open({ kind: "edit", stamp }),
     remove: (stamp) => open({ kind: "delete", stamp }),
     afterWrite,
