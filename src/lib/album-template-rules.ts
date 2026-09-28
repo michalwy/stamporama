@@ -140,6 +140,22 @@ export function albumVerticalPlacementLabel(key: AlbumVerticalPlacement): string
   return ALBUM_VERTICAL_PLACEMENTS.find((p) => p.key === key)?.label ?? key;
 }
 
+/**
+ * Where the album's title sits relative to the page frame (#1428).
+ *
+ * `below-frame` is every page before #1428: the title is the first line inside the top margin.
+ * `in-frame` sets it **into** the frame's top line, which is broken around it — the head of every
+ * card in the collector's AlbumEasy binders, where a white image laid over the rule makes the gap.
+ * A sheet with no rule to break (no border, or a border of zero weight) places the title below, as
+ * `album-layout.ts` states.
+ */
+export const ALBUM_TITLE_PLACEMENTS = [
+  { key: "below-frame", label: "Below the frame" },
+  { key: "in-frame", label: "In the frame line" },
+] as const;
+
+export type AlbumTitlePlacement = (typeof ALBUM_TITLE_PLACEMENTS)[number]["key"];
+
 /** The five roles type is set for. Ordered as they appear down a page, which is the order the
  *  form shows them in. */
 export const ALBUM_TYPE_ROLES = [
@@ -179,6 +195,11 @@ export interface AlbumRenderPreset {
   frameOrnament: string;
   /** The ornament's longer side. */
   frameOrnamentSizeMm: number;
+  /** Where the album's title sits: below the frame, or set into its top line (#1428). */
+  titlePlacement: AlbumTitlePlacement;
+  /** The white left on each side of a title set into the frame line, between the text and where
+   *  the rule stops (#1428). */
+  titleFrameGapMm: number;
   /** Where each sheet's content sits vertically (#1419). A single page may override it — see
    *  `AlbumBlockSpec.pagePlacement`. */
   verticalPlacement: AlbumVerticalPlacement;
@@ -266,6 +287,12 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   // like his; existing templates and albums were given `none` by their migration and keep theirs.
   frameOrnament: "rosette",
   frameOrnamentSizeMm: 25,
+  // Below the frame is every page before #1428, so it stays the default. The gap is measured off his
+  // printed `PL-1928.pdf`: the rule stops 67.0 mm apart around a 57.1 mm "Rzeczpospolita Polska" —
+  // 5 mm of white each side. (His `_*.txt` includes lay a white image over the rule, sized by hand
+  // per title; the gap is what that image leaves once printed.)
+  titlePlacement: "below-frame",
+  titleFrameGapMm: 5,
   // His pages are all set from the top — AlbumEasy has no other way to set one — so a new template
   // starts as the album he already prints, and an existing one keeps its pages exactly (#1419).
   verticalPlacement: "top",
@@ -379,6 +406,8 @@ export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawI
     borderGapMm: str("borderGapMm"),
     frameOrnament: str("frameOrnament"),
     frameOrnamentSizeMm: str("frameOrnamentSizeMm"),
+    titlePlacement: str("titlePlacement"),
+    titleFrameGapMm: str("titleFrameGapMm"),
     verticalPlacement: str("verticalPlacement"),
     boxGapXMm: str("boxGapXMm"),
     boxGapYMm: str("boxGapYMm"),
@@ -584,6 +613,15 @@ export function parseAlbumRenderPreset(
     MAX_ORNAMENT_MM
   );
   if (!frameOrnamentSizeMm.ok) return frameOrnamentSizeMm;
+  const titlePlacement = parseChoice(raw.titlePlacement, "Album title placement", ALBUM_TITLE_PLACEMENTS);
+  if (!titlePlacement.ok) return titlePlacement;
+  const titleFrameGapMm = mm(
+    "titleFrameGapMm",
+    "Gap around the title in the frame line",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!titleFrameGapMm.ok) return titleFrameGapMm;
   const verticalPlacement = parseChoice(
     raw.verticalPlacement,
     "Vertical placement",
@@ -714,6 +752,8 @@ export function parseAlbumRenderPreset(
       borderGapMm: borderGapMm.value,
       frameOrnament: frameOrnament.value,
       frameOrnamentSizeMm: frameOrnamentSizeMm.value,
+      titlePlacement: titlePlacement.value,
+      titleFrameGapMm: titleFrameGapMm.value,
       verticalPlacement: verticalPlacement.value,
       ...boxGaps.value,
       headingSpaceAboveMm: headingSpaceAboveMm.value,
@@ -812,6 +852,10 @@ export function asAlbumBoxBorderStyle(raw: string): AlbumBoxBorderStyle {
 
 export function asAlbumLabelPosition(raw: string): AlbumLabelPosition {
   return coerce(raw, ALBUM_LABEL_POSITIONS, DEFAULT_ALBUM_PRESET.labelPosition);
+}
+
+export function asAlbumTitlePlacement(raw: string): AlbumTitlePlacement {
+  return coerce(raw, ALBUM_TITLE_PLACEMENTS, DEFAULT_ALBUM_PRESET.titlePlacement);
 }
 
 export function asAlbumVerticalPlacement(raw: string): AlbumVerticalPlacement {

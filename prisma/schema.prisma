@@ -1004,6 +1004,11 @@ model AlbumTemplate {
   // (#1419): `top` | `center` | `justify` | `center-justify`. Only the leftover space moves; what
   // lands on a sheet is packed exactly as before. `top` is every page printed before this existed.
   verticalPlacement String @default("top")
+  // Where the album's title sits (#1428): `below-frame`, every page printed before this existed, or
+  // `in-frame`, set into the frame's top line with the rule broken around it and `titleFrameGapMm`
+  // of white each side. Layout: the title then takes no band of its own.
+  titlePlacement  String @default("below-frame")
+  titleFrameGapMm Float  @default(5)
 
   // ── Spacing ──
   // Between boxes, horizontally and vertically; then the space a checklist heading reserves above
@@ -1187,6 +1192,8 @@ model Album {
   frameOrnament       String @default("none")
   frameOrnamentSizeMm Float  @default(25)
   verticalPlacement String @default("top")
+  titlePlacement    String @default("below-frame")
+  titleFrameGapMm   Float  @default(5)
 
   boxGapXMm           Float
   boxGapYMm           Float

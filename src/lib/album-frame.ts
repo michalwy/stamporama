@@ -28,6 +28,15 @@
 //
 // So the drawing carries its own alignment. A frame starting at `0 0` sits wholly inside the corner;
 // one starting at negative numbers reaches out past the rule, the way `Classic`'s rosette does.
+//
+// ## The title in the frame line (#1428)
+//
+// When the album's title is set into the frame, the top rule — both rules of a double one — stops
+// `titleFrameGapMm` short of the title on each side. The title is placed by the plan
+// (`album-layout.ts`, which reads {@link albumTitleInFrame} and {@link albumFrameCentreMm} from here
+// so the two cannot disagree about whether there is a line to sit in); the frame only leaves room
+// around the rectangle it is handed. That rectangle is the one the sheet printed — a stored card's
+// own — so a card reprinted later breaks its rule exactly where it did.
 
 import type { AlbumRect } from "./album-layout";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
@@ -46,11 +55,20 @@ export interface AlbumFrameLine {
   y2Mm: number;
 }
 
+export interface AlbumFramePoint {
+  xMm: number;
+  yMm: number;
+}
+
 export interface AlbumFrame {
   /** The weight every rule is drawn at. */
   lineMm: number;
   /** Closed rules — a frame without corner ornaments, drawn as rectangles so their corners join. */
   rects: AlbumRect[];
+  /** Open rules that turn corners — a frame without ornaments whose top rule is broken around the
+   *  title (#1428). Drawn as one stroke each with mitred joins, so the corners join as a rectangle's
+   *  do, and butt ends at the gap. */
+  paths: AlbumFramePoint[][];
   /** Open rules, between the ornaments. Drawn with butt ends: they stop where the drawing starts. */
   lines: AlbumFrameLine[];
   ornaments: { corner: AlbumFrameCorner; matrix: AlbumFrameMatrix }[];
@@ -67,7 +85,18 @@ export type AlbumFramePreset = Pick<
   | "borderInsetMm"
   | "borderGapMm"
   | "frameOrnamentSizeMm"
+  | "titlePlacement"
+  | "titleFrameGapMm"
 >;
+
+/** Whether the sheet has a rule the title can be set into (#1428): the preset asks for it, and there
+ *  is a rule to break. Without one the title is placed below, as it always was — a page with no
+ *  frame has nothing to break. Ornaments alone are not a line. */
+export function albumTitleInFrame(
+  preset: Pick<AlbumRenderPreset, "titlePlacement" | "borderStyle" | "borderWidthMm">
+): boolean {
+  return preset.titlePlacement === "in-frame" && preset.borderStyle !== "none" && preset.borderWidthMm > 0;
+}
 
 /** Where each rule's centre line runs, inset from the sheet's edge. */
 function ruleInsets(preset: AlbumFramePreset): number[] {
@@ -79,8 +108,11 @@ function ruleInsets(preset: AlbumFramePreset): number[] {
   return [outer, outer + preset.borderWidthMm + preset.borderGapMm];
 }
 
-/** The frame's centre line — where an ornament's (0, 0) is laid. */
-export function albumFrameCentreMm(preset: AlbumFramePreset): number {
+/** The frame's centre line — where an ornament's (0, 0) is laid, and the line a title set into the
+ *  frame is centred on (#1428). */
+export function albumFrameCentreMm(
+  preset: Pick<AlbumRenderPreset, "borderStyle" | "borderWidthMm" | "borderInsetMm" | "borderGapMm">
+): number {
   if (preset.borderStyle === "double" && preset.borderWidthMm > 0) {
     return preset.borderInsetMm + (preset.borderWidthMm + preset.borderGapMm) / 2;
   }
@@ -91,17 +123,46 @@ export function albumFrameCentreMm(preset: AlbumFramePreset): number {
  * The frame a sheet prints: its rules, and an ornament at each corner when there is one.
  *
  * `ornament` is the drawing already resolved — the album's for a live sheet, the one the card
- * stored for a printed one — or null for a frame of rules alone.
+ * stored for a printed one — or null for a frame of rules alone. `title` is the title the sheet
+ * printed, as the plan placed it; the top rule is broken around it only when the preset sets the
+ * title into the frame (#1428).
  */
-export function albumFrame(preset: AlbumFramePreset, ornament: AlbumOrnamentDrawing | null): AlbumFrame {
+export function albumFrame(
+  preset: AlbumFramePreset,
+  ornament: AlbumOrnamentDrawing | null,
+  title: AlbumRect | null = null
+): AlbumFrame {
   const W = preset.pageWidthMm;
   const H = preset.pageHeightMm;
   const insets = ruleInsets(preset);
-  const frame: AlbumFrame = { lineMm: preset.borderWidthMm, rects: [], lines: [], ornaments: [] };
+  const frame: AlbumFrame = { lineMm: preset.borderWidthMm, rects: [], paths: [], lines: [], ornaments: [] };
+
+  // Where the top rule stops for the title, if it does.
+  const gap =
+    title && albumTitleInFrame(preset)
+      ? {
+          fromX: title.xMm - preset.titleFrameGapMm,
+          toX: title.xMm + title.widthMm + preset.titleFrameGapMm,
+        }
+      : null;
 
   const size = preset.frameOrnamentSizeMm;
   if (!ornament || !(size > 0)) {
-    frame.rects = insets.map((r) => ({ xMm: r, yMm: r, widthMm: W - 2 * r, heightMm: H - 2 * r }));
+    for (const r of insets) {
+      if (!gap) {
+        frame.rects.push({ xMm: r, yMm: r, widthMm: W - 2 * r, heightMm: H - 2 * r });
+        continue;
+      }
+      // One stroke round the sheet from the right of the gap to its left, so every corner is a
+      // join. A gap wider than the rule takes the whole top edge and the stroke starts at a corner.
+      const right = Math.min(Math.max(gap.toX, r), W - r);
+      const left = Math.max(Math.min(gap.fromX, W - r), r);
+      const points: AlbumFramePoint[] = [];
+      if (right < W - r) points.push({ xMm: right, yMm: r });
+      points.push({ xMm: W - r, yMm: r }, { xMm: W - r, yMm: H - r }, { xMm: r, yMm: H - r }, { xMm: r, yMm: r });
+      if (left > r) points.push({ xMm: left, yMm: r });
+      frame.paths.push(points);
+    }
     return frame;
   }
 
@@ -123,7 +184,13 @@ export function albumFrame(preset: AlbumFramePreset, ornament: AlbumOrnamentDraw
     const fromX = Math.max(reachX, r);
     const fromY = Math.max(reachY, r);
     if (fromX < W - fromX) {
-      frame.lines.push({ x1Mm: fromX, y1Mm: r, x2Mm: W - fromX, y2Mm: r });
+      if (!gap) {
+        frame.lines.push({ x1Mm: fromX, y1Mm: r, x2Mm: W - fromX, y2Mm: r });
+      } else {
+        // The top rule in two, each side of the title; a side the gap swallows is left out.
+        if (gap.fromX > fromX) frame.lines.push({ x1Mm: fromX, y1Mm: r, x2Mm: Math.min(gap.fromX, W - fromX), y2Mm: r });
+        if (gap.toX < W - fromX) frame.lines.push({ x1Mm: Math.max(gap.toX, fromX), y1Mm: r, x2Mm: W - fromX, y2Mm: r });
+      }
       frame.lines.push({ x1Mm: fromX, y1Mm: H - r, x2Mm: W - fromX, y2Mm: H - r });
     }
     if (fromY < H - fromY) {

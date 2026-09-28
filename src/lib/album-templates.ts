@@ -6,6 +6,7 @@ import {
   asAlbumBorderStyle,
   asAlbumBoxBorderStyle,
   asAlbumLabelPosition,
+  asAlbumTitlePlacement,
   asAlbumVerticalPlacement,
   type AlbumRenderPreset,
   type AlbumTemplateInput,
@@ -75,6 +76,8 @@ const TEMPLATE_SELECT = {
   frameOrnament: true,
   frameOrnamentSizeMm: true,
   verticalPlacement: true,
+  titlePlacement: true,
+  titleFrameGapMm: true,
   boxGapXMm: true,
   boxGapYMm: true,
   headingSpaceAboveMm: true,
@@ -110,7 +113,7 @@ const TEMPLATE_SELECT = {
 
 type TemplateRow = Prisma.AlbumTemplateGetPayload<{ select: typeof TEMPLATE_SELECT }>;
 
-/** The four choice columns come back as `string`; everything else is already its own type. */
+/** The five choice columns come back as `string`; everything else is already its own type. */
 function toData(row: TemplateRow): AlbumTemplateData {
   return {
     ...row,
@@ -118,6 +121,7 @@ function toData(row: TemplateRow): AlbumTemplateData {
     boxBorderStyle: asAlbumBoxBorderStyle(row.boxBorderStyle),
     labelPosition: asAlbumLabelPosition(row.labelPosition),
     verticalPlacement: asAlbumVerticalPlacement(row.verticalPlacement),
+    titlePlacement: asAlbumTitlePlacement(row.titlePlacement),
   };
 }
 

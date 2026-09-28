@@ -88,6 +88,10 @@ built-in redrawn by a later build, or an upload deleted, never reaches a card.
 - The frame is **paint, not layout**: none of `borderGapMm`, `frameOrnament` or `frameOrnamentSizeMm`
   moves a block, and changing them re-plans nothing. A printed card still reports them as a template
   change, because the card would now look different.
+- **Amended by #1428**: the album title can be set into the frame's top line. That choice is layout —
+  the title gives its line back to the content — so the plan places the title (on the centre line of
+  §3) and `album-frame.ts` only breaks the rules around the rectangle it is handed, which for a printed
+  card is the card's own. The frame module still decides nothing about the plan.
 - A preset's comparison stays a comparison of primitives, so the divergence report needed nothing new.
 - A drawing too detailed (4 000 paths, 120 000 commands) or a file over 1 MB is refused at the upload,
   so a card's snapshot cannot grow by megabytes.

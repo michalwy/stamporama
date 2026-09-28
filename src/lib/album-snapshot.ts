@@ -237,6 +237,8 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   // had the checklist heading's, which the card does carry. One stored before #1427 has no frame
   // ornament, and its double rule was drawn 1.2 mm apart — the gap the PDF used before it was a
   // value. The size is the migration's default, so an album that also has none reports nothing.
+  // One stored before #1428 printed its title below the frame, and the gap is the migration's
+  // default for the same reason.
   const stored = snapshot as AlbumPageSnapshot;
   const preset = stored.preset;
   if (
@@ -249,6 +251,8 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
     preset.borderGapMm !== undefined &&
     preset.frameOrnament !== undefined &&
     preset.frameOrnamentSizeMm !== undefined &&
+    preset.titlePlacement !== undefined &&
+    preset.titleFrameGapMm !== undefined &&
     stored.frameOrnament !== undefined &&
     stored.page.placement !== undefined
   ) {
@@ -267,6 +271,8 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
       borderGapMm: preset.borderGapMm ?? 1.2,
       frameOrnament: preset.frameOrnament ?? "none",
       frameOrnamentSizeMm: preset.frameOrnamentSizeMm ?? 25,
+      titlePlacement: preset.titlePlacement ?? "below-frame",
+      titleFrameGapMm: preset.titleFrameGapMm ?? 5,
     },
     frameOrnament: stored.frameOrnament ?? null,
     page: { ...stored.page, placement: stored.page.placement ?? "top" },

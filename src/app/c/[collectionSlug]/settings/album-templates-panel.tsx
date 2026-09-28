@@ -20,6 +20,7 @@ import {
   ALBUM_BORDER_STYLES,
   ALBUM_BOX_BORDER_STYLES,
   ALBUM_LABEL_POSITIONS,
+  ALBUM_TITLE_PLACEMENTS,
   ALBUM_VERTICAL_PLACEMENTS,
   ALBUM_MM_STEP,
   ALBUM_PT_STEP,
@@ -419,6 +420,28 @@ export function AlbumPresetForm({
             disabled={isPending}
           />
           <div>
+            <LabelWithError htmlFor="f-album-titlePlacement">Album title</LabelWithError>
+            <select
+              id="f-album-titlePlacement"
+              name="titlePlacement"
+              defaultValue={preset.titlePlacement}
+              disabled={isPending}
+              style={INPUT_STYLE}
+            >
+              {ALBUM_TITLE_PLACEMENTS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <MmField
+            name="titleFrameGapMm"
+            label="Gap around the title in the line (mm)"
+            value={preset.titleFrameGapMm}
+            disabled={isPending}
+          />
+          <div>
             <LabelWithError htmlFor="f-album-verticalPlacement">Content on the page</LabelWithError>
             <select
               id="f-album-verticalPlacement"
@@ -439,6 +462,12 @@ export function AlbumPresetForm({
           The frame is drawn in the margin and never moves a series. A <strong>corner ornament</strong>{" "}
           sits at each corner, mirrored to face into the page, and the rules run between them; its size
           is its longer side. Your own can be uploaded as an SVG drawn for the top-left corner.
+        </p>
+        <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
+          The <strong>album title</strong> can sit <strong>in the frame line</strong>: the top rule —
+          both rules of a double one — breaks around it, leaving the gap on each side, and the title
+          no longer takes a line of its own, so the content starts on the top margin. Unlike the rest
+          of the frame this moves series. A page with no border prints the title below, as before.
         </p>
         <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
           Where a page that is not full puts its series. <strong>Justified</strong> puts the first at
