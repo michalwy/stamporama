@@ -426,6 +426,53 @@ sheet**. Measuring is for one stamp at a time, so a group is not offered it.
 
 A printed card is read-only, so none of this is offered on one.
 
+### Pages without stamps
+
+An album is not only pages of stamps. A **title page** — a coat of arms, *Wolne Miasto Gdańsk*,
+*Freie Stadt Danzig*, *1920 – 1939*, inside the album's frame — a **section divider**, a **map** or a
+**page of notes** is a page without stamps, and any of them is made the same way: **Add a page without
+stamps** in the sheet's panel (click the paper outside any block).
+
+**It is filed, like a note, before or after a checklist.** Reorder the album and the page goes where
+its checklist goes. Filed *before* everything it is the album's **opening page**, *after* everything its
+**closing** one. A page filed before a year's first checklist comes before that year's first sheet,
+and the year's heading stays on the sheet of stamps rather than being left alone on a card. Two pages
+filed at the same place are put in order with **Earlier** and **Later**.
+
+**It is a sheet of its own**, laid out on paper of its own. The album's **frame** is printed on it. The
+album's name at the top, the chapter's heading and the footer are **off**, and each can be switched on
+for that page under *The frame*. (The footer names the sheet's catalog range, and a page without stamps
+has none, so a footer that only says that prints nothing.)
+
+**What goes on it is placed where you put it.** *Heading*, *Text* and *Picture…* put one on the page,
+selected so you can type at once:
+
+- **A heading or a text** is set in one of **the template's own faces** — the chapter heading's, the
+  checklist heading's and so on — at a **size you choose** in points, left, centred or right. A heading
+  starts in the chapter heading's face and a text in the checklist heading's, but both can be set in
+  any. Line breaks you type are kept, and a line too long for the width wraps.
+- **A picture** is chosen from the collection's **picture library**, which is shared by every album:
+  a coat of arms uploaded once can go on the title page of one album and the section pages of another.
+  Upload an **SVG, PNG or JPEG** from the same dialog. An SVG made of plain shapes in solid colours
+  prints **as lines**, sharp at any size. One the album's reader does not follow — a gradient,
+  transparency, text in the drawing — is drawn **once, at a high resolution**, when you upload it, and
+  prints as a picture; its panel says so, and why. A picture can be deleted from the library only while
+  no page and no printed card uses it.
+
+Each thing on the page has a **position** — across and down, in millimetres from the sheet's top-left
+corner — and a **width**. Drag it on the sheet to move it, drag the handle on its right edge to widen
+it, or type the millimetres in its panel: both write the same numbers. A text is as tall as its lines
+and a picture as tall as its own proportions make it, so neither has a height to set. **Centre across**
+and **Centre down** centre it in the dashed rectangle on the sheet, which is what the frame's heads
+leave. **To the front** and **To the back** decide which of two things is drawn over the other.
+
+A **PNG or a JPEG that would print below 300 dpi** at the width you placed it is outlined on the sheet
+and said in the panel, with the figure — make it narrower, or upload a sharper one. It is a warning,
+not a refusal, and like the other flags it never goes onto the paper.
+
+The page prints exactly as the editor shows it: the canvas and the PDF place every picture and every
+line of text in the same millimetres.
+
 ### A printed card opens read-only
 
 The editor works on sheets that are still a plan. A card you have marked printed opens showing
@@ -437,6 +484,11 @@ made on the album screen under *Printed cards*.
 One thing you *can* still change is what a **note** on a printed card says, and the card then
 reports the difference like any other — the same as renaming an issue. Taking such a note out of the
 album is refused, though: the card would go on carrying words nothing in the album accounts for.
+
+A **page without stamps** works the same way. Once it is on a printed card you can still move, retype,
+restyle or take things off it, and the card reports the difference; the page itself cannot be taken
+out of the album while the card is in the binder, and neither can a picture the card prints be deleted
+from the library.
 
 ## Printing
 
@@ -566,6 +618,10 @@ If one checklist runs across two or three sheets, they go onto paper together �
 (*Sheets 4–6*) and the action marks all of them. Half a checklist on a card and half still in the
 plan is not a state the album can hold.
 
+A page without stamps is marked printed like any other sheet, and is a card of its own. The list names
+it *A page without stamps*, since it has no catalog range to be named by, and it is left off the
+cutting list — there is nothing on it to cut.
+
 ### What a printed card keeps
 
 Everything that was on it: the headings and labels exactly as they read that day, every box's size in
@@ -590,7 +646,10 @@ date** narrows it to the cards that differ:
 
 - **Stamps** — the checklist gained or lost a slot, or would now print in a different order;
 - **Size** — a box would now be cut to a different size, or from a different strip;
-- **Text** — a renamed series or area, a corrected translation, a change of language;
+- **Text** — a renamed series or area, a corrected translation, a change of language, or different
+  words on a page without stamps;
+- **Page** — on a page without stamps, something has moved or changed width, is set in another face,
+  size or alignment, has been replaced, added or taken off, or is drawn in a different order;
 - **Template** — the album's page settings have moved since the card was set, or the card's content
   would now be placed differently on it (at the top, centred, justified). What is compared is how the
   card would actually be placed, so a card that keeps its own placement, or holds a single series,

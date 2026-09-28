@@ -135,7 +135,9 @@ describe("the schema this rule was reasoned about", () => {
     // `trimWriteArgs` descends only through Prisma's own write operators. A new one means reading
     // `prisma-text-trim.ts` again and deciding whether that is still true of it.
     const found = [...schema.matchAll(/^\s+(\w+)\s+Json\??/gm)].map((m) => m[1]).sort();
-    assert.deepEqual(found, ["allegroCategoryParameters", "drawing", "rates", "snapshot", "value"]);
+    // `drawing` twice: a corner ornament's outlines (#1427) and a free page picture's (#1429), both
+    // read by `album-ornament-svg.ts` into numbers and `#rrggbb` colours.
+    assert.deepEqual(found, ["allegroCategoryParameters", "drawing", "drawing", "rates", "snapshot", "value"]);
   });
 
   it("has no column named like a Prisma write operator", () => {

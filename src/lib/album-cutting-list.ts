@@ -458,6 +458,9 @@ export function albumCutSheets(
 
   for (const page of pages) {
     if (page.layout.kind === "live") {
+      // A page without stamps (#1429) has nothing to cut, and a sheet listed with no cuts is a line
+      // the collector reads for nothing.
+      if (page.layout.free) continue;
       sheets.push({
         range: page.range,
         chapterKey: page.layout.chapterKey,
@@ -483,6 +486,7 @@ export function albumCutSheets(
       });
       continue;
     }
+    if (snapshot.page.free) continue;
     sheets.push({
       // The card's **own** stored range and chapter, not the plan's account of where it sits: what
       // is on a card is what was stored when it was printed.

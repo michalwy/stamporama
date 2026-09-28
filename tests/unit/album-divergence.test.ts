@@ -7,7 +7,9 @@ import {
   countNewlyDivergingSheets,
   diffAlbumPlans,
   pairAlbumPages,
+  albumComparableFreeElements,
   type AlbumComparableBox,
+  type AlbumComparableFreeElement,
   type AlbumComparablePage,
 } from "../../src/lib/album-divergence";
 import { DEFAULT_ALBUM_PRESET } from "../../src/lib/album-template-rules";
@@ -50,6 +52,45 @@ const page = (
 });
 
 const kinds = (found: { kind: string }[]) => found.map((d) => d.kind);
+
+const textEl = (
+  id: string,
+  over: Partial<AlbumComparableFreeElement> = {}
+): AlbumComparableFreeElement => ({
+  id,
+  kind: "text",
+  xMm: 10,
+  yMm: 40,
+  widthMm: 190,
+  text: "Wolne Miasto Gdańsk",
+  setting: "chapter 24 center",
+  pictureId: null,
+  ...over,
+});
+
+const pictureEl = (
+  id: string,
+  over: Partial<AlbumComparableFreeElement> = {}
+): AlbumComparableFreeElement => ({
+  id,
+  kind: "picture",
+  xMm: 75,
+  yMm: 80,
+  widthMm: 60,
+  text: "",
+  setting: "",
+  pictureId: "coat-of-arms",
+  ...over,
+});
+
+/** A card of a page without stamps (#1429): no range, no blocks of stamps — its elements. */
+const freePage = (elements: AlbumComparableFreeElement[]): AlbumComparablePage =>
+  page("", [], {
+    chapter: "",
+    footer: "",
+    blocks: [{ entryId: "fp", part: 1, kind: "page", heading: "", boxes: [] }],
+    free: elements,
+  });
 
 describe("albumPlanFingerprint", () => {
   const sheet = (stampIds: string[]) => ({
@@ -262,12 +303,14 @@ describe("compareAlbumPages", () => {
   });
 
   it("reports every kind in the order the report is read in", () => {
+    // `page` is a free page's own kind (#1429), so the two sides carry one element that has moved.
     const found = compareAlbumPages(
-      page("PL 1-2", [box("a"), box("b")]),
+      page("PL 1-2", [box("a"), box("b")], { free: [pictureEl("p", { xMm: 10 })] }),
       page("PL 1-3", [box("a", { heightMm: 33, photoId: "p1" }), box("b"), box("c")], {
         chapter: "1939",
         footer: "PL 1-2",
         preset: { ...DEFAULT_ALBUM_PRESET, blockGapMm: 9 },
+        free: [pictureEl("p", { xMm: 12 })],
       })
     );
     assert.deepEqual(kinds(found), ALBUM_DIVERGENCE_KINDS.slice());
@@ -341,5 +384,92 @@ describe("countNewlyDivergingSheets", () => {
   it("is zero when nothing changes", () => {
     const now = [sheet("a"), sheet("b", [photo])];
     assert.equal(countNewlyDivergingSheets(now, now), 0);
+  });
+});
+
+describe("compareAlbumPages on a page without stamps (#1429)", () => {
+  const title = [pictureEl("arms"), textEl("t1"), textEl("t2", { text: "Freie Stadt Danzig", yMm: 60 })];
+
+  it("finds nothing on a card that still matches its page", () => {
+    assert.deepEqual(compareAlbumPages(freePage(title), freePage(title)), []);
+  });
+
+  it("reports a moved element, because on a page he laid out himself a position is a fact", () => {
+    // The contrast with every other sheet, where coordinates are consequences and never compared.
+    const moved = title.map((el) => (el.id === "arms" ? { ...el, yMm: 70 } : el));
+    const found = compareAlbumPages(freePage(title), freePage(moved));
+    assert.deepEqual(kinds(found), ["page"]);
+    assert.match(found[0].detail, /1 element has moved or changed size/);
+  });
+
+  it("reports a widened element the same way", () => {
+    const wider = title.map((el) => (el.id === "t1" ? { ...el, widthMm: 150 } : el));
+    assert.deepEqual(kinds(compareAlbumPages(freePage(title), freePage(wider))), ["page"]);
+  });
+
+  it("reports changed words as text, with both readings", () => {
+    const retyped = title.map((el) => (el.id === "t2" ? { ...el, text: "Freie Stadt\nDanzig" } : el));
+    const found = compareAlbumPages(freePage(title), freePage(retyped));
+    assert.deepEqual(kinds(found), ["text"]);
+    // A text that only broke differently must not read identically on both sides of the message.
+    assert.match(found[0].detail, /would now read "Freie Stadt \/ Danzig"; the card reads "Freie Stadt Danzig"/);
+  });
+
+  it("reports a text set in another face, size or alignment as the page", () => {
+    const restyled = title.map((el) => (el.id === "t1" ? { ...el, setting: "chapter 28 center" } : el));
+    const found = compareAlbumPages(freePage(title), freePage(restyled));
+    assert.deepEqual(kinds(found), ["page"]);
+    assert.match(found[0].detail, /set in a different face, size or alignment/);
+  });
+
+  it("reports a replaced picture as the page, not as a stamp photo ranked last", () => {
+    const replaced = title.map((el) => (el.id === "arms" ? { ...el, pictureId: "other" } : el));
+    const found = compareAlbumPages(freePage(title), freePage(replaced));
+    assert.deepEqual(kinds(found), ["page"]);
+    assert.match(found[0].detail, /1 picture has been replaced/);
+  });
+
+  it("reports what was added and what was taken off, quoting a text's words", () => {
+    const found = compareAlbumPages(
+      freePage(title),
+      freePage([textEl("t1"), textEl("t3", { text: "1920 – 1939" }), pictureEl("map", { pictureId: "map" })])
+    );
+    const details = found.map((d) => `${d.kind}: ${d.detail}`);
+    assert.ok(details.includes('text: The page now has a text the card does not carry: "1920 – 1939".'));
+    assert.ok(details.includes('text: The card carries a text the page no longer has: "Freie Stadt Danzig".'));
+    assert.ok(details.includes("page: The page now has 1 picture the card does not carry."));
+    assert.ok(details.includes("page: 1 picture on the card is no longer on the page."));
+  });
+
+  it("reports a change of drawing order only when nothing else explains it", () => {
+    const reordered = [title[1], title[0], title[2]];
+    const found = compareAlbumPages(freePage(title), freePage(reordered));
+    assert.deepEqual(kinds(found), ["page"]);
+    assert.match(found[0].detail, /drawn in a different order/);
+  });
+
+  it("reads a placed page the same way from a plan and from a card", () => {
+    const placed = albumComparableFreeElements({
+      id: "fp",
+      elements: [
+        {
+          kind: "text",
+          id: "t1",
+          role: "chapter",
+          sizePt: 24,
+          align: "left",
+          lines: ["Wolne Miasto", "Gdańsk"],
+          xMm: 10,
+          yMm: 40,
+          widthMm: 100,
+          heightMm: 20,
+        },
+        { kind: "picture", id: "arms", pictureId: "coat-of-arms", xMm: 75, yMm: 80, widthMm: 60, heightMm: 70 },
+      ],
+    });
+    assert.deepEqual(placed, [
+      textEl("t1", { text: "Wolne Miasto\nGdańsk", setting: "chapter 24 left", widthMm: 100 }),
+      pictureEl("arms"),
+    ]);
   });
 });

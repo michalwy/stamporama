@@ -272,5 +272,10 @@ is a block the pairing has made worse.
   block for decision 3's reason, it only removes one pairing (the block after it may still pair with
   it), and it is not a page break: a block that no longer fits once it has moved down goes to the next
   sheet whole, by the ordinary rule.
+- #1429 added **pages without stamps** ([ADR-0058](0058-album-free-pages.md)): an `album_free_page`
+  row filed before or after an entry exactly as a note is, and laid out as a sheet of its own rather
+  than packed. What is on it is the one thing on this track stored as a **position** — millimetres from
+  the sheet's corner — and that is decision 3 holding rather than broken: the position is on the free
+  page, which is a row, and no re-flow moves it. The page itself is still filed by an anchor.
 - Anyone reaching for a foreign key from `album` to `album_template`, or for an `album_page` table
   holding live pages, is undoing decisions 4 and 3 rather than tidying up. Read this file first.

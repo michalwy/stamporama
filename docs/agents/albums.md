@@ -3,7 +3,8 @@
 Printed album pages: what a page is, and what its boxes are cut from. The design was decided in
 **#755** — read that issue before anything here, it is the reasoning this file only summarises — and
 is being built out in #763–#771 and #777/#778. The model itself is **ADR-0045** (#767); printed
-pages are **ADR-0047** (#778); the cutting list they all feed is #770, below.
+pages are **ADR-0047** (#778); pages without stamps are **ADR-0058** (#1429); the cutting list they
+all feed is #770, below.
 
 The rule that runs through all of it: **an album is a durable, printed object, and the app's job is
 to plan it, not to render it once.** Pages get glued into. Two things paper cannot take back:
@@ -769,7 +770,7 @@ difference *is* the continuation page. The signal is the snapshot's own block `p
 split; back to 1 for a continuation), not the index's `part` column, which is offset so an entry's
 cards stay in filing order.
 
-The kinds are ranked `stamps`, `size`, `text`, `template`, `photo`, and **`photo` is last on
+The kinds are ranked `stamps`, `size`, `text`, `page` (a free page's arrangement, #1429), `template`, `photo`, and **`photo` is last on
 purpose**: a picture arriving after a card was printed is real and low-value, and one bulk scanning
 session would otherwise bury every genuine finding. The comparison is over **facts, not
 coordinates**, and the footer is suppressed when the stamps are what changed — it names the range, so
@@ -1270,6 +1271,58 @@ What is worth not re-deriving:
   notches at the corners. Without a gap it is still `rects`, byte for byte what it was.
 - **Divergence is the ordinary preset comparison** — the labels derive to *Title placement* and *Title
   frame gap (mm)*. A card stored before #1428 reads `below-frame` and 5, the migration's values.
+
+## Pages without stamps (#1429, ADR-0058)
+
+A title page, a section divider, a map, a page of notes: `AlbumFreePage` filed like a note, and
+`AlbumFreePageElement` rows — pictures and texts — placed on it in millimetres. **Read ADR-0058
+first.** `album-free-page.ts` is the pure vocabulary (bounds, the 300 dpi rule, centring, parsing);
+`album-layout.ts` places the sheet (`placeFreePage`); `album-pictures.ts` is the library;
+`free-page-panels.tsx` is the editor's side. What is worth not re-deriving:
+
+- **No title-page kind.** The collector wanted *any page without stamps* (2026-09-28); a title page is
+  one use of it. Nothing on the model says what a page is for.
+- **Filed like a note, laid out as a sheet.** A `page` block is never packed: it closes the page being
+  filled and gets paper of its own — **unless nothing is on that page yet**, so a year heading waiting
+  for its chapter's first checklist is kept open rather than emitted alone in front of the free page.
+  That condition is the one the unit suite breaks on (`tests/unit/album-free-page.test.ts`), with four
+  failures, if it is made unconditional. It shares a band with nothing (`measureBand`), a keep-together
+  cannot cross it (`keepTogether`), and it is skipped when finding a chapter's opener — a printed free
+  page at a chapter's head is not the card that carries the year.
+- **Within one slot a free page goes outside the notes** (`slotBlocks` in `album-plan.ts`): before an
+  entry it comes first, after an entry last, so a note stays beside its checklist.
+- **The chapter heading is the page's own statement** (`AlbumFreePageSpec.chapterHeading`), resolved in
+  `album-plan.ts` from the run of entries the anchor is in, rather than read off the chapter in the
+  layout. That is what lets a card's reference re-plan the free page **alone**: planned inside a chapter
+  whose heading waits for a first block, the reference came out two sheets against a card of one.
+- **Positions are stored; only the width is.** The one exception on the track to *corrections are
+  deltas*, and it is ADR-0045 §3 holding: the position is on the free page, a row. Heights are the
+  plan's — a text's lines, a picture's `aspect` (resolved in the plan context from the library).
+- **A text's face is a role, its size its own.** `AlbumPlacedText.sizePt` / `align` are optional and
+  absent on everything the layout sets itself; `albumPlacedTextFace` and `albumLineStartMm` are what
+  both renderers read, and the canvas anchors `start` / `middle` / `end` at the same x. Typed line breaks
+  are kept (`wrapAlbumFreeText`); an empty paragraph is an empty line.
+- **The library, not a copy per element** (decided 2026-09-28). Immutable; `NO ACTION` from both the
+  element and `album_printed_page_picture` — not `RESTRICT`, which would fail a collection delete
+  mid-cascade. The snapshot references pictures by id for that reason and copies nothing.
+- **An SVG the reader refuses is rasterised, not refused** (decided 2026-09-28). `readOrnamentSvg`
+  first; on `AlbumOrnamentSvgError` `sharp` draws it at 4000 px on the long side and `rasterReason`
+  keeps the reader's `reason` phrase. Only a file `sharp` cannot draw either is refused. The browser is
+  served `albumDrawingSvg` for a vector — outlines written back, never the upload — and the raster
+  bytes for the rest, through one route.
+- **On a card, coordinates are facts** (`compareFreeElements` in `album-divergence.ts`) — the opposite
+  of every other sheet. Words are `text`; the arrangement is the new kind `page` (decided 2026-09-28),
+  after `text` and before `template`. A text that only re-broke must not read the same on both sides of
+  the message, hence `quoted` showing line breaks as ` / `.
+- **Never orphaned, and discardable.** `AlbumPrintedIndex.byFreePage` claims the card; `printedCardGroups`
+  gives it a group of its own; `discardCoveredReprints` discards a stamp-less card when nothing names it
+  any more — which also closed the same gap for a card holding only a note, where a reprint had stayed
+  pending for ever.
+- **Left off the cutting list**, live and printed (`albumCutSheets`), and absent from the template
+  preview (`freePages: []` in `sampleSheetSource`).
+- **The editor goes to a new page by id** (`?page=<id>`, resolved in `getAlbumEditorData`): its position
+  is the re-plan's to decide, and an effect waiting for the refreshed list to name it is what the lint
+  rule refused.
 
 ## The cutting list (#770)
 

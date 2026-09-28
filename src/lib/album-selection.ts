@@ -30,6 +30,8 @@ export type AlbumEditorSelection =
   | ({ kind: "box" } & AlbumBoxRef)
   | { kind: "boxes"; boxes: AlbumBoxRef[] }
   | { kind: "block"; id: string }
+  /** One picture or text on a page without stamps (#1429). */
+  | { kind: "element"; id: string }
   | null;
 
 function sameBox(a: AlbumBoxRef, b: AlbumBoxRef): boolean {

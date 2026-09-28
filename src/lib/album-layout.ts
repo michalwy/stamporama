@@ -20,6 +20,9 @@
 //   page divided into columns, and the difference matters — see the note there.
 // - A **chapter** is one year (#755). Its heading is printed once, at the head of the chapter, and a
 //   chapter **starts a page**.
+// - A **free page** is a page without stamps (#1429) — a title page, a section divider — filed before
+//   or after an entry like a note, and laid out on a sheet of its own with whatever the collector put
+//   on it, where he put it. It is never packed among blocks: see {@link placeFreePage}.
 //
 // The last two are not invented. Both are read off the collector's own ~140 hand-written AlbumEasy
 // pages: every `PL-19xx.txt` carries exactly one `HEADER 24 "<year>"` however many `PAGE_START(` it
@@ -79,6 +82,7 @@ import type {
   AlbumRenderPreset,
   AlbumVerticalPlacement,
 } from "./album-template-rules";
+import type { AlbumFreeTextAlign } from "./album-free-page";
 import { roundSizeMm } from "./stamp-size";
 import { albumFrameCentreMm, albumTitleInFrame } from "./album-frame";
 
@@ -204,6 +208,34 @@ export interface AlbumRect {
 export interface AlbumPlacedText extends AlbumRect {
   role: AlbumTextRole;
   lines: string[];
+  /** The size the text is set at, when it is not its role's (#1429). A free page's text takes a
+   *  template **face** by its role and a size of its own; everything else on a sheet is set at its
+   *  role's size and leaves this absent. */
+  sizePt?: number;
+  /** Where each line sits in {@link widthMm} — absent is centred, which is every text the layout sets
+   *  itself. Only a free page's text chooses (#1429). */
+  align?: AlbumFreeTextAlign;
+}
+
+/** The face and size a placed text is set in: its role's face, at its own size where it has one. */
+export function albumPlacedTextFace(
+  preset: AlbumRenderPreset,
+  text: Pick<AlbumPlacedText, "role" | "sizePt">,
+): { face: string; sizePt: number } {
+  const own = albumRoleFace(preset, text.role);
+  return text.sizePt === undefined ? own : { face: own.face, sizePt: text.sizePt };
+}
+
+/** Where a line `lineWidthMm` wide starts inside a text's band, by the text's alignment. The one piece
+ *  of horizontal arithmetic both renderers need for a line, so the PDF and the canvas cannot put a
+ *  left-aligned line in two places. */
+export function albumLineStartMm(
+  text: Pick<AlbumPlacedText, "xMm" | "widthMm" | "align">,
+  lineWidthMm: number,
+): number {
+  if (text.align === "left") return text.xMm;
+  if (text.align === "right") return text.xMm + text.widthMm - lineWidthMm;
+  return text.xMm + (text.widthMm - lineWidthMm) / 2;
 }
 
 /** The minimum a box states to be placed: its cut size and the label under it. Callers pass their
@@ -247,7 +279,62 @@ export type AlbumBlockBreak = "auto" | "always" | "avoid";
  * Optional, and read as `entry` when absent, so a snapshot stored before text blocks existed reads
  * back as what it is rather than being refused by version (`album-snapshot.ts`).
  */
-export type AlbumBlockKind = "entry" | "text";
+export type AlbumBlockKind = "entry" | "text" | "page";
+
+/**
+ * One element of a free page (#1429), as the plan is given it: placed by the collector, in millimetres
+ * from the sheet's top-left corner. Only the width is stated — a text is as tall as its lines and a
+ * picture as tall as its proportions make it (`album-free-page.ts`).
+ */
+export type AlbumFreeElementSpec =
+  | {
+      kind: "text";
+      id: string;
+      xMm: number;
+      yMm: number;
+      widthMm: number;
+      text: string;
+      /** Which of the template's faces it is set in. */
+      role: AlbumTextRole;
+      sizePt: number;
+      align: AlbumFreeTextAlign;
+    }
+  | {
+      kind: "picture";
+      id: string;
+      xMm: number;
+      yMm: number;
+      widthMm: number;
+      pictureId: string;
+      /** Height over width — the picture's own proportions, resolved by the caller. */
+      aspect: number;
+    };
+
+/** A free page's own statements (#1429): what it carries, and which of the frame's heads it prints. */
+export interface AlbumFreePageSpec {
+  printTitle: boolean;
+  printChapter: boolean;
+  printFooter: boolean;
+  /** The heading of the chapter the page is filed in, resolved by the caller — printed only when
+   *  {@link printChapter} says so. Carried on the page rather than read off the chapter so that a
+   *  printed card's reference (#778) can be planned without the chapter around it. */
+  chapterHeading: string;
+  elements: readonly AlbumFreeElementSpec[];
+}
+
+/** A free page's element as the plan places it. A text carries its wrapped lines, as every other
+ *  text the plan places does; a picture its rectangle, with the height its proportions gave it. */
+export type AlbumPlacedFreeElement =
+  | ({ kind: "text"; id: string } & AlbumPlacedText)
+  | ({ kind: "picture"; id: string; pictureId: string } & AlbumRect);
+
+/** What a free page puts on its sheet (#1429). */
+export interface AlbumPlacedFreePage {
+  /** The free page's own id — the block's `entryId`, and the row it is edited through. */
+  id: string;
+  /** In drawing order: a later element is drawn over an earlier one. */
+  elements: AlbumPlacedFreeElement[];
+}
 
 /** One block to place: a checklist's heading and its boxes, in the order the album prints them. */
 export interface AlbumBlockSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
@@ -257,8 +344,13 @@ export interface AlbumBlockSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
   /** The rendered checklist heading, already in the album's language. Blank reserves nothing. */
   heading: string;
   boxes: readonly T[];
-  /** A checklist, or a block of the collector's own text (#769). Absent means `entry`. */
+  /** A checklist, a block of the collector's own text (#769), or a page without stamps (#1429).
+   *  Absent means `entry`. */
   kind?: AlbumBlockKind;
+  /** What a `page` block is (#1429). A free page is **a sheet of its own**: it closes the page being
+   *  filled and is laid out on paper of its own, never packed among blocks. Absent on every other
+   *  kind. */
+  free?: AlbumFreePageSpec;
   /** Which of the template's roles this block's text is set in. Absent means `heading`, which is
    *  what a checklist is. A **text block** names another of them, which is the whole of what "from
    *  the template's text roles" (#769) buys: the collector picks the voice the note is printed in
@@ -411,6 +503,9 @@ export type AlbumPlannedPage<T extends AlbumBoxSpec = AlbumBoxSpec> =
        *
        *  Absent on a sheet stored before placement existed, which was placed at the top. */
       placement?: AlbumVerticalPlacement;
+      /** A page without stamps (#1429): the collector's own pictures and texts. Absent on every sheet
+       *  the layout packed — and then `headings` and `boxes` are empty on this one. */
+      free?: AlbumPlacedFreePage;
     };
 
 /** A whole album's plan. Pages in printing order, and there is deliberately **no page number**
@@ -878,6 +973,8 @@ function measureBand<T extends AlbumBoxSpec>(
     available < cap &&
     from + available < blocks.length &&
     !blocks[from + available].printedPageIds?.length &&
+    // A free page (#1429) is a sheet of its own and shares a band with nothing.
+    blocks[from + available].kind !== "page" &&
     (available === 0 ||
       (blocks[from + available].breakBefore !== "always" &&
         !blocks[from + available].bandBreakBefore))
@@ -947,6 +1044,7 @@ function keepTogether<T extends AlbumBoxSpec>(
     const next = blocks[at];
     if (
       !next ||
+      next.kind === "page" ||
       next.breakBefore !== "avoid" ||
       (next.printedPageIds?.length ?? 0) > 0
     ) {
@@ -1130,8 +1228,13 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
     // second 1938 on a live sheet in front of the card headed 1938 — this family of bug arriving
     // through the editor rather than through a reorder. A note that is itself on paper *is* an
     // opener, because it is on the card that carries the year.
+    //
+    // A **free page** (#1429) never answers it. It is a sheet of its own, which prints its chapter's
+    // heading only if its own switch says so and never instead of the chapter's first stamp sheet.
     const opener = chapter.blocks.find(
-      (b) => b.kind !== "text" || (b.printedPageIds?.length ?? 0) > 0,
+      (b) =>
+        b.kind !== "page" &&
+        (b.kind !== "text" || (b.printedPageIds?.length ?? 0) > 0),
     );
     const opensOnPaper = !!opener?.printedPageIds?.length;
     const chapterFace = albumRoleFace(preset, "chapter");
@@ -1172,6 +1275,40 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
 
     while (i < chapter.blocks.length) {
       const block = chapter.blocks[i];
+
+      // **A free page** (#1429) is a sheet of its own, laid out on paper of its own. It closes the
+      // page being filled — but only if something is on it: a chapter's first page whose year heading
+      // is still waiting for its first block is kept open, so a free page filed before a chapter's
+      // first checklist comes *before* the year's first sheet rather than leaving the year alone on a
+      // card in front of it. On paper already, it is stepped over like any printed sheet.
+      if (block.kind === "page") {
+        if (page.blocks.length > 0) {
+          emit(page);
+          page = freshPage(chapter.key);
+        }
+        const printedIds = block.printedPageIds;
+        if (printedIds && printedIds.length > 0) {
+          for (const id of printedIds) {
+            const held = filed.get(id);
+            if (held) {
+              if (!held.entryIds.includes(block.entryId)) held.entryIds.push(block.entryId);
+              continue;
+            }
+            const sheet: Extract<AlbumPlannedPage<T>, { kind: "printed" }> = {
+              kind: "printed",
+              printedPageId: id,
+              chapterKey: chapter.key,
+              entryIds: [block.entryId],
+            };
+            pages.push(sheet);
+            filed.set(id, sheet);
+          }
+        } else if (block.free) {
+          pages.push(placeFreePage<T>(block.entryId, block.free, chapter.key, frame, preset, metrics));
+        }
+        i += 1;
+        continue;
+      }
 
       const printedIds = block.printedPageIds;
       if (printedIds && printedIds.length > 0) {
@@ -1337,6 +1474,135 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
   }
 
   return { pages };
+}
+
+/**
+ * A free text's lines (#1429): the collector's own line breaks kept, and each paragraph wrapped to the
+ * element's width with the measurer every other text on the sheet is wrapped with.
+ *
+ * An empty paragraph is kept as an empty line — a blank line typed between two is space the collector
+ * asked for — and a text that is blank altogether has no lines and reserves nothing, as a blank
+ * template does (#766).
+ */
+export function wrapAlbumFreeText(
+  text: string,
+  widthMm: number,
+  face: string,
+  sizePt: number,
+  metrics: AlbumTextMetrics,
+): string[] {
+  if (!text.trim()) return [];
+  return text
+    .split(/\r?\n/)
+    .flatMap((paragraph) => {
+      const lines = wrapAlbumText(paragraph, widthMm, face, sizePt, metrics);
+      return lines.length ? lines : [""];
+    });
+}
+
+/**
+ * One free page as a sheet (#1429).
+ *
+ * The frame is the album's, and each of its three heads is the page's own choice: the running head
+ * and the footer are the bands every other sheet reserves, placed where they are placed there, and the
+ * chapter heading is set under the head exactly as a chapter's first sheet sets it. The **content
+ * area** is what those leave — the rectangle an element is centred in — and it is the only thing
+ * computed here that the collector did not state.
+ *
+ * The elements are where the collector put them. What the plan adds is only what he did not state
+ * and cannot: a text's wrapped lines and its height, and a picture's height from its proportions.
+ */
+function placeFreePage<T extends AlbumBoxSpec>(
+  id: string,
+  spec: AlbumFreePageSpec,
+  chapterKey: string,
+  frame: PageFrame,
+  preset: AlbumRenderPreset,
+  metrics: AlbumTextMetrics,
+): Extract<AlbumPlannedPage<T>, { kind: "live" }> {
+  const title = spec.printTitle ? frame.title : null;
+  let top = title ? frame.contentTop : preset.marginTopMm;
+
+  let chapter: AlbumPlacedText | null = null;
+  if (spec.printChapter) {
+    const face = albumRoleFace(preset, "chapter");
+    const lines = wrapAlbumText(spec.chapterHeading, frame.contentW, face.face, face.sizePt, metrics);
+    if (lines.length) {
+      const textMm = roundSizeMm(lines.length * metrics.lineHeightMm(face.face, face.sizePt));
+      chapter = {
+        role: "chapter",
+        lines,
+        xMm: frame.contentX,
+        yMm: roundSizeMm(top + preset.chapterSpaceAboveMm),
+        widthMm: frame.contentW,
+        heightMm: textMm,
+      };
+      top = roundSizeMm(top + preset.chapterSpaceAboveMm + textMm + preset.chapterSpaceBelowMm);
+    }
+  }
+
+  const footer = spec.printFooter ? frame.footer : null;
+  const bottom = footer
+    ? frame.contentBottom
+    : roundSizeMm(preset.pageHeightMm - preset.marginBottomMm);
+
+  const elements: AlbumPlacedFreeElement[] = spec.elements.map((el) => {
+    if (el.kind === "picture") {
+      return {
+        kind: "picture",
+        id: el.id,
+        pictureId: el.pictureId,
+        xMm: el.xMm,
+        yMm: el.yMm,
+        widthMm: el.widthMm,
+        heightMm: roundSizeMm(el.widthMm * el.aspect),
+      };
+    }
+    const face = albumRoleFace(preset, el.role);
+    const lines = wrapAlbumFreeText(el.text, el.widthMm, face.face, el.sizePt, metrics);
+    return {
+      kind: "text",
+      id: el.id,
+      role: el.role,
+      sizePt: el.sizePt,
+      align: el.align,
+      lines,
+      xMm: el.xMm,
+      yMm: el.yMm,
+      widthMm: el.widthMm,
+      heightMm: roundSizeMm(lines.length * metrics.lineHeightMm(face.face, el.sizePt)),
+    };
+  });
+
+  return {
+    kind: "live",
+    chapterKey,
+    title,
+    chapter,
+    headings: [],
+    boxes: [],
+    blocks: [
+      {
+        entryId: id,
+        kind: "page",
+        part: 1,
+        heading: "",
+        firstBoxIndex: 0,
+        boxCount: 0,
+      },
+    ],
+    footer,
+    content: {
+      xMm: frame.contentX,
+      yMm: top,
+      widthMm: frame.contentW,
+      heightMm: roundSizeMm(bottom - top),
+    },
+    // Nothing on a free page is packed, so there is no leftover for a placement to spend: the
+    // collector put everything where it is.
+    placement: "top",
+    free: { id, elements },
+  };
 }
 
 /**

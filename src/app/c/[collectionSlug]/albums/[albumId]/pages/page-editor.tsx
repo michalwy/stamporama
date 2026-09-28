@@ -36,7 +36,16 @@ import {
 } from "@/lib/album-corrections";
 import { insertBefore } from "@/lib/album-drag";
 import {
+  addAlbumFreeElementAction,
+  addAlbumFreePageAction,
   addAlbumTextBlockAction,
+  deleteAlbumFreeElementAction,
+  deleteAlbumFreePageAction,
+  reorderAlbumFreePagesAction,
+  restackAlbumFreeElementAction,
+  updateAlbumFreeElementAction,
+  updateAlbumFreePageAction,
+  type AlbumFreePageCreatedState,
   clearAlbumBoxAdjustmentsAction,
   clearAlbumEntryStampOrderAction,
   deleteAlbumTextBlockAction,
@@ -96,6 +105,15 @@ import {
 } from "./page-canvas";
 import { AlbumNameSuggestion } from "../album-name-suggestion";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { BTN, CHIP, FRAME, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
+import {
+  AddFreePageDialog,
+  FreeElementPanel,
+  FreePagePanel,
+  PicturePickerDialog,
+} from "./free-page-panels";
+import { ALBUM_FREE_TEXT_STARTS, albumCentredXMm } from "@/lib/album-free-page";
+import type { AlbumPictureData } from "@/lib/album-pictures";
 
 // The page editor (#769): where the collector overrules the automatic layout.
 //
@@ -120,11 +138,6 @@ import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input"
 // A card in a binder opens showing what went onto the paper, with its divergences beside it.
 // Correcting one is not an edit but a decision — a continuation page or a reprint — and that
 // decision is made on the album screen. Nothing here offers it a second time.
-
-const MUTED: React.CSSProperties = {
-  fontSize: "0.8125rem",
-  color: "var(--color-text-muted)",
-};
 
 /** The card every area-picking screen in this app is (`ui-patterns.md`): one bordered box with the
  *  rail inside it, not a floating rail beside a separate panel — and, this being a workbench rather
@@ -169,52 +182,7 @@ const PANEL: React.CSSProperties = {
   overflowY: "auto",
 };
 
-/** A recessed frame for figures over what is selected — `--color-bg-page` inside the card's own
- *  white, the shape every summary bar in this app already carries. */
-const FRAME: React.CSSProperties = {
-  background: "var(--color-bg-page)",
-  borderRadius: "0.5rem",
-  padding: "0.625rem 0.75rem",
-};
-
-const INPUT: React.CSSProperties = {
-  width: "100%",
-  padding: "0.3125rem 0.5rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-};
-
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  padding: "0.0625rem 0.375rem",
-  borderRadius: "0.25rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-muted)",
-  whiteSpace: "nowrap",
-};
-
-const BTN: React.CSSProperties = {
-  padding: "0.3125rem 0.625rem",
-  background: "transparent",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.8125rem",
-  color: "var(--color-text-primary)",
-  textDecoration: "none",
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-};
-
 const ZOOMS = [0.5, 0.75, 1, 1.5, 2];
-
-/** Millimetres to a tenth, the precision everything on this track cuts to. */
-function mm(value: number): number {
-  return Math.round(value * 10) / 10;
-}
 
 interface AlbumPageEditorProps {
   collectionSlug: string;
@@ -236,6 +204,11 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     at: { left: number; bottom: number };
   } | null>(null);
   const [addingNote, setAddingNote] = useState(false);
+  /** Adding a page without stamps (#1429). The page just added is gone to by its own id, since that
+   *  is where its contents will be placed and its position is the re-plan's to decide. */
+  const [addingPage, setAddingPage] = useState(false);
+  /** The picture library open, to put a picture on the page or to replace one. */
+  const [picking, setPicking] = useState<{ replace: string | null } | null>(null);
   /** A size being given to several stamps at once (#1309) — a block's, or the boxes selected. */
   const [sizeGroup, setSizeGroup] = useState<{ stampIds: string[]; label: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -378,6 +351,75 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     });
   }
 
+  /** {@link run} for an action that creates something the screen should then go to — a free page's
+   *  sheet, or a new element, selected so it can be typed into at once. */
+  function runCreate(
+    action: () => Promise<AlbumFreePageCreatedState>,
+    then: (id: string) => void
+  ) {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      if (result.status === "created") then(result.id);
+      router.refresh();
+    });
+  }
+
+  /** Put a text on the free page being looked at — a heading across the content, or a text a little
+   *  narrower — starting in the template's own face at its own size, and selected to be typed into. */
+  function addFreeText(kind: keyof typeof ALBUM_FREE_TEXT_STARTS) {
+    const free = sheet?.free;
+    if (!sheet || !free) return;
+    const start = ALBUM_FREE_TEXT_STARTS[kind];
+    const content = sheet.content;
+    const widthMm = kind === "heading" ? content.widthMm : mm(content.widthMm * 0.8);
+    const form = new FormData();
+    form.set("kind", "text");
+    form.set("text", kind === "heading" ? "Heading" : "Text");
+    form.set("role", start.role);
+    form.set(
+      "sizePt",
+      String(start.role === "chapter" ? sheet.preset.chapterSizePt : sheet.preset.headingSizePt)
+    );
+    form.set("align", "center");
+    form.set("xMm", String(albumCentredXMm(content, widthMm)));
+    form.set("yMm", String(mm(content.yMm + (kind === "heading" ? 40 : 80))));
+    form.set("widthMm", String(widthMm));
+    runCreate(
+      () => addAlbumFreeElementAction(free.id, form),
+      (id) => setSelection({ kind: "element", id })
+    );
+  }
+
+  /** Put a picture from the library on the page, 60 mm wide and centred across — or swap the one in
+   *  an element for it. */
+  function placePicture(picture: AlbumPictureData, replace: string | null) {
+    const free = sheet?.free;
+    setPicking(null);
+    if (!sheet || !free) return;
+    if (replace) {
+      const form = new FormData();
+      form.set("pictureId", picture.id);
+      run(() => updateAlbumFreeElementAction(replace, form));
+      return;
+    }
+    const widthMm = Math.min(60, sheet.content.widthMm);
+    const form = new FormData();
+    form.set("kind", "picture");
+    form.set("pictureId", picture.id);
+    form.set("xMm", String(albumCentredXMm(sheet.content, widthMm)));
+    form.set("yMm", String(mm(sheet.content.yMm + 20)));
+    form.set("widthMm", String(widthMm));
+    runCreate(
+      () => addAlbumFreeElementAction(free.id, form),
+      (id) => setSelection({ kind: "element", id })
+    );
+  }
+
   /** Every checklist in the album, for a note's anchor — not only the ones on this sheet: the
    *  anchor is where a note is *filed*, and a note about a series two sheets on is an ordinary thing
    *  to write while looking at this one. */
@@ -385,6 +427,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
 
   function sheetHref(position: number): string {
     const params = new URLSearchParams(search.toString());
+    params.delete("page");
     params.set("sheet", String(position));
     return `/c/${collectionSlug}/albums/${album.id}/pages?${params.toString()}`;
   }
@@ -405,6 +448,18 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     sheet && selection?.kind === "block"
       ? (sheet.blocks.find((b) => b.id === selection.id) ?? null)
       : null;
+  const selectedElement =
+    sheet?.free && selection?.kind === "element"
+      ? (sheet.free.elements.find((el) => el.id === selection.id) ?? null)
+      : null;
+  /** The free pages filed at the same anchor and side as the one on this sheet, in their order. */
+  const freeSiblings = (() => {
+    const own = sheet?.free ? data.freePages.find((p) => p.id === sheet.free!.id) : undefined;
+    if (!own) return [];
+    return data.freePages
+      .filter((p) => p.anchorAlbumEntryId === own.anchorAlbumEntryId && p.side === own.side)
+      .map((p) => p.id);
+  })();
 
   /** Commit a space correction — on a checklist or on one of the collector's own notes. The two are
    *  different rows and the same correction, which is why the block carries its kind. */
@@ -707,9 +762,10 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               }}
             >
               <span style={{ fontWeight: row.position === sheet?.position ? 600 : 400 }}>
-                {row.range || "(no catalog numbers)"}
+                {row.free ? row.free.label : row.range || "(no catalog numbers)"}
               </span>
               <span style={{ ...MUTED, display: "block", fontSize: "0.75rem" }}>
+                {row.free ? "page without stamps · " : ""}
                 {row.chapterKey || "no year"}
                 {row.printed ? " · on paper" : ""}
               </span>
@@ -748,6 +804,20 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               drag={preview}
               onDrag={setPreview}
               onDragEnd={(d) => {
+                // A free page's element (#1429): the offset is the new position, or the new width.
+                if ((d.kind === "move" || d.kind === "width") && d.elementId) {
+                  const el = drawnSheet.free?.elements.find((e) => e.id === d.elementId);
+                  if (!el) return;
+                  const form = new FormData();
+                  if (d.kind === "move") {
+                    form.set("xMm", String(mm(el.xMm + d.dxMm)));
+                    form.set("yMm", String(mm(el.yMm + d.dyMm)));
+                  } else {
+                    form.set("widthMm", String(Math.max(1, mm(el.widthMm + d.dxMm))));
+                  }
+                  run(() => updateAlbumFreeElementAction(el.id, form));
+                  return;
+                }
                 if (d.kind === "space" || d.kind === "spaceAfter") {
                   const block = drawnSheet.blocks.find((b) => b.id === d.blockId);
                   if (!block?.correction) return;
@@ -790,6 +860,49 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               <PrintedSheetPanel
                 sheet={sheet}
                 albumHref={`/c/${collectionSlug}/albums/${album.id}`}
+              />
+            ) : sheet.free && selectedElement ? (
+              <FreeElementPanel
+                el={selectedElement}
+                content={sheet.content}
+                disabled={isPending}
+                onPreview={(d) =>
+                  setPreview(d ? { ...d, blockId: sheet.free!.id, elementId: selectedElement.id } : null)
+                }
+                onSave={(form) => {
+                  setPreview(null);
+                  run(() => updateAlbumFreeElementAction(selectedElement.id, form));
+                }}
+                onRestack={(to) => run(() => restackAlbumFreeElementAction(selectedElement.id, to))}
+                onDelete={() => {
+                  setSelection(null);
+                  run(() => deleteAlbumFreeElementAction(selectedElement.id));
+                }}
+                onReplacePicture={() => setPicking({ replace: selectedElement.id })}
+                onDone={() => setSelection(null)}
+              />
+            ) : sheet.free ? (
+              <FreePagePanel
+                sheet={sheet}
+                free={sheet.free}
+                anchors={anchorChoices}
+                siblings={freeSiblings.length}
+                disabled={isPending}
+                onSave={(form) => run(() => updateAlbumFreePageAction(sheet.free!.id, form))}
+                onAddText={addFreeText}
+                onAddPicture={() => setPicking({ replace: null })}
+                onMove={(by) => {
+                  const own = data.freePages.find((p) => p.id === sheet.free!.id);
+                  const at = freeSiblings.indexOf(sheet.free!.id);
+                  const to = at + by;
+                  if (!own || at === -1 || to < 0 || to >= freeSiblings.length) return;
+                  const next = freeSiblings.filter((id) => id !== own.id);
+                  next.splice(to, 0, own.id);
+                  run(() =>
+                    reorderAlbumFreePagesAction(album.id, own.anchorAlbumEntryId, own.side, next)
+                  );
+                }}
+                onDelete={() => run(() => deleteAlbumFreePageAction(sheet.free!.id))}
               />
             ) : selectedBoxes.length > 1 ? (
               <BoxesPanel
@@ -887,6 +1000,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                 collectionId={album.collectionId}
                 language={album.language}
                 onAddNote={() => setAddingNote(true)}
+                onAddPage={() => setAddingPage(true)}
                 onSaved={() => router.refresh()}
                 gaps={{
                   x: gapX,
@@ -935,6 +1049,39 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
             onApplied: () => router.refresh(),
           }}
           onClose={() => setSizeGroup(null)}
+        />
+      )}
+
+      {addingPage && (
+        <AddFreePageDialog
+          anchors={anchorChoices}
+          // Offered after the last checklist on the sheet being looked at, which is where a page added
+          // "here" is most likely meant to go.
+          defaultAnchor={
+            [...(sheet?.blocks ?? [])].reverse().find((b) => b.kind === "entry")?.id ?? null
+          }
+          isPending={isPending}
+          error={error ?? undefined}
+          onClose={() => !isPending && setAddingPage(false)}
+          onSubmit={(form) =>
+            runCreate(
+              () => addAlbumFreePageAction(album.id, form),
+              (id) => {
+                setAddingPage(false);
+                setSelection(null);
+                router.push(`/c/${collectionSlug}/albums/${album.id}/pages?page=${id}`);
+              }
+            )
+          }
+        />
+      )}
+
+      {picking && (
+        <PicturePickerDialog
+          collectionId={album.collectionId}
+          pictures={data.pictures}
+          onPick={(picture) => placePicture(picture, picking.replace)}
+          onClose={() => setPicking(null)}
         />
       )}
 
@@ -989,23 +1136,6 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
 
 // ── The panels ───────────────────────────────────────────────────────────────
 
-function PanelHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: "0.6875rem",
-        fontWeight: 700,
-        textTransform: "uppercase",
-        letterSpacing: "0.03em",
-        color: "var(--color-text-muted)",
-        marginBottom: "0.5rem",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 /** Nothing selected: what is on the sheet, what needs attention before it is printed, and the way to
  *  add a note. */
 function SheetPanel({
@@ -1013,6 +1143,7 @@ function SheetPanel({
   collectionId,
   language,
   onAddNote,
+  onAddPage,
   onSaved,
   gaps,
   photos,
@@ -1022,6 +1153,7 @@ function SheetPanel({
   collectionId: string;
   language: string;
   onAddNote: () => void;
+  onAddPage: () => void;
   onSaved: () => void;
   gaps: BoxGapFieldsProps;
   photos: PhotoSwitchProps;
@@ -1125,6 +1257,16 @@ function SheetPanel({
         <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
           A block of your own words, set in one of the template&apos;s voices and filed after a
           checklist so it travels with it.
+        </p>
+      </div>
+
+      <div>
+        <button type="button" onClick={onAddPage} style={BTN}>
+          <Icon name="add" size="sm" /> Add a page without stamps
+        </button>
+        <p style={{ ...MUTED, margin: "0.5rem 0 0", lineHeight: 1.5 }}>
+          A title page, a section divider or a map: a sheet of its own inside the album&apos;s frame,
+          with pictures, headings and texts placed where you put them.
         </p>
       </div>
 

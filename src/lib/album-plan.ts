@@ -4,11 +4,14 @@ import { prisma } from "./db";
 import {
   getAlbum,
   getAlbumEntries,
+  getAlbumFreePages,
   getAlbumTextBlocks,
   type AlbumData,
   type AlbumEntryData,
+  type AlbumFreePageData,
   type AlbumTextBlockData,
 } from "./albums";
+import { resolveAlbumPictures, type AlbumPictureRef } from "./album-pictures";
 import { albumCorrectedStampSize } from "./album-corrections";
 import { getHawidStrips, type HawidStripData } from "./hawid-stock";
 import {
@@ -42,12 +45,13 @@ import { resolveAlbumFrameOrnament } from "./album-ornament-store";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import { getAlbumPrintedIndex, type AlbumPrintedIndex } from "./album-printed-pages";
 import { albumPlanFingerprint } from "./album-print-rules";
-import type { AlbumComparablePage } from "./album-divergence";
+import { albumComparableFreeElements, type AlbumComparablePage } from "./album-divergence";
 import {
   planAlbumPages,
   type AlbumPlan,
   type AlbumBoxSpec,
   type AlbumBlockSpec,
+  type AlbumFreeElementSpec,
   type AlbumPlacedText,
   type AlbumPlannedPage,
 } from "./album-layout";
@@ -212,6 +216,10 @@ export interface AlbumPlanContext {
   entries: AlbumEntryData[];
   /** The collector's own text blocks (#769), in the order they are filed. */
   textBlocks: AlbumTextBlockData[];
+  /** The album's pages without stamps (#1429), in the order they are filed. */
+  freePages: AlbumFreePageData[];
+  /** The library pictures those pages place, by id — read once here, for their proportions. */
+  pictures: Map<string, AlbumPictureRef>;
   printed: AlbumPrintedIndex;
   emptyStock: boolean;
   /** The corner ornament the frame names, resolved once here for every sheet drawn from this
@@ -275,12 +283,13 @@ export async function albumPlanContext(
   // faces with the old box heights, which is precisely the confident wrong answer a preview must
   // never produce.
   const album: AlbumData = override ? { ...row, ...override } : row;
-  const [entries, textBlocks] = await Promise.all([
+  const [entries, textBlocks, freePages] = await Promise.all([
     getAlbumEntries(ownerId, albumId),
     getAlbumTextBlocks(ownerId, albumId),
+    getAlbumFreePages(ownerId, albumId),
   ]);
 
-  const [stock, areas, issuePrefixes, toCopy, printed, collection, frameOrnament] = await Promise.all([
+  const [stock, areas, issuePrefixes, toCopy, printed, collection, frameOrnament, pictures] = await Promise.all([
     getHawidStrips(ownerId, album.collectionId),
     getCollectionAreas(ownerId, album.collectionId),
     loadIssuePrefixMap(album.collectionId),
@@ -291,6 +300,10 @@ export async function albumPlanContext(
       select: { defaultLanguage: true },
     }),
     resolveAlbumFrameOrnament(album.collectionId, album.frameOrnament),
+    resolveAlbumPictures(
+      album.collectionId,
+      freePages.flatMap((page) => page.elements.flatMap((el) => (el.pictureId ? [el.pictureId] : [])))
+    ),
   ]);
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
   // The language texts resolve in, normalised exactly as `makeTitleCopyMapper` normalises it: the
@@ -419,6 +432,8 @@ export async function albumPlanContext(
     album,
     entries,
     textBlocks,
+    freePages,
+    pictures,
     printed,
     emptyStock: stock.length === 0,
     frameOrnament,
@@ -527,14 +542,32 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
   }
   // Anchored to nothing: the head of the album, and the end of it. Both are steadier than naming the
   // first or last checklist, neither of which stays the first or the last.
-  const headNotes = notesAt.get(slot(null, "before")) ?? [];
-  const tailNotes = notesAt.get(slot(null, "after")) ?? [];
-  let headNotesFiled = headNotes.length === 0;
   // Which sheet a note is on is the **printed index's** answer, not the note's own column: a card
   // being reprinted has its content back in the live plan, and the note beside a checklist on that
   // card has to come back with it.
   const noteBlock = (note: AlbumTextBlockData) =>
     albumNoteBlock(note, printed.byTextBlock.get(note.id) ?? null);
+
+  // The album's pages without stamps (#1429), filed exactly as notes are — an anchor and a side — and
+  // sharing a note's slots. Within one slot a free page goes **outside** the notes: a note beside a
+  // checklist stays next to the checklist it is about, and the page that is a sheet of its own goes
+  // before or after both.
+  const freeAt = new Map<string, AlbumFreePageData[]>();
+  for (const page of context.freePages) {
+    const at = slot(page.anchorAlbumEntryId, page.side);
+    freeAt.set(at, [...(freeAt.get(at) ?? []), page]);
+  }
+  const freeBlock = (page: AlbumFreePageData) =>
+    albumFreePageBlock(context, page, printed.byFreePage.get(page.id) ?? null);
+  const slotBlocks = (anchorId: string | null, side: "before" | "after"): AlbumBlockSpec<AlbumBoxData>[] => {
+    const notes = (notesAt.get(slot(anchorId, side)) ?? []).map(noteBlock);
+    const pages = (freeAt.get(slot(anchorId, side)) ?? []).map(freeBlock);
+    return side === "before" ? [...pages, ...notes] : [...notes, ...pages];
+  };
+
+  const headBlocks = slotBlocks(null, "before");
+  const tailBlocks = slotBlocks(null, "after");
+  let headNotesFiled = headBlocks.length === 0;
 
   const chapters: { key: string; heading: string; blocks: AlbumBlockSpec<AlbumBoxData>[] }[] = [];
   for (const entry of entries) {
@@ -545,11 +578,10 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
       chapters.push(chapter);
     }
     if (!headNotesFiled) {
-      for (const note of headNotes) chapter.blocks.push(noteBlock(note));
+      chapter.blocks.push(...headBlocks);
       headNotesFiled = true;
     }
-    for (const note of notesAt.get(slot(entry.id, "before")) ?? [])
-      chapter.blocks.push(noteBlock(note));
+    chapter.blocks.push(...slotBlocks(entry.id, "before"));
     const heading = context.checklistHeading(entry);
     const onPaper = printed.byEntry.get(entry.id);
 
@@ -566,8 +598,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
         bandBreakBefore: entry.bandBreakBefore,
         pagePlacement: entry.pagePlacement,
       });
-      for (const note of notesAt.get(slot(entry.id, "after")) ?? [])
-        chapter.blocks.push(noteBlock(note));
+      chapter.blocks.push(...slotBlocks(entry.id, "after"));
       continue;
     }
 
@@ -613,23 +644,22 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
         });
       }
     }
-    for (const note of notesAt.get(slot(entry.id, "after")) ?? [])
-      chapter.blocks.push(noteBlock(note));
+    chapter.blocks.push(...slotBlocks(entry.id, "after"));
   }
 
   // An album that is nothing but notes — no checklists gathered yet, or every one removed — still
   // has something to lay out. A chapter with no year is what a checklist spanning issues already
   // produces, so this is the shape the planner has rather than a special case.
   if (!headNotesFiled) {
-    chapters.push({ key: "", heading: "", blocks: headNotes.map(noteBlock) });
+    chapters.push({ key: "", heading: "", blocks: headBlocks });
   }
   // The album's closing notes go at the end of its last chapter — or open one of their own when
   // there is nothing else in the album at all.
-  if (tailNotes.length > 0) {
+  if (tailBlocks.length > 0) {
     const last = chapters[chapters.length - 1];
     const into = last ?? { key: "", heading: "", blocks: [] };
     if (!last) chapters.push(into);
-    for (const note of tailNotes) into.blocks.push(noteBlock(note));
+    into.blocks.push(...tailBlocks);
   }
 
   const pages = context.finish(planAlbumPages(chapters, album, album.name, albumTextMetrics));
@@ -671,6 +701,91 @@ export function albumNoteBlock(
     breakBefore: note.breakBefore,
     bandBreakBefore: note.bandBreakBefore,
     pagePlacement: note.pagePlacement,
+  };
+}
+
+/**
+ * The chapter a free page is filed in, as its heading reads (#1429) — the chapter of the entry it is
+ * anchored to, or of the album's first entry for its opening page and its last for its closing one,
+ * which is where the plan puts those. The heading is the one the plan gives that chapter: the heading
+ * of the **run** of entries sharing a year that the entry is in, rendered over the run's first entry.
+ */
+function freePageChapterHeading(
+  context: Pick<AlbumPlanContext, "entries" | "chapterHeading">,
+  page: AlbumFreePageData
+): string {
+  const { entries } = context;
+  if (entries.length === 0) return "";
+  let at = page.anchorAlbumEntryId
+    ? entries.findIndex((e) => e.id === page.anchorAlbumEntryId)
+    : page.side === "before"
+      ? 0
+      : entries.length - 1;
+  if (at < 0) at = page.side === "before" ? 0 : entries.length - 1;
+  const key = (e: AlbumEntryData) => (e.year === null ? "" : String(e.year));
+  while (at > 0 && key(entries[at - 1]) === key(entries[at])) at -= 1;
+  return context.chapterHeading([entries[at]]);
+}
+
+/**
+ * One of the album's pages without stamps as a block the plan can place (#1429).
+ *
+ * A `page` block: `album-layout.ts` lays it out on a sheet of its own, with its elements where the
+ * collector put them. What this adds is only what the layout cannot know — each picture's proportions
+ * from the library, and the heading of the chapter the page is filed in, printed only if the page's
+ * own switch says so.
+ *
+ * A free page **on a card** names that sheet, exactly as a note on paper does, so the plan steps
+ * over it (ADR-0047 §4).
+ */
+export function albumFreePageBlock(
+  context: Pick<AlbumPlanContext, "entries" | "pictures" | "chapterHeading">,
+  page: AlbumFreePageData,
+  printedPageId: string | null
+): AlbumBlockSpec<AlbumBoxData> {
+  return {
+    entryId: page.id,
+    kind: "page",
+    heading: "",
+    boxes: [],
+    printedPageIds: printedPageId ? [printedPageId] : null,
+    free: {
+      printTitle: page.printTitle,
+      printChapter: page.printChapter,
+      printFooter: page.printFooter,
+      chapterHeading: page.printChapter
+        ? freePageChapterHeading(context, page)
+        : "",
+      elements: page.elements.flatMap((el): AlbumFreeElementSpec[] => {
+        if (el.kind === "text") {
+          return [
+            {
+              kind: "text" as const,
+              id: el.id,
+              xMm: el.xMm,
+              yMm: el.yMm,
+              widthMm: el.widthMm,
+              text: el.text,
+              role: el.role,
+              sizePt: el.sizePt,
+              align: el.align,
+            },
+          ];
+        }
+        if (!el.pictureId) return [];
+        return [
+          {
+            kind: "picture" as const,
+            id: el.id,
+            xMm: el.xMm,
+            yMm: el.yMm,
+            widthMm: el.widthMm,
+            pictureId: el.pictureId,
+            aspect: context.pictures.get(el.pictureId)?.aspect ?? 1,
+          },
+        ];
+      }),
+    },
   };
 }
 
@@ -764,8 +879,10 @@ export interface AlbumPlanPageView {
    *  work out which other sheets to pick, the listing says so and the action sends the whole run.
    *  A single-sheet page holds just its own position. */
   runWith: number[];
-  /** The checklist headings on the sheet, in reading order. */
+  /** The checklist headings on the sheet, in reading order — for a free page, its texts. */
   headings: string[];
+  /** A page without stamps (#1429), which a list names by what it says rather than by a range. */
+  free: boolean;
   /** A heading continued from the previous page — a block too tall for one column. The PDF marks
    *  such a sheet `[2]`, `[3]` on the heading itself (#768); this flag is just the chip. */
   continued: boolean;
@@ -836,6 +953,7 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
     });
   }
 
+  const freeCards = new Set(result.printed.byFreePage.values());
   return {
     emptyStock: result.emptyStock,
     fingerprint: albumPlanFingerprint(albumPlanPrint(result.pages)),
@@ -849,6 +967,7 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
           printedAt: row?.printedAt.toISOString() ?? null,
           runWith: [],
           headings: [],
+          free: freeCards.has(page.layout.printedPageId),
           continued: false,
           boxCount: 0,
           oversizeCount: 0,
@@ -864,7 +983,12 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
         printedPageId: null,
         printedAt: null,
         runWith: runOf.get(index) ?? [index + 1],
-        headings: page.layout.headings.map((h) => h.lines.join(" ")),
+        headings: page.layout.free
+          ? page.layout.free.elements.flatMap((el) =>
+              el.kind === "text" && el.lines.some((l) => l) ? [el.lines.filter((l) => l).join(" ")] : []
+            )
+          : page.layout.headings.map((h) => h.lines.join(" ")),
+        free: !!page.layout.free,
         continued: page.layout.blocks.some((b) => b.part > 1),
         boxCount: boxes.length,
         oversizeCount: boxes.filter((b) => b.strip === null).length,
@@ -956,5 +1080,6 @@ export function albumComparablePage(
     preset: albumRenderPreset(album),
     placement: layout.placement ?? "top",
     blocks,
+    ...(layout.free ? { free: albumComparableFreeElements(layout.free) } : {}),
   };
 }

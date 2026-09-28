@@ -74,3 +74,10 @@ export function sheetVariantKey(
 export function ornamentKey(collectionId: string, ornamentId: string): string {
   return `${collectionId}/ornaments/${ornamentId}/original.svg`;
 }
+
+/** The key of one file of a free page's library picture (#1429):
+ * `<collectionId>/album-pictures/<id>/<file>` — `original.<ext>` as uploaded, and `raster.png` for an
+ * SVG the vector reader does not follow, rasterised once at upload. */
+export function albumPictureKey(collectionId: string, pictureId: string, file: string): string {
+  return `${collectionId}/album-pictures/${pictureId}/${file}`;
+}
