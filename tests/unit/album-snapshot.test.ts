@@ -54,3 +54,29 @@ describe("a card stored before the title could sit in the frame line (#1428)", (
     assert.equal(card.preset.titleFrameGapMm, 5);
   });
 });
+
+describe("a card stored before the footer was placed on its own (#1457)", () => {
+  const before: Record<string, unknown> = { ...DEFAULT_ALBUM_PRESET };
+  delete before.footerPlacement;
+  delete before.footerOffsetMm;
+  delete before.footerFrameGapMm;
+
+  it("reads as printed inside the frame, its foot on its own bottom margin", () => {
+    const card = parseAlbumSnapshot(stored(before));
+    assert.equal(card.preset.footerPlacement, "inside-frame");
+    // 10 mm margin, the double rule's inside at 6.8 mm: the migration's figure for its album.
+    assert.equal(card.preset.footerOffsetMm, 3.2);
+    assert.equal(card.preset.footerFrameGapMm, 5);
+  });
+
+  it("works the offset out from the card's own margin and frame, as the migration did its album's", () => {
+    const card = parseAlbumSnapshot(
+      stored({ ...before, marginBottomMm: 15, borderStyle: "single", borderWidthMm: 0.4 })
+    );
+    assert.equal(card.preset.footerOffsetMm, 9.8);
+    // One older still, whose double rule was 1.2 mm apart before the gap was a value (#1427).
+    const older: Record<string, unknown> = { ...before };
+    delete older.borderGapMm;
+    assert.equal(parseAlbumSnapshot(stored(older)).preset.footerOffsetMm, 3.2);
+  });
+});

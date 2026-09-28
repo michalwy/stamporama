@@ -23,6 +23,7 @@ import {
   ALBUM_BOX_BORDER_STYLES,
   ALBUM_LABEL_POSITIONS,
   ALBUM_TITLE_PLACEMENTS,
+  ALBUM_FOOTER_PLACEMENTS,
   ALBUM_VERTICAL_PLACEMENTS,
   ALBUM_MM_STEP,
   ALBUM_PT_STEP,
@@ -742,6 +743,26 @@ export function AlbumPresetForm({
                     value={preset.titleFrameGapMm}
                     disabled={isPending}
                   />
+                  <div />
+                  <ChoiceField
+                    name="footerPlacement"
+                    label="Footer"
+                    value={preset.footerPlacement}
+                    options={ALBUM_FOOTER_PLACEMENTS}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="footerOffsetMm"
+                    label="Footer offset from the frame"
+                    value={preset.footerOffsetMm}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="footerFrameGapMm"
+                    label="Gap around the footer in the line"
+                    value={preset.footerFrameGapMm}
+                    disabled={isPending}
+                  />
                 </div>
                 <p style={{ ...HINT_STYLE, marginTop: "0.75rem" }}>
                   The frame is drawn in the margin and never moves a series. A <strong>corner ornament</strong>{" "}
@@ -754,6 +775,14 @@ export function AlbumPresetForm({
                   no longer takes a line of its own, so the content starts on the top margin. Unlike the
                   rest of the frame this moves series. A page with no border prints the title below, as
                   before.
+                </p>
+                <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
+                  The <strong>footer</strong> is placed from the frame, never from the content: its offset is
+                  measured up from the frame&apos;s inside when it sits <strong>inside the frame</strong>, and
+                  down from its outside when it sits <strong>below the frame</strong>, in the margin. In the
+                  frame line the bottom rule breaks around it as it does around the title. The margins alone
+                  decide where series go; a footer reaching above the bottom margin keeps them clear of it. A
+                  page with no border prints the footer on the bottom margin.
                 </p>
               </>
             )}

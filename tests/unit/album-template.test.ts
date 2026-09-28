@@ -167,6 +167,19 @@ describe("parseAlbumTemplateInput", () => {
     assert.match(parseError({ titleFrameGapMm: "" }), /Gap around the title in the frame line/);
   });
 
+  it("reads where the footer sits, its offset from the frame and the gap around it in the line (#1457)", () => {
+    for (const placement of ["inside-frame", "in-frame", "below-frame"] as const) {
+      assert.equal(parsedOk({ footerPlacement: placement }).footerPlacement, placement);
+    }
+    assert.match(parseError({ footerPlacement: "above" }), /Footer placement is not a recognised/);
+    assert.equal(parsedOk({ footerOffsetMm: "1,5" }).footerOffsetMm, 1.5);
+    assert.equal(parsedOk({ footerOffsetMm: "0" }).footerOffsetMm, 0);
+    assert.match(parseError({ footerOffsetMm: "-1" }), /Footer offset from the frame/);
+    assert.match(parseError({ footerOffsetMm: "" }), /Footer offset from the frame/);
+    assert.equal(parsedOk({ footerFrameGapMm: "3" }).footerFrameGapMm, 3);
+    assert.match(parseError({ footerFrameGapMm: "-1" }), /Gap around the footer in the frame line/);
+  });
+
   it("starts a new template with his Classic frame's shape: a double rule and a 25 mm corner (#1427)", () => {
     assert.equal(DEFAULT_ALBUM_PRESET.borderStyle, "double");
     assert.equal(DEFAULT_ALBUM_PRESET.borderGapMm, 1.2);

@@ -84,7 +84,14 @@ import type {
 } from "./album-template-rules";
 import type { AlbumFreeTextAlign } from "./album-free-page";
 import { roundSizeMm } from "./stamp-size";
-import { albumFrameCentreMm, albumTitleInFrame } from "./album-frame";
+import {
+  albumFooterInFrame,
+  albumFrameCentreMm,
+  albumFrameInnerEdgeMm,
+  albumFrameOuterEdgeMm,
+  albumHasRule,
+  albumTitleInFrame,
+} from "./album-frame";
 
 /**
  * How text is measured. The engine never measures anything itself — it asks.
@@ -550,6 +557,16 @@ interface PageFrame {
  * than a jump — `max(margin, title bottom + space below)` — so a title a tenth of a millimetre
  * taller moves the content a tenth, never a whole spacing value. The space above has nothing to
  * separate the title from and is not read.
+ *
+ * **The footer is placed on its own (#1457)**, from the frame rather than as the foot of the content,
+ * so where it sits never enlarges the area the content is spread over — before, the only way to print
+ * it below the frame was a bottom margin smaller than the frame, and #1419's placement then spread
+ * the content down to the frame. Inside the frame its foot is `footerOffsetMm` above the rule's
+ * inside; in the frame line it is centred on the bottom rule's centre line, as the title is on the
+ * top one; below the frame its head is `footerOffsetMm` under the rule's outside. A sheet with no
+ * rule sets its foot on the bottom margin, as every footer was set before. The content then ends on
+ * the bottom margin, or on the footer's head if the footer reaches above that — so content never
+ * runs into it, and a footer in the margin takes nothing from the content.
  */
 function pageFrame(
   preset: AlbumRenderPreset,
@@ -614,9 +631,9 @@ function pageFrame(
     ? roundSizeMm(metrics.lineHeightMm(footerFace.face, footerFace.sizePt))
     : 0;
 
-  const contentBottom = roundSizeMm(
-    preset.pageHeightMm - preset.marginBottomMm - footerHeight,
-  );
+  const marginBottom = roundSizeMm(preset.pageHeightMm - preset.marginBottomMm);
+  const footerTop = footerHeight ? albumFooterTopMm(preset, footerHeight) : marginBottom;
+  const contentBottom = Math.min(marginBottom, footerTop);
 
   return {
     contentX,
@@ -627,11 +644,56 @@ function pageFrame(
     footer: footerHeight
       ? {
           xMm: contentX,
-          yMm: contentBottom,
+          yMm: footerTop,
           widthMm: contentW,
           heightMm: footerHeight,
         }
       : null,
+  };
+}
+
+/** Where the footer's line starts, down from the sheet's top edge — see {@link pageFrame}. */
+function albumFooterTopMm(preset: AlbumRenderPreset, heightMm: number): number {
+  const H = preset.pageHeightMm;
+  if (!albumHasRule(preset)) return roundSizeMm(H - preset.marginBottomMm - heightMm);
+  switch (preset.footerPlacement) {
+    case "inside-frame":
+      return roundSizeMm(
+        roundSizeMm(H - albumFrameInnerEdgeMm(preset) - preset.footerOffsetMm) - heightMm,
+      );
+    case "in-frame":
+      return roundSizeMm(H - albumFrameCentreMm(preset) - heightMm / 2);
+    case "below-frame":
+      return roundSizeMm(H - albumFrameOuterEdgeMm(preset) + preset.footerOffsetMm);
+  }
+}
+
+/**
+ * The footer's text in the band the plan placed for it (#1457).
+ *
+ * The band is the content's width, and the renderers centre the line in it — every footer before
+ * #1457 and every one inside or below the frame. **Set into the frame line** the footer is instead
+ * exactly as wide as its text and centred on the sheet, as the title is (#1428): that rectangle is
+ * what `album-frame.ts` breaks the bottom rule around, so the letters and the gap cannot disagree.
+ * Its width is only known here, because the text names the page's own range and is rendered after the
+ * page is closed.
+ */
+export function albumPlacedFooter(
+  preset: AlbumRenderPreset,
+  band: AlbumRect,
+  text: string,
+  metrics: AlbumTextMetrics,
+): AlbumPlacedText {
+  if (!albumFooterInFrame(preset)) return { role: "footer", lines: [text], ...band };
+  const face = albumRoleFace(preset, "footer");
+  const widthMm = roundSizeMm(metrics.measureMm(text, face.face, face.sizePt));
+  return {
+    role: "footer",
+    lines: [text],
+    xMm: roundSizeMm((preset.pageWidthMm - widthMm) / 2),
+    yMm: band.yMm,
+    widthMm,
+    heightMm: band.heightMm,
   };
 }
 

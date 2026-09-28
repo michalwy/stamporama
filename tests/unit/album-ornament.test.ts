@@ -16,8 +16,12 @@ import {
   isAlbumUploadedOrnamentId,
 } from "../../src/lib/album-ornaments";
 import {
+  albumFooterInFrame,
+  albumFooterOffsetFromMarginMm,
   albumFrame,
   albumFrameCentreMm,
+  albumFrameInnerEdgeMm,
+  albumFrameOuterEdgeMm,
   albumTitleInFrame,
   type AlbumFramePreset,
 } from "../../src/lib/album-frame";
@@ -336,6 +340,8 @@ const A4: AlbumFramePreset = {
   frameOrnamentSizeMm: 20,
   titlePlacement: "below-frame",
   titleFrameGapMm: 5,
+  footerPlacement: "inside-frame",
+  footerFrameGapMm: 5,
 };
 
 /** A plain square ornament whose frame starts at 0 0: 10 units, so 2 mm a unit at 20 mm. */
@@ -504,5 +510,113 @@ describe("the page frame around a title set into its top line (#1428)", () => {
     }
     assert.equal(albumTitleInFrame(IN_FRAME), true);
     assert.equal(albumTitleInFrame({ ...IN_FRAME, borderStyle: "single" }), true);
+  });
+});
+
+describe("the page frame around a footer set into its bottom line (#1457)", () => {
+  const IN_FRAME: AlbumFramePreset = { ...A4, footerPlacement: "in-frame", footerFrameGapMm: 4 };
+  const FOOTER = { xMm: 95, yMm: 292, widthMm: 20, heightMm: 3.4 };
+  const TITLE = { xMm: 76.45, yMm: 2, widthMm: 57.1, heightMm: 7.6 };
+  const bottomAt = (f: ReturnType<typeof albumFrame>, y: number) =>
+    f.lines.filter((l) => l.y1Mm === y && l.y2Mm === y).sort((a, b) => a.x1Mm - b.x1Mm);
+  const q = (n: number) => Number(n.toFixed(3));
+  const at = (path: { xMm: number; yMm: number }[]) => path.map((p) => [q(p.xMm), q(p.yMm)]);
+
+  it("breaks both bottom rules between the ornaments, the gap wide each side of the footer", () => {
+    const f = albumFrame(IN_FRAME, SQUARE, null, FOOTER);
+    const reach = albumFrameCentreMm(A4) + 20;
+    for (const y of [297 - 5, 297 - (5 + 0.4 + 1.2)]) {
+      const [left, right] = bottomAt(f, y);
+      close(left.x1Mm, reach);
+      close(left.x2Mm, 95 - 4);
+      close(right.x1Mm, 95 + 20 + 4);
+      close(right.x2Mm, 210 - reach);
+      assert.equal(bottomAt(f, y).length, 2);
+    }
+    // The top rules and the sides are as they were.
+    assert.equal(f.lines.length, 10);
+    assert.equal(f.lines.filter((l) => l.y1Mm === 5 && l.y2Mm === 5).length, 1);
+  });
+
+  it("leaves the rule whole for a footer inside or below the frame, and for no footer", () => {
+    for (const placement of ["inside-frame", "below-frame"] as const) {
+      const preset = { ...A4, footerPlacement: placement };
+      assert.deepEqual(albumFrame(preset, SQUARE, null, FOOTER), albumFrame(A4, SQUARE));
+      assert.deepEqual(albumFrame(preset, null, null, FOOTER), albumFrame(A4, null));
+    }
+    assert.deepEqual(albumFrame(IN_FRAME, null, null, null), albumFrame(A4, null));
+  });
+
+  it("turns a frame of rules alone into one open stroke per rule, from the gap round to the gap", () => {
+    const f = albumFrame({ ...IN_FRAME, borderStyle: "single" }, null, null, FOOTER);
+    assert.equal(f.rects.length, 0);
+    assert.deepEqual(at(f.paths[0]), [
+      [91, 292],
+      [5, 292],
+      [5, 5],
+      [205, 5],
+      [205, 292],
+      [119, 292],
+    ]);
+    assert.equal(f.paths.length, 1);
+  });
+
+  it("breaks a rule with both a title and a footer in it into two strokes, down the right and up the left", () => {
+    const preset = { ...IN_FRAME, borderStyle: "single" as const, titlePlacement: "in-frame" as const };
+    const f = albumFrame(preset, null, TITLE, FOOTER);
+    assert.deepEqual(f.paths.map(at), [
+      [
+        [q(TITLE.xMm + TITLE.widthMm + 5), 5],
+        [205, 5],
+        [205, 292],
+        [119, 292],
+      ],
+      [
+        [91, 292],
+        [5, 292],
+        [5, 5],
+        [q(TITLE.xMm - 5), 5],
+      ],
+    ]);
+  });
+
+  it("leaves out a stroke the two gaps have swallowed between them", () => {
+    const preset = { ...IN_FRAME, borderStyle: "single" as const, titlePlacement: "in-frame" as const };
+    const whole = { xMm: 0, widthMm: 210 };
+    const f = albumFrame(preset, null, { ...TITLE, ...whole }, { ...FOOTER, ...whole });
+    assert.deepEqual(f.paths.map(at), [
+      [
+        [205, 5],
+        [205, 292],
+      ],
+      [
+        [5, 292],
+        [5, 5],
+      ],
+    ]);
+  });
+
+  it("has nothing to break on a sheet with no rule, ornaments or not", () => {
+    for (const over of [{ borderStyle: "none" as const }, { borderWidthMm: 0 }]) {
+      const preset = { ...IN_FRAME, ...over };
+      assert.equal(albumFooterInFrame(preset), false);
+      assert.deepEqual(albumFrame(preset, SQUARE, null, FOOTER), albumFrame({ ...A4, ...over }, SQUARE));
+    }
+    assert.equal(albumFooterInFrame(IN_FRAME), true);
+  });
+});
+
+describe("the frame's edges, which a footer is measured from (#1457)", () => {
+  it("measures the inside to the inner rule's inner edge, and the outside to the outer rule's outer one", () => {
+    close(albumFrameInnerEdgeMm(A4), 5 + 0.4 + 1.2 + 0.2);
+    close(albumFrameInnerEdgeMm({ ...A4, borderStyle: "single" }), 5.2);
+    close(albumFrameOuterEdgeMm(A4), 4.8);
+  });
+
+  it("gives the offset that keeps a footer's foot on the bottom margin, as the migration does", () => {
+    assert.equal(albumFooterOffsetFromMarginMm({ ...A4, marginBottomMm: 10 }), 3.2);
+    assert.equal(albumFooterOffsetFromMarginMm({ ...A4, borderStyle: "single", marginBottomMm: 15 }), 9.8);
+    // A margin reaching past the frame's inside — the old way to print the footer below it — is 0.
+    assert.equal(albumFooterOffsetFromMarginMm({ ...A4, marginBottomMm: 4 }), 0);
   });
 });
