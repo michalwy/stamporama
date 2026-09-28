@@ -142,6 +142,22 @@ describe("parseAlbumTemplateInput", () => {
     assert.match(parseError({ labelGapMm: "" }), /Space between a box and its label is required/);
   });
 
+  it("reads the space around the album title and the chapter heading as ordinary spacing (#1426)", () => {
+    const fields = [
+      ["titleSpaceAboveMm", /Space above the album title/],
+      ["titleSpaceBelowMm", /Space below the album title/],
+      ["chapterSpaceAboveMm", /Space above a chapter heading/],
+      ["chapterSpaceBelowMm", /Space below a chapter heading/],
+    ] as const;
+    for (const [key, name] of fields) {
+      assert.equal(parsedOk({ [key]: "2,5" })[key], 2.5);
+      assert.equal(parsedOk({ [key]: "0" })[key], 0);
+      assert.match(parseError({ [key]: "-1" }), name);
+      assert.match(parseError({ [key]: "100.5" }), name);
+      assert.match(parseError({ [key]: "" }), name);
+    }
+  });
+
   it("reads an absent checkbox as off", () => {
     assert.equal(parsedOk({ printPhotos: "" }).printPhotos, false);
     assert.equal(parsedOk({ printPhotos: "on" }).printPhotos, true);

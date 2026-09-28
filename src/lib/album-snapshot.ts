@@ -225,11 +225,18 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   // else existed. Filled in rather than bumping the version: the reading is certain, and refusing
   // every card printed before today would be the opposite of what a stored result is for. A card
   // stored before #1420 has no label gap by the same reasoning, and its labels sat on the box's
-  // edge: 0, or every such card would report the new value as a template change.
+  // edge: 0, or every such card would report the new value as a template change. One stored before
+  // #1426 has no space around its page headings: the album's name had none, and the chapter heading
+  // had the checklist heading's, which the card does carry.
   const stored = snapshot as AlbumPageSnapshot;
+  const preset = stored.preset;
   if (
-    stored.preset.verticalPlacement !== undefined &&
-    stored.preset.labelGapMm !== undefined &&
+    preset.verticalPlacement !== undefined &&
+    preset.labelGapMm !== undefined &&
+    preset.titleSpaceAboveMm !== undefined &&
+    preset.titleSpaceBelowMm !== undefined &&
+    preset.chapterSpaceAboveMm !== undefined &&
+    preset.chapterSpaceBelowMm !== undefined &&
     stored.page.placement !== undefined
   ) {
     return stored;
@@ -237,9 +244,13 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   return {
     ...stored,
     preset: {
-      ...stored.preset,
-      verticalPlacement: stored.preset.verticalPlacement ?? "top",
-      labelGapMm: stored.preset.labelGapMm ?? 0,
+      ...preset,
+      verticalPlacement: preset.verticalPlacement ?? "top",
+      labelGapMm: preset.labelGapMm ?? 0,
+      titleSpaceAboveMm: preset.titleSpaceAboveMm ?? 0,
+      titleSpaceBelowMm: preset.titleSpaceBelowMm ?? 0,
+      chapterSpaceAboveMm: preset.chapterSpaceAboveMm ?? preset.headingSpaceAboveMm,
+      chapterSpaceBelowMm: preset.chapterSpaceBelowMm ?? preset.headingSpaceBelowMm,
     },
     page: { ...stored.page, placement: stored.page.placement ?? "top" },
   };
