@@ -87,6 +87,12 @@ interface CollapsibleFilterPanelProps {
    * strip is 2.25rem wide and has room for one button, which is the one that gets the panel back.
    */
   headerAction?: React.ReactNode;
+  /**
+   * A strip between the header and the scrolling body — the area tree's search box (#1436). It
+   * stays put while the body scrolls, for the header's reason: a box that scrolled away with the
+   * tree it narrows would be out of sight exactly when the tree is long enough to need it.
+   */
+  subheader?: React.ReactNode;
   /** Scrollable panel body (the list of options). */
   children: React.ReactNode;
 }
@@ -105,6 +111,7 @@ export function CollapsibleFilterPanel({
   expandedWidth,
   borderLeft,
   headerAction,
+  subheader,
   children,
 }: CollapsibleFilterPanelProps) {
   const { loaded, collapsed, toggle } = useCollapsed(storageKey);
@@ -223,6 +230,8 @@ export function CollapsibleFilterPanel({
             </Tooltip>
           </span>
         </div>
+
+        {subheader}
 
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>{children}</div>
       </div>

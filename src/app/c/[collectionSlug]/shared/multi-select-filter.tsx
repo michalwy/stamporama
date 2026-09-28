@@ -3,6 +3,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/app/icons";
+import { foldForSearch } from "@/lib/fold-for-search";
 import { TextInput } from "./text-input";
 import {
   FILTER_MENU_HEADING_STYLE,
@@ -267,9 +268,4 @@ export function MultiSelectFilter({
         )}
     </>
   );
-}
-
-/** A label or a search as compared: case and diacritics folded, so `gdansk` finds `Gdańsk`. */
-function foldForSearch(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
