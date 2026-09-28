@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useCallback, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
 import { rollUpAreaCounts, type AreaFacet } from "@/lib/area-facets";
+import { searchAreas, stepAreaMatch } from "@/lib/area-search";
 import { getDescendantIds, flattenAreaTree, hasChildAreas } from "./area-helpers";
 import { CollapsibleFilterPanel } from "./collapsible-filter-panel";
 import { Tooltip } from "./tooltip";
+import { TextInput } from "./text-input";
+import { useEscapeLayer } from "@/app/escape-stack";
 import { SubtreeScopeToggle, useSubtreeScope } from "./subtree-scope";
 import { QuickAddAreaDialog } from "./quick-add-area-dialog";
 import { Icon } from "@/app/icons";
@@ -188,6 +191,63 @@ export function AreaFilterSidebar({
     [areas, counts, includeDescendants]
   );
 
+  // The search (#1436). It narrows what is **drawn** and never what is selected: `filterAreaId` is
+  // not read or written by any of it, so an area selected earlier stays selected while the search
+  // hides it and is there, still selected, when the box is cleared — the app's rule that a filter
+  // never unticks anything (`ui-patterns.md`).
+  const [query, setQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const search = useMemo(() => searchAreas(areas, query), [areas, query]);
+
+  // Under a search the collapsed branches are ignored — a match inside one would otherwise be
+  // found and not shown — and the tree is re-flattened over what is drawn, so the guide rails join
+  // the rows that are actually on screen rather than siblings the search has hidden.
+  const drawnTree = useMemo(
+    () =>
+      search ? flattenAreaTree(areas.filter((a) => search.shownIds.has(a.id))) : visibleTree,
+    [search, areas, visibleTree]
+  );
+
+  // The arrow keys walk the **matches**, in the order they are drawn; the dimmed ancestors are
+  // context and are stepped over. With nothing chosen yet the first match is in hand, so typing a
+  // name and pressing Enter selects it.
+  const matchOrder = useMemo(
+    () =>
+      search
+        ? drawnTree.filter(({ area }) => search.matchIds.has(area.id)).map(({ area }) => area.id)
+        : [],
+    [search, drawnTree]
+  );
+  const [cursorId, setCursorId] = useState<string | null>(null);
+  const activeMatchId = search
+    ? cursorId !== null && search.matchIds.has(cursorId)
+      ? cursorId
+      : (matchOrder[0] ?? null)
+    : null;
+
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+  useEffect(() => {
+    if (activeMatchId) rowRefs.current.get(activeMatchId)?.scrollIntoView({ block: "nearest" });
+  }, [activeMatchId]);
+
+  // Escape empties the box before it closes anything else — inside a picker the panel sits in a
+  // dialog, and one Escape meant for the search must not throw the dialog away with it. A layer
+  // only while there is something to clear and the box has the keyboard: with the focus elsewhere,
+  // Escape belongs to whatever surface the collector is in.
+  useEscapeLayer(() => setQuery(""), query !== "" && searchFocused);
+
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setCursorId(stepAreaMatch(matchOrder, activeMatchId, e.key === "ArrowDown" ? 1 : -1));
+    } else if (e.key === "Enter") {
+      // Always swallowed: the stamp picker renders this panel inside a copy's `<form>`, and an
+      // Enter in a text field would otherwise submit it.
+      e.preventDefault();
+      if (activeMatchId && activeMatchId !== filterAreaId) onNavigate(activeMatchId);
+    }
+  }
+
   return (
     <>
       <CollapsibleFilterPanel
@@ -195,6 +255,39 @@ export function AreaFilterSidebar({
         collapsedLabel="Areas"
         storageKey="stamporama:area-filter-panel-collapsed"
         expandedWidth="22rem"
+        subheader={
+          areas.length > 0 ? (
+            <div
+              style={{
+                padding: "0.4rem 0.75rem",
+                borderBottom: "1px solid var(--color-border)",
+              }}
+            >
+              <TextInput
+                type="search"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setCursorId(null);
+                }}
+                onKeyDown={onSearchKeyDown}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                placeholder="Search areas…"
+                aria-label="Search areas"
+                style={{
+                  width: "100%",
+                  padding: "0.35rem 0.5rem",
+                  border: "1px solid var(--color-border-strong)",
+                  borderRadius: "0.3rem",
+                  fontSize: "0.8125rem",
+                  background: "var(--color-bg-elevated)",
+                  color: "var(--color-text-primary)",
+                }}
+              />
+            </div>
+          ) : undefined
+        }
         headerAction={
           quickAddCollectionId ? (
             <Tooltip
@@ -333,12 +426,34 @@ export function AreaFilterSidebar({
           </Tooltip>
         )}
 
+        {search && search.matchIds.size === 0 && (
+          <div
+            style={{
+              padding: "0.5rem 1rem",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            No areas match
+          </div>
+        )}
+
         {loaded &&
-          visibleTree.map(({ area, depth, isLast, ancestorHasNextSibling }) => {
+          drawnTree.map(({ area, depth, isLast, ancestorHasNextSibling }) => {
           const isSelected = filterAreaId === area.id;
           const isInScope = activeIds ? activeIds.has(area.id) : false;
-          const hasChildren = parentIds.has(area.id);
+          // No chevrons under a search: every branch holding a match is open, and folding one shut
+          // would hide the very rows the search found.
+          const hasChildren = !search && parentIds.has(area.id);
           const isCollapsed = collapsed.has(area.id);
+          // An ancestor drawn only so its match is seen where it belongs (#531's rule).
+          const isContext = search !== null && !search.matchIds.has(area.id);
+          const isActive = activeMatchId === area.id;
+          const restBackground = isSelected
+            ? "var(--color-accent-soft)"
+            : isActive
+              ? "var(--color-bg-muted)"
+              : "transparent";
           // `undefined` — this screen supplies no facet — is not the same claim as `0`, and only
           // the second one gets a number drawn.
           const rowCount = countByArea?.get(area.id);
@@ -346,6 +461,10 @@ export function AreaFilterSidebar({
           return (
             <button
               key={area.id}
+              ref={(el) => {
+                if (el) rowRefs.current.set(area.id, el);
+                else rowRefs.current.delete(area.id);
+              }}
               type="button"
               // Selected already: nothing to do (#843). Toggle-off is the idiom for a chip standing
               // alone; this list carries an explicit "All areas" row, so the way to clear is already
@@ -359,7 +478,7 @@ export function AreaFilterSidebar({
                   e.currentTarget.style.background = "var(--color-bg-muted)";
               }}
               onMouseLeave={(e) => {
-                if (!isSelected) e.currentTarget.style.background = "transparent";
+                if (!isSelected) e.currentTarget.style.background = restBackground;
               }}
               style={{
                 display: "flex",
@@ -367,16 +486,22 @@ export function AreaFilterSidebar({
                 width: "100%",
                 textAlign: "left",
                 paddingLeft: "0.75rem",
-                background: isSelected ? "var(--color-accent-soft)" : "transparent",
+                background: restBackground,
                 border: "none",
+                // The match in hand is marked by an outline as well as the tint, so it stays
+                // findable on the selected row, whose tint is already taken.
+                outline: isActive ? "1px solid var(--color-accent)" : "none",
+                outlineOffset: "-1px",
                 cursor: "pointer",
                 fontSize: "0.8125rem",
                 fontWeight: isSelected ? 600 : 400,
                 color: isSelected
                   ? "var(--color-accent)"
-                  : isInScope
-                    ? "var(--color-text-primary)"
-                    : "var(--color-text-secondary)",
+                  : isContext
+                    ? "var(--color-text-muted)"
+                    : isInScope
+                      ? "var(--color-text-primary)"
+                      : "var(--color-text-secondary)",
               }}
             >
               {Array.from({ length: depth }).map((_, i) => {
