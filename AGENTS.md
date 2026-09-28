@@ -125,6 +125,8 @@ there before working against one.
   and the database removes it again on every write (ADR-0055). `type="password"` is the one
   exception, and it is named in `tests/unit/text-field-coverage.test.ts`.
 - A hover hint is the shared `Tooltip`, never the browser's `title`.
+- A control gets **one short line of hint at most**; longer explanations go to a `Tooltip` and the user
+  guide. The one exception is a sentence that prevents a costly mistake, kept beside its action.
 - Row-level actions go in a single `⋮` `RowActionsMenu`.
 - Semantic color tokens from `src/app/globals.css`; a new token needs values in **both** `:root` and
   `.dark`.
