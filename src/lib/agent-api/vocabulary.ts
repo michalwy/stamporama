@@ -207,6 +207,7 @@ export type VocabularyName =
   | "platform"
   | "exchange partner"
   | "size preset"
+  | "album"
   | "color"
   | "watermark"
   | "paper"
