@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
-import { createLot, intakeStamps, updateLot } from "../../src/lib/lots";
+import { createLot, intakeStamps, markPurchaseArrived, updateLot } from "../../src/lib/lots";
 import {
   createPurchase,
   listPurchasesPaginated,
@@ -13,7 +13,8 @@ import {
 
 // *Completed* after *Arrived* (#1449): a purchase whose sorting is done. Set by hand and only from
 // *Arrived*, moved back to *Arrived* with a bare write, a filter of its own on the Intake documents
-// list, and nothing about the order read-only because of it.
+// list, and nothing about the order read-only because of it. An opening balance is marked the same
+// way (#1461), without gaining a delivery status.
 
 describe("a purchase marked Completed (#1449)", () => {
   let userId: string;
@@ -156,15 +157,99 @@ describe("a purchase marked Completed (#1449)", () => {
     assert.ok(!completedIds.includes(arrived));
   });
 
-  it("does not apply to an opening balance, which has no delivery status", async () => {
-    const doc = await createPurchase(userId, collectionId, {
-      kind: "opening_balance",
-      title: "The shelf",
-      currency: "EUR",
-      purchasedAt: "2026-01-01",
+  describe("an opening balance marked completed (#1461)", () => {
+    async function openingBalance(title: string) {
+      const doc = await createPurchase(userId, collectionId, {
+        kind: "opening_balance",
+        title,
+        currency: "EUR",
+        purchasedAt: "2026-01-01",
+      });
+      return doc.id;
+    }
+
+    it("is marked completed and moved back in progress through the purchase's own doors", async () => {
+      const docId = await openingBalance("The shelf");
+      assert.equal(await statusOf(docId), "arrived");
+      await markPurchaseCompleted(userId, docId);
+      assert.equal(await statusOf(docId), "completed");
+      await assert.rejects(markPurchaseCompleted(userId, docId), /Only an arrived order/);
+      await reopenCompletedPurchase(userId, docId);
+      assert.equal(await statusOf(docId), "arrived");
+      await assert.rejects(reopenCompletedPurchase(userId, docId), /not completed/);
     });
-    await assert.rejects(markPurchaseCompleted(userId, doc.id), /no delivery status/);
-    await assert.rejects(reopenCompletedPurchase(userId, doc.id), /no delivery status/);
-    assert.equal(await statusOf(doc.id), "arrived");
+
+    it("gains no delivery status, in the domain or the database", async () => {
+      const docId = await openingBalance("No post");
+      await markPurchaseCompleted(userId, docId);
+      await assert.rejects(setPurchaseStatus(userId, docId, "in_transit"), /no delivery status/);
+      await assert.rejects(markPurchaseArrived(userId, docId), /no delivery status/);
+      for (const status of ["preparing", "in_transit"]) {
+        await assert.rejects(
+          prisma.purchase.update({ where: { id: docId }, data: { status } }),
+          /purchase_kind_shape/
+        );
+      }
+      assert.equal(await statusOf(docId), "completed");
+    });
+
+    it("keeps its mark through a header edit, whatever status the form sent", async () => {
+      // Its header has no status field: an edit that wrote one back would reopen it silently.
+      const docId = await openingBalance("Edited later");
+      await markPurchaseCompleted(userId, docId);
+      await updatePurchase(userId, docId, {
+        title: "Edited later, renamed",
+        currency: "EUR",
+        purchasedAt: "2026-01-02",
+      });
+      assert.equal(await statusOf(docId), "completed");
+      await updatePurchase(userId, docId, {
+        title: "Edited later, renamed",
+        currency: "EUR",
+        purchasedAt: "2026-01-02",
+        status: "preparing",
+      });
+      assert.equal(await statusOf(docId), "completed");
+    });
+
+    it("locks nothing: a copy identified into it still lands `to_sort`", async () => {
+      const docId = await openingBalance("A piece left for later");
+      await markPurchaseCompleted(userId, docId);
+      const lotId = await createLot(userId, docId, null);
+      const [copy] = await intakeStamps(userId, { lotId }, { stampId, conditionId });
+      const item = await prisma.item.findUniqueOrThrow({
+        where: { id: copy.itemId },
+        select: { deliveryState: true },
+      });
+      assert.equal(item.deliveryState, "to_sort");
+      assert.equal(await statusOf(docId), "completed");
+    });
+
+    it("answers the Completed filter beside completed purchases, and never a delivery status", async () => {
+      const inProgress = await openingBalance("Still being worked");
+      const finished = await openingBalance("Finished");
+      await markPurchaseCompleted(userId, finished);
+      const purchase = await purchaseWithStatus("arrived");
+      await markPurchaseCompleted(userId, purchase);
+
+      const ids = async (filters: Parameters<typeof listPurchasesPaginated>[2]) =>
+        (await listPurchasesPaginated(userId, collectionId, { ...filters, pageSize: 200 })).items.map(
+          (p) => p.id
+        );
+
+      const completed = await ids({ status: "completed" });
+      assert.ok(completed.includes(finished));
+      assert.ok(completed.includes(purchase));
+      assert.ok(!completed.includes(inProgress));
+
+      const arrived = await ids({ status: "arrived" });
+      assert.ok(!arrived.includes(inProgress));
+      assert.ok(!arrived.includes(finished));
+
+      const completedOpening = await ids({ type: "opening_balance", status: "completed" });
+      assert.ok(completedOpening.includes(finished));
+      assert.ok(!completedOpening.includes(purchase));
+      assert.ok(!completedOpening.includes(inProgress));
+    });
   });
 });

@@ -10,8 +10,9 @@
  * This module is the single vocabulary for the axis: the valid set, the labels, the tint tokens, and
  * the two rules every reader needs — *has it arrived* and *what is left before it is finished*. Pure —
  * no Prisma, no React — so the domain layer, the route handlers and every screen read the same list
- * instead of restating it. An opening balance has no status of its own and is stored `arrived`
- * (#1323); nothing here concerns it. */
+ * instead of restating it. An opening balance has no delivery status of its own and is stored
+ * `arrived` (#1323) — but it is marked *Completed* exactly as a purchase is (#1461), so the completion
+ * rules below answer for both kinds. */
 
 /** Lifecycle order — the order the statuses are offered in every select and filter. */
 export const PURCHASE_STATUSES = ["preparing", "in_transit", "arrived", "completed"] as const;

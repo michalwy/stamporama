@@ -25,7 +25,7 @@ import {
   useInvalidatePurchases,
   type PurchaseFilters,
 } from "./use-purchases-query";
-import { intakeViewNarrowings, intakeViewOffersStatus, type IntakeNarrowing } from "./intake-view-params";
+import { intakeViewNarrowings, intakeViewStatusesFor, type IntakeNarrowing } from "./intake-view-params";
 import { useIntakeView } from "./use-intake-view";
 import { PurchaseFormDialog } from "./purchase-form-dialog";
 import { PurchaseRow } from "./purchase-row";
@@ -38,7 +38,8 @@ type DialogState =
   | { kind: "delete"; purchase: PurchaseListItem };
 
 /** Every status, *Completed* included (#1449) — which is what makes *Arrived* mean *still being
- *  sorted*: the filter is an exact match, so a completed order answers only its own chip. */
+ *  sorted*: the filter is an exact match, so a completed order answers only its own chip. The
+ *  delivery statuses list purchases only; *Completed* lists opening balances too (#1461). */
 const STATUS_FILTERS: { value: PurchaseStatus; label: string }[] = PURCHASE_STATUSES.map((value) => ({
   value,
   label: PURCHASE_STATUS_META[value].label,
@@ -90,8 +91,9 @@ export function PurchasesListPanel({
   );
   const { type, status, platforms, suppliers, sortBy, sortDir } = view;
   // A delivery status is a purchase's own (#1323): under *Opening balances* there is none to filter
-  // by, so the status toggles are not drawn — and none is in force (`resolveIntakeView`).
-  const showStatus = intakeViewOffersStatus(type);
+  // by, so only *Completed* is drawn (#1461) — and no other is in force (`resolveIntakeView`).
+  const offeredStatuses = intakeViewStatusesFor(type);
+  const statusFilters = STATUS_FILTERS.filter((f) => offeredStatuses.includes(f.value));
 
   const filters: PurchaseFilters = useMemo(
     () => ({ type, status, platformIds: platforms, supplierIds: suppliers, sortBy, sortDir }),
@@ -178,30 +180,37 @@ export function PurchasesListPanel({
             ))}
           </div>
 
-          {showStatus && (
-            <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
-              {STATUS_FILTERS.map(({ value, label }) => {
-                const active = status === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setView({ status: active ? undefined : value })}
-                    style={{
-                      ...FILTER_CONTROL_STYLE,
-                      cursor: "pointer",
-                      fontWeight: active ? 600 : 400,
-                      color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: active ? "var(--color-accent)" : "var(--color-border-strong)",
-                      background: active ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+            {statusFilters.map(({ value, label }) => {
+              const active = status === value;
+              const toggle = (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setView({ status: active ? undefined : value })}
+                  style={{
+                    ...FILTER_CONTROL_STYLE,
+                    cursor: "pointer",
+                    fontWeight: active ? 600 : 400,
+                    color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                    borderColor: active ? "var(--color-accent)" : "var(--color-border-strong)",
+                    background: active ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+              // The one status both kinds carry (#1461) says so, since its neighbours list
+              // purchases only.
+              return value === "completed" ? (
+                <Tooltip key={value} content="Purchases and opening balances marked completed">
+                  {toggle}
+                </Tooltip>
+              ) : (
+                toggle
+              );
+            })}
+          </div>
 
           {/* Platform and supplier (#1392). Multi-select, each with a *none* value for documents
               recorded without one — an opening balance carries neither, so it is found there and

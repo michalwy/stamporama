@@ -66,8 +66,8 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
   const status = statusChip(p.status);
   const detailHref = `/c/${collectionSlug}/purchases/${p.id}`;
   // An opening balance (#1323) is named by its title and has no supplier, platform, shipping or
-  // delivery status to show; its money figure is the lots' opening values, or a sentence saying
-  // there are none.
+  // delivery status to show — only *Completed* once marked (#1461); its money figure is the lots'
+  // opening values, or a sentence saying there are none.
   const opening = p.kind === "opening_balance";
   const name = opening ? p.title : p.contactName;
   const fallbackName = opening ? "Untitled" : "No supplier";
@@ -143,9 +143,17 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
           <EntityNoChip entity="purchase" no={p.purchaseNo} prefix="p" />
           <span style={META_INLINE}>{p.purchasedAt}</span>
           {opening ? (
-            <Tooltip content="Stamps brought into the collection without being bought">
-              <span style={CHIP}>Opening balance</span>
-            </Tooltip>
+            <>
+              <Tooltip content="Stamps brought into the collection without being bought">
+                <span style={CHIP}>Opening balance</span>
+              </Tooltip>
+              {/* No delivery status, but it is marked completed as a purchase is (#1461). */}
+              {p.status === "completed" && (
+                <Tooltip content="Marked completed: its sorting is done">
+                  <span style={status.style}>{status.label}</span>
+                </Tooltip>
+              )}
+            </>
           ) : (
             <>
               {p.type === "trade" && (
