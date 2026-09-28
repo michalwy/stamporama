@@ -22,7 +22,8 @@ On the purchases screen a purchase is just its **header**:
 - the **purchase date**,
 - a single **transaction currency** for every amount on the purchase,
 - a **shipping / shared cost** (spread across the order's lines by price),
-- a **delivery status** (*Preparing*, *In transit*, or *Arrived*).
+- a **delivery status** (*Preparing*, *In transit*, *Arrived*, or *Completed* once its sorting is
+  done — see [Marking an order completed](#marking-an-order-completed)).
 
 Every amount field — shipping, lot prices, expense prices — accepts either a comma or a period as
 the decimal separator, so `12,50` and `12.50` are both fine. You can also type a small sum instead
@@ -182,9 +183,11 @@ opening value* rather than `0.00`, and when only some do, a chip says how many l
 - **Filter** by type with the *Purchases* / *Trades* / *Opening balances* toggles. *Purchases* are
   the orders you recorded or settled from an auction; *Trades* are the orders closing a trade
   created.
-- **Filter** by delivery status with the *Preparing* / *In transit* / *Arrived* toggles. A delivery
-  status belongs to a purchase alone, so these never show an opening balance, and they are not
-  offered while *Opening balances* is selected.
+- **Filter** by delivery status with the *Preparing* / *In transit* / *Arrived* / *Completed*
+  toggles. *Arrived* shows only the orders still being sorted — a completed one is under
+  *Completed* alone — so *Arrived* is the list of parcels that still need work. A delivery status
+  belongs to a purchase alone, so these never show an opening balance, and they are not offered
+  while *Opening balances* is selected.
 - **Filter** by platform and by supplier. Each takes several at once, and each has a *No platform* /
   *No supplier* option for documents recorded without one. An opening balance has neither, so it
   shows under *No platform* and *No supplier* and never under a named one. The supplier filter has a
@@ -239,11 +242,13 @@ where you build up the order's lots and identify copies into them over time.
 The header carries a **status** dropdown (top-right). Switch between **Preparing** and **In
 transit** and it saves immediately — no need to open the edit dialog. Choosing **Arrived**
 opens the **Mark arrived** flow (see *Marking an order arrived* below) rather than a bare
-status change, because arriving also moves the order's copies to *To sort*.
+status change, because arriving also moves the order's copies to *To sort*. **Completed** can be
+chosen once the order has arrived (see *Marking an order completed* below); choosing **Arrived** on
+a completed order simply moves it back.
 
 Next to the dropdown, a small **→** button advances the status one step along the fixed
-progression (*Preparing → In transit → Arrived*) with a single click. It disappears once the
-order has **Arrived**.
+progression (*Preparing → In transit → Arrived → Completed*) with a single click. It disappears
+once the order is **Completed**.
 
 Beside them, **Edit header** opens the same dialog the Purchases list's **⋮ → Edit** opens, over
 this order: supplier, platform, date, transaction currency, status and shipping cost. It edits the
@@ -1644,7 +1649,7 @@ The copies are
 linked to the lot and marked **Ordered** — purchased but
 not yet in hand, so they are deliberately **not** counted as *in collection* yet. (They
 become part of your collection later, once received.) If the order is already **Arrived**
-— the usual case when you identify a parcel piece by piece on your desk — the copies start
+(or **Completed**) — the usual case when you identify a parcel piece by piece on your desk — the copies start
 at **To sort** instead: they are in hand, just not filed yet, so they land beside the
 siblings that **Mark arrived** already moved there. Either way they are not *in collection*
 until sorted.
@@ -2120,6 +2125,25 @@ worth](inventory.md#what-a-piece-carrying-several-stamps-is-worth).
 The way to meet this blocker least often is not to reach it: the intake step has its own
 [**Catalog value** field](#the-catalogue-value-while-the-catalogue-is-still-open), filled in while
 the paper catalogue is still open at the stamp. A copy priced there is never among the unpriced.
+
+### Marking an order completed
+
+Sorting a parcel takes days after it arrives, and when it is done, mark the order **Completed**.
+That is what keeps the list's *Arrived* filter down to the parcels still being worked — a completed
+order is found under *Completed* instead.
+
+The order screen suggests it. Once **nothing is left** — no copy *to sort*, no scan tile still
+unidentified or set aside, and every lot closed — a **Mark completed** button appears in the header
+where **Mark arrived** was. One click and the order is completed.
+
+You can also complete an order with something still left, from the status dropdown or its **→**
+button: a dialog says what is left — so many copies to sort, so many scan tiles, so many open lots —
+and lets you go ahead anyway. That is for the doubtful piece you are leaving for later on purpose.
+
+**Completed locks nothing.** You can still add lots, identify copies, sort, and close or reopen lots
+exactly as before; a copy identified into a completed order starts at **To sort**, as it would on an
+arrived one. Closing a lot is what freezes cost, and that is unchanged. To move the order back,
+choose **Arrived** in the status dropdown.
 
 ### Reopening for corrections
 

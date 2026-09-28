@@ -22,7 +22,8 @@ import {
   parseIntakePartyIds,
   type IntakeDocumentType,
 } from "@/lib/purchase-kind";
-import type { PurchaseSortBy, PurchaseStatus } from "@/lib/purchases";
+import type { PurchaseSortBy } from "@/lib/purchases";
+import { isPurchaseStatus, type PurchaseStatus } from "@/lib/purchase-status";
 
 /** Everything the toolbar over the Intake documents list decides. */
 export interface IntakeView {
@@ -38,7 +39,6 @@ export interface IntakeView {
   sortDir: "asc" | "desc";
 }
 
-export const INTAKE_STATUSES: readonly PurchaseStatus[] = ["preparing", "in_transit", "arrived"];
 export const INTAKE_SORTS: readonly PurchaseSortBy[] = ["purchasedAt", "createdAt"];
 
 /**
@@ -96,10 +96,7 @@ export function resolveIntakeView(readParam: (key: string) => string | null): In
   return {
     type,
     // A purchase's field, and there are no purchases on screen — the note at the top.
-    status:
-      type !== "opening_balance" && INTAKE_STATUSES.includes(statusRaw as PurchaseStatus)
-        ? (statusRaw as PurchaseStatus)
-        : undefined,
+    status: type !== "opening_balance" && isPurchaseStatus(statusRaw) ? statusRaw : undefined,
     platforms: parseIntakePartyIds(readParam(VIEW_PARAM.platforms)),
     suppliers: parseIntakePartyIds(readParam(VIEW_PARAM.suppliers)),
     sortBy: INTAKE_SORTS.includes(sortRaw as PurchaseSortBy)

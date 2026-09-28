@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PurchaseListItem } from "@/lib/purchases";
+import { PURCHASE_STATUS_META, type PurchaseStatus } from "@/lib/purchase-status";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import {
   RowQuickActions,
@@ -31,16 +32,10 @@ const META_INLINE: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const STATUS: Record<string, { label: string; token: string }> = {
-  preparing: { label: "Preparing", token: "muted" },
-  in_transit: { label: "In transit", token: "accent" },
-  arrived: { label: "Arrived", token: "success" },
-};
-
 /** Soft-tinted status chip so the delivery state reads at a glance, mirroring the
  * inventory disposition chips. Falls back to a neutral chip for unknown values. */
 function statusChip(status: string): { style: React.CSSProperties; label: string } {
-  const meta = STATUS[status];
+  const meta = PURCHASE_STATUS_META[status as PurchaseStatus];
   if (!meta) return { style: CHIP, label: status };
   if (meta.token === "muted") return { style: CHIP, label: meta.label };
   return {

@@ -258,7 +258,7 @@ export interface AgentPurchaseRow {
   readonly platform?: string;
   readonly purchasedAt: string;
   readonly currency: string;
-  /** `preparing`, `in_transit` or `arrived`. Nothing on this surface moves it. */
+  /** `preparing`, `in_transit`, `arrived` or `completed` (#1449). Nothing on this surface moves it. */
   readonly status: string;
   readonly shippingCost?: string;
   readonly lots: number;

@@ -62,6 +62,10 @@ describe("resolveIntakeView", () => {
     });
   });
 
+  it("reads Completed as a status of its own (#1449)", () => {
+    assert.equal(resolveIntakeView(reader({ status: "completed" })).status, "completed");
+  });
+
   it("never has a status in force while only opening balances are listed", () => {
     const resolved = resolveIntakeView(reader({ type: "opening_balance", status: "arrived" }));
     assert.equal(resolved.type, "opening_balance");

@@ -98,6 +98,16 @@ import {
   deliveryStateLabel,
   deliveryStateToken,
 } from "@/lib/delivery-state";
+import {
+  PURCHASE_STATUSES,
+  PURCHASE_STATUS_META,
+  describePurchaseWorkLeft,
+  hasPurchaseArrived,
+  isPurchaseWorkDone,
+  purchaseStatusLabel,
+  type PurchaseStatus,
+  type PurchaseWorkLeft,
+} from "@/lib/purchase-status";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import {
   useCollectionLocations,
@@ -215,15 +225,6 @@ const TOOLBAR_LABEL: React.CSSProperties = {
   textTransform: "uppercase",
   letterSpacing: "0.04em",
 };
-
-const PURCHASE_STATUS: Record<string, { label: string; token: string }> = {
-  preparing: { label: "Preparing", token: "muted" },
-  in_transit: { label: "In transit", token: "accent" },
-  arrived: { label: "Arrived", token: "success" },
-};
-
-// Purchase delivery status in lifecycle order, for the inline status select (#141).
-const PURCHASE_STATUS_ORDER = ["preparing", "in_transit", "arrived"];
 
 // The inline row dropdown offers the states in the shared lifecycle order (#121) — see
 // `DELIVERY_STATES` in `@/lib/delivery-state`.
@@ -367,6 +368,8 @@ export function PurchaseDetailPanel({
   // through the Purchases list's own dialog. Everything below the header has its own controls.
   const [editingHeader, setEditingHeader] = useState(false);
   const [arriving, setArriving] = useState(false);
+  // Marking the order completed with work still left on it (#1449): the dialog that says what.
+  const [completing, setCompleting] = useState(false);
   const [error, setError] = useState<string | undefined>();
   // Briefly highlight a lot right after it is created, so the new card is easy to spot once
   // the panel refreshes with it (#158).
@@ -768,26 +771,68 @@ export function PurchaseDetailPanel({
   // Apply a delivery-status transition, shared by the inline select and the quick-advance
   // button (#159). Arriving moves copies to "to sort" and can bulk-file them, so it routes
   // through the dedicated dialog rather than a bare status write (#141).
-  function applyStatus(next: string) {
+  //
+  // *Completed* (#1449) follows arrival and has its own two doors: from *Arrived* it is marked —
+  // at once when nothing is left, through a dialog saying what is when something is — and from
+  // *Completed* back to *Arrived* is a bare status write, not a second arrival.
+  function applyStatus(next: PurchaseStatus) {
     if (next === purchase.status) return;
     setError(undefined);
+    if (next === "completed") {
+      if (workDone) markCompleted();
+      else setCompleting(true);
+      return;
+    }
     if (next === "arrived") {
-      setArriving(true);
+      if (purchase.status === "completed") {
+        run(async () => {
+          const { reopenCompletedPurchaseAction } = await import("@/app/actions/purchases");
+          return reopenCompletedPurchaseAction(purchase.id);
+        });
+      } else {
+        setArriving(true);
+      }
       return;
     }
     run(async () => {
       const { setPurchaseStatusAction } = await import("@/app/actions/purchases");
-      return setPurchaseStatusAction(purchase.id, next as "preparing" | "in_transit");
+      return setPurchaseStatusAction(purchase.id, next);
     });
   }
 
+  function markCompleted() {
+    run(
+      async () => {
+        const { markPurchaseCompletedAction } = await import("@/app/actions/purchases");
+        return markPurchaseCompletedAction(purchase.id);
+      },
+      () => setCompleting(false)
+    );
+  }
+
+  // What stands between this order and *Completed* (#1449). *To sort* comes off the order summary,
+  // which every copy write re-reads; the tiles and the lots' states off the server render, which
+  // identification and closing refresh. Unknown until the summary has loaded, and until then the
+  // order cannot be completed — a suggestion made before the count is in could be wrong.
+  const workLeft: PurchaseWorkLeft | null = orderSummary
+    ? {
+        toSort: orderSummary.toSortCount,
+        tiles: purchase.unidentifiedTileCount + purchase.parkedTileCount,
+        openLots: purchase.lots.filter((l) => l.status === "open").length,
+      }
+    : null;
+  const workDone = workLeft !== null && isPurchaseWorkDone(workLeft);
+  const canComplete = purchase.status === "arrived" && workLeft !== null;
+
   // The next status in the fixed progression, for the one-click advance button (#159). Null at
-  // the terminal "arrived" state (or an unrecognized status), where the button is hidden.
-  const statusIdx = PURCHASE_STATUS_ORDER.indexOf(purchase.status);
+  // the terminal "completed" state (or an unrecognized status), where the button is hidden — and
+  // while *Arrived* cannot be completed yet.
+  const statusIdx = PURCHASE_STATUSES.indexOf(purchase.status as PurchaseStatus);
   const nextStatus =
-    statusIdx >= 0 && statusIdx < PURCHASE_STATUS_ORDER.length - 1
-      ? PURCHASE_STATUS_ORDER[statusIdx + 1]
+    statusIdx >= 0 && statusIdx < PURCHASE_STATUSES.length - 1
+      ? PURCHASE_STATUSES[statusIdx + 1]
       : null;
+  const advanceTo = nextStatus === "completed" && !canComplete ? null : nextStatus;
 
   // An opening balance (#1323) is this same screen over a document that bought nothing: it is named by
   // its title, and has no supplier, platform, shipping or delivery status to show or to set.
@@ -848,15 +893,18 @@ export function PurchaseDetailPanel({
       </Tooltip>
       <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
         {!openingBalance && (() => {
-          const s = PURCHASE_STATUS[purchase.status] ?? { label: purchase.status, token: "muted" };
+          const s = PURCHASE_STATUS_META[purchase.status as PurchaseStatus] ?? {
+            label: purchase.status,
+            token: "muted",
+          };
           return (
             <>
-            <Tooltip content="Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow.">
+            <Tooltip content="Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow, and Completed once its sorting is done.">
               <select
                 aria-label="Purchase status"
                 value={purchase.status}
                 disabled={isPending}
-                onChange={(e) => applyStatus(e.target.value)}
+                onChange={(e) => applyStatus(e.target.value as PurchaseStatus)}
                 style={{
                   ...tintChip(s.token, s.label).style,
                   // Use longhand border props so toggling between muted (no borderColor)
@@ -874,23 +922,26 @@ export function PurchaseDetailPanel({
                   appearance: "auto",
                 }}
               >
-                {PURCHASE_STATUS_ORDER.map((v) => (
-                  <option key={v} value={v}>
-                    {PURCHASE_STATUS[v]?.label ?? v}
+                {PURCHASE_STATUSES.map((v) => (
+                  // *Completed* only follows *Arrived* (#1449).
+                  <option
+                    key={v}
+                    value={v}
+                    disabled={v === "completed" && purchase.status !== "completed" && !canComplete}
+                  >
+                    {PURCHASE_STATUS_META[v].label}
                   </option>
                 ))}
               </select>
             </Tooltip>
             {/* One-click advance to the next step in the fixed progression (#159). Hidden at
-                the terminal "arrived" status. */}
-            {nextStatus && (
-              <Tooltip
-                content={`Advance to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
-              >
+                the terminal "completed" status. */}
+            {advanceTo && (
+              <Tooltip content={`Advance to ${purchaseStatusLabel(advanceTo)}`}>
                 <button
                   type="button"
-                  aria-label={`Advance status to ${PURCHASE_STATUS[nextStatus]?.label ?? nextStatus}`}
-                  onClick={() => applyStatus(nextStatus)}
+                  aria-label={`Advance status to ${purchaseStatusLabel(advanceTo)}`}
+                  onClick={() => applyStatus(advanceTo)}
                   disabled={isPending}
                   style={{
                     ...CHIP,
@@ -943,7 +994,31 @@ export function PurchaseDetailPanel({
             <Icon name="edit" size="sm" /> Edit header
           </button>
         </Tooltip>
-        {!openingBalance && purchase.status !== "arrived" && (
+        {/* The suggestion (#1449): once nothing is left, the step the order is waiting for is
+            completing it, and it takes the place *Mark arrived* had. Only ever a suggestion — the
+            status control above completes an order with work left too, after saying what. */}
+        {!openingBalance && purchase.status === "arrived" && workDone && (
+          <Tooltip content="Nothing is left on this order: every copy is sorted, no scan tile is waiting and every lot is closed. Completing it takes it out of the Arrived filter; it can be moved back at any time.">
+            <button
+              type="button"
+              onClick={() => applyStatus("completed")}
+              disabled={isPending}
+              style={{
+                ...INPUT_STYLE,
+                width: "auto",
+                cursor: "pointer",
+                fontWeight: 600,
+                color: "#fff",
+                background: "var(--color-action-primary)",
+                border: "none",
+                padding: "0.375rem 0.875rem",
+              }}
+            >
+              Mark completed
+            </button>
+          </Tooltip>
+        )}
+        {!openingBalance && !hasPurchaseArrived(purchase.status) && (
           <Tooltip content="Mark the whole order arrived: its copies move to “to sort”, ready to be filed">
             <button
               type="button"
@@ -1637,6 +1712,32 @@ export function PurchaseDetailPanel({
               () => setArriving(false)
             );
           }}
+        />
+      )}
+
+      {/* Mark order completed with work still left (#1449): say what, and allow it anyway. */}
+      {completing && workLeft && (
+        <ConfirmDialog
+          title="Mark order completed"
+          message={
+            <>
+              This order still has {describePurchaseWorkLeft(workLeft).join(", ")}. Mark it completed
+              anyway if you are leaving that for later on purpose — nothing becomes read-only, and it
+              can be moved back to <strong>Arrived</strong> at any time.
+            </>
+          }
+          actionLabel="Mark completed"
+          pendingLabel="Marking…"
+          variant="primary"
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setCompleting(false);
+              setError(undefined);
+            }
+          }}
+          onConfirm={markCompleted}
         />
       )}
 
