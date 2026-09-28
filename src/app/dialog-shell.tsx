@@ -20,8 +20,8 @@ import { Icon } from "@/app/icons";
  * The height is the shell's own `maxHeight`, so no dialog — whatever it asks for — can push its
  * header and its close button off the top of the window. The width is the same margin across, for a
  * dialog that asks to be as wide as it can be. **A dialog whose work is the picture** takes both as
- * its size (#1388, Measure and mark): every pixel of window it leaves unused is a pixel less to place
- * a ruler's end with.
+ * its size (#1388, Measure and mark; #1453, the album Page template): every pixel of window it leaves
+ * unused is a pixel less to place a ruler's end with, or to see a millimetre's gap on a sheet by.
  */
 export const DIALOG_MAX_HEIGHT = "calc(100vh - 4rem)";
 export const DIALOG_MAX_WIDTH = "calc(100vw - 4rem)";
@@ -37,11 +37,11 @@ export const DIALOG_MAX_WIDTH = "calc(100vw - 4rem)";
  * exactly that: `min(90vh, 48rem)` here, `min(85vh, 40rem)` there, each set on the day its dialog
  * was written, and every one of them cutting the list off well above the bottom of the window.
  *
- * `min(100vh - 4rem, 70rem)`, the album template dialog's figure (#978) and for its reasons. The
- * first term is **`DialogShell`'s own `maxHeight`**: any smaller factor of `vh` is clamped by the
- * shell on a short window, so it can only ever lose rows a taller panel would have shown. The
- * 70rem ceiling is what stops a very tall monitor from drawing a picker no eye tracks from its
- * search box to its footer.
+ * `min(100vh - 4rem, 70rem)`, the figure the album template dialog had from #978 until #1453 gave
+ * it the whole window, and for #978's reasons. The first term is **`DialogShell`'s own
+ * `maxHeight`**: any smaller factor of `vh` is clamped by the shell on a short window, so it can only
+ * ever lose rows a taller panel would have shown. The 70rem ceiling is what stops a very tall monitor
+ * from drawing a picker no eye tracks from its search box to its footer.
  *
  * It is a **fixed `height`, never a `maxHeight`**: the list scrolls inside the panel and the panel
  * does not move. A dialog that grew and shrank as the search narrowed would shift the rows under

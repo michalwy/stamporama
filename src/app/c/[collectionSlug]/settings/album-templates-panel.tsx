@@ -8,6 +8,8 @@ import {
   DialogActions,
   LabelWithError,
   ConfirmDialog,
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
 } from "@/app/dialog-shell";
 import {
   createAlbumTemplateAction,
@@ -71,8 +73,8 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 // Thirty-odd numbers, none of which showed what it did until an album was generated and a PDF
 // produced. The preview is the answer, and where it sits is most of whether it works: a page behind
 // a tab is a page nobody looks at *while typing*, which is the only moment it is worth anything.
-// So the dialog is a two-column workbench — the fields scroll, the sheet stays put — and it is among
-// the widest dialogs in the application because its right-hand column is a piece of A4.
+// So the dialog is a two-column workbench — the fields scroll, the sheet stays put — and it takes
+// the whole window (#1453) because its right-hand column is a piece of paper.
 //
 // The preview panel owns the reading and the redrawing; everything this file does for it is hold a
 // `ref` to the form and count changes. That is deliberate: the fields stay **uncontrolled** and the
@@ -140,32 +142,28 @@ const VISUALLY_HIDDEN: React.CSSProperties = {
 
 /** The fields' share of the dialog's width, and the one figure in it that is a floor rather than a
  *  cap: the ~800 px the three-column grid had at 52rem, before the preview (#795). **Every rem the
- *  dialog has past this goes to the sheet** (#978) — the grid does not loosen as the window grows,
- *  because the thing asked to be bigger is the page, not the form. Below it, the fields give way
- *  only once the sheet is down to `PREVIEW_MIN_WIDTH`, which is the column #795 shipped. */
+ *  dialog has past this goes to the sheet** (#978, #1453) — the grid does not loosen as the window
+ *  grows, because the thing asked to be bigger is the page, not the form. Below it, the fields give
+ *  way only once the sheet is down to `PREVIEW_MIN_WIDTH`, which is the column #795 shipped. */
 const FIELDS_WIDTH = "49.5rem";
 /** The section list's share of `FIELDS_WIDTH` (#1431). Taken out of the fields rather than out of
  *  the sheet: one section's fields are a screenful at most, so the grid can spare it, and the sheet
- *  keeps every rem #978 gave it. */
+ *  keeps every rem the window gives it. */
 const SECTION_LIST_WIDTH = "9.5rem";
 const PREVIEW_MIN_WIDTH = "22rem";
-/** A4 at about 76%: the most a 92rem dialog leaves once the fields have their 49.5rem. */
-const PREVIEW_MAX_WIDTH = "38rem";
 
-/** Among the widest dialogs in the application, for #815's reason: the right-hand column is a piece
- *  of A4, and a preview of a printed page at postage-stamp size is the one thing it must not be.
- *  `FIELDS_WIDTH` + the 1.5rem gap + `PREVIEW_MAX_WIDTH` + the body's 3rem of padding is exactly the
- *  92rem cap, so on a large monitor the sheet is at its widest and nothing is left over. Under the
- *  cap the dialog is 96vw and the **preview** gives up the difference, not the fields: a 1440 px
- *  window draws the sheet at about 32rem, and a 1280 px one is back to about #795's 22rem. */
-export const ALBUM_PRESET_DIALOG_WIDTH = "min(96vw, 92rem)";
+/** All the window has, up to the shell's margin, in both directions (#1453) — the Measure and mark
+ *  window's size (#1388), and for its reason: the preview is what every value here is judged by, and
+ *  a millimetre's gap is only as visible as the sheet is large. The fields keep `FIELDS_WIDTH`, so
+ *  every rem past it is the sheet's, with no cap: #978's 92rem stopped the sheet at A4 ~76% on
+ *  exactly the large monitor where there was room for it at 1:1. As a size of the window, it follows
+ *  the window when that is resized, and the preview's zoom follows its frame. */
+export const ALBUM_PRESET_DIALOG_WIDTH = DIALOG_MAX_WIDTH;
 
-/** Viewport-relative, and through `min()`, so the panel stays fixed and scrolls inside rather than
- *  resizing (#838's trap). The first term is `DialogShell`'s own `maxHeight`: any smaller factor of
- *  `vh` would be clamped by the shell on a short window while the preview, which is written against
- *  this figure, still believed the larger one — and its sheet would run under the footer. The 70rem
- *  ceiling is where a sheet at `PREVIEW_MAX_WIDTH` fits the preview's scroll area whole. */
-export const ALBUM_PRESET_DIALOG_HEIGHT = "min(100vh - 4rem, 70rem)";
+/** A fixed `height`, never a `maxHeight`, so the panel does not resize as a section is chosen
+ *  (#838's trap): the fields scroll inside it and the sheet is fitted to what is left. It is the
+ *  shell's own ceiling, so no window pushes the header, the buttons or the section list off it. */
+export const ALBUM_PRESET_DIALOG_HEIGHT = DIALOG_MAX_HEIGHT;
 
 const GRID_STYLE: React.CSSProperties = {
   display: "grid",
@@ -441,7 +439,8 @@ function SectionList({
   onChoose: (section: AlbumPresetSection) => void;
 }) {
   return (
-    <div style={{ flex: `0 0 ${SECTION_LIST_WIDTH}`, display: "flex", flexDirection: "column" }}>
+    // Its own scroll, on a window too short for eight tabs, so the dialog's body never has one.
+    <div style={{ flex: `0 0 ${SECTION_LIST_WIDTH}`, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       <div role="tablist" aria-orientation="vertical" aria-label="Template sections" style={{ display: "flex", flexDirection: "column" }}>
         {ALBUM_PRESET_SECTIONS.map((section) => {
           const on = section.key === active;
@@ -504,6 +503,13 @@ function SectionList({
  * edited beside its language), and an album's preview draws that album rather than offering a
  * sample.
  *
+ * ## The dialog's height is the body's (#1453)
+ *
+ * The form fills the dialog's body and does not scroll as a whole: the fields scroll in their own
+ * column, and the preview's column is the full height, so the room the sheet is fitted to is the room
+ * on screen rather than an estimate of it. Anything a caller wants above the fields — an album's
+ * explanation of whose values these are — is passed as `intro`, so it stays in the fields' column.
+ *
  * ## Sections, and the preview marking the field in hand (#1431)
  *
  * The values are in sections, one shown at a time (`album-field-marks.ts` says which value is in
@@ -524,6 +530,7 @@ export function AlbumPresetForm({
   formRef,
   previewAlbumId,
   sampleLanguage,
+  intro,
 }: {
   collectionId: string;
   preset: AlbumRenderPreset;
@@ -536,6 +543,8 @@ export function AlbumPresetForm({
   /** The language the text builders' sample stamps resolve in: the collection's own for a template,
    *  which has none, and the album's for an album. */
   sampleLanguage: string | null;
+  /** Drawn above the section list and the fields, in their column. */
+  intro?: React.ReactNode;
 }) {
   // The four texts are controlled, so their builders can preview as they are typed; everything else
   // is an ordinary uncontrolled field read straight off the `FormData`.
@@ -610,360 +619,375 @@ export function AlbumPresetForm({
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: "1.5rem", minWidth: 0 }}>
-      <div style={{ flex: `0 1 ${FIELDS_WIDTH}`, minWidth: 0, display: "flex", gap: "1.25rem" }}>
-        <SectionList active={section} changed={changed} onChoose={chooseSection} />
+    // The dialog body's height, exactly, so the body itself never scrolls (#1453): the fields do, in
+    // their own column, and the preview's column is left the whole of it.
+    <div style={{ display: "flex", gap: "1.5rem", minWidth: 0, height: "100%" }}>
+      <div
+        style={{
+          flex: `0 1 ${FIELDS_WIDTH}`,
+          minWidth: 0,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {intro}
+        <div style={{ flex: 1, minHeight: 0, display: "flex", gap: "1.25rem" }}>
+          <SectionList active={section} changed={changed} onChoose={chooseSection} />
 
-        {/* The fields. One handler for every ordinary field: React's `onChange` is the input event
-            underneath, so it fires per keystroke on a number and once on a select or a checkbox —
-            which is what the preview wants, and why `onInput` is not also attached: both would bump
-            twice a keystroke and re-render this whole form for nothing. */}
-        <div
-          style={{ flex: 1, minWidth: 0 }}
-          onChange={bump}
-          onPointerOver={(e) => setHovered(fieldAt(e.target))}
-          onPointerLeave={() => setHovered(null)}
-          onFocus={(e) => setFocused(fieldAt(e.target))}
-          onBlur={() => setFocused(null)}
-        >
-          {name !== null && (
-            <div style={{ marginBottom: "1.25rem" }}>
-              <LabelWithError htmlFor="f-album-name">Name</LabelWithError>
-              <TextInput
-                id="f-album-name"
-                name="name"
-                defaultValue={name}
-                disabled={isPending}
-                placeholder="e.g. Polska A4"
-                style={INPUT_STYLE}
-              />
-              <span style={HINT_STYLE}>
-                What you pick it by when you start an album. Copied onto the album, never linked to it —
-                so editing this template later cannot change a page already in a binder.
-              </span>
-            </div>
-          )}
-
-          {panel(
-            "page",
-            <>
-              <div style={GRID_STYLE}>
-                <MmField name="pageWidthMm" label="Width" value={preset.pageWidthMm} disabled={isPending} />
-                <MmField name="pageHeightMm" label="Height" value={preset.pageHeightMm} disabled={isPending} />
-                <div />
-                <MmField name="marginTopMm" label="Top margin" value={preset.marginTopMm} disabled={isPending} />
-                <MmField name="marginRightMm" label="Right margin" value={preset.marginRightMm} disabled={isPending} />
-                <div />
-                <MmField name="marginBottomMm" label="Bottom margin" value={preset.marginBottomMm} disabled={isPending} />
-                <MmField name="marginLeftMm" label="Left margin" value={preset.marginLeftMm} disabled={isPending} />
-                <div />
-                <ChoiceField
-                  name="verticalPlacement"
-                  label="Content on the page"
-                  value={preset.verticalPlacement}
-                  options={ALBUM_VERTICAL_PLACEMENTS}
+          {/* The fields. One handler for every ordinary field: React's `onChange` is the input event
+              underneath, so it fires per keystroke on a number and once on a select or a checkbox —
+              which is what the preview wants, and why `onInput` is not also attached: both would bump
+              twice a keystroke and re-render this whole form for nothing. */}
+          <div
+            // Scrolls on its own, the section list and the sheet staying where they are. The couple of
+            // pixels of padding keep a field's focus ring inside what this clips.
+            style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "2px 0.5rem 2px 2px" }}
+            onChange={bump}
+            onPointerOver={(e) => setHovered(fieldAt(e.target))}
+            onPointerLeave={() => setHovered(null)}
+            onFocus={(e) => setFocused(fieldAt(e.target))}
+            onBlur={() => setFocused(null)}
+          >
+            {name !== null && (
+              <div style={{ marginBottom: "1.25rem" }}>
+                <LabelWithError htmlFor="f-album-name">Name</LabelWithError>
+                <TextInput
+                  id="f-album-name"
+                  name="name"
+                  defaultValue={name}
                   disabled={isPending}
+                  placeholder="e.g. Polska A4"
+                  style={INPUT_STYLE}
                 />
+                <span style={HINT_STYLE}>
+                  What you pick it by when you start an album. Copied onto the album, never linked to it —
+                  so editing this template later cannot change a page already in a binder.
+                </span>
               </div>
-              <p style={{ ...HINT_STYLE, marginTop: "0.75rem" }}>
-                Where a page that is not full puts its series. <strong>Justified</strong> puts the first
-                at the top and the last at the bottom with equal gaps between; <strong>centred and
-                justified</strong> makes the space above, between and below them all equal. The running
-                head, the year and the footer stay where they are, and a page can choose its own in the
-                page editor.
-              </p>
-            </>
-          )}
+            )}
 
-          {panel(
-            "frame",
-            <>
-              <div style={GRID_STYLE}>
-                <ChoiceField
-                  name="borderStyle"
-                  label="Decorative border"
-                  value={preset.borderStyle}
-                  options={ALBUM_BORDER_STYLES}
-                  disabled={isPending}
-                />
-                <MmField name="borderWidthMm" label="Border weight" value={preset.borderWidthMm} disabled={isPending} />
-                <MmField name="borderInsetMm" label="Border inset" value={preset.borderInsetMm} disabled={isPending} />
-                <MmField name="borderGapMm" label="Between double rules" value={preset.borderGapMm} disabled={isPending} />
-                <div />
-                <div />
-                <div data-album-field="frameOrnament">
-                  <FrameOrnamentField
-                    collectionId={collectionId}
-                    defaultValue={preset.frameOrnament}
+            {panel(
+              "page",
+              <>
+                <div style={GRID_STYLE}>
+                  <MmField name="pageWidthMm" label="Width" value={preset.pageWidthMm} disabled={isPending} />
+                  <MmField name="pageHeightMm" label="Height" value={preset.pageHeightMm} disabled={isPending} />
+                  <div />
+                  <MmField name="marginTopMm" label="Top margin" value={preset.marginTopMm} disabled={isPending} />
+                  <MmField name="marginRightMm" label="Right margin" value={preset.marginRightMm} disabled={isPending} />
+                  <div />
+                  <MmField name="marginBottomMm" label="Bottom margin" value={preset.marginBottomMm} disabled={isPending} />
+                  <MmField name="marginLeftMm" label="Left margin" value={preset.marginLeftMm} disabled={isPending} />
+                  <div />
+                  <ChoiceField
+                    name="verticalPlacement"
+                    label="Content on the page"
+                    value={preset.verticalPlacement}
+                    options={ALBUM_VERTICAL_PLACEMENTS}
                     disabled={isPending}
-                    onChanged={bump}
                   />
                 </div>
-                <MmField
-                  name="frameOrnamentSizeMm"
-                  label="Ornament size"
-                  value={preset.frameOrnamentSizeMm}
-                  disabled={isPending}
-                />
-                <div />
-                <ChoiceField
-                  name="titlePlacement"
-                  label="Album title"
-                  value={preset.titlePlacement}
-                  options={ALBUM_TITLE_PLACEMENTS}
-                  disabled={isPending}
-                />
-                <MmField
-                  name="titleFrameGapMm"
-                  label="Gap around the title in the line"
-                  value={preset.titleFrameGapMm}
-                  disabled={isPending}
-                />
-              </div>
-              <p style={{ ...HINT_STYLE, marginTop: "0.75rem" }}>
-                The frame is drawn in the margin and never moves a series. A <strong>corner ornament</strong>{" "}
-                sits at each corner, mirrored to face into the page, and the rules run between them; its
-                size is its longer side. Your own can be uploaded as an SVG drawn for the top-left corner.
-              </p>
-              <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
-                The <strong>album title</strong> can sit <strong>in the frame line</strong>: the top rule —
-                both rules of a double one — breaks around it, leaving the gap on each side, and the title
-                no longer takes a line of its own, so the content starts on the top margin. Unlike the
-                rest of the frame this moves series. A page with no border prints the title below, as
-                before.
-              </p>
-            </>
-          )}
+                <p style={{ ...HINT_STYLE, marginTop: "0.75rem" }}>
+                  Where a page that is not full puts its series. <strong>Justified</strong> puts the first
+                  at the top and the last at the bottom with equal gaps between; <strong>centred and
+                  justified</strong> makes the space above, between and below them all equal. The running
+                  head, the year and the footer stay where they are, and a page can choose its own in the
+                  page editor.
+                </p>
+              </>
+            )}
 
-          {panel(
-            "headings",
-            <>
-              <CheckField
-                name="printTitle"
-                label="Print the album title as a running head on every page"
-                checked={preset.printTitle}
-                disabled={isPending}
-                style={{ marginBottom: "1rem" }}
-              />
-              <div style={GRID_STYLE}>
-                <MmField
-                  name="titleSpaceAboveMm"
-                  label="Above the album title"
-                  value={preset.titleSpaceAboveMm}
-                  disabled={isPending}
-                />
-                <MmField
-                  name="titleSpaceBelowMm"
-                  label="Below the album title"
-                  value={preset.titleSpaceBelowMm}
-                  disabled={isPending}
-                />
-                <div />
-                <MmField
-                  name="chapterSpaceAboveMm"
-                  label="Above a chapter heading"
-                  value={preset.chapterSpaceAboveMm}
-                  disabled={isPending}
-                />
-                <MmField
-                  name="chapterSpaceBelowMm"
-                  label="Below a chapter heading"
-                  value={preset.chapterSpaceBelowMm}
-                  disabled={isPending}
-                />
-                <div />
-                <MmField
-                  name="headingSpaceAboveMm"
-                  label="Above a checklist heading"
-                  value={preset.headingSpaceAboveMm}
-                  disabled={isPending}
-                />
-                <MmField
-                  name="headingSpaceBelowMm"
-                  label="Below a checklist heading"
-                  value={preset.headingSpaceBelowMm}
-                  disabled={isPending}
-                />
-              </div>
-            </>
-          )}
+            {panel(
+              "frame",
+              <>
+                <div style={GRID_STYLE}>
+                  <ChoiceField
+                    name="borderStyle"
+                    label="Decorative border"
+                    value={preset.borderStyle}
+                    options={ALBUM_BORDER_STYLES}
+                    disabled={isPending}
+                  />
+                  <MmField name="borderWidthMm" label="Border weight" value={preset.borderWidthMm} disabled={isPending} />
+                  <MmField name="borderInsetMm" label="Border inset" value={preset.borderInsetMm} disabled={isPending} />
+                  <MmField name="borderGapMm" label="Between double rules" value={preset.borderGapMm} disabled={isPending} />
+                  <div />
+                  <div />
+                  <div data-album-field="frameOrnament">
+                    <FrameOrnamentField
+                      collectionId={collectionId}
+                      defaultValue={preset.frameOrnament}
+                      disabled={isPending}
+                      onChanged={bump}
+                    />
+                  </div>
+                  <MmField
+                    name="frameOrnamentSizeMm"
+                    label="Ornament size"
+                    value={preset.frameOrnamentSizeMm}
+                    disabled={isPending}
+                  />
+                  <div />
+                  <ChoiceField
+                    name="titlePlacement"
+                    label="Album title"
+                    value={preset.titlePlacement}
+                    options={ALBUM_TITLE_PLACEMENTS}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="titleFrameGapMm"
+                    label="Gap around the title in the line"
+                    value={preset.titleFrameGapMm}
+                    disabled={isPending}
+                  />
+                </div>
+                <p style={{ ...HINT_STYLE, marginTop: "0.75rem" }}>
+                  The frame is drawn in the margin and never moves a series. A <strong>corner ornament</strong>{" "}
+                  sits at each corner, mirrored to face into the page, and the rules run between them; its
+                  size is its longer side. Your own can be uploaded as an SVG drawn for the top-left corner.
+                </p>
+                <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
+                  The <strong>album title</strong> can sit <strong>in the frame line</strong>: the top rule —
+                  both rules of a double one — breaks around it, leaving the gap on each side, and the title
+                  no longer takes a line of its own, so the content starts on the top margin. Unlike the
+                  rest of the frame this moves series. A page with no border prints the title below, as
+                  before.
+                </p>
+              </>
+            )}
 
-          {panel(
-            "boxes",
-            <>
-              <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
-                A <strong>band</strong> is a horizontal slice of the page. Normally it holds one checklist
-                across the full width; where two short ones would both fit, they can share it side by
-                side. This is a ceiling, not a frame — the page is never divided into fixed columns, and
-                nothing ever runs off the side of one.
-              </p>
+            {panel(
+              "headings",
+              <>
+                <CheckField
+                  name="printTitle"
+                  label="Print the album title as a running head on every page"
+                  checked={preset.printTitle}
+                  disabled={isPending}
+                  style={{ marginBottom: "1rem" }}
+                />
+                <div style={GRID_STYLE}>
+                  <MmField
+                    name="titleSpaceAboveMm"
+                    label="Above the album title"
+                    value={preset.titleSpaceAboveMm}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="titleSpaceBelowMm"
+                    label="Below the album title"
+                    value={preset.titleSpaceBelowMm}
+                    disabled={isPending}
+                  />
+                  <div />
+                  <MmField
+                    name="chapterSpaceAboveMm"
+                    label="Above a chapter heading"
+                    value={preset.chapterSpaceAboveMm}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="chapterSpaceBelowMm"
+                    label="Below a chapter heading"
+                    value={preset.chapterSpaceBelowMm}
+                    disabled={isPending}
+                  />
+                  <div />
+                  <MmField
+                    name="headingSpaceAboveMm"
+                    label="Above a checklist heading"
+                    value={preset.headingSpaceAboveMm}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="headingSpaceBelowMm"
+                    label="Below a checklist heading"
+                    value={preset.headingSpaceBelowMm}
+                    disabled={isPending}
+                  />
+                </div>
+              </>
+            )}
+
+            {panel(
+              "boxes",
+              <>
+                <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
+                  A <strong>band</strong> is a horizontal slice of the page. Normally it holds one checklist
+                  across the full width; where two short ones would both fit, they can share it side by
+                  side. This is a ceiling, not a frame — the page is never divided into fixed columns, and
+                  nothing ever runs off the side of one.
+                </p>
+                <div style={GRID_STYLE}>
+                  <NumberField
+                    name="blocksPerBand"
+                    label="Checklists per band"
+                    value={preset.blocksPerBand}
+                    step={1}
+                    min={MIN_BLOCKS_PER_BAND}
+                    max={MAX_BLOCKS_PER_BAND}
+                    disabled={isPending}
+                    hint="1 never pairs."
+                  />
+                  <MmField
+                    name="blockGapMm"
+                    label="Between two sharing a band"
+                    value={preset.blockGapMm}
+                    disabled={isPending}
+                  />
+                  <div />
+                  <MmField name="boxGapXMm" label="Between boxes, across" value={preset.boxGapXMm} disabled={isPending} />
+                  <MmField name="boxGapYMm" label="Between rows" value={preset.boxGapYMm} disabled={isPending} />
+                  <div />
+                  <ChoiceField
+                    name="labelPosition"
+                    label="Label position"
+                    value={preset.labelPosition}
+                    options={ALBUM_LABEL_POSITIONS}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="labelGapMm"
+                    label="Between a box and its label"
+                    value={preset.labelGapMm}
+                    disabled={isPending}
+                  />
+                  <div />
+                  <ChoiceField
+                    name="boxBorderStyle"
+                    label="Box outline"
+                    value={preset.boxBorderStyle}
+                    options={ALBUM_BOX_BORDER_STYLES}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="boxBorderWidthMm"
+                    label="Outline weight"
+                    value={preset.boxBorderWidthMm}
+                    disabled={isPending}
+                  />
+                </div>
+              </>
+            )}
+
+            {panel(
+              "hawid",
+              <>
+                <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
+                  What a box adds to the stamp itself. The two are not the same kind of number: the vertical
+                  one is added <em>before a strip is chosen</em> — the stamp plus it has to fit inside a
+                  strip&apos;s whole outer height, welded border and all — while the horizontal one is the
+                  cut. Together they replace AlbumEasy&apos;s single global 4 mm.
+                </p>
+                <div style={GRID_STYLE}>
+                  <MmField
+                    name="verticalClearanceMm"
+                    label="Vertical clearance"
+                    value={preset.verticalClearanceMm}
+                    disabled={isPending}
+                    hint="Added to the stamp's height; the shortest strip that whole figure fits inside is used. Raise it for a deliberately roomier mount."
+                  />
+                  <MmField
+                    name="horizontalMarginMm"
+                    label="Horizontal margin"
+                    value={preset.horizontalMarginMm}
+                    disabled={isPending}
+                    hint="Added to the stamp's width. This axis is cut, so it is exact."
+                  />
+                </div>
+              </>
+            )}
+
+            {panel(
+              "type",
+              <>
+                <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
+                  Sizes are in points, the unit type is set in and the unit a PDF is drawn in. The faces are
+                  the ones this app ships and embeds, so a page prints the same on any machine — Liberation
+                  matches Times New Roman and Arial metrically, for albums filed beside pages already
+                  printed in them.
+                </p>
+                <div style={GRID_STYLE}>
+                  <TypeRow role="title" label="Album title" face={preset.titleFace} size={preset.titleSizePt} disabled={isPending} />
+                  <TypeRow role="chapter" label="Chapter heading" face={preset.chapterFace} size={preset.chapterSizePt} disabled={isPending} />
+                  <TypeRow role="heading" label="Checklist heading" face={preset.headingFace} size={preset.headingSizePt} disabled={isPending} />
+                  <TypeRow role="label" label="Box label" face={preset.labelFace} size={preset.labelSizePt} disabled={isPending} />
+                  <TypeRow role="footer" label="Footer" face={preset.footerFace} size={preset.footerSizePt} disabled={isPending} />
+                </div>
+              </>
+            )}
+
+            {panel(
+              "photos",
               <div style={GRID_STYLE}>
+                <CheckField
+                  name="printPhotos"
+                  label="Print the photo a box has"
+                  checked={preset.printPhotos}
+                  disabled={isPending}
+                  style={{ gridColumn: "span 3" }}
+                />
                 <NumberField
-                  name="blocksPerBand"
-                  label="Checklists per band"
-                  value={preset.blocksPerBand}
+                  name="photoOpacityPercent"
+                  label="Photo opacity"
+                  value={preset.photoOpacityPercent}
+                  unit="%"
                   step={1}
-                  min={MIN_BLOCKS_PER_BAND}
-                  max={MAX_BLOCKS_PER_BAND}
+                  min={0}
+                  max={100}
                   disabled={isPending}
-                  hint="1 never pairs."
-                />
-                <MmField
-                  name="blockGapMm"
-                  label="Between two sharing a band"
-                  value={preset.blockGapMm}
-                  disabled={isPending}
-                />
-                <div />
-                <MmField name="boxGapXMm" label="Between boxes, across" value={preset.boxGapXMm} disabled={isPending} />
-                <MmField name="boxGapYMm" label="Between rows" value={preset.boxGapYMm} disabled={isPending} />
-                <div />
-                <ChoiceField
-                  name="labelPosition"
-                  label="Label position"
-                  value={preset.labelPosition}
-                  options={ALBUM_LABEL_POSITIONS}
-                  disabled={isPending}
-                />
-                <MmField
-                  name="labelGapMm"
-                  label="Between a box and its label"
-                  value={preset.labelGapMm}
-                  disabled={isPending}
-                />
-                <div />
-                <ChoiceField
-                  name="boxBorderStyle"
-                  label="Box outline"
-                  value={preset.boxBorderStyle}
-                  options={ALBUM_BOX_BORDER_STYLES}
-                  disabled={isPending}
-                />
-                <MmField
-                  name="boxBorderWidthMm"
-                  label="Outline weight"
-                  value={preset.boxBorderWidthMm}
-                  disabled={isPending}
+                  hint="Faint reads as what belongs here; full strength reads as a photograph."
                 />
               </div>
-            </>
-          )}
+            )}
 
-          {panel(
-            "hawid",
-            <>
-              <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
-                What a box adds to the stamp itself. The two are not the same kind of number: the vertical
-                one is added <em>before a strip is chosen</em> — the stamp plus it has to fit inside a
-                strip&apos;s whole outer height, welded border and all — while the horizontal one is the
-                cut. Together they replace AlbumEasy&apos;s single global 4 mm.
-              </p>
-              <div style={GRID_STYLE}>
-                <MmField
-                  name="verticalClearanceMm"
-                  label="Vertical clearance"
-                  value={preset.verticalClearanceMm}
-                  disabled={isPending}
-                  hint="Added to the stamp's height; the shortest strip that whole figure fits inside is used. Raise it for a deliberately roomier mount."
-                />
-                <MmField
-                  name="horizontalMarginMm"
-                  label="Horizontal margin"
-                  value={preset.horizontalMarginMm}
-                  disabled={isPending}
-                  hint="Added to the stamp's width. This axis is cut, so it is exact."
-                />
-              </div>
-            </>
-          )}
-
-          {panel(
-            "type",
-            <>
-              <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
-                Sizes are in points, the unit type is set in and the unit a PDF is drawn in. The faces are
-                the ones this app ships and embeds, so a page prints the same on any machine — Liberation
-                matches Times New Roman and Arial metrically, for albums filed beside pages already
-                printed in them.
-              </p>
-              <div style={GRID_STYLE}>
-                <TypeRow role="title" label="Album title" face={preset.titleFace} size={preset.titleSizePt} disabled={isPending} />
-                <TypeRow role="chapter" label="Chapter heading" face={preset.chapterFace} size={preset.chapterSizePt} disabled={isPending} />
-                <TypeRow role="heading" label="Checklist heading" face={preset.headingFace} size={preset.headingSizePt} disabled={isPending} />
-                <TypeRow role="label" label="Box label" face={preset.labelFace} size={preset.labelSizePt} disabled={isPending} />
-                <TypeRow role="footer" label="Footer" face={preset.footerFace} size={preset.footerSizePt} disabled={isPending} />
-              </div>
-            </>
-          )}
-
-          {panel(
-            "photos",
-            <div style={GRID_STYLE}>
-              <CheckField
-                name="printPhotos"
-                label="Print the photo a box has"
-                checked={preset.printPhotos}
-                disabled={isPending}
-                style={{ gridColumn: "span 3" }}
-              />
-              <NumberField
-                name="photoOpacityPercent"
-                label="Photo opacity"
-                value={preset.photoOpacityPercent}
-                unit="%"
-                step={1}
-                min={0}
-                max={100}
-                disabled={isPending}
-                hint="Faint reads as what belongs here; full strength reads as a photograph."
-              />
-            </div>
-          )}
-
-          {panel(
-            "texts",
-            <>
-              <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
-                Each of these is a template over the same {"{token}"} vocabulary your listing texts use —
-                not translated text — so one template serves an album in any language. The album&apos;s
-                own language resolves the tokens when its pages are planned.
-              </p>
-              <TemplateSamplePicker samples={samples} />
-              {TEXT_FIELDS.map((field) => (
-                <div key={field.key} data-album-field={field.key}>
-                  <TemplateBuilder
-                    label={field.label}
-                    open={openText === field.key}
-                    onToggle={() => setOpenText(openText === field.key ? null : field.key)}
-                    value={texts[field.key]}
-                    onChange={(value) => setText(field.key, value)}
-                    tokens={field.tokens}
-                    description={field.description}
-                    samples={samples}
-                    emptyPreview={field.emptyPreview}
-                    context={ALBUM_PREVIEW_CONTEXT}
-                  />
-                </div>
-              ))}
-            </>
-          )}
-          {TEXT_FIELDS.map((field) => (
-            <input key={field.key} type="hidden" name={field.key} value={texts[field.key]} />
-          ))}
+            {panel(
+              "texts",
+              <>
+                <p style={{ ...HINT_STYLE, marginTop: 0, marginBottom: "0.75rem" }}>
+                  Each of these is a template over the same {"{token}"} vocabulary your listing texts use —
+                  not translated text — so one template serves an album in any language. The album&apos;s
+                  own language resolves the tokens when its pages are planned.
+                </p>
+                <TemplateSamplePicker samples={samples} />
+                {TEXT_FIELDS.map((field) => (
+                  <div key={field.key} data-album-field={field.key}>
+                    <TemplateBuilder
+                      label={field.label}
+                      open={openText === field.key}
+                      onToggle={() => setOpenText(openText === field.key ? null : field.key)}
+                      value={texts[field.key]}
+                      onChange={(value) => setText(field.key, value)}
+                      tokens={field.tokens}
+                      description={field.description}
+                      samples={samples}
+                      emptyPreview={field.emptyPreview}
+                      context={ALBUM_PREVIEW_CONTEXT}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
+            {TEXT_FIELDS.map((field) => (
+              <input key={field.key} type="hidden" name={field.key} value={texts[field.key]} />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Sticky, so the page stays in view while the fields under the pointer scroll past it. The
-          collector is changing a number *because of* what is on this sheet; a preview that had to be
-          scrolled back to would be one he stops consulting. */}
-      {/* Grows from nothing into whatever the fields leave, between #795's column and A4 at ~76%. */}
+      {/* The full height, not scrolled with the fields, so the page stays in view while the fields
+          under the pointer scroll past it. The collector is changing a number *because of* what is on
+          this sheet; a preview that had to be scrolled back to would be one he stops consulting. */}
+      {/* Grows from #795's column into whatever the fields leave, with no ceiling (#1453). */}
       <div
         style={{
           flex: "1 1 0",
           minWidth: PREVIEW_MIN_WIDTH,
-          maxWidth: PREVIEW_MAX_WIDTH,
-          position: "sticky",
-          top: 0,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         <AlbumTemplatePreviewPanel
@@ -971,7 +995,6 @@ export function AlbumPresetForm({
           formRef={formRef}
           revision={revision}
           albumId={previewAlbumId}
-          dialogHeight={ALBUM_PRESET_DIALOG_HEIGHT}
           markField={hovered ?? focused}
         />
       </div>
