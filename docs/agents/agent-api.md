@@ -8,19 +8,20 @@ hand-written rather than built on the reference SDK.
 
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
-track has landed**, #1036 last, #1390 has since added purchases and #1415 stamp sizes; both
-wrappers exist and the registry carries **forty-eight operations** — #708's vocabulary read, #710's
+track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes and #1438 the
+catalogue writes; both wrappers exist and the registry carries **fifty-three operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1168's bid recommendation, and #1037's catalog-number resolver. Five counts are quoted
+operations, #1438's five catalogue writes, #1168's bid recommendation, and #1037's catalog-number
+resolver. Six counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
-carries thirty operations* (from #1036 until #1390) and *the registry carries forty-one operations*
-(from #1390 until #1415).
+carries thirty operations* (from #1036 until #1390), *the registry carries forty-one operations*
+(from #1390 until #1415) and *the registry carries forty-eight operations* (from #1415 until #1438).
 
-**Twenty-one of them write** since #1415 added four; *seventeen of them write* was the count from
-#1390 until then, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
+**Twenty-six of them write** since #1438 added five; *twenty-one of them write* was the count from
+#1415 until then, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
 below). Two earlier sentences are
@@ -127,6 +128,7 @@ src/lib/agent-api/
   purchase-reads.ts the purchase responses, the seller match and the close-name rule (#1390)
   catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
   size-reads.ts     the size figure grammar, the size source, the apply report (#1415)
+  catalog-edits.ts  the "key: value" entries, the date bounds, the duplicate refusal (#1438)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -144,10 +146,12 @@ src/lib/agent-api/
     auctions.ts     the three auction reads (#1036)                      ← server-side
     purchases.ts    the eleven purchase operations (#1390)               ← server-side
     sizes.ts        the seven stamp-size and preset operations (#1415)  ← server-side
+    stamp-refs.ts   naming a stamp by id or number, reading its labels   ← server-side
+    catalog-edits.ts  the five catalogue writes (#1438)                  ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1483,6 +1487,74 @@ and the dragged order is the collector's muscle memory (ADR-0048). `SIZE_PRESET_
 `reorderStampSizePresets` out of every operation module, and
 `tests/integration/agent-api-sizes.test.ts` pins the exact list of size operations.
 
+## Building the catalogue
+
+**Five operations, and all five write** (#1438): an issue, its stamps and its variants entered from a
+catalogue page, a dealer's list or Colnect, and their names, numbers and attributes corrected —
+where until then the resolver could find a number and nothing could add one.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `create_issue` | yes | an issue in an area, its declared ranges, and the stamps they generate (#70, #451) |
+| `add_issue_stamps` | yes | the issue's *Add stamp range* dialog (#219), optionally sized from a preset (#807) |
+| `add_stamp_variants` | yes | the *Add variant range* dialog (#722), with its subtype (#1000) |
+| `update_issue` | yes | the name, the year, the translated names, a catalogue's declared range |
+| `update_stamp` | yes | the name, translated names, date, catalogue numbers and attributes (#71, #736) |
+
+**Every write is the app's own.** `createIssue`, `addStampRangeToIssue`, `addVariantRangeToStamp`,
+`updateIssue` and `updateStampWithCatalog` are the issue form's, the two range dialogs' and the two
+edit dialogs' writes. What the operations add is what those dialogs' server actions do before they
+write — `parseCatalogNumberSpec` / `parseVariantNumberSpec`, the same-span rule across catalogues,
+`AUTO_CREATE_MAX_STAMPS`, the 1840–2100 year bound — each read in the operation so its refusal is
+written for an agent, since the domain throws plain `Error`s this surface does not relay. Three lib
+functions grew rather than being worked around: the three creating ones **return the created stamp
+ids** (the screen callers ignore them), and `createIssue` takes the add-range dialog's
+`sizePresetId`, resolved before the transaction as `addStampRangeToIssue` resolves it.
+
+**A catalogue's numbers are one `"catalogue: numbers"` entry in a string list** — `"Mi: 100-105,
+107"` — because a parameter is a scalar or a string list and nothing richer (#706), and the value is
+exactly the issue form's syntax, so a spec means here what it means in the dialog. Translated names
+are `"de: Freimarken"` the same way. **Every catalogue named generates stamps** unless `stamps_from`
+names fewer — the form ticks its boxes itself and an agent has no boxes, so the default is stated on
+the parameter and a mismatched span is refused pointing at `stamps_from`, never silently narrowed.
+
+**A catalogue must be one the area keeps** (`effectiveVendorsForArea`, the forms' own set), and a
+translated name one of `getCollectionTranslationContext`'s languages: a number or a name the forms
+offer no field for would be one the collector could neither see nor correct on the record's screen.
+
+**A duplicate is refused whatever `Collection.duplicateCatalogMode` says**, and that is #1438's
+decision rather than an oversight of the setting. The setting decides what a person typing into a
+form may override; an agent that could have found the stamp with `resolve_catalog_numbers` has no
+business creating a second one. So the operations call `findCatalogDuplicatesForCandidates` /
+`findCatalogDuplicatesForStamp` directly — catalogue identity, vendor + effective prefix + number
+(#85), the key the resolver compares too — and refuse with the holders named and their ids in
+`accepted`. The mode-gated `enforce…` wrappers are not used, and their sentence (*switch to warnings
+under Settings*) is written for the screen.
+
+**An edit restates what it does not change.** `updateIssue` writes `name` and `year` as `?? null`
+and `updateStampWithCatalog` writes the name, the date and **every** catalogue number, because that
+is what an edit dialog submits; so each edit reads the record first and sends the rest back, and a
+`clear` list empties a field (`params.ts` refuses an empty string). The attributes and translations
+go through the domain's own *absent means untouched* rule (`pickStampAttributeWrites`,
+`syncEntityTranslations`). A stamp edit refuses a run (`Mi: 401-402`): a stamp has one number in
+each catalogue. **No operation takes a number off a stamp or a range off an issue** — leaving that
+out is reversible and publishing it is not, the argument *Working on trades* makes for a line's
+manual value.
+
+**The four attribute dictionaries joined the vocabulary** (`colors`, `watermarks`, `papers`,
+`printings`) on #708's licence, *adding a key is not a break*: `update_stamp` takes them by name.
+
+**Nothing is deleted, moved or reordered**, and it is held the way the other boundaries are.
+`CATALOG_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts` keeps `deleteIssue`,
+`deleteStamp`, `deleteStampCatalogNumber`, `removeStampFromIssue`, `mergeIssues`, `moveStampNode`,
+`reparentStampNode`, `moveIssueToArea`, `reorderIssueMembers`, `deleteChecklist` and
+`reorderChecklistStamps` out of every operation module, and `tests/integration/agent-api-catalog-edits.test.ts`
+pins the exact list of writes under `/issues` and `/stamps` and fails on a delete-, move- or
+reorder-shaped name. New stamps take the issue's order as the dialogs' generation gives it (#549).
+
+**`resolveStampRefs` and `loadStampLabels` moved out of `sizes.ts` into `operations/stamp-refs.ts`**
+so the two modules share one way of naming a stamp and reading its numbers back.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and
@@ -1506,9 +1578,12 @@ exist cannot be.
 - **The agent never touches a copy through a purchase, never does anything to one that cannot be
   undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
+- **The agent never deletes, moves or reorders an issue, a stamp or a variant** (#1438). See
+  *Building the catalogue* above.
 
 Do not add a publish-shaped, send-shaped, auction-writing or copy-touching operation to the
-registry, whatever it is called, nor one that deletes a size preset. *Two boundaries* was this
+registry, whatever it is called, nor one that deletes a size preset or deletes, moves or reorders an
+issue or a stamp. *Two boundaries* was this
 section's count until #1036 and *three* until #1390, and both are quoted rather than deleted.
 
 ### The two boundaries are not the same shape
@@ -1733,7 +1808,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries forty-eight operations.** It was empty on #706, which shipped none; #708
+**The document carries fifty-three operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -1745,9 +1820,10 @@ added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, 
 `create_purchase`, `update_purchase`, `add_purchase_lot`, `update_purchase_lot`,
 `remove_purchase_lot`, `add_purchase_expense`, `update_purchase_expense` and
 `remove_purchase_expense`; #1415 added `list_size_presets`, `get_stamp_size`, `create_size_preset`,
-`update_size_preset`, `set_stamp_size`, `preview_stamp_size_apply` and `apply_stamp_size`. *The
-document carries thirty operations* stood here from #1036 until #1390, and *forty-one* from #1390
-until #1415. Six earlier sentences are quoted rather than deleted because each stood
+`update_size_preset`, `set_stamp_size`, `preview_stamp_size_apply` and `apply_stamp_size`; #1438
+added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` and `update_stamp`.
+*The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
+until #1415, and *forty-eight* from #1415 until #1438. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

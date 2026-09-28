@@ -181,6 +181,17 @@ export interface CollectionVocabulary {
    * See {@link ExchangePartnerVocabularyEntry} for what is projected and what deliberately is not.
    */
   readonly exchangePartners: readonly ExchangePartnerVocabularyEntry[];
+  /**
+   * **The four catalogue-attribute dictionaries (#71), added by #1438 on #708's own licence** —
+   * *adding a key is not a break*. `update_stamp` sets a stamp's colour, watermark, paper and
+   * printing by name, and a name it could not look up here is a cuid it would have to guess. They
+   * are flat lists shaped like a condition's, and each may be empty: nothing is seeded, and a
+   * collection that names no colours has none to send.
+   */
+  readonly colors: readonly VocabularyEntry[];
+  readonly watermarks: readonly VocabularyEntry[];
+  readonly papers: readonly VocabularyEntry[];
+  readonly printings: readonly VocabularyEntry[];
 }
 
 /** How a vocabulary is named in an error sentence — the agent reads these, so they are English. */
@@ -195,7 +206,11 @@ export type VocabularyName =
   | "catalog"
   | "platform"
   | "exchange partner"
-  | "size preset";
+  | "size preset"
+  | "color"
+  | "watermark"
+  | "paper"
+  | "printing";
 
 /** Trim and case-fold, so that `"mnh"`, `" MNH "` and `"MNH"` are one value. */
 function fold(value: string): string {

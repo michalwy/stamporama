@@ -436,3 +436,58 @@ describe("the agent API's operation modules (#1415)", () => {
     }
   });
 });
+
+/**
+ * **The catalogue writes create and correct, and never delete, move or reorder** (#1438). An issue,
+ * a stamp or a variant is created and its names, numbers and attributes corrected; deleting one,
+ * moving a stamp to another issue or under another parent, merging two issues, moving an issue to
+ * another area and reordering the stamp tree are decisions for the screen. Each entry names its
+ * module, so the control below can check the name is still a real export there.
+ */
+const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
+  ["deleteIssue", { module: "src/lib/issues.ts", why: "deletes an issue" }],
+  ["deleteStamp", { module: "src/lib/stamps.ts", why: "deletes a stamp" }],
+  ["deleteStampCatalogNumber", { module: "src/lib/stamps.ts", why: "takes a catalogue number off a stamp" }],
+  ["removeStampFromIssue", { module: "src/lib/issues.ts", why: "takes a stamp out of its issue" }],
+  ["mergeIssues", { module: "src/lib/issues.ts", why: "folds one issue into another and deletes it" }],
+  ["moveStampNode", { module: "src/lib/issues.ts", why: "moves a stamp to another issue" }],
+  ["reparentStampNode", { module: "src/lib/issues.ts", why: "moves a stamp under another parent" }],
+  ["moveIssueToArea", { module: "src/lib/issues.ts", why: "moves an issue to another area" }],
+  ["reorderIssueMembers", { module: "src/lib/issues.ts", why: "rewrites the collector's order of the stamp tree" }],
+  ["deleteChecklist", { module: "src/lib/checklists.ts", why: "deletes a checklist" }],
+  ["reorderChecklistStamps", { module: "src/lib/checklists.ts", why: "rewrites a checklist's order" }],
+]);
+
+describe("the agent API's operation modules (#1438)", () => {
+  it("reach no domain function that deletes, moves or reorders an issue or a stamp", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        const entry = CATALOG_BOUNDARY.get(name);
+        if (entry) {
+          breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}" — it ${entry.why}`);
+        }
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `The agent creates and corrects issues, stamps and variants, and never deletes, moves or reorders one (#1438).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("would notice one, because the walk sees the catalogue writes that are allowed", () => {
+    const fixture = path.join(AGENT_API, "operations/catalog-edits.ts");
+    const names = importedBindings(fixture).map((binding) => binding.name);
+    for (const allowed of ["createIssue", "addStampRangeToIssue", "addVariantRangeToStamp", "updateIssue", "updateStampWithCatalog"]) {
+      assert.ok(names.includes(allowed), `the walk did not see \`${allowed}\` in operations/catalog-edits.ts`);
+    }
+    for (const [name, { module }] of CATALOG_BOUNDARY) {
+      assert.match(
+        readFileSync(path.join(ROOT, module), "utf8"),
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of ${module} any more`
+      );
+    }
+  });
+});

@@ -107,7 +107,7 @@ catalogues: a number written as Fischer's is never quietly answered with the Mic
 number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
 everywhere else in the app. A **read only** token can do all of this.
 
-**A read-and-write token can change things, and there are four places where that is now true.**
+**A read-and-write token can change things, and there are five places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
 for it, and write or re-generate its title and description — all of it inside Stamporama, on a
@@ -173,6 +173,40 @@ assistant cannot measure anything; if one is wrong, say so and it will overwrite
 is an ordinary size on the stamp, like one you typed. It names stamps by their catalogue numbers, and
 a number that fits more than one of your stamps is refused with the candidates rather than guessed.
 It **cannot delete a preset** or change their order — that stays in Settings.
+
+On **issues and stamps** — the catalogue itself — it can enter a series it reads on a catalogue
+page, a dealer's list or Colnect, so that you do not type in what it could have. It can:
+
+- **create an issue** in one of your areas, with its year, its name and each catalogue's numbers,
+  written the way the *Add issue* form takes them — `Mi: 100-105, 107`, or `2895A-2897A,
+  2895B-2897B`. The numbers declare the issue's range and create its stamps, one per number, matched
+  across catalogues by position and put on the issue's checklist, as the form's *Assign to stamps*
+  boxes do. It can give the new stamps a size preset while it is at it;
+- **add stamps to an issue**, one per number, at the end of the issue's order and on its checklist,
+  as the *Add stamp range* dialog does;
+- **add a run of variants under a stamp** — `a-f` under `240` makes `240a` to `240f` — with the kind
+  of variant they are, exactly as the *Add variant range* dialog does;
+- **correct an issue**: its name, its year, its name in your other languages, and the range it
+  declares in a catalogue;
+- **correct a stamp or a variant**: its name and translated names, its date of issue, its number in
+  any catalogue its area keeps, and its attributes — denomination and perforation as printed, and the
+  colour, watermark, paper and printing from your own lists in Settings.
+
+Only what it is told to change changes; a stamp's other catalogue numbers and fields stay as they
+are. A name in another language is accepted only in a language you list or print in.
+
+**It never creates a stamp you already have.** A catalogue number that is already in your collection
+— the same catalogue and the same prefix, so `Mi·SP 1` and `Mi·PL 1` still count as two — is refused,
+and the assistant is told which stamp has it. That holds even when your **Duplicates** setting only
+warns: that setting is for you, typing a duplicate on purpose, and the assistant can always look the
+number up first. It will not create an issue in a grouping-only area, nor record a number in a
+catalogue the area does not keep.
+
+**What it cannot do on the catalogue is delete or move anything.** It never deletes an issue, a
+stamp or a variant, never takes a catalogue number off a stamp, never moves a stamp to another issue
+or under another stamp, never merges two issues or moves one to another area, and never changes the
+order of an issue's stamps. Those stay on the issue's and the stamp's own screens, where everything
+it creates can be seen and corrected.
 
 **And there is one thing it can answer about a stamp you do not own and have not recorded: what a
 lot at auction would be worth bidding.** Tell it what the auctioneer says the lot holds — the
