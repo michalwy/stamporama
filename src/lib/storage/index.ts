@@ -26,6 +26,7 @@ export { describeCacheMax } from "./cache-rules";
 // Key arithmetic lives in `keys.ts` so it can be unit-tested without this barrel's Prisma-backed
 // cache coming with it (#861); re-exported here because every caller reaches it through `@/lib/storage`.
 export {
+  albumPictureKey,
   extForMime,
   ornamentKey,
   permanentPrefix,

@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type {
+  AlbumEditorBlock,
   AlbumEditorBox,
+  AlbumEditorFreeElement,
   AlbumEditorSheet,
   AlbumEditorText,
 } from "@/lib/album-editor";
@@ -200,15 +202,31 @@ function SheetFrame({
 export type CanvasSelection = AlbumEditorSelection;
 
 /** A drag in progress, as millimetres already moved. Applied as an offset to what is drawn and to
- *  nothing else; the server re-plans when it ends. */
+ *  nothing else; the server re-plans when it ends.
+ *
+ *  `move` and `width` are a free page's element (#1429): the one place the collector places something
+ *  rather than correcting the layout, so the offset *is* the new position — the release writes the
+ *  element's own millimetres, and the plan only re-wraps a text to its new width. */
 export interface CanvasDrag {
-  kind: "space" | "spaceAfter" | "size";
-  /** The block, or the box's block. */
+  kind: "space" | "spaceAfter" | "size" | "move" | "width";
+  /** The block, or the box's block — or the free page an element is on. */
   blockId: string;
   stampId?: string;
+  /** The free page's element being moved or widened. */
+  elementId?: string;
   dxMm: number;
   dyMm: number;
 }
+
+/** Where the canvas and the picture list fetch a library picture (#1429). A vector comes back as an
+ *  SVG written from its outlines — the four commands the PDF draws — never as the file uploaded. */
+export function albumPictureUrl(collectionId: string, pictureId: string): string {
+  return `/api/collections/${collectionId}/album-pictures/${pictureId}`;
+}
+
+/** The colour a picture too coarse to print well is outlined in — the oversize box's, since both say
+ *  *this will not come out as it looks here*. On no card. */
+const COARSE = "#b45309";
 
 /** A box's identity as one string, for saying which one the pointer is over. The pair is what names
  *  a box (ADR-0047 §2) and both halves are cuids, so a colon cannot occur inside either. */
@@ -341,7 +359,8 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
     e: React.PointerEvent,
     kind: CanvasDrag["kind"],
     blockId: string,
-    stampId?: string
+    stampId?: string,
+    elementId?: string
   ) {
     if (readOnly) return;
     e.preventDefault();
@@ -350,7 +369,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
     const startY = e.clientY;
     const target = e.currentTarget as Element;
     target.setPointerCapture(e.pointerId);
-    let live: CanvasDrag = { kind, blockId, stampId, dxMm: 0, dyMm: 0 };
+    let live: CanvasDrag = { kind, blockId, stampId, elementId, dxMm: 0, dyMm: 0 };
 
     const move = (raw: Event) => {
       const ev = raw as PointerEvent;
@@ -358,6 +377,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
         kind,
         blockId,
         stampId,
+        elementId,
         dxMm: pxToMm(ev.clientX - startX),
         dyMm: pxToMm(ev.clientY - startY),
       };
@@ -400,21 +420,36 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
     }
   }
 
-  function drawText(text: AlbumEditorText, key: string, dy: number, flagged: boolean) {
+  function drawText(
+    text: AlbumEditorText,
+    key: string,
+    dy: number,
+    flagged: boolean,
+    dx = 0
+  ) {
     const style: React.CSSProperties = {
       fontFamily: text.face.cssStack,
       fontWeight: text.face.bold ? 700 : 400,
       fontStyle: text.face.italic ? "italic" : "normal",
     };
+    // The alignment is a paint difference like the centring always was: the line is anchored where
+    // `albumLineStartMm` puts it in the PDF, and the browser's own face sets the ink from there.
+    const anchorX =
+      text.align === "left"
+        ? text.xMm
+        : text.align === "right"
+          ? text.xMm + text.widthMm
+          : text.xMm + text.widthMm / 2;
+    const textAnchor = text.align === "left" ? "start" : text.align === "right" ? "end" : "middle";
     return (
       <g key={key}>
         {text.lines.map((line, i) => (
           <text
             key={i}
-            x={text.xMm + text.widthMm / 2}
+            x={anchorX + dx}
             y={text.yMm + dy + i * text.face.lineHeightMm + text.face.baselineOffsetMm}
             fontSize={text.face.sizeMm}
-            textAnchor="middle"
+            textAnchor={textAnchor}
             fill={INK}
             style={style}
           >
@@ -504,9 +539,29 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
         drawText(sheet.chapter, "chapter", 0, sheet.chapter.gaps.length > 0)}
       {sheet.footer && drawText(sheet.footer, "footer", 0, sheet.footer.gaps.length > 0)}
 
+      {/* A page without stamps (#1429): its pictures and texts in their drawing order, each where the
+          collector put it. Picked up anywhere to move it; the handle on the selected one widens it. */}
+      {sheet.free?.elements.map((el) => (
+        <FreeElement
+          key={el.id}
+          el={el}
+          collectionId={collectionId}
+          freePageId={sheet.free!.id}
+          chosen={selection?.kind === "element" && selection.id === el.id}
+          drag={drag?.elementId === el.id ? drag : null}
+          interactive={interactive}
+          readOnly={readOnly}
+          drawText={drawText}
+          onSelect={() => onSelect({ kind: "element", id: el.id })}
+          onStartDrag={startDrag}
+        />
+      ))}
+
       {/* Headings, in the order the blocks that own them were placed. */}
       {sheet.headings.map((heading, i) => {
-        const block = sheet.blocks.filter((b) => b.heading)[i];
+        const block = sheet.blocks.filter(
+          (b): b is AlbumEditorBlock & { kind: "entry" | "text" } => !!b.heading && b.kind !== "page"
+        )[i];
         const dy = block ? spaceOffset(block.id) : 0;
         const bandMm = Math.max(heading.heightMm, heading.face.lineHeightMm);
         const lifted = carry?.kind === "block" && !!block && carry.blockId === block.id;
@@ -849,6 +904,116 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
         />
       )}
     </svg>
+  );
+}
+
+/**
+ * One element of a free page (#1429), drawn where the collector put it and following a drag in
+ * progress. A component of its own so that `onStartDrag` — which reads the SVG's frame to turn pixels
+ * into millimetres — is only called from an event handler, `BlockSpaceHandles`' reason.
+ *
+ * The offset drawn while a handle is held is the whole of the preview: a move shifts the element, a
+ * widening widens it — and a picture's height follows, since its proportions are its own. A text's
+ * lines are re-wrapped by the server on release, never here (ADR-0045 §7).
+ */
+function FreeElement({
+  el,
+  collectionId,
+  freePageId,
+  chosen,
+  drag,
+  interactive,
+  readOnly,
+  drawText,
+  onSelect,
+  onStartDrag,
+}: {
+  el: AlbumEditorFreeElement;
+  collectionId: string;
+  freePageId: string;
+  chosen: boolean;
+  drag: CanvasDrag | null;
+  interactive: boolean;
+  readOnly: boolean;
+  drawText: (text: AlbumEditorText, key: string, dy: number, flagged: boolean, dx?: number) => React.ReactNode;
+  onSelect: () => void;
+  onStartDrag: (
+    e: React.PointerEvent,
+    kind: CanvasDrag["kind"],
+    blockId: string,
+    stampId?: string,
+    elementId?: string
+  ) => void;
+}) {
+  const dx = drag?.kind === "move" ? drag.dxMm : 0;
+  const dy = drag?.kind === "move" ? drag.dyMm : 0;
+  const widthMm = Math.max(1, el.widthMm + (drag?.kind === "width" ? drag.dxMm : 0));
+  const heightMm =
+    el.kind === "picture" && el.widthMm > 0 ? (el.heightMm * widthMm) / el.widthMm : el.heightMm;
+  const x = el.xMm + dx;
+  const y = el.yMm + dy;
+  /** Something to pick up, even for a text with no lines yet. */
+  const bandMm = Math.max(heightMm, el.kind === "text" ? el.placed.face.lineHeightMm : 1);
+  return (
+    <g>
+      {el.kind === "picture" ? (
+        <image
+          href={albumPictureUrl(collectionId, el.pictureId)}
+          x={x}
+          y={y}
+          width={widthMm}
+          height={heightMm}
+          // Fits, never crops — and the rectangle already has the picture's proportions.
+          preserveAspectRatio="xMidYMid meet"
+          pointerEvents="none"
+        />
+      ) : (
+        drawText({ ...el.placed, widthMm: drag?.kind === "width" ? widthMm : el.placed.widthMm }, `t-${el.id}`, dy, false, dx)
+      )}
+      <rect
+        x={x}
+        y={y}
+        width={widthMm}
+        height={bandMm}
+        fill="transparent"
+        stroke={el.kind === "picture" && el.tooCoarse ? COARSE : "none"}
+        strokeWidth={0.4 * MM}
+        strokeDasharray="1.5 1"
+        style={{ cursor: !interactive ? "default" : readOnly ? "pointer" : "move" }}
+        pointerEvents={interactive ? undefined : "none"}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onSelect();
+          onStartDrag(e, "move", freePageId, undefined, el.id);
+        }}
+      />
+      {chosen && (
+        <rect
+          x={x - 1}
+          y={y - 1}
+          width={widthMm + 2}
+          height={bandMm + 2}
+          fill="none"
+          stroke={HANDLE}
+          strokeWidth={0.5 * MM}
+          strokeDasharray={drag ? "1.5 1.2" : undefined}
+          pointerEvents="none"
+        />
+      )}
+      {chosen && !readOnly && (
+        // The width handle, on the right edge: dragged, it writes the width the panel shows, and
+        // typing that width moves it — one figure, two ways in (#769).
+        <rect
+          x={x + widthMm - 1.6}
+          y={y + bandMm / 2 - 1.6}
+          width={3.2}
+          height={3.2}
+          fill={HANDLE}
+          style={{ cursor: "ew-resize" }}
+          onPointerDown={(e) => onStartDrag(e, "width", freePageId, undefined, el.id)}
+        />
+      )}
+    </g>
   );
 }
 

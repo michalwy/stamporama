@@ -56,6 +56,9 @@ export interface AlbumPrintedIndex {
    *  *on paper* means is what keeps the note and the checklist beside it from being answered two
    *  different ways. */
   byTextBlock: Map<string, string>;
+  /** Which card each free page (#1429) is on, for cards that are not being reprinted — read here for
+   *  the reason {@link byTextBlock} is. */
+  byFreePage: Map<string, string>;
   /** Printed sheets no live entry names any more, so nothing in the plan can file them. A card in a
    *  binder whose stamps have all left the album is not a row to sweep — it is a divergence, and the
    *  report is where it is said. */
@@ -78,13 +81,17 @@ export async function getAlbumPrintedIndex(albumId: string): Promise<AlbumPrinte
   });
   const pages = new Map(rows.map((r) => [r.id, r]));
 
-  const [stamps, notes] = await Promise.all([
+  const [stamps, notes, freePages] = await Promise.all([
     prisma.albumPrintedPageStamp.findMany({
       where: { printedPage: { albumId, reprintingAt: null } },
       orderBy: [{ part: "asc" }, { sortOrder: "asc" }],
       select: { albumPrintedPageId: true, stampId: true, albumEntryId: true, part: true },
     }),
     prisma.albumTextBlock.findMany({
+      where: { albumId, printedPage: { reprintingAt: null } },
+      select: { id: true, printedPageId: true },
+    }),
+    prisma.albumFreePage.findMany({
       where: { albumId, printedPage: { reprintingAt: null } },
       select: { id: true, printedPageId: true },
     }),
@@ -122,10 +129,20 @@ export async function getAlbumPrintedIndex(albumId: string): Promise<AlbumPrinte
     claimed.add(note.printedPageId);
   }
 
+  // A free page's card carries no stamps at all, so — like a note's — it is claimed here or it would
+  // read as orphaned (#1429), the trap #769 met with a sheet holding only a note.
+  const byFreePage = new Map<string, string>();
+  for (const page of freePages) {
+    if (!page.printedPageId) continue;
+    byFreePage.set(page.id, page.printedPageId);
+    claimed.add(page.printedPageId);
+  }
+
   return {
     pages,
     byEntry,
     byTextBlock,
+    byFreePage,
     orphanedPageIds: rows
       .filter((r) => !r.reprintingAt && !claimed.has(r.id))
       .map((r) => r.id),

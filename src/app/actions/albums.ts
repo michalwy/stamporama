@@ -1,13 +1,33 @@
 "use server";
 
 import { AlbumOrnamentError } from "@/lib/album-ornament-store";
+import { AlbumPictureError, deleteAlbumPicture } from "@/lib/album-pictures";
+import {
+  ALBUM_FREE_POSITION_MAX_MM,
+  ALBUM_FREE_POSITION_MIN_MM,
+  ALBUM_FREE_WIDTH_MAX_MM,
+  ALBUM_FREE_WIDTH_MIN_MM,
+  asAlbumFreeElementKind,
+  asAlbumFreeTextAlign,
+  parseAlbumFreeMm,
+  parseAlbumFreeSizePt,
+} from "@/lib/album-free-page";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   addAlbumEntry,
+  addAlbumFreePage,
+  addAlbumFreePageElement,
   addAlbumTextBlock,
+  deleteAlbumFreePage,
+  deleteAlbumFreePageElement,
+  reorderAlbumFreePages,
+  restackAlbumFreePageElement,
+  updateAlbumFreePage,
+  updateAlbumFreePageElement,
+  type AlbumFreeElementInput,
   clearAlbumBoxAdjustments,
   clearAlbumEntryStampOrder,
   createAlbum,
@@ -31,6 +51,7 @@ import {
   updateAlbumPreset,
   updateAlbumPrintPhotos,
   updateAlbumTextBlock,
+  AlbumFreePageError,
   AlbumNameTakenError,
   type AlbumBlockLayoutInput,
   type AlbumEntryData,
@@ -86,6 +107,8 @@ function toErrorState(err: unknown, fallback: string): AlbumActionState {
   if (err instanceof AlbumNameTakenError) return { status: "error", message: err.message };
   // An uploaded corner ornament that is no longer the collection's (#1427).
   if (err instanceof AlbumOrnamentError) return { status: "error", message: err.message };
+  // A free page on a card, or a picture that is not the collection's (#1429).
+  if (err instanceof AlbumFreePageError) return { status: "error", message: err.message };
   // A printing refusal always says something the collector has to act on — a stale listing, half a
   // checklist chosen, a sheet already on paper — so its own words reach them rather than a "please
   // try again" they cannot act on.
@@ -770,5 +793,217 @@ export async function reorderAlbumTextBlocksAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Could not reorder those notes." };
+  }
+}
+
+// ── Pages without stamps (#1429) ─────────────────────────────────────────────
+//
+// A free page is filed like a note — an anchor and a side — and its elements are placed at
+// millimetres from the sheet's top-left corner. The millimetres arrive as strings through the same
+// reading the fields use; **blank is not zero** here, because a position is not a delta.
+
+/** A free page just added, so the editor can go straight to its sheet. */
+export type AlbumFreePageCreatedState = AlbumActionState | { status: "created"; id: string };
+
+export async function addAlbumFreePageAction(
+  albumId: string,
+  formData: FormData
+): Promise<AlbumFreePageCreatedState> {
+  const session = await getSession();
+  const anchor = ((formData.get("anchorAlbumEntryId") as string | null) ?? "").trim();
+  try {
+    const id = await addAlbumFreePage(session.user.id, albumId, {
+      anchorAlbumEntryId: anchor || null,
+      side: asAlbumTextBlockSide(((formData.get("side") as string | null) ?? "").trim()),
+    });
+    return { status: "created", id };
+  } catch (err) {
+    return toErrorState(err, "Could not add that page.");
+  }
+}
+
+/** Re-file a free page, or switch one of the frame's heads on it. Only the fields sent change. */
+export async function updateAlbumFreePageAction(
+  freePageId: string,
+  formData: FormData
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  const raw = (key: string) => formData.get(key) as string | null;
+  const flag = (key: string) => {
+    const value = raw(key);
+    return value === null ? undefined : value === "true";
+  };
+  const anchor = raw("anchorAlbumEntryId");
+  const side = raw("side");
+  try {
+    await updateAlbumFreePage(session.user.id, freePageId, {
+      ...(anchor === null ? {} : { anchorAlbumEntryId: anchor.trim() || null }),
+      ...(side === null ? {} : { side: asAlbumTextBlockSide(side.trim()) }),
+      printTitle: flag("printTitle"),
+      printChapter: flag("printChapter"),
+      printFooter: flag("printFooter"),
+    });
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Could not change that page.");
+  }
+}
+
+export async function deleteAlbumFreePageAction(freePageId: string): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await deleteAlbumFreePage(session.user.id, freePageId);
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Could not remove that page.");
+  }
+}
+
+export async function reorderAlbumFreePagesAction(
+  albumId: string,
+  anchorAlbumEntryId: string | null,
+  side: string,
+  orderedIds: string[]
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await reorderAlbumFreePages(
+      session.user.id,
+      albumId,
+      anchorAlbumEntryId,
+      asAlbumTextBlockSide(side),
+      orderedIds
+    );
+    return { status: "success" };
+  } catch {
+    return { status: "error", message: "Could not reorder those pages." };
+  }
+}
+
+/** The fields of one element that were sent, parsed and bounded — or the message the collector reads.
+ *  Absent fields stay absent: a drag sends its position and nothing else. */
+function readFreeElement(
+  formData: FormData
+):
+  | { ok: true; value: Partial<Omit<AlbumFreeElementInput, "kind">> }
+  | { ok: false; message: string } {
+  const raw = (key: string) => formData.get(key) as string | null;
+  const value: Partial<Omit<AlbumFreeElementInput, "kind">> = {};
+  const mm = (key: "xMm" | "yMm" | "widthMm", label: string, min: number, max: number) => {
+    const typed = raw(key);
+    if (typed === null) return null;
+    const parsed = parseAlbumFreeMm(typed, label, min, max);
+    if (!parsed.ok) return parsed.message;
+    value[key] = parsed.value;
+    return null;
+  };
+  const problem =
+    mm("xMm", "Across", ALBUM_FREE_POSITION_MIN_MM, ALBUM_FREE_POSITION_MAX_MM) ??
+    mm("yMm", "Down", ALBUM_FREE_POSITION_MIN_MM, ALBUM_FREE_POSITION_MAX_MM) ??
+    mm("widthMm", "Width", ALBUM_FREE_WIDTH_MIN_MM, ALBUM_FREE_WIDTH_MAX_MM);
+  if (problem) return { ok: false, message: problem };
+  const size = raw("sizePt");
+  if (size !== null) {
+    const parsed = parseAlbumFreeSizePt(size);
+    if (!parsed.ok) return parsed;
+    value.sizePt = parsed.value;
+  }
+  const text = raw("text");
+  if (text !== null) value.text = text.trim();
+  const role = raw("role");
+  if (role !== null) value.role = asAlbumTextRole(role.trim());
+  const align = raw("align");
+  if (align !== null) value.align = asAlbumFreeTextAlign(align.trim());
+  const pictureId = raw("pictureId");
+  if (pictureId !== null) value.pictureId = pictureId.trim() || null;
+  return { ok: true, value };
+}
+
+/** Put a picture or a text on a free page. Every field is required here: a new element has to be
+ *  somewhere, at some width. */
+export async function addAlbumFreeElementAction(
+  freePageId: string,
+  formData: FormData
+): Promise<AlbumFreePageCreatedState> {
+  const session = await getSession();
+  const kind = asAlbumFreeElementKind(((formData.get("kind") as string | null) ?? "").trim());
+  if (!kind) return { status: "error", message: "A page holds pictures and texts." };
+  const read = readFreeElement(formData);
+  if (!read.ok) return { status: "error", message: read.message };
+  const v = read.value;
+  if (v.xMm === undefined || v.yMm === undefined || v.widthMm === undefined) {
+    return { status: "error", message: "A new element needs a position and a width." };
+  }
+  if (kind === "text" && !v.text) return { status: "error", message: "A text needs something in it." };
+  if (kind === "picture" && !v.pictureId) return { status: "error", message: "Choose a picture." };
+  try {
+    const id = await addAlbumFreePageElement(session.user.id, freePageId, {
+      kind,
+      xMm: v.xMm,
+      yMm: v.yMm,
+      widthMm: v.widthMm,
+      text: v.text ?? "",
+      role: v.role ?? "heading",
+      sizePt: v.sizePt ?? 12,
+      align: v.align ?? "center",
+      pictureId: v.pictureId ?? null,
+    });
+    return { status: "created", id };
+  } catch (err) {
+    return toErrorState(err, "Could not put that on the page.");
+  }
+}
+
+export async function updateAlbumFreeElementAction(
+  elementId: string,
+  formData: FormData
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  const read = readFreeElement(formData);
+  if (!read.ok) return { status: "error", message: read.message };
+  if (read.value.text !== undefined && !read.value.text) {
+    return { status: "error", message: "A text needs something in it — remove it instead." };
+  }
+  try {
+    await updateAlbumFreePageElement(session.user.id, elementId, read.value);
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Could not change that.");
+  }
+}
+
+export async function deleteAlbumFreeElementAction(elementId: string): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await deleteAlbumFreePageElement(session.user.id, elementId);
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Could not take that off the page.");
+  }
+}
+
+export async function restackAlbumFreeElementAction(
+  elementId: string,
+  to: "front" | "back"
+): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await restackAlbumFreePageElement(session.user.id, elementId, to === "back" ? "back" : "front");
+    return { status: "success" };
+  } catch (err) {
+    return toErrorState(err, "Could not change the drawing order.");
+  }
+}
+
+/** Delete a picture from the collection's library. Refused, naming them, while a page or a card
+ *  prints it. */
+export async function deleteAlbumPictureAction(pictureId: string): Promise<AlbumActionState> {
+  const session = await getSession();
+  try {
+    await deleteAlbumPicture(session.user.id, pictureId);
+    return { status: "success" };
+  } catch (err) {
+    if (err instanceof AlbumPictureError) return { status: "error", message: err.message };
+    return toErrorState(err, "Could not delete that picture.");
   }
 }

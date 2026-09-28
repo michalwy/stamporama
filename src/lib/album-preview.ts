@@ -121,6 +121,10 @@ function sampleSheetSource(
     album,
     entries: albumPreviewEntries(),
     textBlocks: [],
+    // A template preview draws the stamp sheets a template produces; a free page is the album's own
+    // (#1429) and a sample has none.
+    freePages: [],
+    pictures: new Map(),
     // A sample resolves in no language, so nothing can have fallen back to a default one (#298).
     textGaps: () => [],
     titleGaps: [],

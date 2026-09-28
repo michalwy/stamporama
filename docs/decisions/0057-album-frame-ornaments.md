@@ -97,6 +97,10 @@ built-in redrawn by a later build, or an upload deleted, never reaches a card.
   so a card's snapshot cannot grow by megabytes.
 - An SVG a drawing program writes with features outside §2 has to be simplified before upload — text
   converted to outlines, gradients flattened. The refusal names which.
+- #1429 reads a free page's SVG pictures through the same reader ([ADR-0058](0058-album-free-pages.md)),
+  so a picture that prints as lines is exactly as safe as an ornament. What the reader refuses there is
+  not refused but rasterised once at upload, and the reader's errors now carry a `reason` phrase for
+  the refusals that are a choice (a gradient, transparency, text) so that fallback can say why.
 - Existing templates and albums were migrated to `none` and a 1.2 mm gap — exactly what they printed
   — while a **new** template starts with the Rosette at 25 mm on a double rule, the shape of the
   collector's `Classic.txt` (`IMAGE_SCALE(0.12)` of a 212 px corner).

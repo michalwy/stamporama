@@ -1,5 +1,17 @@
 import "server-only";
-import { albumRoleFace, type AlbumRect, type AlbumTextRole } from "./album-layout";
+import {
+  albumPlacedTextFace,
+  type AlbumPlacedFreePage,
+  type AlbumRect,
+  type AlbumTextRole,
+} from "./album-layout";
+import type { AlbumFreeTextAlign } from "./album-free-page";
+import { albumPictureDpi, albumPictureTooCoarse } from "./album-free-page";
+import {
+  getAlbumPictures,
+  type AlbumPictureData,
+  type AlbumPictureRef,
+} from "./album-pictures";
 import type { AlbumRenderPreset, AlbumVerticalPlacement } from "./album-template-rules";
 import { albumBaselineOffsetMm, albumTextMetrics, PT_TO_MM } from "./album-metrics";
 import { findAlbumFace } from "./album-fonts";
@@ -22,7 +34,12 @@ import type { AlbumDivergence } from "./album-divergence";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import { resolveAlbumPhotos } from "./album-photos";
 import type { AlbumBoxAdjustmentValue } from "./album-corrections";
-import type { AlbumData, AlbumEntryData, AlbumTextBlockData } from "./albums";
+import type {
+  AlbumData,
+  AlbumEntryData,
+  AlbumFreePageData,
+  AlbumTextBlockData,
+} from "./albums";
 
 // What one sheet looks like to the page editor (#769) — the geometry the canvas draws, and
 // everything it has to be able to say about what is on it.
@@ -77,7 +94,14 @@ import type { AlbumData, AlbumEntryData, AlbumTextBlockData } from "./albums";
  */
 export type AlbumSheetSource = Pick<
   AlbumPlanContext,
-  "album" | "entries" | "textBlocks" | "textGaps" | "titleGaps" | "frameOrnament"
+  | "album"
+  | "entries"
+  | "textBlocks"
+  | "freePages"
+  | "pictures"
+  | "textGaps"
+  | "titleGaps"
+  | "frameOrnament"
 >;
 
 /** How a run of text is set, resolved once here so the canvas and the PDF put ink in the same place. */
@@ -106,6 +130,8 @@ export interface AlbumEditorText extends AlbumRect {
   role: AlbumTextRole;
   lines: string[];
   face: AlbumEditorFace;
+  /** Where each line sits in the band — centred unless a free page's text says otherwise (#1429). */
+  align: AlbumFreeTextAlign;
   /** The entity fields this text rendered untranslated (#298), each fillable in place (#299/#300).
    *  Empty on a printed sheet: what is on the card is what is on the card. */
   gaps: TitleFallback[];
@@ -144,11 +170,55 @@ export interface AlbumEditorBox extends AlbumRect {
   photoId: string | null;
 }
 
+/**
+ * One element of a free page as the editor draws and edits it (#1429). The position and width are the
+ * collector's own; the height is the plan's — a text's lines, a picture's proportions.
+ */
+export type AlbumEditorFreeElement =
+  | (AlbumRect & {
+      kind: "text";
+      id: string;
+      /** The placed text, lines wrapped by the measurer the PDF uses. */
+      placed: AlbumEditorText;
+      /** The words as typed, line breaks and all. */
+      text: string;
+      role: AlbumTextRole;
+      sizePt: number;
+      align: AlbumFreeTextAlign;
+    })
+  | (AlbumRect & {
+      kind: "picture";
+      id: string;
+      pictureId: string;
+      /** The library's name for it; blank on a printed card, which draws what it printed. */
+      name: string;
+      /** True for a picture that prints as lines. */
+      vector: boolean;
+      /** Dots per inch at its placed width, for a raster; null for a vector or on a card. */
+      dpi: number | null;
+      /** Below 300 dpi at this width — flagged before printing, never printed (#1429). */
+      tooCoarse: boolean;
+      /** Why an SVG prints as a picture rather than as lines, completing "the drawing …". */
+      rasterReason: string | null;
+    });
+
+/** A page without stamps, on the sheet it is (#1429). */
+export interface AlbumEditorFreePage {
+  id: string;
+  printTitle: boolean;
+  printChapter: boolean;
+  printFooter: boolean;
+  /** Where it is filed. Null on a printed card, where nothing is set. */
+  anchor: { albumEntryId: string | null; side: "before" | "after" } | null;
+  /** In drawing order: a later element is drawn over an earlier one. */
+  elements: AlbumEditorFreeElement[];
+}
+
 /** One block on the sheet, with the corrections that are settable on it. */
 export interface AlbumEditorBlock {
-  /** The album entry, or the note's own id. */
+  /** The album entry, the note's own id, or the free page's. */
   id: string;
-  kind: "entry" | "text";
+  kind: "entry" | "text" | "page";
   /** Which sheet of a split block this is; 1 for a block that moved whole. */
   part: number;
   /** What this sheet printed for it — the marked `[2]`, `[3]` heading on a continuation sheet. */
@@ -215,6 +285,8 @@ export interface AlbumEditorSheet {
   gaps: TitleFallback[];
   /** What has changed under this card since it was printed (#778). Empty for a live sheet. */
   divergences: AlbumDivergence[];
+  /** A page without stamps (#1429), or null on a sheet of stamps. */
+  free: AlbumEditorFreePage | null;
   /** How the sheet's content sits vertically (#1419). `acted` is the placement as it acted on this
    *  sheet — `justify` on a sheet of one band acts as `top`. `opener` is the block that opens the
    *  sheet, which is where a page's own placement is kept; null on a printed sheet, where nothing is
@@ -223,7 +295,7 @@ export interface AlbumEditorSheet {
     acted: AlbumVerticalPlacement;
     opener: {
       id: string;
-      kind: "entry" | "text";
+      kind: "entry" | "text" | "page";
       name: string;
       /** The page's own placement, or null where the sheet follows the album. */
       override: AlbumVerticalPlacement | null;
@@ -235,10 +307,21 @@ export interface AlbumEditorData {
   album: AlbumData;
   entries: AlbumEntryData[];
   textBlocks: AlbumTextBlockData[];
+  /** The album's pages without stamps (#1429). */
+  freePages: AlbumFreePageData[];
+  /** The collection's picture library, for placing one on a free page (#1429). */
+  pictures: AlbumPictureData[];
   /** Every sheet of the plan, so the editor can offer a rail without a second read. Geometry is
    *  carried for the **selected** sheet alone: a page of boxes is a lot of millimetres to ship for a
    *  list, and the album screen already lists sheets without any of them. */
-  sheets: { position: number; range: string; chapterKey: string; printed: boolean }[];
+  sheets: {
+    position: number;
+    range: string;
+    chapterKey: string;
+    printed: boolean;
+    /** A page without stamps, named by its first text rather than by a range it does not have. */
+    free: { id: string; label: string } | null;
+  }[];
   sheet: AlbumEditorSheet | null;
   /** True when the collection has described no hawid stock, which makes **every** box a pocket. */
   emptyStock: boolean;
@@ -248,6 +331,16 @@ export interface AlbumEditorData {
   untranslated: { texts: number; sheets: number[] };
   /** The area's name in the album's language, offered in place of the default-language name (#1311). */
   nameSuggestion: string | null;
+}
+
+/** How a free page is named in a list: its first words, or what it is when it has none yet (#1429). */
+export function freePageName(page: Pick<AlbumFreePageData, "elements">): string {
+  const words = page.elements
+    .filter((el) => el.kind === "text")
+    .map((el) => el.text.replace(/\s+/g, " ").trim())
+    .find((t) => t);
+  if (words) return words.length > 60 ? `${words.slice(0, 59)}…` : words;
+  return page.elements.length > 0 ? "A page of pictures" : "An empty page";
 }
 
 /** How many of a sheet's texts fell back, counting each placed text once. */
@@ -262,12 +355,14 @@ function untranslatedTexts(sheet: AlbumEditorSheet): number {
   return texts.filter((t) => t !== null && t.gaps.length > 0).length;
 }
 
-/** The face a role is set in, with everything a renderer needs to place its ink. */
+/** The face a role is set in — at its own size where a free page's text has one (#1429) — with
+ *  everything a renderer needs to place its ink. */
 function editorFace(
   preset: AlbumRenderPreset,
   role: AlbumTextRole,
+  ownSizePt?: number,
 ): AlbumEditorFace {
-  const { face, sizePt } = albumRoleFace(preset, role);
+  const { face, sizePt } = albumPlacedTextFace(preset, { role, sizePt: ownSizePt });
   const known = findAlbumFace(face);
   return {
     id: face,
@@ -285,7 +380,12 @@ function editorFace(
 }
 
 function editorText(
-  placed: { role: AlbumTextRole; lines: string[] } & AlbumRect,
+  placed: {
+    role: AlbumTextRole;
+    lines: string[];
+    sizePt?: number;
+    align?: AlbumFreeTextAlign;
+  } & AlbumRect,
   preset: AlbumRenderPreset,
   gaps: TitleFallback[],
 ): AlbumEditorText {
@@ -296,9 +396,52 @@ function editorText(
     yMm: placed.yMm,
     widthMm: placed.widthMm,
     heightMm: placed.heightMm,
-    face: editorFace(preset, placed.role),
+    face: editorFace(preset, placed.role, placed.sizePt),
+    align: placed.align ?? "center",
     gaps,
   };
+}
+
+/**
+ * A free page's elements as the editor draws them (#1429). `pictures` is the library as far as it is
+ * known — on a printed card it may not be, and a card draws what it printed with no flag beside it.
+ */
+function editorFreeElements(
+  free: AlbumPlacedFreePage,
+  preset: AlbumRenderPreset,
+  raw: AlbumFreePageData | null,
+  pictures: ReadonlyMap<string, AlbumPictureRef> | null,
+): AlbumEditorFreeElement[] {
+  const typed = new Map(raw?.elements.map((el) => [el.id, el]) ?? []);
+  return free.elements.map((el): AlbumEditorFreeElement => {
+    const rect = { xMm: el.xMm, yMm: el.yMm, widthMm: el.widthMm, heightMm: el.heightMm };
+    if (el.kind === "text") {
+      const own = typed.get(el.id);
+      return {
+        ...rect,
+        kind: "text",
+        id: el.id,
+        placed: editorText(el, preset, []),
+        text: own?.text ?? el.lines.join("\n"),
+        role: el.role,
+        sizePt: el.sizePt ?? albumPlacedTextFace(preset, el).sizePt,
+        align: el.align ?? "center",
+      };
+    }
+    const picture = pictures?.get(el.pictureId) ?? null;
+    const widthPx = picture && picture.kind === "raster" ? picture.widthPx : null;
+    return {
+      ...rect,
+      kind: "picture",
+      id: el.id,
+      pictureId: el.pictureId,
+      name: picture?.name ?? "",
+      vector: picture?.kind === "vector",
+      dpi: widthPx === null ? null : Math.round(albumPictureDpi(widthPx, el.widthMm)),
+      tooCoarse: albumPictureTooCoarse(widthPx, el.widthMm),
+      rasterReason: picture?.rasterReason ?? null,
+    };
+  });
 }
 
 function dedupeGaps(gaps: readonly TitleFallback[]): TitleFallback[] {
@@ -338,6 +481,7 @@ export function liveSheet(
   const album = context.album;
   const entryById = new Map(context.entries.map((e) => [e.id, e]));
   const noteById = new Map(context.textBlocks.map((n) => [n.id, n]));
+  const freePageById = new Map(context.freePages.map((p) => [p.id, p]));
 
   const pageStampIds = layout.boxes.map((b) => b.box.stampId);
   const chapterEntries = context.entries.filter(
@@ -352,6 +496,7 @@ export function liveSheet(
   for (const block of layout.blocks) {
     const entry = entryById.get(block.entryId);
     const note = noteById.get(block.entryId);
+    const freePage = block.kind === "page" ? freePageById.get(block.entryId) : undefined;
     /** The row the block's corrections live on — a note's own, or the entry's. */
     const corrected = note ?? entry;
     const slice = layout.boxes.slice(cursor, cursor + block.boxCount);
@@ -417,9 +562,11 @@ export function liveSheet(
       kind: block.kind ?? "entry",
       part: block.part,
       heading: block.heading,
-      name: note
-        ? note.text.trim().slice(0, 60) || "A note with nothing in it yet"
-        : (entry?.checklistName ?? "This checklist is no longer in the album"),
+      name: freePage
+        ? freePageName(freePage)
+        : note
+          ? note.text.trim().slice(0, 60) || "A note with nothing in it yet"
+          : (entry?.checklistName ?? "This checklist is no longer in the album"),
       firstBoxIndex: block.firstBoxIndex,
       boxCount: block.boxCount,
       correction: note
@@ -463,7 +610,8 @@ export function liveSheet(
 
   // The page's own placement is kept on the block that opens it (#1419) — whichever block the
   // layout placed first, which is the one it read the override from.
-  const openerBlock = blocks[0];
+  // A free page has none: nothing on it is packed, so there is no leftover for a placement to spend.
+  const openerBlock = layout.free ? undefined : blocks[0];
   const openerRow = openerBlock
     ? (noteById.get(openerBlock.id) ?? entryById.get(openerBlock.id))
     : undefined;
@@ -493,6 +641,19 @@ export function liveSheet(
       ...footerGaps,
     ]),
     divergences: [],
+    free: layout.free
+      ? (() => {
+          const own = freePageById.get(layout.free.id) ?? null;
+          return {
+            id: layout.free.id,
+            printTitle: own?.printTitle ?? !!layout.title,
+            printChapter: own?.printChapter ?? !!layout.chapter,
+            printFooter: own?.printFooter ?? !!page.footer,
+            anchor: own ? { albumEntryId: own.anchorAlbumEntryId, side: own.side } : null,
+            elements: editorFreeElements(layout.free, album, own, context.pictures),
+          };
+        })()
+      : null,
     placement: {
       acted: layout.placement ?? album.verticalPlacement,
       opener:
@@ -557,7 +718,7 @@ function printedSheet(
       kind: block.kind ?? "entry",
       part: block.part,
       heading: block.heading,
-      name: block.heading || "(no heading)",
+      name: block.kind === "page" ? "A page without stamps" : block.heading || "(no heading)",
       firstBoxIndex: first,
       boxCount: block.boxCount,
       correction: null,
@@ -590,6 +751,16 @@ function printedSheet(
     blocks,
     gaps: [],
     divergences,
+    free: layout.free
+      ? {
+          id: layout.free.id,
+          printTitle: !!layout.title,
+          printChapter: !!layout.chapter,
+          printFooter: !!snapshot.footer,
+          anchor: null,
+          elements: editorFreeElements(layout.free, preset, null, null),
+        }
+      : null,
     placement: { acted: layout.placement ?? "top", opener: null },
   };
 }
@@ -605,7 +776,8 @@ function printedSheet(
 export async function getAlbumEditorData(
   ownerId: string,
   albumId: string,
-  position: number | null,
+  /** A position, or a page without stamps by its own id (#1429). */
+  position: number | { freePageId: string } | null,
 ): Promise<AlbumEditorData | null> {
   // One read, and the plan taken off it. The screen needs both — the geometry to draw and the rows
   // to say what is settable on it — and reading the album twice would be two answers to a question
@@ -614,16 +786,30 @@ export async function getAlbumEditorData(
   if (!context) return null;
   const plan = planAlbumFrom(context);
 
-  const sheets = plan.pages.map((page, i) => ({
-    position: i + 1,
-    range: page.range,
-    chapterKey: page.layout.chapterKey,
-    printed: page.layout.kind === "printed",
-  }));
+  const freeCards = new Map([...plan.printed.byFreePage].map(([pageId, cardId]) => [cardId, pageId]));
+  const freePageById = new Map(context.freePages.map((p) => [p.id, p]));
+  const sheets = plan.pages.map((page, i) => {
+    const freeId =
+      page.layout.kind === "live" ? page.layout.free?.id : freeCards.get(page.layout.printedPageId);
+    const freePage = freeId ? freePageById.get(freeId) : undefined;
+    return {
+      position: i + 1,
+      range: page.range,
+      chapterKey: page.layout.chapterKey,
+      printed: page.layout.kind === "printed",
+      free: freeId
+        ? { id: freeId, label: freePage ? freePageName(freePage) : "A page without stamps" }
+        : null,
+    };
+  });
 
+  const asked =
+    position !== null && typeof position === "object"
+      ? (sheets.find((row) => row.free?.id === position.freePageId)?.position ?? null)
+      : position;
   const chosen =
-    position !== null && position >= 1 && position <= plan.pages.length
-      ? position
+    asked !== null && asked >= 1 && asked <= plan.pages.length
+      ? asked
       : plan.pages.length > 0
         ? 1
         : null;
@@ -676,10 +862,14 @@ export async function getAlbumEditorData(
     untranslated.sheets.push(i + 1);
   });
 
+  const pictures = await getAlbumPictures(ownerId, context.album.collectionId);
+
   return {
     album: context.album,
     entries: context.entries,
     textBlocks: context.textBlocks,
+    freePages: context.freePages,
+    pictures,
     sheets,
     sheet,
     emptyStock: plan.emptyStock,

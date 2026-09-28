@@ -28,6 +28,10 @@
 // - the **picture** each mount printed, by `Photo.id`;
 // - the **corner ornament** the frame printed (#1427), as a drawing rather than a name: a built-in
 //   can be redrawn by a later build and an uploaded one deleted, and neither may reach a card.
+// - on a **free page** (#1429), every element as it was placed — a text's wrapped lines, face, size
+//   and alignment, and a picture's rectangle and its library id. The picture is referenced rather
+//   than copied: a library picture is never changed once written, and `album_printed_page_picture`
+//   keeps it from being deleted while a card prints it.
 //
 // Nothing here needs a fallback and nothing here resolves. A printed page draws stored values.
 //
@@ -184,6 +188,21 @@ export function snapshotStampRows(snapshot: AlbumPageSnapshot): AlbumSnapshotSta
     });
   }
   return rows;
+}
+
+/** Every library picture a free page's card prints (#1429), for the index that keeps them from being
+ *  deleted while the card is in a binder. */
+export function snapshotPictureIds(snapshot: AlbumPageSnapshot): string[] {
+  const ids = new Set<string>();
+  for (const el of snapshot.page.free?.elements ?? []) {
+    if (el.kind === "picture") ids.add(el.pictureId);
+  }
+  return [...ids];
+}
+
+/** The free page a card carries (#1429), by id, or null for a card of stamps. */
+export function snapshotFreePageId(snapshot: AlbumPageSnapshot): string | null {
+  return snapshot.page.free?.id ?? null;
 }
 
 /** Every `Photo.id` a sheet printed, so a renderer reads exactly the pictures the card carries. */

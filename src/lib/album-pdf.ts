@@ -26,12 +26,19 @@ import {
 import fontkit from "@pdf-lib/fontkit";
 import sharp from "sharp";
 import {
+  albumLineStartMm,
+  albumPlacedTextFace,
   albumRoleFace,
   type AlbumPlacedBox,
   type AlbumPlacedText,
   type AlbumPlannedPage,
   type AlbumRect,
 } from "./album-layout";
+import {
+  readAlbumPictureBytes,
+  resolveAlbumPictures,
+  type AlbumPictureRef,
+} from "./album-pictures";
 import type { AlbumRenderPreset } from "./album-template-rules";
 import { albumBaselineOffsetMm, albumTextMetrics, MM_TO_PT } from "./album-metrics";
 import { loadAlbumFontBytes, AlbumFontError } from "./album-font-bytes";
@@ -207,7 +214,9 @@ function drawText(
   text: AlbumPlacedText,
   fontFor: FontResolver
 ) {
-  const { face, sizePt } = albumRoleFace(preset, text.role);
+  // A free page's text is set in its role's face at a size of its own, and aligned as the collector
+  // chose (#1429); everything else on a sheet is its role's size, centred.
+  const { face, sizePt } = albumPlacedTextFace(preset, text);
   const font = fontFor(face);
   const lineMm = albumTextMetrics.lineHeightMm(face, sizePt);
   const baselineMm = albumBaselineOffsetMm(face, sizePt);
@@ -215,7 +224,7 @@ function drawText(
     if (!line) return;
     const widthMm = albumTextMetrics.measureMm(line, face, sizePt);
     page.drawText(line, {
-      x: (text.xMm + (text.widthMm - widthMm) / 2) * MM_TO_PT,
+      x: albumLineStartMm(text, widthMm) * MM_TO_PT,
       y: fromTop(preset, text.yMm + i * lineMm + baselineMm),
       size: sizePt,
       font,
@@ -364,6 +373,40 @@ function drawPhoto(page: PDFPage, preset: AlbumRenderPreset, rect: AlbumRect, im
   });
 }
 
+/**
+ * A free page's picture (#1429) in the rectangle the plan gave it: as **vectors** — its outlines
+ * written as path operators, through {@link drawOrnament}'s one transformation, scaled so its `viewBox`
+ * fills the rectangle — or as a raster, fitted and never cropped. The rectangle already has the
+ * picture's own proportions, so the two agree; the fit is only what keeps a rounding tenth from
+ * stretching it.
+ */
+function drawPicture(
+  page: PDFPage,
+  preset: AlbumRenderPreset,
+  rect: AlbumRect,
+  picture: AlbumPictureRef,
+  image: PDFImage | undefined
+) {
+  if (picture.drawing) {
+    const vb = picture.drawing.viewBox;
+    const scale = Math.min(rect.widthMm / vb.width, rect.heightMm / vb.height);
+    const x = rect.xMm + (rect.widthMm - vb.width * scale) / 2 - vb.x * scale;
+    const y = rect.yMm + (rect.heightMm - vb.height * scale) / 2 - vb.y * scale;
+    drawOrnament(page, preset, picture.drawing, [scale, 0, 0, scale, x, y]);
+    return;
+  }
+  if (!image) return;
+  const scale = Math.min(rect.widthMm / image.width, rect.heightMm / image.height);
+  const widthMm = image.width * scale;
+  const heightMm = image.height * scale;
+  page.drawImage(image, {
+    x: (rect.xMm + (rect.widthMm - widthMm) / 2) * MM_TO_PT,
+    y: fromTop(preset, rect.yMm + (rect.heightMm - heightMm) / 2 + heightMm),
+    width: widthMm * MM_TO_PT,
+    height: heightMm * MM_TO_PT,
+  });
+}
+
 // ── The document ─────────────────────────────────────────────────────────────
 
 /**
@@ -470,6 +513,7 @@ export async function renderAlbumPdf(
   };
 
   const images = await loadImages(album, pages, doc);
+  const pictures = await loadPictures(album, pages, doc);
 
   for (const sheet of pages) {
     const { preset, page: layout } = sheet;
@@ -478,6 +522,17 @@ export async function renderAlbumPdf(
     drawFrame(page, preset, sheet.frameOrnament, layout.title);
     if (layout.title) drawText(page, preset, layout.title, fontFor);
     if (layout.chapter) drawText(page, preset, layout.chapter, fontFor);
+
+    // A page without stamps (#1429): the collector's own pictures and texts, in their drawing order,
+    // where he put them.
+    for (const el of layout.free?.elements ?? []) {
+      if (el.kind === "text") {
+        drawText(page, preset, el, fontFor);
+        continue;
+      }
+      const held = pictures.get(el.pictureId);
+      if (held) drawPicture(page, preset, el, held.picture, held.image);
+    }
 
     // Continuation headings already carry their `[2]`, `[3]` — the plan measured the marked string
     // and reserved room for it (`albumContinuationHeading`), so there is nothing to append here.
@@ -543,6 +598,46 @@ async function embedFaces(
     }
   }
   return fonts;
+}
+
+/**
+ * Every library picture the chosen sheets' free pages place (#1429), resolved once and — for a raster —
+ * embedded once, whichever sheet it is on and however many.
+ *
+ * A live page and a card name a picture the same way, by its library id: a library picture is never
+ * changed once written, and a card keeps the one it printed from being deleted, so both questions have
+ * one answer. A picture that is nonetheless not there is **refused by name**, as a face or a frame's
+ * ornament is: a title page printed without its coat of arms is wrong in a way nobody sees until it is
+ * in the binder.
+ */
+async function loadPictures(
+  album: AlbumData,
+  sheets: readonly DrawableSheet[],
+  doc: PDFDocument
+): Promise<Map<string, { picture: AlbumPictureRef; image?: PDFImage }>> {
+  const ids = sheets.flatMap((sheet) =>
+    (sheet.page.free?.elements ?? []).flatMap((el) => (el.kind === "picture" ? [el.pictureId] : []))
+  );
+  const out = new Map<string, { picture: AlbumPictureRef; image?: PDFImage }>();
+  if (ids.length === 0) return out;
+  const found = await resolveAlbumPictures(album.collectionId, ids);
+  for (const id of new Set(ids)) {
+    const picture = found.get(id);
+    if (!picture) {
+      throw new AlbumPdfError(
+        "A page without stamps places a picture the collection no longer has. Take it off the page before printing."
+      );
+    }
+    if (picture.drawing) {
+      out.set(id, { picture });
+      continue;
+    }
+    const bytes = await readAlbumPictureBytes(picture);
+    const { bytes: embeddable, png } = await toEmbeddable(bytes, picture.raster!.mime);
+    const image = png ? await doc.embedPng(embeddable) : await doc.embedJpg(embeddable);
+    out.set(id, { picture, image });
+  }
+  return out;
 }
 
 /**

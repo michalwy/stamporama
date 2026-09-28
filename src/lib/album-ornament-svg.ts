@@ -66,8 +66,21 @@ export interface AlbumOrnamentDrawing {
   paths: AlbumOrnamentPath[];
 }
 
-/** Thrown for a file this reader will not turn into a drawing. The message reaches the collector. */
-export class AlbumOrnamentSvgError extends Error {}
+/** Thrown for a file this reader will not turn into a drawing. The message reaches the collector.
+ *
+ *  `reason` is set where the file is a perfectly good SVG this reader chooses not to follow — a
+ *  gradient, transparency, text — as a phrase that completes *"the drawing …"*. A free page's picture
+ *  (#1429) reads SVG through this same reader and prints such a file as a picture instead of refusing
+ *  it, and says why in those words rather than in a corner ornament's. Absent on a file that cannot
+ *  be read at all. */
+export class AlbumOrnamentSvgError extends Error {
+  constructor(
+    message: string,
+    readonly reason?: string
+  ) {
+    super(message);
+  }
+}
 
 /** Refuse a file that is not worth reading before a byte of it is parsed. An ornament is a few
  *  kilobytes; a megabyte is a scanned picture wrapped in SVG or a whole page of clip art. */
@@ -360,7 +373,8 @@ function parseColour(raw: string): string | null {
   if (v === "currentcolor") return "currentColor";
   if (v.startsWith("url(")) {
     throw new AlbumOrnamentSvgError(
-      "The drawing is painted with a gradient or a pattern. A corner ornament prints in solid colours — fill it with one."
+      "The drawing is painted with a gradient or a pattern. A corner ornament prints in solid colours — fill it with one.",
+      "is painted with a gradient or a pattern"
     );
   }
   let m = /^#([0-9a-f]{3})$/.exec(v);
@@ -467,7 +481,8 @@ function applyProperty(paint: Paint, parent: Paint, name: string, rawValue: stri
       const o = value.endsWith("%") ? Number(value.slice(0, -1)) / 100 : Number(value);
       if (!Number.isFinite(o) || o < 1) {
         throw new AlbumOrnamentSvgError(
-          "Part of the drawing is transparent. A corner ornament prints in solid ink — make every part fully opaque."
+          "Part of the drawing is transparent. A corner ornament prints in solid ink — make every part fully opaque.",
+          "is partly transparent"
         );
       }
       return;
@@ -483,7 +498,7 @@ function applyProperty(paint: Paint, parent: Paint, name: string, rawValue: stri
   }
   const refusal = REFUSED_UNLESS_NONE[name];
   if (refusal && value !== "none" && !(name === "stroke-dasharray" && value === "0")) {
-    throw new AlbumOrnamentSvgError(`The drawing ${refusal}, which a corner ornament cannot print.`);
+    throw new AlbumOrnamentSvgError(`The drawing ${refusal}, which a corner ornament cannot print.`, refusal);
   }
 }
 
@@ -924,7 +939,10 @@ function colourOf(value: string | null, paint: Paint): string | null {
  */
 export function readOrnamentSvg(source: string): AlbumOrnamentDrawing {
   if (source.length > MAX_ORNAMENT_SVG_BYTES) {
-    throw new AlbumOrnamentSvgError("This file is too large to be a corner ornament (1 MB at most).");
+    throw new AlbumOrnamentSvgError(
+      "This file is too large to be a corner ornament (1 MB at most).",
+      "is larger than a megabyte"
+    );
   }
   const root = parseXml(source.replace(/^﻿/, ""));
   if (localName(root.name) !== "svg") throw notSvg("its outermost element is not <svg>");
@@ -964,7 +982,10 @@ export function readOrnamentSvg(source: string): AlbumOrnamentDrawing {
     if (!isRoot) {
       if (PASSED_OVER.has(name)) return;
       if (REFUSED[name]) {
-        throw new AlbumOrnamentSvgError(`The drawing ${REFUSED[name]}, which a corner ornament cannot print.`);
+        throw new AlbumOrnamentSvgError(
+          `The drawing ${REFUSED[name]}, which a corner ornament cannot print.`,
+          REFUSED[name]
+        );
       }
       if (!SHAPES.has(name) && !CONTAINERS.has(name)) return;
     }
@@ -990,7 +1011,10 @@ export function readOrnamentSvg(source: string): AlbumOrnamentDrawing {
     const commands = transformCommands(own, matrix);
     commandCount += commands.length;
     if (paths.length + 1 > MAX_PATHS || commandCount > MAX_COMMANDS) {
-      throw new AlbumOrnamentSvgError("The drawing is too detailed to print as a corner ornament.");
+      throw new AlbumOrnamentSvgError(
+        "The drawing is too detailed to print as a corner ornament.",
+        "is too detailed to print as lines"
+      );
     }
     paths.push({
       commands,
@@ -1006,6 +1030,29 @@ export function readOrnamentSvg(source: string): AlbumOrnamentDrawing {
 
   if (paths.length === 0) throw new AlbumOrnamentSvgError("The drawing draws nothing that could be printed.");
   return { viewBox, paths };
+}
+
+/**
+ * A whole drawing as an SVG document **written from its outlines** — never the file that was uploaded.
+ *
+ * For a free page's picture (#1429), which the browser shows through an `<img>` and the PDF draws from
+ * the same four commands. Everything in it is numbers and `#rrggbb` colours this reader produced, so
+ * nothing the collector uploaded reaches a browser as markup (ADR-0057 §1).
+ */
+export function albumDrawingSvg(drawing: AlbumOrnamentDrawing): string {
+  const { x, y, width, height } = drawing.viewBox;
+  const paths = drawing.paths
+    .map(
+      (p) =>
+        `<path d="${albumOrnamentPathData(p.commands)}" fill="${p.fill ?? "none"}" fill-rule="${p.fillRule}"` +
+        ` stroke="${p.stroke ?? "none"}" stroke-width="${p.strokeWidth}" stroke-linecap="${p.lineCap}"` +
+        ` stroke-linejoin="${p.lineJoin}"/>`
+    )
+    .join("");
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}"` +
+    ` width="${width}" height="${height}">${paths}</svg>`
+  );
 }
 
 /** A drawing's outlines as SVG path data — for the canvas, which draws the same numbers the PDF

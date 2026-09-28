@@ -141,6 +141,7 @@ model Collection {
   tags            Tag[]
   albumTemplates  AlbumTemplate[]
   albumOrnaments  AlbumOrnament[]
+  albumPictures   AlbumPicture[]
   albums          Album[]
   lotBuilderPresets LotBuilderPreset[]
   items           Item[]
@@ -1248,6 +1249,7 @@ model Album {
   entries        AlbumEntry[]
   printedPages   AlbumPrintedPage[]
   textBlocks     AlbumTextBlock[]
+  freePages      AlbumFreePage[]
 
   // An album is picked and printed by name, and two albums called "Polska" would make which binder a
   // footer names depend on which row the database handed back first — `AlbumTemplate`'s rule.
@@ -1324,6 +1326,7 @@ model AlbumEntry {
   boxAdjustments    AlbumBoxAdjustment[]
   rowBreaks         AlbumRowBreak[]
   textBlocks       AlbumTextBlock[]       @relation("AlbumTextBlockAnchor")
+  freePages        AlbumFreePage[]        @relation("AlbumFreePageAnchor")
   continuesPrintedPage AlbumPrintedPage? @relation("AlbumEntryContinuation", fields: [continuesPrintedPageId], references: [id], onDelete: SetNull)
   printedStamps     AlbumPrintedPageStamp[]
 
@@ -1534,6 +1537,10 @@ model AlbumPrintedPage {
   // The collector's own text blocks (#769) that went onto this sheet, so the plan steps over them
   // instead of emitting them again on live paper.
   textBlocks         AlbumTextBlock[]        @relation("AlbumTextBlockPrinted")
+  // The collector's free pages (#1429) that went onto this sheet — the same seam as the notes above.
+  freePages          AlbumFreePage[]         @relation("AlbumFreePagePrinted")
+  // The index of the pictures this card prints (#1429), derived from its snapshot.
+  pictures           AlbumPrintedPagePicture[]
 
   @@index([albumId, printedAt])
   @@map("album_printed_page")
@@ -1571,6 +1578,139 @@ model AlbumPrintedPageStamp {
   @@index([albumEntryId, part, sortOrder])
   @@index([stampId])
   @@map("album_printed_page_stamp")
+}
+
+// Which pictures a printed card carries (#1429) — the index over `AlbumPrintedPage.snapshot`, derived
+// from it in the same transaction and written from nowhere else, as `AlbumPrintedPageStamp` is. It is
+// what lets the database refuse deleting a picture a card in a binder still prints.
+model AlbumPrintedPagePicture {
+  albumPrintedPageId String
+  pictureId          String
+
+  printedPage AlbumPrintedPage @relation(fields: [albumPrintedPageId], references: [id], onDelete: Cascade)
+  picture     AlbumPicture     @relation(fields: [pictureId], references: [id], onDelete: NoAction)
+
+  @@id([albumPrintedPageId, pictureId])
+  @@index([pictureId])
+  @@map("album_printed_page_picture")
+}
+
+// A picture in the collection's library, for the album's free pages (#1429) — a coat of arms, a map,
+// an emblem. Uploaded once and used on as many pages as the collector wants.
+//
+// **Never changed once written.** An element names it by id, so replacing its bytes would change what
+// a live page prints with nothing to say so; a different picture is a new upload. Deleting one is
+// refused while an element or a printed card names it (`NoAction` on both, checked at the end of the
+// statement so deleting the whole collection still cascades).
+//
+// Two ways to print, and the row says which:
+//
+// - `drawing` — an SVG the frame's ornament reader takes (ADR-0057), kept as its outlines and printed
+//   as vectors. The PDF and the canvas draw the same four commands; the file is never drawn as SVG.
+// - raster — a PNG or a JPEG as uploaded (`storageKey`), or an SVG the reader refuses, **rasterised
+//   once at upload** (`rasterKey`) with the reason in `rasterReason`. Decided with the collector on
+//   2026-09-28: a coat of arms with a gradient is worth printing, and the screen says it will print as
+//   a picture rather than as lines. `widthPx` / `heightPx` are the raster's, so the editor can flag
+//   one that would print below 300 dpi at its placed size.
+model AlbumPicture {
+  id             String   @id @default(cuid())
+  collectionId   String
+  // Picked by name, so unique in the collection — the upload takes the file's name and numbers a
+  // second one, as an ornament does.
+  name           String
+  storageKey     String
+  storageBackend String
+  contentType    String
+  sizeBytes      Int
+  widthPx        Int?
+  heightPx       Int?
+  drawing        Json?
+  rasterKey      String?
+  rasterReason   String?
+  createdAt      DateTime @default(now())
+
+  collection Collection                @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  elements   AlbumFreePageElement[]
+  printedOn  AlbumPrintedPagePicture[]
+
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("album_picture")
+}
+
+// A page without stamps (#1429): a title page, a section divider, a map, a page of notes — pictures,
+// headings and texts placed freely inside the album's frame.
+//
+// **Anchored to an entry, not positioned**, exactly as `AlbumTextBlock` is and for the same reason
+// (ADR-0045 §3): a live page has no row, so a free page is filed *before* or *after* an entry and
+// moves with it when the album re-flows. Null + `before` is the album's opening page and null +
+// `after` its closing one, and a removed entry sets the anchor null rather than taking the page.
+//
+// Unlike a note it **is a sheet**, so it carries the page-level switches: whether it prints the
+// running head, its chapter's heading and the footer. All three are off by default.
+//
+// `printedPageId` is the seam a note has (ADR-0047 §4): a free page on a card is on that card, and
+// the plan steps over it.
+model AlbumFreePage {
+  id                 String  @id @default(cuid())
+  albumId            String
+  anchorAlbumEntryId String?
+  /// `before` | `after` that anchor.
+  side               String  @default("after")
+  /// Among the free pages sharing one anchor and one side.
+  sortOrder          Int     @default(0)
+  printTitle         Boolean @default(false)
+  printChapter       Boolean @default(false)
+  printFooter        Boolean @default(false)
+  printedPageId      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  album            Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  anchorAlbumEntry AlbumEntry?            @relation("AlbumFreePageAnchor", fields: [anchorAlbumEntryId], references: [id], onDelete: SetNull)
+  printedPage      AlbumPrintedPage?      @relation("AlbumFreePagePrinted", fields: [printedPageId], references: [id], onDelete: SetNull)
+  elements         AlbumFreePageElement[]
+
+  @@index([albumId])
+  @@index([anchorAlbumEntryId, sortOrder])
+  @@index([printedPageId])
+  @@map("album_free_page")
+}
+
+// One picture or one run of text on a free page (#1429).
+//
+// **A position, in millimetres from the sheet's top-left corner** — the one place on this track where
+// the collector places something himself rather than correcting the layout by a delta. It is not
+// ADR-0045 §3 broken: the position is on the free page, which is a row, and no re-flow can move it.
+//
+// Only the **width** is stored. A text wraps to it and is as tall as its lines; a picture keeps its
+// proportions and is as tall as the width makes it. `sortOrder` is the drawing order — a later element
+// is drawn over an earlier one.
+model AlbumFreePageElement {
+  id         String  @id @default(cuid())
+  freePageId String
+  /// `picture` | `text`.
+  kind       String
+  sortOrder  Int     @default(0)
+  xMm        Float
+  yMm        Float
+  widthMm    Float
+  /// A text's words. Line breaks the collector types are kept.
+  text       String  @default("")
+  /// Which of the template's five faces a text is set in (#766) — its face, not its size.
+  role       String  @default("heading")
+  sizePt     Float   @default(12)
+  /// `left` | `center` | `right` within the element's width.
+  align      String  @default("center")
+  pictureId  String?
+
+  freePage AlbumFreePage @relation(fields: [freePageId], references: [id], onDelete: Cascade)
+  picture  AlbumPicture? @relation(fields: [pictureId], references: [id], onDelete: NoAction)
+
+  @@index([freePageId, sortOrder])
+  @@index([pictureId])
+  @@map("album_free_page_element")
 }
 
 model CatalogVendor {

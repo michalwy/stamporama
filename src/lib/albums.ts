@@ -29,6 +29,12 @@ import {
   type AlbumTextBlockSide,
 } from "./album-corrections";
 import type { AlbumBlockBreak, AlbumTextRole } from "./album-layout";
+import {
+  asAlbumFreeElementKind,
+  asAlbumFreeTextAlign,
+  type AlbumFreeElementKind,
+  type AlbumFreeTextAlign,
+} from "./album-free-page";
 
 // Albums (#767) — the Prisma side. The design is #755; ADR-0045 states the model.
 //
@@ -1097,6 +1103,362 @@ export async function reorderAlbumTextBlocks(
   await prisma.$transaction(
     orderedIds.map((id, i) =>
       prisma.albumTextBlock.update({ where: { id }, data: { sortOrder: i } })
+    )
+  );
+}
+
+// ── Free pages (#1429) ───────────────────────────────────────────────────────
+
+/** One picture or run of text on a free page, as the editor reads it. A position in millimetres from
+ *  the sheet's top-left corner, and a width; the height is the plan's to work out. */
+export interface AlbumFreePageElementData {
+  id: string;
+  kind: AlbumFreeElementKind;
+  /** Drawing order: a later element is drawn over an earlier one. */
+  sortOrder: number;
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  text: string;
+  role: AlbumTextRole;
+  sizePt: number;
+  align: AlbumFreeTextAlign;
+  pictureId: string | null;
+}
+
+/** A page without stamps, as the editor reads one. Filed like a note — see `AlbumTextBlockData`. */
+export interface AlbumFreePageData {
+  id: string;
+  anchorAlbumEntryId: string | null;
+  side: AlbumTextBlockSide;
+  sortOrder: number;
+  printTitle: boolean;
+  printChapter: boolean;
+  printFooter: boolean;
+  /** The card it went onto, if it has been printed (#778). The plan steps over it there. */
+  printedPageId: string | null;
+  elements: AlbumFreePageElementData[];
+}
+
+const FREE_PAGE_SELECT = {
+  id: true,
+  anchorAlbumEntryId: true,
+  side: true,
+  sortOrder: true,
+  printTitle: true,
+  printChapter: true,
+  printFooter: true,
+  printedPageId: true,
+  elements: {
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      kind: true,
+      sortOrder: true,
+      xMm: true,
+      yMm: true,
+      widthMm: true,
+      text: true,
+      role: true,
+      sizePt: true,
+      align: true,
+      pictureId: true,
+    },
+  },
+} satisfies Prisma.AlbumFreePageSelect;
+
+function toFreePageData(
+  row: Prisma.AlbumFreePageGetPayload<{ select: typeof FREE_PAGE_SELECT }>
+): AlbumFreePageData {
+  return {
+    ...row,
+    side: asAlbumTextBlockSide(row.side),
+    elements: row.elements.flatMap((el) => {
+      const kind = asAlbumFreeElementKind(el.kind);
+      // A kind this build does not know is left off the page rather than drawn as something else.
+      if (!kind) return [];
+      return [
+        {
+          ...el,
+          kind,
+          role: asAlbumTextRole(el.role),
+          align: asAlbumFreeTextAlign(el.align),
+        },
+      ];
+    }),
+  };
+}
+
+export async function getAlbumFreePages(
+  ownerId: string,
+  albumId: string
+): Promise<AlbumFreePageData[]> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.albumFreePage.findMany({
+    where: { albumId },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    select: FREE_PAGE_SELECT,
+  });
+  return rows.map(toFreePageData);
+}
+
+async function resolveFreePageAlbum(
+  freePageId: string
+): Promise<{ albumId: string; collectionId: string }> {
+  const row = await prisma.albumFreePage.findUnique({
+    where: { id: freePageId },
+    select: { albumId: true, album: { select: { collectionId: true } } },
+  });
+  if (!row) throw new Error("Free page not found.");
+  return { albumId: row.albumId, collectionId: row.album.collectionId };
+}
+
+async function resolveFreeElementPage(
+  elementId: string
+): Promise<{ freePageId: string; albumId: string; collectionId: string }> {
+  const row = await prisma.albumFreePageElement.findUnique({
+    where: { id: elementId },
+    select: {
+      freePageId: true,
+      freePage: { select: { albumId: true, album: { select: { collectionId: true } } } },
+    },
+  });
+  if (!row) throw new Error("That element is no longer on the page.");
+  return {
+    freePageId: row.freePageId,
+    albumId: row.freePage.albumId,
+    collectionId: row.freePage.album.collectionId,
+  };
+}
+
+/** Where a free page is filed and which of the frame's heads it prints. */
+export interface AlbumFreePageInput {
+  anchorAlbumEntryId: string | null;
+  side: AlbumTextBlockSide;
+  printTitle: boolean;
+  printChapter: boolean;
+  printFooter: boolean;
+}
+
+export async function addAlbumFreePage(
+  ownerId: string,
+  albumId: string,
+  input: Pick<AlbumFreePageInput, "anchorAlbumEntryId" | "side">
+): Promise<string> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await assertAnchorInAlbum(albumId, input.anchorAlbumEntryId);
+  const last = await prisma.albumFreePage.findFirst({
+    where: { albumId, anchorAlbumEntryId: input.anchorAlbumEntryId, side: input.side },
+    orderBy: { sortOrder: "desc" },
+    select: { sortOrder: true },
+  });
+  const created = await prisma.albumFreePage.create({
+    data: {
+      albumId,
+      anchorAlbumEntryId: input.anchorAlbumEntryId,
+      side: input.side,
+      sortOrder: last ? last.sortOrder + 1 : 0,
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/**
+ * Re-file a free page, or switch one of the frame's heads on it.
+ *
+ * **A free page on a card may be edited, and the edit is a divergence** — a note's rule
+ * (`updateAlbumTextBlock`), for a note's reason: the card keeps what it printed (ADR-0047 §1), the
+ * page goes on being live, and #778 reports the difference.
+ */
+export async function updateAlbumFreePage(
+  ownerId: string,
+  freePageId: string,
+  input: Partial<AlbumFreePageInput>
+): Promise<void> {
+  const { albumId, collectionId } = await resolveFreePageAlbum(freePageId);
+  await assertCollectionOwner(ownerId, collectionId);
+  if (input.anchorAlbumEntryId !== undefined) {
+    await assertAnchorInAlbum(albumId, input.anchorAlbumEntryId);
+  }
+  await prisma.albumFreePage.update({
+    where: { id: freePageId },
+    data: {
+      ...(input.anchorAlbumEntryId === undefined
+        ? {}
+        : { anchorAlbumEntryId: input.anchorAlbumEntryId }),
+      ...(input.side === undefined ? {} : { side: input.side }),
+      ...(input.printTitle === undefined ? {} : { printTitle: input.printTitle }),
+      ...(input.printChapter === undefined ? {} : { printChapter: input.printChapter }),
+      ...(input.printFooter === undefined ? {} : { printFooter: input.printFooter }),
+    },
+  });
+}
+
+/** Thrown for a free-page gesture the collector has to do something else about. Its message reaches
+ *  them. */
+export class AlbumFreePageError extends Error {}
+
+/** Take a free page out of the album. Refused while it is on a card, for a note's reason: the card
+ *  would then carry a page nothing in the album accounts for. */
+export async function deleteAlbumFreePage(ownerId: string, freePageId: string): Promise<void> {
+  const { collectionId } = await resolveFreePageAlbum(freePageId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const current = await prisma.albumFreePage.findUnique({
+    where: { id: freePageId },
+    select: { printedPageId: true },
+  });
+  if (current?.printedPageId) {
+    throw new AlbumFreePageError(
+      "This page is on a printed card, so it cannot be taken out of the album — the card would then " +
+        "be one nothing accounts for. Change what is on it and the difference is reported, or reprint " +
+        "the card."
+    );
+  }
+  await prisma.albumFreePage.delete({ where: { id: freePageId } });
+}
+
+/** Reorder the free pages filed at one anchor and side. Densely renumbered, as every order here is. */
+export async function reorderAlbumFreePages(
+  ownerId: string,
+  albumId: string,
+  anchorAlbumEntryId: string | null,
+  side: AlbumTextBlockSide,
+  orderedIds: string[]
+): Promise<void> {
+  const collectionId = await resolveAlbumCollection(albumId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const existing = await prisma.albumFreePage.findMany({
+    where: { albumId, anchorAlbumEntryId, side },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map((p) => p.id));
+  if (orderedIds.length !== existingIds.size || !orderedIds.every((id) => existingIds.has(id))) {
+    throw new Error("Reorder list does not match the pages filed here.");
+  }
+  await prisma.$transaction(
+    orderedIds.map((id, i) =>
+      prisma.albumFreePage.update({ where: { id }, data: { sortOrder: i } })
+    )
+  );
+}
+
+/** One element's statements, as the editor sends them. A picture names one of the collection's own. */
+export interface AlbumFreeElementInput {
+  kind: AlbumFreeElementKind;
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  text: string;
+  role: AlbumTextRole;
+  sizePt: number;
+  align: AlbumFreeTextAlign;
+  pictureId: string | null;
+}
+
+async function assertPictureInCollection(collectionId: string, pictureId: string | null): Promise<void> {
+  if (!pictureId) return;
+  const found = await prisma.albumPicture.count({ where: { id: pictureId, collectionId } });
+  if (found === 0) throw new AlbumFreePageError("That picture is not in this collection's library.");
+}
+
+export async function addAlbumFreePageElement(
+  ownerId: string,
+  freePageId: string,
+  input: AlbumFreeElementInput
+): Promise<string> {
+  const { collectionId } = await resolveFreePageAlbum(freePageId);
+  await assertCollectionOwner(ownerId, collectionId);
+  if (input.kind === "picture" && !input.pictureId) {
+    throw new AlbumFreePageError("A picture element needs a picture.");
+  }
+  await assertPictureInCollection(collectionId, input.pictureId);
+  const last = await prisma.albumFreePageElement.findFirst({
+    where: { freePageId },
+    orderBy: { sortOrder: "desc" },
+    select: { sortOrder: true },
+  });
+  const created = await prisma.albumFreePageElement.create({
+    data: {
+      freePageId,
+      kind: input.kind,
+      // A new element goes on top: it is the one the collector is about to look at.
+      sortOrder: last ? last.sortOrder + 1 : 0,
+      xMm: input.xMm,
+      yMm: input.yMm,
+      widthMm: input.widthMm,
+      text: input.kind === "text" ? input.text : "",
+      role: input.role,
+      sizePt: input.sizePt,
+      align: input.align,
+      pictureId: input.kind === "picture" ? input.pictureId : null,
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** Move, resize or re-set one element. Only the fields sent change: a drag sends its position and
+ *  nothing else, so an open panel's other figures cannot ride along and overwrite it. */
+export async function updateAlbumFreePageElement(
+  ownerId: string,
+  elementId: string,
+  input: Partial<Omit<AlbumFreeElementInput, "kind">>
+): Promise<void> {
+  const { collectionId } = await resolveFreeElementPage(elementId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const current = await prisma.albumFreePageElement.findUnique({
+    where: { id: elementId },
+    select: { kind: true },
+  });
+  if (!current) throw new Error("That element is no longer on the page.");
+  if (input.pictureId !== undefined) {
+    if (current.kind !== "picture" || !input.pictureId) {
+      throw new AlbumFreePageError("Only a picture can show a picture.");
+    }
+    await assertPictureInCollection(collectionId, input.pictureId);
+  }
+  await prisma.albumFreePageElement.update({
+    where: { id: elementId },
+    data: {
+      ...(input.xMm === undefined ? {} : { xMm: input.xMm }),
+      ...(input.yMm === undefined ? {} : { yMm: input.yMm }),
+      ...(input.widthMm === undefined ? {} : { widthMm: input.widthMm }),
+      ...(input.text === undefined || current.kind !== "text" ? {} : { text: input.text }),
+      ...(input.role === undefined ? {} : { role: input.role }),
+      ...(input.sizePt === undefined ? {} : { sizePt: input.sizePt }),
+      ...(input.align === undefined ? {} : { align: input.align }),
+      ...(input.pictureId === undefined ? {} : { pictureId: input.pictureId }),
+    },
+  });
+}
+
+export async function deleteAlbumFreePageElement(ownerId: string, elementId: string): Promise<void> {
+  const { collectionId } = await resolveFreeElementPage(elementId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.albumFreePageElement.delete({ where: { id: elementId } });
+}
+
+/** Bring an element to the front of its page, or send it to the back — the drawing order. */
+export async function restackAlbumFreePageElement(
+  ownerId: string,
+  elementId: string,
+  to: "front" | "back"
+): Promise<void> {
+  const { freePageId, collectionId } = await resolveFreeElementPage(elementId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const siblings = await prisma.albumFreePageElement.findMany({
+    where: { freePageId },
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  const rest = siblings.map((s) => s.id).filter((id) => id !== elementId);
+  const ordered = to === "front" ? [...rest, elementId] : [elementId, ...rest];
+  await prisma.$transaction(
+    ordered.map((id, i) =>
+      prisma.albumFreePageElement.update({ where: { id }, data: { sortOrder: i } })
     )
   );
 }

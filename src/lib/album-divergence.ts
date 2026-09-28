@@ -41,6 +41,7 @@ import {
   type AlbumRenderPreset,
   type AlbumVerticalPlacement,
 } from "./album-template-rules";
+import type { AlbumPlacedFreePage } from "./album-layout";
 
 /**
  * The kinds of divergence, **most serious first**. This order is the report's order.
@@ -52,6 +53,11 @@ import {
  *   mount on the card was cut to the old figure and a hawid cut wrong is gone.
  * - `text` — a renamed issue or area, a filled-in or corrected translation, a language change. Wrong
  *   words on a card that is otherwise right.
+ * - `page` — something on a **free page** (#1429) has moved, been resized, set differently, replaced
+ *   or taken off since the card was printed. Its own kind, decided with the collector on 2026-09-28:
+ *   on a page he laid out himself the arrangement *is* the content, so it ranks just below the words
+ *   and above an album-wide template change — and a replaced coat of arms is not the low-value
+ *   `photo` a bulk scanning session produces.
  * - `template` — the album's render preset has moved since the sheet was set.
  * - `photo` — a picture has arrived, changed or gone since the card was printed.
  *
@@ -61,7 +67,7 @@ import {
  * the first day the collector sits down with a scanner, which is precisely what this report exists
  * to avoid.
  */
-export const ALBUM_DIVERGENCE_KINDS = ["stamps", "size", "text", "template", "photo"] as const;
+export const ALBUM_DIVERGENCE_KINDS = ["stamps", "size", "text", "page", "template", "photo"] as const;
 
 export type AlbumDivergenceKind = (typeof ALBUM_DIVERGENCE_KINDS)[number];
 
@@ -93,9 +99,61 @@ export interface AlbumComparableBlock {
    *  snapshot stored before notes existed, which is the `entry` it was. It changes no comparison —
    *  only what a divergence is *called*, and "a checklist heading now reads" is the wrong sentence
    *  about a note somebody typed. */
-  kind?: "entry" | "text";
+  kind?: "entry" | "text" | "page";
   heading: string;
   boxes: AlbumComparableBox[];
+}
+
+/**
+ * One element of a free page (#1429), reduced to what a card can be wrong about.
+ *
+ * **Here coordinates are facts.** Everywhere else on a sheet a position is a consequence of the facts
+ * above it and is left out of the comparison; on a free page the collector placed every element
+ * himself, so where it is and how wide is what he chose, and a card printed before he moved it is a
+ * card that no longer says what the page does.
+ */
+export interface AlbumComparableFreeElement {
+  id: string;
+  kind: "text" | "picture";
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  /** A text's lines as they wrap, one per line; empty for a picture. */
+  text: string;
+  /** How a text is set — its face's role, its size and its alignment — as one comparable string;
+   *  empty for a picture. */
+  setting: string;
+  pictureId: string | null;
+}
+
+/** A free page's elements in drawing order, as the comparison reads them — from a live plan and from a
+ *  card's snapshot alike, since both carry the placed page. */
+export function albumComparableFreeElements(
+  free: AlbumPlacedFreePage,
+): AlbumComparableFreeElement[] {
+  return free.elements.map((el) =>
+    el.kind === "text"
+      ? {
+          id: el.id,
+          kind: "text",
+          xMm: el.xMm,
+          yMm: el.yMm,
+          widthMm: el.widthMm,
+          text: el.lines.join("\n"),
+          setting: `${el.role} ${el.sizePt ?? ""} ${el.align ?? "center"}`,
+          pictureId: null,
+        }
+      : {
+          id: el.id,
+          kind: "picture",
+          xMm: el.xMm,
+          yMm: el.yMm,
+          widthMm: el.widthMm,
+          text: "",
+          setting: "",
+          pictureId: el.pictureId,
+        },
+  );
 }
 
 /** A sheet reduced to what can be compared: no coordinates, and no page number. */
@@ -114,6 +172,8 @@ export interface AlbumComparablePage {
    *  band, would otherwise report a template change that moved nothing on it. */
   placement: AlbumVerticalPlacement;
   blocks: AlbumComparableBlock[];
+  /** A free page's elements (#1429), or absent on a sheet of stamps. */
+  free?: AlbumComparableFreeElement[];
 }
 
 /** One printed sheet paired with what would now be produced for it, or the absence of one. */
@@ -392,6 +452,9 @@ export function compareAlbumPages(
     });
   }
 
+  // -- A free page's own content (#1429) --
+  if (printed.free || reference.free) found.push(...compareFreeElements(printed.free ?? [], reference.free ?? []));
+
   // -- Template --
   const preset = presetDifferences(printed.preset, reference.preset);
   if (preset.length > 0) {
@@ -438,6 +501,112 @@ export function compareAlbumPages(
   }
 
   return rankAlbumDivergences(found);
+}
+
+/** A text's words for a message: one line, with its line breaks shown as ` / ` — a text that only
+ *  broke differently must not read the same on both sides — and short enough to read beside a card. */
+function quoted(text: string): string {
+  const oneLine = text
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join(" / ")
+    .trim();
+  return oneLine.length > 80 ? `${oneLine.slice(0, 79)}…` : oneLine;
+}
+
+/**
+ * What differs between the elements a free page's card carries and those the page has now (#1429).
+ *
+ * The words are `text`, like every other wording change; everything else about the arrangement is
+ * `page`. An element is matched by its own id, so a text whose words changed is one text reading
+ * differently rather than one removed and another added.
+ */
+function compareFreeElements(
+  printed: readonly AlbumComparableFreeElement[],
+  reference: readonly AlbumComparableFreeElement[],
+): AlbumDivergence[] {
+  const found: AlbumDivergence[] = [];
+  const was = new Map(printed.map((e) => [e.id, e]));
+  const now = new Map(reference.map((e) => [e.id, e]));
+
+  let picturesAdded = 0;
+  let picturesRemoved = 0;
+  let replaced = 0;
+  let moved = 0;
+  let restyled = 0;
+
+  for (const el of reference) {
+    if (was.has(el.id)) continue;
+    if (el.kind === "text") {
+      found.push({ kind: "text", detail: `The page now has a text the card does not carry: "${quoted(el.text)}".` });
+    } else {
+      picturesAdded += 1;
+    }
+  }
+  for (const el of printed) {
+    const current = now.get(el.id);
+    if (!current) {
+      if (el.kind === "text") {
+        found.push({ kind: "text", detail: `The card carries a text the page no longer has: "${quoted(el.text)}".` });
+      } else {
+        picturesRemoved += 1;
+      }
+      continue;
+    }
+    if (el.kind === "text") {
+      if (el.text !== current.text) {
+        found.push({
+          kind: "text",
+          detail: `A text on the page would now read "${quoted(current.text)}"; the card reads "${quoted(el.text)}".`,
+        });
+      }
+      if (el.setting !== current.setting) restyled += 1;
+    } else if (el.pictureId !== current.pictureId) {
+      replaced += 1;
+    }
+    if (el.xMm !== current.xMm || el.yMm !== current.yMm || el.widthMm !== current.widthMm) moved += 1;
+  }
+
+  if (picturesAdded > 0) {
+    found.push({
+      kind: "page",
+      detail: `The page now has ${countPhrase(picturesAdded, "picture", "pictures")} the card does not carry.`,
+    });
+  }
+  if (picturesRemoved > 0) {
+    found.push({
+      kind: "page",
+      detail: `${countPhrase(picturesRemoved, "picture", "pictures")} on the card ${
+        picturesRemoved === 1 ? "is" : "are"
+      } no longer on the page.`,
+    });
+  }
+  if (replaced > 0) {
+    found.push({
+      kind: "page",
+      detail: `${countPhrase(replaced, "picture has", "pictures have")} been replaced since the card was printed.`,
+    });
+  }
+  if (moved > 0) {
+    found.push({
+      kind: "page",
+      detail: `${countPhrase(moved, "element has", "elements have")} moved or changed size since the card was printed.`,
+    });
+  }
+  if (restyled > 0) {
+    found.push({
+      kind: "page",
+      detail: `${countPhrase(restyled, "text is", "texts are")} set in a different face, size or alignment now.`,
+    });
+  }
+  // Drawing order is part of the arrangement: an element drawn over another is not the same page as
+  // one drawn under it. Said only when nothing else explains the difference.
+  const common = (list: readonly AlbumComparableFreeElement[], other: ReadonlyMap<string, unknown>) =>
+    list.filter((e) => other.has(e.id)).map((e) => e.id).join(" ");
+  if (found.length === 0 && common(printed, now) !== common(reference, was)) {
+    found.push({ kind: "page", detail: "The page's elements would now be drawn in a different order." });
+  }
+  return found;
 }
 
 /** A printed sheet as the report states it, reduced to what *does it still match* reads. */

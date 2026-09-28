@@ -308,6 +308,16 @@ way for years.
   now reports a note the card carries that the album no longer has — a note holds no stamps, so none of
   §5's stamp rules would ever have caught it, and it was the one thing on a card that could vanish into
   silence.
+- #1429's **page without stamps** is a card of its own ([ADR-0058](0058-album-free-pages.md)), and
+  it is the third shape in the list above: it names its card on its own row (`album_free_page.printedPageId`),
+  is claimed in the printed index by it so it never reads as orphaned, and is its own group in the
+  report, re-planned alone for its reference. Its snapshot references its **pictures by id** rather than
+  copying them — a library picture is never changed once written, and `album_printed_page_picture`, an
+  index derived from the snapshot in the same transaction as `album_printed_page_stamp` is, keeps one a
+  card prints from being deleted. On such a card **coordinates are facts**, since the collector placed
+  them, and a change reports as a new kind, `page`, between `text` and `template`. And the reprint
+  rule's *every stamp is on a newer card* has nothing to cover on a card of no stamps, so such a card —
+  a free page's, or one holding only a note — is discarded when nothing names it any more.
 - Anyone reaching for a `frozen` boolean, for a whole-album shadow plan to diff against, or for the
   live sheet selector to identify a card for reprinting is undoing decisions 1, 5 and 3 respectively.
   Read this file first.

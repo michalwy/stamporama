@@ -182,6 +182,7 @@ const DIVERGENCE_LABEL: Record<AlbumDivergenceKind, string> = {
   stamps: "Stamps",
   size: "Size",
   text: "Text",
+  page: "Page",
   template: "Template",
   photo: "Picture",
 };
@@ -524,7 +525,8 @@ export function AlbumScreen({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-              {page.range || "(no catalog numbers on this sheet)"}
+              {page.range ||
+                (page.free ? "A page without stamps" : "(no catalog numbers on this sheet)")}
             </span>
             {page.printedPageId ? (
               <Tooltip
@@ -1136,7 +1138,8 @@ export function AlbumScreen({
                     <span
                       style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}
                     >
-                      {sheet.range || "(no catalog numbers on this card)"}
+                      {sheet.range ||
+                        (sheet.free ? "A page without stamps" : "(no catalog numbers on this card)")}
                     </span>
                     <span style={MUTED}>
                       printed {new Date(sheet.printedAt).toLocaleDateString()}

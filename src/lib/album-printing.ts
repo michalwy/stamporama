@@ -2,6 +2,7 @@ import "server-only";
 import { prisma, type DbTransaction } from "./db";
 import { Prisma } from "@/generated/prisma/client";
 import {
+  albumFreePageBlock,
   albumNoteBlock,
   albumPlanContext,
   albumComparablePage,
@@ -22,11 +23,14 @@ import { resolveAlbumPhotos } from "./album-photos";
 import {
   ALBUM_SNAPSHOT_VERSION,
   snapshotBlocks,
+  snapshotFreePageId,
+  snapshotPictureIds,
   snapshotStampRows,
   type AlbumPageSnapshot,
   type AlbumSnapshotBox,
 } from "./album-snapshot";
 import {
+  albumComparableFreeElements,
   countNewlyDivergingSheets,
   diffAlbumPlans,
   type AlbumComparablePage,
@@ -187,7 +191,11 @@ export async function markAlbumPagesPrinted(
     const noteIds = snapshot.page.blocks
       .filter((b) => b.kind === "text")
       .map((b) => b.entryId);
-    return { snapshot, rows, noteIds };
+    // A free page (#1429) names its card on its own row for the same reason, and the pictures it
+    // prints go into the index that keeps them from being deleted while the card is in a binder.
+    const freePageId = snapshotFreePageId(snapshot);
+    const pictureIds = snapshotPictureIds(snapshot);
+    return { snapshot, rows, noteIds, freePageId, pictureIds };
   });
 
   const continuationsAnswered = plan.entries
@@ -206,12 +214,19 @@ export async function markAlbumPagesPrinted(
           range: write.snapshot.range,
           snapshot: write.snapshot as unknown as Prisma.InputJsonValue,
           stamps: { createMany: { data: write.rows } },
+          pictures: { createMany: { data: write.pictureIds.map((pictureId) => ({ pictureId })) } },
         },
         select: { id: true },
       });
       if (write.noteIds.length > 0) {
         await tx.albumTextBlock.updateMany({
           where: { albumId, id: { in: write.noteIds } },
+          data: { printedPageId: created.id },
+        });
+      }
+      if (write.freePageId) {
+        await tx.albumFreePage.updateMany({
+          where: { albumId, id: write.freePageId },
           data: { printedPageId: created.id },
         });
       }
@@ -241,7 +256,11 @@ export async function markAlbumPagesPrinted(
 async function discardCoveredReprints(tx: DbTransaction, albumId: string): Promise<void> {
   const waiting = await tx.albumPrintedPage.findMany({
     where: { albumId, reprintingAt: { not: null } },
-    select: { id: true, stamps: { select: { stampId: true } } },
+    select: {
+      id: true,
+      stamps: { select: { stampId: true } },
+      _count: { select: { textBlocks: true, freePages: true } },
+    },
   });
   if (waiting.length === 0) return;
   const live = await tx.albumPrintedPageStamp.findMany({
@@ -250,7 +269,15 @@ async function discardCoveredReprints(tx: DbTransaction, albumId: string): Promi
   });
   const covered = new Set(live.map((r) => r.stampId));
   const done = waiting
-    .filter((page) => page.stamps.length > 0 && page.stamps.every((s) => covered.has(s.stampId)))
+    .filter((page) =>
+      page.stamps.length > 0
+        ? page.stamps.every((s) => covered.has(s.stampId))
+        : // A card of **no stamps** — a free page (#1429), or a sheet holding only a note — has nothing
+          // the rule above can cover. Its reprint has happened when what it carried has gone onto a
+          // new card: marking that card printed moves the page's (or the note's) own row onto it, so
+          // nothing names this one any more.
+          page._count.textBlocks === 0 && page._count.freePages === 0
+    )
     .map((page) => page.id);
   if (done.length > 0) await tx.albumPrintedPage.deleteMany({ where: { id: { in: done } } });
 }
@@ -360,6 +387,21 @@ export async function describeAlbumUnprint(
   const snapshot = snapshots.get(printedPageId);
   const said: string[] = [];
   if (!snapshot) return ["This sheet's stored contents cannot be read; un-printing will discard it."];
+
+  if (snapshot.page.free) {
+    // A free page (#1429) has no boxes and no checklists to speak of — what it kept is its own
+    // arrangement.
+    said.push(
+      "The stored page — every picture and text where it was placed, in the faces it was set in — is " +
+        "discarded and cannot be recovered."
+    );
+    said.push("The page returns to the live plan and will be drawn from what it holds today.");
+    if (row.reprintingAt) {
+      said.push("This sheet is already awaiting a reprint; un-printing it instead forgets the old card entirely.");
+    }
+    said.push("The card itself stays in the binder. The album simply stops knowing about it.");
+    return said;
+  }
 
   const boxes = snapshot.page.boxes.length;
   said.push(
@@ -492,6 +534,8 @@ export interface AlbumPrintedSheetReport {
   /** The collector has chosen a reprint; the content is back in the live plan until a new sheet is
    *  marked printed in its turn. */
   reprinting: boolean;
+  /** A card of a page without stamps (#1429), which has no range to be named by. */
+  free: boolean;
   divergences: AlbumDivergence[];
   entries: AlbumPrintedEntryReport[];
 }
@@ -528,18 +572,27 @@ export async function getAlbumPrintedReport(
   const photoIdFor = (stampId: string) => photos.get(stampId)?.id ?? null;
 
   const sheets = new Map<string, AlbumPrintedSheetReport>();
+  const freeCards = new Set(
+    [...snapshots].filter(([, snapshot]) => snapshot.page.free).map(([id]) => id)
+  );
   for (const [id, row] of printed.pages) {
     sheets.set(id, {
       id,
       range: row.range,
       printedAt: row.printedAt.toISOString(),
       reprinting: row.reprintingAt !== null,
+      free: freeCards.has(id),
       divergences: [],
       entries: [],
     });
   }
 
-  for (const group of printedCardGroups(printed.byEntry, snapshots, printed.byTextBlock)) {
+  for (const group of printedCardGroups(
+    printed.byEntry,
+    snapshots,
+    printed.byTextBlock,
+    printed.byFreePage
+  )) {
     const groupSheets = group.pageIds.filter((id) => {
       const row = printed.pages.get(id);
       return row && !row.reprintingAt;
@@ -641,6 +694,9 @@ export async function countAlbumRenameDivergence(
 interface PrintedCardGroup {
   pageIds: string[];
   entryIds: Set<string>;
+  /** The free page the card is (#1429), or null for a card of stamps. A free page is always a card of
+   *  its own. */
+  freePageId: string | null;
 }
 
 /**
@@ -666,7 +722,10 @@ function printedCardGroups(
   /** Which sheet each of the collector's notes is on (#769), so a card carrying **only** a note is
    *  still a card. Without it such a sheet joins no group, is never compared, and is offered nothing
    *  in the report — a card in the binder the album has quietly stopped having an opinion about. */
-  byTextBlock: ReadonlyMap<string, string>
+  byTextBlock: ReadonlyMap<string, string>,
+  /** Which card each free page is on (#1429). A free page is a sheet of its own, so its card is always
+   *  a group of one — and without this it would be no group at all, for a note's reason. */
+  byFreePage: ReadonlyMap<string, string> = new Map()
 ): PrintedCardGroup[] {
   const parent = new Map<string, string>();
   const find = (id: string): string => {
@@ -701,7 +760,7 @@ function printedCardGroups(
     const root = find(id);
     let group = groups.get(root);
     if (!group) {
-      group = { pageIds: [], entryIds: new Set() };
+      group = { pageIds: [], entryIds: new Set(), freePageId: null };
       groups.set(root, group);
     }
     if (!group.pageIds.includes(id)) group.pageIds.push(id);
@@ -715,6 +774,10 @@ function printedCardGroups(
   for (const pageId of byTextBlock.values()) {
     if (!parent.has(pageId)) parent.set(pageId, pageId);
     groupFor(pageId);
+  }
+  for (const [freePageId, pageId] of byFreePage) {
+    if (!parent.has(pageId)) parent.set(pageId, pageId);
+    groupFor(pageId).freePageId = freePageId;
   }
   return [...groups.values()];
 }
@@ -735,6 +798,22 @@ function planPrintedCardReference(
   photoIdFor: (stampId: string) => string | null
 ): AlbumComparablePage[] {
   const first = snapshots.get(group.pageIds[0]);
+
+  // A free page's card (#1429) is the page itself, re-planned alone on fresh paper: the chapter it is
+  // filed in is its own statement (`AlbumFreePageSpec.chapterHeading`), so no chapter is planned around
+  // it and nothing can make the reference two sheets where the card is one.
+  if (group.freePageId) {
+    const page = context.freePages.find((p) => p.id === group.freePageId);
+    if (!page) return [];
+    const plan = planAlbumPages(
+      [{ key: first?.chapterKey ?? "", heading: "", blocks: [albumFreePageBlock(context, page, null)] }],
+      context.album,
+      context.album.name,
+      albumTextMetrics
+    );
+    return context.finish(plan).map((sheet) => albumComparablePage(context.album, sheet));
+  }
+
   const onOtherCards = new Set<string>();
   for (const [id, snapshot] of snapshots) {
     if (group.pageIds.includes(id)) continue;
@@ -836,6 +915,7 @@ export function snapshotComparablePage(snapshot: AlbumPageSnapshot): AlbumCompar
     preset: snapshot.preset,
     // A card stored before #1419 was placed at the top: nothing else existed.
     placement: snapshot.page.placement ?? "top",
+    ...(snapshot.page.free ? { free: albumComparableFreeElements(snapshot.page.free) } : {}),
     blocks: snapshotBlocks(snapshot.page).map((block) => ({
       entryId: block.entryId,
       part: block.part,

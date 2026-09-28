@@ -10,7 +10,7 @@ export const metadata = { title: "Album pages" };
 
 interface PageEditorPageProps {
   params: Promise<{ collectionSlug: string; albumId: string }>;
-  searchParams: Promise<{ sheet?: string }>;
+  searchParams: Promise<{ sheet?: string; page?: string }>;
 }
 
 /**
@@ -20,13 +20,17 @@ interface PageEditorPageProps {
  * it is a one-based **position** in the plan — which is how a sheet is asked for everywhere on this
  * track (ADR-0046 §7) and never how one is named: a page's identity is its catalog range, and a
  * number is a position that moves. Nothing here stores one.
+ *
+ * `?page=<id>` asks for a **page without stamps** by its own id instead (#1429) — the one kind of sheet
+ * that has an identity to be asked for by, and what the editor goes to right after adding one, before
+ * it can know where the re-plan put it. A position, when both are given, wins.
  */
 export default async function AlbumPageEditorPage({
   params,
   searchParams,
 }: PageEditorPageProps) {
   const { collectionSlug, albumId } = await params;
-  const { sheet } = await searchParams;
+  const { sheet, page } = await searchParams;
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect(await signInPath());
@@ -38,7 +42,7 @@ export default async function AlbumPageEditorPage({
   const data = await getAlbumEditorData(
     session.user.id,
     albumId,
-    Number.isFinite(requested) ? requested : null
+    Number.isFinite(requested) ? requested : page ? { freePageId: page } : null
   );
   if (!data || data.album.collectionId !== collection.id) notFound();
 
