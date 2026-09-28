@@ -1775,8 +1775,13 @@ export async function createIssue(
     /** Ceiling on `autoCreateStamps.count`; see {@link assertAutoCreateInput}. Defaults to the
      * dialog's `AUTO_CREATE_MAX_STAMPS`. */
     maxAutoCreateStamps?: number;
+    /** A size preset whose pair every generated stamp is created with (#807) — the add-range
+     * dialog's option, reached at creation by the agent API (#1438). Resolved before anything is
+     * written, so a preset from another collection creates no issue at all. Ignored without
+     * `autoCreateStamps`: there is nothing to size. */
+    sizePresetId?: string | null;
   }
-): Promise<{ id: string }> {
+): Promise<{ id: string; stampIds: string[] }> {
   await assertCollectionOwner(ownerId, collectionId);
   const area = await prisma.collectionArea.findUnique({
     where: { id: areaId },
@@ -1792,6 +1797,10 @@ export async function createIssue(
   }
 
   if (data.autoCreateStamps) assertAutoCreateInput(data.autoCreateStamps, data.maxAutoCreateStamps);
+  const size =
+    data.autoCreateStamps && data.sizePresetId
+      ? await getStampSizePresetPair(collectionId, data.sizePresetId)
+      : null;
 
   const created = await prisma.$transaction(async (tx) => {
     const issue = await tx.issue.create({
@@ -1827,6 +1836,7 @@ export async function createIssue(
         issueId: issue.id,
         issuedYear: data.year ?? null,
         input: data.autoCreateStamps,
+        size,
       });
     }
 
@@ -1835,7 +1845,7 @@ export async function createIssue(
   // Populate the denormalized catalog sort key for the issue and any auto-created stamps (#181).
   await recomputeIssueSortKeys(collectionId, [created.id]);
   await recomputeStampSortKeys(collectionId, created.stampIds);
-  return { id: created.id };
+  return { id: created.id, stampIds: created.stampIds };
 }
 
 /**
@@ -1851,6 +1861,8 @@ export async function createIssue(
  * a **new** stamp in a warning collection and makes nothing in a blocking one, so no existing stamp
  * is ever reached. The preset is resolved before anything is written, so a preset from another
  * collection fails the whole add rather than leaving an unsized range behind.
+ *
+ * Answers the created stamps' ids, in the order the numbers were generated.
  */
 export async function addStampRangeToIssue(
   ownerId: string,
@@ -1858,7 +1870,7 @@ export async function addStampRangeToIssue(
   issueId: string,
   input: AutoCreateStampsInput,
   options: { maxStamps?: number; sizePresetId?: string | null } = {}
-): Promise<void> {
+): Promise<string[]> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
@@ -1883,6 +1895,7 @@ export async function addStampRangeToIssue(
     })
   );
   await recomputeStampSortKeys(collectionId, stampIds);
+  return stampIds;
 }
 
 /**
@@ -1896,6 +1909,8 @@ export async function addStampRangeToIssue(
  * Beyond that the children come out exactly as the single dialog leaves them — the parent's year
  * (#360), no name, no checklist entry — because it is the same stamp, typed once instead of six
  * times.
+ *
+ * Answers the created variants' ids, in the order the numbers were generated.
  */
 export async function addVariantRangeToStamp(
   ownerId: string,
@@ -1909,7 +1924,7 @@ export async function addVariantRangeToStamp(
     /** The subtype every variant carries; the collection's default when null/omitted. */
     subtypeId?: string | null;
   }
-): Promise<void> {
+): Promise<string[]> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
@@ -1957,6 +1972,7 @@ export async function addVariantRangeToStamp(
     })
   );
   await recomputeStampSortKeys(collectionId, stampIds);
+  return stampIds;
 }
 
 export async function updateIssue(

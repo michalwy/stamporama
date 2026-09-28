@@ -73,7 +73,7 @@ function entry(
 /**
  * Read the collection's vocabulary.
  *
- * One `Promise.all`, because these are ten independent reads and nothing here depends on anything
+ * One `Promise.all`, because these are fourteen independent reads and nothing here depends on anything
  * else here — except the collection row itself, which has to come first: it carries the
  * `defaultLanguage` every translation is selected by, and it is where ownership is proved.
  */
@@ -107,6 +107,10 @@ export async function readCollectionVocabulary(
     catalogs,
     platforms,
     exchangePartners,
+    colors,
+    watermarks,
+    papers,
+    printings,
   ] = await Promise.all([
       prisma.stampCondition.findMany({
         where: { collectionId },
@@ -203,7 +207,30 @@ export async function readCollectionVocabulary(
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       }),
+      // The four attribute dictionaries (#71), for `update_stamp` (#1438), in the collector's order.
+      prisma.stampColor.findMany({
+        where: { collectionId },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: { id: true, name: true, translations: { where: { language }, select: { name: true } } },
+      }),
+      prisma.stampWatermark.findMany({
+        where: { collectionId },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: { id: true, name: true, translations: { where: { language }, select: { name: true } } },
+      }),
+      prisma.stampPaper.findMany({
+        where: { collectionId },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: { id: true, name: true, translations: { where: { language }, select: { name: true } } },
+      }),
+      prisma.stampPrinting.findMany({
+        where: { collectionId },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: { id: true, name: true, translations: { where: { language }, select: { name: true } } },
+      }),
     ]);
+  const attribute = (row: { id: string; name: string; translations: { name: string | null }[] }) =>
+    entry(row.id, row.name, null, labelFor(row.name, row.translations[0]?.name));
 
   return {
     baseCurrency: collection.baseCurrency,
@@ -251,6 +278,10 @@ export async function readCollectionVocabulary(
       currency: row.platformCurrency,
     })),
     exchangePartners: exchangePartners.map((row) => entry(row.id, row.name, null, undefined)),
+    colors: colors.map(attribute),
+    watermarks: watermarks.map(attribute),
+    papers: papers.map(attribute),
+    printings: printings.map(attribute),
   };
 }
 
@@ -274,13 +305,13 @@ export const getCollectionVocabularyOperation: Operation = {
   method: "GET",
   path: "/vocabulary",
   description:
-    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors, catalogs, marketplaces and exchange partners — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
+    "Fetch every configurable vocabulary in this collection — conditions, formats, certificate statuses, subtypes, areas, locations, catalog vendors, catalogs, marketplaces, exchange partners and the stamp attributes (colours, watermarks, papers, printings) — with the id and the collection's own name for each. Call this once at the start of a session and keep the result: every other operation that takes a condition, an area, a location and so on accepts either the id or the name from here.",
   writes: false,
   parameters: [],
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };
