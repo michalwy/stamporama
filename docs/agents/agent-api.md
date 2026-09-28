@@ -9,20 +9,21 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes and #1445 a stamp's Colnect ID; both wrappers exist and the registry carries **fifty-four operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID and #1452 translations; both wrappers exist and the registry carries **fifty-six operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1168's bid recommendation, and #1037's catalog-number
-resolver. Six counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1168's bid recommendation, and #1037's catalog-number
+resolver. Seven counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
 carries thirty operations* (from #1036 until #1390), *the registry carries forty-one operations*
-(from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438)
-and *the registry carries fifty-three operations* (from #1438 until #1445).
+(from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
+*the registry carries fifty-three operations* (from #1438 until #1445) and *the registry carries
+fifty-four operations* (from #1445 until #1452).
 
-**Twenty-seven of them write** since #1445 added one; *twenty-six of them write* was the count from
-#1438 until then, *twenty-one of them write* from
+**Twenty-eight of them write** since #1452 added one; *twenty-seven of them write* was the count from
+#1445 until then, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
@@ -132,6 +133,7 @@ src/lib/agent-api/
   size-reads.ts     the size figure grammar, the size source, the apply report (#1415)
   catalog-edits.ts  the "key: value" entries, the date bounds, the duplicate refusal (#1438)
   colnect-ids.ts    reading a Colnect item-ID, the answer, the refusal for one held (#1445)
+  translations.ts   the text kinds, the `kind.field.id` key, the language check, the answers (#1452)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -152,10 +154,11 @@ src/lib/agent-api/
     stamp-refs.ts   naming a stamp by id or number, reading its labels   ← server-side
     catalog-edits.ts  the five catalogue writes (#1438)                  ← server-side
     colnect-ids.ts  set_stamp_colnect_id (#1445)                        ← server-side
+    translations.ts find_missing_translations / set_translations (#1452) ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1601,6 +1604,55 @@ in step* (#689). `set_stamp_colnect_id` is exempted **by name, with its reason**
 operation to slip past it: it sends nothing, claims nothing about a list and clears no report, and
 `markColnectApplied` stays out through the import guard.
 
+## Translating the collection's texts
+
+**Two operations, one of which writes** (#1452): the texts a language is missing, and the
+translations that fill them — hundreds of names an assistant can translate in a sitting, where a
+missing one falls back to the default language and on a printed card stays that way (#1308).
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `find_missing_translations` | no | a language's gaps, narrowed by `kind`, `area` (with its subtree) or `album` (`GET /translations/missing`) |
+| `set_translations` | yes | `"key: translation"` entries, at most 100, gaps only unless `replace` (`POST /translations`) |
+
+**Every text the app translates, and through the app's own path.** The kinds are
+`TRANSLATABLE_ENTITY_FIELDS` under snake_case names (`certificate_status`, an area's `title_name`),
+and `tests/unit/agent-api-translations.test.ts` fails if the two lists part. The write is
+`saveEntityTranslation`, the in-place gap editor's (#299, #300), so a translation written here is the
+row the collector's dialogs write and every listing title and album page reads it at once. Nothing
+becomes translatable here that is not in the app, and nothing marks a row as an assistant's.
+
+**A text is named by a key, `kind.field.id`.** A write is a batch and parameters are scalars and
+string lists (#706), so each entry is `"key: translation"`, the catalogue writes' spelling (#1438)
+split on the first colon — which a key never contains, so a translation may carry colons. The find
+hands the keys out and the agent sends them back; it never assembles one from three parameters.
+
+***Missing* is what would fall back**: words in the default-language column and no filled
+translation row for the language. A stamp or an issue with no name has nothing to translate, and a
+write naming one is refused. **A checklist still named after its issue is not listed** — it prints
+the issue's translation (`resolveChecklistName`), so the issue is the gap; that comparison is
+column-to-column, which the query builder cannot express, so checklists are filtered in memory.
+Everything else pages in the database, the sources counted for `total` and walked in
+`TRANSLATION_KINDS` order.
+
+**Narrowed to an album, the list is the page editor's**: `albumTranslationGaps` in `album-editor.ts`
+is the texts behind the editor's album-wide *untranslated* figure, deduplicated by the row that fixes
+each, in page order — lifted so that the agent and the editor cannot disagree about an album. The
+language must be the album's own. A printed card is left out, as the editor leaves it out; nothing
+here touches a snapshot, and a translation that changes a card's words is a `text` divergence
+(#778) like any other.
+
+**Only the collection's languages** (`getCollectionTranslationContext`: its platforms' listing
+languages and its albums' languages, #777) — any other is refused with them in `accepted`, and so is
+the default language, whose text is the entity's own column.
+
+**A write keeps what is there.** A text that already has a translation is listed under `kept` with
+its current wording unless `replace` is sent; a replacement is under `written` with `replaced`. That
+is #1415's protective default, reported rather than refused so that a batch fills every gap it can.
+Every entry is checked — the key, the row in this collection, words to translate — before the first
+row is written. **No operation clears a translation**: a blank entry is refused, and taking one away
+stays on the entity's screen.
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and
@@ -1854,7 +1906,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries fifty-four operations.** It was empty on #706, which shipped none; #708
+**The document carries fifty-six operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -1868,9 +1920,9 @@ added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, 
 `remove_purchase_expense`; #1415 added `list_size_presets`, `get_stamp_size`, `create_size_preset`,
 `update_size_preset`, `set_stamp_size`, `preview_stamp_size_apply` and `apply_stamp_size`; #1438
 added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` and `update_stamp`;
-#1445 added `set_stamp_colnect_id`.
+#1445 added `set_stamp_colnect_id`; #1452 added `find_missing_translations` and `set_translations`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, and *fifty-three* from #1438 until #1445. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, and *fifty-four* from #1445 until #1452. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

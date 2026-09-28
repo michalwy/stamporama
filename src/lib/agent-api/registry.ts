@@ -11,7 +11,8 @@
 // it to thirty; #1390 added the eleven purchase operations, nine of which write, taking it to
 // forty-one; #1415 added the seven size operations, four of which write, taking it to forty-eight;
 // #1438 added the five catalogue writes, taking it to fifty-three; #1445 added
-// `set_stamp_colnect_id`, taking it to **fifty-four**. Each one is an entry here
+// `set_stamp_colnect_id`, taking it to fifty-four; #1452 added the two translation operations,
+// taking it to **fifty-six**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -32,7 +33,8 @@
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
 // their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then stamp sizes (#1415), in the order a size read off a catalogue is put on a series: the presets already
 // kept, one stamp's size and where it comes from, a new or corrected preset, one stamp, and the
-// apply, previewed before it is run. **`recommend_bid` is last because it is the
+// apply, previewed before it is run — then translations (#1452), what a language is missing before
+// what fills it. **`recommend_bid` is last because it is the
 // one operation that is not about the collection at all** (#1168): it answers *is this auction worth
 // looking at*, about a lot nothing here records, and an agent reaches it having decided to ask a
 // question the four workflows above cannot. It is what the generated document lists them in and what
@@ -126,6 +128,7 @@ import {
   setStampSizeOperation,
   updateSizePresetOperation,
 } from "./operations/sizes";
+import { findMissingTranslationsOperation, setTranslationsOperation } from "./operations/translations";
 import { matchPathTemplate, parsePathTemplate, templateSpecificity } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
@@ -184,6 +187,8 @@ export const OPERATIONS: readonly Operation[] = [
   setStampSizeOperation,
   previewStampSizeApplyOperation,
   applyStampSizeOperation,
+  findMissingTranslationsOperation,
+  setTranslationsOperation,
   recommendBidOperation,
 ];
 

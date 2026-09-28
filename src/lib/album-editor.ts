@@ -878,6 +878,25 @@ export async function getAlbumEditorData(
   };
 }
 
+/**
+ * Every text the album's live sheets would print in the default language (#1308), each once, in the
+ * order the sheets reach them — the texts behind the editor's album-wide figure, for a caller that has
+ * to name them rather than count them (the agent API, #1452). A printed card is left out, as it is
+ * from the figure: what is on it is on it.
+ */
+export async function albumTranslationGaps(
+  ownerId: string,
+  albumId: string,
+): Promise<{ language: string; gaps: TitleFallback[] } | null> {
+  const context = await albumPlanContext(ownerId, albumId);
+  if (!context) return null;
+  const plan = planAlbumFrom(context);
+  const gaps = plan.pages.flatMap(
+    (page, i) => liveSheet(page, i + 1, context, () => null)?.gaps ?? [],
+  );
+  return { language: context.album.language, gaps: dedupeGaps(gaps) };
+}
+
 // -- The album screen's rows (#1430) -----------------------------------------------
 //
 // The album screen shows every sheet with a thumbnail and with what needs attention before it is

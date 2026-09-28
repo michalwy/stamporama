@@ -107,7 +107,7 @@ catalogues: a number written as Fischer's is never quietly answered with the Mic
 number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
 everywhere else in the app. A **read only** token can do all of this.
 
-**A read-and-write token can change things, and there are five places where that is now true.**
+**A read-and-write token can change things, and there are six places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
 for it, and write or re-generate its title and description — all of it inside Stamporama, on a
@@ -223,6 +223,28 @@ does it, so the listing and the links use it straight away. Two things hold:
 On a stamp with variants the item-ID is about that stamp itself. Listing a copy you have not
 identified down to the variant under its cheapest variant is worked out when you list it, and is
 never written onto the parent stamp.
+
+On **translations**, it can translate your texts into the languages you list or print in — the names of your areas,
+issues, checklists and stamps, and the names and abbreviations of your conditions, certificates,
+formats, subtypes, colours, watermarks, papers and printing methods. Filling hundreds of them is what
+an assistant is good at, and until one is filled a listing title or an album page in that language
+prints the text in your collection's own language. It can:
+
+- **list what a language is missing** — each text with its words in your own language and what it
+  belongs to, such as a stamp's catalogue numbers and issue — for the whole collection, for one kind
+  of text, for one area and every area under it, or for one album. For an album the list is exactly
+  what its pages not yet printed would print untranslated, the texts the page editor flags. A **read
+  only** token can ask this;
+- **write the translations**, which are then yours like any you typed: every listing title and album
+  page in that language uses them at once, and you check them where they are shown. Nothing marks
+  them as written by an assistant.
+
+**It never replaces a translation you already have unless it is told to**, and when it does, it says
+which translation it replaced. A language you do not list or print in is refused, and so is your
+collection's own language, whose texts are the names themselves. It does not remove a translation.
+**An album card already printed stays exactly as it is**: a translation that changes what a printed
+card says shows up on the album as a difference, as any other change to its text does, and deciding
+what to do about it stays with you.
 
 **And there is one thing it can answer about a stamp you do not own and have not recorded: what a
 lot at auction would be worth bidding.** Tell it what the auctioneer says the lot holds — the
