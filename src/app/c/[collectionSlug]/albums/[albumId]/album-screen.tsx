@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import {
@@ -26,35 +26,63 @@ import {
 } from "@/app/actions/albums";
 import type { AlbumData, AlbumEntryData } from "@/lib/albums";
 import type { AlbumPlanOverview } from "@/lib/album-plan";
+import type { AlbumSheetSketch, AlbumSheetSummary } from "@/lib/album-editor";
+import {
+  albumChapterRuns,
+  albumScreenSummary,
+  albumScreenViewQuery,
+  cardMatchesFilter,
+  entryChapterKey,
+  needsAttention,
+  NO_ATTENTION,
+  parseAlbumScreenView,
+  sheetMatchesFilter,
+  type AlbumCardFilter,
+  type AlbumChapterRun,
+  type AlbumScreenView,
+  type AlbumSheetAttention,
+  type AlbumSheetFilter,
+} from "@/lib/album-screen-view";
 import type { AlbumPrintedReport } from "@/lib/album-printing";
 import type { AlbumDivergenceKind } from "@/lib/album-divergence";
 import { languageLabel } from "@/lib/languages";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { AlbumNameSuggestion } from "./album-name-suggestion";
 
 // One album (#767): what it prints, in what order, and how that falls onto sheets.
 //
-// Two lists, and they are two different questions. **Entries** is the order the album reads in and
-// is edited here. **Sheets** is what the plan makes of it and is edited nowhere — a page is a
-// derivation of current data, re-planned whenever anything it reads changes, and only a page marked
-// printed (#778) ever stops being one. The page editor with its relative corrections is #769.
+// Laid out across the whole window (#1430): a **summary strip** saying where the album stands, the
+// album's actions in the header, and three tabs. **Sheets** (the default) is what the plan makes of
+// the entries and is edited nowhere — a page is a derivation of current data, re-planned whenever
+// anything it reads changes, and only a page marked printed (#778) ever stops being one. **Entries**
+// is the order the album reads in and is edited here. **Printed cards** (#778) reports how each card
+// in the binder differs from what the data would now produce and never resolves any of it. Sheets and
+// entries are grouped into the plan's chapters (`album-screen-view.ts` says why those are runs, not
+// year buckets); the tab, the filters and the folded chapters live in the address.
+//
+// Every figure on the strip is a sum of the per-sheet numbers the rows show, and those are the page
+// editor's own flags counted off the sheet as the editor draws it (`albumSheetSummaries`) — so the
+// strip, a row and the editor cannot disagree. The printed-card figure is the report's.
 //
 // There is deliberately **no "what changed since last time"** here. A live page reshuffling harms
 // nothing — that is exactly what makes it live — so a live-versus-previous-live diff has no customer.
-// The only comparison anyone can act on is against paper, and that is the third list: **Printed
-// cards** (#778), which reports how each card in the binder differs from what the data would now
-// produce and never resolves any of it.
+// The only comparison anyone can act on is against paper, and that is the Printed cards tab.
 //
 // Two rules the screen has to keep, because both are easy to lose in a component:
 //
 // - **Marking a sheet printed is its own gesture.** Downloading the PDF marks nothing; an album that
 //   froze itself on the first preview would be a trap.
 // - **A card may state only what stays true of the objects it describes.** The flags on a live sheet
-//   below — *N in a pocket*, *N sized from a neighbour* — are exactly the staleness-prone kind that
-//   may not be printed, and they are shown here deliberately: they are shown *about* a sheet, on
-//   screen, before it is printed, and never go onto the paper.
+//   — *N in a pocket*, *N sized from a neighbour* — are exactly the staleness-prone kind that may not
+//   be printed, and they are shown here deliberately: they are shown *about* a sheet, on screen,
+//   before it is printed, and never go onto the paper.
+//
+// The standing explanations this screen used to print as paragraphs are hints beside what they
+// explain now, and the user guide carries them in full. The one that stays in plain sight is *print at
+// 100 %* beside Download PDF, because getting that wrong ruins a card and nothing on it shows.
 
 const CARD_STYLE: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -98,6 +126,58 @@ const CHIP: React.CSSProperties = {
 
 /** The divergence kinds, in the words the collector reads them in. Ranked in
  *  `ALBUM_DIVERGENCE_KINDS`; a picture arriving after the fact is last there and last here. */
+const PRIMARY_BTN: React.CSSProperties = {
+  ...DOWNLOAD_BTN,
+  background: "var(--color-action-primary)",
+  borderColor: "var(--color-action-primary)",
+  color: "#fff",
+  fontWeight: 600,
+};
+
+const WARN_CHIP: React.CSSProperties = {
+  ...CHIP,
+  borderColor: "var(--color-warning-border)",
+  background: "var(--color-warning-soft)",
+  color: "var(--color-warning)",
+};
+
+/** A standing explanation, one hover away (#1430): muted, dotted, beside what it explains. */
+const HINT: React.CSSProperties = {
+  ...MUTED,
+  fontSize: "0.75rem",
+  textDecoration: "underline dotted",
+  textUnderlineOffset: "0.2em",
+  cursor: "help",
+};
+
+/** A figure on the summary strip — it opens the tab and filter that shows what it counts. */
+const FIGURE_BTN: React.CSSProperties = {
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  color: "var(--color-accent)",
+  fontSize: "0.875rem",
+  cursor: "pointer",
+  textAlign: "left",
+};
+
+/** Paper is paper in either theme — the page editor's canvas draws it the same way. */
+const THUMB_PAPER = "#ffffff";
+const THUMB_EDGE = "#c9c9c9";
+const THUMB_INK = "#111111";
+const THUMB_TEXT = "#a3a3a3";
+const THUMB_FLAG = "#b45309";
+const THUMB_WIDTH_PX = 56;
+
+const TAB_LABEL = { sheets: "Sheets", entries: "Entries", printed: "Printed cards" } as const;
+
+const SHEET_FILTER_LABEL: Record<AlbumSheetFilter, string> = {
+  all: "All",
+  attention: "Needs attention",
+  live: "Live",
+  printed: "Printed",
+};
+
 const DIVERGENCE_LABEL: Record<AlbumDivergenceKind, string> = {
   stamps: "Stamps",
   size: "Size",
@@ -111,6 +191,8 @@ interface AlbumScreenProps {
   album: AlbumData;
   entries: AlbumEntryData[];
   initialOverview: AlbumPlanOverview;
+  /** One per sheet of `initialOverview.pages`, in the same order: its thumbnail and its flags. */
+  sheets: AlbumSheetSummary[];
   printedReport: AlbumPrintedReport;
   /** The area's name in the album's language, offered in place of the default-language name (#1311). */
   nameSuggestion: string | null;
@@ -121,10 +203,14 @@ export function AlbumScreen({
   album,
   entries,
   initialOverview,
+  sheets,
   printedReport,
   nameSuggestion,
 }: AlbumScreenProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const view = parseAlbumScreenView(searchParams);
   // Local ordering for optimistic drag-and-drop, re-synced from the server on refresh — the hawid
   // stock panel's pattern, and the plan comes back with it.
   const [items, setItems] = useState(entries);
@@ -317,209 +403,387 @@ export function AlbumScreen({
     });
   }
 
+  function setView(next: Partial<AlbumScreenView>) {
+    const qs = albumScreenViewQuery({ ...view, ...next }, searchParams.toString());
+    router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+  }
+
+  function toggleChapter(id: string) {
+    const closed = new Set(view.closed);
+    if (closed.has(id)) closed.delete(id);
+    else closed.add(id);
+    setView({ closed });
+  }
+
+  // The plan's sheets beside their rows' facts. Both lists come off one plan, in one order.
+  const rows = initialOverview.pages.map((page, i) => ({
+    page,
+    position: i + 1,
+    printed: page.printedPageId !== null,
+    summary: sheets[i] ?? null,
+    attention: sheets[i]?.attention ?? NO_ATTENTION,
+  }));
+  type SheetRow = (typeof rows)[number];
+  const summary = albumScreenSummary(items, rows, printedReport.sheets);
+  const cardById = new Map(printedReport.sheets.map((c) => [c.id, c]));
+
+  const sheetChapters = albumChapterRuns(rows, (r) => r.page.chapterKey);
+  const entryChapters = albumChapterRuns(items, entryChapterKey);
+  const chapterAttention = new Map(
+    sheetChapters.map((run) => [run.id, run.items.filter((r) => needsAttention(r.attention)).length])
+  );
+  const visibleSheetChapters = sheetChapters
+    .map((run) => ({ ...run, items: run.items.filter((r) => sheetMatchesFilter(r, view.sheets)) }))
+    .filter((run) => run.items.length > 0);
+  const visibleCards = printedReport.sheets.filter((c) => cardMatchesFilter(c, view.cards));
+
+  const sizesNotMeasured = summary.attention.inherited + summary.attention.unmeasured;
+
+  function sheetActions(row: SheetRow): RowAction[] {
+    const { page, position } = row;
+    return page.printedPageId
+      ? [
+          {
+            key: "editor",
+            label: "Open in the page editor",
+            icon: "open",
+            href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${position}`,
+            hint: "Read-only: it draws what went onto the paper, with what has changed since",
+          },
+          {
+            key: "pdf",
+            label: "Download this card",
+            icon: "print",
+            href: pdfHref(position),
+            hint: "Drawn from what was stored when it was printed",
+          },
+          {
+            key: "unprint",
+            label: "Un-print this sheet",
+            icon: "revert",
+            danger: true,
+            separatorBefore: true,
+            onSelect: () => setUnprint({ id: page.printedPageId!, range: page.range }),
+          },
+        ]
+      : [
+          {
+            key: "editor",
+            label: "Open in the page editor",
+            icon: "edit",
+            href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${position}`,
+            hint: "Correct it by hand, exact in millimetres",
+          },
+          {
+            key: "pdf",
+            label: "Download this sheet",
+            icon: "print",
+            href: pdfHref(position),
+            hint: "Print at 100% / Actual size",
+          },
+          {
+            key: "printed",
+            label:
+              page.runWith.length > 1
+                ? `Mark sheets ${page.runWith.join(", ")} printed…`
+                : "Mark printed…",
+            icon: "check",
+            separatorBefore: true,
+            hint:
+              page.runWith.length > 1
+                ? "One checklist runs across them, so they go onto paper together"
+                : undefined,
+            onSelect: () =>
+              setMarkPrinted({
+                sheets: page.runWith,
+                label:
+                  page.runWith.length > 1
+                    ? `sheets ${page.runWith.join(", ")}`
+                    : page.range || "this sheet",
+              }),
+          },
+        ];
+  }
+
+  function renderSheetRow(row: SheetRow, last: boolean) {
+    const { page, attention } = row;
+    const card = page.printedPageId ? cardById.get(page.printedPageId) : undefined;
+    return (
+      <div
+        key={row.position}
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "1rem",
+          padding: "0.625rem 1rem",
+          background: "var(--color-bg-elevated)",
+          borderBottom: last ? "none" : "1px solid var(--color-border)",
+        }}
+      >
+        <SheetThumbnail sketch={row.summary?.sketch ?? null} range={page.range} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+              {page.range || "(no catalog numbers on this sheet)"}
+            </span>
+            {page.printedPageId ? (
+              <Tooltip
+                content={
+                  page.printedAt
+                    ? `Printed on ${new Date(page.printedAt).toLocaleDateString()}. This sheet is a stored result: it draws what went onto the paper, whatever has changed since.`
+                    : "A stored sheet: it draws what went onto the paper, whatever has changed since."
+                }
+              >
+                <span style={CHIP}>
+                  Printed
+                  {page.printedAt ? ` ${new Date(page.printedAt).toLocaleDateString()}` : ""}
+                </span>
+              </Tooltip>
+            ) : (
+              <Tooltip content="Not on paper yet: planned from your current data every time this screen opens, so it follows every change until you mark it printed.">
+                <span style={CHIP}>Live</span>
+              </Tooltip>
+            )}
+            {card && card.divergences.length > 0 && (
+              <Tooltip content="The data has moved on since this card was printed. Printed cards says what differs.">
+                <button
+                  type="button"
+                  onClick={() => setView({ tab: "printed", cards: "diverged" })}
+                  style={{ ...WARN_CHIP, cursor: "pointer" }}
+                >
+                  Out of date
+                </button>
+              </Tooltip>
+            )}
+            {page.continued && <span style={CHIP}>Continued</span>}
+            {page.runWith.length > 1 && (
+              <Tooltip content={`One checklist runs across sheets ${page.runWith.join(", ")}; they go onto paper together.`}>
+                <span style={CHIP}>
+                  Sheets {page.runWith[0]}–{page.runWith[page.runWith.length - 1]}
+                </span>
+              </Tooltip>
+            )}
+          </div>
+          {page.headings.length > 0 && (
+            <div style={{ ...MUTED, marginTop: "0.25rem", lineHeight: 1.5 }}>
+              {page.headings.join(" · ")}
+            </div>
+          )}
+          {needsAttention(attention) && (
+            <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.375rem", flexWrap: "wrap" }}>
+              <AttentionChips attention={attention} />
+            </div>
+          )}
+        </div>
+        <span style={{ ...MUTED, whiteSpace: "nowrap", paddingTop: "0.125rem" }}>
+          {page.printedPageId
+            ? "on paper"
+            : page.boxCount === 1
+              ? "1 box"
+              : `${page.boxCount} boxes`}
+        </span>
+        <RowActionsMenu ariaLabel="Sheet actions" actions={sheetActions(row)} />
+      </div>
+    );
+  }
+
+  function renderEntryRow(entry: AlbumEntryData, last: boolean) {
+    return (
+      <div
+        key={entry.id}
+        draggable={!isPending}
+        onDragStart={() => setDraggingId(entry.id)}
+        onDragEnd={() => setDraggingId(null)}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => handleDrop(entry.id)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          padding: "0.625rem 1rem",
+          background: draggingId === entry.id ? "var(--color-bg-page)" : "var(--color-bg-elevated)",
+          borderBottom: last ? "none" : "1px solid var(--color-border)",
+          opacity: draggingId === entry.id ? 0.5 : 1,
+          cursor: isPending ? "default" : "grab",
+        }}
+      >
+        <span aria-hidden style={{ color: "var(--color-text-muted)" }}>
+          <Icon name="dragGrip" size="sm" />
+        </span>
+        <span style={{ ...MUTED, width: "3rem" }}>{entry.year ?? "—"}</span>
+        <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)" }}>
+          {entry.checklistName}
+        </span>
+        {entry.ordersItsOwn && (
+          <Tooltip content="This album prints these stamps in its own order, not the checklist's">
+            <span style={CHIP}>Own order</span>
+          </Tooltip>
+        )}
+        <span style={MUTED}>
+          {entry.stampIds.length === 1 ? "1 stamp" : `${entry.stampIds.length} stamps`}
+        </span>
+        <RowActionsMenu
+          ariaLabel="Entry actions"
+          actions={[
+            ...(entry.ordersItsOwn
+              ? [
+                  {
+                    key: "reset",
+                    label: "Follow the checklist's order",
+                    icon: "revert" as const,
+                    onSelect: () => run(() => clearAlbumEntryStampOrderAction(entry.id)),
+                  },
+                ]
+              : []),
+            {
+              key: "remove",
+              label: "Remove from album",
+              icon: "delete",
+              danger: true,
+              separatorBefore: entry.ordersItsOwn,
+              onSelect: () => setConfirm(entry),
+            },
+          ]}
+        />
+      </div>
+    );
+  }
+
+  function renderChapters<T>(
+    runs: AlbumChapterRun<T>[],
+    noun: [string, string],
+    renderRow: (item: T, last: boolean) => ReactNode
+  ) {
+    return runs.map((run) => {
+      const open = !view.closed.has(run.id);
+      const attention = chapterAttention.get(run.id) ?? 0;
+      return (
+        <div key={run.id} style={{ ...CARD_STYLE, marginBottom: "0.75rem" }}>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => toggleChapter(run.id)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              width: "100%",
+              padding: "0.5rem 1rem",
+              border: "none",
+              borderBottom: open ? "1px solid var(--color-border)" : "none",
+              background: "var(--color-bg-page)",
+              cursor: "pointer",
+              textAlign: "left",
+              color: "var(--color-text-primary)",
+            }}
+          >
+            <span style={{ display: "inline-flex", color: "var(--color-text-muted)" }}>
+              <Icon name={open ? "collapse" : "expand"} size="sm" />
+            </span>
+            <span style={{ fontSize: "0.9375rem", fontWeight: 600 }}>{run.key || "No year"}</span>
+            <span style={MUTED}>
+              {run.items.length} {run.items.length === 1 ? noun[0] : noun[1]}
+            </span>
+            {attention > 0 && (
+              <span style={WARN_CHIP}>
+                {attention === 1 ? "1 sheet needs attention" : `${attention} sheets need attention`}
+              </span>
+            )}
+          </button>
+          {open && run.items.map((item, i) => renderRow(item, i === run.items.length - 1))}
+        </div>
+      );
+    });
+  }
+
+  const sheetFilterCount: Record<AlbumSheetFilter, number> = {
+    all: summary.sheets,
+    attention: summary.attentionSheets,
+    live: summary.live,
+    printed: summary.printed,
+  };
+  const tabCount = { sheets: summary.sheets, entries: summary.entries, printed: summary.cards };
+
   return (
-    <div style={{ padding: "2rem", maxWidth: "64rem" }}>
+    <div style={{ padding: "2rem" }}>
       <Link
         href={`/c/${collectionSlug}/albums`}
         style={{ ...MUTED, textDecoration: "none", display: "inline-block", marginBottom: "0.5rem" }}
       >
         ← Albums
       </Link>
-      <h2
-        style={{
-          margin: "0 0 0.25rem",
-          fontSize: "1.25rem",
-          fontWeight: 600,
-          color: "var(--color-text-primary)",
-        }}
-      >
-        {album.name}
-      </h2>
-      {nameSuggestion && (
-        <AlbumNameSuggestion
-          albumId={album.id}
-          name={album.name}
-          suggestion={nameSuggestion}
-          language={album.language}
-        />
-      )}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: "1rem",
-          margin: "0 0 1.5rem",
-        }}
-      >
-        <p style={{ ...MUTED, margin: 0 }}>
-          Printed in {languageLabel(album.language)} · {album.pageWidthMm} × {album.pageHeightMm} mm ·{" "}
-          {album.blocksPerBand === 1
-            ? "one checklist per band"
-            : `up to ${album.blocksPerBand} checklists per band`}
-        </p>
-        <Tooltip content="This album's own page, spacing, hawid, type and text values, with its pages drawn beside them. Changes apply to this album only — the template it started from is not touched.">
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => {
-              setPresetError(null);
-              setPresetOpen(true);
-            }}
-            style={{ ...DOWNLOAD_BTN, cursor: isPending ? "default" : "pointer" }}
-          >
-            Page template…
-          </button>
-        </Tooltip>
-      </div>
 
-      {error && (
-        <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
-          {error}
-        </p>
-      )}
-      {notice && <p style={{ ...MUTED, marginBottom: "1rem" }}>{notice}</p>}
-
-      {initialOverview.emptyStock && (
-        <p
-          style={{
-            ...MUTED,
-            marginBottom: "1.5rem",
-            padding: "0.75rem 1rem",
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.5rem",
-            lineHeight: 1.6,
-          }}
-        >
-          This collection has no hawid stock, so every box below is planned as a pocket. That is what
-          an undescribed drawer honestly comes to — add the strips you own in Settings → Albums and
-          the boxes will be cut from them.
-        </p>
-      )}
-
-      {/* ── Entries ── */}
+      {/* ── Header: the album, and what can be done to all of it ── */}
 
       <div
         style={{
           display: "flex",
-          alignItems: "baseline",
+          alignItems: "flex-start",
           justifyContent: "space-between",
-          marginBottom: "0.75rem",
+          gap: "1.5rem",
+          marginBottom: "1.25rem",
+          flexWrap: "wrap",
         }}
       >
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Entries</h3>
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => run(() => gatherAlbumEntriesAction(album.id))}
-          style={{
-            padding: "0.375rem 0.75rem",
-            background: "transparent",
-            border: "1px solid var(--color-border-strong)",
-            borderRadius: "0.375rem",
-            fontSize: "0.8125rem",
-            color: "var(--color-text-primary)",
-            cursor: isPending ? "default" : "pointer",
-          }}
-        >
-          Gather new checklists
-        </button>
-      </div>
-      <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
-        Gathered from {album.name}&apos;s area and everything under it, in catalog order. Drag to
-        change the order the album prints them in. A checklist that spans several issues has no area
-        and cannot be gathered — add one of those from its own screen.
-      </p>
-
-      <div style={{ ...CARD_STYLE, marginBottom: "2rem" }}>
-        {items.length === 0 && (
-          <p style={{ ...MUTED, padding: "1rem" }}>
-            Nothing to print yet: this area has no checklists.
-          </p>
-        )}
-        {items.map((entry, i) => (
-          <div
-            key={entry.id}
-            draggable={!isPending}
-            onDragStart={() => setDraggingId(entry.id)}
-            onDragEnd={() => setDraggingId(null)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => handleDrop(entry.id)}
+        <div style={{ minWidth: 0 }}>
+          <h2
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-              padding: "0.625rem 1rem",
-              background:
-                draggingId === entry.id ? "var(--color-bg-page)" : "var(--color-bg-elevated)",
-              borderBottom: i < items.length - 1 ? "1px solid var(--color-border)" : "none",
-              opacity: draggingId === entry.id ? 0.5 : 1,
-              cursor: isPending ? "default" : "grab",
+              margin: "0 0 0.25rem",
+              fontSize: "1.25rem",
+              fontWeight: 600,
+              color: "var(--color-text-primary)",
             }}
           >
-            <span aria-hidden style={{ color: "var(--color-text-muted)" }}>
-              <Icon name="dragGrip" size="sm" />
-            </span>
-            <span style={{ ...MUTED, width: "3rem" }}>{entry.year ?? "—"}</span>
-            <span
-              style={{
-                flex: 1,
-                fontSize: "0.9375rem",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              {entry.checklistName}
-            </span>
-            {entry.ordersItsOwn && (
-              <Tooltip content="This album prints these stamps in its own order, not the checklist's">
-                <span style={CHIP}>Own order</span>
-              </Tooltip>
-            )}
-            <span style={MUTED}>
-              {entry.stampIds.length === 1 ? "1 stamp" : `${entry.stampIds.length} stamps`}
-            </span>
-            <RowActionsMenu
-              ariaLabel="Entry actions"
-              actions={[
-                ...(entry.ordersItsOwn
-                  ? [
-                      {
-                        key: "reset",
-                        label: "Follow the checklist's order",
-                        icon: "revert" as const,
-                        onSelect: () =>
-                          run(() => clearAlbumEntryStampOrderAction(entry.id)),
-                      },
-                    ]
-                  : []),
-                {
-                  key: "remove",
-                  label: "Remove from album",
-                  icon: "delete",
-                  danger: true,
-                  separatorBefore: entry.ordersItsOwn,
-                  onSelect: () => setConfirm(entry),
-                },
-              ]}
+            {album.name}
+          </h2>
+          {nameSuggestion && (
+            <AlbumNameSuggestion
+              albumId={album.id}
+              name={album.name}
+              suggestion={nameSuggestion}
+              language={album.language}
             />
-          </div>
-        ))}
-      </div>
-
-      {/* ── Sheets ── */}
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          marginBottom: "0.75rem",
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Sheets</h3>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+          )}
+          <p style={{ ...MUTED, margin: 0 }}>
+            Printed in {languageLabel(album.language)} · {album.pageWidthMm} × {album.pageHeightMm} mm ·{" "}
+            {album.blocksPerBand === 1
+              ? "one checklist per band"
+              : `up to ${album.blocksPerBand} checklists per band`}
+          </p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          {initialOverview.pages.length > 0 && (
+            <Tooltip content="Draw a sheet at 1:1 and correct it by hand — extra space, a forced break, a box a couple of millimetres bigger, an order of your own. Every correction is a delta, so a stamp arriving later re-flows the page and keeps them.">
+              <Link href={`/c/${collectionSlug}/albums/${album.id}/pages`} style={PRIMARY_BTN}>
+                Page editor
+              </Link>
+            </Tooltip>
+          )}
+          {initialOverview.pages.length > 0 && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+              <Tooltip content="Compose the whole album as a PDF, drawn to size so a box on the paper measures what the cutting list says.">
+                <a
+                  href={pdfHref()}
+                  // The file's own name comes from the server's Content-Disposition, which knows the
+                  // album; the attribute only makes this a download rather than a navigation.
+                  download
+                  style={DOWNLOAD_BTN}
+                >
+                  ↓ Download PDF
+                </a>
+              </Tooltip>
+              <Tooltip
+                align="end"
+                content="The print dialog defaults to Fit to page, which shrinks the sheet by a few percent — and nothing on the card shows it except a ruler. Set 100% / Actual size, and measure one box on the first sheet."
+              >
+                <span style={{ ...MUTED, fontSize: "0.75rem", color: "var(--color-warning)", whiteSpace: "nowrap" }}>
+                  print at 100 %
+                </span>
+              </Tooltip>
+            </span>
+          )}
           {livePositions.length > 0 && (
-            <Tooltip content="Say that every unprinted sheet below has gone onto paper. The album stores what was on each of them; nothing is frozen by downloading a draft.">
+            <Tooltip content="Say that every unprinted sheet has gone onto paper. The album stores what was on each of them; nothing is frozen by downloading a draft.">
               <button
                 type="button"
                 disabled={isPending}
@@ -539,287 +803,393 @@ export function AlbumScreen({
             </Tooltip>
           )}
           {initialOverview.pages.length > 0 && (
-            <Tooltip content="Draw a sheet at 1:1 and correct it by hand — extra space, a forced break, a box a couple of millimetres bigger, an order of your own. Every correction is a delta, so a stamp arriving later re-flows the page and keeps them.">
-              <Link
-                href={`/c/${collectionSlug}/albums/${album.id}/pages`}
-                style={DOWNLOAD_BTN}
-              >
-                Page editor
-              </Link>
-            </Tooltip>
-          )}
-          {initialOverview.pages.length > 0 && (
             <Tooltip content="What to cut for every sheet, and what the album still needs bought. It is a list, so it prints from the browser — only the album's own pages have to be true to the millimetre.">
-              <Link
-                href={`/c/${collectionSlug}/albums/${album.id}/cutting-list`}
-                style={DOWNLOAD_BTN}
-              >
+              <Link href={`/c/${collectionSlug}/albums/${album.id}/cutting-list`} style={DOWNLOAD_BTN}>
                 Cutting list
               </Link>
             </Tooltip>
           )}
-          {initialOverview.pages.length > 0 && (
-            <Tooltip content="Compose the whole album as a PDF. Print it at 100% / Actual size — Fit to page silently shrinks the sheet and the boxes stop being true.">
-              <a
-                href={pdfHref()}
-                // The file's own name comes from the server's Content-Disposition, which knows the
-                // album; the attribute only makes this a download rather than a navigation.
-                download
-                style={DOWNLOAD_BTN}
-              >
-                ↓ Download PDF
-              </a>
-            </Tooltip>
-          )}
+          <Tooltip
+            align="end"
+            content="This album's own page, spacing, hawid, type and text values, with its pages drawn beside them. Changes apply to this album only — the template it started from is not touched."
+          >
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setPresetError(null);
+                setPresetOpen(true);
+              }}
+              style={{ ...DOWNLOAD_BTN, cursor: isPending ? "default" : "pointer" }}
+            >
+              Page template…
+            </button>
+          </Tooltip>
         </div>
       </div>
-      <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
-        Planned from the entries above, fresh every time you open this screen — there is nothing to
-        refresh and nothing stored. A sheet is named by the catalog numbers on it, not by a page
-        number: a number is a position, and a position moves when the collection grows, so one added
-        stamp would invalidate every card already in the binder.
-      </p>
-      <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
-        The PDF is composed here rather than printed from the browser, so a box on the paper measures
-        what the cutting list says. That only holds if you print it at <strong>100% / Actual
-        size</strong> — the print dialog defaults to <em>Fit to page</em>, which shrinks the sheet by
-        a few percent, and nothing on the card shows it except a ruler.
-      </p>
 
-      <div style={CARD_STYLE}>
-        {initialOverview.pages.length === 0 && (
-          <p style={{ ...MUTED, padding: "1rem" }}>No sheets: there is nothing to lay out yet.</p>
-        )}
-        {initialOverview.pages.map((page, i) => (
-          <div
-            key={i}
-            style={{
-              padding: "0.75rem 1rem",
-              background: "var(--color-bg-elevated)",
-              borderBottom: i < initialOverview.pages.length - 1 ? "1px solid var(--color-border)" : "none",
-            }}
+      {error && (
+        <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
+          {error}
+        </p>
+      )}
+      {notice && <p style={{ ...MUTED, marginBottom: "1rem" }}>{notice}</p>}
+
+      {initialOverview.emptyStock && (
+        <p
+          style={{
+            ...MUTED,
+            marginBottom: "1.25rem",
+            padding: "0.75rem 1rem",
+            border: "1px solid var(--color-border)",
+            borderRadius: "0.5rem",
+            lineHeight: 1.6,
+          }}
+        >
+          This collection has no hawid stock, so every box is planned as a pocket. That is what an
+          undescribed drawer honestly comes to — add the strips you own in Settings → Albums and the
+          boxes will be cut from them.
+        </p>
+      )}
+
+      {/* ── Summary: where the album stands, each figure a way in ── */}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: "0.75rem",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <SummaryTile title="Entries">
+          <button type="button" style={FIGURE_BTN} onClick={() => setView({ tab: "entries" })}>
+            {summary.entries === 1 ? "1 entry" : `${summary.entries} entries`}
+          </button>
+          <span style={MUTED}>
+            {summary.chapters === 1 ? "1 chapter" : `${summary.chapters} chapters`}
+            {summary.years &&
+              ` · ${summary.years.from === summary.years.to ? summary.years.from : `${summary.years.from}–${summary.years.to}`}`}
+          </span>
+        </SummaryTile>
+        <SummaryTile title="Sheets">
+          <button
+            type="button"
+            style={FIGURE_BTN}
+            onClick={() => setView({ tab: "sheets", sheets: "all" })}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span
-                style={{
-                  fontSize: "0.9375rem",
-                  fontWeight: 600,
-                  color: "var(--color-text-primary)",
-                }}
-              >
-                {page.range || "(no catalog numbers on this sheet)"}
-              </span>
-              {page.chapterKey && <span style={CHIP}>{page.chapterKey}</span>}
-              {page.printedPageId && (
+            {summary.sheets === 1 ? "1 sheet" : `${summary.sheets} sheets`}
+          </button>
+          <span style={{ ...MUTED, display: "flex", gap: "0.375rem", alignItems: "baseline" }}>
+            <button
+              type="button"
+              style={{ ...FIGURE_BTN, fontSize: "0.8125rem" }}
+              onClick={() => setView({ tab: "sheets", sheets: "live" })}
+            >
+              {summary.live} live
+            </button>
+            ·
+            <button
+              type="button"
+              style={{ ...FIGURE_BTN, fontSize: "0.8125rem" }}
+              onClick={() => setView({ tab: "sheets", sheets: "printed" })}
+            >
+              {summary.printed} printed
+            </button>
+          </span>
+        </SummaryTile>
+        <SummaryTile title="Before printing">
+          {summary.attentionSheets === 0 ? (
+            <span style={MUTED}>Nothing to check</span>
+          ) : (
+            <>
+              {sizesNotMeasured > 0 && (
                 <Tooltip
-                  content={
-                    page.printedAt
-                      ? `Printed on ${new Date(page.printedAt).toLocaleDateString()}. This sheet is a stored result: it draws what went onto the paper, whatever has changed since.`
-                      : "A stored sheet: it draws what went onto the paper, whatever has changed since."
-                  }
+                  align="start"
+                  content={[
+                    summary.attention.inherited > 0 &&
+                      `${summary.attention.inherited} sized from a neighbour on the checklist`,
+                    summary.attention.unmeasured > 0 &&
+                      `${summary.attention.unmeasured} with no size anywhere on the checklist`,
+                  ]
+                    .filter(Boolean)
+                    .join("; ")}
                 >
-                  <span style={CHIP}>Printed</span>
+                  <button type="button" style={FIGURE_BTN} onClick={() => setView({ tab: "sheets", sheets: "attention" })}>
+                    {sizesNotMeasured === 1 ? "1 size not measured" : `${sizesNotMeasured} sizes not measured`}
+                  </button>
                 </Tooltip>
               )}
-              {page.continued && <span style={CHIP}>Continued</span>}
-              {page.runWith.length > 1 && (
-                <Tooltip content={`One checklist runs across sheets ${page.runWith.join(", ")}; they go onto paper together.`}>
-                  <span style={CHIP}>
-                    Sheets {page.runWith[0]}–{page.runWith[page.runWith.length - 1]}
-                  </span>
-                </Tooltip>
+              {summary.attention.oversize > 0 && (
+                <button type="button" style={FIGURE_BTN} onClick={() => setView({ tab: "sheets", sheets: "attention" })}>
+                  {summary.attention.oversize === 1
+                    ? "1 box in a pocket"
+                    : `${summary.attention.oversize} boxes in a pocket`}
+                </button>
               )}
-              <span style={{ ...MUTED, marginLeft: "auto" }}>
-                {page.printedPageId
-                  ? "on paper"
-                  : page.boxCount === 1
-                    ? "1 box"
-                    : `${page.boxCount} boxes`}
+              {summary.attention.untranslated > 0 && (
+                <button type="button" style={FIGURE_BTN} onClick={() => setView({ tab: "sheets", sheets: "attention" })}>
+                  {summary.attention.untranslated === 1
+                    ? "1 untranslated text"
+                    : `${summary.attention.untranslated} untranslated texts`}
+                </button>
+              )}
+              <span style={MUTED}>
+                on {summary.attentionSheets === 1 ? "1 sheet" : `${summary.attentionSheets} sheets`}
               </span>
-              <RowActionsMenu
-                ariaLabel="Sheet actions"
-                actions={
-                  page.printedPageId
-                    ? [
-                        {
-                          key: "editor",
-                          label: "Open in the page editor",
-                          icon: "open",
-                          href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${i + 1}`,
-                          hint: "Read-only: it draws what went onto the paper, with what has changed since",
-                        },
-                        {
-                          key: "pdf",
-                          label: "Download this card",
-                          icon: "print",
-                          href: pdfHref(i + 1),
-                          hint: "Drawn from what was stored when it was printed",
-                        },
-                        {
-                          key: "unprint",
-                          label: "Un-print this sheet",
-                          icon: "revert",
-                          danger: true,
-                          separatorBefore: true,
-                          onSelect: () =>
-                            setUnprint({ id: page.printedPageId!, range: page.range }),
-                        },
-                      ]
-                    : [
-                        {
-                          key: "editor",
-                          label: "Open in the page editor",
-                          icon: "edit",
-                          href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${i + 1}`,
-                          hint: "Correct it by hand, exact in millimetres",
-                        },
-                        {
-                          key: "pdf",
-                          label: "Download this sheet",
-                          icon: "print",
-                          href: pdfHref(i + 1),
-                          hint: "Print at 100% / Actual size",
-                        },
-                        {
-                          key: "printed",
-                          label:
-                            page.runWith.length > 1
-                              ? `Mark sheets ${page.runWith.join(", ")} printed…`
-                              : "Mark printed…",
-                          icon: "check",
-                          separatorBefore: true,
-                          hint:
-                            page.runWith.length > 1
-                              ? "One checklist runs across them, so they go onto paper together"
-                              : undefined,
-                          onSelect: () =>
-                            setMarkPrinted({
-                              sheets: page.runWith,
-                              label:
-                                page.runWith.length > 1
-                                  ? `sheets ${page.runWith.join(", ")}`
-                                  : page.range || "this sheet",
-                            }),
-                        },
-                      ]
-                }
-              />
-            </div>
-            {page.headings.length > 0 && (
-              <div style={{ ...MUTED, marginTop: "0.25rem", lineHeight: 1.5 }}>
-                {page.headings.join(" · ")}
-              </div>
-            )}
-            {(page.oversizeCount > 0 ||
-              page.inheritedSizeCount > 0 ||
-              page.unmeasuredCount > 0) && (
-              <div
-                style={{ display: "flex", gap: "0.375rem", marginTop: "0.375rem", flexWrap: "wrap" }}
+            </>
+          )}
+        </SummaryTile>
+        <SummaryTile title="Printed cards">
+          {summary.cards === 0 ? (
+            <span style={MUTED}>None yet</span>
+          ) : (
+            <>
+              {summary.divergedCards > 0 ? (
+                <button
+                  type="button"
+                  style={FIGURE_BTN}
+                  onClick={() => setView({ tab: "printed", cards: "diverged" })}
+                >
+                  {summary.divergedCards === 1 ? "1 out of date" : `${summary.divergedCards} out of date`}
+                </button>
+              ) : (
+                <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
+                  All still match
+                </span>
+              )}
+              <button
+                type="button"
+                style={{ ...FIGURE_BTN, fontSize: "0.8125rem" }}
+                onClick={() => setView({ tab: "printed", cards: "all" })}
               >
-                {page.oversizeCount > 0 && (
-                  <span style={CHIP}>
-                    {page.oversizeCount} in a pocket — no strip is tall enough
-                  </span>
-                )}
-                {page.inheritedSizeCount > 0 && (
-                  <span style={CHIP}>
-                    {page.inheritedSizeCount} sized from a neighbour, not measured
-                  </span>
-                )}
-                {page.unmeasuredCount > 0 && (
-                  <span style={CHIP}>{page.unmeasuredCount} with no size at all</span>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+                of {summary.cards === 1 ? "1 card" : `${summary.cards} cards`}
+              </button>
+            </>
+          )}
+        </SummaryTile>
       </div>
 
-      {/* -- Printed cards (#778) -- */}
+      {/* ── Tabs ── */}
 
-      {printedReport.sheets.length > 0 && (
+      <div
+        role="tablist"
+        style={{ display: "flex", borderBottom: "1px solid var(--color-border)", marginBottom: "1rem" }}
+      >
+        {(["sheets", "entries", "printed"] as const).map((tab) => {
+          const active = view.tab === tab;
+          return (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setView({ tab })}
+              style={{
+                padding: "0.625rem 1rem",
+                fontSize: "0.875rem",
+                fontWeight: active ? 600 : 400,
+                color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                background: "transparent",
+                border: "none",
+                borderBottom: active ? "2px solid var(--color-accent)" : "2px solid transparent",
+                cursor: "pointer",
+                marginBottom: "-1px",
+              }}
+            >
+              {TAB_LABEL[tab]}{" "}
+              <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>{tabCount[tab]}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Sheets ── */}
+
+      {view.tab === "sheets" && (
         <>
-          <h3 style={{ margin: "2rem 0 0.75rem", fontSize: "1rem", fontWeight: 600 }}>
-            Printed cards
-          </h3>
-          <p style={{ ...MUTED, margin: "0 0 1rem", lineHeight: 1.6, maxWidth: "42rem" }}>
-            What each card in the binder no longer says. A card is <strong>reported</strong>, never
-            put right on its own: it can be out of date for a good reason for years. Where you do want
-            to act there are two answers and you pick each time — a <strong>continuation page</strong>
-            {" "}carrying the new stamps with a range of its own, filed after the card it continues, or
-            a <strong>reprint</strong> of the whole card.
-          </p>
-          <div style={CARD_STYLE}>
-            {printedReport.sheets.map((sheet, i) => (
-              <div
-                key={sheet.id}
-                style={{
-                  padding: "0.75rem 1rem",
-                  background: "var(--color-bg-elevated)",
-                  borderBottom:
-                    i < printedReport.sheets.length - 1 ? "1px solid var(--color-border)" : "none",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <span
-                    style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}
-                  >
-                    {sheet.range || "(no catalog numbers on this card)"}
-                  </span>
-                  <span style={MUTED}>
-                    printed {new Date(sheet.printedAt).toLocaleDateString()}
-                  </span>
-                  {sheet.reprinting && (
-                    <Tooltip content="Its checklists are back in the plan and will be re-planned in full. This stored card stands until the replacement is marked printed in its turn.">
-                      <span style={CHIP}>Awaiting reprint</span>
-                    </Tooltip>
-                  )}
-                  {sheet.divergences.length === 0 && !sheet.reprinting && (
-                    <span style={CHIP}>Still matches</span>
-                  )}
-                  <span style={{ marginLeft: "auto" }} />
-                  <RowActionsMenu
-                    ariaLabel="Printed card actions"
-                    actions={printedCardActions(sheet)}
-                  />
-                </div>
-                {sheet.entries.some((e) => e.continuationOpen) && (
-                  <div style={{ ...MUTED, marginTop: "0.375rem", lineHeight: 1.5 }}>
-                    A continuation sheet is waiting in the plan above for{" "}
-                    {sheet.entries
-                      .filter((e) => e.continuationOpen)
-                      .map((e) => e.checklistName)
-                      .join(", ")}
-                    .
-                  </div>
-                )}
-                {sheet.divergences.length > 0 && (
-                  <ul
-                    style={{
-                      listStyle: "none",
-                      margin: "0.5rem 0 0",
-                      padding: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.25rem",
-                    }}
-                  >
-                    {sheet.divergences.map((d, n) => (
-                      <li
-                        key={n}
-                        style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}
-                      >
-                        <span style={{ ...CHIP, flexShrink: 0 }}>{DIVERGENCE_LABEL[d.kind]}</span>
-                        <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)", lineHeight: 1.5 }}>
-                          {d.detail}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+            {(["all", "attention", "live", "printed"] as const).map((filter) => (
+              <FilterChip
+                key={filter}
+                label={SHEET_FILTER_LABEL[filter]}
+                count={sheetFilterCount[filter]}
+                active={view.sheets === filter}
+                onClick={() => setView({ sheets: filter })}
+              />
             ))}
+            <span style={{ marginLeft: "auto", display: "flex", gap: "1rem" }}>
+              <Tooltip
+                align="end"
+                content="Planned from the entries, fresh every time you open this screen — there is nothing to refresh and nothing stored until a sheet is marked printed."
+              >
+                <span style={HINT}>Live sheets</span>
+              </Tooltip>
+              <Tooltip
+                align="end"
+                content="A sheet is named by the catalog numbers on it, not by a page number: a number is a position, and a position moves when the collection grows, so one added stamp would invalidate every card already in the binder."
+              >
+                <span style={HINT}>Why ranges, not page numbers</span>
+              </Tooltip>
+            </span>
           </div>
+          {rows.length === 0 && (
+            <p style={{ ...MUTED, ...CARD_STYLE, padding: "1rem" }}>
+              No sheets: there is nothing to lay out yet.
+            </p>
+          )}
+          {rows.length > 0 && visibleSheetChapters.length === 0 && (
+            <p style={{ ...MUTED, ...CARD_STYLE, padding: "1rem" }}>
+              No sheet is {SHEET_FILTER_LABEL[view.sheets].toLowerCase()}.
+            </p>
+          )}
+          {renderChapters(visibleSheetChapters, ["sheet", "sheets"], renderSheetRow)}
+        </>
+      )}
+
+      {/* ── Entries ── */}
+
+      {view.tab === "entries" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
+            <Tooltip content={`Picks up checklists that have appeared under ${album.name}'s area since you last looked. It only ever adds.`}>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => run(() => gatherAlbumEntriesAction(album.id))}
+                style={{ ...DOWNLOAD_BTN, cursor: isPending ? "default" : "pointer" }}
+              >
+                Gather new checklists
+              </button>
+            </Tooltip>
+            <span style={{ marginLeft: "auto", display: "flex", gap: "1rem" }}>
+              <Tooltip
+                align="end"
+                content="Gathered from the album's area and everything under it, in catalog order. Drag a row to change the order the album prints them in."
+              >
+                <span style={HINT}>Order</span>
+              </Tooltip>
+              <Tooltip
+                align="end"
+                content="A checklist that spans several issues has no area and cannot be gathered — add one of those from its own screen."
+              >
+                <span style={HINT}>A checklist is missing</span>
+              </Tooltip>
+            </span>
+          </div>
+          {items.length === 0 && (
+            <p style={{ ...MUTED, ...CARD_STYLE, padding: "1rem" }}>
+              Nothing to print yet: this area has no checklists.
+            </p>
+          )}
+          {renderChapters(entryChapters, ["entry", "entries"], renderEntryRow)}
+        </>
+      )}
+
+      {/* ── Printed cards (#778) ── */}
+
+      {view.tab === "printed" && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+            {(["all", "diverged"] as const satisfies readonly AlbumCardFilter[]).map((filter) => (
+              <FilterChip
+                key={filter}
+                label={filter === "all" ? "All" : "Out of date"}
+                count={filter === "all" ? summary.cards : summary.divergedCards}
+                active={view.cards === filter}
+                onClick={() => setView({ cards: filter })}
+              />
+            ))}
+            <span style={{ marginLeft: "auto" }}>
+              <Tooltip
+                align="end"
+                content="A card is reported, never put right on its own: it can be out of date for a good reason for years. Where you do want to act, pick per card from its ⋮ — a continuation page carrying the new stamps with a range of its own, filed after the card it continues, or a reprint of the whole card."
+              >
+                <span style={HINT}>What to do about a difference</span>
+              </Tooltip>
+            </span>
+          </div>
+          {printedReport.sheets.length === 0 && (
+            <p style={{ ...MUTED, ...CARD_STYLE, padding: "1rem" }}>
+              Nothing printed yet. Mark sheets printed once they have gone onto paper, and this tab
+              reports what each card no longer says.
+            </p>
+          )}
+          {printedReport.sheets.length > 0 && visibleCards.length === 0 && (
+            <p style={{ ...MUTED, ...CARD_STYLE, padding: "1rem" }}>
+              Every card still matches the album.
+            </p>
+          )}
+          {visibleCards.length > 0 && (
+            <div style={CARD_STYLE}>
+              {visibleCards.map((sheet, i) => (
+                <div
+                  key={sheet.id}
+                  style={{
+                    padding: "0.75rem 1rem",
+                    background: "var(--color-bg-elevated)",
+                    borderBottom:
+                      i < visibleCards.length - 1 ? "1px solid var(--color-border)" : "none",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span
+                      style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}
+                    >
+                      {sheet.range || "(no catalog numbers on this card)"}
+                    </span>
+                    <span style={MUTED}>
+                      printed {new Date(sheet.printedAt).toLocaleDateString()}
+                    </span>
+                    {sheet.reprinting && (
+                      <Tooltip content="Its checklists are back in the plan and will be re-planned in full. This stored card stands until the replacement is marked printed in its turn.">
+                        <span style={CHIP}>Awaiting reprint</span>
+                      </Tooltip>
+                    )}
+                    {sheet.divergences.length === 0 && !sheet.reprinting && (
+                      <span style={CHIP}>Still matches</span>
+                    )}
+                    <span style={{ marginLeft: "auto" }} />
+                    <RowActionsMenu
+                      ariaLabel="Printed card actions"
+                      actions={printedCardActions(sheet)}
+                    />
+                  </div>
+                  {sheet.entries.some((e) => e.continuationOpen) && (
+                    <div style={{ ...MUTED, marginTop: "0.375rem", lineHeight: 1.5 }}>
+                      A continuation sheet is waiting in Sheets for{" "}
+                      {sheet.entries
+                        .filter((e) => e.continuationOpen)
+                        .map((e) => e.checklistName)
+                        .join(", ")}
+                      .
+                    </div>
+                  )}
+                  {sheet.divergences.length > 0 && (
+                    <ul
+                      style={{
+                        listStyle: "none",
+                        margin: "0.5rem 0 0",
+                        padding: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.25rem",
+                      }}
+                    >
+                      {sheet.divergences.map((d, n) => (
+                        <li key={n} style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
+                          <span style={{ ...CHIP, flexShrink: 0 }}>{DIVERGENCE_LABEL[d.kind]}</span>
+                          <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)", lineHeight: 1.5 }}>
+                            {d.detail}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -943,5 +1313,110 @@ export function AlbumScreen({
         />
       )}
     </div>
+  );
+}
+
+function SummaryTile({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div
+      style={{
+        ...CARD_STYLE,
+        padding: "0.75rem 1rem",
+        background: "var(--color-bg-elevated)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: "0.25rem",
+      }}
+    >
+      <span
+        style={{
+          fontSize: "0.6875rem",
+          fontWeight: 600,
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        {title}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+/** A live sheet's flags, in the page editor's words and order (`album-box-flag.ts`). */
+function AttentionChips({ attention }: { attention: AlbumSheetAttention }) {
+  return (
+    <>
+      {attention.unmeasured > 0 && (
+        <span style={WARN_CHIP}>{attention.unmeasured} with no size at all</span>
+      )}
+      {attention.oversize > 0 && (
+        <span style={WARN_CHIP}>{attention.oversize} in a pocket — no strip is tall enough</span>
+      )}
+      {attention.inherited > 0 && (
+        <span style={WARN_CHIP}>{attention.inherited} sized from a neighbour, not measured</span>
+      )}
+      {attention.untranslated > 0 && (
+        <Tooltip content="Texts that would print in the collection's default language. The page editor outlines them and fills the gap in place.">
+          <span style={WARN_CHIP}>
+            {attention.untranslated === 1
+              ? "1 untranslated text"
+              : `${attention.untranslated} untranslated texts`}
+          </span>
+        </Tooltip>
+      )}
+    </>
+  );
+}
+
+/**
+ * A sheet in miniature: where its text sits and where its boxes are, with a box the editor would flag
+ * drawn in the warning colour. Every figure came from the server — this scales them, and measures
+ * nothing (ADR-0045 §7).
+ */
+function SheetThumbnail({ sketch, range }: { sketch: AlbumSheetSketch | null; range: string }) {
+  if (!sketch) {
+    return <span aria-hidden style={{ width: THUMB_WIDTH_PX, flexShrink: 0 }} />;
+  }
+  const heightPx = Math.round((THUMB_WIDTH_PX * sketch.heightMm) / sketch.widthMm);
+  return (
+    <svg
+      role="img"
+      aria-label={`Sheet ${range}`}
+      width={THUMB_WIDTH_PX}
+      height={heightPx}
+      viewBox={`0 0 ${sketch.widthMm} ${sketch.heightMm}`}
+      style={{ flexShrink: 0, display: "block" }}
+    >
+      <rect
+        x={0}
+        y={0}
+        width={sketch.widthMm}
+        height={sketch.heightMm}
+        fill={THUMB_PAPER}
+        stroke={THUMB_EDGE}
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+      />
+      {sketch.lines.map((l, i) => (
+        <rect key={`l${i}`} x={l.xMm} y={l.yMm} width={l.widthMm} height={l.heightMm} fill={THUMB_TEXT} />
+      ))}
+      {sketch.boxes.map((b, i) => (
+        <rect
+          key={`b${i}`}
+          x={b.xMm}
+          y={b.yMm}
+          width={b.widthMm}
+          height={b.heightMm}
+          fill={b.flagged ? THUMB_FLAG : "none"}
+          fillOpacity={b.flagged ? 0.25 : undefined}
+          stroke={b.flagged ? THUMB_FLAG : THUMB_INK}
+          strokeWidth={0.5}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+    </svg>
   );
 }

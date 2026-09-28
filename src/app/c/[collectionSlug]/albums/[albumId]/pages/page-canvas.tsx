@@ -13,6 +13,7 @@ import {
   type AlbumCarry,
   type AlbumDropMark,
 } from "@/lib/album-drag";
+import { albumBoxFlag, type AlbumBoxFlag } from "@/lib/album-box-flag";
 import { albumFrame } from "@/lib/album-frame";
 import { albumOrnamentPathData, type AlbumOrnamentDrawing } from "@/lib/album-ornament-svg";
 import type { AlbumRenderPreset } from "@/lib/album-template-rules";
@@ -101,21 +102,18 @@ const HANDLE = "#2563eb";
  * supply. `corrected` is not a warning at all — it says a figure is the collector's own, so that a
  * page they no longer remember correcting does not read as one the rule produced.
  */
-const FLAG = {
+const FLAG: Record<AlbumBoxFlag, { colour: string; label: string }> = {
   unmeasured: { colour: "#c2410c", label: "No size anywhere on the checklist" },
   oversize: { colour: "#b45309", label: "Pocket — no strip is tall enough" },
   inherited: { colour: "#a16207", label: "Sized from a neighbour, not measured" },
   corrected: { colour: "#1d4ed8", label: "Corrected by hand" },
-} as const;
+};
 
-export type AlbumBoxFlag = keyof typeof FLAG;
+export type { AlbumBoxFlag };
 
+/** The one rule, shared with the album screen's summary (#1430) so the two count the same boxes. */
 export function boxFlag(box: AlbumEditorBox): AlbumBoxFlag | null {
-  if (box.sizeSource === null) return "unmeasured";
-  if (box.stripLabel === null) return "oversize";
-  if (box.sizeSource === "inherited") return "inherited";
-  if (box.adjustment) return "corrected";
-  return null;
+  return albumBoxFlag(box);
 }
 
 export const BOX_FLAGS = FLAG;

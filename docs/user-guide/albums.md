@@ -162,9 +162,43 @@ offer are the ones your platforms and your albums use, minus your
 column goes away again; whatever you had typed for it stays where it was, ready if the language comes
 back.
 
+## The album's screen
+
+An album opens across the whole window, in three layers.
+
+**The header** names the album and holds what you do to all of it: **Page editor** (the main one),
+**Download PDF** with its *print at 100 %* reminder beside it, **Mark printed…**, **Cutting list** and
+**Page template…**.
+
+**The summary strip** below it says where the album stands, and every figure on it is a way in:
+
+- **Entries** — how many checklists, in how many chapters, over which years. Opens the Entries tab.
+- **Sheets** — how many, how many are still live and how many are printed. Each opens the Sheets tab
+  narrowed to those.
+- **Before printing** — sizes not measured (borrowed from a neighbour, or missing altogether), boxes
+  that go in a pocket, and texts that would print untranslated. These are the page editor's own
+  flags, counted over every live sheet, so the strip and the editor always agree. Any of them opens
+  the Sheets tab on *Needs attention*.
+- **Printed cards** — how many cards in your binders no longer match the album, out of how many.
+  Opens the Printed cards tab on *Out of date*.
+
+**Three tabs** hold the rest: **Sheets** (the one the album opens on), **Entries** and **Printed
+cards**. Sheets and entries are grouped into the album's **chapters** — a year each, the same
+chapters the pages print — and a chapter's heading says how many it holds and how many of its sheets
+need attention. Click a heading to fold the chapter away.
+
+The tab you are on, the filter and the chapters you folded are part of the page's address, so going
+into the page editor and coming back — or bookmarking the album — returns you to exactly that view.
+
+The explanations that used to sit on this screen as paragraphs are now hints: hover the dotted text
+beside the thing it explains. The one reminder that stays in plain sight is *print at 100 %*, beside
+**Download PDF**, because getting that wrong ruins a card and nothing on the card shows it.
+
 ## Entries
 
-Entries are checklists, in the order the album prints them. Drag a row to change that order.
+The **Entries** tab lists the checklists in the order the album prints them. Drag a row to change that
+order — across chapters too; a checklist dragged among another year's starts a chapter of its own
+there, exactly as the pages would print it.
 
 - **Gather new checklists** picks up checklists that have appeared in the area since you last looked.
   It only ever *adds*: an entry you put there by hand, or one whose issue has since moved elsewhere,
@@ -178,7 +212,13 @@ Entries are checklists, in the order the album prints them. Drag a row to change
 
 ## Sheets
 
-The plan, made from the entries above.
+The **Sheets** tab is the plan, made from the entries. Each row shows a small **thumbnail** of the
+sheet — where its text sits and where its boxes are, with any box that needs a look drawn in amber —
+then its catalog range, the checklists on it, and whether it is **Live** (not on paper yet, and
+re-planned every time you open the album) or **Printed** on a given date. A printed sheet whose card
+no longer matches the album says **Out of date**; click it to see why.
+
+The row of chips above the list narrows it: **All**, **Needs attention**, **Live**, **Printed**.
 
 **A sheet is named by the catalog numbers on it** — `PL 303-309` — and never by a page number. That
 is deliberate, and it is the whole reason the feature is shaped this way: a page number is a
@@ -209,7 +249,7 @@ used to add by hand so that two stamps on one card sit level. The space is part 
 counts when deciding what fits. If a pair still needs nudging, *space before* a block moves just that
 block.
 
-Each sheet also flags what needs a look before you print it:
+Each live sheet also flags what needs a look before you print it:
 
 - **N in a pocket** — no strip in your hawid stock is tall enough for those, so they are drawn at
   their own size with no mount. A block, a souvenir sheet or a cover goes in a pocket.
@@ -218,6 +258,13 @@ Each sheet also flags what needs a look before you print it:
   but it is a figure nobody measured and you are about to cut to it.
 - **N with no size at all** — nothing on that checklist has been measured, so there is nothing to
   draw. Measure one stamp of the set and the rest follow.
+- **N untranslated texts** — headings, labels or the footer that would print in your collection's
+  default language because a translation into the album's language is missing. The page editor
+  outlines them and lets you fill the gap in place.
+
+A box is counted under one of these only, as the page editor flags it: *no size at all* before *in a
+pocket*, and *in a pocket* before *sized from a neighbour*. *Needs attention* shows every sheet
+carrying any of them.
 
 If the collection has **no hawid stock** at all, the screen says so and every box is planned as a
 pocket. That is honest rather than broken: describe your drawer in Settings → Albums and the boxes
@@ -225,7 +272,7 @@ are cut from it.
 
 ## The page editor
 
-**Page editor** on the Sheets header — or *Open in the page editor* on one sheet's `⋮` — draws a
+**Page editor** in the album's header — or *Open in the page editor* on one sheet's `⋮` — draws a
 sheet at **1:1** and lets you overrule the layout by hand.
 
 It is a workbench and it takes the window. **Only the sheet scrolls**: the list of sheets on the
@@ -377,8 +424,9 @@ album is refused, though: the card would go on carrying words nothing in the alb
 
 ## Printing
 
-**Download PDF** composes the whole album. Each sheet also has its own **PDF** link, which is the
-one you want after adding a stamp: it reprints that card and nothing else.
+**Download PDF** in the album's header composes the whole album. Each sheet's ⋮ menu also has
+**Download this sheet**, which is the one you want after adding a stamp: it reprints that card and
+nothing else.
 
 ### Print it at 100%, and check the first one with a ruler
 
@@ -405,7 +453,7 @@ is not 100% of a sheet of paper.
 
 ### What is on the page
 
-Everything the sheets list above describes, drawn to size: the album's name at the top if the
+Everything the Sheets tab describes, drawn to size: the album's name at the top if the
 template prints it, the year, each checklist's heading, a box per slot with its label, and the
 sheet's catalog range in the footer.
 
@@ -430,7 +478,7 @@ that matters is against **paper**, and that is the next section.
 
 ## The cutting list
 
-**Cutting list**, beside *Download PDF*, is the sheet you take to the desk with the scissors. It
+**Cutting list**, in the album's header, is the sheet you take to the desk with the scissors. It
 answers the two questions that come up there: *what do I cut for this card*, and *how much stock does
 this album need*.
 
@@ -491,8 +539,8 @@ was printed reads as not in your stock too.
 
 ## Printed cards
 
-When a sheet has gone onto paper and into a binder, tell the album so. **Mark printed…** at the head
-of the Sheets list does the whole album; the ⋮ menu on a sheet does that one.
+When a sheet has gone onto paper and into a binder, tell the album so. **Mark printed…** in the album's
+header does every sheet not yet on paper; the ⋮ menu on a sheet does that one.
 
 **Downloading the PDF marks nothing.** A draft is generated to be looked at, and an album that froze
 itself the first time you previewed it would be a trap. Saying *these went onto paper* is its own
@@ -521,7 +569,8 @@ are shown on screen, before you print, and never go onto the paper.)
 
 ### What the album tells you afterwards
 
-**Printed cards** lists every card in the binder and what no longer matches it:
+The **Printed cards** tab lists every card in the binder and what no longer matches it — **Out of
+date** narrows it to the cards that differ:
 
 - **Stamps** — the checklist gained or lost a slot, or would now print in a different order;
 - **Size** — a box would now be cut to a different size, or from a different strip;
@@ -544,7 +593,7 @@ Both are on the card's ⋮ menu, and you choose per difference — there is no s
 
 **A continuation page.** The stamps that have joined since get a sheet of their own, with its own
 catalog range (`PL 306`), filed straight after the card they continue. Nothing renumbers, because
-nothing was ever numbered. Until you print it, the continuation sits in the Sheets list like any
+nothing was ever numbered. Until you print it, the continuation sits in the Sheets tab like any
 other unprinted sheet, and another stamp arriving in the meantime lands on it too.
 
 Note that until you ask for one, a stamp added to a printed checklist appears **nowhere** in the plan.
