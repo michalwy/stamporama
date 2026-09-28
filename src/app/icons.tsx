@@ -91,6 +91,7 @@ import {
   Map,
   MapPin,
   Maximize,
+  Maximize2,
   Menu,
   Merge,
   MessageSquare,
@@ -367,6 +368,9 @@ const GLYPHS = {
   zoomOut: ZoomOut,
   /** Back to the whole thing on screen at once. */
   zoomFit: Maximize,
+  /** The picture, with everything on it, taken into the large Measure and mark window (#1442). Not
+   * `zoomFit`, which changes the zoom inside the same panel: this changes the panel. */
+  enlarge: Maximize2,
   /** Measuring on a scan (#598) — the ruler. The perforation gauge beside it deliberately has no
    * glyph: there is no picture of a gauge that reads faster than the word, and `1:1` above is the
    * same judgement. `range` shares this glyph and means something else entirely (a declared range

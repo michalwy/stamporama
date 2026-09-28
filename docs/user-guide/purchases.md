@@ -703,6 +703,18 @@ card scan**, and the percentage picks up a dot while it is showing that. Once a 
 been swept by the retention setting there is nothing deeper to fetch, and the tile's own image is
 what you see; by then the card has been worked through and the close look is over.
 
+**Open it large when the panel is too small.** Wherever the tile sits in a column beside a form —
+while identifying it, in *Browse stamps*, in the condition step, in a series run or in a
+comparison — the last button in its toolbar opens the large **Measure and mark** window over the
+dialog you are in. It is the same viewer, as large as your browser window: everything you had on the
+tile goes with it — the side, the tool, the ruler or gauge line, your marks (and Undo), the
+resolution and tooth count on the measuring bar, the watermark view — and it opens at the same zoom,
+on the same part of the stamp. Close it (the × or **Esc**) and all of that comes back to the panel,
+including anything you measured or drew in the window. The dialog underneath stays exactly where it
+was. **Esc** in the window first takes back what is in it — the watermark view, the line, the tool —
+and closes the window last; it never closes the dialog underneath. A size taken with **Size** in the
+window is offered to the stamp's size in the form beside the panel straight away.
+
 **Switching front to back keeps the zoom and the position.** Telling a variant apart is a
 comparison, so flipping sides leaves you looking at the same part of the stamp at the same
 magnification rather than starting again from Fit.

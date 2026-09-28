@@ -9,6 +9,8 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
+import { DIALOG_MAX_HEIGHT, DIALOG_MAX_WIDTH, DialogShell } from "@/app/dialog-shell";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 // From the viewer module itself rather than `inventory/photo-thumb`, which re-exports it: that module
 // opens this viewer over a copy's photo (#1290), and importing back through it would close a cycle.
@@ -179,12 +181,26 @@ interface Props {
   /** A snapshot was saved (#674) — for a screen that shows the photos it just gained. */
   onSnapshotSaved?: () => void;
   /**
-   * The least height the picture keeps, however little room the surface around it leaves. 20rem by
-   * default, so a viewer sharing a panel with a form keeps a picture worth the name. The Measure and
-   * mark window passes `0` (#1388): the viewer *is* that window, whose height is the browser's, so on
-   * a short window it is the picture that gives way — never the toolbar or the readout under it.
+   * This viewer **is** the large Measure and mark window (#1388), not a panel beside a form.
+   *
+   * Two things follow. The picture keeps no least height: a viewer sharing a panel with a form keeps
+   * 20rem, a picture worth the name, but the window's height is the browser's, so on a short window
+   * it is the picture that gives way — never the toolbar or the readout under it. And there is no
+   * control to open the large window (#1442), since this is it.
    */
-  minPictureHeight?: string;
+  largeWindow?: boolean;
+  /**
+   * Everything on the picture as another instance of this viewer left it (#1442) — read once, when
+   * this one mounts, and never again. It is how the large window opens on the panel's work and how
+   * the panel takes the window's work back; see {@link ViewerState}.
+   */
+  carried?: ViewerState;
+  /** Every change to what {@link carried} holds, for the window that has to hand it back on closing
+   * (#1442). */
+  onStateChange?: (state: ViewerState) => void;
+  /** The large window opened over this panel, or closed again (#1442) — for a surface around the
+   * viewer that listens to the keyboard itself, which must leave the keys to the window meanwhile. */
+  onEnlargedChange?: (open: boolean) => void;
   /** For the alt text, which is the only place a tile's position is named on this side of the
    * dialog. */
   position: number;
@@ -303,13 +319,16 @@ export function IdentifiedPieceAside({
   const [openId, setOpenId] = useState<string | null>(null);
   const openedIndex = shown.findIndex((p) => p.tileId === openId);
   const opened = openedIndex === -1 ? null : shown[openedIndex];
+  /** The open piece's large window is up (#1442) — the arrows then belong to it: stepping to the next
+   * piece underneath would swap the picture the window is working on for another. */
+  const [enlarged, setEnlarged] = useState(false);
 
   // ‹ / › and the arrow keys, while one piece is open. Stepping *is* the comparison this panel
   // exists for — a run is told apart by flicking between two pieces at the same zoom, and going
   // back out to the grid to click the neighbour breaks that into three acts. Not while a field has
   // focus: the steps in front of this panel are forms, and ← / → are cursor keys inside them.
   useEffect(() => {
-    if (openedIndex === -1) return;
+    if (openedIndex === -1 || enlarged) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -326,7 +345,7 @@ export function IdentifiedPieceAside({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openedIndex, shown]);
+  }, [enlarged, openedIndex, shown]);
 
   if (shown.length === 0) return null;
   if (shown.length === 1) {
@@ -410,6 +429,7 @@ export function IdentifiedPieceAside({
           onGauge={onGauge}
           onTurn={onTurn ? (side, turn) => onTurn(opened.tileId, side, turn) : undefined}
           turning={turning}
+          onEnlargedChange={setEnlarged}
         />
       </div>
     );
@@ -710,6 +730,37 @@ interface Natural {
   height: number;
 }
 
+/**
+ * Everything on the picture that moves between a side panel and the large Measure and mark window
+ * (#1442) — both ways, so nothing is measured twice.
+ *
+ * **One viewer in two sizes**, and this is what makes it one: the window is this same component,
+ * mounted on what the panel held and handing it back when it closes. What is carried is the work —
+ * the side, the tool, the measuring line, the marks with their Undo, the stated scale and the tooth
+ * count, the watermark view — and the view: the zoom and the point at the centre of the viewport, by
+ * `resizeViewport`'s rule for a viewport that changed size (#1388). A panel that was fitted opens
+ * fitted, because *the whole picture* is what it was showing. What is not carried is a selection and
+ * a note half typed: the note is kept first, as reaching for another tool keeps it, and a selection
+ * is a click's worth of state. The marks' style is not carried because it is not per viewer at all
+ * (`useAnnotationStyle`).
+ */
+export interface ViewerState {
+  side: TileSideView["side"];
+  /** The picture the marks were placed on, so the receiving viewer knows they are its own. */
+  photoId: string | null;
+  view: Viewport;
+  /** The viewport `view` was taken in, which is what lets the receiver keep the centre. */
+  viewport: ViewportSize;
+  fitted: boolean;
+  tool: MeasureTool;
+  marks: { a: ScanPoint; b: ScanPoint } | null;
+  history: MarksHistory;
+  dpiText: string;
+  teethText: string;
+  teethSource: TeethSource;
+  watermark: { on: boolean; channel: WatermarkChannel; strength: number };
+}
+
 export function TileZoomView({
   collectionId,
   sides,
@@ -721,22 +772,31 @@ export function TileZoomView({
   subject = "tile",
   onSize,
   onSnapshotSaved,
-  minPictureHeight = "20rem",
+  largeWindow = false,
+  carried,
+  onStateChange,
+  onEnlargedChange,
 }: Props) {
   const noun = subject === "photo" ? "photo" : "tile";
-  const [sideKey, setSideKey] = useState(() => sides[0]?.side ?? "front");
+  const [sideKey, setSideKey] = useState(() => carried?.side ?? sides[0]?.side ?? "front");
   const current = sides.find((s) => s.side === sideKey) ?? sides[0];
   const [natural, setNatural] = useState<Record<string, Natural>>({});
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<ViewportSize>({ width: 0, height: 0 });
-  const [view, setView] = useState<Viewport>({ scale: 1, offsetX: 0, offsetY: 0 });
+  const [view, setView] = useState<Viewport>(
+    () => carried?.view ?? { scale: 1, offsetX: 0, offsetY: 0 }
+  );
   /** Whether the view is still the fitted one — what keeps **Fit** lit, and what tells a resize or a
    * flip whether to re-fit or to leave a chosen zoom alone. Held as a ref beside the state because
    * the resize observer fires outside React's render. */
-  const [fitted, setFitted] = useState(true);
-  const fittedRef = useRef(true);
+  const [fitted, setFitted] = useState(carried?.fitted ?? true);
+  const fittedRef = useRef(carried?.fitted ?? true);
   const [panning, setPanning] = useState(false);
+  /** The large Measure and mark window is open over this panel (#1442). The work is the window's
+   * meanwhile: this viewer leaves it the keyboard and reports no reading of its own, and takes
+   * everything back when the window closes. */
+  const [enlarged, setEnlarged] = useState(false);
 
   const measured = current ? natural[current.photoId] : undefined;
   /** How far the side on screen is turned from its box (#1006). The photo is already cut turned, so
@@ -802,7 +862,13 @@ export function TileZoomView({
   // window under a zoomed-in picture does not slide what was being read out of view.
   // A layout effect, so the fit lands in the same commit as the measurement above rather than a
   // painted frame later.
-  const laidOutRef = useRef<ViewportSize>({ width: 0, height: 0 });
+  //
+  // A view carried from another viewer (#1442) is the same case: a view taken in a viewport of
+  // another size. So the carried viewport stands as the one last laid out, and the first layout
+  // here — or the one after the window hands its view back, which `carriedAt` asks for — moves it
+  // across by the rule above.
+  const laidOutRef = useRef<ViewportSize>(carried?.viewport ?? { width: 0, height: 0 });
+  const [carriedAt, setCarriedAt] = useState(0);
   useLayoutEffect(() => {
     if (!ready) return;
     const picture = { width: pictureWidth, height: pictureHeight };
@@ -811,7 +877,7 @@ export function TileZoomView({
     setView((v) =>
       fittedRef.current ? fitViewport(picture, size) : resizeViewport(v, picture, from, size)
     );
-  }, [pictureWidth, pictureHeight, ready, size]);
+  }, [pictureWidth, pictureHeight, ready, size, carriedAt]);
 
   const zoomStep = useCallback(
     (factor: number, anchor?: { x: number; y: number }) => {
@@ -856,8 +922,10 @@ export function TileZoomView({
   }, [markFitted, pictureHeight, pictureWidth, ready, size]);
 
   // The same keys as the editor, so the two surfaces are one habit. Not while a field has focus —
-  // the settled tile's note is a textarea, and `-` is a character in it.
+  // the settled tile's note is a textarea, and `-` is a character in it. Not while the large window
+  // is open over this panel either (#1442): the keys are the window's then.
   useEffect(() => {
+    if (enlarged) return;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -874,14 +942,14 @@ export function TileZoomView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fit, zoomStep]);
+  }, [enlarged, fit, zoomStep]);
 
   // ── Measuring (#598) ────────────────────────────────────────────────────────────────────────
 
   /** Off, or one of the two tools. Off is the resting state and stays it: the viewer's plain drag
    * is the hand, and a surface that started out measuring would make every look-at-a-stamp begin
    * by putting a tool down. */
-  const [chosenTool, setChosenTool] = useState<MeasureTool>("off");
+  const [chosenTool, setChosenTool] = useState<MeasureTool>(carried?.tool ?? "off");
   /** …and what is actually down. Derived rather than corrected after the fact: a side with no box
    * cannot be measured at all, and forcing the choice back to `off` from an effect would let one
    * render happen with a tool down over a side that has no scan geometry. */
@@ -892,7 +960,9 @@ export function TileZoomView({
 
   /** The two marks, in the picture's own **scan** pixels — the coordinate space every number here
    * is taken in, and the reason a reading does not change when the zoom does. */
-  const [marks, setMarks] = useState<{ a: ScanPoint; b: ScanPoint } | null>(null);
+  const [marks, setMarks] = useState<{ a: ScanPoint; b: ScanPoint } | null>(
+    carried?.marks ?? null
+  );
   /** The picture the marks were placed on. A turn (#1006) hands this view a **new** photo in a new
    * frame, where the old marks would lie across somewhere else — so they go, adjusted while rendering
    * rather than in an effect, which would draw them over the turned picture for a frame first. */
@@ -901,7 +971,7 @@ export function TileZoomView({
    * change to them kept for **Undo**. They stay until cleared — a detail is usually ringed and then
    * given a line or a note beside it — and they belong to the picture they were drawn on, so they go
    * with it exactly as the measuring marks do. */
-  const [history, setHistory] = useState<MarksHistory>(NO_MARKS);
+  const [history, setHistory] = useState<MarksHistory>(carried?.history ?? NO_MARKS);
   const annotations = history.marks;
   /** A note being typed (#1300). Held in a ref beside the state: it is finished from a blur, a key and a
    * click, which can arrive in one turn, and only the first of them may keep it. */
@@ -965,7 +1035,7 @@ export function TileZoomView({
   /** The stated scale, as typed. Prefilled from the collection and **never written back**: a card
    * scanned at 600 measured once is a fact about that card, not a new assumption for every later
    * measurement. Changing what the collection assumes is a Settings act. */
-  const [dpiText, setDpiText] = useState(String(scanDpi));
+  const [dpiText, setDpiText] = useState(carried?.dpiText ?? String(scanDpi));
   const dpi = parseScanDpi(dpiText);
 
   /**
@@ -981,8 +1051,8 @@ export function TileZoomView({
    * The field stays the authority. Counting fills it, typing takes it back, and nothing downstream
    * knows or cares which happened.
    */
-  const [teethText, setTeethText] = useState("10");
-  const [teethSource, setTeethSource] = useState<TeethSource>("typed");
+  const [teethText, setTeethText] = useState(carried?.teethText ?? "10");
+  const [teethSource, setTeethSource] = useState<TeethSource>(carried?.teethSource ?? "typed");
   const teeth = parseToothCount(teethText);
 
   /** Space is the hand tool while a measuring tool is down, exactly as in the cut editor — one
@@ -1014,7 +1084,7 @@ export function TileZoomView({
   };
 
   useEffect(() => {
-    if (!measuring) return;
+    if (!measuring || enlarged) return;
     const down = (e: KeyboardEvent) => {
       // A space typed into a note is a space, not the hand.
       const target = e.target as HTMLElement | null;
@@ -1033,7 +1103,7 @@ export function TileZoomView({
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, [measuring]);
+  }, [enlarged, measuring]);
 
   // Escape clears the line, and then puts the tool down — before it reaches the dialog. The layer
   // is pushed when the tool comes out, which is after the dialog registered its own, so this is the
@@ -1230,10 +1300,13 @@ export function TileZoomView({
    * where a collector has no way to judge a number and every value that helps is inside the window
    * already chosen.
    */
-  const [chosenWatermark, setChosenWatermark] = useState(false);
-  const [watermarkChannel, setWatermarkChannel] =
-    useState<WatermarkChannel>(DEFAULT_WATERMARK_CHANNEL);
-  const [watermarkStrength, setWatermarkStrength] = useState(DEFAULT_WATERMARK_STRENGTH);
+  const [chosenWatermark, setChosenWatermark] = useState(carried?.watermark.on ?? false);
+  const [watermarkChannel, setWatermarkChannel] = useState<WatermarkChannel>(
+    carried?.watermark.channel ?? DEFAULT_WATERMARK_CHANNEL
+  );
+  const [watermarkStrength, setWatermarkStrength] = useState(
+    carried?.watermark.strength ?? DEFAULT_WATERMARK_STRENGTH
+  );
   const watermarkOn = canMeasure && chosenWatermark;
 
   // Escape puts the filter away, and it is the topmost layer while it is down — so the order over a
@@ -1391,7 +1464,12 @@ export function TileZoomView({
    * is a copy that can be stale — which for a number quoted as a measurement is not a bug worth
    * risking to save an arithmetic. */
   const reading = describeReading({ tool, marks, dpi, teeth, noun });
-  const gauge = reading.gauge ?? null;
+  /** Whether this viewer's figures are the ones standing (#1442). While the large window is open over
+   * the panel the window is the one measuring, and a second voice reporting the panel's older reading
+   * beside it would be two figures for one piece; the window reports through the same channels, and
+   * when it closes it clears them and this viewer, holding the window's work, reports again. */
+  const reporting = !enlarged;
+  const gauge = reporting ? (reading.gauge ?? null) : null;
 
   // Hand the figure to whoever asked for it (#740). Above the `current` guard because it is a hook,
   // and split in two so that the unmount — the loupe closing back to the grid, the dialog moving to
@@ -1407,7 +1485,7 @@ export function TileZoomView({
   // otherwise. Hooks, so they sit above the `current` guard with the gauge's.
   //
   // The **measured** figure is the size tool's reading and exists only while one stands.
-  usePublishSizeProposal("measured", reading.size ?? null, dpi);
+  usePublishSizeProposal("measured", reporting ? (reading.size ?? null) : null, dpi);
   // The **estimate** is the tile's own crop box divided by the stated scale, and it is always
   // there: the box was cut by #574's detector or by hand in the cut editor, and either way it is
   // the stamp plus whatever slack the cut carried. Good enough to propose, never good enough to
@@ -1419,12 +1497,12 @@ export function TileZoomView({
     const upright = isSideways(turn) ? { ...box, w: box.h, h: box.w } : box;
     return sizeFromScanPixels(upright, dpi, MM_PER_INCH);
   }, [box, dpi, turn]);
-  usePublishSizeProposal("estimated", cropSize, dpi);
+  usePublishSizeProposal("estimated", reporting ? cropSize : null, dpi);
 
   // The size on the bar, for a caller that writes one (#1290) — split like the gauge's, so the viewer
   // closing takes the figure with it.
-  const sizeWidth = reading.size?.widthMm ?? null;
-  const sizeHeight = reading.size?.heightMm ?? null;
+  const sizeWidth = reporting ? (reading.size?.widthMm ?? null) : null;
+  const sizeHeight = reporting ? (reading.size?.heightMm ?? null) : null;
   useEffect(() => {
     onSize?.(
       sizeWidth === null || sizeHeight === null || dpi === null
@@ -1441,6 +1519,71 @@ export function TileZoomView({
     marks: SnapshotMark[];
     viewScale: number;
   } | null>(null);
+
+  // ── The large window (#1442) ────────────────────────────────────────────────────────────────
+
+  /** What this viewer holds, to be carried into the large window or back out of it. A count still
+   * running is carried as the figure in the field: the count lands on the viewer that started it. */
+  const viewerState = (): ViewerState => ({
+    side: current?.side ?? sideKey,
+    photoId: current?.photoId ?? null,
+    view,
+    viewport: size,
+    fitted,
+    tool: chosenTool,
+    marks,
+    history,
+    dpiText,
+    teethText,
+    teethSource: teethSource === "counting" ? "typed" : teethSource,
+    watermark: { on: chosenWatermark, channel: watermarkChannel, strength: watermarkStrength },
+  });
+
+  // Every change, for the window that has to hand it all back when it closes. Without dependencies:
+  // the state is most of this component, and listing it would be listing the component.
+  useEffect(() => {
+    onStateChange?.(viewerState());
+  });
+
+  // Split like the gauge's, so a viewer unmounted with the window open does not leave the surface
+  // around it waiting for a window that is gone.
+  useEffect(() => {
+    onEnlargedChange?.(enlarged);
+  }, [enlarged, onEnlargedChange]);
+  useEffect(() => () => onEnlargedChange?.(false), [onEnlargedChange]);
+
+  /** Open the large window on this panel's work. A note being typed is kept first, as reaching for
+   * another tool keeps it; the window reads the panel as the render after this one leaves it. */
+  const enlarge = () => {
+    finishNote(true);
+    setSelected(null);
+    setSpaceHeld(false);
+    setEnlarged(true);
+  };
+
+  /** The window closed: everything it held becomes this panel's, the view moved across into this
+   * viewport by the same rule that carried it out (`carriedAt`). */
+  const takeBack = (state: ViewerState) => {
+    setEnlarged(false);
+    setSideKey(state.side);
+    setMarksOn(state.photoId);
+    setMarks(state.marks);
+    markedRef.current = state.marks;
+    setHistory(state.history);
+    editNote(null);
+    setSelected(null);
+    setChosenTool(state.tool);
+    setDpiText(state.dpiText);
+    setTeethText(state.teethText);
+    setTeethSource(state.teethSource);
+    setChosenWatermark(state.watermark.on);
+    setWatermarkChannel(state.watermark.channel);
+    setWatermarkStrength(state.watermark.strength);
+    markFitted(state.fitted);
+    laidOutRef.current = state.viewport;
+    setView(state.view);
+    setCarriedAt((n) => n + 1);
+  };
 
   if (!current) return null;
 
@@ -1648,10 +1791,24 @@ export function TileZoomView({
           active={!fitted && atActualSize}
           onClick={actualSize}
         />
+        {/* The large window (#1442), last in the bar and beside the zoom, since what it gives is the
+            same thing the zoom gives — a closer look — in a larger frame. Absent on the window
+            itself. */}
+        {!largeWindow && (
+          <ScanToolButton
+            icon="enlarge"
+            label=""
+            hint="Open in the large Measure and mark window, over this dialog — the marks, the reading, the scale and the zoom go with it and come back when it closes"
+            onClick={enlarge}
+          />
+        )}
       </div>
 
       <div
         ref={viewportRef}
+        // The window's first focus (#1442): the shell would otherwise put it in the first field, and
+        // with a tool carried in that is the scale — where `+`, `−` and `0` are typed, not zoomed.
+        {...(largeWindow ? { "data-autofocus": true, tabIndex: -1 } : {})}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPan}
@@ -1667,7 +1824,7 @@ export function TileZoomView({
         }}
         style={{
           flex: 1,
-          minHeight: minPictureHeight,
+          minHeight: largeWindow ? "0" : "20rem",
           position: "relative",
           overflow: "hidden",
           borderRadius: "0.375rem",
@@ -1676,6 +1833,7 @@ export function TileZoomView({
           cursor: panning ? "grabbing" : handDrag ? "grab" : tool === "text" ? "text" : "crosshair",
           userSelect: "none",
           touchAction: "none",
+          outline: "none",
         }}
       >
         <div
@@ -2123,8 +2281,105 @@ export function TileZoomView({
           }}
         />
       )}
+
+      {enlarged && (
+        <MeasureWindow
+          title={subject === "photo" ? current.label : `Tile ${position + 1} — Measure and mark`}
+          carried={viewerState()}
+          onClose={takeBack}
+          collectionId={collectionId}
+          sides={sides}
+          subject={subject}
+          position={position}
+          scanDpi={scanDpi}
+          onGauge={onGauge}
+          onSize={onSize}
+          onSnapshotSaved={onSnapshotSaved}
+          onTurn={onTurn}
+          turning={turning}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * The large Measure and mark window (#1388) opened over a side panel (#1442): this viewer again, the
+ * size of the browser, on top of whatever dialog the panel is in.
+ *
+ * **The dialog underneath stays open and untouched.** The window is one more layer: it is portalled
+ * to the page, because the panel it is opened from sits inside a dialog whose `transform` would
+ * otherwise lay it out inside that dialog (the snapshot dialog's reason), and it paints above the
+ * identification chain's dialogs and below the snapshot dialog it can itself open.
+ *
+ * **Escape closes the window last — after what is inside it.** A layer is pushed when it mounts,
+ * and effects run child first, so the shell's own layer would land *above* a tool carried in with
+ * the viewer, and the first Escape would close the window rather than put down the line the
+ * collector was placing. So the shell takes no layer of its own and the window's is pushed by
+ * {@link WindowEscape}, a sibling mounted **before** the shell — siblings' effects run in order, so
+ * it is under everything the viewer registers. Each Escape then takes back one thing — the
+ * watermark, the marks, the tool, and then the window — exactly as in the panel. The price is the
+ * backdrop: a shell without a layer does not close on a click beside it either, which on a surface
+ * drawn on to its edges is no loss.
+ *
+ * Whatever the viewer holds when the window closes goes back to the panel, however it is closed.
+ * The readings go through the same channels the panel uses, so a size taken here is offered to the
+ * stamp form beside the panel while the window is still open.
+ */
+function MeasureWindow({
+  title,
+  carried,
+  onClose,
+  ...viewer
+}: Omit<Props, "largeWindow" | "carried" | "onStateChange" | "onEnlargedChange"> & {
+  title: string;
+  carried: ViewerState;
+  onClose: (state: ViewerState) => void;
+}) {
+  const latest = useRef(carried);
+  const close = () => onClose(latest.current);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <>
+      <WindowEscape onEscape={close} />
+      <DialogShell
+        title={title}
+        onClose={close}
+        maxWidth={DIALOG_MAX_WIDTH}
+        height={DIALOG_MAX_HEIGHT}
+        zIndexBase={250}
+        dismissable={false}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            padding: "1rem 1.25rem",
+          }}
+        >
+          <TileZoomView
+            {...viewer}
+            largeWindow
+            carried={carried}
+            onStateChange={(state) => {
+              latest.current = state;
+            }}
+          />
+        </div>
+      </DialogShell>
+    </>,
+    document.body
+  );
+}
+
+/** The large window's Escape layer, on its own so that it can be mounted ahead of the viewer — see
+ * {@link MeasureWindow}. */
+function WindowEscape({ onEscape }: { onEscape: () => void }) {
+  useEscapeLayer(onEscape);
+  return null;
 }
 
 /** The palette entry a style names — the colour a note is typed in. */

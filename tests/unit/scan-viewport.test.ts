@@ -123,6 +123,24 @@ describe("resizeViewport", () => {
     const corner = { scale: 1, offsetX: 0, offsetY: 0 };
     assert.deepEqual(resizeViewport(corner, CARD, SIZE, BIG), corner);
   });
+
+  // #1442: a side panel's view carried into the large Measure and mark window and back is the same
+  // move twice — so the panel gets back the zoom and the point it was showing, not a drifted copy.
+  it("comes back unchanged from a larger viewport and back again", () => {
+    const panel = { width: 360, height: 420 };
+    const window = { width: 1840, height: 1000 };
+    const inPanel = zoomTo(fitViewport(CARD, panel), 0.4, { x: 180, y: 210 }, CARD, panel);
+    const inWindow = resizeViewport(inPanel, CARD, panel, window);
+    const centre = toSheetPoint(inPanel, panel.width / 2, panel.height / 2);
+    const shown = toSheetPoint(inWindow, window.width / 2, window.height / 2);
+    assert.equal(inWindow.scale, inPanel.scale);
+    assert.ok(Math.abs(shown.x - centre.x) < 1e-9);
+    assert.ok(Math.abs(shown.y - centre.y) < 1e-9);
+    const back = resizeViewport(inWindow, CARD, window, panel);
+    assert.equal(back.scale, inPanel.scale);
+    assert.ok(Math.abs(back.offsetX - inPanel.offsetX) < 1e-9);
+    assert.ok(Math.abs(back.offsetY - inPanel.offsetY) < 1e-9);
+  });
 });
 
 describe("regionRequest", () => {
