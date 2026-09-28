@@ -97,6 +97,11 @@ What makes it different is only what a purchase has and it does not:
   currency. Leave the field blank when it has none; a blank field is *no value*, which is not the
   same as `0`.
 
+It is **marked completed** exactly as a purchase is, once its sorting is done — see
+[Marking an order completed](#marking-an-order-completed). Where a purchase has its delivery status
+in the header, an opening balance has a small **In progress** / **Completed** control, and nothing
+else: it never becomes *Preparing*, *In transit* or *Arrived*.
+
 A lot **closes and reopens as a purchase lot does**:
 
 - A lot **with** an opening value is split across its copies by their primary-catalogue prices, and
@@ -176,18 +181,20 @@ short summary of its lines (how many **lots** and **expenses**), and the **total
 of every lot, every expense, and the shipping cost, shown in the purchase's currency. A
 freshly recorded purchase shows *0 lots* until you add its lines during intake.
 
-An opening balance shows its **title**, the **date**, an *Opening balance* mark, how many **lots**
-it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
+An opening balance shows its **title**, the **date**, an *Opening balance* mark (and a *Completed*
+one once it is marked completed), how many **lots** it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
 opening value* rather than `0.00`, and when only some do, a chip says how many lots have none.
 
 - **Filter** by type with the *Purchases* / *Trades* / *Opening balances* toggles. *Purchases* are
   the orders you recorded or settled from an auction; *Trades* are the orders closing a trade
   created.
-- **Filter** by delivery status with the *Preparing* / *In transit* / *Arrived* / *Completed*
+- **Filter** by status with the *Preparing* / *In transit* / *Arrived* / *Completed*
   toggles. *Arrived* shows only the orders still being sorted — a completed one is under
   *Completed* alone — so *Arrived* is the list of parcels that still need work. A delivery status
-  belongs to a purchase alone, so these never show an opening balance, and they are not offered
-  while *Opening balances* is selected.
+  belongs to a purchase alone, so *Preparing*, *In transit* and *Arrived* never show an opening
+  balance, and they are not offered while *Opening balances* is selected. **Completed** shows both
+  kinds — every purchase and every opening balance marked completed — and stays on offer under
+  *Opening balances*, where it lists the finished ones.
 - **Filter** by platform and by supplier. Each takes several at once, and each has a *No platform* /
   *No supplier* option for documents recorded without one. An opening balance has neither, so it
   shows under *No platform* and *No supplier* and never under a named one. The supplier filter has a
@@ -2131,6 +2138,12 @@ the paper catalogue is still open at the stamp. A copy priced there is never amo
 Sorting a parcel takes days after it arrives, and when it is done, mark the order **Completed**.
 That is what keeps the list's *Arrived* filter down to the parcels still being worked — a completed
 order is found under *Completed* instead.
+
+An **opening balance** is marked completed the same way — cataloguing a whole stockbook can take
+weeks too. Everything below applies to it, with two differences in wording: its header control reads
+**In progress** / **Completed** rather than a delivery status, and moving it back means choosing
+**In progress**. The list's *Completed* filter finds completed opening balances beside completed
+purchases.
 
 The order screen suggests it. Once **nothing is left** — no copy *to sort*, no scan tile still
 unidentified or set aside, and every lot closed — a **Mark completed** button appears in the header

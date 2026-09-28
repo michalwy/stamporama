@@ -29,7 +29,8 @@ import { isPurchaseStatus, type PurchaseStatus } from "./purchase-status";
 // A `Purchase` row is also the **opening balance** (#1323, ADR-0054): the same document with a
 // `kind` of `opening_balance`, a required free `title`, and none of a purchase's own fields — no
 // supplier, platform or shipping, and no delivery status of its own (stored `arrived`, since its
-// copies are in hand from the start). The kind is fixed at creation.
+// copies are in hand from the start, and `completed` once marked finished — #1461). The kind is fixed
+// at creation.
 //
 // All access is collection-owner-scoped; the checks live here, server-side.
 
@@ -143,7 +144,8 @@ export interface PurchaseListFilters {
   offset?: number;
   /** The document type (#1323). */
   type?: IntakeDocumentType;
-  /** Delivery status — a purchase's alone, so it narrows to purchases (an opening balance has none). */
+  /** Status. A delivery status narrows to purchases (an opening balance has none); *Completed* is
+   *  the one an opening balance shares, so it answers for both kinds (#1461). */
   status?: PurchaseStatus;
   contactId?: string;
   /** Platforms (#1392), any of them — {@link INTAKE_PARTY_NONE} for documents recorded without one,
@@ -333,9 +335,7 @@ function buildPurchaseListWhere(
     collectionId,
     AND: [
       filters.type ? documentTypeWhere(filters.type) : {},
-      // A delivery status is a purchase's own: an opening balance is stored `arrived` and shows no
-      // status, so it must not answer the *Arrived* chip (#1323).
-      filters.status ? { status: filters.status, kind: "purchase" } : {},
+      filters.status ? statusWhere(filters.status) : {},
       filters.kind ? { kind: filters.kind } : {},
       partyWhere("platformId", filters.platformIds),
       partyWhere("contactId", filters.supplierIds),
@@ -355,6 +355,16 @@ function buildPurchaseListWhere(
  * answers *none* and never a named party, which is what the issue asks for without a word here
  * about kinds.
  */
+/**
+ * The status filter. A delivery status is a purchase's own: an opening balance is stored `arrived`
+ * and shows no status, so it must not answer the *Arrived* chip (#1323). *Completed* is the
+ * exception — an opening balance is marked completed exactly as a purchase is, and the one filter
+ * finds every finished document of both kinds (#1461).
+ */
+function statusWhere(status: PurchaseStatus): Prisma.PurchaseWhereInput {
+  return status === "completed" ? { status } : { status, kind: "purchase" };
+}
+
 function partyWhere(
   field: "platformId" | "contactId",
   ids: readonly string[] | undefined
@@ -503,6 +513,9 @@ export async function createPurchase(
         collectionId,
         purchaseNo: await allocateEntityNumber(tx, collectionId, "purchase"),
         kind,
+        // An opening balance's copies are in hand from the start (#1323); `resolveHeader` leaves
+        // its status out, so the one write that sets it is this one.
+        ...(kind === "opening_balance" ? { status: "arrived" satisfies PurchaseStatus } : {}),
         ...header,
         // No line items here — lots and expenses are created during intake (#121).
       },
@@ -516,8 +529,10 @@ export async function createPurchase(
 /**
  * The header columns a create or an edit writes, for the document's kind. A purchase resolves its
  * supplier and platform and keeps its shipping and status; an **opening balance** writes its title
- * and nulls every purchase-only field — whatever the form sent — with its status held at `arrived`,
- * so the CHECK `purchase_kind_shape` is met by construction rather than by a caller remembering it.
+ * and nulls every purchase-only field — whatever the form sent — so the CHECK `purchase_kind_shape`
+ * is met by construction rather than by a caller remembering it. **Its status is not a header
+ * field**: it is `arrived` from creation ({@link createPurchase}) and moves only through the
+ * completion doors below, so an edit leaves a completed opening balance completed (#1461).
  */
 async function resolveHeader(
   collectionId: string,
@@ -539,7 +554,6 @@ async function resolveHeader(
       currency,
       fxRateToBase,
       shippingCost: null,
-      status: "arrived" satisfies PurchaseStatus,
     };
   }
 
@@ -613,13 +627,18 @@ export async function setPurchaseStatus(
  * completing an order that has not arrived would skip what arriving does to its copies. Anything
  * still outstanding (copies to sort, tiles, open lots) is the screen's to state and never a refusal
  * here: the collector may leave a doubtful piece for later on purpose. Nothing is locked by it.
+ *
+ * An **opening balance** is marked completed through the same door (#1461): it is stored `arrived`
+ * from creation, so the one rule — only from *Arrived* — holds for it without a branch. It gains no
+ * delivery status; `setPurchaseStatus` and `markPurchaseArrived` still refuse one.
  */
 export async function markPurchaseCompleted(ownerId: string, purchaseId: string): Promise<void> {
   await moveCompletion(ownerId, purchaseId, "arrived", "completed", "Only an arrived order can be marked completed.");
 }
 
 /** Move a completed purchase back to **Arrived** (#1449) — a bare status write: a completed order
- * has already been through arrival, so there are no copies for it to move. */
+ * has already been through arrival, so there are no copies for it to move. On an opening balance
+ * this is *back in progress* (#1461). */
 export async function reopenCompletedPurchase(ownerId: string, purchaseId: string): Promise<void> {
   await moveCompletion(ownerId, purchaseId, "completed", "arrived", "This order is not completed.");
 }
@@ -631,10 +650,7 @@ async function moveCompletion(
   to: PurchaseStatus,
   refusal: string
 ): Promise<void> {
-  const { kind } = await assertPurchaseOwner(ownerId, purchaseId);
-  if (kind === "opening_balance") {
-    throw new Error("An opening balance has no delivery status.");
-  }
+  await assertPurchaseOwner(ownerId, purchaseId);
   // Conditional on the status it moves from, so two tabs cannot complete an order that one of
   // them has just sent back in transit.
   const { count } = await prisma.purchase.updateMany({

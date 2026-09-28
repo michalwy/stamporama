@@ -149,3 +149,28 @@ The collector retired it and carried its work over (2026-09-16):
   behind it from an unvalued lot — reads *not applicable* rather than *not worked out yet*.
 - **Card scans is retired (#1326)** — see §8.
 - The quick jump's `p` sequence is shared: an opening balance takes the next purchase number.
+
+## Addendum: an opening balance can be marked completed (#1461)
+
+An opening balance goes through the same intake work as a purchase — scans, identification, *to
+sort*, Store — often over weeks for a whole stockbook, and once ADR-0009's *Completed* addendum
+(#1449) let a purchase be marked finished, opening balances in progress and finished ones were the
+only documents on the list that looked alike. The collector settled on 2026-09-28 that it can be
+marked completed too.
+
+- **The mark is the purchase's `completed` status, not a column of its own.** The status stored
+  `arrived` above was chosen because it is the fact every reader asks; `completed` answers that
+  question the same way (`hasPurchaseArrived`), so intake, the lock-nothing rule and the list's
+  filter carry over with no branch. Migration `20260929130000_opening_balance_completed` widens
+  `purchase_kind_shape` from `status = 'arrived'` to `status IN ('arrived', 'completed')`.
+- **It gains no delivery status.** Setting a status and marking one arrived are still refused, and
+  the CHECK still refuses `preparing` and `in_transit`. The screen calls the two states *In progress*
+  and *Completed*; the doors are the purchase's own (`markPurchaseCompleted`,
+  `reopenCompletedPurchase`), suggested and allowed with work left exactly as #1449 describes.
+- **The status is no longer a header field for an opening balance.** It is written `arrived` at
+  creation and moved only through those doors, so a header edit leaves a completed one completed
+  rather than writing `arrived` back over it.
+- **The list's *Completed* status filter answers for both kinds**, and is the one status offered
+  while *Opening balances* is the type; the delivery statuses still list purchases only. The issue
+  proposed a separate *completed / in progress* filter across both kinds; the collector chose this
+  instead (2026-09-28), so there is no filter for *in progress* across both kinds.

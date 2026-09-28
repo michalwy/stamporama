@@ -78,8 +78,8 @@ export function useIntakeView(
   );
 
   const setView = useCallback(
-    (patch: Partial<IntakeView>) => updateParams(intakeViewUpdatesFor(patch)),
-    [updateParams]
+    (patch: Partial<IntakeView>) => updateParams(intakeViewUpdatesFor(patch, view)),
+    [updateParams, view]
   );
 
   const clearFilters = useCallback(() => updateParams(intakeViewClearUpdates()), [updateParams]);

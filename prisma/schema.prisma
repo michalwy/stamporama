@@ -3461,8 +3461,9 @@ model Purchase {
   fxRateToBase Decimal?
   // Shared cost (shipping/handling) distributed across all lines by price (ADR-0009 §3).
   shippingCost Decimal? @db.Decimal(10, 2)
-  // Physical delivery status of the shipment: preparing | in_transit | arrived. Always `arrived` on
-  // an opening balance, whose copies are in hand from the start and which shows no status (#1323).
+  // Physical delivery status of the shipment: preparing | in_transit | arrived | completed (#1449).
+  // An opening balance has no delivery status (#1323): its copies are in hand from the start, so it
+  // is `arrived` while being worked and `completed` once the collector marks it finished (#1461).
   status       String   @default("preparing")
   // Which intake document this is (#1323, ADR-0054): `purchase` | `opening_balance`, closed in
   // `src/lib/purchase-kind.ts` rather than in the database. An opening balance brings copies in

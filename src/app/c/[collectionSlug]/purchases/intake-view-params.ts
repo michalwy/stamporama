@@ -9,8 +9,10 @@
 // button and a copied link all agree with what is on screen (#844).
 //
 // **One setting constrains another.** A delivery status is a purchase's own (#1323): while only
-// opening balances are listed there is nothing for it to filter, so the status toggles are not
-// drawn. A remembered status must not survive that silently — it would be a filter in force with
+// opening balances are listed there is nothing for it to filter, so those toggles are not drawn.
+// *Completed* is the exception — an opening balance is marked completed as a purchase is, and the
+// one toggle finds both kinds (#1461) — so it is the only status offered under *Opening balances*.
+// A remembered delivery status must not survive that silently — it would be a filter in force with
 // no control on screen to show it or switch it off. So {@link resolveIntakeView} drops it on the
 // way in, whatever the address or the memory says, and {@link intakeViewUpdatesFor} clears it on
 // the way out when *Opening balances* is picked, so it does not come back when the type is
@@ -23,13 +25,13 @@ import {
   type IntakeDocumentType,
 } from "@/lib/purchase-kind";
 import type { PurchaseSortBy } from "@/lib/purchases";
-import { isPurchaseStatus, type PurchaseStatus } from "@/lib/purchase-status";
+import { isPurchaseStatus, PURCHASE_STATUSES, type PurchaseStatus } from "@/lib/purchase-status";
 
 /** Everything the toolbar over the Intake documents list decides. */
 export interface IntakeView {
   /** One document type, or every type. */
   type?: IntakeDocumentType;
-  /** One delivery status, or every status. Never set while `type` is `opening_balance`. */
+  /** One status, or every status. Only *Completed* while `type` is `opening_balance` (#1461). */
   status?: PurchaseStatus;
   /** Platform ids, {@link INTAKE_PARTY_NONE} among them for *No platform*. Empty is every platform. */
   platforms: string[];
@@ -95,8 +97,10 @@ export function resolveIntakeView(readParam: (key: string) => string | null): In
   const sortRaw = readParam(VIEW_PARAM.sortBy) ?? "";
   return {
     type,
-    // A purchase's field, and there are no purchases on screen — the note at the top.
-    status: type !== "opening_balance" && isPurchaseStatus(statusRaw) ? statusRaw : undefined,
+    // A delivery status is a purchase's field, and there may be no purchases on screen — the note
+    // at the top.
+    status:
+      isPurchaseStatus(statusRaw) && intakeViewAllowsStatus(type, statusRaw) ? statusRaw : undefined,
     platforms: parseIntakePartyIds(readParam(VIEW_PARAM.platforms)),
     suppliers: parseIntakePartyIds(readParam(VIEW_PARAM.suppliers)),
     sortBy: INTAKE_SORTS.includes(sortRaw as PurchaseSortBy)
@@ -106,9 +110,29 @@ export function resolveIntakeView(readParam: (key: string) => string | null): In
   };
 }
 
-/** Whether the status toggles are offered, and a status can be in force, for this type. */
-export function intakeViewOffersStatus(type: IntakeDocumentType | undefined): boolean {
-  return type !== "opening_balance";
+/** The one status an opening balance has to filter by (#1461): it has no delivery status, but is
+ *  marked completed as a purchase is. */
+const OPENING_BALANCE_STATUSES: readonly PurchaseStatus[] = ["completed"];
+
+/** The status toggles offered, and so the statuses that can be in force, for this type. */
+export function intakeViewStatusesFor(
+  type: IntakeDocumentType | undefined
+): readonly PurchaseStatus[] {
+  return type === "opening_balance" ? OPENING_BALANCE_STATUSES : PURCHASE_STATUSES;
+}
+
+/** Whether `status` can be in force while `type` is listed. */
+export function intakeViewAllowsStatus(
+  type: IntakeDocumentType | undefined,
+  status: PurchaseStatus
+): boolean {
+  return intakeViewStatusesFor(type).includes(status);
+}
+
+/** Whether this type narrows the status toggles — a status the address or a press carries may then
+ *  be one the screen cannot apply. */
+function narrowsStatuses(type: IntakeDocumentType | undefined): boolean {
+  return intakeViewStatusesFor(type).length < PURCHASE_STATUSES.length;
 }
 
 /**
@@ -142,16 +166,23 @@ function serialize(key: keyof IntakeView, view: Partial<IntakeView>): string {
  * `updateParams` funnel takes, where `""` deletes.
  *
  * **Only the keys named are written**, so a press says what it changed and nothing else. The one
- * addition is the rule at the top of this file: picking *Opening balances* takes the status with it,
- * in the same write.
+ * addition is the rule at the top of this file: picking *Opening balances* takes a delivery status
+ * with it, in the same write — and keeps *Completed*, which applies there too (#1461). `current` is
+ * the view in force, which says which one it is; without it the status is cleared.
  */
-export function intakeViewUpdatesFor(patch: Partial<IntakeView>): Record<string, string> {
+export function intakeViewUpdatesFor(
+  patch: Partial<IntakeView>,
+  current?: IntakeView
+): Record<string, string> {
   const updates: Record<string, string> = {};
   for (const key of VIEW_KEYS) {
     if (!(key in patch)) continue;
     updates[VIEW_PARAM[key]] = serialize(key, patch);
   }
-  if ("type" in patch && !intakeViewOffersStatus(patch.type)) updates[VIEW_PARAM.status] = "";
+  if ("type" in patch && !("status" in patch) && narrowsStatuses(patch.type)) {
+    const kept = current?.status;
+    if (!kept || !intakeViewAllowsStatus(patch.type, kept)) updates[VIEW_PARAM.status] = "";
+  }
   return updates;
 }
 
@@ -202,7 +233,8 @@ export function intakeViewClearUpdates(): Record<string, string> {
  * keeps a clean address.
  *
  * The one deletion it makes is a status the address names while it cannot be in force (the note at
- * the top): left there, a copied link would carry a filter the screen is not applying.
+ * the top): left there, a copied link would carry a filter the screen is not applying. *Completed*
+ * under *Opening balances* is in force, so it stays.
  */
 export function intakeViewUrlUpdates(
   view: IntakeView,
@@ -214,7 +246,8 @@ export function intakeViewUrlUpdates(
     const value = serialize(key, view);
     if (value && (urlValue(param) ?? "") !== value) updates[param] = value;
   }
-  if (!intakeViewOffersStatus(view.type) && urlValue(VIEW_PARAM.status) !== null) {
+  const urlStatus = urlValue(VIEW_PARAM.status);
+  if (narrowsStatuses(view.type) && urlStatus !== null && urlStatus !== view.status) {
     updates[VIEW_PARAM.status] = "";
   }
   return Object.keys(updates).length > 0 ? updates : null;

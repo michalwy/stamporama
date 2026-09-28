@@ -313,4 +313,5 @@ the pure `src/lib/purchase-status.ts`.
 - **It locks nothing and moves back to *Arrived*** with a bare status write. Closing a lot is what
   freezes cost (§3), and that is unchanged.
 - **No migration.** The column is an unconstrained string; the valid set is closed in code, as it
-  always was. An opening balance still has no status of its own and stays `arrived` (ADR-0054).
+  always was. An opening balance still has no delivery status of its own and stays `arrived` (ADR-0054)
+  — until #1461 let it be marked `completed` as well, which is ADR-0054's addendum.

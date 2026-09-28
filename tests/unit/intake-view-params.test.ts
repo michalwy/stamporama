@@ -5,6 +5,7 @@ import {
   INTAKE_VIEW_PARAMS,
   intakeViewClearUpdates,
   intakeViewNarrowings,
+  intakeViewStatusesFor,
   intakeViewUpdatesFor,
   intakeViewUrlUpdates,
   pruneStoredParties,
@@ -66,10 +67,17 @@ describe("resolveIntakeView", () => {
     assert.equal(resolveIntakeView(reader({ status: "completed" })).status, "completed");
   });
 
-  it("never has a status in force while only opening balances are listed", () => {
-    const resolved = resolveIntakeView(reader({ type: "opening_balance", status: "arrived" }));
-    assert.equal(resolved.type, "opening_balance");
-    assert.equal(resolved.status, undefined);
+  it("never has a delivery status in force while only opening balances are listed", () => {
+    for (const status of ["preparing", "in_transit", "arrived"]) {
+      const resolved = resolveIntakeView(reader({ type: "opening_balance", status }));
+      assert.equal(resolved.type, "opening_balance");
+      assert.equal(resolved.status, undefined);
+    }
+  });
+
+  it("keeps Completed while only opening balances are listed (#1461)", () => {
+    const resolved = resolveIntakeView(reader({ type: "opening_balance", status: "completed" }));
+    assert.equal(resolved.status, "completed");
   });
 
   it("falls back to the default for a value that no longer exists", () => {
@@ -95,9 +103,32 @@ describe("intakeViewUpdatesFor", () => {
     });
   });
 
+  it("keeps Completed when Opening balances is picked, since it applies there too (#1461)", () => {
+    const current = view({ status: "completed" });
+    assert.deepEqual(intakeViewUpdatesFor({ type: "opening_balance" }, current), {
+      type: "opening_balance",
+    });
+  });
+
+  it("clears a delivery status in force when Opening balances is picked", () => {
+    const current = view({ status: "arrived" });
+    assert.deepEqual(intakeViewUpdatesFor({ type: "opening_balance" }, current), {
+      type: "opening_balance",
+      status: "",
+    });
+  });
+
   it("leaves the status alone for any other type", () => {
     assert.deepEqual(intakeViewUpdatesFor({ type: "trade" }), { type: "trade" });
     assert.deepEqual(intakeViewUpdatesFor({ type: undefined }), { type: "" });
+  });
+});
+
+describe("intakeViewStatusesFor", () => {
+  it("offers every status over purchases, and only Completed over opening balances (#1461)", () => {
+    assert.deepEqual(intakeViewStatusesFor(undefined), ["preparing", "in_transit", "arrived", "completed"]);
+    assert.deepEqual(intakeViewStatusesFor("trade"), ["preparing", "in_transit", "arrived", "completed"]);
+    assert.deepEqual(intakeViewStatusesFor("opening_balance"), ["completed"]);
   });
 });
 
@@ -156,6 +187,14 @@ describe("intakeViewUrlUpdates — the restore written back into the address (#8
   it("writes once: nothing where the address already says what is on screen", () => {
     const restored = view({ type: "purchase", suppliers: ["s1"] });
     assert.equal(intakeViewUrlUpdates(restored, reader({ type: "purchase", supplier: "s1" })), null);
+  });
+
+  it("leaves Completed in the address while only opening balances are listed (#1461)", () => {
+    const shown = resolveIntakeView(reader({ type: "opening_balance", status: "completed" }));
+    assert.equal(
+      intakeViewUrlUpdates(shown, reader({ type: "opening_balance", status: "completed" })),
+      null
+    );
   });
 
   it("takes out a status the address names while only opening balances are listed", () => {

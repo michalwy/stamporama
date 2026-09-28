@@ -525,8 +525,9 @@ export async function markPurchaseArrivedAction(
   }
 }
 
-/** Mark an arrived purchase completed — its sorting is done (#1449). Whatever is still left was
- * stated on the screen before this was sent; it is never a refusal. */
+/** Mark an arrived purchase, or an opening balance, completed — its sorting is done (#1449,
+ * #1461). Whatever is still left was stated on the screen before this was sent; it is never a
+ * refusal. */
 export async function markPurchaseCompletedAction(purchaseId: string): Promise<PurchaseActionState> {
   const session = await getSession();
   try {
@@ -540,7 +541,7 @@ export async function markPurchaseCompletedAction(purchaseId: string): Promise<P
   }
 }
 
-/** Move a completed purchase back to arrived (#1449). */
+/** Move a completed purchase back to arrived, or an opening balance back in progress (#1449, #1461). */
 export async function reopenCompletedPurchaseAction(
   purchaseId: string
 ): Promise<PurchaseActionState> {

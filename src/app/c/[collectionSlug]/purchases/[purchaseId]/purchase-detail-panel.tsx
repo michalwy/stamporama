@@ -837,6 +837,15 @@ export function PurchaseDetailPanel({
   // An opening balance (#1323) is this same screen over a document that bought nothing: it is named by
   // its title, and has no supplier, platform, shipping or delivery status to show or to set.
   const openingBalance = purchase.kind === "opening_balance";
+  // What the status control offers. An opening balance has no delivery status, but is marked
+  // completed as a purchase is (#1461): stored `arrived` while it is being worked, which it calls
+  // *In progress*, and `completed` once finished — the same two doors, under its own words.
+  const statusOptions: { value: PurchaseStatus; label: string; token: string }[] = openingBalance
+    ? [
+        { value: "arrived", label: "In progress", token: "muted" },
+        { value: "completed", ...PURCHASE_STATUS_META.completed },
+      ]
+    : PURCHASE_STATUSES.map((value) => ({ value, ...PURCHASE_STATUS_META[value] }));
 
   // The order's header row and its value bar, each drawn twice (#1410): where they sit, and again in
   // the pinned layer once the page has scrolled them away. One element and one set of props, so the
@@ -892,16 +901,22 @@ export function PurchaseDetailPanel({
         <span style={CHIP}>{purchase.purchasedAt}</span>
       </Tooltip>
       <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        {!openingBalance && (() => {
-          const s = PURCHASE_STATUS_META[purchase.status as PurchaseStatus] ?? {
+        {(() => {
+          const s = statusOptions.find((o) => o.value === purchase.status) ?? {
             label: purchase.status,
             token: "muted",
           };
           return (
             <>
-            <Tooltip content="Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow, and Completed once its sorting is done.">
+            <Tooltip
+              content={
+                openingBalance
+                  ? "Mark this opening balance completed once its sorting is done — saves immediately, and it can be moved back to In progress at any time."
+                  : "Set the order's delivery status — saves immediately. Choose Arrived to run the arrival flow, and Completed once its sorting is done."
+              }
+            >
               <select
-                aria-label="Purchase status"
+                aria-label={openingBalance ? "Opening balance completion" : "Purchase status"}
                 value={purchase.status}
                 disabled={isPending}
                 onChange={(e) => applyStatus(e.target.value as PurchaseStatus)}
@@ -922,21 +937,22 @@ export function PurchaseDetailPanel({
                   appearance: "auto",
                 }}
               >
-                {PURCHASE_STATUSES.map((v) => (
+                {statusOptions.map(({ value: v, label }) => (
                   // *Completed* only follows *Arrived* (#1449).
                   <option
                     key={v}
                     value={v}
                     disabled={v === "completed" && purchase.status !== "completed" && !canComplete}
                   >
-                    {PURCHASE_STATUS_META[v].label}
+                    {label}
                   </option>
                 ))}
               </select>
             </Tooltip>
             {/* One-click advance to the next step in the fixed progression (#159). Hidden at
-                the terminal "completed" status. */}
-            {advanceTo && (
+                the terminal "completed" status, and on an opening balance, which has no
+                progression — only the mark, suggested below (#1461). */}
+            {advanceTo && !openingBalance && (
               <Tooltip content={`Advance to ${purchaseStatusLabel(advanceTo)}`}>
                 <button
                   type="button"
@@ -997,8 +1013,14 @@ export function PurchaseDetailPanel({
         {/* The suggestion (#1449): once nothing is left, the step the order is waiting for is
             completing it, and it takes the place *Mark arrived* had. Only ever a suggestion — the
             status control above completes an order with work left too, after saying what. */}
-        {!openingBalance && purchase.status === "arrived" && workDone && (
-          <Tooltip content="Nothing is left on this order: every copy is sorted, no scan tile is waiting and every lot is closed. Completing it takes it out of the Arrived filter; it can be moved back at any time.">
+        {purchase.status === "arrived" && workDone && (
+          <Tooltip
+            content={
+              openingBalance
+                ? "Nothing is left on this opening balance: every copy is sorted, no scan tile is waiting and every lot is closed. Completing it lists it under the Completed filter; it can be moved back at any time."
+                : "Nothing is left on this order: every copy is sorted, no scan tile is waiting and every lot is closed. Completing it takes it out of the Arrived filter; it can be moved back at any time."
+            }
+          >
             <button
               type="button"
               onClick={() => applyStatus("completed")}
@@ -1715,15 +1737,17 @@ export function PurchaseDetailPanel({
         />
       )}
 
-      {/* Mark order completed with work still left (#1449): say what, and allow it anyway. */}
+      {/* Mark order completed with work still left (#1449): say what, and allow it anyway. An
+          opening balance is marked the same way, in its own words (#1461). */}
       {completing && workLeft && (
         <ConfirmDialog
-          title="Mark order completed"
+          title={openingBalance ? "Mark opening balance completed" : "Mark order completed"}
           message={
             <>
-              This order still has {describePurchaseWorkLeft(workLeft).join(", ")}. Mark it completed
-              anyway if you are leaving that for later on purpose — nothing becomes read-only, and it
-              can be moved back to <strong>Arrived</strong> at any time.
+              This {openingBalance ? "opening balance" : "order"} still has{" "}
+              {describePurchaseWorkLeft(workLeft).join(", ")}. Mark it completed anyway if you are
+              leaving that for later on purpose — nothing becomes read-only, and it can be moved back
+              to <strong>{openingBalance ? "In progress" : "Arrived"}</strong> at any time.
             </>
           }
           actionLabel="Mark completed"
