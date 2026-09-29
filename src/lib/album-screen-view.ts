@@ -123,6 +123,28 @@ export function albumScreenViewQuery(view: AlbumScreenView, base = ""): string {
   return params.toString();
 }
 
+/**
+ * The parameter that carries the album screen's view through the page editor (#1489), so the
+ * editor's way back lands on the tab, filter and chapters the collector left. One parameter holding
+ * the screen's own query rather than the screen's parameters themselves: the editor keeps its
+ * address's other parameters as it moves between sheets, and `sheets` there would read as a filter
+ * where the PDF reads it as a range.
+ */
+export const ALBUM_VIEW_PARAM = "view";
+
+/** The album screen's address with a view carried back from the editor. The carried text is read
+ *  through `parseAlbumScreenView`, so nothing but the view ever reaches the address; `next` sets
+ *  part of it (the editor's *Printed cards* link opens that tab). */
+export function albumScreenReturnHref(
+  albumHref: string,
+  carried: string | null,
+  next: Partial<AlbumScreenView> = {}
+): string {
+  const view = parseAlbumScreenView(new URLSearchParams(carried ?? ""));
+  const qs = albumScreenViewQuery({ ...view, ...next });
+  return qs ? `${albumHref}?${qs}` : albumHref;
+}
+
 // -- Filters --------------------------------------------------------------------
 
 export interface AlbumSheetRowFacts {

@@ -113,6 +113,7 @@ import {
   PicturePickerDialog,
 } from "./free-page-panels";
 import { ALBUM_FREE_TEXT_STARTS, albumCentredXMm } from "@/lib/album-free-page";
+import { ALBUM_VIEW_PARAM, albumScreenReturnHref } from "@/lib/album-screen-view";
 import type { AlbumPictureData } from "@/lib/album-pictures";
 
 // The page editor (#769): where the collector overrules the automatic layout.
@@ -193,6 +194,10 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
   const router = useRouter();
   const search = useSearchParams();
   const { album, sheet } = data;
+  // The album screen's view rides along in the address (#1489) and survives every move between
+  // sheets, which keep the address's other parameters, so the way back lands where it was left.
+  const albumHref = `/c/${collectionSlug}/albums/${album.id}`;
+  const carriedView = search.get(ALBUM_VIEW_PARAM);
 
   const [zoom, setZoom] = useState(1);
   const [selection, setSelection] = useState<CanvasSelection>(null);
@@ -615,7 +620,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
       }}
     >
       <Link
-        href={`/c/${collectionSlug}/albums/${album.id}`}
+        href={albumScreenReturnHref(albumHref, carriedView)}
         style={{
           ...MUTED,
           textDecoration: "none",
@@ -859,7 +864,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
             sheet.readOnly ? (
               <PrintedSheetPanel
                 sheet={sheet}
-                albumHref={`/c/${collectionSlug}/albums/${album.id}`}
+                albumHref={albumScreenReturnHref(albumHref, carriedView, { tab: "printed" })}
               />
             ) : sheet.free && selectedElement ? (
               <FreeElementPanel
@@ -1070,7 +1075,9 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               (id) => {
                 setAddingPage(false);
                 setSelection(null);
-                router.push(`/c/${collectionSlug}/albums/${album.id}/pages?page=${id}`);
+                const params = new URLSearchParams({ page: id });
+                if (carriedView) params.set(ALBUM_VIEW_PARAM, carriedView);
+                router.push(`${albumHref}/pages?${params.toString()}`);
               }
             )
           }
