@@ -430,10 +430,10 @@ languages you add. A small number on the button counts the languages still **mis
 
 **Done** closes the translations dialog and carries your entries back to the area — they are written
 only when you save the **area** itself, so cancelling the area dialog discards the translations along
-with everything else you changed there. The same dialog handles conditions, certificate statuses,
-stamp subtypes, issue names and stamp names, always beside the field it translates: where an entity has **two**
-translatable fields (a condition's name and its abbreviation), each gets its own 🌐 and its own
-dialog, so a badge always tells you about exactly one field.
+with everything else you changed there. The same dialog handles issue names and stamp names, always
+beside the field it translates. The dictionaries in Settings — conditions, certificate statuses,
+formats, subtypes and attributes — need no dialog: their pane has room for a box per language right
+under the text it translates (see [Pages with a list](collections.md#pages-with-a-list)).
 
 The roll-up and the language are independent: the roll-up decides **which area** names the title, and
 the language only decides **how that area is written**. So with `Poland` set to `Poland` plus a Polish

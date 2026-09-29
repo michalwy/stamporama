@@ -98,9 +98,10 @@ export function countTranslated(languages: string[], values: TranslationValues):
  * entity — which has no id yet — is handled the same way as an existing one). The confirm button is
  * labelled "Done" rather than "Save" to match.
  *
- * Generic over the entity's translatable `fields`, so one dialog serves every translatable entity:
- * area title name (#293), condition and certificate status name / abbreviation (#294), issue name
- * (#295) and stamp name (#296). Entities with more than one translatable field open it once per
+ * Generic over the entity's translatable `fields`, so one dialog serves every translatable entity
+ * edited in a dialog: area title name (#293), issue name (#295) and stamp name (#296). The Settings
+ * dictionaries — conditions, certificate statuses (#294), formats, subtypes, attributes — no longer
+ * open it: their detail pane has the room to show one field per language in place (#1471). Entities with more than one translatable field open it once per
  * field rather than showing both at once — see {@link TranslationField}. `languages` is the set
  * needing a translation — the platforms' listing languages minus the collection's default language,
  * since text in that language already lives in the entity's own column. When it is empty the caller

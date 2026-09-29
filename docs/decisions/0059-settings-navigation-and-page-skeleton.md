@@ -6,7 +6,8 @@ Accepted; the navigation, the entries, the skeleton and the addresses are implem
 Designed in #1465 with the collector on 2026-09-29, against a wireframe. The three body shapes (§5)
 are built by the pages' own issues — #1471 (list beside detail), #1474 (list beside preview) and
 #1473 (grid of fields) — and the summary strip by #1475. **Reverses #691's 56rem cap** on the
-Settings screen as a whole (§6).
+Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
+dictionaries (#1471); what it settled is in §5.
 
 ## Context
 
@@ -75,6 +76,27 @@ A page body is one of three shared shapes:
 - **Grid of fields** — the plain forms: the cards in a grid of two or three columns.
 
 A page that needs a fourth shape has to say why, in its issue and in this record.
+
+**List beside detail, as built (#1471).** `settings/list-detail.tsx` holds the pieces and every
+dictionary composes them — a flat list, a grouped one (Multipliers) and a tree (Catalogs) alike:
+
+- The selected row's fields are edited **in place**, with Save, Revert and Delete; *Add* is the page's
+  main action and opens an empty pane, and a saved add moves the pane onto the row it created. Only
+  Delete still asks in a dialog, since it cannot be undone.
+- **The selected row is in the address** (`&row=<id>`; `&row=new`, `&row=new:<parent>` while adding),
+  so a link opens a given condition and a reload keeps it. With none chosen the pane opens the first
+  row — a default, so left out of the address (§7). Choosing another entry or tab drops it.
+- **Leaving a row with unsaved changes asks first** — another row, *Add*, a tab, another entry — and
+  closing the window gets the browser's own question. *Unsaved* is the form's entries measured
+  against what it opened with, not a flag each field has to remember to raise.
+- **What the list did, it keeps**: drag to reorder where the order matters, badges, the subtypes'
+  default radio. **Translations are fields in the pane**, a row per language and a column per
+  translatable field, rather than a 🌐 dialog over it.
+- The detail column is capped at 40rem, which is how the shape keeps *a single field never
+  stretches across the window*; it stays in view while a long list scrolls.
+
+*Rejected in writing #1471:* selecting the row through the router, which would re-run the whole
+Settings loader on every click down a list — the address is written with `history.replaceState`.
 
 ### 6. What this reverses from #691
 

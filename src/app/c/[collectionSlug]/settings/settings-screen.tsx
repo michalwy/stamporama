@@ -12,6 +12,7 @@ import {
   StorageSettingsPanel,
 } from "./settings-panel";
 import { SettingsPageFrame } from "./settings-page-frame";
+import { LeaveGuardProvider, useLeaveGuard } from "./leave-guard";
 import {
   SETTINGS_GROUPS,
   resolveSettingsAddress,
@@ -30,7 +31,7 @@ import {
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
 import { AppVersionLabel } from "@/app/c/[collectionSlug]/shared/app-version-label";
-import { CatalogPanel } from "../catalog/catalog-panel";
+import { CatalogPanel } from "./catalogs-panel";
 import { ConditionsPanel } from "./conditions-panel";
 import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { FormatsPanel } from "./formats-panel";
@@ -198,6 +199,20 @@ const sectionHeadingStyle: React.CSSProperties = {
   margin: "0 0 1rem",
 };
 
+/**
+ * The entries already laid out in one of ADR-0059's body shapes, so no longer held to today's
+ * column (`UNSHAPED_PAGE_WIDTH`). The Catalog group's dictionaries are list beside detail (#1471).
+ */
+const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
+  "catalogs",
+  "conditions",
+  "certificates",
+  "formats",
+  "subtypes",
+  "attributes",
+  "size-presets",
+]);
+
 /** Where the navigation stays put: the window scrolls the page, never the list (#1469). */
 const NAV_TOP = "2rem";
 
@@ -207,16 +222,29 @@ const NAV_TOP = "2rem";
  * the entries are `settings-nav.ts`'s.
  */
 export function SettingsScreen(props: SettingsScreenProps) {
+  // Everything that takes an edited row off the screen asks first (#1471) — the page's own rows,
+  // its tabs, and the navigation beside it.
+  return (
+    <LeaveGuardProvider>
+      <SettingsScreenBody {...props} />
+    </LeaveGuardProvider>
+  );
+}
+
+function SettingsScreenBody(props: SettingsScreenProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { guard } = useLeaveGuard();
 
   const { entry, part } = resolveSettingsAddress(searchParams.get("tab"), searchParams.get("part"));
 
   // A tab inside an entry replaces rather than pushes, as the album screen's do (#1430): it is a
   // view of one page, and Back should leave the page rather than step through its tabs.
   function choosePart(next: string) {
-    router.replace(`${pathname}${settingsSearch(searchParams, entry.key, next)}`, { scroll: false });
+    guard(() =>
+      router.replace(`${pathname}${settingsSearch(searchParams, entry.key, next)}`, { scroll: false })
+    );
   }
 
   // The search (#1470) is local rather than in the address: it is a way of finding an entry, not a
@@ -282,7 +310,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
           group={settingsGroupOf(entry)}
           title={entry.label}
           hint={entry.hint}
-          unshaped
+          unshaped={!RESHAPED_ENTRIES.has(entry.key)}
           tabs={
             entry.parts && part ? { parts: entry.parts, active: part, onChoose: choosePart } : undefined
           }
@@ -506,6 +534,8 @@ function SettingsNavGroup({
   matches: SettingsMatch[] | null;
   onPick: (entry: SettingsEntryKey, field: SettingsFieldMatch | null) => void;
 }) {
+  const router = useRouter();
+  const { guard } = useLeaveGuard();
   // Outside the app's sections (General, System) the active row is the accent's, as Overview's and
   // the footer's are in the sidebar.
   const hue = group.tint ? `var(--color-tag-${group.tint})` : "var(--color-accent)";
@@ -531,10 +561,18 @@ function SettingsNavGroup({
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {rows.map(({ entry, fields }) => {
           const active = entry.key === activeKey;
+          const href = `${pathname}${settingsSearch(new URLSearchParams(), entry.key, null)}`;
           return (
             <li key={entry.key}>
               <Link
-                href={`${pathname}${settingsSearch(new URLSearchParams(), entry.key, null)}`}
+                href={href}
+                onClick={(e) => {
+                  // A plain click leaves through the guard; a modified one opens a new tab and
+                  // leaves nothing behind, so it goes straight through.
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                  e.preventDefault();
+                  guard(() => router.push(href));
+                }}
                 aria-current={active ? "page" : undefined}
                 style={{
                   display: "block",

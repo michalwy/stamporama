@@ -103,6 +103,32 @@ The search looks at what a page shows as it opens — its section headings and i
 inside dialogs or at the rows of a list: *Mint Never Hinged* is one of your conditions, not a
 setting, so it finds nothing here.
 
+### Pages with a list
+
+The dictionaries of the **Catalog** group — Catalogs, Conditions, Certificate statuses, Formats (and
+its Multipliers), Subtypes, the four Attributes lists and Size presets — are a **list beside the
+selected row's detail**. The list is on the left; click a row and its fields open on the right, where
+you change them in place:
+
+- **Save** writes the change; **Revert** appears once you have changed something and puts the fields
+  back as they were; **Delete** removes the row, after asking.
+- **Add** — at the top right of the page, *Add condition*, *Add format* and so on — opens an empty set
+  of fields in the same place. Once it is added, the new row is selected, ready for the next change;
+  **Cancel** leaves without adding.
+- **Nothing is lost by accident.** Click another row, *Add*, another tab or another Settings entry
+  while a change is not saved and you are asked first whether to discard it. Closing or reloading the
+  window asks too.
+- **The selected row is part of the page's address**, so a reload keeps it and a bookmark or a link
+  opens that very condition or format. With no row chosen, the first one is shown.
+- The list keeps what it did before: **drag a row** to reorder where the order matters, the badges on
+  the rows, the subtypes' default radio. What a page used to explain in a paragraph above its list is
+  now behind the **ⓘ** beside the list and beside the fields it concerns.
+- **Translations are fields in the pane.** Once a platform lists in — or an album is printed in — a
+  language other than your collection's [default language](#default-language), the pane grows an
+  **In other languages** block: a line per language, with a box for each text that can be translated
+  (a condition's *Abbreviation* and *Name* side by side). A blank box falls back to the text above,
+  shown greyed inside it, and the translations are saved with the rest of the row.
+
 ## Filtering the Issues, Stamps, and Copies lists
 
 The **Issues**, **Stamps**, and **Copies** (inventory) lists share the same three-column layout:
@@ -183,7 +209,7 @@ To see the copies themselves, use **View copies** in the row's **⋮** menu.
 
 ## Row actions
 
-Every list row across the app — stamps, issues, inventory copies, areas, catalog vendors and names, conditions, certificate statuses, and subtypes — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show valuation**), with the destructive **Delete** set apart in red at the bottom. On the **Issues**, **Stamps** and **Copies** lists the first entry opens the row's own full-page view — see [Detail pages](detail-pages.md). Section-level buttons such as **+ Add area** or **+ Add condition** stay in place above their lists.
+Every list row across the app — stamps, issues, inventory copies, areas and more — keeps its actions behind a single **⋮** button at the right of the row. Click it to open a menu of that row's actions (for example **Edit**, **Add copy**, **View copies**, **Show valuation**), with the destructive **Delete** set apart in red at the bottom. On the **Issues**, **Stamps** and **Copies** lists the first entry opens the row's own full-page view — see [Detail pages](detail-pages.md). Section-level buttons such as **+ Add area** stay in place above their lists. The dictionaries in Settings are the exception: a row there has no menu, because clicking it opens everything it can do beside the list — see [Pages with a list](#pages-with-a-list).
 
 A few of the most-repeated actions are also reachable **without opening the menu**: small icon buttons sit just left of the **⋮**, dimmed until you hover the row, which brings them up to full strength. They are always there — so you can aim straight at the one you want — and they are shortcuts only — every one of them is still in the menu, which stays the complete list of what the row can do. Each list promotes the actions it is most worked with:
 
@@ -672,6 +698,20 @@ A checklist spanning issues is also offered when a ticked run of scan tiles is i
 - The stamp list and the issue's stamp tree show a stamp **in bold** when it is on at least one checklist.
 - A stamp's own detail page names the checklists counting it, under each issue it belongs to.
 
+## Catalogs
+
+**Settings → Catalogs** keeps the catalogues your stamps are numbered and priced in, three levels
+deep: a **vendor** (*Michel*, abbreviated *Mi*), the **catalog names** it publishes (*Michel
+Deutschland*, each with the currency its prices are in), and the **editions** of each you price from
+(*2024*). They are one tree on the left of the page, each level indented under the one it belongs to,
+and any of them can be selected and edited on the right.
+
+- **Add vendor** is the page's button at the top right.
+- A selected vendor's pane has **Add catalog name**, and a selected catalog name's has **Add
+  edition** — an addition always happens under the item it belongs to.
+- Deleting a vendor deletes its catalog names and editions with it, and deleting a catalog name its
+  editions; you are told so before anything goes.
+
 ## Stamp conditions
 
 Each collection keeps its own list of **conditions** — the grades used when valuing stamps (for example Mint Never Hinged, Mint Hinged, Used, or Cancelled to Order). Manage them from **Settings → Conditions**.
@@ -686,7 +726,7 @@ Certificate and guarantee status is tracked as a separate dimension, not as part
 
 ### Conditions in other languages
 
-Once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), the **Name** and **Abbreviation** fields each grow their own 🌐 button, and both are labelled with your default language (e.g. *Name — English (en)*). Click one to enter that **single** field per language — the two are kept apart on purpose, since abbreviations like `MNH` are often left exactly as they are while the full name is translated. Each button's small number counts the languages still missing **that** field, and a blank entry always falls back to the default text, so a title never ends up with a gap. The entries save together with the condition, so cancelling the condition dialog discards them too.
+Once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), the **Name** and **Abbreviation** fields are labelled with your default language (e.g. *Name — English (en)*) and the condition's pane grows an **In other languages** block: a line per language, with an **Abbreviation** box and a **Name** box. The two are kept apart on purpose, since abbreviations like `MNH` are often left exactly as they are while the full name is translated. A blank box always falls back to the default text, which it shows greyed, so a title never ends up with a gap. The translations are saved together with the condition, so **Revert** — or discarding the change when you leave the row — drops them too.
 
 These feed the `{condition}` and `{conditionAbbr}` tokens in [listing titles](contacts.md#adding-and-editing).
 
@@ -701,11 +741,11 @@ Each collection keeps its own list of **certificate statuses** — the certifica
 - **Reorder** statuses by dragging rows; the order controls how statuses are listed elsewhere in the app.
 - **Delete** a status you no longer need. A status that is already used by catalog prices cannot be deleted — remove those prices first.
 
-Certificate statuses translate exactly like [conditions](#conditions-in-other-languages) — a 🌐 button on each of **Name** and **Abbreviation**, feeding the `{certificate}` and `{certificateAbbr}` title tokens.
+Certificate statuses translate exactly like [conditions](#conditions-in-other-languages) — an **Abbreviation** and a **Name** box per language in the status's pane, feeding the `{certificate}` and `{certificateAbbr}` title tokens.
 
 ## Condition and certificate colours
 
-A condition and a certificate status each carry a **colour**, so the chips they draw across the app can be told apart at a glance instead of reading as one grey line. Pick one in the **Colour** field of the add or edit dialog, on either list: a row of swatches, with a dashed **No colour** swatch at the front.
+A condition and a certificate status each carry a **colour**, so the chips they draw across the app can be told apart at a glance instead of reading as one grey line. Pick one in the **Colour** field of the condition's or status's pane: a row of swatches, with a dashed **No colour** swatch at the front.
 
 - The colour shows on the **Copies** list, on duplicate and grouped rows, on a copy's own page, on trade receive lines, on auction lot composition lines and on an offer's **Items** rows — everywhere the condition or the status is already drawn as a chip. It does not change listing text, prices, or anything that leaves the app.
 - **No colour is a real choice.** An entry with no colour keeps the plain grey chip, which is what makes a coloured one stand out: colouring everything says as much as colouring nothing.
@@ -743,8 +783,8 @@ Each collection keeps its own list of **subtypes** that records this distinction
 
 - Every new collection starts with a default set: **Variant**, **Colour variety**, **Perforation variety**, **Paper variety**, **Watermark variety** and **Print variety** (acts as variant), plus **Error**, **Plate flaw**, **Overprint** and **Forgery** (distinct entries). These are ordinary rows — rename, reorder, or delete any of them.
 - **Add** a subtype with a name (e.g. "Colour variety") and choose whether it acts as a variant.
-- **Select the default** with the radio button on the left of each row. Exactly one subtype is always the default; it is the one assigned to newly created child stamps. Choosing a new default clears the old one.
-- **Toggle Acts as variant** directly on a row at any time.
+- **Select the default** with the radio button on the left of each row. Exactly one subtype is always the default; it is the one assigned to newly created child stamps. Choosing a new default clears the old one. The default carries a **Default** tag.
+- **Acts as variant** is a switch in the subtype's pane, saved with its name; the rows that act as a variant carry a **Variant** tag.
 - **Reorder** subtypes by dragging rows.
 - **Delete** a subtype you no longer need. The current default cannot be deleted — pick another default first — and a subtype already assigned to stamps cannot be deleted either.
 
@@ -784,7 +824,7 @@ A stamp's subtype appears as a small grey tag beside its catalog numbers on the 
 
 ### Subtypes in other languages
 
-Subtypes translate exactly like [conditions](#conditions-in-other-languages) — a 🌐 button beside **Name**, filled in per listing language and saved together with the subtype. These feed the `{subtype}` token in listing titles, descriptions, and private notes, so a Polish listing reads "Nadruk" where an English one reads "Overprint". Leave a language blank to fall back to the name above.
+Subtypes translate exactly like [conditions](#conditions-in-other-languages) — a **Name** box per listing language in the subtype's pane, saved together with the subtype. These feed the `{subtype}` token in listing titles, descriptions, and private notes, so a Polish listing reads "Nadruk" where an English one reads "Overprint". Leave a language blank to fall back to the name above.
 
 The token follows the same rule as the tag: a stamp on the collection's **default** subtype renders `{subtype}` as empty, so ordinary variants do not pick up a redundant word in their listing title.
 
@@ -870,7 +910,7 @@ A **size preset** is that pair of millimetres, saved under a name you choose. Ke
   a preset, so two presets can never hold the same width and height; try to save one that is already
   on the list and you are told which pair it is rather than shown a failed save. The name is there so
   you can recognise it.
-- **Correct** a preset from its **⋮ → Edit** — the figures as well as the name. Stamps you have
+- **Correct** a preset by selecting it — the figures as well as the name. Stamps you have
   already sized from it keep the numbers they hold: a preset is *copied* onto a stamp, never linked
   to it, so a later correction does not travel. Fix those on the stamps themselves, or by applying
   the corrected preset over them again.
@@ -961,7 +1001,7 @@ Denomination and perforation get no filter of their own — they are free text, 
 
 ### Attributes in other languages
 
-The four lists translate exactly like [subtypes](#subtypes-in-other-languages) — a 🌐 button beside **Name**, filled in per listing language and saved together with the entry, so a Polish listing can read *karminowy* where an English one reads *Carmine*. Leave a language blank to fall back to the name above.
+The four lists translate exactly like [subtypes](#subtypes-in-other-languages) — a **Name** box per listing language in the entry's pane, saved together with the entry, so a Polish listing can read *karminowy* where an English one reads *Carmine*. Leave a language blank to fall back to the name above.
 
 ### Filling attributes from Colnect
 

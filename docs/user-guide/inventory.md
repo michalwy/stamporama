@@ -746,7 +746,7 @@ Formats are managed in **Settings → Formats**. A format that is used by any co
 any catalog price cannot be deleted.
 
 **Formats in other languages.** Once a platform lists in — or an album is printed in — a language other than your collection's
-default, the format's **Name** and **Abbreviation** fields each grow their own 🌐 button, exactly as
+default, the format's pane grows an **Abbreviation** and a **Name** box per language, exactly as
 [conditions](collections.md#conditions-in-other-languages) do — and they fall back independently, so
 you can translate *Block of 4* as *Viererblock* while leaving `Blk4` alone. These feed the
 `{format}` and `{formatAbbr}` tokens in [listing texts](contacts.md#adding-and-editing).
