@@ -7,8 +7,8 @@ Designed in #1465 with the collector on 2026-09-29, against a wireframe. The thr
 are built by the pages' own issues — #1471 (list beside detail), #1474 (list beside preview) and
 #1473 (grid of fields) — and the summary strip by #1475. **Reverses #691's 56rem cap** on the
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
-dictionaries (#1471), and list beside preview carries Album templates (#1474); what each settled is
-in §5.
+dictionaries (#1471), list beside preview carries Album templates (#1474), and the grid of fields
+carries the plain forms (#1473); what each settled is in §5.
 
 ## Context
 

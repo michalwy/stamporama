@@ -79,6 +79,16 @@ line what the page is for — hover it. Where one thing has several parts they a
 of its page: **Formats** has *Formats* and *Multipliers*, and **Attributes** has a tab for each of
 its four lists.
 
+The plain forms — **Collection**, **Photos & storage**, **Bid recommendation**, **Duplicate numbers**
+and **Philasearch** — use the whole width of the window. Each setting is a **card** — its name, one
+short line saying what it is, and its control — and the cards sit side by side, two or three to a
+row depending on how wide the window is, so no field is ever stretched across the screen. Where a
+setting has more to say, an **ⓘ** beside its name says it when you hover it, and this guide says the
+rest. A few things stay apart from the cards: **Reset to demo data** sits on its own at the foot of
+Collection, with its warning beside the button; the **duplicate report** runs across the page under
+the Duplicate numbers card; and Philasearch's **platform** is chosen at the top right of its page,
+beside the title.
+
 Every page has an address of its own, and so does each tab — `settings?tab=formats&part=multipliers`
 — so a bookmark opens exactly what you were looking at. Addresses saved before the entries were
 split keep working: they open the entry that inherited the content, or, where one page became
@@ -1365,11 +1375,11 @@ It also drops on its own: a week after an offer is sold or withdrawn, its genera
 
 ### Local cache
 
-If the person running this Stamporama stores photos in the cloud rather than on the server's own disk, a second line appears beside the figure above: **Local cache**.
+If the person running this Stamporama stores photos in the cloud rather than on the server's own disk, a second card appears beside the figure above: **Local cache**.
 
 It is the copies Stamporama keeps on the server's disk so it does not have to fetch the same files back from cloud storage over and over while it works — the card scan it has just received and is about to cut, the copy scans it composes into a listing image every time you press Regenerate. Files on their way to your browser are never cached; only files the *server* is working on.
 
-Two things about it are worth knowing, and the line says both:
+Two things about it are worth knowing, and the card says both — the second on its face, the first behind its **ⓘ**:
 
 - **It is not your data, and it is not part of the figure above.** Everything in the cache also exists in cloud storage. Emptying it costs nothing but a little time the next time those files are needed, which is why there is a plain **Clear this collection's copies** button and no confirmation.
 - **It is instance-wide.** The cache is shared by every collection on this Stamporama, and its size limit is set by whoever runs it, so the figure is shown as *used of limit* for the whole instance, with your collection's share of it named beside. It looks after itself: once it reaches the limit, the least recently used copies are dropped automatically.
@@ -1429,7 +1439,7 @@ rather be told than guess — and every reading it gives you names the profile i
 
 ### How long closed listings keep their images
 
-Right below the storage figure, **Settings → Photos & storage** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.
+Beside the storage figures, **Settings → Photos & storage** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.
 
 There are three answers:
 

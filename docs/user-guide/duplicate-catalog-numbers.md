@@ -45,7 +45,7 @@ Duplicate handling is set per collection under **Settings → Duplicate numbers*
 
 ## The duplicate report
 
-**Settings → Duplicate numbers** also shows a collection-wide report grouping every catalog
+Under the policy card, across the page, **Settings → Duplicate numbers** shows a collection-wide report grouping every catalog
 identity that appears on two or more stamps. Each group lists the conflicting stamps with
 links to open them in the Stamps list, so you can review and resolve them. Use **Refresh**
 to re-run the report after making changes.
