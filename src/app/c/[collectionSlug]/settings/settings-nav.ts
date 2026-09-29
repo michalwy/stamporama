@@ -314,9 +314,16 @@ export function resolveSettingsAddress(
 }
 
 /**
+ * The selected row of a list-beside-detail page (#1471): `&row=<id>`, so a link or a reload opens
+ * that condition or format. A row belongs to one page and one tab, so choosing either drops it.
+ */
+export const SETTINGS_ROW_PARAM = "row";
+
+/**
  * The query an entry and its tab are written as. The defaults are left out — the default entry and
  * an entry's first tab — so the plainest address stays the plainest, and every other parameter on
- * the address (the Allegro callback's outcome, say) is kept.
+ * the address (the Allegro callback's outcome, say) is kept. The selected row is not: it names a row
+ * of the page being left.
  */
 export function settingsSearch(
   current: URLSearchParams,
@@ -324,6 +331,7 @@ export function settingsSearch(
   part: string | null
 ): string {
   const params = new URLSearchParams(current.toString());
+  params.delete(SETTINGS_ROW_PARAM);
   const entry = entryByKey(entryKey);
   if (entryKey === DEFAULT_SETTINGS_ENTRY) params.delete("tab");
   else params.set("tab", entryKey);

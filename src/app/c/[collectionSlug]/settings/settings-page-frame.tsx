@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { SettingsGroup, SettingsPart } from "./settings-nav";
@@ -12,10 +13,24 @@ import type { SettingsGroup, SettingsPart } from "./settings-nav";
  * of #691 that still holds — a single field never stretches across the window — is each body
  * shape's to keep. But today's pages are a single column of fields, and uncapped they would be
  * exactly the stretched field #691 was about. So each keeps today's width until its own issue lays
- * it out (#1471, #1473, #1474, #1475, #1476, #1479, #1480), and this constant goes when the last of
- * them lands.
+ * it out (#1473, #1474, #1475, #1476, #1479, #1480; the Catalog dictionaries went with #1471), and
+ * this constant goes when the last of them lands.
  */
 export const UNSHAPED_PAGE_WIDTH = "56rem";
+
+/** Where a page body's main action lands in the header (#1471). */
+const ActionSlot = createContext<HTMLElement | null>(null);
+
+/**
+ * A page's main action, drawn at the header's right (ADR-0059 §4) by the body that owns it. The body
+ * holds the state the action works on — *Add condition* opens the body's own detail pane — so it
+ * renders the button and the frame gives it a place, rather than the screen threading each page's
+ * handlers up to the header.
+ */
+export function SettingsPageAction({ children }: { children: ReactNode }) {
+  const slot = useContext(ActionSlot);
+  return slot ? createPortal(children, slot) : null;
+}
 
 interface SettingsPageFrameProps {
   group: SettingsGroup;
@@ -54,6 +69,7 @@ export function SettingsPageFrame({
   children,
 }: SettingsPageFrameProps) {
   const tint = group.tint ? `var(--color-tag-${group.tint})` : "var(--color-text-muted)";
+  const [actionSlot, setActionSlot] = useState<HTMLDivElement | null>(null);
   return (
     <div style={unshaped ? { maxWidth: UNSHAPED_PAGE_WIDTH } : undefined}>
       <header
@@ -100,7 +116,12 @@ export function SettingsPageFrame({
             </Tooltip>
           </div>
         </div>
-        {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+        <div
+          ref={setActionSlot}
+          style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}
+        >
+          {action}
+        </div>
       </header>
 
       {summary && <div style={{ marginBottom: "1.5rem" }}>{summary}</div>}
@@ -143,7 +164,7 @@ export function SettingsPageFrame({
         </div>
       )}
 
-      {children}
+      <ActionSlot.Provider value={actionSlot}>{children}</ActionSlot.Provider>
     </div>
   );
 }
