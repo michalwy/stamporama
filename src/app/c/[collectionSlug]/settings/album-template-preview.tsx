@@ -10,9 +10,9 @@ import {
   ALBUM_PREVIEW_FITS,
   albumPreviewZoom,
   asAlbumPreviewFit,
-  type AlbumPreviewFit,
 } from "@/lib/album-preview-fit";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
+import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 
 // The album template's live preview (#795): the page the thirty-odd numbers in the dialog beside
 // this actually produce.
@@ -57,22 +57,6 @@ const DEBOUNCE_MS = 260;
  *  is (#1431): how large a sheet is wanted is the collector's and his screen's, not a template's. */
 const FIT_KEY = "stamporama:album-preview-fit";
 
-function readStoredFit(): AlbumPreviewFit {
-  try {
-    return asAlbumPreviewFit(localStorage.getItem(FIT_KEY));
-  } catch {
-    return asAlbumPreviewFit(null);
-  }
-}
-
-function storeFit(fit: AlbumPreviewFit) {
-  try {
-    localStorage.setItem(FIT_KEY, fit);
-  } catch {
-    // ignore (private mode / disabled storage) — the preview then opens on the whole page
-  }
-}
-
 /** The whole height of the column it is given: the sheets' frame takes what the controls above it
  *  and the notes below it leave, and that is the room the zoom fits the sheet to. */
 const PANEL_STYLE: React.CSSProperties = {
@@ -114,14 +98,26 @@ const WARN_STYLE: React.CSSProperties = {
   color: "var(--color-warning)",
 };
 
+/**
+ * What the sheet is drawn from.
+ *
+ * - `form` — the editor's own form, as it is being typed (#795). The preview goes through the **same
+ *   parser a save goes through**, so it can never draw a page the template would refuse to store.
+ * - `template` — a template as it is stored: the Settings page's preview beside the list (#1474),
+ *   read-only. The same planner draws it from the same values, which is what keeps it and the editor
+ *   opened on that template in agreement.
+ */
+export type AlbumPreviewSubject =
+  | { kind: "form"; formRef: React.RefObject<HTMLFormElement | null> }
+  | { kind: "template"; templateId: string };
+
 interface AlbumTemplatePreviewPanelProps {
   collectionId: string;
-  /** The form the preset is read off. The preview goes through the **same parser a save goes
-   *  through**, so it can never draw a page the template would refuse to store. */
-  formRef: React.RefObject<HTMLFormElement | null>;
+  subject: AlbumPreviewSubject;
   /** Bumped by the dialog whenever any field changes — including the four texts, which are React
-   *  state written into hidden inputs and therefore fire no `input` event of their own. */
-  revision: number;
+   *  state written into hidden inputs and therefore fire no `input` event of their own. A stored
+   *  template passes its stored values, so a saved edit redraws it. */
+  revision: number | string;
   /** The album whose **own** values are being edited (#1215). The preview then draws that album and
    *  nothing else: there is no sample to offer and no other album to point at, because the values
    *  in the form belong to this one. Absent — the template dialog — the source is chosen. */
@@ -133,7 +129,7 @@ interface AlbumTemplatePreviewPanelProps {
 
 export function AlbumTemplatePreviewPanel({
   collectionId,
-  formRef,
+  subject,
   revision,
   albumId,
   markField,
@@ -143,18 +139,19 @@ export function AlbumTemplatePreviewPanel({
   // Keyed on the id rather than on `source`, which is a new object every render and would re-plan
   // the page on every keystroke's re-render as well as on its debounce.
   const sourceKey = source.kind === "album" ? source.albumId : "";
+  // The subject's parts, each stable across renders, for the same reason.
+  const formRef = subject.kind === "form" ? subject.formRef : null;
+  const templateId = subject.kind === "template" ? subject.templateId : null;
   const [albums, setAlbums] = useState<AlbumSummary[]>([]);
   const [preview, setPreview] = useState<AlbumTemplatePreview | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
-  /** The panel only ever mounts inside a dialog opened by a click, so reading the browser's storage
-   *  while initialising cannot disagree with a server render. */
-  const [fit, setFit] = useState<AlbumPreviewFit>(readStoredFit);
-  const chooseFit = (next: AlbumPreviewFit) => {
-    setFit(next);
-    storeFit(next);
-  };
+  /** Through the hydration-safe store rather than read while initialising: the Settings page's
+   *  preview (#1474) is rendered on the server too, where there is no storage, and a first render
+   *  that differed from the server's would not hydrate. Disabled storage leaves the whole page. */
+  const [storedFit, chooseFit] = usePersistentString(FIT_KEY, asAlbumPreviewFit(null));
+  const fit = asAlbumPreviewFit(storedFit);
   const frameRef = useRef<HTMLDivElement>(null);
   /** Which request the sheet on screen belongs to. A slow reply for an older preset must not land
    *  on top of a newer one — the collector holding an arrow key down produces exactly that race. */
@@ -195,18 +192,21 @@ export function AlbumTemplatePreviewPanel({
   }, []);
 
   const draw = useCallback(async () => {
-    const form = formRef.current;
-    if (!form) return;
+    const form = formRef ? formRef.current : null;
+    if (!form && !templateId) return;
     const ticket = latest.current + 1;
     latest.current = ticket;
     setPending(true);
     try {
-      const { albumTemplatePreviewAction } = await import("@/app/actions/album-templates");
-      const result = await albumTemplatePreviewAction(
-        collectionId,
-        new FormData(form),
-        sourceKey ? { kind: "album", albumId: sourceKey } : { kind: "sample" }
+      const { albumTemplatePreviewAction, albumTemplateStoredPreviewAction } = await import(
+        "@/app/actions/album-templates"
       );
+      const drawOver: AlbumPreviewSource = sourceKey
+        ? { kind: "album", albumId: sourceKey }
+        : { kind: "sample" };
+      const result = form
+        ? await albumTemplatePreviewAction(collectionId, new FormData(form), drawOver)
+        : await albumTemplateStoredPreviewAction(collectionId, templateId!, drawOver);
       if (latest.current !== ticket) return;
       setPending(false);
       if (result.status === "invalid") {
@@ -225,7 +225,7 @@ export function AlbumTemplatePreviewPanel({
       setPending(false);
       setProblem("the page could not be drawn just now.");
     }
-  }, [collectionId, formRef, sourceKey]);
+  }, [collectionId, formRef, templateId, sourceKey]);
 
   useEffect(() => {
     const handle = setTimeout(() => {

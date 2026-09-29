@@ -866,6 +866,43 @@ export function albumTemplateSummary(preset: AlbumRenderPreset): string {
   return `${page} · ${bands} · ${albumFaceLabel(preset.titleFace)} ${preset.titleSizePt} pt`;
 }
 
+/** A template's main values as label and value, for the summary beside its preview on the Settings
+ *  page (#1474). The preview answers *how it looks*; these are the figures a sheet does not show at a
+ *  glance — the page's millimetres, the faces by name, whether photos print — and deliberately a
+ *  handful rather than thirty: the editor is one click away for the rest. */
+export function albumTemplateSummaryRows(
+  preset: AlbumRenderPreset
+): { label: string; value: string }[] {
+  const { marginTopMm: t, marginRightMm: r, marginBottomMm: b, marginLeftMm: l } = preset;
+  const margins =
+    t === r && r === b && b === l
+      ? `${t} mm`
+      : `top ${t} · right ${r} · bottom ${b} · left ${l} mm`;
+  const border = ALBUM_BORDER_STYLES.find((s) => s.key === preset.borderStyle)?.label ?? "None";
+  const ornaments = preset.frameOrnament !== "none" && preset.frameOrnamentSizeMm > 0;
+  const frame = !ornaments
+    ? border
+    : preset.borderStyle === "none"
+      ? "Corner ornaments"
+      : `${border}, corner ornaments`;
+  return [
+    { label: "Page", value: `${preset.pageWidthMm} × ${preset.pageHeightMm} mm` },
+    { label: "Margins", value: margins },
+    { label: "Frame", value: frame },
+    {
+      label: "Per band",
+      value:
+        preset.blocksPerBand === 1 ? "One checklist" : `Up to ${preset.blocksPerBand} checklists`,
+    },
+    { label: "Album title", value: `${albumFaceLabel(preset.titleFace)} ${preset.titleSizePt} pt` },
+    { label: "Box labels", value: `${albumFaceLabel(preset.labelFace)} ${preset.labelSizePt} pt` },
+    {
+      label: "Photos",
+      value: preset.printPhotos ? `Printed at ${preset.photoOpacityPercent}%` : "Not printed",
+    },
+  ];
+}
+
 /** Coerce a stored choice column back to its union, falling back to the default preset's value.
  *
  * The parser above is what keeps these columns honest on the way *in*, so this only ever fires for

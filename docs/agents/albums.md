@@ -300,6 +300,29 @@ re-deriving:
   appearing there. A *Not redrawn* line therefore shrinks a whole-page sheet by a line's height while
   it shows — accepted rather than reserving an empty line under every sheet.
 
+### The same preview on the Settings page (#1474)
+
+The Album templates page is *list beside preview* (ADR-0059 §5): the templates on the left, the
+selected one's page on the right, *Edit…* opening the editor above. What is worth not re-deriving:
+
+- **It is the editor's preview component, not a second one.** `AlbumTemplatePreviewPanel` takes a
+  `subject`: the editor's form, or a stored template's id. The stored one is planned by
+  `albumTemplateStoredPreviewAction` through the same `planPreview` the form's action uses, from
+  `albumRenderPreset` of the row — and the editor's fields start at exactly those values, which its
+  parser returns unchanged, so the two sheets cannot differ. A client-built `FormData` of the stored
+  template was the alternative and was not taken: it would be a second encoding of the form's fields
+  (the checkboxes' `on`, the hidden texts) to keep in step with the first.
+- **The fit is read through the hydration-safe store** (`usePersistentString`), not while
+  initialising. The panel used to mount only inside a dialog opened by a click; on the Settings page
+  it is rendered on the server too, where a stored *Page width* would have failed to hydrate.
+- **The page redraws a template when its stored values change**, not only when another is chosen:
+  its `revision` is the row itself, so a saved edit, refreshed onto the page, redraws the sheet under
+  the same id.
+- **Duplicate was added here** (settled with the collector on 2026-09-29): the issue assumed it
+  already existed. The copy takes `albumRenderPreset` of the source — never the row's id or
+  timestamps — under the first free *(copy)*, *(copy 2)*, … name (`template-copy-name.ts`, pure and
+  case-blind, for the collage and ref card pages to reuse).
+
 ### Sections, and the preview marking the field in hand (#1431)
 
 #795 made the numbers visible; it still left thirty-odd of them in one column, and a changed gap of a

@@ -8,6 +8,8 @@ import {
   DialogActions,
   LabelWithError,
   ConfirmDialog,
+  DialogPrimaryButton,
+  DialogSecondaryButton,
   DIALOG_MAX_HEIGHT,
   DIALOG_MAX_WIDTH,
 } from "@/app/dialog-shell";
@@ -15,6 +17,7 @@ import {
   createAlbumTemplateAction,
   updateAlbumTemplateAction,
   deleteAlbumTemplateAction,
+  duplicateAlbumTemplateAction,
   type AlbumTemplateActionState,
 } from "@/app/actions/album-templates";
 import type { AlbumTemplateData } from "@/lib/album-templates";
@@ -32,6 +35,7 @@ import {
   MIN_BLOCKS_PER_BAND,
   MIN_TYPE_PT,
   albumTemplateSummary,
+  albumTemplateSummaryRows,
   readAlbumPresetFields,
   type AlbumRenderPreset,
 } from "@/lib/album-template-rules";
@@ -57,13 +61,16 @@ import {
   TemplateSamplePicker,
   useTemplateSamples,
 } from "@/app/c/[collectionSlug]/shared/template-builder";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Icon } from "@/app/icons";
 import { AlbumTemplatePreviewPanel } from "./album-template-preview";
+import { ListBesidePreview, useSettingsSelection } from "./list-beside-preview";
+import { SettingsPageAction } from "./settings-page-frame";
 import { FrameOrnamentField } from "./album-ornaments-panel";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
-// The album templates (#766) — the ref-card panel's list-and-dialog scaffolding, with the listing
-// templates dialog's builder for the four texts.
+// The album templates (#766) — on the Settings page, the list beside the selected template's page
+// (#1474; `list-beside-preview.tsx`); in the editor, the listing templates dialog's builder for the
+// four texts.
 //
 // The one thing this panel has to keep saying, because it is the rule the whole model rests on:
 // choosing a template on an album **copies** it. Nothing here reaches into an album that already
@@ -1021,7 +1028,7 @@ export function AlbumPresetForm({
       >
         <AlbumTemplatePreviewPanel
           collectionId={collectionId}
-          formRef={formRef}
+          subject={{ kind: "form", formRef }}
           revision={revision}
           albumId={previewAlbumId}
           markField={hovered ?? focused}
@@ -1039,6 +1046,8 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
   /** The open dialog's form, so the preview can read the preset off the very `FormData` a save
    *  reads. One form is open at a time, so one ref is enough. */
   const formRef = useRef<HTMLFormElement>(null);
+  const [selectedId, select] = useSettingsSelection(initialTemplates);
+  const selected = initialTemplates.find((t) => t.id === selectedId) ?? null;
 
   function openDialog(d: DialogState) {
     setActionState({ status: "idle" });
@@ -1049,7 +1058,11 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
     if (!isPending) setDialog({ kind: "none" });
   }
 
-  function handleSuccess() {
+  /** A template made by an add or a duplicate is selected, so its page is what is on screen next;
+   *  a deleted one's address is cleared, and the first template takes its place. */
+  function handleSuccess(result: Extract<AlbumTemplateActionState, { status: "success" }>) {
+    if (result.id) select(result.id);
+    else if (dialog.kind === "delete") select(null);
     setDialog({ kind: "none" });
     router.refresh();
   }
@@ -1062,7 +1075,7 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
     startTransition(async () => {
       const result = await action(new FormData(e.currentTarget));
       setActionState(result);
-      if (result.status === "success") handleSuccess();
+      if (result.status === "success") handleSuccess(result);
     });
   }
 
@@ -1070,7 +1083,16 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
     startTransition(async () => {
       const result = await action();
       setActionState(result);
-      if (result.status === "success") handleSuccess();
+      if (result.status === "success") handleSuccess(result);
+    });
+  }
+
+  function duplicate(template: AlbumTemplateData) {
+    setActionState({ status: "idle" });
+    startTransition(async () => {
+      const result = await duplicateAlbumTemplateAction(template.id);
+      setActionState(result);
+      if (result.status === "success") handleSuccess(result);
     });
   }
 
@@ -1080,32 +1102,11 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
 
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
-        <button
-          type="button"
-          onClick={() => openDialog({ kind: "add" })}
-          style={{
-            padding: "0.5rem 1rem",
-            background: "var(--color-action-primary)",
-            color: "#fff",
-            border: "none",
-            borderRadius: "0.375rem",
-            fontSize: "0.875rem",
-            fontWeight: 500,
-            cursor: "pointer",
-          }}
-        >
-          + Add template
-        </button>
-      </div>
-
-      <p style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
-        How an album looks, held once and reused: the page and its margins, the spacing, the hawid
-        clearances a box adds to a stamp, a face and size for each kind of text, and the headings,
-        labels and footer as {"{token}"} templates. Starting an album from a template{" "}
-        <strong>copies</strong> these values onto it — the album keeps its own, so editing a template
-        never reaches back into pages that are already printed and glued into.
-      </p>
+      <SettingsPageAction>
+        <DialogPrimaryButton type="button" onClick={() => openDialog({ kind: "add" })}>
+          <Icon name="add" /> Add template
+        </DialogPrimaryButton>
+      </SettingsPageAction>
 
       {listError && (
         <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
@@ -1113,67 +1114,67 @@ export function AlbumTemplatesPanel({ collectionId, initialTemplates }: AlbumTem
         </p>
       )}
 
-      {initialTemplates.length === 0 && (
-        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
+      {initialTemplates.length === 0 ? (
+        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem", maxWidth: "40rem" }}>
           No album templates yet. A new one starts as A4 with 10 mm margins and the type an album is
           conventionally set in — adjust it rather than starting from nothing.
         </p>
+      ) : (
+        <ListBesidePreview
+          label="Album templates"
+          items={initialTemplates.map((template) => ({
+            id: template.id,
+            name: template.name,
+            note: albumTemplateSummary(template),
+            actions: [
+              {
+                key: "edit",
+                label: "Edit…",
+                icon: "edit",
+                onSelect: () => openDialog({ kind: "edit", template }),
+              },
+              {
+                key: "duplicate",
+                label: "Duplicate",
+                icon: "duplicate",
+                disabled: isPending,
+                onSelect: () => duplicate(template),
+              },
+              {
+                key: "delete",
+                label: "Delete",
+                icon: "delete",
+                danger: true,
+                separatorBefore: true,
+                onSelect: () => openDialog({ kind: "delete", template }),
+              },
+            ],
+          }))}
+          selectedId={selectedId}
+          onSelect={select}
+          selected={
+            selected && {
+              title: selected.name,
+              actions: (
+                <DialogSecondaryButton onClick={() => openDialog({ kind: "edit", template: selected })}>
+                  <Icon name="edit" /> Edit…
+                </DialogSecondaryButton>
+              ),
+              summary: albumTemplateSummaryRows(selected),
+              preview: (
+                <AlbumTemplatePreviewPanel
+                  collectionId={collectionId}
+                  subject={{ kind: "template", templateId: selected.id }}
+                  // Redrawn when its values change under the same id: an edit saved, and the
+                  // page refreshed, hands this a new row for the template already selected.
+                  revision={JSON.stringify(selected)}
+                  markField={null}
+                />
+              ),
+            }
+          }
+        />
       )}
-
-      <div
-        style={{
-          border: initialTemplates.length > 0 ? "1px solid var(--color-border)" : "none",
-          borderRadius: "0.75rem",
-          overflow: "hidden",
-        }}
-      >
-        {initialTemplates.map((template, i) => (
-          <div
-            key={template.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-              padding: "0.75rem 1rem",
-              background: "var(--color-bg-elevated)",
-              borderBottom: i < initialTemplates.length - 1 ? "1px solid var(--color-border)" : "none",
-            }}
-          >
-            <span
-              style={{
-                flex: 1,
-                fontSize: "0.9375rem",
-                color: "var(--color-text-primary)",
-                fontWeight: 500,
-              }}
-            >
-              {template.name}
-            </span>
-            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              {albumTemplateSummary(template)}
-            </span>
-            <RowActionsMenu
-              ariaLabel="Album template actions"
-              actions={[
-                {
-                  key: "edit",
-                  label: "Edit",
-                  icon: "edit",
-                  onSelect: () => openDialog({ kind: "edit", template }),
-                },
-                {
-                  key: "delete",
-                  label: "Delete",
-                  icon: "delete",
-                  danger: true,
-                  separatorBefore: true,
-                  onSelect: () => openDialog({ kind: "delete", template }),
-                },
-              ]}
-            />
-          </div>
-        ))}
-      </div>
 
       {/* ── Dialogs ── */}
 
