@@ -629,6 +629,14 @@ chapters. Settled with the collector against a wireframe. What is worth not re-d
   (folded chapter ids; open is the default). Defaults are left out of the address.
 - **The standing paragraphs became hints** (dotted text with a `Tooltip`) and user-guide text. The
   *print at 100 %* reminder stays visible beside *Download PDF*.
+- **The thumbnail opens its sheet in the page editor** (#1489), a printed card too (the editor draws
+  it read-only), as an ordinary `Link` so a new tab can take it. Every way into the editor from this
+  screen carries the screen's view in **one** parameter, `view` (`ALBUM_VIEW_PARAM`), holding the
+  screen's own query: the editor keeps its other parameters as it moves between sheets, so the view
+  survives that, and its links back re-read it through `parseAlbumScreenView`
+  (`albumScreenReturnHref`) so nothing but a view is ever carried. One parameter rather than the
+  screen's own: `sheets` in the editor's address would be a filter where the PDF reads it as a range.
+  Browser Back needed none of this — the view was already the address.
 
 ## The PDF (#768, ADR-0046)
 

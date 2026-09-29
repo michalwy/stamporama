@@ -28,6 +28,7 @@ import type { AlbumData, AlbumEntryData } from "@/lib/albums";
 import type { AlbumPlanOverview } from "@/lib/album-plan";
 import type { AlbumSheetSketch, AlbumSheetSummary } from "@/lib/album-editor";
 import {
+  ALBUM_VIEW_PARAM,
   albumChapterRuns,
   albumScreenSummary,
   albumScreenViewQuery,
@@ -409,6 +410,17 @@ export function AlbumScreen({
     router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
   }
 
+  /** The page editor, on one sheet or on its first, carrying this view so the editor's way back
+   *  returns to it (#1489). */
+  function editorHref(position?: number): string {
+    const params = new URLSearchParams();
+    if (position !== undefined) params.set("sheet", String(position));
+    const carried = albumScreenViewQuery(view);
+    if (carried) params.set(ALBUM_VIEW_PARAM, carried);
+    const qs = params.toString();
+    return `/c/${collectionSlug}/albums/${album.id}/pages${qs ? `?${qs}` : ""}`;
+  }
+
   function toggleChapter(id: string) {
     const closed = new Set(view.closed);
     if (closed.has(id)) closed.delete(id);
@@ -448,7 +460,7 @@ export function AlbumScreen({
             key: "editor",
             label: "Open in the page editor",
             icon: "open",
-            href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${position}`,
+            href: editorHref(position),
             hint: "Read-only: it draws what went onto the paper, with what has changed since",
           },
           {
@@ -472,7 +484,7 @@ export function AlbumScreen({
             key: "editor",
             label: "Open in the page editor",
             icon: "edit",
-            href: `/c/${collectionSlug}/albums/${album.id}/pages?sheet=${position}`,
+            href: editorHref(position),
             hint: "Correct it by hand, exact in millimetres",
           },
           {
@@ -521,7 +533,12 @@ export function AlbumScreen({
           borderBottom: last ? "none" : "1px solid var(--color-border)",
         }}
       >
-        <SheetThumbnail sketch={row.summary?.sketch ?? null} range={page.range} />
+        <SheetThumbnail
+          sketch={row.summary?.sketch ?? null}
+          range={page.range}
+          href={editorHref(row.position)}
+          printed={row.printed}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -756,7 +773,7 @@ export function AlbumScreen({
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           {initialOverview.pages.length > 0 && (
             <Tooltip content="Draw a sheet at 1:1 and correct it by hand — extra space, a forced break, a box a couple of millimetres bigger, an order of your own. Every correction is a delta, so a stamp arriving later re-flows the page and keeps them.">
-              <Link href={`/c/${collectionSlug}/albums/${album.id}/pages`} style={PRIMARY_BTN}>
+              <Link href={editorHref()} style={PRIMARY_BTN}>
                 Page editor
               </Link>
             </Tooltip>
@@ -1381,48 +1398,80 @@ function AttentionChips({ attention }: { attention: AlbumSheetAttention }) {
  * A sheet in miniature: where its text sits and where its boxes are, with a box the editor would flag
  * drawn in the warning colour. Every figure came from the server — this scales them, and measures
  * nothing (ADR-0045 §7).
+ *
+ * It is the sheet, so it opens the sheet (#1489): an ordinary link to the page editor on it, which
+ * draws a printed card read-only as it always does, and which a new tab can take.
  */
-function SheetThumbnail({ sketch, range }: { sketch: AlbumSheetSketch | null; range: string }) {
+function SheetThumbnail({
+  sketch,
+  range,
+  href,
+  printed,
+}: {
+  sketch: AlbumSheetSketch | null;
+  range: string;
+  href: string;
+  printed: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
   if (!sketch) {
     return <span aria-hidden style={{ width: THUMB_WIDTH_PX, flexShrink: 0 }} />;
   }
   const heightPx = Math.round((THUMB_WIDTH_PX * sketch.heightMm) / sketch.widthMm);
+  const label = printed
+    ? "Open this card in the page editor, read-only"
+    : "Open this sheet in the page editor";
   return (
-    <svg
-      role="img"
-      aria-label={`Sheet ${range}`}
-      width={THUMB_WIDTH_PX}
-      height={heightPx}
-      viewBox={`0 0 ${sketch.widthMm} ${sketch.heightMm}`}
-      style={{ flexShrink: 0, display: "block" }}
-    >
-      <rect
-        x={0}
-        y={0}
-        width={sketch.widthMm}
-        height={sketch.heightMm}
-        fill={THUMB_PAPER}
-        stroke={THUMB_EDGE}
-        strokeWidth={1}
-        vectorEffect="non-scaling-stroke"
-      />
-      {sketch.lines.map((l, i) => (
-        <rect key={`l${i}`} x={l.xMm} y={l.yMm} width={l.widthMm} height={l.heightMm} fill={THUMB_TEXT} />
-      ))}
-      {sketch.boxes.map((b, i) => (
-        <rect
-          key={`b${i}`}
-          x={b.xMm}
-          y={b.yMm}
-          width={b.widthMm}
-          height={b.heightMm}
-          fill={b.flagged ? THUMB_FLAG : "none"}
-          fillOpacity={b.flagged ? 0.25 : undefined}
-          stroke={b.flagged ? THUMB_FLAG : THUMB_INK}
-          strokeWidth={0.5}
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
-    </svg>
+    <Tooltip content={label} style={{ flexShrink: 0 }}>
+      <Link
+        href={href}
+        aria-label={range ? `${label}: ${range}` : label}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          display: "block",
+          borderRadius: "0.125rem",
+          // Left unset at rest, so a keyboard's focus ring is the browser's own.
+          outline: hovered ? "2px solid var(--color-accent)" : undefined,
+          outlineOffset: "2px",
+        }}
+      >
+        <svg
+          aria-hidden
+          width={THUMB_WIDTH_PX}
+          height={heightPx}
+          viewBox={`0 0 ${sketch.widthMm} ${sketch.heightMm}`}
+          style={{ flexShrink: 0, display: "block" }}
+        >
+          <rect
+            x={0}
+            y={0}
+            width={sketch.widthMm}
+            height={sketch.heightMm}
+            fill={THUMB_PAPER}
+            stroke={THUMB_EDGE}
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+          {sketch.lines.map((l, i) => (
+            <rect key={`l${i}`} x={l.xMm} y={l.yMm} width={l.widthMm} height={l.heightMm} fill={THUMB_TEXT} />
+          ))}
+          {sketch.boxes.map((b, i) => (
+            <rect
+              key={`b${i}`}
+              x={b.xMm}
+              y={b.yMm}
+              width={b.widthMm}
+              height={b.heightMm}
+              fill={b.flagged ? THUMB_FLAG : "none"}
+              fillOpacity={b.flagged ? 0.25 : undefined}
+              stroke={b.flagged ? THUMB_FLAG : THUMB_INK}
+              strokeWidth={0.5}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </svg>
+      </Link>
+    </Tooltip>
   );
 }

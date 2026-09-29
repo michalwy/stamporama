@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ALBUM_VIEW_PARAM,
   albumChapterRuns,
+  albumScreenReturnHref,
   albumScreenSummary,
   albumScreenViewQuery,
   cardMatchesFilter,
@@ -64,6 +66,25 @@ describe("the address", () => {
     });
     assert.equal(albumScreenViewQuery(parseAlbumScreenView(params(qs)), ""), qs.replace("other=1&", ""));
     assert.equal(albumScreenViewQuery(parseAlbumScreenView(params("")), ""), "");
+  });
+
+  it("comes back from the page editor as it was left (#1489)", () => {
+    const view = parseAlbumScreenView(params("tab=entries&sheets=attention&closed=1939"));
+    const editor = params(`sheet=3&${ALBUM_VIEW_PARAM}=${encodeURIComponent(albumScreenViewQuery(view))}`);
+    const back = albumScreenReturnHref("/c/x/albums/a", editor.get(ALBUM_VIEW_PARAM));
+    assert.equal(back, "/c/x/albums/a?tab=entries&sheets=attention&closed=1939");
+  });
+
+  it("carries nothing but the view, and a plain address when there is none", () => {
+    assert.equal(albumScreenReturnHref("/c/x/albums/a", null), "/c/x/albums/a");
+    assert.equal(albumScreenReturnHref("/c/x/albums/a", "next=https://evil.test&tab=nope"), "/c/x/albums/a");
+  });
+
+  it("opens the Printed cards tab and keeps the rest of the view", () => {
+    assert.equal(
+      albumScreenReturnHref("/c/x/albums/a", "cards=diverged&closed=1939", { tab: "printed" }),
+      "/c/x/albums/a?tab=printed&cards=diverged&closed=1939"
+    );
   });
 });
 

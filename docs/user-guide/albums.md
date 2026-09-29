@@ -232,7 +232,8 @@ chapters the pages print — and a chapter's heading says how many it holds and 
 need attention. Click a heading to fold the chapter away.
 
 The tab you are on, the filter and the chapters you folded are part of the page's address, so going
-into the page editor and coming back — or bookmarking the album — returns you to exactly that view.
+into the page editor and coming back — with the browser's Back or the editor's own link to the album,
+even after moving between sheets there — or bookmarking the album returns you to exactly that view.
 
 The explanations that used to sit on this screen as paragraphs are now hints: hover the dotted text
 beside the thing it explains. The one reminder that stays in plain sight is *print at 100 %*, beside
@@ -261,6 +262,10 @@ sheet — where its text sits and where its boxes are, with any box that needs a
 then its catalog range, the checklists on it, and whether it is **Live** (not on paper yet, and
 re-planned every time you open the album) or **Printed** on a given date. A printed sheet whose card
 no longer matches the album says **Out of date**; click it to see why.
+
+**Click a thumbnail to open that sheet in the page editor.** A printed sheet opens there too, read-only,
+as the card went onto paper and with what has changed since. The thumbnail is an ordinary link, so it
+opens in a new tab as well.
 
 The row of chips above the list narrows it: **All**, **Needs attention**, **Live**, **Printed**.
 
@@ -316,7 +321,8 @@ are cut from it.
 
 ## The page editor
 
-**Page editor** in the album's header — or *Open in the page editor* on one sheet's `⋮` — draws a
+**Page editor** in the album's header — or a sheet's thumbnail, or *Open in the page editor* on its
+`⋮` — draws a
 sheet at **1:1** and lets you overrule the layout by hand.
 
 It is a workbench and it takes the window. **Only the sheet scrolls**: the list of sheets on the
