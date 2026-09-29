@@ -476,7 +476,7 @@ function VariantPriceGrid({
   if (grid.conditions.length === 0) {
     return (
       <p style={MUTED}>
-        No conditions defined. Add them under Settings → Conditions &amp; formats before recording
+        No conditions defined. Add them under Settings → Conditions before recording
         prices.
       </p>
     );

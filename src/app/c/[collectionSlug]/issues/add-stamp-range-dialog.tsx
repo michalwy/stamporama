@@ -407,7 +407,7 @@ export function AddStampRangeDialog({
                   {dup.groups.length === 1 ? "number" : "numbers"} already in this collection:{" "}
                   {dup.groups.slice(0, 5).map((g) => g.label).join(", ")}
                   {dup.groups.length > 5 ? ` and ${dup.groups.length - 5} more` : ""}.
-                  {dupBlocking ? " Switch to warnings under Settings → Duplicates to save anyway." : ""}
+                  {dupBlocking ? " Switch to warnings under Settings → Duplicate numbers to save anyway." : ""}
                 </div>
               )}
             </div>

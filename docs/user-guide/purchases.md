@@ -1426,7 +1426,7 @@ there would be no batch header left to hang it on.
 
 **The record is never deleted. The scan behind it can be, if you ask.** A finished batch's card scan
 is the largest file this app keeps, and once every tile on the card has been dealt with the card can
-never be cut again — so **Settings → General** has *Keep card scans of finished batches*, which will
+never be cut again — so **Settings → Photos & storage** has *Keep card scans of finished batches*, which will
 delete those scans after a period you choose. It is **off unless you switch it on**: a listing's
 generated images can be made again, but a stockbook taken apart cannot be scanned again, so nothing
 here is deleted on a schedule you did not ask for. If you do switch it on, the batch keeps its tiles,

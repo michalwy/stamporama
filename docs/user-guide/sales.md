@@ -300,7 +300,7 @@ never says anything of its own keeps following its method's carrier.
 
 Whether the number becomes a **link** depends on that carrier:
 
-1. Add the carrier under **Settings → Shipping** with its **tracking address** — the page where it
+1. Add the carrier under **Settings → Carriers** with its **tracking address** — the page where it
    looks a parcel up, with `{code}` where the tracking number goes, e.g.
    `https://emonitoring.poczta-polska.pl/?numer={code}`. Leave the address blank for a carrier with
    no tracking page.

@@ -186,7 +186,7 @@ export function RefCardsControls({
         </label>
       ) : (
         <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", paddingBottom: "0.4rem" }}>
-          Printing the built-in card. Add your own sizes in Settings → Ref cards.
+          Printing the built-in card. Add your own sizes in Settings → Ref card templates.
         </span>
       )}
 

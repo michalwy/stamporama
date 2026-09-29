@@ -828,7 +828,7 @@ yourself](#attaching-your-own-images) are never deleted: those are originals, an
 them again.
 
 The week is a grace period, in case you want to look at, download or re-post the images shortly
-after closing the listing. **You can change it for this collection** in **Settings → General**,
+after closing the listing. **You can change it for this collection** in **Settings → Photos & storage**,
 under *Keep closed listings' images* — see [Collections](collections.md#how-long-closed-listings-keep-their-images).
 A working collection and an archive of something finished want different answers, which is why the
 period belongs to the collection rather than to the whole instance. Deleting the sale that sold an

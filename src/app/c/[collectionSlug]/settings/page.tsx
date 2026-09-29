@@ -44,7 +44,7 @@ import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
 import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
 import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
 import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
-import { SettingsTabs } from "./settings-tabs";
+import { SettingsScreen } from "./settings-screen";
 
 export const metadata = { title: "Settings" };
 
@@ -58,8 +58,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
 
   // Areas left Settings for a page of their own (#775; in the Catalog section since #1234), and `?tab=areas` is an address a
   // collector has had in front of them for months — every mention of it in the user guide was one,
-  // and the tab strip itself was a bookmark. Without this the query simply falls through to
-  // General, which is the one outcome worth avoiding: it does not look like a move, it looks like
+  // and the old tab strip itself was a bookmark. Without this the query simply falls through to
+  // the default entry, which is the one outcome worth avoiding: it does not look like a move, it looks like
   // the screen is gone. The mirror of what `/areas` did until now, pointing the other way.
   const { tab } = await searchParams;
   if ((Array.isArray(tab) ? tab[0] : tab) === "areas") {
@@ -143,12 +143,11 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
   ]);
 
   return (
-    // The width cap lives on the tabs (#691), not here: how wide a settings surface may get is the
-    // tab's answer rather than the page's. The tree that made that distinction worth drawing has
-    // since moved out (#775); the placement stands on its own reasoning.
+    // No width cap here (#1469; ADR-0059): the screen takes the window, and how wide a page's
+    // fields may run is its body shape's answer, not the screen's.
     <div style={{ padding: "2rem" }}>
       <Suspense fallback={null}>
-        <SettingsTabs
+        <SettingsScreen
           collectionId={collection.id}
           collectionName={collection.name}
           baseCurrency={collection.baseCurrency}
@@ -169,7 +168,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           // default is *keep for ever* unless an operator says otherwise, which is exactly the
           // sentence a collector following the instance should be reading.
           instanceScanSheetTtlLabel={describeScanSheetTtl(instanceScanSheetTtlMs())}
-          // The collection's scanning profiles (#1443), with what uses each — the Scanning tab.
+          // The collection's scanning profiles (#1443), with what uses each — the Scanners entry.
           initialScanningProfiles={scanningProfiles}
           collectionSlug={collectionSlug}
           initialAreas={areas}

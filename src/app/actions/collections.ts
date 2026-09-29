@@ -85,7 +85,7 @@ export type DefaultLanguageState =
   | { status: "success"; language: string }
   | { status: "error"; message: string };
 
-/** Set the collection's default language (#293) from the Settings → General picker. */
+/** Set the collection's default language (#293) from the Settings → Collection picker. */
 export async function updateCollectionDefaultLanguageAction(
   collectionId: string,
   language: string
@@ -108,7 +108,7 @@ export type ItemNoPadState =
   | { status: "success"; pad: number }
   | { status: "error"; message: string };
 
-/** Set the internal copy-number width (#268) from the Settings → General picker. */
+/** Set the internal copy-number width (#268) from the Settings → Collection picker. */
 export async function updateCollectionItemNoPadAction(
   collectionId: string,
   pad: number
@@ -132,7 +132,7 @@ export type ClosedOfferPhotoTtlState =
   | { status: "error"; message: string };
 
 /**
- * Save this collection's closed-offer photo retention (#577) from Settings → General.
+ * Save this collection's closed-offer photo retention (#577) from Settings → Photos & storage.
  *
  * `null` clears the setting, which is not "unset it and take a default" but the collection saying
  * it has no opinion and defers to the instance — the one answer no column default could express.
@@ -160,7 +160,7 @@ export type ScanSheetTtlState =
   | { status: "error"; message: string };
 
 /**
- * Save this collection's retained-scan retention (#578) from Settings → General.
+ * Save this collection's retained-scan retention (#578) from Settings → Photos & storage.
  *
  * The same three answers as the closed-offer period above — and the same meaning for `null`, the
  * collection saying it has no opinion. What differs is what "no opinion" works out to: keeping a
@@ -189,7 +189,7 @@ export type BidPercentsState =
   | { status: "success" }
   | { status: "error"; message: string };
 
-/** Save one of the bid-recommendation percentages (#508) from the Settings → General section. */
+/** Save one of the bid-recommendation percentages (#508) from Settings → Bid recommendation. */
 export async function updateCollectionBidPercentsAction(
   collectionId: string,
   patch: BidPercentPatch
@@ -220,7 +220,7 @@ export type ClearStorageCacheState =
   | { status: "error"; message: string };
 
 /**
- * Empty this collection's share of the local storage cache (#591) from Settings → General.
+ * Empty this collection's share of the local storage cache (#591) from Settings → Photos & storage.
  *
  * No confirmation dialog, unlike everything else on this screen that deletes: every object in the
  * cache is a copy of one that still exists on the remote backend, so the worst this can cost is the

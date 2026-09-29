@@ -86,7 +86,7 @@ double line for you to cut down the middle of.
 ### Card formats
 
 The size of a ref card is set by the pocket it has to fit, so it is yours to state rather than ours
-to guess. Keep your sizes as named **ref card templates** under **Settings → Ref cards**, and pick
+to guess. Keep your sizes as named **ref card templates** under **Settings → Ref card templates**, and pick
 one from the **Card format** control above the sheet. A template holds four measurements, all in
 millimetres:
 

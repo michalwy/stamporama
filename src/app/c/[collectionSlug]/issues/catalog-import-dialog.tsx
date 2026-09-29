@@ -463,7 +463,7 @@ function SourceStep({
         {areaId && !targetVendor && (
           <p style={{ ...NOTE, color: "var(--color-warning)" }}>
             This area has no primary catalog, so there is nothing to file the file&rsquo;s numbers
-            under. Set one on the area in Settings → Areas first.
+            under. Set one on the area in Catalog → Areas first.
           </p>
         )}
         <p style={NOTE}>One import, one area — a file per country.</p>

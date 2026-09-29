@@ -48,7 +48,7 @@ async function handle(
       // Before the lookup: whether a path exists is information, and an unauthenticated caller gets
       // none of it.
       throw unauthorized(
-        "Send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant."
+        "Send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant & API."
       );
     }
 

@@ -849,7 +849,7 @@ export function AlbumScreen({
           }}
         >
           This collection has no hawid stock, so every box is planned as a pocket. That is what an
-          undescribed drawer honestly comes to — add the strips you own in Settings → Albums and the
+          undescribed drawer honestly comes to — add the strips you own in Settings → Hawid stock and the
           boxes will be cut from them.
         </p>
       )}

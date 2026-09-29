@@ -4,7 +4,7 @@ import { AlbumOrnamentError, uploadAlbumOrnament } from "@/lib/album-ornament-st
 import { MAX_ORNAMENT_SVG_BYTES } from "@/lib/album-ornament-svg";
 
 // **Uploading a corner ornament** for the album page frame (#1427), from the album template's frame
-// field and from Settings → Albums.
+// field and from Settings → Corner ornaments.
 //
 // Multipart through a route handler rather than a server action, the list import's boundary before
 // it: the payload is a file the collector picked. The file is read into a drawing here and refused

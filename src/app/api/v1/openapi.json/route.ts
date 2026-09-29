@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const caller = await resolveAgentApiCaller(request);
     if (!caller) {
       throw unauthorized(
-        "Send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant."
+        "Send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant & API."
       );
     }
     return NextResponse.json(

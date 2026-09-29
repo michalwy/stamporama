@@ -15,7 +15,7 @@ import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu
 import { useToast } from "@/app/toast-provider";
 
 // The collector's own corner ornaments (#1427): the frame field the album template's form carries,
-// and the list under Settings → Albums where an upload can be deleted.
+// and the list under Settings → Corner ornaments where an upload can be deleted.
 //
 // The upload goes to its route and comes back as a row; what is shown of it here is the drawing it
 // was read into — never the file — which is also exactly what the page will print.
@@ -193,7 +193,7 @@ export function FrameOrnamentField({
   );
 }
 
-/** Settings → Albums: the collection's own corner ornaments, each shown as it prints. */
+/** Settings → Corner ornaments: the collection's own corner ornaments, each shown as it prints. */
 export function AlbumOrnamentsPanel({ collectionId }: { collectionId: string }) {
   const { data: ornaments, isLoading } = useAlbumOrnaments(collectionId);
   const queryClient = useQueryClient();

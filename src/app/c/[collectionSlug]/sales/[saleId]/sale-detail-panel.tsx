@@ -380,7 +380,7 @@ export function SaleDetailPanel({
                 <Tooltip
                   content={
                     sale.carrierName
-                      ? `${sale.carrierName} has no tracking address recorded — add one in Settings → Shipping`
+                      ? `${sale.carrierName} has no tracking address recorded — add one in Settings → Carriers`
                       : "No carrier is recorded for this parcel, so there is nothing to link to"
                   }
                 >

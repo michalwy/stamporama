@@ -683,7 +683,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
           }}
         >
           This collection has no hawid stock, so every box below is a pocket. Add the strips you own
-          in Settings → Albums and the boxes will be cut from them.
+          in Settings → Hawid stock and the boxes will be cut from them.
         </p>
       )}
       {data.nameSuggestion && (

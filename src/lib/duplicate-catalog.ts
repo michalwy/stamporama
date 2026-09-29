@@ -191,7 +191,7 @@ export function formatDuplicateBlockMessage(groups: CatalogDuplicateGroup[]): st
   const shown = labels.slice(0, 5).join(", ");
   const extra = labels.length > 5 ? ` and ${labels.length - 5} more` : "";
   const noun = labels.length === 1 ? "catalog number" : "catalog numbers";
-  return `Duplicate ${noun} already in this collection: ${shown}${extra}. Switch to warnings under Settings → Duplicates to save anyway.`;
+  return `Duplicate ${noun} already in this collection: ${shown}${extra}. Switch to warnings under Settings → Duplicate numbers to save anyway.`;
 }
 
 // ── Candidate check (create / edit / auto-generate) ───────────────────────────

@@ -18,7 +18,7 @@ function stampLabel(s: CatalogDuplicateGroup["stamps"][number]): string {
  * identity the user is entering (#85). Rendered inline next to the catalog-number
  * label so it never changes the dialog's height (mirrors the duplicate-name warning
  * in #178). Advisory in "warn" mode; the caller disables the save in "block" mode.
- * Links to the conflicting stamps live in the Settings → Duplicates report, since a
+ * Links to the conflicting stamps live in the Settings → Duplicate numbers report, since a
  * tooltip is not clickable.
  */
 export function CatalogDuplicateWarningIcon({
@@ -55,7 +55,7 @@ export function CatalogDuplicateWarningIcon({
       </span>
       {blocking ? (
         <span style={{ display: "block", marginTop: "0.25rem" }}>
-          Saving is blocked — change the number, or switch to warnings under Settings → Duplicates.
+          Saving is blocked — change the number, or switch to warnings under Settings → Duplicate numbers.
         </span>
       ) : (
         <span style={{ display: "block", marginTop: "0.25rem" }}>

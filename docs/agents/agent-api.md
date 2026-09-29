@@ -254,7 +254,7 @@ deliberate.** `agent-api/scope.ts` holds `assertOperationScope`, a function of a
 `writes` declaration, so `pnpm test:unit` can hold it; `route-auth.ts` holds the one-line function
 the dispatcher calls, because that is where the collection pinning already lives and because
 authorization here is server-side and never in a caller. The vocabulary itself is one level further
-out again, in the pure `src/lib/assistant-token-scope.ts` — Settings → Assistant is a `"use client"`
+out again, in the pure `src/lib/assistant-token-scope.ts` — Settings → Assistant & API is a `"use client"`
 panel and `api-tokens.ts` carries `server-only`, so a constant both halves read belongs in a module
 neither owns (`platform.md`).
 

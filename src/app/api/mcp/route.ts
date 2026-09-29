@@ -46,7 +46,7 @@ import { getAppVersion } from "@/lib/version";
 function unauthenticated(): NextResponse {
   const { status, body } = errorResponseBody(
     unauthorized(
-      "Send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant."
+      "Send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant & API."
     )
   );
   return NextResponse.json(body, {

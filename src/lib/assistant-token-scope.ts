@@ -12,7 +12,7 @@
 // per-area scopes later without a second model, which is why the pair is deliberately coarse.
 //
 // **This module is pure and that is load-bearing.** `api-tokens.ts` carries `server-only` and
-// reaches Prisma, and Settings → Assistant is a `"use client"` panel that has to render the pickers
+// reaches Prisma, and Settings → Assistant & API is a `"use client"` panel that has to render the pickers
 // and the list — so the vocabulary cannot live in either of them. A constant both halves read
 // belongs in a pure `src/lib/` module neither owns (`platform.md`, on `MAX_REF_CARDS`), and the
 // decision belongs here too so that a unit test can hold it.

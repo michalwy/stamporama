@@ -49,12 +49,12 @@ half exists, committed so every machine's unpacked build is the same extension.
 1. `pnpm build`.
 2. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, choose
    `extension/dist`.
-3. In Stamporama: **Settings → Assistant → Connect Stamporama Assistant**.
+3. In Stamporama: **Settings → Assistant & API → Connect Stamporama Assistant**.
 4. With that page still in front, click the extension's toolbar icon. That is the whole setup —
    the profile appears in **Options**, active, with nothing typed.
 
 Adding a profile by hand (Options → *Add profile*: instance URL, collection id, token from
-**Settings → Assistant → Generate token by hand**) still works, for a browser or a script that cannot
+**Settings → Assistant & API → Generate token by hand**) still works, for a browser or a script that cannot
 register.
 
 Unpacked is the **development** path, and stays available alongside the store build — see *Two
@@ -68,7 +68,7 @@ from a link, updated by the store.
 <https://chromewebstore.google.com/detail/lhbaflbkfgahmcbgmlibleedmfcdjedf>
 
 Click **Add to Chrome**, then connect it —
-**Settings → Assistant → Connect Stamporama Assistant** in Stamporama, and click the toolbar icon
+**Settings → Assistant & API → Connect Stamporama Assistant** in Stamporama, and click the toolbar icon
 with that page in front.
 
 There is no policy, profile or MDM anywhere in this, and nothing to set up per machine. Chrome
@@ -189,7 +189,7 @@ page is matched again against the new target.
 
 A profile is normally not typed in at all: the instance registers itself.
 
-**Settings → Assistant** in Stamporama mints a short-lived, single-use code and exposes it, with the
+**Settings → Assistant & API** in Stamporama mints a short-lived, single-use code and exposes it, with the
 instance's own origin and the current collection, as JSON in a hidden element
 (`#stamporama-assistant-registration`). Clicking the toolbar icon on that page reads the payload,
 `POST`s the code to `/api/assistant/register`, and stores the token it gets back as a profile — made

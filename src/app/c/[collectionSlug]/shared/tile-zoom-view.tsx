@@ -2193,7 +2193,7 @@ export function TileZoomView({
               or a resolution typed for the sitting when no profile fits. Switching holds for this
               sitting only — the scan keeps its profile and the collection its default. */}
           <Tooltip
-            content={`What this ${subject === "photo" ? "picture" : "card"} was scanned with. Switching here holds for this sitting only — the ${subject === "photo" ? "collection keeps its default" : "scan keeps its profile"}, set in Settings → Scanning.`}
+            content={`What this ${subject === "photo" ? "picture" : "card"} was scanned with. Switching here holds for this sitting only — the ${subject === "photo" ? "collection keeps its default" : "scan keeps its profile"}, set in Settings → Scanners.`}
           >
             <select
               value={typing ? TYPED_SCALE : scaleChoice}

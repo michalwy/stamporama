@@ -1598,7 +1598,7 @@ function SizePresetControls({
         void invalidatePresets(collectionId);
         toast({
           message: `${stampSizePresetPair(result.preset)} saved as a size preset`,
-          href: `/c/${collectionSlug}/settings?tab=attributes`,
+          href: `/c/${collectionSlug}/settings?tab=size-presets`,
           linkLabel: "Name it",
         });
       } else if (result.status === "exists") {

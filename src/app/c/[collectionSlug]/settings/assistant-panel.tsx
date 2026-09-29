@@ -31,7 +31,7 @@ import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
-// Settings → Assistant (#252, part of #155). Two ways to connect the browser extension to this
+// Settings → Assistant & API (#252, part of #155). Two ways to connect the browser extension to this
 // instance + collection:
 //
 // 1. **Register** — the recommended one. A click mints a short-lived, single-use code and exposes it

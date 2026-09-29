@@ -173,7 +173,7 @@ export function StampSizePresetPicker({
               ) : list.length === 0 ? (
                 <EmptyLine>
                   No presets yet. Save a size from a stamp&apos;s fields, or add one under Settings →
-                  Attributes.
+                  Size presets.
                 </EmptyLine>
               ) : shown.length === 0 ? (
                 <EmptyLine>No preset matches.</EmptyLine>

@@ -801,7 +801,7 @@ export function ScansCard({
           style={LABEL_INPUT_STYLE}
         />
         {scanning.profiles.length > 1 && (
-          <Tooltip content="What the scans you add are scanned with — the measuring tool opens on it. Profiles are set up in Settings → Scanning.">
+          <Tooltip content="What the scans you add are scanned with — the measuring tool opens on it. Profiles are set up in Settings → Scanners.">
             <select
               value={newProfileId ?? ""}
               onChange={(e) => setNewProfileId(e.target.value || null)}

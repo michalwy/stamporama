@@ -118,7 +118,7 @@ Four ornaments come built in — **Rosette**, **Vine**, **Art Deco** and **Squar
 Stamporama in the spirit of a classic album frame; a new template starts with the Rosette at 25 mm on
 a double rule. You can also use **your own**:
 
-- **Upload SVG…** beside the ornament field, or under **Settings → Albums → Corner ornaments**, takes
+- **Upload SVG…** beside the ornament field, or under **Settings → Corner ornaments**, takes
   an SVG drawing. It lands in the field straight away and is kept in the collection for every
   template and album.
 - Draw it for the **top-left corner**. The drawing's point **0,0 sits on the frame's line** — on the
@@ -311,7 +311,7 @@ pocket*, and *in a pocket* before *sized from a neighbour*. *Needs attention* sh
 carrying any of them.
 
 If the collection has **no hawid stock** at all, the screen says so and every box is planned as a
-pocket. That is honest rather than broken: describe your drawer in Settings → Albums and the boxes
+pocket. That is honest rather than broken: describe your drawer in Settings → Hawid stock and the boxes
 are cut from it.
 
 ## The page editor
