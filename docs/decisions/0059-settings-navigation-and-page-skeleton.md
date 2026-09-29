@@ -101,7 +101,9 @@ outcome still reaches its page. An unknown key opens the default entry rather th
 
 - Every "Settings → X" reference in the app, the extension and the user guide names an entry that
   exists; a renamed or split entry renames them in the same change.
-- A new entry is a line in `settings-nav.ts`, a case in the screen's body switch (a missing case does
-  not compile) and a line in the navigation test.
+- A new entry is a line in `settings-nav.ts`, a case in the screen's body switch and a line in the
+  search index `settings-search.ts` (a missing case or line does not compile), and a line in the
+  navigation test.
 - Search over the entries and their fields (#1470) builds on the entry list rather than on the
-  rendered screen.
+  rendered screen: the index names each page's fields in the page's own words, pinned to its source
+  by `tests/unit/settings-search.test.ts`.

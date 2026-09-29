@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScanningProfileListRow } from "@/lib/scanning-profile";
 import { ScanningProfilesPanel } from "./scanning-profiles-panel";
 import Link from "next/link";
@@ -20,6 +21,14 @@ import {
   type SettingsEntryKey,
   type SettingsGroup,
 } from "./settings-nav";
+import {
+  normalizeSettingsText,
+  searchSettings,
+  type SettingsFieldMatch,
+  type SettingsMatch,
+} from "./settings-search";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
 import { AppVersionLabel } from "@/app/c/[collectionSlug]/shared/app-version-label";
 import { CatalogPanel } from "../catalog/catalog-panel";
 import { ConditionsPanel } from "./conditions-panel";
@@ -210,6 +219,49 @@ export function SettingsScreen(props: SettingsScreenProps) {
     router.replace(`${pathname}${settingsSearch(searchParams, entry.key, next)}`, { scroll: false });
   }
 
+  // The search (#1470) is local rather than in the address: it is a way of finding an entry, not a
+  // view of one, so a reload or a bookmark should open the page it names with the whole list beside
+  // it. Moving between entries keeps it, since the screen stays mounted.
+  const [query, setQuery] = useState("");
+  const matches = useMemo(() => searchSettings(query), [query]);
+
+  // The field a picked match should land on, held until the page it is on has rendered. `nonce`
+  // lets the same match be picked twice.
+  const [target, setTarget] = useState<FieldTarget | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  function pick(entryKey: SettingsEntryKey, field: SettingsFieldMatch | null) {
+    if (field) setTarget({ entry: entryKey, ...field, nonce: Date.now() });
+    router.push(`${pathname}${settingsSearch(new URLSearchParams(), entryKey, field?.part ?? null)}`, {
+      scroll: false,
+    });
+  }
+
+  useEffect(() => {
+    if (!target || target.entry !== entry.key || target.part !== part) return;
+    // A tab is found among the tabs, a field in the page's body — never the page title, which on an
+    // entry like Formats says the same word as its first tab.
+    const root = target.kind === "part" ? frameRef.current : bodyRef.current;
+    if (!root) return;
+    // A page that reads its data after mounting (Acceptance profiles, Corner ornaments) shows its
+    // fields a moment late, so the field is looked for on each frame for a couple of seconds
+    // rather than once.
+    let frame = 0;
+    let tries = 0;
+    const attempt = () => {
+      const found = findField(root, target);
+      if (found || ++tries > FIELD_LOOKUP_FRAMES) {
+        if (found) markField(found, root, target.label);
+        setTarget(null);
+        return;
+      }
+      frame = requestAnimationFrame(attempt);
+    };
+    frame = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(frame);
+  }, [target, entry.key, part]);
+
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: "2.5rem" }}>
       <SettingsNav
@@ -217,8 +269,12 @@ export function SettingsScreen(props: SettingsScreenProps) {
         pathname={pathname}
         appVersion={props.appVersion}
         appReleaseDate={props.appReleaseDate}
+        query={query}
+        onQuery={setQuery}
+        matches={matches}
+        onPick={pick}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div ref={frameRef} style={{ flex: 1, minWidth: 0 }}>
         <SettingsPageFrame
           // Keyed on the entry so a page's own state — a half-typed field, an open row — does not
           // follow the collector onto the next entry.
@@ -231,12 +287,87 @@ export function SettingsScreen(props: SettingsScreenProps) {
             entry.parts && part ? { parts: entry.parts, active: part, onChoose: choosePart } : undefined
           }
         >
-          <SettingsEntryBody entryKey={entry.key} part={part} {...props} />
+          <div ref={bodyRef}>
+            <SettingsEntryBody entryKey={entry.key} part={part} {...props} />
+          </div>
         </SettingsPageFrame>
       </div>
     </div>
   );
 }
+
+interface FieldTarget {
+  entry: SettingsEntryKey;
+  part: string | null;
+  label: string;
+  kind: SettingsFieldMatch["kind"];
+  nonce: number;
+}
+
+/** About two seconds at sixty frames. */
+const FIELD_LOOKUP_FRAMES = 120;
+
+/**
+ * The element on the open page that shows `label`. The index holds the page's own words
+ * (`settings-search.ts`, pinned to each page's source by its test), so the field is found by what it
+ * says rather than by an anchor every page would have to carry. A label that is only an
+ * `aria-label` — a control with no visible caption — is the fallback.
+ */
+function findField(root: HTMLElement, target: FieldTarget): HTMLElement | null {
+  const want = normalizeSettingsText(target.label);
+  const visible = (el: Element) => el.getClientRects().length > 0;
+  if (target.kind === "part") {
+    return (
+      Array.from(root.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+        (el) => normalizeSettingsText(el.textContent ?? "") === want
+      ) ?? null
+    );
+  }
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const el = node.parentElement;
+    if (!el || !visible(el)) continue;
+    if (
+      normalizeSettingsText(node.nodeValue ?? "") === want ||
+      normalizeSettingsText(el.textContent ?? "") === want
+    ) {
+      return el;
+    }
+  }
+  return (
+    Array.from(root.querySelectorAll<HTMLElement>("[aria-label]")).find(
+      (el) => visible(el) && normalizeSettingsText(el.getAttribute("aria-label") ?? "") === want
+    ) ?? null
+  );
+}
+
+/**
+ * Scroll to the field and mark it for a moment (#1470). A card whose title the label is — Base
+ * currency, a retention period — is marked whole, since the card *is* the setting; a heading over a
+ * run of panels is marked alone, or the mark would light up the rest of the page with it.
+ */
+function markField(el: HTMLElement, root: HTMLElement, label: string) {
+  const want = normalizeSettingsText(label);
+  let marked = el;
+  const card = el.parentElement?.closest("section, fieldset");
+  if (
+    card instanceof HTMLElement &&
+    root.contains(card) &&
+    normalizeSettingsText(card.textContent ?? "").startsWith(want)
+  ) {
+    marked = card;
+  }
+  scrollIntoView(marked, { block: "center" });
+  // Restart the mark when the same field is picked again while it is still showing.
+  marked.classList.remove(FIELD_FLASH);
+  void marked.offsetWidth;
+  marked.classList.add(FIELD_FLASH);
+  marked.addEventListener("animationend", () => marked.classList.remove(FIELD_FLASH), {
+    once: true,
+  });
+}
+
+const FIELD_FLASH = "field-arrival-flash";
 
 /**
  * The navigation (#1465): a vertical list beside the content, as in the Page template dialog
@@ -244,18 +375,36 @@ export function SettingsScreen(props: SettingsScreenProps) {
  * collector opens to *find* something should not hide half of it. It scrolls on its own when the
  * window is short. The group headings speak in the sidebar's tints, so a group reads as the part of
  * the app it configures.
+ *
+ * The search above it (#1470) narrows the same list rather than opening a second one: the entries
+ * that match keep their group and their place, and under each is the field or tab that matched,
+ * which opens the page at it.
  */
 function SettingsNav({
   activeKey,
   pathname,
   appVersion,
   appReleaseDate,
+  query,
+  onQuery,
+  matches,
+  onPick,
 }: {
   activeKey: string;
   pathname: string;
   appVersion: string;
   appReleaseDate: string | null;
+  query: string;
+  onQuery: (query: string) => void;
+  /** Null while nothing is typed: the whole list. */
+  matches: SettingsMatch[] | null;
+  onPick: (entry: SettingsEntryKey, field: SettingsFieldMatch | null) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const shownGroups = matches
+    ? SETTINGS_GROUPS.filter((g) => matches.some((m) => m.entry.group === g.key))
+    : SETTINGS_GROUPS;
+
   return (
     <nav
       aria-label="Settings"
@@ -268,14 +417,60 @@ function SettingsNav({
         flexDirection: "column",
       }}
     >
+      <TextInput
+        ref={inputRef}
+        type="search"
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            // Clears first; a second Escape on an empty field leaves it.
+            e.preventDefault();
+            if (query) onQuery("");
+            else inputRef.current?.blur();
+          } else if (e.key === "Enter" && matches && matches.length > 0) {
+            e.preventDefault();
+            const first = matches[0];
+            onPick(first.entry.key, first.fields[0] ?? null);
+          }
+        }}
+        placeholder="Find a setting…"
+        aria-label="Find a setting by name"
+        autoComplete="off"
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          marginBottom: "1rem",
+          padding: "0.375rem 0.625rem",
+          border: "1px solid var(--color-border-strong)",
+          borderRadius: "0.375rem",
+          fontSize: "0.875rem",
+          color: "var(--color-text-primary)",
+          background: "var(--color-bg-elevated)",
+        }}
+      />
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {SETTINGS_GROUPS.map((group, i) => (
+        {matches && matches.length === 0 && (
+          <p
+            style={{
+              margin: 0,
+              padding: "0 0.75rem",
+              fontSize: "0.8125rem",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            No setting is called that.
+          </p>
+        )}
+        {shownGroups.map((group, i) => (
           <SettingsNavGroup
             key={group.key}
             group={group}
             first={i === 0}
             activeKey={activeKey}
             pathname={pathname}
+            matches={matches}
+            onPick={onPick}
           />
         ))}
       </div>
@@ -301,16 +496,23 @@ function SettingsNavGroup({
   first,
   activeKey,
   pathname,
+  matches,
+  onPick,
 }: {
   group: SettingsGroup;
   first: boolean;
   activeKey: string;
   pathname: string;
+  matches: SettingsMatch[] | null;
+  onPick: (entry: SettingsEntryKey, field: SettingsFieldMatch | null) => void;
 }) {
   // Outside the app's sections (General, System) the active row is the accent's, as Overview's and
   // the footer's are in the sidebar.
   const hue = group.tint ? `var(--color-tag-${group.tint})` : "var(--color-accent)";
   const plate = group.tint ? `var(--color-tag-${group.tint}-soft)` : "var(--color-bg-muted)";
+  const rows = matches
+    ? matches.filter((m) => m.entry.group === group.key)
+    : settingsEntriesOf(group.key).map((entry) => ({ entry, fields: [] }));
   return (
     <div>
       <p
@@ -327,7 +529,7 @@ function SettingsNavGroup({
         {group.label}
       </p>
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {settingsEntriesOf(group.key).map((entry) => {
+        {rows.map(({ entry, fields }) => {
           const active = entry.key === activeKey;
           return (
             <li key={entry.key}>
@@ -348,6 +550,33 @@ function SettingsNavGroup({
               >
                 {entry.label}
               </Link>
+              {fields.length > 0 && (
+                <ul style={{ listStyle: "none", margin: "0 0 0.25rem", padding: 0 }}>
+                  {fields.map((field) => (
+                    <li key={`${field.part ?? ""}:${field.label}`}>
+                      {/* A link as well as a pick: it is a place, so it opens in a new tab like
+                          any other, and the click is what carries the collector to the field. */}
+                      <Link
+                        href={`${pathname}${settingsSearch(new URLSearchParams(), entry.key, field.part)}`}
+                        onClick={(e) => {
+                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                          e.preventDefault();
+                          onPick(entry.key, field);
+                        }}
+                        style={{
+                          display: "block",
+                          padding: "0.1875rem 0.75rem 0.1875rem 1.5rem",
+                          fontSize: "0.8125rem",
+                          textDecoration: "none",
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
+                        {field.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           );
         })}

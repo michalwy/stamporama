@@ -288,6 +288,32 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   }
 }
 
+/* The Settings field a search match opened (#1470): `arrival-flash`'s message — *this is what you
+   came for* — on an element that may sit on any surface. A settings card rests on
+   --color-bg-elevated, a section heading on the page itself, so the fade names no colour to end
+   on: a keyframe that leaves `background-color` out interpolates to the element's own value,
+   whatever it is. Same hold, same ring, same reduced-motion rule. */
+@keyframes field-arrival-flash {
+  0%,
+  45% {
+    background-color: var(--color-bg-highlight-flash);
+    box-shadow: 0 0 0 2px var(--color-accent);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
+.field-arrival-flash {
+  animation: field-arrival-flash 2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field-arrival-flash {
+    animation-timing-function: step-end;
+  }
+}
+
 /* Confirmation toasts (#541). The card slides a little way in from the edge it sits against and
    fades up, so a stack that gains an entry reads as one arriving rather than as the whole column
    jumping. Short and eased-out: this is feedback on something already done, not an event. */

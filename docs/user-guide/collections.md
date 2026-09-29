@@ -67,7 +67,7 @@ it serves:
 - **Collection** — Scanners, Tags, Album templates, Hawid stock, Corner ornaments and Ref card
   templates.
 - **Selling** — Collage templates, Carriers, Allegro, Delcampe and Philasearch.
-- **Intake** — Acceptance profiles and Bid recommendation.
+- **Intake** — Acceptance profiles, Bid recommendation and Auction reminder.
 - **Partners** — Colnect.
 - **System** — Assistant & API, [Email](email.md).
 
@@ -83,6 +83,25 @@ Every page has an address of its own, and so does each tab — `settings?tab=for
 — so a bookmark opens exactly what you were looking at. Addresses saved before the entries were
 split keep working: they open the entry that inherited the content, or, where one page became
 several, the first of them (`?tab=conditions` opens Conditions, `?tab=albums` opens Album templates).
+
+### Finding a setting
+
+A setting is not always on a page named after it — how long images are kept is on **Photos &
+storage**, the base currency on **Collection** — so above the list is a **Find a setting…** field.
+Type part of a name and the list narrows to the entries that have it, each showing under it the
+field, section or tab that matched: *currency* leaves **Collection** with *Base currency* under it,
+*multipliers* leaves **Formats** with its *Multipliers* tab. Several words narrow further, and the
+entry's own name counts, so *allegro profiles* finds Allegro's listing profiles rather than
+Delcampe's. A few settings are also found by a word the page does not use — *retention* finds both
+periods on Photos & storage.
+
+Click a match to open its page at it: on the right tab, scrolled to the field, which is marked for a
+moment. **Enter** opens the first match. **Escape** clears the field and brings the whole list back.
+The search stays while you move between pages, so you can try the next match.
+
+The search looks at what a page shows as it opens — its section headings and its fields — and not
+inside dialogs or at the rows of a list: *Mint Never Hinged* is one of your conditions, not a
+setting, so it finds nothing here.
 
 ## Filtering the Issues, Stamps, and Copies lists
 
