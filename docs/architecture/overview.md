@@ -647,6 +647,18 @@ Delivery is a **manual upload** — there is no Delcampe API (#154 is an open sc
 - **`buildOfferPhotoArchive`** reads the stored bytes and zips them in plan order, served by `GET .../offers/[offerId]/photos/zip` with a `Content-Disposition` named after the offer. Buffered, not streamed — the archive is a handful of megabytes and a stream would hold the same central directory anyway. Nothing is re-rendered on download, so an archive pulled twice from unchanged images is byte-identical.
 - **Skipped sides are reported, not omitted.** `planOfferPhotos` returns `skipped` (side, group, the copies with no scan for it) alongside the images, and the card shows it whether or not the preview is expanded: a set of eight losing its back collage over one missing reverse scan is invisible otherwise. A group the photo-count limit dropped outright is *not* reported twice — the drop count already says it.
 
+## Mail to the collector (`MailMessage`, #1372; [ADR-0060](../decisions/0060-mail-provider.md))
+
+The instance can send email to the collector — to the collection owner's own account address and
+nobody else. The provider is chosen at deployment (`STAMPORAMA_MAIL_PROVIDER`, Resend first) behind
+the `MailProvider` interface in `src/lib/mail/`, the way the storage backend is; nothing about it is
+entered in Settings. A feature queues a `MailMessage`; the in-process mail worker (started beside the
+offer photo worker, ADR-0018) sends it, and a failed attempt goes back into the queue on a schedule of
+about an hour (attempts at 0, 1, 5, 15, 30 and 60 minutes). Only the last failure makes the row
+`failed`, which the notification centre reports until Settings → Email is opened. The test message on
+that tab is sent at once rather than queued, so its answer is the provider's own. Outbound traffic:
+`POST https://api.resend.com/emails`, and only when a provider is configured.
+
 ## CI
 
 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) is the record of what CI runs — which jobs exist, what each one is gated on, and why — and everything below is a summary of it. Where the two disagree, the workflow is right.
@@ -719,3 +731,6 @@ A second, **versioned** HTTP surface beside the screen API, for an agentic AI cl
 | `STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` | no | The **instance default** for how long a sold / withdrawn offer keeps its **generated** listing images before the purge sweep deletes them (#512; default `7`). `0` purges at the next sweep; `off` / `never` keeps them for ever. A collection that sets its own period in Settings → Photos & storage overrides this (#577); one that does not follows it. Originals are never in scope |
 | `STAMPORAMA_SCAN_SHEET_TTL_DAYS` | no | The **instance default** for how long a batch that has been finished with keeps its retained card scans before the sweep deletes them (#578; default `off`). Same grammar as the row above — `0` sweeps at the next pass, `off` / `never` keeps for ever — and a collection may set its own period in Settings → Photos & storage. Defaults to keeping, because a scan is a source and a broken-up stockbook cannot be scanned again |
 | `STAMPORAMA_SECRET_KEY` | when connecting Allegro | Encrypts third-party credentials at rest — the Allegro client secret and OAuth tokens (#476; ADR-0023) — and seals the partner share links so a collector can read their own address again (#681; ADR-0039 §9). Generate with `openssl rand -base64 32`. Changing it invalidates every stored connection and makes existing share links unreadable to their owner (they keep working for the partner). Without it Allegro cannot be connected at all, while share links still mint and work — they simply cannot be shown a second time |
+| `STAMPORAMA_MAIL_PROVIDER` | no | The provider the instance sends mail to the collector through (#1372; [ADR-0060](../decisions/0060-mail-provider.md)). `resend` is the one this version knows; unset means the instance sends no mail and Settings → Email says so. Chosen here, never in Settings |
+| `STAMPORAMA_RESEND_API_KEY` | with `resend` | Resend API key; sending access is enough. Never shown in Settings |
+| `STAMPORAMA_RESEND_FROM` | with `resend` | Sender address, `addr@domain` or `Name <addr@domain>`. The domain must be verified in Resend, or it refuses to send |

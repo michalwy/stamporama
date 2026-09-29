@@ -40,7 +40,7 @@ describe("settings navigation (#1469)", () => {
       ["Selling", ["Collage templates", "Carriers", "Allegro", "Delcampe", "Philasearch"]],
       ["Intake", ["Acceptance profiles", "Bid recommendation"]],
       ["Partners", ["Colnect"]],
-      ["System", ["Assistant & API"]],
+      ["System", ["Assistant & API", "Email"]],
     ]);
   });
 

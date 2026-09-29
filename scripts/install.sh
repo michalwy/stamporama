@@ -477,6 +477,45 @@ It is mounted read-only into the container and also signs the read URLs." \
     info "Photos will be stored in the local stamporama-data volume."
   fi
 
+  # --- Mail to the collector (#1372) --------------------------------------
+  # Optional: an instance without a provider simply sends no mail. Resend is the one provider this
+  # version knows; it only sends from an address on a domain verified in the Resend dashboard.
+  local mail_mode mail_default
+  mail_default="none"
+  if [ "$is_reconfigure" -eq 1 ]; then
+    case "$(get_env STAMPORAMA_MAIL_PROVIDER)" in resend) mail_default="resend" ;; esac
+  fi
+
+  ui_menu mail_mode "$mail_default" "Should Stamporama be able to send you email (reminders, reports)?" \
+    none   "No — send no mail" \
+    resend "Yes, through Resend (resend.com; needs an API key and a verified domain)"
+
+  if [ "$mail_mode" = "resend" ]; then
+    local resend_key resend_from existing_key
+    existing_key="$(get_env STAMPORAMA_RESEND_API_KEY || true)"
+    if [ -n "$existing_key" ]; then
+      ui_password resend_key "Resend API key (STAMPORAMA_RESEND_API_KEY). Leave blank to keep the current one."
+      [ -n "$resend_key" ] || resend_key="$existing_key"
+    else
+      ui_password resend_key "Resend API key (STAMPORAMA_RESEND_API_KEY), from resend.com/api-keys.
+A key with sending access is enough."
+    fi
+    [ -n "$resend_key" ] || die "A Resend API key is required to send mail through Resend."
+
+    ui_prompt resend_from "Sender address (STAMPORAMA_RESEND_FROM), e.g. Stamporama <stamps@example.com>.
+Its domain must be verified at resend.com/domains, or Resend refuses to send." \
+      "$(dflt STAMPORAMA_RESEND_FROM "")"
+    [ -n "$resend_from" ] || die "A sender address is required to send mail through Resend."
+
+    set_env STAMPORAMA_MAIL_PROVIDER "resend"
+    set_env STAMPORAMA_RESEND_API_KEY "$resend_key"
+    set_env STAMPORAMA_RESEND_FROM "$resend_from"
+    info "Mail will be sent through Resend from ${resend_from}. Send a test from Settings → Email."
+  else
+    set_env STAMPORAMA_MAIL_PROVIDER ""
+    info "No mail provider: the instance will send no mail."
+  fi
+
   # --- Launch --------------------------------------------------------------
   info "Pulling images..."
   if ! compose pull 2>/dev/tty; then
@@ -527,6 +566,11 @@ print_summary() {
     echo "Back it up alongside your database — losing it loses the images." >/dev/tty
   fi
   echo >/dev/tty
+  if [ "$(get_env STAMPORAMA_MAIL_PROVIDER)" = "resend" ]; then
+    echo "Mail goes out through Resend from $(get_env STAMPORAMA_RESEND_FROM)." >/dev/tty
+    echo "Send a test from Settings → Email; the boot log says the same: docker compose logs app | grep '\[mail\]'" >/dev/tty
+    echo >/dev/tty
+  fi
   # Worth saying out loud, because it is the one file whose loss silently breaks something that
   # still looks intact in a restored database (#476).
   echo "Your .env holds STAMPORAMA_SECRET_KEY, which encrypts stored marketplace credentials." >/dev/tty

@@ -57,6 +57,10 @@ services:
       # quiet log is occasionally what a local session actually wants. Production reads it from .env,
       # where it ships commented out.
       STAMPORAMA_ALLEGRO_DEBUG: ${STAMPORAMA_ALLEGRO_DEBUG:-1}
+      # Mail to the collector (#1372), off unless the developer's environment names a provider.
+      STAMPORAMA_MAIL_PROVIDER: ${STAMPORAMA_MAIL_PROVIDER:-}
+      STAMPORAMA_RESEND_API_KEY: ${STAMPORAMA_RESEND_API_KEY:-}
+      STAMPORAMA_RESEND_FROM: ${STAMPORAMA_RESEND_FROM:-}
       STAMPORAMA_VERSION: ${STAMPORAMA_VERSION:-dev}
       STAMPORAMA_BUILD_DATE: ${STAMPORAMA_BUILD_DATE:-}
     command: sh -c "pnpm exec prisma migrate deploy && pnpm start"

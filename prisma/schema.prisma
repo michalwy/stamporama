@@ -173,6 +173,8 @@ model Collection {
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
   valueSnapshots  CollectionValueSnapshot[]
+  // Mail sent to the collector on this collection's behalf (#1372).
+  mailMessages    MailMessage[]
   overviewAreas   CollectionOverviewArea[]
 
   @@unique([ownerId, slug])
@@ -6455,4 +6457,43 @@ model Verification {
   updatedAt  DateTime?
 
   @@map("verification")
+}
+
+// One email to the collector, queued by a feature of this collection and sent through the mail
+// provider the instance was deployed with (#1372; ADR-0060).
+//
+// The row is the queue and the record at once, like `OfferPhotoGeneration` (ADR-0018): the worker
+// claims a due `queued` row, and a failed attempt puts it back with a later `nextAttemptAt` until the
+// retry schedule (`mail/retry-rules.ts`) runs out, when it becomes `failed` and the notification
+// centre reports it. There is no recipient column: mail only ever goes to the collection owner's
+// account address, read at the moment of sending, so a changed address is where the next attempt
+// goes. `sentTo` records where it actually went.
+model MailMessage {
+  id           String   @id @default(cuid())
+  collectionId String
+  /** `queued` | `sending` | `sent` | `failed`. */
+  status       String   @default("queued")
+  subject      String
+  /** Plain text: nothing sent yet needs markup, and plain text reads the same in every client. */
+  text         String
+  /** Attempts started so far, the current one included. Also names the attempt to the provider
+   * (its idempotency key), so a send a restart interrupted is repeated under the same name. */
+  attempts     Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  /** The provider's own words about the last failed attempt; kept once sent, as a record. */
+  lastError    String?
+  providerMessageId String?
+  sentTo       String?
+  createdAt    DateTime @default(now())
+  sentAt       DateTime?
+  failedAt     DateTime?
+  /** When the collector opened Settings → Email after the final failure — what takes it off the
+   * notification centre. The row itself stays on that tab. */
+  seenAt       DateTime?
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([collectionId, status])
+  @@map("mail_message")
 }

@@ -52,12 +52,14 @@ import { HawidStockPanel } from "./hawid-stock-panel";
 import { AlbumTemplatesPanel } from "./album-templates-panel";
 import { AlbumOrnamentsPanel } from "./album-ornaments-panel";
 import { AssistantPanel } from "./assistant-panel";
+import { EmailPanel } from "./email-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogVendorData } from "@/lib/catalog";
 import type { ColnectMappingData, ColnectConditionMappingData } from "@/lib/colnect";
 import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
 import type { AssistantTokenData } from "@/lib/api-tokens";
+import type { MailSettings } from "@/lib/mail/messages";
 import type { StampConditionData } from "@/lib/conditions";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { FormatFactorData } from "@/lib/format-factors";
@@ -143,6 +145,9 @@ interface SettingsScreenProps {
   /** Every platform contact, for that picker. */
   platformContacts: { id: string; name: string }[];
   initialAssistantTokens: AssistantTokenData[];
+  /** Email (#1372): the instance's mail provider as a summary — never its key — and this
+   * collection's undelivered mail. */
+  mailSettings: MailSettings;
   /** Internal copy-number display width (#268), edited on Collection. */
   itemNoPad: number;
   /** The bid-recommendation percentages (#508), edited on Bid recommendation. */
@@ -385,6 +390,7 @@ function SettingsEntryBody({
   philasearchPlatformId,
   platformContacts,
   initialAssistantTokens,
+  mailSettings,
   itemNoPad,
   bidFloorPercent,
   bidCeilingPercent,
@@ -672,6 +678,8 @@ function SettingsEntryBody({
           initialTokens={initialAssistantTokens}
         />
       );
+    case "email":
+      return <EmailPanel collectionId={collectionId} settings={mailSettings} />;
     default: {
       // Every entry has a body: a new one in `settings-nav.ts` without a case here does not compile.
       const unreachable: never = entryKey as never;
