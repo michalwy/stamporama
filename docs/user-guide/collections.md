@@ -1145,8 +1145,21 @@ Pages you have already printed are paper.
 ## Album templates
 
 **Settings → Album templates** holds everything about how an album *looks*, so a new album
-is not an evening of retyping page sizes and font names. The dialog is split into sections, listed
-down its left side, and shows one at a time:
+is not an evening of retyping page sizes and font names.
+
+The page lists your templates on the left, each with its page size, how many checklists may share a
+band and its title face. Click one and the right side shows **its page** — the same drawing the
+editor shows, over the sample page or one of your albums — with its main values above it: the page,
+the margins, the frame, the checklists per band, the faces of the album title and the box labels,
+and whether photos print. The selected template is in the page's address, so a reload or a bookmark
+comes back to it.
+
+**Edit…** above the page opens the full editor. **Add template** at the top of the page starts a new
+one, and each template's **⋮** has *Edit…*, **Duplicate** — a copy of every value, named
+*… (copy)*, which is then selected — and *Delete*. A template you add or duplicate is the one shown
+next.
+
+The editor is split into sections, listed down its left side, and shows one at a time:
 
 - **Page** — size and the four margins, and where a page that is not full puts its series.
 - **Frame** — the page frame: no rule, one or two, with its weight, its inset and the white between

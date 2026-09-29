@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { assertAlbumFrameOrnament } from "./album-ornament-store";
+import { copyName } from "./template-copy-name";
 import {
   asAlbumBorderStyle,
   asAlbumBoxBorderStyle,
@@ -9,6 +10,7 @@ import {
   asAlbumTitlePlacement,
   asAlbumFooterPlacement,
   asAlbumVerticalPlacement,
+  albumRenderPreset,
   type AlbumRenderPreset,
   type AlbumTemplateInput,
 } from "./album-template-rules";
@@ -152,17 +154,65 @@ function rethrowNameClash(err: unknown, name: string): never {
   throw err;
 }
 
+/** One template of the collection, or null when it is not one of its — the Settings page's preview
+ *  of a stored template (#1474), which is planned from the row rather than from a form. */
+export async function getAlbumTemplate(
+  ownerId: string,
+  collectionId: string,
+  templateId: string
+): Promise<AlbumTemplateData | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const row = await prisma.albumTemplate.findFirst({
+    where: { id: templateId, collectionId },
+    select: TEMPLATE_SELECT,
+  });
+  return row ? toData(row) : null;
+}
+
+/** Creates a template and answers its id, so the page that made it can select it (#1474). */
 export async function createAlbumTemplate(
   ownerId: string,
   collectionId: string,
   data: AlbumTemplateInput
-): Promise<void> {
+): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   await assertAlbumFrameOrnament(collectionId, data.frameOrnament);
   try {
-    await prisma.albumTemplate.create({ data: { collectionId, ...data } });
+    const created = await prisma.albumTemplate.create({
+      data: { collectionId, ...data },
+      select: { id: true },
+    });
+    return created.id;
   } catch (err) {
     rethrowNameClash(err, data.name);
+  }
+}
+
+/** A copy of a template under the first free *(copy)* name, answering the copy's id (#1474). Every
+ *  value is carried over as stored — the ornament included, which is the collection's own and so
+ *  still valid — and nothing links the two afterwards, the same rule an album's copy lives under. */
+export async function duplicateAlbumTemplate(ownerId: string, templateId: string): Promise<string> {
+  const collectionId = await resolveTemplateCollection(templateId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const source = await prisma.albumTemplate.findUniqueOrThrow({
+    where: { id: templateId },
+    select: TEMPLATE_SELECT,
+  });
+  const siblings = await prisma.albumTemplate.findMany({
+    where: { collectionId },
+    select: { name: true },
+  });
+  const copy = copyName(source.name, siblings.map((t) => t.name));
+  try {
+    const created = await prisma.albumTemplate.create({
+      // The preset alone, through the one list of what a preset holds (#766) — never the row's own
+      // id or timestamps.
+      data: { collectionId, name: copy, ...albumRenderPreset(toData(source)) },
+      select: { id: true },
+    });
+    return created.id;
+  } catch (err) {
+    rethrowNameClash(err, copy);
   }
 }
 

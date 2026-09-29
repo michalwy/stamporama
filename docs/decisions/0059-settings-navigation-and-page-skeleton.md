@@ -7,7 +7,8 @@ Designed in #1465 with the collector on 2026-09-29, against a wireframe. The thr
 are built by the pages' own issues — #1471 (list beside detail), #1474 (list beside preview) and
 #1473 (grid of fields) — and the summary strip by #1475. **Reverses #691's 56rem cap** on the
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
-dictionaries (#1471); what it settled is in §5.
+dictionaries (#1471), and list beside preview carries Album templates (#1474); what each settled is
+in §5.
 
 ## Context
 
@@ -97,6 +98,18 @@ dictionary composes them — a flat list, a grouped one (Multipliers) and a tree
 
 *Rejected in writing #1471:* selecting the row through the router, which would re-run the whole
 Settings loader on every click down a list — the address is written with `history.replaceState`.
+
+**List beside preview, as built (#1474).** `settings/list-beside-preview.tsx`, on Album templates
+first; the collage and ref card templates follow (#1477, #1478):
+
+- The templates on the left, each with a one-line note and its `⋮` (*Edit…*, *Duplicate*, *Delete*);
+  on the right the selected one's title with *Edit…*, a handful of its main values, and **its
+  drawing** — the page's own, handed in. *Add* is the page's main action.
+- **The preview is the editor's**: the same component, fed a stored template rather than a form,
+  planned through the same function — so the page and the editor opened on it cannot disagree.
+- **The selection is list beside detail's**: `&row=`, the same hook, the same fallback to the first.
+- The body is a fixed height of the window, so the list scrolls in its own column and the drawing is
+  fitted to the room on screen rather than to its content.
 
 ### 6. What this reverses from #691
 

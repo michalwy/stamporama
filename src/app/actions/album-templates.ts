@@ -8,6 +8,8 @@ import {
   createAlbumTemplate,
   updateAlbumTemplate,
   deleteAlbumTemplate,
+  duplicateAlbumTemplate,
+  getAlbumTemplate,
   getAlbumTemplates,
   AlbumTemplateNameTakenError,
   type AlbumTemplateData,
@@ -16,6 +18,7 @@ import {
   parseAlbumTemplateInput,
   albumRenderPreset,
   readAlbumPresetFields,
+  type AlbumRenderPreset,
   type AlbumTemplateRawInput,
 } from "@/lib/album-template-rules";
 import {
@@ -36,7 +39,9 @@ import {
 
 export type AlbumTemplateActionState =
   | { status: "idle" }
-  | { status: "success" }
+  /** `id` is the template a create or a duplicate made, which the Settings page then selects
+   *  (#1474); an edit or a delete has none to hand back. */
+  | { status: "success"; id?: string }
   | { status: "error"; message: string };
 
 async function getSession() {
@@ -84,8 +89,8 @@ export async function createAlbumTemplateAction(
   const parsed = readForm(formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
-    await createAlbumTemplate(session.user.id, collectionId, parsed.value);
-    return { status: "success" };
+    const id = await createAlbumTemplate(session.user.id, collectionId, parsed.value);
+    return { status: "success", id };
   } catch (err) {
     return toErrorState(err, "Failed to add the template. Please try again.");
   }
@@ -115,6 +120,19 @@ export async function deleteAlbumTemplateAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete the template. Please try again." };
+  }
+}
+
+/** A copy of the template under a *(copy)* name, every value carried over (#1474). */
+export async function duplicateAlbumTemplateAction(
+  templateId: string
+): Promise<AlbumTemplateActionState> {
+  const session = await getSession();
+  try {
+    const id = await duplicateAlbumTemplate(session.user.id, templateId);
+    return { status: "success", id };
+  } catch (err) {
+    return toErrorState(err, "Failed to duplicate the template. Please try again.");
   }
 }
 
@@ -170,6 +188,24 @@ export type AlbumPreviewResult =
  *  four text builders resolve `{albumName}` against. */
 const PREVIEW_TEMPLATE_NAME = "Untitled template";
 
+/** One preset drawn over the chosen source — the one path both previews below take. */
+async function planPreview(
+  userId: string,
+  collectionId: string,
+  preset: AlbumRenderPreset,
+  source: AlbumPreviewSource
+): Promise<AlbumPreviewResult> {
+  if (source.kind === "album") {
+    const preview = await albumTemplateAlbumPreview(userId, source.albumId, preset);
+    if (!preview) {
+      return { status: "invalid", message: "That album is no longer available." };
+    }
+    return { status: "ok", preview };
+  }
+  const preview = await albumTemplateSamplePreview(userId, collectionId, preset);
+  return { status: "ok", preview };
+}
+
 export async function albumTemplatePreviewAction(
   collectionId: string,
   formData: FormData,
@@ -181,20 +217,30 @@ export async function albumTemplatePreviewAction(
   // The preset alone: a template's own name and id are not values a page is set in, and
   // `albumRenderPreset` is the one list of what a preset holds (#766).
   const preset = albumRenderPreset(parsed.value);
-  if (source.kind === "album") {
-    const preview = await albumTemplateAlbumPreview(session.user.id, source.albumId, preset);
-    if (!preview) {
-      return { status: "invalid", message: "That album is no longer available." };
-    }
-    return { status: "ok", preview };
-  }
-  const preview = await albumTemplateSamplePreview(session.user.id, collectionId, preset);
-  return { status: "ok", preview };
+  return planPreview(session.user.id, collectionId, preset, source);
+}
+
+/**
+ * The same page for a template **as it is stored** — the Settings page's preview beside the list
+ * (#1474), where there is no form to read. It is planned by the same two functions from the same
+ * preset, so the sheet here and the sheet in the editor opened on that template cannot differ: the
+ * editor's fields start at exactly these values, and its parser gives them back unchanged.
+ */
+export async function albumTemplateStoredPreviewAction(
+  collectionId: string,
+  templateId: string,
+  source: AlbumPreviewSource
+): Promise<AlbumPreviewResult> {
+  const session = await getSession();
+  const template = await getAlbumTemplate(session.user.id, collectionId, templateId);
+  if (!template) return { status: "invalid", message: "That template is no longer available." };
+  const preset = albumRenderPreset(template);
+  return planPreview(session.user.id, collectionId, preset, source);
 }
 
 /** The albums the preview may be pointed at. Read on demand rather than passed down through the
- *  settings screen: the list is only ever needed once a template dialog is open, and the Settings
- *  tab shell is a file several sessions share. */
+ *  settings screen: the list is only needed where a preview is drawn — a template dialog, or the
+ *  Album templates page (#1474) — and the Settings shell is a file several sessions share. */
 export async function albumPreviewAlbumsAction(
   collectionId: string
 ): Promise<AlbumSummary[]> {

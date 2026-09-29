@@ -14,6 +14,7 @@ import {
   DEFAULT_ALBUM_PRESET,
   albumHawidMargins,
   albumTemplateSummary,
+  albumTemplateSummaryRows,
   parseAlbumBoxGaps,
   parseAlbumRenderPreset,
   parseAlbumTemplateInput,
@@ -326,6 +327,45 @@ describe("albumTemplateSummary", () => {
     assert.match(
       albumTemplateSummary({ ...DEFAULT_ALBUM_PRESET, blocksPerBand: 1 }),
       /one block per band/
+    );
+  });
+});
+
+describe("albumTemplateSummaryRows (#1474)", () => {
+  const value = (preset: typeof DEFAULT_ALBUM_PRESET, label: string) =>
+    albumTemplateSummaryRows(preset).find((r) => r.label === label)?.value;
+
+  it("states the main values beside the preview, a handful rather than thirty", () => {
+    assert.deepEqual(
+      albumTemplateSummaryRows(DEFAULT_ALBUM_PRESET).map((r) => r.label),
+      ["Page", "Margins", "Frame", "Per band", "Album title", "Box labels", "Photos"]
+    );
+    assert.equal(value(DEFAULT_ALBUM_PRESET, "Page"), "210 × 297 mm");
+  });
+
+  it("gives equal margins once and unequal ones side by side", () => {
+    const equal = { ...DEFAULT_ALBUM_PRESET, marginTopMm: 10, marginRightMm: 10, marginBottomMm: 10, marginLeftMm: 10 };
+    assert.equal(value(equal, "Margins"), "10 mm");
+    assert.equal(
+      value({ ...equal, marginLeftMm: 20 }, "Margins"),
+      "top 10 · right 10 · bottom 10 · left 20 mm"
+    );
+  });
+
+  it("names the frame's rules and its ornaments, either of which may be absent", () => {
+    const frame = (borderStyle: "none" | "single" | "double", frameOrnament: string) =>
+      value({ ...DEFAULT_ALBUM_PRESET, borderStyle, frameOrnament, frameOrnamentSizeMm: 25 }, "Frame");
+    assert.equal(frame("double", "none"), "Double rule");
+    assert.equal(frame("single", "rosette"), "Single rule, corner ornaments");
+    assert.equal(frame("none", "rosette"), "Corner ornaments");
+    assert.equal(frame("none", "none"), "None");
+  });
+
+  it("says whether photos print, and how strongly", () => {
+    assert.equal(value({ ...DEFAULT_ALBUM_PRESET, printPhotos: false }, "Photos"), "Not printed");
+    assert.equal(
+      value({ ...DEFAULT_ALBUM_PRESET, printPhotos: true, photoOpacityPercent: 30 }, "Photos"),
+      "Printed at 30%"
     );
   });
 });
