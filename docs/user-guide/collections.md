@@ -69,7 +69,7 @@ it serves:
 - **Selling** — Collage templates, Carriers, Allegro, Delcampe and Philasearch.
 - **Intake** — Acceptance profiles and Bid recommendation.
 - **Partners** — Colnect.
-- **System** — Assistant & API.
+- **System** — Assistant & API, [Email](email.md).
 
 Every group is always open; on a short window the list scrolls on its own. The running app version
 is the last line under it.

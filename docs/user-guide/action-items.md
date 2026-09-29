@@ -106,6 +106,11 @@ bid that no longer exists. Stamporama never clears the marker by itself, so this
 open the offer and either leave it (the auction may yet be bid on again) or **Clear active
 bidding**.
 
+**Email not delivered** — amber. A message the instance tried to [email](email.md) you — a reminder,
+say — that still had not gone through after an hour of retries. The row names the message and gives
+the mail provider's reason. A message that got through on a later attempt never appears here.
+Opening **Settings → Email**, where every undelivered message is listed, clears it.
+
 The three red groups, and *Changed since listed*, are the same **needs action** flag the offers list
 shows, split by *why* it fired, because each asks for something different: a sold copy has to come
 out of the listing, a copy under the hammer is waiting on someone else's clock, one sold on a

@@ -8,6 +8,7 @@ import {
   offersWithObservedBidding,
   offersWithPlatformSale,
 } from "./offers";
+import { unseenFailedMail } from "./mail/messages";
 
 /**
  * The **action items** the notification centre reports (#367) — the states already tracked
@@ -28,7 +29,10 @@ import {
  *   marketplace has to be recorded before the listing beside it takes an order too;
  * - the two bidding groups are what the Allegro sync did on its own (#481) — the notice that it
  *   flagged an auction, which lasts until it is read, and the flag left standing over a bid that has
- *   since been withdrawn, which lasts until the collector settles it.
+ *   since been withdrawn, which lasts until the collector settles it;
+ * - mail that could not be delivered after every retry (#1372) — a reminder that failed to arrive
+ *   looks exactly like having no reminder, so the one place that can say so is here. It lasts until
+ *   Settings → Email is opened.
  *
  * **Providers, not sources**, is the extension point: a provider returns one *or more* groups, so
  * two groups that come out of one read (the offers pair) stay one read. Adding a source is one
@@ -68,7 +72,8 @@ export type ActionItemGroupId =
   | "offer-auction-ended"
   | "offer-platform-sale"
   | "offer-platform-sale-conflict"
-  | "offer-listing-changed";
+  | "offer-listing-changed"
+  | "mail-undelivered";
 
 /**
  * How much is at stake, which is what decides both the tint and the reading order.
@@ -491,6 +496,33 @@ const listingChangedProvider: ActionItemProvider = {
   },
 };
 
+/**
+ * Mail given up on after its last retry (#1372). `warning`: nothing is broken in the collection, but
+ * whatever the message was about — a lot closing today — will be missed if nobody looks. Read on
+ * Settings → Email, whose opening is what takes it off this list (the bidding notice's rule, #481).
+ */
+const mailProvider: ActionItemProvider = {
+  async load({ ownerId, collectionId, limit }) {
+    const failed = await unseenFailedMail(ownerId, collectionId, limit);
+    return [
+      {
+        id: "mail-undelivered" as const,
+        title: "Email not delivered",
+        severity: "warning" as const,
+        count: failed.total,
+        items: failed.messages.map((message) => ({
+          key: message.id,
+          label: message.subject,
+          detail: message.lastError,
+          at: message.failedAt?.toISOString() ?? null,
+          href: "settings?tab=email",
+        })),
+        href: "settings?tab=email",
+      },
+    ];
+  },
+};
+
 /** Provider order is only the tie-break — {@link SEVERITY_ORDER} decides what the panel leads with,
  * so a source's place in this list never quietly outranks a worse problem from another one. */
 const PROVIDERS: ActionItemProvider[] = [
@@ -501,6 +533,7 @@ const PROVIDERS: ActionItemProvider[] = [
   endedAuctionProvider,
   platformSaleProvider,
   listingChangedProvider,
+  mailProvider,
 ];
 
 /**

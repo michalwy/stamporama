@@ -56,7 +56,8 @@ export type SettingsEntryKey =
   | "acceptance"
   | "bids"
   | "colnect"
-  | "assistant";
+  | "assistant"
+  | "email";
 
 export interface SettingsEntry {
   key: SettingsEntryKey;
@@ -253,6 +254,13 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "system",
     label: "Assistant & API",
     hint: "Connect the browser extension, and the tokens the API and the MCP server accept.",
+  },
+  // Mail to the collector (#1372; ADR-0060). Read-only here: the provider is chosen at deployment.
+  {
+    key: "email",
+    group: "system",
+    label: "Email",
+    hint: "The provider this instance sends you mail through, a test message, and mail that did not arrive.",
   },
 ];
 

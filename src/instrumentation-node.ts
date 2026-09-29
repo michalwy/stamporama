@@ -41,6 +41,9 @@
 //   - the daily value snapshots (#652) — an hourly pass recording each collection's value for the
 //     day, one row per collection and per area, updated rather than appended on a later pass. The
 //     one figure the Overview cannot compute after the fact, so it is written down as it happens.
+//   - the mail worker (#1372) — sends queued mail through the provider the instance was deployed
+//     with, and brings a failed message back round on its retry schedule. Does nothing on an
+//     instance with no provider.
 
 import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
@@ -53,6 +56,8 @@ import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
 import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
 import { purgeFinishedScanSheets } from "@/lib/scan-sheets";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
+import { describeMailConfig, readMailConfig } from "@/lib/mail/config";
+import { startMailWorker } from "@/lib/mail/worker";
 import { logStorageStartup, sweepStorageCache } from "@/lib/storage";
 import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
 import {
@@ -81,6 +86,7 @@ export async function start(): Promise<void> {
   // Report the configured photo-storage backend and probe it once at boot, so a misconfigured
   // volume or bucket surfaces in the logs immediately rather than on the first upload (#138).
   await logStorageStartup();
+  console.log(`[mail] ${describeMailConfig(readMailConfig())}`);
 
   // Abandoned staging, both kinds, in one pass on one TTL: a dropped-but-unsaved photo (#112) and a
   // card scan that stopped arriving halfway through (#590) are the same class of thing — bytes the
@@ -313,5 +319,10 @@ export async function start(): Promise<void> {
   // action only enqueues, and this worker renders. Never lets a startup failure abort boot.
   await startOfferPhotoWorker().catch((err) => {
     console.error("[offer-photos] worker failed to start", err);
+  });
+
+  // Mail to the collector (#1372): sends what features queue and brings failures back round.
+  await startMailWorker().catch((err) => {
+    console.error("[mail] worker failed to start", err);
   });
 }

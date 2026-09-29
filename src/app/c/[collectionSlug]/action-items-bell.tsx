@@ -45,7 +45,7 @@ const SEVERITY_TOKEN: Record<ActionItemSeverity, string> = {
 };
 
 /** First segment of this query's key, so the cache subscription below can recognise its own. */
-const ACTION_ITEMS_KEY = "action-items";
+export const ACTION_ITEMS_KEY = "action-items";
 
 /**
  * Re-read the action items whenever **any other screen refreshes itself**.
