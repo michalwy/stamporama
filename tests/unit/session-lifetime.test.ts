@@ -1,10 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
+import { betterAuth } from "better-auth";
+import { memoryAdapter } from "better-auth/adapters/memory";
 import { proxy, config } from "@/proxy";
 import {
+  COOKIE_MAX_AGE_CEILING_SECONDS,
   SESSION_COOKIE_NAMES,
   SESSION_MAX_AGE_SECONDS,
+  SESSION_OPTIONS,
   SESSION_REFRESH_AGE_SECONDS,
   isSecureSessionCookieName,
   sessionEndReason,
@@ -30,10 +34,90 @@ describe("how long a session lasts", () => {
     );
   });
 
+  it("states no more than a cookie may carry", () => {
+    // #1468 — ADR-0052 first spelled "until you sign out" as ten years, and Better Auth writes this
+    // number as the cookie's `Max-Age` at sign-in. Its serializer refuses anything above 400 days,
+    // so every sign-in failed on the server.
+    assert.equal(COOKIE_MAX_AGE_CEILING_SECONDS, 34_560_000);
+    assert.ok(
+      SESSION_MAX_AGE_SECONDS <= COOKIE_MAX_AGE_CEILING_SECONDS,
+      `a session cookie may state at most 400 days; got ${SESSION_MAX_AGE_SECONDS / DAY} days`
+    );
+  });
+
+  it("slides the stored row daily, so 400 days count from the last visit", () => {
+    // The row lives `expiresIn` from its last refresh, and a refresh only happens once `updateAge`
+    // has passed — so the row can lag the collector's last visit by up to that long.
+    assert.equal(SESSION_REFRESH_AGE_SECONDS, DAY);
+  });
+
   it("refreshes the stored row well inside its own lifetime", () => {
     // Better Auth slides `expiresAt` once `updateAge` has passed since the last refresh. If that
     // were ever set at or above the lifetime, the row would expire without once being renewed.
     assert.ok(SESSION_REFRESH_AGE_SECONDS < SESSION_MAX_AGE_SECONDS);
+  });
+});
+
+describe("signing in through Better Auth itself (#1468)", () => {
+  // The defect was a throw inside Better Auth's own cookie serializer, reached only by signing in —
+  // which is why a suite that pinned the numbers never saw it. So this signs up and signs in with
+  // the app's own session options against an in-memory store, and reads every cookie that comes
+  // back.
+
+  function authWith(session: { expiresIn: number; updateAge: number }) {
+    return betterAuth({
+      database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
+      emailAndPassword: { enabled: true },
+      baseURL: "https://stamps.example.com",
+      secret: "unit-test-secret-unit-test-secret-unit-test",
+      session,
+      logger: { disabled: true },
+    });
+  }
+
+  const credentials = { email: "collector@example.com", password: "correct horse battery" };
+
+  /** The `Max-Age` of every cookie a response sets, by name. */
+  function maxAges(response: Response): Map<string, number> {
+    const ages = new Map<string, number>();
+    for (const line of response.headers.getSetCookie()) {
+      const name = line.slice(0, line.indexOf("="));
+      const age = /;\s*Max-Age=(\d+)/i.exec(line);
+      if (age) ages.set(name, Number(age[1]));
+    }
+    return ages;
+  }
+
+  it("signs in, and no cookie it sets states more than 400 days", async () => {
+    const auth = authWith(SESSION_OPTIONS);
+    const signUp = await auth.api.signUpEmail({
+      body: { ...credentials, name: "Collector" },
+      asResponse: true,
+    });
+    assert.equal(signUp.status, 200);
+
+    const signIn = await auth.api.signInEmail({ body: credentials, asResponse: true });
+    assert.equal(signIn.status, 200);
+
+    const ages = maxAges(signIn);
+    assert.equal(
+      ages.get("__Secure-better-auth.session_token"),
+      SESSION_MAX_AGE_SECONDS,
+      "the session cookie should carry the full lifetime"
+    );
+    for (const [name, age] of ages) {
+      assert.ok(age <= COOKIE_MAX_AGE_CEILING_SECONDS, `${name} states ${age / DAY} days`);
+    }
+  });
+
+  it("fails to sign in with a lifetime past the ceiling — the defect this pins", async () => {
+    // The control: without it, a Better Auth that stopped enforcing the ceiling would leave the
+    // test above passing for a reason that no longer holds.
+    const auth = authWith({ expiresIn: 10 * 365 * DAY, updateAge: DAY });
+    await assert.rejects(
+      auth.api.signUpEmail({ body: { ...credentials, name: "Collector" }, asResponse: true }),
+      /400 days/
+    );
   });
 });
 
@@ -147,6 +231,14 @@ describe("the middleware that renews the lease", () => {
     const encoded = encodeURIComponent("tok.a+b/c==");
     const header = setCookies(proxy(request(`better-auth.session_token=${encoded}`)))[0];
     assert.match(header, new RegExp(`^better-auth\\.session_token=${encoded.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")};`));
+  });
+
+  it("never renews for longer than a cookie may carry", () => {
+    for (const name of SESSION_COOKIE_NAMES) {
+      const header = setCookies(proxy(request(`${name}=tok.sig`)))[0];
+      const age = Number(/Max-Age=(\d+)/.exec(header ?? "")?.[1]);
+      assert.ok(age > 0 && age <= COOKIE_MAX_AGE_CEILING_SECONDS, `${name} renewed for ${age}s`);
+    }
   });
 
   it("touches nothing when the browser sent no session cookie", () => {
