@@ -2,9 +2,9 @@
 
 // The one place the app reads `prefers-reduced-motion` (#1022).
 //
-// `globals.css` takes the motion out of the three animations it has — `.just-added-flash` (#158)
-// and `.arrival-flash` (#850/#876) hold still instead of fading (#877), the toast (#541) appears
-// without sliding — under `@media (prefers-reduced-motion: reduce)`. The **scroll** that goes with
+// `globals.css` takes the motion out of the animations it has — `.just-added-flash` (#158),
+// `.arrival-flash` (#850/#876) and `.field-arrival-flash` (#1470) hold still instead of fading
+// (#877), the toast (#541) appears without sliding — under `@media (prefers-reduced-motion: reduce)`. The **scroll** that goes with
 // an arrival is JavaScript, and until #1022 it honoured nothing: a collector who had asked for less
 // motion got the flash suppressed and the whole page gliding instead, which is the motion they
 // asked not to have. The CSS kept the preference and the JavaScript did not.
