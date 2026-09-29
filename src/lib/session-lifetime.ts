@@ -18,42 +18,63 @@
 // browser simply stopped sending it.
 //
 // So the fix has two halves and needs both. This module holds the numbers and the pure rules;
-// `src/middleware.ts` renews the cookie on every request the collector makes, and `src/lib/auth.ts`
+// `src/proxy.ts` renews the cookie on every request the collector makes, and `src/lib/auth.ts`
 // takes the spans below.
 
 /**
- * The session's lifetime, in seconds — ten years.
+ * The longest `Max-Age` a cookie may state — 400 days.
+ *
+ * Browsers already cap a cookie's lifetime here (RFC 6265bis), and Better Auth's cookie serializer
+ * (`better-call`) goes further: asked for more, it **throws**, and the sign-in that asked for it
+ * fails on the server (#1468). The ceiling is the transport's, not a policy of this app's.
+ */
+export const COOKIE_MAX_AGE_CEILING_SECONDS = 400 * 24 * 60 * 60;
+
+/**
+ * The session's lifetime, in seconds — 400 days, the most a cookie can state.
  *
  * **This is not a policy, it is the largest number the transport can carry.** A cookie that is to
  * survive closing the browser must state *some* expiry, and a stored session row has an
- * `expiresAt` column that is not nullable, so "never" has to be spelled as a date. Ten years is far
- * enough out that nothing in ordinary use reaches it, and it is re-stated on every request
- * (`src/middleware.ts`), so the span that actually applies is ten years from the collector's **last
- * visit** rather than from their sign-in.
+ * `expiresAt` column that is not nullable, so "never" has to be spelled as a date. Better Auth
+ * writes this same number as the cookie's `Max-Age` at sign-in, so it cannot exceed
+ * {@link COOKIE_MAX_AGE_CEILING_SECONDS} — ADR-0052 first spelled it as ten years, and every
+ * sign-in failed (#1468).
  *
- * Browsers cap a cookie's own lifetime at 400 days regardless of what the server asks for, which is
- * precisely why the renewal is not optional: without it this number would silently become thirteen
- * months and the defect would come back, rarer and harder to recognise.
+ * It is re-stated on every request (`src/proxy.ts`), and the stored row slides daily
+ * ({@link SESSION_REFRESH_AGE_SECONDS}), so the span that actually applies is 400 days from the
+ * collector's **last visit** rather than from their sign-in: only 400 days without a single visit
+ * ends a session. Without the renewal it would be 400 days from signing in, and the defect of
+ * #1175 would come back, rarer and harder to recognise.
  */
-export const SESSION_MAX_AGE_SECONDS = 10 * 365 * 24 * 60 * 60;
+export const SESSION_MAX_AGE_SECONDS = COOKIE_MAX_AGE_CEILING_SECONDS;
 
 /**
- * How stale the stored session row may get before Better Auth slides its `expiresAt` — thirty days.
+ * How stale the stored session row may get before Better Auth slides its `expiresAt` — one day.
  *
  * Better Auth refreshes a session when `expiresAt - expiresIn + updateAge <= now`, i.e. once this
- * long has passed since the last refresh, so this is a write frequency and nothing else: the
- * collector never feels it. It is thirty days rather than the default day because the refresh is a
- * database write performed while a server component renders, and with a ten-year `expiresIn` there
- * is nothing urgent about it.
+ * long has passed since the last refresh, so this is a write frequency: the collector never feels
+ * it. It is also how far short of {@link SESSION_MAX_AGE_SECONDS} the row can fall behind the last
+ * visit, which is why it is Better Auth's own default day rather than a longer span (#1468) — one
+ * database write a day, performed while a server component renders, keeps "400 days from the last
+ * visit" true of the row as well as of the cookie.
  */
-export const SESSION_REFRESH_AGE_SECONDS = 30 * 24 * 60 * 60;
+export const SESSION_REFRESH_AGE_SECONDS = 24 * 60 * 60;
+
+/**
+ * Better Auth's `session` options, as `src/lib/auth.ts` passes them — one object so that the unit
+ * test signing in through Better Auth itself (#1468) is configured with exactly what the app is.
+ */
+export const SESSION_OPTIONS = {
+  expiresIn: SESSION_MAX_AGE_SECONDS,
+  updateAge: SESSION_REFRESH_AGE_SECONDS,
+} as const;
 
 /**
  * The two names Better Auth's session cookie can have here, and the only two.
  *
  * The `__Secure-` prefix is added when the instance's `baseURL` is `https://` (or when `NODE_ENV`
  * is production and no `baseURL` is set), so which one is in play is a deployment fact. Probing for
- * both rather than re-deriving the rule keeps `src/middleware.ts` free of configuration: the name
+ * both rather than re-deriving the rule keeps `src/proxy.ts` free of configuration: the name
  * the browser sent is itself the answer, and it also says whether the cookie is `Secure`.
  */
 export const SESSION_COOKIE_NAMES = [
@@ -96,8 +117,8 @@ export type SessionEndReason = "settings-changed" | "sessions-cleared" | "expire
  *   collector signs out can put the cookie back a moment after `/api/auth/sign-out` deleted its
  *   row. Nothing is reachable with it and nothing is at risk; the browser is simply holding a
  *   receipt for a session that is gone, which is exactly what this reason describes.
- * - **A row that has expired.** Only reachable for a session minted before this instance took the
- *   lifetime above; kept because it is the truthful thing to say when it happens.
+ * - **A row that has expired.** Reachable after {@link SESSION_MAX_AGE_SECONDS} without a single
+ *   visit, or for a session minted before this instance took the lifetime above.
  * - **A row that is live.** The token names a real, unexpired session and the instance still would
  *   not take the cookie, so what failed is the cookie's signature or its name — which is the
  *   authentication secret having been rotated, or the instance having moved between `http` and

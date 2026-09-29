@@ -6,6 +6,9 @@ Accepted and implemented in #1175. The collector reported the defect on 2026-09-
 settled with him the same day. #1176 — not losing your place when a session *does* end — is the
 sibling and is untouched by this.
 
+**Amended by #1468** (2026-09-29): the lifetime is 400 days, not ten years, and the stored row slides
+daily rather than monthly. The rule is unchanged — see *Amendment: the 400-day ceiling* below.
+
 ## Context
 
 The collector was returned to the sign-in screen in the middle of working. Not often, but
@@ -45,7 +48,7 @@ one.
 ### 1. The spans are long enough that they are never what ends a session
 
 `src/lib/session-lifetime.ts` holds them and `src/lib/auth.ts` takes them: `expiresIn` ten years,
-`updateAge` thirty days.
+`updateAge` thirty days. *(Superseded by #1468: 400 days and one day — see the amendment below.)*
 
 Ten years is **not a policy**. A cookie that is to survive closing the browser must state *some*
 expiry, and `session.expiresAt` is a non-nullable column, so "never" has to be spelled as a date; ten
@@ -132,3 +135,36 @@ sent the cookie, so its sign-in screen sees a first-time visitor. That is writte
   red to show for it. `better-auth` is on `renovate.json`'s **never-alone** list for this reason.
 - A sign-in page render now costs a cookie read and, only when a refused cookie is present, one
   indexed `session` lookup.
+
+## Amendment: the 400-day ceiling (#1468)
+
+**Ten years could never be signed in with.** Better Auth writes `session.expiresIn` as the session
+cookie's `Max-Age` at sign-in, and its cookie serializer (`better-call`) **throws** for a `Max-Age`
+above 400 days — the same limit browsers apply (RFC 6265bis caps a cookie's lifetime at 400 days).
+So from #1175 on every sign-in failed on the server with *Cookies Max-Age SHOULD NOT be greater than
+400 days*. Nobody saw it at once because a collector already signed in never signs in again: the
+proxy kept renewing the cookie they had, and the proxy sets it through Next, which does not check.
+The first sign-out, on 2026-09-29, locked the instance.
+
+**The ceiling is the transport's, and it does not change the rule.** While nothing about the
+instance changes, a session still lasts until the collector signs out, with no inactivity window
+and no fixed lifetime in ordinary use. What changes is the spelling of "never":
+
+- `expiresIn` is **400 days** — the largest `Max-Age` a cookie may state, held once as
+  `COOKIE_MAX_AGE_CEILING_SECONDS` in `src/lib/session-lifetime.ts` and read by both halves. Every
+  cookie the app sets, at sign-in and on renewal, stays within it.
+- `updateAge` is **one day**, Better Auth's own default. The stored row lives `expiresIn` from its
+  last refresh, and a refresh happens only once `updateAge` has passed, so the row can lag the last
+  visit by that much. Against ten years a month did not matter; against 400 days it would have made
+  the real span 370. One write a day keeps "400 days from the last visit" true of the row as well as
+  the cookie.
+
+Because the proxy re-leases the cookie on every request and the row slides daily, **only 400 days
+with no visit at all ends a session**, and browsers already imposed that on the cookie, so nothing
+the collector sees changes. A session minted under the ten-year spelling keeps its row's far date
+and needs nothing.
+
+A unit test now signs in through Better Auth itself — the app's own session options against an
+in-memory store — and fails if any cookie it sets states more than 400 days, with a control that
+signing in with ten years is refused. Pinning the numbers alone never reached the serializer, which
+is how the defect shipped.

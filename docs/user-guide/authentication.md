@@ -27,7 +27,7 @@ Only a screen of Stamporama itself is ever returned to. An address on the sign-i
 
 ## Staying signed in
 
-**Being signed in lasts until you sign out.** There is no inactivity window and no fixed lifetime: coming back to Stamporama after a fortnight finds you exactly as signed in as coming back an hour later would, and restarting the instance — or a development server — changes nothing. Closing the browser changes nothing either.
+**Being signed in lasts until you sign out.** There is no inactivity window and no fixed lifetime: coming back to Stamporama after a fortnight finds you exactly as signed in as coming back an hour later would, and restarting the instance — or a development server — changes nothing. Closing the browser changes nothing either. The one limit is **400 days without opening Stamporama at all** — the longest any browser keeps a sign-in — and every visit starts those 400 days again.
 
 Three things do end a session, and all three are changes to the instance rather than to what you were doing:
 
