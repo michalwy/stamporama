@@ -16,6 +16,7 @@ import {
   type AlbumDropMark,
 } from "@/lib/album-drag";
 import { albumBoxFlag, type AlbumBoxFlag } from "@/lib/album-box-flag";
+import { albumBoxOutline } from "@/lib/album-box-outline";
 import { albumFrame } from "@/lib/album-frame";
 import type { AlbumRect } from "@/lib/album-layout";
 import { albumOrnamentPathData, type AlbumOrnamentDrawing } from "@/lib/album-ornament-svg";
@@ -494,11 +495,11 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
     );
   }
 
-  const boxDash =
+  const boxDash = (weightMm: number) =>
     preset.boxBorderStyle === "dashed"
       ? "1.5 1"
       : preset.boxBorderStyle === "dotted"
-        ? `${preset.boxBorderWidthMm} ${preset.boxBorderWidthMm * 2}`
+        ? `${weightMm} ${weightMm * 2}`
         : undefined;
 
   return (
@@ -698,6 +699,9 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
          *  on each of several boxes would promise a gesture for all of them that moves one. */
         const alone = chosen && selection?.kind === "box";
         const flag = boxFlag(box);
+        // The outline lies inside the box, as it does in the PDF (#1466); with none, the bare box is
+        // still what takes the pointer.
+        const outline = albumBoxOutline(preset, { xMm: box.xMm, yMm: box.yMm + dy, widthMm, heightMm });
         const lifted =
           carry?.kind === "box" && carry.blockId === blockId && carry.stampId === box.stampId;
         const mark: AlbumDropMark | null =
@@ -722,14 +726,14 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
               />
             )}
             <rect
-              x={box.xMm}
-              y={box.yMm + dy}
-              width={widthMm}
-              height={heightMm}
+              x={outline?.rect.xMm ?? box.xMm}
+              y={outline?.rect.yMm ?? box.yMm + dy}
+              width={outline?.rect.widthMm ?? widthMm}
+              height={outline?.rect.heightMm ?? heightMm}
               fill="transparent"
-              stroke={preset.boxBorderStyle === "none" ? "none" : INK}
-              strokeWidth={preset.boxBorderWidthMm}
-              strokeDasharray={boxDash}
+              stroke={outline ? INK : "none"}
+              strokeWidth={outline?.weightMm}
+              strokeDasharray={outline ? boxDash(outline.weightMm) : undefined}
               style={{
                 cursor: !interactive ? "default" : readOnly ? "pointer" : "grab",
               }}

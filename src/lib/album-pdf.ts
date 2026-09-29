@@ -51,6 +51,7 @@ import {
 } from "./album-photos";
 import { getAlbumPageSnapshots } from "./album-printed-pages";
 import type { AlbumSnapshotBox } from "./album-snapshot";
+import { albumBoxOutline } from "./album-box-outline";
 import { albumFrame, type AlbumFrameMatrix } from "./album-frame";
 import type { AlbumOrnamentDrawing, AlbumOrnamentPath } from "./album-ornament-svg";
 import {
@@ -340,19 +341,21 @@ function drawOrnament(
   page.pushOperators(...ops);
 }
 
-/** The outline around one mount, in the template's own style. `none` is a real choice: a hawid is
- *  visible enough on paper, and a page whose boxes are only implied by the mounts is a legitimate
- *  album (#766). */
+/** The outline around one mount, in the template's own style, **inside** the box — its outer edge
+ *  is the box's size, so a hawid cut to size covers it (#1466, `album-box-outline.ts`). `none` is a
+ *  real choice: a hawid is visible enough on paper, and a page whose boxes are only implied by the
+ *  mounts is a legitimate album (#766). */
 function drawBoxOutline(page: PDFPage, preset: AlbumRenderPreset, rect: AlbumRect) {
-  if (preset.boxBorderStyle === "none" || preset.boxBorderWidthMm <= 0) return;
-  const w = preset.boxBorderWidthMm;
+  const outline = albumBoxOutline(preset, rect);
+  if (!outline) return;
+  const w = outline.weightMm;
   const dash =
     preset.boxBorderStyle === "dashed"
       ? DASH_MM.map((mm) => mm * MM_TO_PT)
       : preset.boxBorderStyle === "dotted"
         ? [w * MM_TO_PT, w * DOT_GAP_FACTOR * MM_TO_PT]
         : undefined;
-  strokeRect(page, preset, rect, w, dash);
+  strokeRect(page, preset, outline.rect, w, dash);
 }
 
 /**

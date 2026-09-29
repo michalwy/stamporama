@@ -152,6 +152,15 @@ The clearances themselves are **not** here — they belong to the album template
 in. The rule takes plain numbers on purpose; it is unit-tested on plain numbers in
 `tests/unit/hawid.test.ts`.
 
+**A box's outline lies inside the box** (#1466, decided with the collector on 2026-09-29). Its outer
+edge is the box's size and its full weight is taken from the inside, so a hawid cut to the box covers
+the whole line. Before, the line was centred on the edge and half of it showed around the mount.
+`album-box-outline.ts` places it — the stroke's path is the box inset by half the weight, a weight
+heavier than the box capped at a solid box — and both the PDF and the canvas stroke what it returns.
+It is paint: box sizes, the plan and the strips do not read it, no template value changed, and so a
+printed card does not report it. Rejected: the outline outside the box (the boxes would take more
+room and the plan would move).
+
 **Printed pages laid out before #793 will diverge, and that is correct.** A snapshot (#778) froze the
 heights it was printed with, so a live page now reports `boxes would now be cut to a different size`
 against it. Those pages *were* laid out on the wrong figure; the report's existing wording covers the

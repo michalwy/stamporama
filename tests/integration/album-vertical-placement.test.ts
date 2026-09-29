@@ -14,6 +14,7 @@ import { createAlbumTemplate } from "../../src/lib/album-templates";
 import { planAlbum } from "../../src/lib/album-plan";
 import { getAlbumEditorData } from "../../src/lib/album-editor";
 import { renderAlbumPdf } from "../../src/lib/album-pdf";
+import { albumBoxOutline } from "../../src/lib/album-box-outline";
 import { MM_TO_PT } from "../../src/lib/album-metrics";
 import {
   countAlbumPresetDivergence,
@@ -266,8 +267,11 @@ describe("the vertical placement of an album page (#1419)", () => {
       .map((stream) => new TextDecoder().decode(decodePDFRawStream(stream).decode()))
       .join("\n");
     const drawnYs = [...ops.matchAll(/1 0 0 1 (-?[\d.]+) (-?[\d.]+) cm/g)].map((m) => Number(m[2]));
+    // The outline lies inside the box (#1466), so the rectangle stroked is the box inset by half its
+    // weight — `albumBoxOutline`'s, the canvas's too.
     for (const box of layout.boxes) {
-      const expected = (DEFAULT_ALBUM_PRESET.pageHeightMm - (box.yMm + box.heightMm)) * MM_TO_PT;
+      const line = albumBoxOutline(DEFAULT_ALBUM_PRESET, box)!.rect;
+      const expected = (DEFAULT_ALBUM_PRESET.pageHeightMm - (line.yMm + line.heightMm)) * MM_TO_PT;
       assert.ok(
         drawnYs.some((y) => Math.abs(y - expected) < 0.01),
         `a mount drawn at ${expected.toFixed(2)} pt from the foot`
