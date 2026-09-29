@@ -64,3 +64,9 @@ comment to say what changed and why.
 
 It does not close issues that were implemented — the session that did the work writes the closing
 comment. It does not merge, tag or release. If `gh` cannot create an issue, report that and stop.
+
+**It gives no next steps.** No queue (*Najbliższe* / *Dalsze*), no ordering of sessions, no release
+suggestion and no Renovate sweep — not after noticing a new release, and not after suggesting a task
+chip. Deciding what comes next is the backlog-review session's work alone
+([`backlog-review.md`](backlog-review.md)); a backlog manager that does it too answers a question
+nobody asked it and gives the user two queues to reconcile (#1481).
