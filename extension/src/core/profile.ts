@@ -17,7 +17,7 @@ export interface Profile {
   collectionId: string;
   /** Optional display name for the collection. */
   collectionName?: string;
-  /** Assistant bearer token issued from Settings → Colnect. */
+  /** Assistant bearer token issued from Settings → Assistant & API. */
   token: string;
 }
 

@@ -161,7 +161,7 @@ always generates, falling back to your default text. The tokens fill in from the
 - `{location}` — the copy's storage location name
 - `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
 - `{itemNo}` — the copy's [internal number](inventory.md#internal-copy-number), padded to the width
-  set in **Settings → General**. Write `{itemNo:3}` to pad to a different width just here (`042`),
+  set in **Settings → Collection**. Write `{itemNo:3}` to pad to a different width just here (`042`),
   or `{itemNo:1}` for no padding at all. No `#` is added — type one in the template if you want it.
 - `{issueName}` — name of the issue the stamp belongs to
 - `{issueYear}` — year of that issue (also collapses to a range across copies)
@@ -464,7 +464,7 @@ way, and is pre-selected when you mark a sale sent — where you change it if th
 somebody else. That matters because a marketplace sells a service, not a company: Allegro's
 "Courier" is whichever courier you walk it to. Naming one is what lets a sale's
 [tracking number](sales.md#tracking-the-shipment) become a link to the carrier's own tracking page.
-Carriers are kept per collection under **Settings → Shipping**, not per platform — the same post
+Carriers are kept per collection under **Settings → Carriers**, not per platform — the same post
 office carries parcels for every marketplace you sell on.
 
 Add a row by filling in the fields at the bottom and pressing **+**. Each row's **⋮** menu

@@ -272,7 +272,7 @@ export function FormatFactorsDialog({
           </button>
           {formats.length === 0 && (
             <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.5rem 0 0" }}>
-              No formats defined yet — add them under Settings → Conditions &amp; formats.
+              No formats defined yet — add them under Settings → Formats.
             </p>
           )}
           {error && !editing && !deleting && (

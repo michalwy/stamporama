@@ -37,18 +37,18 @@ Chrome keeps it up to date on its own, the same way it updates any other extensi
 Nothing is typed in, and no token is copied by hand:
 
 1. Open the collection you want the Assistant to write to.
-2. Go to **Settings → Assistant** and choose **Connect Stamporama Assistant**.
+2. Go to **Settings → Assistant & API** and choose **Connect Stamporama Assistant**.
 3. With that page still in front, click the Assistant's toolbar icon.
 
 The connection appears in the extension's options, active and named after your collection. Repeat it
 per collection, or per instance if you run more than one — the extension keeps them side by side and
 shows the active one in a coloured badge, so it is always clear where a match will be written.
 
-You can revoke a connection at any time from the same **Settings → Assistant** screen.
+You can revoke a connection at any time from the same **Settings → Assistant & API** screen.
 
 ## Tokens, and what each one may do
 
-Every connection is a **token**, and **Settings → Assistant** lists them all — the ones the Assistant
+Every connection is a **token**, and **Settings → Assistant & API** lists them all — the ones the Assistant
 created for itself when you connected it, and any you made by hand. Revoking one cuts off whatever
 is using it, immediately.
 
@@ -520,7 +520,7 @@ Two things it deliberately doesn't do:
 
 For this to be offered, the connection has to be the one this instance is scripting: the Assistant
 registers your instance's address when you connect it, which is what lets a page of yours hand an
-offer over without any click on the toolbar. Connect it again from **Settings → Assistant** if the
+offer over without any click on the toolbar. Connect it again from **Settings → Assistant & API** if the
 button says it is not installed on a browser where it plainly is.
 
 ## Closing a Colnect listing

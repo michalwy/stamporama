@@ -29,10 +29,9 @@ import {
 } from "@/lib/item-number";
 import { formatBytes } from "@/lib/format-bytes";
 import type { StorageCacheStatus } from "@/lib/storage-cache";
-import { AppVersionLabel } from "@/app/c/[collectionSlug]/shared/app-version-label";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
-interface SettingsPanelProps {
+interface CollectionSettingsPanelProps {
   collectionId: string;
   collectionName: string;
   baseCurrency: string;
@@ -40,11 +39,10 @@ interface SettingsPanelProps {
   defaultLanguage: string;
   /** How many digits an internal copy number is padded to for display (#268). */
   itemNoPad: number;
-  /** The band a bid recommendation is stated as, in percent of a lot's fair figure (#508). */
-  bidFloorPercent: number;
-  bidCeilingPercent: number;
-  /** What a catalogue value is anchored at until any realization ratio has been learned (#508). */
-  bidFallbackPercent: number;
+}
+
+interface StorageSettingsPanelProps {
+  collectionId: string;
   /** How long a closed offer keeps its generated images in this collection (#577), or null while
    * the collection defers to the instance. */
   closedOfferPhotoTtl: string | null;
@@ -58,9 +56,15 @@ interface SettingsPanelProps {
   /** The local cache of remote storage objects (#591) — instance-wide, with this collection's
    * share broken out. Inactive on the filesystem backend, where the bytes are already local. */
   storageCache: StorageCacheStatus;
-  appVersion: string;
-  /** When the running build was made (#507), ISO-8601, or null on an unstamped build. */
-  appReleaseDate: string | null;
+}
+
+interface BidRecommendationPanelProps {
+  collectionId: string;
+  /** The band a bid recommendation is stated as, in percent of a lot's fair figure (#508). */
+  bidFloorPercent: number;
+  bidCeilingPercent: number;
+  /** What a catalogue value is anchored at until any realization ratio has been learned (#508). */
+  bidFallbackPercent: number;
 }
 
 /** The three bid-recommendation percentages (#508), each said in the terms it is used in. Nothing
@@ -424,7 +428,8 @@ function StorageCacheSection({
   );
 }
 
-export function SettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad, bidFloorPercent, bidCeilingPercent, bidFallbackPercent, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, storageCache, appVersion, appReleaseDate }: SettingsPanelProps) {
+/** Settings → Collection (#1469): what holds for the whole collection, and the reset. */
+export function CollectionSettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad }: CollectionSettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
@@ -445,69 +450,6 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
         setPad(previous);
         setPadError(result.message);
       }
-    });
-  }
-
-  // The two retention periods (#577, #578). One hook, used twice: they are separate settings with
-  // separate answers, but they are the *same* question asked about two kinds of bytes, and a second
-  // copy of this state machine is how the two would come to behave differently on the same screen.
-  const offerRetention = useRetentionSetting({
-    initial: closedOfferPhotoTtl,
-    instanceLabel: instanceClosedOfferPhotoTtlLabel,
-    describe: (setting) => describeClosedOfferPhotoTtl(closedOfferPhotoTtlMs(setting)),
-    save: (setting) => updateCollectionClosedOfferPhotoTtlAction(collectionId, setting),
-    startTransition,
-  });
-  const scanRetention = useRetentionSetting({
-    initial: scanSheetTtl,
-    instanceLabel: instanceScanSheetTtlLabel,
-    describe: (setting) => describeScanSheetTtl(scanSheetTtlMs(setting)),
-    save: (setting) => updateCollectionScanSheetTtlAction(collectionId, setting),
-    startTransition,
-  });
-
-  // The three bid-recommendation percentages (#508). Held as text while typing — a number input
-  // that reparses every keystroke fights the collector halfway through "125".
-  const [bidPercents, setBidPercents] = useState({
-    bidFloorPercent: String(bidFloorPercent),
-    bidCeilingPercent: String(bidCeilingPercent),
-    bidFallbackPercent: String(bidFallbackPercent),
-  });
-  // What is actually stored, tracked here rather than read back off the props: the props come from
-  // a server render that does not re-run on a save, so a value edited twice would be compared
-  // against the figure the page was loaded with.
-  const [savedBidPercents, setSavedBidPercents] = useState({
-    bidFloorPercent,
-    bidCeilingPercent,
-    bidFallbackPercent,
-  });
-  const [bidError, setBidError] = useState<string | null>(null);
-
-  function commitBidPercent(key: keyof typeof bidPercents) {
-    const saved = savedBidPercents[key];
-    const value = parseBidPercent(bidPercents[key]);
-    if (value === null) {
-      // Put the stored figure back rather than leaving an unsaveable one on screen: this section
-      // saves on leaving a field, so a rejected value with nothing to press would just sit there.
-      setBidPercents((p) => ({ ...p, [key]: String(saved) }));
-      setBidError(
-        `A percentage must be a whole number between ${MIN_BID_PERCENT} and ${MAX_BID_PERCENT}.`
-      );
-      return;
-    }
-    setBidPercents((p) => ({ ...p, [key]: String(value) }));
-    setBidError(null);
-    if (value === saved) return;
-    startTransition(async () => {
-      const result = await updateCollectionBidPercentsAction(collectionId, {
-        [key]: value,
-      } as BidPercentPatch);
-      if (result.status === "error") {
-        setBidPercents((p) => ({ ...p, [key]: String(saved) }));
-        setBidError(result.message);
-        return;
-      }
-      setSavedBidPercents((p) => ({ ...p, [key]: value }));
     });
   }
 
@@ -742,246 +684,6 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
         </div>
       </section>
 
-      {/* Bid recommendation (#508; ADR-0029 §3, §4). The percentages a recommended bid is stated
-          with — a trading style, unlike the realization ratio, which is learned from what the
-          collection has actually recorded (#520) and is deliberately not a setting. */}
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <p
-          style={{
-            margin: "0 0 0.25rem",
-            fontSize: "0.9375rem",
-            fontWeight: 500,
-            color: "var(--color-text-primary)",
-          }}
-        >
-          Bid recommendation
-        </p>
-        <p
-          style={{
-            margin: "0 0 1rem",
-            fontSize: "0.8125rem",
-            color: "var(--color-text-muted)",
-          }}
-        >
-          What an auction lot is worth bidding is stated as three figures around what it is worth —
-          a floor, the fair figure itself, and a walk-away. These are the percentages that band is
-          built from. How much of catalogue a stamp actually fetches is not among them: that is
-          learned from the results you record, per area, condition and period, so it stays a
-          measurement rather than an opinion typed in once.
-        </p>
-
-        {BID_PERCENT_FIELDS.map((field) => (
-          <div
-            key={field.key}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "1rem",
-              paddingTop: "0.75rem",
-            }}
-          >
-            <div>
-              <p
-                style={{
-                  margin: "0 0 0.125rem",
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  color: "var(--color-text-primary)",
-                }}
-              >
-                {field.label}
-              </p>
-              <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                {field.description}
-              </p>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
-              <input
-                type="number"
-                inputMode="numeric"
-                aria-label={field.label}
-                min={MIN_BID_PERCENT}
-                max={MAX_BID_PERCENT}
-                step={1}
-                value={bidPercents[field.key]}
-                onChange={(e) =>
-                  setBidPercents((p) => ({ ...p, [field.key]: e.target.value }))
-                }
-                onBlur={() => commitBidPercent(field.key)}
-                disabled={isPending}
-                style={{
-                  width: "5rem",
-                  padding: "0.4rem 0.625rem",
-                  border: "1px solid var(--color-border-strong)",
-                  borderRadius: "0.375rem",
-                  fontSize: "0.875rem",
-                  color: "var(--color-text-primary)",
-                  background: "var(--color-bg-elevated)",
-                }}
-              />
-              <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>%</span>
-            </div>
-          </div>
-        ))}
-
-        {bidError && (
-          <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-            {bidError}
-          </p>
-        )}
-      </section>
-
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              App version
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              The version of Stamporama currently running.
-            </p>
-          </div>
-          <span
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-            }}
-          >
-            <AppVersionLabel version={appVersion} releaseDate={appReleaseDate} />
-          </span>
-        </div>
-      </section>
-
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Photo storage
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Total space used by all photos in this collection.
-            </p>
-          </div>
-          <span
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-            }}
-          >
-            {formatBytes(photoStorageBytes)}
-          </span>
-        </div>
-      </section>
-
-      <StorageCacheSection
-        collectionId={collectionId}
-        status={storageCache}
-        disabled={isPending}
-      />
-
-      {/* Both retention periods (#577, #578), directly under the storage figure because they are
-          the answer to what that figure shows — and next to each other because they are one
-          question about two kinds of bytes. Their defaults differ, and deliberately: a generated
-          image is output that Regenerate makes again, while a card scan is a source, so the scan
-          sweep ships off and is switched on by the collector who has the disk problem. */}
-      <RetentionSection
-        title="Keep closed listings' images"
-        description={
-          <>
-            After an offer is sold or withdrawn, Stamporama deletes the listing images it generated
-            for it. Nothing else goes: your own uploads, the copies&apos; scans and the whole photo
-            plan stay, so Regenerate makes the images again whenever you want them back.
-          </>
-        }
-        daysLabel="Days a closed listing keeps its generated images"
-        daysHint="days — 0 deletes them at the next sweep"
-        state={offerRetention}
-        disabled={isPending}
-      />
-
-      <RetentionSection
-        title="Keep card scans of finished batches"
-        description={
-          <>
-            When every tile cut from a scanned card has become a copy or been discarded, the card can
-            never be cut again and only its file is left. A card with a piece set aside to check on it
-            is never counted as finished, so its scan stays until that piece is settled. Stamporama can delete that file after a
-            while — the batch keeps its tiles and still says what the card held, but the scan itself
-            is gone for good, so re-cutting it is no longer possible. Off unless you ask for it: a
-            stockbook cannot be scanned again once it has been broken up.
-          </>
-        }
-        daysLabel="Days a finished batch keeps its card scans"
-        daysHint="days after the batch is finished with — 0 deletes at the next sweep"
-        state={scanRetention}
-        disabled={isPending}
-      />
-
       <section
         style={{
           border: "1px solid var(--color-error-border)",
@@ -1094,5 +796,275 @@ export function SettingsPanel({ collectionId, collectionName, baseCurrency, defa
         />
       )}
     </>
+  );
+}
+
+/** Settings → Photos & storage (#1469): the storage figures and the two retention periods. */
+export function StorageSettingsPanel({ collectionId, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, storageCache }: StorageSettingsPanelProps) {
+  const [isPending, startTransition] = useTransition();
+
+  // The two retention periods (#577, #578). One hook, used twice: they are separate settings with
+  // separate answers, but they are the *same* question asked about two kinds of bytes, and a second
+  // copy of this state machine is how the two would come to behave differently on the same screen.
+  const offerRetention = useRetentionSetting({
+    initial: closedOfferPhotoTtl,
+    instanceLabel: instanceClosedOfferPhotoTtlLabel,
+    describe: (setting) => describeClosedOfferPhotoTtl(closedOfferPhotoTtlMs(setting)),
+    save: (setting) => updateCollectionClosedOfferPhotoTtlAction(collectionId, setting),
+    startTransition,
+  });
+  const scanRetention = useRetentionSetting({
+    initial: scanSheetTtl,
+    instanceLabel: instanceScanSheetTtlLabel,
+    describe: (setting) => describeScanSheetTtl(scanSheetTtlMs(setting)),
+    save: (setting) => updateCollectionScanSheetTtlAction(collectionId, setting),
+    startTransition,
+  });
+
+  return (
+    <>
+      <section
+        style={{
+          border: "1px solid var(--color-border)",
+          borderRadius: "0.75rem",
+          padding: "1.25rem 1.5rem",
+          background: "var(--color-bg-elevated)",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 0.25rem",
+                fontSize: "0.9375rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              Photo storage
+            </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              Total space used by all photos in this collection.
+            </p>
+          </div>
+          <span
+            style={{
+              fontSize: "0.9375rem",
+              fontWeight: 600,
+              color: "var(--color-text-primary)",
+            }}
+          >
+            {formatBytes(photoStorageBytes)}
+          </span>
+        </div>
+      </section>
+
+      <StorageCacheSection
+        collectionId={collectionId}
+        status={storageCache}
+        disabled={isPending}
+      />
+
+      {/* Both retention periods (#577, #578), directly under the storage figure because they are
+          the answer to what that figure shows — and next to each other because they are one
+          question about two kinds of bytes. Their defaults differ, and deliberately: a generated
+          image is output that Regenerate makes again, while a card scan is a source, so the scan
+          sweep ships off and is switched on by the collector who has the disk problem. */}
+      <RetentionSection
+        title="Keep closed listings' images"
+        description={
+          <>
+            After an offer is sold or withdrawn, Stamporama deletes the listing images it generated
+            for it. Nothing else goes: your own uploads, the copies&apos; scans and the whole photo
+            plan stay, so Regenerate makes the images again whenever you want them back.
+          </>
+        }
+        daysLabel="Days a closed listing keeps its generated images"
+        daysHint="days — 0 deletes them at the next sweep"
+        state={offerRetention}
+        disabled={isPending}
+      />
+
+      <RetentionSection
+        title="Keep card scans of finished batches"
+        description={
+          <>
+            When every tile cut from a scanned card has become a copy or been discarded, the card can
+            never be cut again and only its file is left. A card with a piece set aside to check on it
+            is never counted as finished, so its scan stays until that piece is settled. Stamporama can delete that file after a
+            while — the batch keeps its tiles and still says what the card held, but the scan itself
+            is gone for good, so re-cutting it is no longer possible. Off unless you ask for it: a
+            stockbook cannot be scanned again once it has been broken up.
+          </>
+        }
+        daysLabel="Days a finished batch keeps its card scans"
+        daysHint="days after the batch is finished with — 0 deletes at the next sweep"
+        state={scanRetention}
+        disabled={isPending}
+      />
+    </>
+  );
+}
+
+/** Settings → Bid recommendation (#1469), in the Intake group beside the auctions it serves. */
+export function BidRecommendationPanel({ collectionId, bidFloorPercent, bidCeilingPercent, bidFallbackPercent }: BidRecommendationPanelProps) {
+  const [isPending, startTransition] = useTransition();
+
+  // The three bid-recommendation percentages (#508). Held as text while typing — a number input
+  // that reparses every keystroke fights the collector halfway through "125".
+  const [bidPercents, setBidPercents] = useState({
+    bidFloorPercent: String(bidFloorPercent),
+    bidCeilingPercent: String(bidCeilingPercent),
+    bidFallbackPercent: String(bidFallbackPercent),
+  });
+  // What is actually stored, tracked here rather than read back off the props: the props come from
+  // a server render that does not re-run on a save, so a value edited twice would be compared
+  // against the figure the page was loaded with.
+  const [savedBidPercents, setSavedBidPercents] = useState({
+    bidFloorPercent,
+    bidCeilingPercent,
+    bidFallbackPercent,
+  });
+  const [bidError, setBidError] = useState<string | null>(null);
+
+  function commitBidPercent(key: keyof typeof bidPercents) {
+    const saved = savedBidPercents[key];
+    const value = parseBidPercent(bidPercents[key]);
+    if (value === null) {
+      // Put the stored figure back rather than leaving an unsaveable one on screen: this section
+      // saves on leaving a field, so a rejected value with nothing to press would just sit there.
+      setBidPercents((p) => ({ ...p, [key]: String(saved) }));
+      setBidError(
+        `A percentage must be a whole number between ${MIN_BID_PERCENT} and ${MAX_BID_PERCENT}.`
+      );
+      return;
+    }
+    setBidPercents((p) => ({ ...p, [key]: String(value) }));
+    setBidError(null);
+    if (value === saved) return;
+    startTransition(async () => {
+      const result = await updateCollectionBidPercentsAction(collectionId, {
+        [key]: value,
+      } as BidPercentPatch);
+      if (result.status === "error") {
+        setBidPercents((p) => ({ ...p, [key]: String(saved) }));
+        setBidError(result.message);
+        return;
+      }
+      setSavedBidPercents((p) => ({ ...p, [key]: value }));
+    });
+  }
+
+  // The percentages a recommended bid is stated with (#508; ADR-0029 §3, §4) — a trading style,
+  // unlike the realization ratio, which is learned from what the collection has actually recorded
+  // (#520) and is deliberately not a setting.
+  return (
+    <section
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.75rem",
+        padding: "1.25rem 1.5rem",
+        background: "var(--color-bg-elevated)",
+        marginBottom: "1.5rem",
+      }}
+    >
+      <p
+        style={{
+          margin: "0 0 0.25rem",
+          fontSize: "0.9375rem",
+          fontWeight: 500,
+          color: "var(--color-text-primary)",
+        }}
+      >
+        Bid recommendation
+      </p>
+      <p
+        style={{
+          margin: "0 0 1rem",
+          fontSize: "0.8125rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        What an auction lot is worth bidding is stated as three figures around what it is worth —
+        a floor, the fair figure itself, and a walk-away. These are the percentages that band is
+        built from. How much of catalogue a stamp actually fetches is not among them: that is
+        learned from the results you record, per area, condition and period, so it stays a
+        measurement rather than an opinion typed in once.
+      </p>
+
+      {BID_PERCENT_FIELDS.map((field) => (
+        <div
+          key={field.key}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1rem",
+            paddingTop: "0.75rem",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: "0 0 0.125rem",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+              }}
+            >
+              {field.label}
+            </p>
+            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              {field.description}
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
+            <input
+              type="number"
+              inputMode="numeric"
+              aria-label={field.label}
+              min={MIN_BID_PERCENT}
+              max={MAX_BID_PERCENT}
+              step={1}
+              value={bidPercents[field.key]}
+              onChange={(e) =>
+                setBidPercents((p) => ({ ...p, [field.key]: e.target.value }))
+              }
+              onBlur={() => commitBidPercent(field.key)}
+              disabled={isPending}
+              style={{
+                width: "5rem",
+                padding: "0.4rem 0.625rem",
+                border: "1px solid var(--color-border-strong)",
+                borderRadius: "0.375rem",
+                fontSize: "0.875rem",
+                color: "var(--color-text-primary)",
+                background: "var(--color-bg-elevated)",
+              }}
+            />
+            <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>%</span>
+          </div>
+        </div>
+      ))}
+
+      {bidError && (
+        <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
+          {bidError}
+        </p>
+      )}
+    </section>
   );
 }

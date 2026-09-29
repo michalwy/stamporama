@@ -54,7 +54,7 @@ export function assertOperationScope(
   if (!operation.writes || scopeAllowsWrite(scope)) return;
   const required = scopeRequiredForWrites(operation.writes);
   throw forbidden(
-    `\`${operation.name}\` writes, and this token is \`${scope}\`. It needs a token with the \`${required}\` scope — mint one in Settings → Assistant.`,
+    `\`${operation.name}\` writes, and this token is \`${scope}\`. It needs a token with the \`${required}\` scope — mint one in Settings → Assistant & API.`,
     ASSISTANT_TOKEN_SCOPES
   );
 }

@@ -13,12 +13,12 @@ import {
 // Auth session cookie is not sent — so it authenticates with a per-collection token instead. A token
 // authorizes as the collection's owner for that one collection. Only the SHA-256 hash is stored; the
 // raw value is returned once at creation and never again. Tokens are minted either by the one-click
-// registration exchange (`assistant-registration.ts`, #252) or by hand from Settings → Assistant;
+// registration exchange (`assistant-registration.ts`, #252) or by hand from Settings → Assistant & API;
 // both land in the same list and revoke the same way.
 //
 // Since #707 a token also carries a **scope** (`read` / `read_write`) and a **kind**
 // (`extension` / `agent`). The vocabulary and the one decision that reads it live in the pure
-// `assistant-token-scope.ts`, because Settings → Assistant is a `"use client"` panel and this
+// `assistant-token-scope.ts`, because Settings → Assistant & API is a `"use client"` panel and this
 // module carries `server-only`. Both are required at mint time rather than defaulted: the column's
 // default was the migration's backfill and was dropped after it, so nothing here can arrive at
 // `read_write` by omission.

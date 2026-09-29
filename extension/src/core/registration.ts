@@ -1,6 +1,6 @@
 // One-click registration (#252): a Stamporama instance registers *itself* into the extension.
 //
-// Its Settings → Assistant page exposes a payload — the instance's own origin, the collection, and a
+// Its Settings → Assistant & API page exposes a payload — the instance's own origin, the collection, and a
 // short-lived single-use code — in a hidden element. Clicking the toolbar icon on that page grants
 // `activeTab`, which is enough to read the payload out of an origin we do not otherwise script; the
 // code is then exchanged (background fetch, CORS-exempt under host_permissions) for an Assistant

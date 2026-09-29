@@ -924,7 +924,7 @@ to. A lot with nothing described yet has no recommendation at all.
 
 ### The settings
 
-The percentages the band is built from live under **Settings → General → Bid recommendation**, per
+The percentages the band is built from live under **Settings → Bid recommendation**, in the Intake group,, per
 collection:
 
 | Setting | Default | What it means |

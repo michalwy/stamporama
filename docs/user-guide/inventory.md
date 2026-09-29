@@ -678,7 +678,7 @@ Typing `i 123` in the sidebar's **Jump to…** box takes you straight to it — 
 lots.
 
 It is shown zero-padded — `#00123` — so a column of numbers lines up. How many digits it pads to is
-your choice, under **Settings → General → Copy number width**: pick `2` and the same copy reads
+your choice, under **Settings → Collection → Copy number width**: pick `2` and the same copy reads
 `#42`, pick `8` and it reads `#00000042`. That is a display setting only — nothing is renumbered,
 and a number wider than the setting simply renders in full. Listing templates can override it per
 token with `{itemNo:3}`, and can use the number at all through the
@@ -742,7 +742,7 @@ number — Michel `S`, `W`, `K`, `Zd` — it is a distinct catalog entry, so rec
 with that number, not as a format of one of its parts. The test is whether the catalog numbered it
 separately, not whether it holds more than one stamp.
 
-Formats are managed in **Settings → Conditions & formats**. A format that is used by any copy or
+Formats are managed in **Settings → Formats**. A format that is used by any copy or
 any catalog price cannot be deleted.
 
 **Formats in other languages.** Once a platform lists in — or an album is printed in — a language other than your collection's
@@ -759,8 +759,8 @@ Catalog values are recorded per format, on the same grid as everything else: the
 
 Most of the time you will not type these in. Catalogs publish multiples as a **multiplier** — one
 Viererblock factor for a whole issue — and record an explicit price only where a multiple is out of
-line. Stamporama follows that: set the multipliers once under **Settings → Conditions & formats →
-Format multipliers**, and every format's price is derived from the single's. Derived values appear
+line. Stamporama follows that: set the multipliers once under **Settings → Formats →
+Multipliers**, and every format's price is derived from the single's. Derived values appear
 in the grid as greyed, dashed placeholders — nothing is stored. Type over one where the catalog
 disagrees and it becomes a real price that always wins; clear it to fall back to the derived value.
 
@@ -772,7 +772,7 @@ narrowest anchor wins, in this order: **issue** first, then the **nearest area**
 
 You set each one where its scope lives, so you never pick the thing it applies to out of a list:
 
-- **Collection-wide and per-area** — Settings → Conditions &amp; formats → Format multipliers.
+- **Collection-wide and per-area** — Settings → Formats → Multipliers.
 - **One area** — also from that area's **⋮** menu on the **Areas** screen, which is usually quicker.
 - **One issue** — from that issue's **⋮** menu on the Issues list. Per-issue multipliers are not
   listed in Settings: you can have one for every issue and every format, so that list would be
@@ -814,7 +814,7 @@ it under the input.
 A cover franked with three different stamps, a fragment cut from a parcel card, an FDC — one piece of
 paper you cannot take apart, carrying catalog numbers the catalog never numbered as a whole. It is
 **one copy**, like a block of four, and its **Format** says what the piece is: *Cover*, *Piece*,
-*FDC* — ordinary format entries you add under **Settings → Conditions & formats**, beside *Block of
+*FDC* — ordinary format entries you add under **Settings → Formats**, beside *Block of
 4*.
 
 What is new is the list of stamps on it. Open the copy's **Edit** dialog and the **Stamp** field is

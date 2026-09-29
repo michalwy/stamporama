@@ -418,7 +418,7 @@ function DraftFields({
       />
       {/* Optional (#491), and only ever about tracking: naming the carrier is what turns a sale's
           tracking number into a link to its own consignment. Carriers are kept in
-          Settings → Shipping, because the same one carries parcels for every platform. */}
+          Settings → Carriers, because the same one carries parcels for every platform. */}
       <select
         id={`${idPrefix}-carrier`}
         value={carrierId}

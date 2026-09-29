@@ -138,7 +138,7 @@ async function render(): Promise<void> {
     const empty = document.createElement("div");
     empty.className = "empty";
     empty.textContent =
-      "No profiles yet — register one from Stamporama’s Settings → Assistant, or add it here by hand.";
+      "No profiles yet — register one from Stamporama’s Settings → Assistant & API, or add it here by hand.";
     listEl.append(empty);
     return;
   }

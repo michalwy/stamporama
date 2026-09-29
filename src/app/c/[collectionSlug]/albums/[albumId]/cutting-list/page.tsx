@@ -168,7 +168,7 @@ export default async function AlbumCuttingListPage({ params }: CuttingListPagePr
           }}
         >
           This collection has no hawid stock described, so there is nothing to cut from and every box
-          below is a pocket. Add the strips you own in Settings → Albums.
+          below is a pocket. Add the strips you own in Settings → Hawid stock.
         </p>
       )}
 

@@ -13,7 +13,7 @@ import {
   ASSISTANT_TOKEN_SCOPES,
 } from "@/lib/assistant-token-scope";
 
-// Server actions behind Settings → Assistant (#252, part of #155): the one-click registration the
+// Server actions behind Settings → Assistant & API (#252, part of #155): the one-click registration the
 // extension consumes, plus the manual token generate/revoke it coexists with (a token is still
 // useful from a script, or from a browser without the extension installed).
 

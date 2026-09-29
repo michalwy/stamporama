@@ -23,7 +23,7 @@ import { DEFAULT_SCAN_DPI, parseScanDpi } from "@/lib/scan-measure";
 import { formatCalibration, type ScanningProfileListRow } from "@/lib/scanning-profile";
 import { ScanningCalibrationDialog } from "./scanning-calibration-dialog";
 
-// Settings → Scanning (#1443): the scanners measurements are taken with.
+// Settings → Scanners (#1443): the scanners measurements are taken with.
 //
 // **One is the default** — what a new scan is offered and what a picture with no scan behind it opens
 // on — and **a profile in use cannot be deleted** (collector's call, 2026-09-28). The row says what

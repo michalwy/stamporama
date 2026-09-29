@@ -35,7 +35,7 @@ instance uses an application you register yourself. It is free and takes a few m
      **without a redirect** — Allegro calls this a device / non-web application. This is the normal
      case.
    - If your Stamporama **does** have a public HTTPS address, you may instead register a web
-     application and give it the redirect URI shown on the Settings → Allegro tab. It must match
+     application and give it the redirect URI shown on the Settings → Allegro page. It must match
      exactly, character for character.
 4. Grant it access:
    - **Read access to your offers and orders** — required. The sold-listing worklist and the bid
@@ -112,7 +112,7 @@ The code is good for a few minutes. If it expires, press the button again.
 ### Sign in on Allegro instead
 
 Offered only when your instance has a configured address (`BETTER_AUTH_URL`). Pressing it sends you
-to Allegro, you confirm, and Allegro sends you straight back to the Settings tab, connected. It is
+to Allegro, you confirm, and Allegro sends you straight back to Settings → Allegro, connected. It is
 one round trip rather than a wait — but it needs the redirect URI shown on the tab to be registered
 with your application, exactly as printed.
 

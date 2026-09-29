@@ -31,7 +31,7 @@ interface ShipmentDialogProps {
   /** How the parcel is going, as recorded on the sale — the method's snapshot name, so the prompt
    * says which service this is about. Null when the sale names no method. */
   shippingMethodName: string | null;
-  /** The collection's carriers, to pick from. Maintained under Settings → Shipping. */
+  /** The collection's carriers, to pick from. Maintained under Settings → Carriers. */
   carriers: CarrierData[];
   /** The carrier in force: the sale's own answer, else the **default** its shipping method carries.
    * Pre-selected, because the usual case is that the default is right. */
@@ -135,7 +135,7 @@ export function ShipmentDialog({
             {carrier
               ? carrier.trackingUrlTemplate
                 ? `${carrier.name} tracks its parcels, so the number becomes a link on the sale.`
-                : `${carrier.name} has no tracking address recorded, so the number is kept but not linked — add one in Settings → Shipping.`
+                : `${carrier.name} has no tracking address recorded, so the number is kept but not linked — add one in Settings → Carriers.`
               : "With no carrier, the number is kept but not linked."}
           </p>
           {mode === "sent" && (

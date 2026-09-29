@@ -19,7 +19,7 @@ than one stamp. The prefix comes from the stamp's primary area — unless its is
 
 ## Warn vs. block
 
-Duplicate handling is set per collection under **Settings → Duplicates**:
+Duplicate handling is set per collection under **Settings → Duplicate numbers**:
 
 - **Warn** (default) — when a catalog number already exists, a non-blocking notice
   appears listing the conflicting stamps. You can still save, because duplicates are
@@ -45,7 +45,7 @@ Duplicate handling is set per collection under **Settings → Duplicates**:
 
 ## The duplicate report
 
-**Settings → Duplicates** also shows a collection-wide report grouping every catalog
+**Settings → Duplicate numbers** also shows a collection-wide report grouping every catalog
 identity that appears on two or more stamps. Each group lists the conflicting stamps with
 links to open them in the Stamps list, so you can review and resolve them. Use **Refresh**
 to re-run the report after making changes.

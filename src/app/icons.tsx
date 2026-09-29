@@ -76,6 +76,7 @@ import {
   Hash,
   House,
   ImageOff,
+  Info,
   Layers,
   Lightbulb,
   Link2,
@@ -285,6 +286,9 @@ const GLYPHS = {
   // Markers — an icon that says something about the thing beside it.
   warning: TriangleAlert,
   suggestion: Lightbulb,
+  /** The ⓘ beside a page title (#1469): what the page is for, a hover away rather than a paragraph
+   *  under the title. */
+  info: Info,
   date: Calendar,
   notes: StickyNote,
   /** What the partner said back through the shared link (#641). Told apart from `notes`, which is

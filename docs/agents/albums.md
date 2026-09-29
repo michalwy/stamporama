@@ -69,7 +69,7 @@ should be able to do the same, or should say plainly that it is an invention.
 ## Hawid stock and the box rule (#765, corrected by #793)
 
 `HawidStrip` is a collection-level dictionary — two heights, the stock length a strip is sold at, an
-optional label, a drag order — shaped and placed like `StampFormat`, edited in **Settings → Albums**.
+optional label, a drag order — shaped and placed like `StampFormat`, edited in **Settings → Hawid stock**.
 Nothing is seeded and nothing is backfilled.
 
 **A strip is named after the stamp it takes, so it carries two heights, and confusing them is what
@@ -169,7 +169,7 @@ cause without change, and nothing about a printed sheet is rewritten.
 ## The album template (#766)
 
 `AlbumTemplate` is a collection-level **render preset** — page, spacing, hawid clearances, a face and
-size per type role, box treatment, photos, and four texts — edited in **Settings → Albums** beside
+size per type role, box treatment, photos, and four texts — edited in **Settings → Album templates**, beside
 the stock. It is `CollageTemplate`'s analogue and follows #307/#308's decisions rather than parallel
 ones.
 

@@ -48,7 +48,41 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 - An **All collections** link in the footer, to return to the collection picker. There is no
   quick-switch dropdown: changing collection is a rare enough act that it does not need a permanent
   control in the sidebar's most prominent row
-- The running app version, shown in muted text at the bottom of the sidebar (also listed under **Settings → General**). Where the build was stamped with one, the **release date** follows it — `v0.68.0 · 2026-08-07` — and hovering the date gives the full time in your own time zone. A build made outside the release process (a local development run) shows the version alone
+- The running app version, shown in muted text at the bottom of the sidebar (and again at the foot of the Settings navigation). Where the build was stamped with one, the **release date** follows it — `v0.68.0 · 2026-08-07` — and hovering the date gives the full time in your own time zone. A build made outside the release process (a local development run) shows the version alone
+
+## Settings
+
+**Settings**, in the sidebar's footer, is where the things you set up once live — the dictionaries,
+the templates, the marketplaces' connections. A screen you work in every day has its own place in
+the sidebar instead.
+
+Down the left of the Settings screen is a list of its entries, one per thing you set up, in groups
+named and coloured like the sidebar's sections, so you look for a setting under the part of the app
+it serves:
+
+- **General** — Collection (currency, default language, copy number width, reset to demo data) and
+  Photos & storage (the storage figures and how long generated images and finished scans are kept).
+- **Catalog** — Catalogs, Conditions, Certificate statuses, Formats, Subtypes, Attributes, Size
+  presets and Duplicate numbers.
+- **Collection** — Scanners, Tags, Album templates, Hawid stock, Corner ornaments and Ref card
+  templates.
+- **Selling** — Collage templates, Carriers, Allegro, Delcampe and Philasearch.
+- **Intake** — Acceptance profiles and Bid recommendation.
+- **Partners** — Colnect.
+- **System** — Assistant & API.
+
+Every group is always open; on a short window the list scrolls on its own. The running app version
+is the last line under it.
+
+Each page starts the same way: the group it belongs to, its title, and an **ⓘ** that says in one
+line what the page is for — hover it. Where one thing has several parts they are tabs across the top
+of its page: **Formats** has *Formats* and *Multipliers*, and **Attributes** has a tab for each of
+its four lists.
+
+Every page has an address of its own, and so does each tab — `settings?tab=formats&part=multipliers`
+— so a bookmark opens exactly what you were looking at. Addresses saved before the entries were
+split keep working: they open the entry that inherited the content, or, where one page became
+several, the first of them (`?tab=conditions` opens Conditions, `?tab=albums` opens Album templates).
 
 ## Filtering the Issues, Stamps, and Copies lists
 
@@ -152,7 +186,7 @@ something the app wrote, a globe opens per-language texts, a caret expands or co
 
 ## Default language
 
-**Settings → General** carries a **Default language** — the language the names and title names you
+**Settings → Collection** carries a **Default language** — the language the names and title names you
 type into Stamporama are written in. It starts as **English** and only matters once you write in
 another language: a platform that lists in one, or an [album](albums.md) printed in one. Anything set
 to your default language needs no translations at all, so it never adds fields anywhere. See
@@ -417,7 +451,7 @@ You only need a row where the abbreviations **differ**. Any Colnect abbreviation
 
 ## Colnect condition mapping
 
-Your [conditions](#stamp-conditions) are your own — the names, abbreviations and order you chose. Colnect's sale form instead offers a **fixed list of five grades**, the same under every item. Listing a copy there means translating between the two, so the same **Settings → Colnect** tab records it once, below the catalog mapping.
+Your [conditions](#stamp-conditions) are your own — the names, abbreviations and order you chose. Colnect's sale form instead offers a **fixed list of five grades**, the same under every item. Listing a copy there means translating between the two, so the same **Settings → Colnect** page records it once, below the catalog mapping.
 
 Every one of your conditions gets a row, with a picker holding Colnect's five grades:
 
@@ -456,7 +490,7 @@ Custom Colnect lists are not offered yet; the four standard ones are.
 
 ## Connecting the browser extension
 
-The **Stamporama Assistant** browser extension matches marketplace catalog pages against your stamps. **Settings → Assistant** connects it, and there is nothing to type: click **Connect Stamporama Assistant**, then — with that page still in front — click the Assistant icon in your browser toolbar. The page hands the extension this instance's address, this collection, and a one-time code; the extension trades the code for its own access token and reports back on the page. Because the page is served *by* the instance, the address is always right, which is also how your test server and your everyday one stay apart without you having to remember which is which.
+The **Stamporama Assistant** browser extension matches marketplace catalog pages against your stamps. **Settings → Assistant & API** connects it, and there is nothing to type: click **Connect Stamporama Assistant**, then — with that page still in front — click the Assistant icon in your browser toolbar. The page hands the extension this instance's address, this collection, and a one-time code; the extension trades the code for its own access token and reports back on the page. Because the page is served *by* the instance, the address is always right, which is also how your test server and your everyday one stay apart without you having to remember which is which.
 
 The one-time code lives for about five minutes and works once. If you wait too long, or want a fresh one, click **Start again**. Connecting the same instance and collection again refreshes that extension profile in place with a new token — that is how you recover from a token you revoked or lost, and it keeps whatever you named the profile.
 
@@ -629,7 +663,7 @@ Each collection keeps its own list of **conditions** — the grades used when va
 - **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
 - **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
 
-Certificate and guarantee status is tracked as a separate dimension, not as part of condition — see below. Both lists live on the same **Settings → Conditions** tab.
+Certificate and guarantee status is tracked as a separate dimension, not as part of condition — see below. They are managed side by side: **Settings → Conditions** and **Settings → Certificate statuses**.
 
 ### Conditions in other languages
 
@@ -639,7 +673,7 @@ These feed the `{condition}` and `{conditionAbbr}` tokens in [listing titles](co
 
 ## Certificate statuses
 
-Each collection keeps its own list of **certificate statuses** — the certificate or guarantee status used when valuing stamps (for example Certificate or Guarantee). This is an independent dimension from condition, so a stamp's grade and its certificate status are recorded separately rather than combined. Manage them in the **Certificate statuses** section of the **Settings → Conditions** tab.
+Each collection keeps its own list of **certificate statuses** — the certificate or guarantee status used when valuing stamps (for example Certificate or Guarantee). This is an independent dimension from condition, so a stamp's grade and its certificate status are recorded separately rather than combined. Manage them in **Settings → Certificate statuses**.
 
 - Certificate status is **optional**: leaving no status selected means the stamp has none, so there is no "None" entry to manage. New collections start with an empty list — add the statuses you use.
 - **Add** a status with a full name (e.g. "Certificate") and a short abbreviation (e.g. "Cert").
@@ -662,7 +696,7 @@ A condition and a certificate status each carry a **colour**, so the chips they 
 
 ## Acceptance profiles
 
-A [want](wants.md) records what you would accept — which conditions, which certificate statuses, which formats — and in practice you use the same two or three answers over and over. An **acceptance profile** is one of those answers with a name on it: *Any mint*, *Anything*, *A copy for the collection*. Manage them in the **Acceptance profiles** section of the **Settings → Conditions & formats** tab, beside the three lists a profile is written in.
+A [want](wants.md) records what you would accept — which conditions, which certificate statuses, which formats — and in practice you use the same two or three answers over and over. An **acceptance profile** is one of those answers with a name on it: *Any mint*, *Anything*, *A copy for the collection*. Manage them in **Settings → Acceptance profiles**, in the Intake group beside the auctions and wants they serve.
 
 - **Add** a profile with a name and the same three acceptance fields the want form uses. Leaving an axis untouched means **any** — an empty selection is not a missing answer.
 - **Reorder** profiles by dragging rows; the order is the order they are offered in.
@@ -737,11 +771,11 @@ The token follows the same rule as the tag: a stamp on the collection's **defaul
 
 ## Stamp attributes
 
-A catalogue states a handful of facts about every stamp beyond its number: what it is denominated, how it is perforated, its colour, its watermark, its paper and how it was printed. The app keeps six such attributes on a stamp — **denomination**, **perforation**, **colour**, **watermark**, **paper** and **printing method** — and the last four are chosen from lists the collection keeps. Manage those four lists on the **Settings → Attributes** tab, which also holds the [size presets](#size-presets).
+A catalogue states a handful of facts about every stamp beyond its number: what it is denominated, how it is perforated, its colour, its watermark, its paper and how it was printed. The app keeps six such attributes on a stamp — **denomination**, **perforation**, **colour**, **watermark**, **paper** and **printing method** — and the last four are chosen from lists the collection keeps. Manage those four lists under **Settings → Attributes**, one tab each; the [size presets](#size-presets) are an entry of their own beside it.
 
 - **Nothing here is required.** A stamp that states no colour simply has none, so there is no default entry and a new collection starts with every list empty. Add the values your catalogues actually use; the demo collection comes with a representative set.
 - **Add** an entry with a name — *Carmine*, *Lozenges*, *Thin paper*, *Photogravure*. **Reorder** entries by dragging rows; the order is the order they are offered in. **Delete** an entry you no longer need — one already assigned to stamps cannot be deleted until those stamps are changed.
-- All four lists sit on one tab because they are one subject, set up in one sitting.
+- All four lists sit in one entry because they are one subject, set up in one sitting.
 
 Denomination and perforation are not lists. They are recorded on each stamp **as printed** — `10 gr`, `1 zł`, `50 h`; `11½`, `11½:12`, `imperf` — because they are facts about that one stamp rather than a vocabulary shared across many, and they are never translated.
 
@@ -807,8 +841,8 @@ issue you measured years ago, so there is nothing left to measure — but it is 
 there is no neighbour to borrow from either, and every stamp in it would otherwise sit sizeless while
 you lay out the page.
 
-A **size preset** is that pair of millimetres, saved under a name you choose. Keep them on the
-**Settings → Attributes** tab, below the four lists.
+A **size preset** is that pair of millimetres, saved under a name you choose. Keep them under
+**Settings → Size presets**.
 
 - **Add** a preset with a **Width (mm)** and a **Height (mm)**. Both are required — unlike a stamp,
   which is free to state half a size, a preset is a complete one. Millimetres to a tenth, and a comma
@@ -912,7 +946,7 @@ The four lists translate exactly like [subtypes](#subtypes-in-other-languages) �
 
 ### Filling attributes from Colnect
 
-The four lists carry one more field, on the **Settings → Colnect** tab rather than here: what Colnect
+The four lists carry one more field, on the **Settings → Colnect** page rather than here: what Colnect
 calls each value. With that mapping in place the [Assistant](assistant.md#when-colnect-knows-what-the-stamp-is)
 fills a matched stamp's attributes straight off its Colnect catalogue page — the fastest way to get
 these six filled in on a collection of any size. Denomination and perforation need no mapping.
@@ -934,7 +968,7 @@ Tags are their own subject and have their own page: see [Tags](tags.md).
 
 ## Carriers
 
-The post offices and couriers you post with, kept under **Settings → Shipping**. A carrier is a name
+The post offices and couriers you post with, kept under **Settings → Carriers**. A carrier is a name
 and a **tracking address** — the page where it looks a parcel up, written with `{code}` where the
 tracking number goes:
 
@@ -993,7 +1027,7 @@ New collections start with no templates — add the ones that match the material
 ## Ref card templates
 
 The other named dictionary of render numbers, and the only thing it has in common with collage
-templates is the shape: **Settings → Ref cards** holds the sizes of the blank ref cards printed from
+templates is the shape: **Settings → Ref card templates** holds the sizes of the blank ref cards printed from
 the Locations screen, in millimetres. See
 [Printing blank ref cards → Card formats](locations.md#card-formats) for what each measurement means
 and how the sheet uses it.
@@ -1004,7 +1038,7 @@ sheet is recorded, so editing or deleting one of these changes only what you pri
 
 ## Hawid stock
 
-**Settings → Albums → Hawid stock** is the list of hawid strips you actually own: the **stamp
+**Settings → Hawid stock** is the list of hawid strips you actually own: the **stamp
 height** printed on the packet, the strip's own **outer height**, how long one strip is **as sold**
 (210 mm, usually), and an optional label for the packet you reach for.
 
@@ -1051,7 +1085,7 @@ Pages you have already printed are paper.
 
 ## Album templates
 
-**Settings → Albums → Album templates** holds everything about how an album *looks*, so a new album
+**Settings → Album templates** holds everything about how an album *looks*, so a new album
 is not an evening of retyping page sizes and font names. The dialog is split into sections, listed
 down its left side, and shows one at a time:
 
@@ -1221,7 +1255,7 @@ The albums themselves live outside Settings, under **Collection → Albums** —
 
 ## Corner ornaments
 
-**Settings → Albums → Corner ornaments** lists the corner ornaments you have uploaded for album page
+**Settings → Corner ornaments** lists the corner ornaments you have uploaded for album page
 frames, each drawn as it prints. **Upload SVG…** adds one (the template's own ornament field has the
 same button); the row's menu deletes one, which is refused while a template or an album still uses it
 — you are told which. Printed cards keep the corners they were printed with either way. How to draw
@@ -1253,7 +1287,7 @@ The **first** promotion happens on its own: when a copy gets its **front** photo
 
 ### Photo storage used
 
-**Settings → General** shows the **total space used by all photos in the collection** — copy photos, stamp photos and the listing images generated for offers, added up. Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
+**Settings → Photos & storage** shows the **total space used by all photos in the collection** — copy photos, stamp photos and the listing images generated for offers, added up. Use it to keep an eye on how much storage your images are taking. The figure updates as you add and remove photos.
 
 It also drops on its own: a week after an offer is sold or withdrawn, its generated listing images are deleted, since they can always be made again from the copies' scans (see [when the listing is over](offers.md#when-the-listing-is-over)). Nothing you uploaded yourself is ever removed this way.
 
@@ -1270,7 +1304,7 @@ Two things about it are worth knowing, and the line says both:
 
 ### Scanning profiles
 
-**Settings → Scanning** lists the scanners you measure scans with. A **scanning profile** is a scanner
+**Settings → Scanners** lists the scanners you measure scans with. A **scanning profile** is a scanner
 at one resolution — *Epson V600, 1200 dpi* — and it is what the ruler, the size tool and the
 perforation gauge in the [tile viewer](purchases.md#measuring-on-the-scan) convert with. Every
 collection starts with one, called *Scanner*, at **1200 dpi**, and it is the **default**: what a new
@@ -1314,7 +1348,7 @@ rather be told than guess — and every reading it gives you names the profile i
 
 ### How long closed listings keep their images
 
-Right below the storage figure, **Settings → General** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.
+Right below the storage figure, **Settings → Photos & storage** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.
 
 There are three answers:
 

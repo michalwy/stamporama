@@ -14,7 +14,7 @@ import {
 } from "@/lib/scanning-profiles";
 import type { ScanScale } from "@/lib/scan-measure";
 
-// Settings → Scanning (#1443): the collection's scanning profiles. Every write here is a Settings
+// Settings → Scanners (#1443): the collection's scanning profiles. Every write here is a Settings
 // act; the measuring tool switches profile for a sitting and never reaches any of these.
 
 async function getSession() {

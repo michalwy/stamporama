@@ -16,12 +16,12 @@ makes both.
 - Your instance reachable from wherever the assistant runs. If you run Stamporama on your own
   machine and the assistant runs there too, that is `http://localhost:3000`. If the assistant runs
   somewhere else — a phone, a hosted client — the instance has to be reachable from there.
-- A **token**, made in **Settings → Assistant**.
+- A **token**, made in **Settings → Assistant & API**.
 
 ## Making the token
 
 1. Open the collection you want the assistant to see.
-2. Go to **Settings → Assistant** and choose **Generate token by hand**.
+2. Go to **Settings → Assistant & API** and choose **Generate token by hand**.
 3. Pick **Agent** for what it is for. That is only a label, so you can tell this row of the list from
    the extension's; it does not change what the token may do.
 4. Pick what it **may do**:
