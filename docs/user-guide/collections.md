@@ -1086,6 +1086,10 @@ down its left side, and shows one at a time:
   larger gap makes each labelled row taller, so a series can move to the next sheet. A row whose
   boxes print no label reserves nothing for it.
 
+  The outline is drawn **inside** the box: its outer edge is exactly the box's size, and a heavier
+  line narrows the space inside rather than making the box bigger. So a hawid cut to the box's size
+  covers the whole line, and none of it shows around the mount — for every style and weight.
+
   A band is a slice of the page. Normally one checklist takes the full width; where two short ones
   would both fit, they can sit side by side, which is what your own pages do a few times per page.
   It is a ceiling and not a frame — the page is never divided into fixed columns and nothing ever
