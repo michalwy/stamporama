@@ -88,6 +88,17 @@ model Collection {
   // until anything has been learned, a catalogue-anchored recommendation is exactly what the
   // "ceiling ← catalogue value" quick fill (#370) already writes.
   bidFallbackPercent Int @default(100)
+  // The morning email of the watched auction lots ending that day (#1373). Off by default, and it
+  // cannot be switched on while the instance has no mail provider (#1372). The hour (0–23) and
+  // "today" are the collector's own, read in `auctionReminderTimeZone` — an IANA zone the Settings
+  // page fills from the browser when the reminder is first switched on, since nothing else here
+  // knows the collector's zone. `auctionReminderLastDay` is the collector's calendar day the
+  // reminder was last done for, sent or empty: moving it is how the sweep claims a day, so a
+  // restart never sends the same day twice.
+  auctionReminderEnabled  Boolean   @default(false)
+  auctionReminderHour     Int       @default(8)
+  auctionReminderTimeZone String?
+  auctionReminderLastDay  DateTime? @db.Date
   // The same allocation counter for `Offer.offerNo` (#416), bumped the same atomic way and for the
   // same reason: an offer number that has been published in a marketplace note must never be handed
   // to a different offer. Separate from `nextItemNo` because copies and listings are counted

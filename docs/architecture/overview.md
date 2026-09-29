@@ -659,6 +659,18 @@ about an hour (attempts at 0, 1, 5, 15, 30 and 60 minutes). Only the last failur
 that tab is sent at once rather than queued, so its answer is the provider's own. Outbound traffic:
 `POST https://api.resend.com/emails`, and only when a provider is configured.
 
+**The morning auction reminder** (#1373, `src/lib/auction-reminder.ts` + the pure
+`auction-reminder-rules.ts`) is the first feature that queues mail. Four columns on `Collection` hold
+it: switched on (off by default, refused while no provider is configured), the hour, the collector's
+IANA time zone — the only place the app knows one, filled from the browser when the reminder is first
+switched on — and `auctionReminderLastDay`, the collector's calendar day it was last done for. A
+five-minute in-process sweep (`auction-reminder-sweep.ts`, started from `instrumentation-node.ts`)
+finds collections whose hour has come in their zone and whose day is not done, **claims the day** with
+a conditional update and queues the message in the same transaction — so a restart after the hour
+sends a missed reminder and never a second one. It lists the open lots ending between now and the
+zone's next midnight, leaving out those past both ceiling and bid (`isOutpriced`, #600); nothing to
+list, no message, the day claimed all the same.
+
 ## CI
 
 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) is the record of what CI runs — which jobs exist, what each one is gated on, and why — and everything below is a summary of it. Where the two disagree, the workflow is right.

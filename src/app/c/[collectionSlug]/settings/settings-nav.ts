@@ -55,6 +55,7 @@ export type SettingsEntryKey =
   | "philasearch"
   | "acceptance"
   | "bids"
+  | "auction-reminder"
   | "colnect"
   | "assistant"
   | "email";
@@ -240,6 +241,15 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "buying",
     label: "Bid recommendation",
     hint: "The percentages an auction lot's recommended bid is stated with.",
+  },
+  // The morning email of the watched auctions ending that day (#1373) — Intake's, where the
+  // auctions are, rather than System's beside Email: it is set up for the bidding, and only sent
+  // through the mail that System configures.
+  {
+    key: "auction-reminder",
+    group: "buying",
+    label: "Auction reminder",
+    hint: "A morning email of the watched auction lots ending that day, at an hour you choose.",
   },
 
   {

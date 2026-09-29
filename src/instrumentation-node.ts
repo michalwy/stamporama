@@ -44,6 +44,10 @@
 //   - the mail worker (#1372) — sends queued mail through the provider the instance was deployed
 //     with, and brings a failed message back round on its retry schedule. Does nothing on an
 //     instance with no provider.
+//   - the morning auction reminder (#1373) — a five-minute pass that, once the collector's chosen
+//     hour has come in their own zone, queues the day's email of watched lots ending that day. Once
+//     a day per collection by a claim on the collection row, so a restart after the hour sends a
+//     missed reminder and never a second one. Does nothing on an instance with no provider.
 
 import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
@@ -66,6 +70,7 @@ import {
 } from "@/lib/delcampe-category-catalog";
 import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
 import { startValueSnapshotSweep } from "@/lib/value-snapshot-sweep";
+import { startAuctionReminderSweep } from "@/lib/auction-reminder-sweep";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const DELCAMPE_CATEGORY_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -314,6 +319,10 @@ export async function start(): Promise<void> {
   // The daily value snapshots (#652). Its timers and its in-flight flag live on `globalThis` inside
   // the module, so a hot reload re-running boot cannot stack a second interval.
   startValueSnapshotSweep();
+
+  // The morning auction reminder (#1373). Its timers and in-flight flag live on `globalThis` inside
+  // the module, like the snapshot sweep's.
+  startAuctionReminderSweep();
 
   // Offer photo generation (#311). Starting it here is what makes Generate a background job: the
   // action only enqueues, and this worker renders. Never lets a startup failure abort boot.

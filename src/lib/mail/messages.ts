@@ -1,5 +1,5 @@
 import "server-only";
-import { prisma } from "../db";
+import { prisma, type DbTransaction } from "../db";
 import { readMailConfig, summarizeMailConfig, type MailConfigSummary } from "./config";
 import { mailErrorMessage, type MailProvider } from "./provider";
 import { nextMailAttemptAt } from "./retry-rules";
@@ -37,13 +37,17 @@ export function isMailConfigured(): boolean {
  * Put a message in the queue, or return null without writing anything when the instance has no
  * mail provider — nothing tries to send on an instance that cannot. Callers kick the worker
  * (`kickMailWorker`) or use `queueMail`, which does both.
+ *
+ * `db` lets a feature queue inside its own transaction, so the message and whatever records that it
+ * was sent are written together or not at all (#1373's once-a-day claim).
  */
 export async function enqueueMail(
   collectionId: string,
-  message: { subject: string; text: string }
+  message: { subject: string; text: string },
+  db: DbTransaction = prisma
 ): Promise<string | null> {
   if (!isMailConfigured()) return null;
-  const row = await prisma.mailMessage.create({
+  const row = await db.mailMessage.create({
     data: { collectionId, subject: message.subject, text: message.text },
     select: { id: true },
   });
