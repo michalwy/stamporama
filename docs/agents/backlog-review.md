@@ -2,7 +2,8 @@
 
 A backlog-review session answers one question: **what should the next session or two take, and how
 should it be grouped?** It proposes and changes nothing — no issues written, no issues closed, no
-release cut, no branch touched.
+release cut, no branch touched. It is the only session that answers it: a backlog manager files
+issues and gives no next steps ([`backlog-manager.md`](backlog-manager.md)).
 
 ## Measure, never remember
 
