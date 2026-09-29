@@ -20,7 +20,7 @@ produced, and most of the issues it generated were about itself rather than abou
 | --- | --- |
 | **Task** | Holds one issue, or several that share a file, end to end. Most sessions are this. |
 | **Backlog review** | Reads the backlog and proposes what to take next and how to group it. Proposes only — it changes nothing. → [`backlog-review.md`](backlog-review.md) |
-| **Backlog manager** | Turns the user's ideas, remarks and bug reports into issues. Writes no code. → [`backlog-manager.md`](backlog-manager.md) |
+| **Backlog manager** | Turns the user's ideas, remarks and bug reports into issues. Writes no code and gives no next steps. → [`backlog-manager.md`](backlog-manager.md) |
 | **Release manager** | Cuts a release: a tag, a Release and a published image. No issue, no branch, no commit. → [`release-versioning.md`](release-versioning.md) |
 
 ## Starting a task
