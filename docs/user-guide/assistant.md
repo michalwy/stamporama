@@ -166,8 +166,8 @@ there is.
 
 **After-auction sales** are refused, in as many words: those lots are no longer being bid on.
 
-Before the first capture, name **which of your platforms is Philasearch** under **Settings →
-Philasearch**.
+Before the first capture, name **which of your platforms is Philasearch** in the **Platform** choice
+at the top right of **Settings → Philasearch**.
 
 ## Find in Stamporama — asking about anything you can select
 

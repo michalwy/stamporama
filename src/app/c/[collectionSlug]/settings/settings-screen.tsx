@@ -202,7 +202,7 @@ const sectionHeadingStyle: React.CSSProperties = {
 /**
  * The entries already laid out in one of ADR-0059's body shapes, so no longer held to today's
  * column (`UNSHAPED_PAGE_WIDTH`). The Catalog group's dictionaries are list beside detail (#1471);
- * Album templates is list beside preview (#1474).
+ * Album templates is list beside preview (#1474); the plain forms are the grid of fields (#1473).
  */
 const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "catalogs",
@@ -213,6 +213,11 @@ const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "attributes",
   "size-presets",
   "album-templates",
+  "general",
+  "storage",
+  "duplicates",
+  "philasearch",
+  "bids",
 ]);
 
 /** Where the navigation stays put: the window scrolls the page, never the list (#1469). */

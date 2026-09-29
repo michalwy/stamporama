@@ -8,14 +8,7 @@ import {
   listCollectionCatalogDuplicatesAction,
 } from "@/app/actions/duplicate-catalog";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
-
-const cardStyle: React.CSSProperties = {
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.75rem",
-  padding: "1.25rem 1.5rem",
-  background: "var(--color-bg-elevated)",
-  marginBottom: "1.5rem",
-};
+import { SettingsFieldCard, SettingsFieldGrid } from "./settings-field-grid";
 
 export function DuplicatesPanel({
   collectionId,
@@ -72,54 +65,34 @@ export function DuplicatesPanel({
 
   return (
     <div>
-      {/* Policy */}
-      <section style={cardStyle}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1.5rem",
-          }}
+      {/* The policy is a card of the grid (#1473); the report is a list below it, at the page's
+          width, since it is read rather than set. */}
+      <SettingsFieldGrid>
+        <SettingsFieldCard
+          label="Duplicate catalog numbers"
+          hint="The same catalog, area prefix and number on more than one stamp."
+          tooltip={
+            <>
+              <strong>Warn</strong> shows a notice and lets the stamp be saved; <strong>Block</strong>{" "}
+              refuses to save a stamp whose catalog number already exists.
+            </>
+          }
+          error={modeError}
         >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Duplicate catalog numbers
-            </p>
-            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)", maxWidth: "32rem" }}>
-              A duplicate is the same catalog vendor, area prefix, and number on more than one stamp.
-              <strong> Warn</strong> shows a non-blocking notice; <strong>Block</strong> prevents saving
-              a stamp whose catalog number already exists.
-            </p>
-          </div>
-          <div style={{ flexShrink: 0 }}>
-            <Segmented<DuplicateCatalogMode>
-              label="Policy"
-              value={mode}
-              onChange={handleModeChange}
-              options={[
-                { value: "warn", label: "Warn" },
-                { value: "block", label: "Block" },
-              ]}
-            />
-          </div>
-        </div>
-        {modeError && (
-          <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-            {modeError}
-          </p>
-        )}
-      </section>
+          <Segmented<DuplicateCatalogMode>
+            label="Policy"
+            value={mode}
+            onChange={handleModeChange}
+            options={[
+              { value: "warn", label: "Warn" },
+              { value: "block", label: "Block" },
+            ]}
+          />
+        </SettingsFieldCard>
+      </SettingsFieldGrid>
 
       {/* Report */}
-      <section>
+      <section style={{ marginTop: "2rem" }}>
         <div
           style={{
             display: "flex",

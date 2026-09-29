@@ -30,6 +30,12 @@ import {
 import { formatBytes } from "@/lib/format-bytes";
 import type { StorageCacheStatus } from "@/lib/storage-cache";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import {
+  SETTINGS_FIELD_NUMBER_STYLE,
+  SETTINGS_FIELD_SELECT_STYLE,
+  SettingsFieldCard,
+  SettingsFieldGrid,
+} from "./settings-field-grid";
 
 interface CollectionSettingsPanelProps {
   collectionId: string;
@@ -67,31 +73,34 @@ interface BidRecommendationPanelProps {
   bidFallbackPercent: number;
 }
 
-/** The three bid-recommendation percentages (#508), each said in the terms it is used in. Nothing
- * reads them yet — the recommendation itself lands with #511. */
+/** The three bid-recommendation percentages (#508), each said in the terms it is used in: one line
+ * on the card, the rest behind its ⓘ (#1473). */
 const BID_PERCENT_FIELDS = [
   {
     key: "bidFloorPercent",
     label: "Bargain floor",
-    description:
-      "Below this share of a lot's fair figure, it is a bargain. Default 75%.",
+    hint: "Below this share of a lot's fair figure, it is a bargain.",
+    tooltip: "A share of the lot's fair figure, in whole percent. Default 75%.",
   },
   {
     key: "bidCeilingPercent",
     label: "Walk-away ceiling",
-    description:
-      "Past this share, the lot belongs to somebody else. It may sit below 100% — buying only under the fair figure is a style, not a mistake. Default 125%.",
+    hint: "Past this share, the lot belongs to somebody else.",
+    tooltip:
+      "It may sit below 100% — buying only under the fair figure is a style, not a mistake. Default 125%.",
   },
   {
     key: "bidFallbackPercent",
     label: "Catalogue fallback",
-    description:
-      "What a catalogue value counts as while nothing has been learned yet from your recorded results. It stops being used as soon as there is evidence. Default 100%.",
+    hint: "What a catalogue value counts as until results are recorded.",
+    tooltip:
+      "Used only while nothing has been learned from your recorded results; it stops being used as soon as there is evidence. Default 100%.",
   },
 ] as const satisfies readonly {
   key: "bidFloorPercent" | "bidCeilingPercent" | "bidFallbackPercent";
   label: string;
-  description: string;
+  hint: string;
+  tooltip: string;
 }[];
 
 /** The three answers a collection can give about retention (#577). The middle one is the whole
@@ -186,69 +195,41 @@ function useRetentionSetting(args: {
   return { mode, days, setDays, error, sentence, handleMode, commitDays };
 }
 
-/** One retention control, rendered. Both periods use it, so the pair reads as one question asked
- * twice rather than as two settings that happen to sit together — which is also what stops their
- * wording, their layout and their three options from drifting apart. */
-function RetentionSection({
+/** One retention control, rendered as a card of the grid. Both periods use it, so the pair reads as
+ * one question asked twice rather than as two settings that happen to sit together — which is also
+ * what stops their wording, their layout and their three options from drifting apart. */
+function RetentionCard({
   title,
-  description,
+  hint,
+  tooltip,
   daysLabel,
-  daysHint,
   state,
   disabled,
 }: {
   title: string;
-  description: ReactNode;
+  hint: ReactNode;
+  tooltip: ReactNode;
   daysLabel: string;
-  daysHint: string;
   state: ReturnType<typeof useRetentionSetting>;
   disabled: boolean;
 }) {
   return (
-    <section
-      style={{
-        border: "1px solid var(--color-border)",
-        borderRadius: "0.75rem",
-        padding: "1.25rem 1.5rem",
-        background: "var(--color-bg-elevated)",
-        marginBottom: "1.5rem",
-      }}
+    <SettingsFieldCard
+      label={title}
+      hint={hint}
+      tooltip={tooltip}
+      // The period in words, whichever of the three is chosen — the same sentence the server writes
+      // to its own log, from the same function, so nothing can describe one sweep two ways.
+      status={state.sentence}
+      error={state.error}
     >
-      <p
-        style={{
-          margin: "0 0 0.25rem",
-          fontSize: "0.9375rem",
-          fontWeight: 500,
-          color: "var(--color-text-primary)",
-        }}
-      >
-        {title}
-      </p>
-      <p
-        style={{
-          margin: "0 0 0.875rem",
-          fontSize: "0.8125rem",
-          color: "var(--color-text-muted)",
-        }}
-      >
-        {description}
-      </p>
-
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
         <select
           aria-label={title}
           value={state.mode}
           onChange={(e) => state.handleMode(e.target.value as RetentionMode)}
           disabled={disabled}
-          style={{
-            padding: "0.4rem 0.625rem",
-            border: "1px solid var(--color-border-strong)",
-            borderRadius: "0.375rem",
-            fontSize: "0.875rem",
-            color: "var(--color-text-primary)",
-            background: "var(--color-bg-elevated)",
-            cursor: "pointer",
-          }}
+          style={SETTINGS_FIELD_SELECT_STYLE}
         >
           <option value="inherit">Follow this instance</option>
           <option value="days">Delete after a number of days</option>
@@ -264,52 +245,34 @@ function RetentionSection({
               onBlur={state.commitDays}
               disabled={disabled}
               inputMode="decimal"
-              style={{
-                width: "5rem",
-                padding: "0.4rem 0.625rem",
-                border: "1px solid var(--color-border-strong)",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                color: "var(--color-text-primary)",
-                background: "var(--color-bg-elevated)",
-              }}
+              style={SETTINGS_FIELD_NUMBER_STYLE}
             />
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              {daysHint}
+              days · 0 = next sweep
             </span>
           </span>
         )}
       </div>
+    </SettingsFieldCard>
+  );
+}
 
-      {/* The period in words, whichever of the three is chosen — the same sentence the server
-          writes to its own log, from the same function, so nothing can describe one sweep two
-          ways. */}
-      <p
-        style={{
-          margin: "0.75rem 0 0",
-          fontSize: "0.8125rem",
-          color: "var(--color-text-secondary)",
-        }}
-      >
-        {state.sentence}
-      </p>
-
-      {state.error && (
-        <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-          {state.error}
-        </p>
-      )}
-    </section>
+/** A figure a card shows rather than edits — the storage used, the base currency. */
+function CardFigure({ children }: { children: ReactNode }) {
+  return (
+    <span style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+      {children}
+    </span>
   );
 }
 
 /**
- * The local storage cache (#591), on a line of its own directly under the storage figure.
+ * The local storage cache (#591), a card beside the storage figure.
  *
  * **Not added to that figure**, deliberately. They answer different questions and one of them is
- * reclaimable: above is how much of the collector's data is being held, here is how much disk this
- * instance is using as scratch. Summed, they would tell an operator that deleting scans is the way
- * to recover space the cache gives back on its own.
+ * reclaimable: the storage card is how much of the collector's data is being held, this is how much
+ * disk this instance is using as scratch. Summed, they would tell an operator that deleting scans is
+ * the way to recover space the cache gives back on its own.
  *
  * **Said to be instance-wide**, in the same voice #577's *instance default* uses for facts that are
  * not the collection's own: the cache holds objects from every collection and its cap is the
@@ -318,10 +281,10 @@ function RetentionSection({
  * reason it is possible at all: keys are collection-scoped.
  *
  * Shown only when there is one. On the filesystem backend the cache is a no-op — the bytes are
- * already local — and a line reporting 0 B of a cap that will never be used would be an invitation
+ * already local — and a card reporting 0 B of a cap that will never be used would be an invitation
  * to go looking for something that is not there.
  */
-function StorageCacheSection({
+function StorageCacheCard({
   collectionId,
   status,
   disabled,
@@ -348,62 +311,41 @@ function StorageCacheSection({
   }
 
   return (
-    <section
-      style={{
-        border: "1px solid var(--color-border)",
-        borderRadius: "0.75rem",
-        padding: "1.25rem 1.5rem",
-        background: "var(--color-bg-elevated)",
-        marginBottom: "1.5rem",
-      }}
+    <SettingsFieldCard
+      label="Local cache"
+      hint="Scratch copies on this instance's disk — not part of your storage."
+      tooltip={
+        <>
+          Copies this instance keeps on its own disk so it does not fetch scans and photos back from
+          remote storage while it works — cutting a card, composing a listing image. It is shared by
+          every collection on this instance, against a cap its operator sets. Nothing here is your
+          data, and emptying it only means the next run fetches again.
+        </>
+      }
+      status={
+        state.status === "success" ? (
+          <span style={{ color: "var(--color-success)" }}>
+            Cleared {state.files} cached file{state.files === 1 ? "" : "s"}, freeing{" "}
+            {formatBytes(state.bytes)}.
+          </span>
+        ) : (
+          <>{formatBytes(share)} of it comes from this collection.</>
+        )
+      }
+      error={state.status === "error" ? state.message : null}
     >
-      <div
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}
-      >
-        <div>
-          <p
-            style={{
-              margin: "0 0 0.25rem",
-              fontSize: "0.9375rem",
-              fontWeight: 500,
-              color: "var(--color-text-primary)",
-            }}
-          >
-            Local cache
-          </p>
-          <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Copies this instance keeps on its own disk so it does not fetch scans and photos back
-            from remote storage while it works — cutting a card, composing a listing image. It is
-            shared by every collection on this instance and is not part of the figure above:
-            nothing here is your data, and emptying it only means the next run fetches again.
-          </p>
-        </div>
-        <span
-          style={{
-            fontSize: "0.9375rem",
-            fontWeight: 600,
-            color: "var(--color-text-primary)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {formatBytes(used)} of {formatBytes(status.maxBytes)}
-        </span>
-      </div>
-
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: "1rem",
-          marginTop: "0.875rem",
+          gap: "0.75rem",
           flexWrap: "wrap",
         }}
       >
-        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-          Instance-wide, against a cap this instance&apos;s operator sets. {formatBytes(share)} of
-          it comes from this collection.
-        </p>
+        <CardFigure>
+          {formatBytes(used)} of {formatBytes(status.maxBytes)}
+        </CardFigure>
         <DialogSecondaryButton
           onClick={clear}
           disabled={disabled || isPending || share === 0}
@@ -412,19 +354,7 @@ function StorageCacheSection({
           {isPending ? "Clearing…" : "Clear this collection's copies"}
         </DialogSecondaryButton>
       </div>
-
-      {state.status === "error" && (
-        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-          {state.message}
-        </p>
-      )}
-      {state.status === "success" && (
-        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-success)" }}>
-          Cleared {state.files} cached file{state.files === 1 ? "" : "s"}, freeing{" "}
-          {formatBytes(state.bytes)}.
-        </p>
-      )}
-    </section>
+    </SettingsFieldCard>
   );
 }
 
@@ -487,116 +417,25 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
 
   return (
     <>
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Base currency
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Set at creation and cannot be changed.
-            </p>
-          </div>
-          <span
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-            }}
-          >
-            {baseCurrency}
-          </span>
-        </div>
-      </section>
+      <SettingsFieldGrid>
+        <SettingsFieldCard label="Base currency" hint="Set when the collection was created; it cannot be changed.">
+          <CardFigure>{baseCurrency}</CardFigure>
+        </SettingsFieldCard>
 
-      {/* Default language (#293): the language the collection's own entity text is written in.
-          Platforms listing in it need no translations at all. */}
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
-          }}
+        {/* Default language (#293): the language the collection's own entity text is written in.
+            Platforms listing in it need no translations at all. */}
+        <SettingsFieldCard
+          label="Default language"
+          hint="The language your names and title names are written in."
+          tooltip="A platform that lists in this language needs no translations at all."
+          error={languageError}
         >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Default language
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              The language your names and title names are written in. Platforms listing in it need
-              no translations.
-            </p>
-            {languageError && (
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-                {languageError}
-              </p>
-            )}
-          </div>
           <select
             aria-label="Default language"
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
             disabled={isPending}
-            style={{
-              padding: "0.4rem 0.625rem",
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "0.375rem",
-              fontSize: "0.875rem",
-              color: "var(--color-text-primary)",
-              background: "var(--color-bg-elevated)",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
+            style={SETTINGS_FIELD_SELECT_STYLE}
           >
             {COMMON_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
@@ -604,72 +443,28 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
               </option>
             ))}
           </select>
-        </div>
-      </section>
+        </SettingsFieldCard>
 
-      {/* Internal copy-number width (#268). Display only — the stored number is the bare integer,
-          so changing this renumbers nothing and never breaks a search. */}
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Copy number width
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              How many digits each copy&apos;s internal number is padded to, so a column of them
-              lines up. Display only — no copy is renumbered, and a search finds a number however it
-              is written. Listing templates can override it per token, e.g.{" "}
+        {/* Internal copy-number width (#268). Display only — the stored number is the bare integer,
+            so changing this renumbers nothing and never breaks a search. */}
+        <SettingsFieldCard
+          label="Copy number width"
+          hint="How many digits a copy's internal number is padded to."
+          tooltip={
+            <>
+              So a column of numbers lines up. Display only — no copy is renumbered, and a search
+              finds a number however it is written. Listing templates can override it per token, e.g.{" "}
               <code>{"{itemNo:3}"}</code>.
-            </p>
-            {padError && (
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-                {padError}
-              </p>
-            )}
-          </div>
+            </>
+          }
+          error={padError}
+        >
           <select
             aria-label="Copy number width"
             value={pad}
             onChange={(e) => handlePadChange(Number(e.target.value))}
             disabled={isPending}
-            style={{
-              padding: "0.4rem 0.625rem",
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "0.375rem",
-              fontSize: "0.875rem",
-              color: "var(--color-text-primary)",
-              background: "var(--color-bg-elevated)",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
+            style={SETTINGS_FIELD_SELECT_STYLE}
           >
             {Array.from(
               { length: MAX_ITEM_NO_PAD - MIN_ITEM_NO_PAD + 1 },
@@ -681,11 +476,15 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
               </option>
             ))}
           </select>
-        </div>
-      </section>
+        </SettingsFieldCard>
+      </SettingsFieldGrid>
 
+      {/* The reset stays apart from the grid (#1473), at the page's foot, and keeps its warning on
+          the page beside the button: it is the one action here that destroys the collection's
+          data, and the sentence is what stops it being pressed as if it were a setting. */}
       <section
         style={{
+          marginTop: "2.5rem",
           border: "1px solid var(--color-error-border)",
           borderRadius: "0.75rem",
           overflow: "hidden",
@@ -717,8 +516,7 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
             padding: "1.25rem 1.5rem",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
+            gap: "2rem",
             background: "var(--color-bg-elevated)",
           }}
         >
@@ -822,100 +620,52 @@ export function StorageSettingsPanel({ collectionId, closedOfferPhotoTtl, instan
   });
 
   return (
-    <>
-      <section
-        style={{
-          border: "1px solid var(--color-border)",
-          borderRadius: "0.75rem",
-          padding: "1.25rem 1.5rem",
-          background: "var(--color-bg-elevated)",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.25rem",
-                fontSize: "0.9375rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Photo storage
-            </p>
-            <p
-              style={{
-                margin: 0,
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Total space used by all photos in this collection.
-            </p>
-          </div>
-          <span
-            style={{
-              fontSize: "0.9375rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-            }}
-          >
-            {formatBytes(photoStorageBytes)}
-          </span>
-        </div>
-      </section>
+    <SettingsFieldGrid>
+      <SettingsFieldCard label="Photo storage" hint="Space used by all photos in this collection.">
+        <CardFigure>{formatBytes(photoStorageBytes)}</CardFigure>
+      </SettingsFieldCard>
 
-      <StorageCacheSection
-        collectionId={collectionId}
-        status={storageCache}
-        disabled={isPending}
-      />
+      <StorageCacheCard collectionId={collectionId} status={storageCache} disabled={isPending} />
 
-      {/* Both retention periods (#577, #578), directly under the storage figure because they are
-          the answer to what that figure shows — and next to each other because they are one
-          question about two kinds of bytes. Their defaults differ, and deliberately: a generated
-          image is output that Regenerate makes again, while a card scan is a source, so the scan
-          sweep ships off and is switched on by the collector who has the disk problem. */}
-      <RetentionSection
+      {/* Both retention periods (#577, #578), after the storage figures because they are the answer
+          to what those figures show — and next to each other because they are one question about
+          two kinds of bytes. Their defaults differ, and deliberately: a generated image is output
+          that Regenerate makes again, while a card scan is a source, so the scan sweep ships off and
+          is switched on by the collector who has the disk problem. */}
+      <RetentionCard
         title="Keep closed listings' images"
-        description={
+        hint="Only the listing images Stamporama generated; Regenerate makes them again."
+        tooltip={
           <>
             After an offer is sold or withdrawn, Stamporama deletes the listing images it generated
             for it. Nothing else goes: your own uploads, the copies&apos; scans and the whole photo
-            plan stay, so Regenerate makes the images again whenever you want them back.
+            plan stay. 0 days deletes them at the next sweep.
           </>
         }
         daysLabel="Days a closed listing keeps its generated images"
-        daysHint="days — 0 deletes them at the next sweep"
         state={offerRetention}
         disabled={isPending}
       />
 
-      <RetentionSection
+      {/* The hint line here is the sentence that prevents a costly mistake (#1460): a deleted scan
+          cannot be brought back, and a stockbook cannot be scanned again once it is broken up. */}
+      <RetentionCard
         title="Keep card scans of finished batches"
-        description={
+        hint="A deleted scan is gone for good: its card can never be cut again."
+        tooltip={
           <>
-            When every tile cut from a scanned card has become a copy or been discarded, the card can
-            never be cut again and only its file is left. A card with a piece set aside to check on it
-            is never counted as finished, so its scan stays until that piece is settled. Stamporama can delete that file after a
-            while — the batch keeps its tiles and still says what the card held, but the scan itself
-            is gone for good, so re-cutting it is no longer possible. Off unless you ask for it: a
-            stockbook cannot be scanned again once it has been broken up.
+            A batch is finished when every tile cut from a card has become a copy or been discarded;
+            a card with a piece set aside to check on it is never counted as finished. The batch
+            keeps its tiles and still says what the card held — only the scan goes. Off unless you
+            ask for it: a stockbook cannot be scanned again once it has been broken up. The days are
+            counted from the batch being finished with; 0 deletes at the next sweep.
           </>
         }
         daysLabel="Days a finished batch keeps its card scans"
-        daysHint="days after the batch is finished with — 0 deletes at the next sweep"
         state={scanRetention}
         disabled={isPending}
       />
-    </>
+    </SettingsFieldGrid>
   );
 }
 
@@ -938,18 +688,22 @@ export function BidRecommendationPanel({ collectionId, bidFloorPercent, bidCeili
     bidCeilingPercent,
     bidFallbackPercent,
   });
-  const [bidError, setBidError] = useState<string | null>(null);
+  // Which field the last rejection was for, so the message sits on that field's card.
+  const [bidError, setBidError] = useState<{ key: keyof typeof bidPercents; message: string } | null>(
+    null
+  );
 
   function commitBidPercent(key: keyof typeof bidPercents) {
     const saved = savedBidPercents[key];
     const value = parseBidPercent(bidPercents[key]);
     if (value === null) {
-      // Put the stored figure back rather than leaving an unsaveable one on screen: this section
-      // saves on leaving a field, so a rejected value with nothing to press would just sit there.
+      // Put the stored figure back rather than leaving an unsaveable one on screen: this page saves
+      // on leaving a field, so a rejected value with nothing to press would just sit there.
       setBidPercents((p) => ({ ...p, [key]: String(saved) }));
-      setBidError(
-        `A percentage must be a whole number between ${MIN_BID_PERCENT} and ${MAX_BID_PERCENT}.`
-      );
+      setBidError({
+        key,
+        message: `A percentage must be a whole number between ${MIN_BID_PERCENT} and ${MAX_BID_PERCENT}.`,
+      });
       return;
     }
     setBidPercents((p) => ({ ...p, [key]: String(value) }));
@@ -961,7 +715,7 @@ export function BidRecommendationPanel({ collectionId, bidFloorPercent, bidCeili
       } as BidPercentPatch);
       if (result.status === "error") {
         setBidPercents((p) => ({ ...p, [key]: String(saved) }));
-        setBidError(result.message);
+        setBidError({ key, message: result.message });
         return;
       }
       setSavedBidPercents((p) => ({ ...p, [key]: value }));
@@ -972,66 +726,16 @@ export function BidRecommendationPanel({ collectionId, bidFloorPercent, bidCeili
   // unlike the realization ratio, which is learned from what the collection has actually recorded
   // (#520) and is deliberately not a setting.
   return (
-    <section
-      style={{
-        border: "1px solid var(--color-border)",
-        borderRadius: "0.75rem",
-        padding: "1.25rem 1.5rem",
-        background: "var(--color-bg-elevated)",
-        marginBottom: "1.5rem",
-      }}
-    >
-      <p
-        style={{
-          margin: "0 0 0.25rem",
-          fontSize: "0.9375rem",
-          fontWeight: 500,
-          color: "var(--color-text-primary)",
-        }}
-      >
-        Bid recommendation
-      </p>
-      <p
-        style={{
-          margin: "0 0 1rem",
-          fontSize: "0.8125rem",
-          color: "var(--color-text-muted)",
-        }}
-      >
-        What an auction lot is worth bidding is stated as three figures around what it is worth —
-        a floor, the fair figure itself, and a walk-away. These are the percentages that band is
-        built from. How much of catalogue a stamp actually fetches is not among them: that is
-        learned from the results you record, per area, condition and period, so it stays a
-        measurement rather than an opinion typed in once.
-      </p>
-
+    <SettingsFieldGrid>
       {BID_PERCENT_FIELDS.map((field) => (
-        <div
+        <SettingsFieldCard
           key={field.key}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
-            paddingTop: "0.75rem",
-          }}
+          label={field.label}
+          hint={field.hint}
+          tooltip={field.tooltip}
+          error={bidError?.key === field.key ? bidError.message : null}
         >
-          <div>
-            <p
-              style={{
-                margin: "0 0 0.125rem",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-              }}
-            >
-              {field.label}
-            </p>
-            <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              {field.description}
-            </p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
             <input
               type="number"
               inputMode="numeric"
@@ -1045,26 +749,12 @@ export function BidRecommendationPanel({ collectionId, bidFloorPercent, bidCeili
               }
               onBlur={() => commitBidPercent(field.key)}
               disabled={isPending}
-              style={{
-                width: "5rem",
-                padding: "0.4rem 0.625rem",
-                border: "1px solid var(--color-border-strong)",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                color: "var(--color-text-primary)",
-                background: "var(--color-bg-elevated)",
-              }}
+              style={SETTINGS_FIELD_NUMBER_STYLE}
             />
             <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>%</span>
           </div>
-        </div>
+        </SettingsFieldCard>
       ))}
-
-      {bidError && (
-        <p style={{ margin: "0.75rem 0 0", fontSize: "0.8125rem", color: "var(--color-error)" }}>
-          {bidError}
-        </p>
-      )}
-    </section>
+    </SettingsFieldGrid>
   );
 }
