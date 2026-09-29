@@ -19,6 +19,7 @@ import { hawidStripLabel } from "./hawid";
 import { titleFallbackKey, type TitleFallback } from "./offer-title-template";
 import {
   albumPlanContext,
+  albumPlanOverview,
   planAlbumFrom,
   type AlbumBoxData,
   type AlbumPlanContext,
@@ -321,8 +322,14 @@ export interface AlbumEditorData {
     printed: boolean;
     /** A page without stamps, named by its first text rather than by a range it does not have. */
     free: { id: string; label: string } | null;
+    /** The sheets that go onto paper with this one, as positions including its own — the album
+     *  screen's `runWith`, so *Mark printed* in the editor sends the same run (#1487). Empty on a card. */
+    runWith: number[];
   }[];
   sheet: AlbumEditorSheet | null;
+  /** The fingerprint of the plan these positions were read from (#778), sent back with a mark so a
+   *  plan that has moved since is refused rather than frozen at the wrong places. */
+  fingerprint: string;
   /** True when the collection has described no hawid stock, which makes **every** box a pocket. */
   emptyStock: boolean;
   /** The texts across **every live sheet** that would print in the default language (#1308) — so a
@@ -776,8 +783,9 @@ function printedSheet(
 export async function getAlbumEditorData(
   ownerId: string,
   albumId: string,
-  /** A position, or a page without stamps by its own id (#1429). */
-  position: number | { freePageId: string } | null,
+  /** A position, a page without stamps by its own id (#1429), or a card by its own id — where the
+   *  editor goes after marking the open sheet printed, since marking can move positions (#1487). */
+  position: number | { freePageId: string } | { printedPageId: string } | null,
 ): Promise<AlbumEditorData | null> {
   // One read, and the plan taken off it. The screen needs both — the geometry to draw and the rows
   // to say what is settable on it — and reading the album twice would be two answers to a question
@@ -785,6 +793,9 @@ export async function getAlbumEditorData(
   const context = await albumPlanContext(ownerId, albumId);
   if (!context) return null;
   const plan = planAlbumFrom(context);
+  // The album screen's own reduction, for the two things *Mark printed* sends (#1487): which sheets go
+  // together, and the plan they were counted in. One source, so the two screens cannot disagree.
+  const overview = albumPlanOverview(plan);
 
   const freeCards = new Map([...plan.printed.byFreePage].map(([pageId, cardId]) => [cardId, pageId]));
   const freePageById = new Map(context.freePages.map((p) => [p.id, p]));
@@ -800,13 +811,23 @@ export async function getAlbumEditorData(
       free: freeId
         ? { id: freeId, label: freePage ? freePageName(freePage) : "A page without stamps" }
         : null,
+      runWith: overview.pages[i].runWith,
     };
   });
 
   const asked =
-    position !== null && typeof position === "object"
-      ? (sheets.find((row) => row.free?.id === position.freePageId)?.position ?? null)
-      : position;
+    position === null || typeof position === "number"
+      ? position
+      : "freePageId" in position
+        ? (sheets.find((row) => row.free?.id === position.freePageId)?.position ?? null)
+        : (() => {
+            const at = plan.pages.findIndex(
+              (page) =>
+                page.layout.kind === "printed" &&
+                page.layout.printedPageId === position.printedPageId
+            );
+            return at === -1 ? null : at + 1;
+          })();
   const chosen =
     asked !== null && asked >= 1 && asked <= plan.pages.length
       ? asked
@@ -872,6 +893,7 @@ export async function getAlbumEditorData(
     pictures,
     sheets,
     sheet,
+    fingerprint: overview.fingerprint,
     emptyStock: plan.emptyStock,
     untranslated,
     nameSuggestion: plan.nameSuggestion,

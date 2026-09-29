@@ -52,6 +52,7 @@ import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { AlbumNameSuggestion } from "./album-name-suggestion";
+import { MarkPrintedDialog } from "./mark-printed-dialog";
 
 // One album (#767): what it prints, in what order, and how that falls onto sheets.
 //
@@ -221,7 +222,11 @@ export function AlbumScreen({
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<AlbumEntryData | null>(null);
-  const [markPrinted, setMarkPrinted] = useState<{ sheets: number[]; label: string } | null>(null);
+  const [markPrinted, setMarkPrinted] = useState<{
+    sheets: number[];
+    label: string;
+    together?: boolean;
+  } | null>(null);
   const [unprint, setUnprint] = useState<{ id: string; range: string } | null>(null);
   // Keyed by the card it describes rather than cleared when the dialog closes: what is being thrown
   // away is what *that* card kept, and a stale account of a different one is exactly the sentence a
@@ -513,6 +518,7 @@ export function AlbumScreen({
                   page.runWith.length > 1
                     ? `sheets ${page.runWith.join(", ")}`
                     : page.range || "this sheet",
+                together: page.runWith.length > 1,
               }),
           },
         ];
@@ -1279,10 +1285,10 @@ export function AlbumScreen({
       )}
 
       {markPrinted && (
-        <ConfirmDialog
-          title="Mark printed"
-          message={`Say that ${markPrinted.label} went onto paper? The album stores everything that was on ${markPrinted.sheets.length === 1 ? "it" : "them"} — the texts as they read now, every box's size in millimetres, the strip each was cut from and the pictures — and draws that from then on, whatever changes in the collection. It can be undone, loudly.`}
-          actionLabel="These went onto paper"
+        <MarkPrintedDialog
+          label={markPrinted.label}
+          count={markPrinted.sheets.length}
+          together={markPrinted.together}
           isPending={isPending}
           error={error ?? undefined}
           onClose={() => !isPending && setMarkPrinted(null)}

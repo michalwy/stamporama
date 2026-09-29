@@ -518,6 +518,24 @@ not a refusal, and like the other flags it never goes onto the paper.
 The page prints exactly as the editor shows it: the canvas and the PDF place every picture and every
 line of text in the same millimetres.
 
+### Printing the sheet you are on
+
+The editor's header carries the two things that follow a correction, for the sheet that is open, so
+you do not have to go back to the album screen for either:
+
+- **Download this sheet** — the same PDF as *Download this sheet* on the album screen, with every
+  correction you have just made in it. A figure you typed is saved when you leave the field, and a
+  download clicked while that save is on its way waits for it. The *print at 100 %* reminder sits
+  beside it, for the reason under [Printing](#print-it-at-100-and-check-the-first-one-with-a-ruler).
+  On a printed card it is **Download this card** and draws what was stored.
+- **Mark printed…** — once the printer has done its part, exactly as the sheet's ⋮ action on the
+  album screen. If one checklist runs across several sheets the button says how many
+  (*Mark 3 sheets printed…*) and the dialog names them before anything is stored: they go onto paper
+  together. Downloading marks nothing; the two stay separate.
+
+After marking, the editor stays on the same sheet, now shown as a printed card — read-only, as below.
+*Mark printed…* is not offered on a sheet that is already a card.
+
 ### A printed card opens read-only
 
 The editor works on sheets that are still a plan. A card you have marked printed opens showing
@@ -539,7 +557,7 @@ from the library.
 
 **Download PDF** in the album's header composes the whole album. Each sheet's ⋮ menu also has
 **Download this sheet**, which is the one you want after adding a stamp: it reprints that card and
-nothing else.
+nothing else. The page editor has the same download for the sheet it has open.
 
 ### Print it at 100%, and check the first one with a ruler
 
@@ -653,7 +671,8 @@ was printed reads as not in your stock too.
 ## Printed cards
 
 When a sheet has gone onto paper and into a binder, tell the album so. **Mark printed…** in the album's
-header does every sheet not yet on paper; the ⋮ menu on a sheet does that one.
+header does every sheet not yet on paper; the ⋮ menu on a sheet does that one, and so does the page
+editor's header for the sheet it has open.
 
 **Downloading the PDF marks nothing.** A draft is generated to be looked at, and an album that froze
 itself the first time you previewed it would be a trap. Saying *these went onto paper* is its own

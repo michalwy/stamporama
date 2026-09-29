@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createAlbum, gatherAlbumEntries, getAlbumEntries } from "../../src/lib/albums";
 import { albumPlanContext, albumPlanOverview, planAlbum, planAlbumFrom } from "../../src/lib/album-plan";
-import { albumSheetSummaries } from "../../src/lib/album-editor";
+import { albumSheetSummaries, getAlbumEditorData } from "../../src/lib/album-editor";
 import {
   cancelAlbumReprint,
   closeAlbumContinuation,
@@ -604,6 +604,59 @@ describe("printed album pages (#778)", () => {
       p.layout.kind === "live" ? p.layout.boxes.map((b) => b.box.catalogNumber) : []
     );
     assert.deepEqual(numbers.sort(), ["303", "304", "305", "306", "307", "400"]);
+  });
+
+  it("marks the page editor's open sheet with the album screen's run and plan (#1487)", async () => {
+    // The editor's *Mark printed* sends what its own data carries, so that data has to be the album
+    // screen's: the same run for every sheet and the same fingerprint. Asked from the **middle** sheet
+    // of a block across three — the one whose run is least obviously its own.
+    const album = await createAlbum(
+      userId,
+      collectionId,
+      { name: "Bloki w edytorze", collectionAreaId: areaId, language: "en" },
+      null
+    );
+    // Only the 1940 checklist, as in the split-block album above.
+    const blocks = await prisma.issue.findFirstOrThrow({ where: { collectionId, year: 1940 } });
+    await prisma.albumEntry.deleteMany({
+      where: { albumId: album, checklist: { issueId: { not: blocks.id } } },
+    });
+    const { overview } = await listing(album);
+    const carrying = overview.pages
+      .map((p, i) => (p.boxCount > 0 ? i + 1 : null))
+      .filter((n): n is number => n !== null);
+    assert.equal(carrying.length, 3);
+
+    const open = await getAlbumEditorData(userId, album, carrying[1]);
+    assert.ok(open?.sheet);
+    assert.equal(open.fingerprint, overview.fingerprint);
+    assert.deepEqual(
+      open.sheets.map((row) => row.runWith),
+      overview.pages.map((page) => page.runWith)
+    );
+    const row = open.sheets[open.sheet.position - 1];
+    assert.deepEqual(row.runWith, carrying);
+
+    const { cards } = await markAlbumPagesPrinted(userId, album, row.runWith, open.fingerprint);
+    assert.deepEqual(
+      cards.map((c) => c.sheet),
+      carrying
+    );
+
+    // The positions move: the year heading that sat alone on the first sheet is no longer planned
+    // once the chapter's first block is on paper. So the sheet that was open is found again by its
+    // card's id, never by its position.
+    const card = cards.find((c) => c.sheet === row.position)!;
+    const after = await getAlbumEditorData(userId, album, { printedPageId: card.id });
+    assert.ok(after?.sheet);
+    assert.notEqual(after.sheet.position, row.position, "this shape is the one where positions move");
+    assert.equal(after.sheet.printedPageId, card.id);
+    assert.equal(after.sheet.range, row.range);
+    assert.equal(after.sheet.readOnly, true);
+    assert.ok(after.sheet.printedAt);
+    assert.equal(after.sheets.every((s) => s.printed && s.runWith.length === 0), true);
+
+    await prisma.album.delete({ where: { id: album } });
   });
 
   it("marks a checklist that runs across three sheets whole, or not at all", async () => {
