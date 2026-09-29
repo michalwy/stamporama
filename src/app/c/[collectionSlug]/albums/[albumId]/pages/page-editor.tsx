@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,6 +49,7 @@ import {
   clearAlbumBoxAdjustmentsAction,
   clearAlbumEntryStampOrderAction,
   deleteAlbumTextBlockAction,
+  markAlbumPagesPrintedAction,
   reorderAlbumEntriesAction,
   reorderAlbumTextBlocksAction,
   setAlbumBoxAdjustmentAction,
@@ -104,6 +105,7 @@ import {
   type CanvasSelection,
 } from "./page-canvas";
 import { AlbumNameSuggestion } from "../album-name-suggestion";
+import { MarkPrintedDialog } from "../mark-printed-dialog";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { BTN, CHIP, FRAME, Hint, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
 import {
@@ -216,7 +218,56 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
   const [picking, setPicking] = useState<{ replace: string | null } | null>(null);
   /** A size being given to several stamps at once (#1309) — a block's, or the boxes selected. */
   const [sizeGroup, setSizeGroup] = useState<{ stampIds: string[]; label: string } | null>(null);
+  /** *Mark printed* asked about for the open sheet (#1487), and what the server said when it refused. */
+  const [markingPrinted, setMarkingPrinted] = useState(false);
+  const [markError, setMarkError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
+
+  // The open sheet as a PDF (#1487) — the album screen's *Download this sheet*, chosen by the same
+  // position. It prints what the editor shows: a figure typed and then left for this link commits on
+  // the blur, which comes before the click, so a click that lands while that save is on its way is
+  // held and made again once it has landed rather than fetching the plan from before it.
+  const downloadRef = useRef<HTMLAnchorElement>(null);
+  const downloadHeld = useRef(false);
+  useEffect(() => {
+    if (isPending || !downloadHeld.current) return;
+    downloadHeld.current = false;
+    downloadRef.current?.click();
+  }, [isPending]);
+  const sheetRow = sheet ? data.sheets[sheet.position - 1] : undefined;
+  const runNames = (sheetRow?.runWith ?? []).map((position) => {
+    const row = data.sheets[position - 1];
+    return row?.free?.label ?? (row?.range || `sheet ${position}`);
+  });
+
+  function markPrinted() {
+    if (!sheetRow) return;
+    setMarkError(null);
+    startTransition(async () => {
+      const result = await markAlbumPagesPrintedAction(album.id, sheetRow.runWith, data.fingerprint);
+      if (result.status === "error") {
+        setMarkError(result.message);
+        return;
+      }
+      setMarkingPrinted(false);
+      setSelection(null);
+      setPreview(null);
+      toast({ message: result.message });
+      // To the card this sheet became, by its id: marking can move the positions — a year heading
+      // alone on a sheet ahead of the run is no longer planned once the chapter is on paper.
+      const card = result.cards.find((c) => c.sheet === sheetRow.position);
+      if (!card) {
+        router.refresh();
+        return;
+      }
+      const params = new URLSearchParams(search.toString());
+      params.delete("sheet");
+      params.delete("page");
+      params.set("card", card.id);
+      router.replace(`/c/${collectionSlug}/albums/${album.id}/pages?${params.toString()}`);
+    });
+  }
 
   // The album's two box gaps as typed (#836), re-synced whenever the stored figures change — after a
   // save re-plans, or after **Page template…** changed them in another tab.
@@ -433,6 +484,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
   function sheetHref(position: number): string {
     const params = new URLSearchParams(search.toString());
     params.delete("page");
+    params.delete("card");
     params.set("sheet", String(position));
     return `/c/${collectionSlug}/albums/${album.id}/pages?${params.toString()}`;
   }
@@ -643,6 +695,79 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
       >
         <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600 }}>Pages</h2>
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+          {sheet && (
+            // The open sheet, onto paper (#1487): the two gestures the album screen's ⋮ offers, kept
+            // apart as they are there — downloading marks nothing, and marking comes after the printer.
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                marginRight: "0.75rem",
+              }}
+            >
+              <Tooltip
+                content={
+                  sheet.readOnly
+                    ? "Drawn from what was stored when it was printed."
+                    : "This sheet as the PDF draws it, with every correction made here."
+                }
+              >
+                <a
+                  ref={downloadRef}
+                  href={`/api/collections/${album.collectionId}/albums/${album.id}/pdf?sheets=${sheet.position}`}
+                  // The file's name comes from the server's Content-Disposition.
+                  download
+                  onClick={(e) => {
+                    if (!isPending) return;
+                    e.preventDefault();
+                    downloadHeld.current = true;
+                  }}
+                  style={BTN}
+                >
+                  ↓ {sheet.readOnly ? "Download this card" : "Download this sheet"}
+                </a>
+              </Tooltip>
+              <Tooltip
+                align="end"
+                content="The print dialog defaults to Fit to page, which shrinks the sheet by a few percent — and nothing on the card shows it except a ruler. Set 100% / Actual size, and measure one box."
+              >
+                <span
+                  style={{
+                    ...MUTED,
+                    fontSize: "0.75rem",
+                    color: "var(--color-warning)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  print at 100 %
+                </span>
+              </Tooltip>
+              {!sheet.readOnly && sheetRow && sheetRow.runWith.length > 0 && (
+                <Tooltip
+                  content={
+                    sheetRow.runWith.length > 1
+                      ? `One checklist runs across ${runNames.join(", ")}, so they go onto paper together.`
+                      : "Say that this sheet has gone onto paper. The album stores what was on it; downloading marks nothing."
+                  }
+                >
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      setMarkError(null);
+                      setMarkingPrinted(true);
+                    }}
+                    style={{ ...BTN, cursor: isPending ? "default" : "pointer" }}
+                  >
+                    {sheetRow.runWith.length > 1
+                      ? `Mark ${sheetRow.runWith.length} sheets printed…`
+                      : "Mark printed…"}
+                  </button>
+                </Tooltip>
+              )}
+            </span>
+          )}
           <span style={MUTED}>Zoom</span>
           {ZOOMS.map((z) => (
             <button
@@ -1100,6 +1225,22 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
           error={error ?? undefined}
           onClose={() => !isPending && setAddingNote(false)}
           onSubmit={(form) => run(() => addAlbumTextBlockAction(album.id, form))}
+        />
+      )}
+
+      {markingPrinted && sheetRow && (
+        <MarkPrintedDialog
+          label={
+            sheetRow.runWith.length > 1
+              ? `sheets ${runNames.join(", ")}`
+              : sheetRow.range || "this sheet"
+          }
+          count={sheetRow.runWith.length}
+          together={sheetRow.runWith.length > 1}
+          isPending={isPending}
+          error={markError ?? undefined}
+          onClose={() => !isPending && setMarkingPrinted(false)}
+          onConfirm={markPrinted}
         />
       )}
 

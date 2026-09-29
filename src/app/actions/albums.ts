@@ -95,6 +95,11 @@ export type AlbumActionState =
   | { status: "success"; message?: string }
   | { status: "error"; message: string };
 
+/** Marking printed, with the cards it made — the page editor goes on to the one it had open (#1487). */
+export type AlbumMarkPrintedState =
+  | { status: "success"; message: string; cards: { sheet: number; id: string }[] }
+  | { status: "error"; message: string };
+
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect(await signInPath());
@@ -103,7 +108,10 @@ async function getSession() {
 
 /** A duplicate name is reported in its own words — an album is printed by name, so two of one name
  *  is worth a sentence rather than a "please try again". */
-function toErrorState(err: unknown, fallback: string): AlbumActionState {
+function toErrorState(
+  err: unknown,
+  fallback: string
+): Extract<AlbumActionState, { status: "error" }> {
   if (err instanceof AlbumNameTakenError) return { status: "error", message: err.message };
   // An uploaded corner ornament that is no longer the collection's (#1427).
   if (err instanceof AlbumOrnamentError) return { status: "error", message: err.message };
@@ -472,12 +480,18 @@ export async function markAlbumPagesPrintedAction(
   albumId: string,
   sheets: number[],
   fingerprint: string
-): Promise<AlbumActionState> {
+): Promise<AlbumMarkPrintedState> {
   const session = await getSession();
   try {
-    const { ranges } = await markAlbumPagesPrinted(session.user.id, albumId, sheets, fingerprint);
+    const { ranges, cards } = await markAlbumPagesPrinted(
+      session.user.id,
+      albumId,
+      sheets,
+      fingerprint
+    );
     return {
       status: "success",
+      cards,
       message:
         ranges.length === 1
           ? `${ranges[0] || "One sheet"} is now a printed card.`

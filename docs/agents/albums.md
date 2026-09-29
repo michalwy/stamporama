@@ -1421,6 +1421,24 @@ it; the rest is a hover away and in `docs/user-guide/albums.md`. What is worth n
   owner and the full default text on one wrapping line, the input at the panel's width below. The
   offer dialogs keep the one-line row, which has the width for it.
 
+### Download and Mark printed from the editor (#1487)
+
+The editor's header offers the open sheet's PDF and *Mark printed…*, the two gestures that follow a
+correction. Three things worth not re-deriving:
+
+- **The editor sends what the album screen sends.** `getAlbumEditorData` carries each sheet's
+  `runWith` and the plan's `fingerprint` off the same `albumPlanOverview` the album screen lists
+  from, and both screens use one `MarkPrintedDialog`. The integration test pins the editor's runs
+  and fingerprint against the overview's, asked from the **middle** sheet of a three-sheet run.
+- **After marking, the editor goes to the card by its id (`?card=`), never by its position.**
+  Marking can move positions: a year heading alone on a sheet ahead of the run
+  (#768's legitimate shape) is no longer planned once the chapter's first block is on paper, so
+  every later sheet moves up one. `markAlbumPagesPrinted` returns each card's id with the position
+  it was marked from; `?card=` resolves it the way `?page=` resolves a free page.
+- **A download waits for a save on its way.** A typed figure commits on blur, and the blur comes
+  before the click, so a click that lands while `isPending` is held and made again once the save has
+  landed. Otherwise the PDF would be the plan from before the correction just made.
+
 ## Pages without stamps (#1429, ADR-0058)
 
 A title page, a section divider, a map, a page of notes: `AlbumFreePage` filed like a note, and

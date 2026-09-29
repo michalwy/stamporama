@@ -88,6 +88,10 @@ export class AlbumPrintError extends Error {}
 /** What one card would be, before it exists: which sheets, and what they will be called. */
 export interface AlbumMarkPrintedResult {
   ranges: string[];
+  /** Each card made, with the position it was marked from. Marking can move the positions — a year
+   *  heading alone on a sheet ahead of the run is no longer planned once the chapter's first block is
+   *  on paper — so a screen that was looking at one of these sheets goes on to it by its id (#1487). */
+  cards: { sheet: number; id: string }[];
 }
 
 /**
@@ -206,8 +210,9 @@ export async function markAlbumPagesPrinted(
     )
     .map((e) => e.id);
 
+  const cards: AlbumMarkPrintedResult["cards"] = [];
   await prisma.$transaction(async (tx) => {
-    for (const write of writes) {
+    for (const [i, write] of writes.entries()) {
       const created = await tx.albumPrintedPage.create({
         data: {
           albumId,
@@ -218,6 +223,7 @@ export async function markAlbumPagesPrinted(
         },
         select: { id: true },
       });
+      cards.push({ sheet: chosen[i], id: created.id });
       if (write.noteIds.length > 0) {
         await tx.albumTextBlock.updateMany({
           where: { albumId, id: { in: write.noteIds } },
@@ -242,7 +248,7 @@ export async function markAlbumPagesPrinted(
     await discardCoveredReprints(tx, albumId);
   });
 
-  return { ranges: writes.map((w) => w.snapshot.range) };
+  return { ranges: writes.map((w) => w.snapshot.range), cards };
 }
 
 /**

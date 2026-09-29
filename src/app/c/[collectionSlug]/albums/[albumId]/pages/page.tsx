@@ -10,7 +10,7 @@ export const metadata = { title: "Album pages" };
 
 interface PageEditorPageProps {
   params: Promise<{ collectionSlug: string; albumId: string }>;
-  searchParams: Promise<{ sheet?: string; page?: string }>;
+  searchParams: Promise<{ sheet?: string; page?: string; card?: string }>;
 }
 
 /**
@@ -23,14 +23,16 @@ interface PageEditorPageProps {
  *
  * `?page=<id>` asks for a **page without stamps** by its own id instead (#1429) — the one kind of sheet
  * that has an identity to be asked for by, and what the editor goes to right after adding one, before
- * it can know where the re-plan put it. A position, when both are given, wins.
+ * it can know where the re-plan put it. `?card=<id>` asks for a **printed card** by its own id the same
+ * way (#1487): marking the open sheet printed can move the positions, so the editor goes on to the
+ * card it just made by the one thing about it that does not move. A position, when given, wins.
  */
 export default async function AlbumPageEditorPage({
   params,
   searchParams,
 }: PageEditorPageProps) {
   const { collectionSlug, albumId } = await params;
-  const { sheet, page } = await searchParams;
+  const { sheet, page, card } = await searchParams;
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect(await signInPath());
@@ -42,7 +44,13 @@ export default async function AlbumPageEditorPage({
   const data = await getAlbumEditorData(
     session.user.id,
     albumId,
-    Number.isFinite(requested) ? requested : page ? { freePageId: page } : null
+    Number.isFinite(requested)
+      ? requested
+      : page
+        ? { freePageId: page }
+        : card
+          ? { printedPageId: card }
+          : null
   );
   if (!data || data.album.collectionId !== collection.id) notFound();
 
