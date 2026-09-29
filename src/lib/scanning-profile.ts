@@ -23,6 +23,13 @@
 // {@link MIN_CALIBRATION_MM}, so a tick missed by a pixel is spread over thousands of them, and a
 // result within {@link MAX_CALIBRATION_DEVIATION} of nominal, since anything further is a slip —
 // a wrong length typed, the two lines swapped — and not a scanner.
+//
+// The two stretches may be marked on one scan or on two (#1486), and the solve is the same: it reads
+// only each stretch's own components, and every scan the scanner takes at one resolution has the
+// same pixel frame — x along the sensor, y along the carriage — wherever the ruler lay and however
+// large the picture was. What two scans do change is who checks: the browser solves for the figure
+// it shows, and the server solves again from the marked stretches ({@link readCalibrationStretches}),
+// so the minimum length and the band hold whoever sent the request.
 
 import {
   MAX_SCAN_DPI,
@@ -156,9 +163,9 @@ export function isNominalDpi(dpi: number): boolean {
   return Number.isInteger(dpi) && dpi >= MIN_SCAN_DPI && dpi <= MAX_SCAN_DPI;
 }
 
-/** Whether a stored calibration is one this module would have produced — both axes within the
- * refusal band of the nominal figure. The write checks it again, so a request carrying a calibration
- * it did not compute cannot slip one past the rule. */
+/** Whether a calibration is one this module would produce — both axes within the refusal band of
+ * the nominal figure. {@link calibrateProfile} ends with it, and the write solves the stretches
+ * again rather than accepting a figure, so a request cannot slip one past the rule. */
 export function isPlausibleCalibration(nominalDpi: number, calibration: ScanScale): boolean {
   return [calibration.x, calibration.y].every(
     (dpi) =>
@@ -174,12 +181,48 @@ export interface CalibrationStretch {
   mm: number;
 }
 
+/** The two stretches a calibration is solved from, each marked on the same scan or on its own. */
+export interface CalibrationStretches {
+  across: CalibrationStretch;
+  along: CalibrationStretch;
+}
+
+/**
+ * The two stretches as a request carries them, or null when it does not carry both: a calibration
+ * is solved from a stretch on each axis, never saved with one of them missing.
+ */
+export function readCalibrationStretches(value: unknown): CalibrationStretches | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { across, along } = value as Record<string, unknown>;
+  const a = readStretch(across);
+  const b = readStretch(along);
+  return a && b ? { across: a, along: b } : null;
+}
+
+function readStretch(value: unknown): CalibrationStretch | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { a, b, mm } = value as Record<string, unknown>;
+  const pa = readPoint(a);
+  const pb = readPoint(b);
+  if (!pa || !pb || typeof mm !== "number" || !Number.isFinite(mm)) return null;
+  return { a: pa, b: pb, mm };
+}
+
+function readPoint(value: unknown): ScanPoint | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { x, y } = value as Record<string, unknown>;
+  if (typeof x !== "number" || typeof y !== "number") return null;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y };
+}
+
 export type CalibrationResult =
   | { ok: true; calibration: ScanScale }
   | { ok: false; reason: string };
 
 /**
- * The effective resolution of each axis, from a stretch marked across the scan and one along it.
+ * The effective resolution of each axis, from a stretch marked across the scan and one along it —
+ * on one scan or on two, which the solve does not need to know.
  *
  * Each stretch satisfies `(dx / X)² + (dy / Y)² = L²`, with its components in pixels and its true
  * length `L` in inches — linear in `1/X²` and `1/Y²`, so the two stretches are solved exactly rather

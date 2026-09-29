@@ -25,6 +25,8 @@ import {
 import { updateStampWithCatalog } from "../../src/lib/stamps";
 import { applyStampSize } from "../../src/lib/stamp-size-presets";
 import { catalogSortKeyOf } from "../../src/lib/catalog-sort-key";
+import { MM_PER_INCH } from "../../src/lib/scan-measure";
+import { type CalibrationStretches } from "../../src/lib/scanning-profile";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-scanning-profiles-"));
 process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
@@ -38,6 +40,17 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //     the size alone, and loses it when the size changes without a measurement;
 //   - a profile in use — the default, a scan's, a size's — cannot be deleted, while a whole
 //     collection still can.
+
+const px = (mm: number, dpi: number) => (mm / MM_PER_INCH) * dpi;
+
+/** A stretch across and one along, as marked on ruler scans taken at an effective `x` × `y` dpi —
+ * placed where two separate scans would put them, since the server cannot tell and need not. */
+function stretches(x: number, y: number, acrossMm = 150, alongMm = 150): CalibrationStretches {
+  return {
+    across: { a: { x: 120, y: 40 }, b: { x: 120 + px(acrossMm, x), y: 40 }, mm: acrossMm },
+    along: { a: { x: 60, y: 90 }, b: { x: 60, y: 90 + px(alongMm, y) }, mm: alongMm },
+  };
+}
 
 async function card(): Promise<Buffer> {
   return sharp({ create: { width: 400, height: 300, channels: 3, background: { r: 10, g: 10, b: 10 } } })
@@ -119,17 +132,26 @@ describe("scanning profiles (#1443)", () => {
     );
   });
 
-  it("stores a calibration within the band and refuses one past it", async () => {
-    const view = await calibrateScanningProfile(userId, epsonId, { x: 1195.374, y: 1198.016 });
+  it("solves the marked stretches itself, stores the result, and refuses one past the band", async () => {
+    const view = await calibrateScanningProfile(userId, epsonId, stretches(1195.37, 1198.02));
     assert.deepEqual(view.calibration, { x: 1195.37, y: 1198.02 });
     await assert.rejects(
-      calibrateScanningProfile(userId, epsonId, { x: 1100, y: 1198 }),
+      calibrateScanningProfile(userId, epsonId, stretches(1100, 1198)),
       ScanningProfileError
     );
     await assert.rejects(
-      calibrateScanningProfile(otherUserId, epsonId, { x: 1195, y: 1198 }),
+      calibrateScanningProfile(otherUserId, epsonId, stretches(1195, 1198)),
       ScanningProfileError
     );
+  });
+
+  it("refuses a stretch shorter than the minimum, whoever sent it (#1486)", async () => {
+    await assert.rejects(
+      calibrateScanningProfile(userId, epsonId, stretches(1195.37, 1198.02, 150, 99)),
+      /at least 100 mm/
+    );
+    const [epson] = (await listScanningProfiles(userId, collectionId)).filter((p) => p.id === epsonId);
+    assert.deepEqual(epson.calibration, { x: 1195.37, y: 1198.02 });
   });
 
   it("drops the calibration when the nominal resolution changes, and keeps it on a rename", async () => {
@@ -138,7 +160,7 @@ describe("scanning profiles (#1443)", () => {
     const halved = await updateScanningProfile(userId, epsonId, { nominalDpi: 600 });
     assert.equal(halved.calibration, null);
     await updateScanningProfile(userId, epsonId, { name: "Epson V600", nominalDpi: 1200 });
-    await calibrateScanningProfile(userId, epsonId, { x: 1195.37, y: 1198.02 });
+    await calibrateScanningProfile(userId, epsonId, stretches(1195.37, 1198.02));
   });
 
   it("records the default on a scan uploaded without a choice, and the chosen one otherwise", async () => {
