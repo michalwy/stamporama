@@ -10,6 +10,7 @@ import {
   parseProfileName,
   profileLabel,
   profileScale,
+  readCalibrationStretches,
   scaleForTurn,
   typedScale,
   type ScanningProfileView,
@@ -174,5 +175,82 @@ describe("calibrating from a ruler (#1443)", () => {
     assert.equal(isPlausibleCalibration(1200, { x: edge, y: 1200 }), true);
     assert.equal(isPlausibleCalibration(1200, { x: edge + 1, y: 1200 }), false);
     assert.equal(isPlausibleCalibration(1200, { x: 1200, y: Number.NaN }), false);
+  });
+});
+
+describe("calibrating from two ruler scans, one per axis (#1486)", () => {
+  const X = 1195.37;
+  const Y = 1198.02;
+
+  /** A stretch of `mm` on a ruler turned `degrees` off the axis it lies along, from `at`, in the
+   * pixels of a scan taken at the effective X × Y. */
+  function ruler(at: { x: number; y: number }, mm: number, degrees: number, along: boolean) {
+    const t = (degrees * Math.PI) / 180;
+    const [cos, sin] = [Math.cos(t), Math.sin(t)];
+    const d = along ? { x: -sin * mm, y: cos * mm } : { x: cos * mm, y: sin * mm };
+    return { a: at, b: { x: at.x + px(d.x, X), y: at.y + px(d.y, Y) }, mm };
+  }
+
+  it("is exact with each ruler askew on its own scan, by a different amount", () => {
+    // The across ruler near the top of a wide scan, 3° one way; the along ruler far down a tall one,
+    // 5° the other. Nothing but the components enters the solve, so where each lay does not matter.
+    const across = ruler({ x: 2400, y: 310 }, 180, 3, false);
+    const along = ruler({ x: 95, y: 6100 }, 220, -5, true);
+    const result = calibrateProfile(1200, across, along);
+    assert.ok(result.ok);
+    near(result.calibration.x, X, 0.005);
+    near(result.calibration.y, Y, 0.005);
+  });
+
+  it("gives what one scan gives for the same two stretches", () => {
+    const across = ruler({ x: 0, y: 0 }, 150, 2, false);
+    const along = ruler({ x: 0, y: 0 }, 150, -1.5, true);
+    const shifted = (s: typeof across, dx: number, dy: number) => ({
+      a: { x: s.a.x + dx, y: s.a.y + dy },
+      b: { x: s.b.x + dx, y: s.b.y + dy },
+      mm: s.mm,
+    });
+    const oneScan = calibrateProfile(1200, shifted(across, 300, 200), shifted(along, 900, 400));
+    const twoScans = calibrateProfile(1200, shifted(across, 50, 7000), shifted(along, 4000, 20));
+    assert.ok(oneScan.ok && twoScans.ok);
+    assert.deepEqual(twoScans.calibration, oneScan.calibration);
+  });
+
+  it("holds the minimum and the band on each scan alike", () => {
+    const short = calibrateProfile(
+      1200,
+      ruler({ x: 0, y: 0 }, 150, 1, false),
+      ruler({ x: 0, y: 0 }, MIN_CALIBRATION_MM - 1, 1, true)
+    );
+    assert.ok(!short.ok && /along the scan must be at least 100 mm/.test(short.reason));
+    // 150 mm typed on the second scan where its stretch is really 140.
+    const along = { ...ruler({ x: 0, y: 0 }, 140, 0, true), mm: 150 };
+    const far = calibrateProfile(1200, ruler({ x: 0, y: 0 }, 150, 0, false), along);
+    assert.ok(!far.ok && /from 1200 dpi/.test(far.reason));
+  });
+});
+
+describe("the stretches a calibration request carries (#1486)", () => {
+  const across = { a: { x: 0, y: 0 }, b: { x: 7000, y: 12 }, mm: 150 };
+  const along = { a: { x: 5, y: 3 }, b: { x: 9, y: 7100 }, mm: 150 };
+
+  it("are read when both are there", () => {
+    assert.deepEqual(readCalibrationStretches({ across, along }), { across, along });
+  });
+
+  it("are refused with one axis missing — a calibration is both or none", () => {
+    assert.equal(readCalibrationStretches({ across }), null);
+    assert.equal(readCalibrationStretches({ along }), null);
+    assert.equal(readCalibrationStretches({ across: null, along }), null);
+    assert.equal(readCalibrationStretches(null), null);
+  });
+
+  it("are refused when an end or a length is not a number", () => {
+    assert.equal(readCalibrationStretches({ across: { ...across, mm: "150" }, along }), null);
+    assert.equal(readCalibrationStretches({ across, along: { ...along, b: { x: 9 } } }), null);
+    assert.equal(
+      readCalibrationStretches({ across, along: { ...along, a: { x: Number.NaN, y: 0 } } }),
+      null
+    );
   });
 });

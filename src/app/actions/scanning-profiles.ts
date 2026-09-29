@@ -12,7 +12,7 @@ import {
   setDefaultScanningProfile,
   updateScanningProfile,
 } from "@/lib/scanning-profiles";
-import type { ScanScale } from "@/lib/scan-measure";
+import { readCalibrationStretches, type CalibrationStretches } from "@/lib/scanning-profile";
 
 // Settings → Scanners (#1443): the collection's scanning profiles. Every write here is a Settings
 // act; the measuring tool switches profile for a sitting and never reaches any of these.
@@ -67,26 +67,21 @@ export async function updateScanningProfileAction(
   );
 }
 
-/** Store the calibration computed in the browser from a ruler's scan, or clear it with null. */
+/**
+ * Calibrate from the two stretches marked on the ruler's scan or scans — solved again on the server
+ * from what was marked — or clear the calibration with null. The scans themselves never arrive.
+ */
 export async function calibrateScanningProfileAction(
   profileId: string,
-  calibration: ScanScale | null
+  stretches: CalibrationStretches | null
 ): Promise<ScanningProfileActionState> {
-  if (
-    calibration !== null &&
-    (typeof calibration !== "object" ||
-      typeof calibration.x !== "number" ||
-      typeof calibration.y !== "number")
-  ) {
-    return { status: "error", message: "That calibration could not be read." };
+  // Read again rather than trusted: a server action's arguments are whatever the request carried.
+  const read = stretches === null ? null : readCalibrationStretches(stretches);
+  if (stretches !== null && !read) {
+    return { status: "error", message: "Mark a stretch across and a stretch along before saving." };
   }
   return run(
-    (ownerId) =>
-      calibrateScanningProfile(
-        ownerId,
-        profileId,
-        calibration && { x: calibration.x, y: calibration.y }
-      ),
+    (ownerId) => calibrateScanningProfile(ownerId, profileId, read),
     "Failed to save the calibration. Please try again."
   );
 }

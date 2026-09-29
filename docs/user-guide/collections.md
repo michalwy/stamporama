@@ -1342,16 +1342,25 @@ its own, so a line along the width reads the across figure and a perforation run
 is gauged with the along figure.
 
 **How to calibrate.** Scan a good ruler on that scanner at the profile's resolution — one lying left
-to right and one top to bottom, or the same ruler twice. Choose **Calibrate** in the profile's **⋮**
-menu and pick the scan: it stays in your browser, and only the result is saved. With **Across**
-chosen, click one tick of the left-to-right ruler and then another at least **100 mm** further on —
-zoom with the wheel and drag to move the picture between the two clicks, so each end sits exactly on
-its tick — and type the true length between them. Do the same with **Along** on the top-to-bottom
-ruler. The effective resolution appears underneath with how far each axis is from nominal; **Save
-calibration** keeps it. A ruler lying a little askew is fine — the two stretches are solved
-together — but a result more than **3%** from nominal is refused as a probable mistake: a length
-typed wrong, or a stretch counted from the wrong tick. Clicking a stretch that already has both ends
-moves the nearer one.
+to right and one top to bottom. They can be on one scan, or on two when a ruler does not fit your
+scanner's bed both ways: one scan with the ruler across the glass and another with it along. Choose
+**Calibrate** in the profile's **⋮** menu.
+
+- **On one scan** — leave **One scan** chosen and pick the scan with **Ruler scan…**.
+- **On two scans** — choose **A scan per axis**, then pick the left-to-right ruler's scan with
+  **Across scan…** and the top-to-bottom one's with **Along scan…**. Each scan shows only the stretch
+  marked on it.
+
+The scans stay in your browser; only the result is saved. With **Across** chosen, click one tick of
+the left-to-right ruler and then another at least **100 mm** further on — zoom with the wheel and drag
+to move the picture between the two clicks, so each end sits exactly on its tick — and type the true
+length between them. Do the same with **Along** on the top-to-bottom ruler. The effective resolution
+appears underneath with how far each axis is from nominal; **Save calibration** keeps both axes at
+once. A calibration is always both axes: with two scans, both are loaded and marked in the same
+sitting, and **Save calibration** stays unavailable until both stretches are marked. A ruler lying a
+little askew is fine, on either scan — the two stretches are solved together — but a result more than
+**3%** from nominal is refused as a probable mistake: a length typed wrong, or a stretch counted from
+the wrong tick. Clicking a stretch that already has both ends moves the nearer one.
 
 **Changing a profile's resolution removes its calibration**, since at another resolution the scanner
 is off by a different amount; **Remove calibration** does the same on purpose. Renaming keeps it.

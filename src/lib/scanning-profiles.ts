@@ -3,16 +3,15 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { DEFAULT_SCAN_DPI, MAX_SCAN_DPI, MIN_SCAN_DPI } from "./scan-measure";
 import {
+  calibrateProfile,
   isNominalDpi,
-  isPlausibleCalibration,
-  MAX_CALIBRATION_DEVIATION,
   MAX_PROFILE_NAME,
   parseProfileName,
   type ScanningProfileListRow,
   type ScanningProfileView,
+  type CalibrationStretches,
   type ScanningSetup,
 } from "./scanning-profile";
-import type { ScanScale } from "./scan-measure";
 import { sizeProfileAfterWrite, type StampSizeFields } from "./stamp-size";
 
 // Scanning profiles (#1443) — the reads and writes. The arithmetic is `scanning-profile.ts`.
@@ -188,29 +187,31 @@ export async function updateScanningProfile(
 }
 
 /**
- * Store a calibration, or clear one with null.
+ * Calibrate a profile from the two stretches marked on its ruler scans, or clear the calibration
+ * with null.
  *
- * The figures are computed in the browser from the ruler's scan, which is never uploaded — so the
- * refusal band is checked again here, and a calibration further from nominal than
- * `MAX_CALIBRATION_DEVIATION` is refused whoever sent it.
+ * The scans themselves never leave the browser, but the stretches do — two ends in scan pixels and
+ * a length each — so the calibration is solved again here rather than taken from the browser's
+ * figure (#1486): a stretch shorter than `MIN_CALIBRATION_MM`, one far off its axis or an answer
+ * past `MAX_CALIBRATION_DEVIATION` is refused whoever sent it, on one scan or two alike.
  */
 export async function calibrateScanningProfile(
   ownerId: string,
   profileId: string,
-  calibration: ScanScale | null
+  stretches: CalibrationStretches | null
 ): Promise<ScanningProfileView> {
   const profile = await assertProfileOwner(ownerId, profileId);
-  if (calibration && !isPlausibleCalibration(profile.nominalDpi, calibration)) {
-    throw new ScanningProfileError(
-      `A calibration more than ${Math.round(MAX_CALIBRATION_DEVIATION * 100)}% from ${profile.nominalDpi} dpi is refused as a probable mistake.`
-    );
+  let calibration: { x: number; y: number } | null = null;
+  if (stretches) {
+    const result = calibrateProfile(profile.nominalDpi, stretches.across, stretches.along);
+    if (!result.ok) throw new ScanningProfileError(result.reason);
+    calibration = result.calibration;
   }
-  const round = (dpi: number) => Math.round(dpi * 100) / 100;
   const row = await prisma.scanningProfile.update({
     where: { id: profileId },
     data: {
-      calibratedDpiX: calibration ? round(calibration.x) : null,
-      calibratedDpiY: calibration ? round(calibration.y) : null,
+      calibratedDpiX: calibration?.x ?? null,
+      calibratedDpiY: calibration?.y ?? null,
     },
     select: SCANNING_PROFILE_SELECT,
   });
