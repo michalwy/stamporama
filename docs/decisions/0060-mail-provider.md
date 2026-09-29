@@ -94,3 +94,6 @@ address shown, or the provider's own error — appears beside the button. It wri
   account's own address. The installer, `.env.prod.example` and the README say so, and a wrong sender
   shows Resend's own refusal on the test button.
 - Settings → Email is an entry of the *System* group (ADR-0059, #1469), beside Assistant & API.
+- The first feature to send mail is the morning auction reminder (#1373). It queues through
+  `enqueueMail` inside its own transaction (the optional `db` argument), so the claim that makes it
+  once a day and the message it queues are written together or not at all.

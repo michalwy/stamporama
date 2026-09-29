@@ -53,6 +53,7 @@ import { AlbumTemplatesPanel } from "./album-templates-panel";
 import { AlbumOrnamentsPanel } from "./album-ornaments-panel";
 import { AssistantPanel } from "./assistant-panel";
 import { EmailPanel } from "./email-panel";
+import { AuctionReminderPanel } from "./auction-reminder-panel";
 import type { DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CatalogVendorData } from "@/lib/catalog";
@@ -60,6 +61,7 @@ import type { ColnectMappingData, ColnectConditionMappingData } from "@/lib/coln
 import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
 import type { AssistantTokenData } from "@/lib/api-tokens";
 import type { MailSettings } from "@/lib/mail/messages";
+import type { AuctionReminderSettings } from "@/lib/auction-reminder";
 import type { StampConditionData } from "@/lib/conditions";
 import type { StampFormatData } from "@/lib/stamp-formats";
 import type { FormatFactorData } from "@/lib/format-factors";
@@ -148,6 +150,9 @@ interface SettingsScreenProps {
   /** Email (#1372): the instance's mail provider as a summary — never its key — and this
    * collection's undelivered mail. */
   mailSettings: MailSettings;
+  /** The morning auction reminder (#1373): on or off, its hour and zone, and whether the instance
+   * can send mail at all. */
+  auctionReminder: AuctionReminderSettings;
   /** Internal copy-number display width (#268), edited on Collection. */
   itemNoPad: number;
   /** The bid-recommendation percentages (#508), edited on Bid recommendation. */
@@ -391,6 +396,7 @@ function SettingsEntryBody({
   platformContacts,
   initialAssistantTokens,
   mailSettings,
+  auctionReminder,
   itemNoPad,
   bidFloorPercent,
   bidCeilingPercent,
@@ -626,6 +632,8 @@ function SettingsEntryBody({
           bidFallbackPercent={bidFallbackPercent}
         />
       );
+    case "auction-reminder":
+      return <AuctionReminderPanel collectionId={collectionId} settings={auctionReminder} />;
     case "colnect":
       return (
         <section>

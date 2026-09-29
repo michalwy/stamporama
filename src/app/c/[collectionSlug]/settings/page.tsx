@@ -25,6 +25,7 @@ import { getColnectListMappings } from "@/lib/colnect-list-sync";
 import { getAllegroPlatform } from "@/lib/allegro";
 import { getAllegroConnectionStatus } from "@/lib/allegro-connection";
 import { getMailSettings } from "@/lib/mail/messages";
+import { getAuctionReminderSettings } from "@/lib/auction-reminder";
 import { listAllegroListingProfiles } from "@/lib/allegro-listing-profile";
 import { listAllegroLearnedCategories } from "@/lib/allegro-category";
 import { getDelcampePlatform } from "@/lib/delcampe";
@@ -108,6 +109,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     storageCache,
     titleLanguages,
     mailSettings,
+    auctionReminder,
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getCatalogTree(session.user.id, collection.id),
@@ -143,6 +145,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getStorageCacheStatus(session.user.id, collection.id),
     getCollectionTitleLanguages(session.user.id, collection.id),
     getMailSettings(session.user.id, collection.id),
+    getAuctionReminderSettings(session.user.id, collection.id),
   ]);
 
   return (
@@ -205,6 +208,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}
           mailSettings={mailSettings}
+          auctionReminder={auctionReminder}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}
           photoStorageBytes={photoStorageBytes}
           // Beside the figure above and never added to it (#591): the storage figure is how much of

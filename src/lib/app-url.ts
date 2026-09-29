@@ -27,3 +27,19 @@ export function offerScreenUrl(collectionSlug: string, offerNo: number): string 
   if (!base) return null;
   return `${base}/o/${encodeURIComponent(collectionSlug)}/${offerNo}`;
 }
+
+/** The absolute address of one auction lot, or null when {@link appBaseUrl} is unset: its sale's
+ * screen with the lot open, the address the quick-jump box sends `lot 12` to. Used by the morning
+ * auction reminder (#1373), a link that leaves the instance in an email. */
+export function auctionLotScreenUrl(
+  collectionSlug: string,
+  auctionSaleId: string,
+  auctionLotId: string
+): string | null {
+  const base = appBaseUrl();
+  if (!base) return null;
+  return (
+    `${base}/c/${encodeURIComponent(collectionSlug)}/auctions/sales/` +
+    `${encodeURIComponent(auctionSaleId)}?lot=${encodeURIComponent(auctionLotId)}`
+  );
+}

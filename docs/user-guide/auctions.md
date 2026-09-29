@@ -311,6 +311,33 @@ of the sidebar: lots closing within the day, and ended lots still waiting for th
 recorded. It is the same two filters, counted for you, so a lot that quietly closed while you were
 elsewhere does not have to be gone looking for.
 
+### A morning email of today's lots
+
+The bell only tells you when you open the app. To be told without opening it, switch on **Settings →
+Auction reminder**, in the Intake group: each morning you get **one email** listing the lots that end
+that day, sent to your account's address.
+
+- **When** — at the hour you choose, 08:00 unless you change it, in **your time zone**. The zone is
+  taken from your browser the first time you switch the reminder on, and can be changed on the same
+  page; *today* means your day there, from midnight to midnight.
+- **What it lists** — every **open** lot ending later that day, soonest first. Each line gives its
+  end time, the sale and the platform, where you stand — *Leading*, *Outbid*, how much you *can
+  still bid* inside your ceiling, and the ceiling itself when you have set one — and a link to the lot
+  in the app.
+- **What it leaves out** — lots already closed or cancelled, lots whose moment has already gone by,
+  and lots whose price has passed both your ceiling and the bid you placed. Those can no longer be won
+  without a new decision; the email says how many there were, in one line at the end.
+- **No lots, no email.** On a day with nothing to list you get nothing, so an email always means
+  something is ending.
+- **Never twice a day.** The day counts as done at the hour, whether or not anything was sent, so a
+  lot added in the afternoon does not bring a second email. If the instance was not running at the
+  hour, the email goes as soon as it is back that day. Switching the reminder on after the hour sends
+  that day's email within a few minutes.
+
+The reminder needs the instance to be able to send mail. If it cannot, the switch is greyed out and
+the page points to [Settings → Email](email.md); an email that fails to arrive is reported there like
+any other.
+
 ### Keeping bids current
 
 There is no scraping and no automatic refreshing — you check a listing and record what you see. Two

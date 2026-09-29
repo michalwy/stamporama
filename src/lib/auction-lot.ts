@@ -636,8 +636,14 @@ function lotBid(lot: AuctionLotSummaryRow): number | null {
  * keep honest — so money is genuinely on the hook there whatever the valuation says. What cannot
  * happen is winning a lot whose price has passed both the ceiling *and* the bid: that needs a new,
  * higher bid first, which is a decision the collector has not made yet.
+ *
+ * The morning auction reminder (#1373) leaves the same lots out of its list, by this same rule, so
+ * the email and the exposure totals cannot disagree about which lots are still in reach.
  */
-function isOutpriced(lot: AuctionLotSummaryRow, fees: AuctionFees): boolean {
+export function isOutpriced(
+  lot: Pick<AuctionLotSummaryRow, "myBid" | "currentBid" | "maxBid">,
+  fees: AuctionFees
+): boolean {
   if (bidStanding(lot.myBid, lot.currentBid) === "leading") return false;
   const cost = allIn(lot.currentBid, fees);
   const cap = num(lot.maxBid);

@@ -1,6 +1,7 @@
 # Email
 
-Your instance can send you email — reminders and reports, as features arrive that use it. Mail only
+Your instance can send you email — so far the [morning auction reminder](auctions.md#a-morning-email-of-todays-lots),
+with more reminders and reports as features arrive that use it. Mail only
 ever goes to **your own account's address**. There is no separate *send to* address and no other
 recipients; to get mail somewhere else, change your account's address.
 
