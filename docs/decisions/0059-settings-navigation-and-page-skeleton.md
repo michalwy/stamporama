@@ -7,7 +7,7 @@ Designed in #1465 with the collector on 2026-09-29, against a wireframe. The thr
 are built by the pages' own issues — #1471 (list beside detail), #1474 (list beside preview) and
 #1473 (grid of fields) — and the summary strip by #1475. **Reverses #691's 56rem cap** on the
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
-dictionaries (#1471) and every other dictionary (#1476), list beside preview carries Album templates (#1474), and the grid of fields
+dictionaries (#1471) and every other dictionary (#1476), list beside preview carries Album and Collage templates (#1474, #1477), and the grid of fields
 carries the plain forms (#1473); what each settled is in §5.
 
 ## Context
@@ -118,7 +118,7 @@ needed that the Catalog group did not:
 - Tags stay **alphabetical** and undraggable, with each row's usage line.
 
 **List beside preview, as built (#1474).** `settings/list-beside-preview.tsx`, on Album templates
-first; the collage and ref card templates follow (#1477, #1478):
+first, then Collage templates (#1477); the ref card templates follow (#1478):
 
 - The templates on the left, each with a one-line note and its `⋮` (*Edit…*, *Duplicate*, *Delete*);
   on the right the selected one's title with *Edit…*, a handful of its main values, and **its
@@ -128,6 +128,13 @@ first; the collage and ref card templates follow (#1477, #1478):
 - **The selection is list beside detail's**: `&row=`, the same hook, the same fallback to the first.
 - The body is a fixed height of the window, so the list scrolls in its own column and the drawing is
   fitted to the room on screen rather than to its content.
+- **Collage templates (#1477)** had no drawing to reuse, so one was made: numbered placeholder stamps
+  of one size, planned by the collage renderer's own geometry (`collage-preview.ts`) and drawn in the
+  browser — arithmetic on six numbers, so it redraws on the keystroke with no round trip. The editor is
+  a whole-window dialog like the album's, fields beside the drawing. The one control on the drawing,
+  settled with the collector on 2026-09-30, is **how many stamps** to lay out, starting at a full
+  image: at capacity an automatic grid is the same picture as a fixed one, so without it the grid
+  choice would be invisible. It is the preview's and is never saved.
 
 ### 6. What this reverses from #691
 

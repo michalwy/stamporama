@@ -18,8 +18,7 @@ import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, renderCollage, type CollageTileSource } from "./photos/collage";
 import type { TileLabelTexts } from "./collage-label";
 import {
-  pairedTrueScaledSizes,
-  resolveCollageColumns,
+  collageColumnsFor,
   type CollagePlannedTileSize,
   type CollageTileTrueSize,
 } from "./collage-layout";
@@ -1639,7 +1638,7 @@ async function renderPlannedCollage(
     // read off the photo rows, so the grid is chosen before any scan is decoded.
     ...(await renderTiles(
       sources,
-      resolveCollageColumns(pairedTrueScaledSizes(plannedTileSizes(image, inputs)), {
+      collageColumnsFor(plannedTileSizes(image, inputs), {
         gridMode: inputs.collage!.collageGridMode,
         rows: inputs.collage!.collageRows,
         columns: inputs.collage!.collageColumns,
