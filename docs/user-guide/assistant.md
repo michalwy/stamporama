@@ -397,10 +397,11 @@ date changes — they are the same act on two kinds of field.
 
 Colnect states a colour as a word of its own — *Carmine*, *Grey Red* — while your collection keeps
 its own list of colours, watermarks, papers and printing methods. So there is a mapping, in
-**Settings → Colnect → Colnect attribute mapping**: a field beside each of your values saying what
-Colnect calls it. **Fill matching** fills in every blank one with your own value's name, which is
-usually right — most of these lists are built from catalogue words in the first place — and you
-correct the ones that are not.
+the **Attributes** tab of **Settings → Colnect** ([Colnect attribute
+mapping](collections.md#colnect-attribute-mapping)): a field beside each of your values saying what
+Colnect calls it, one list at a time. **Fill matching** fills in every blank one with your own
+value's name, which is usually right — most of these lists are built from catalogue words in the
+first place — and you correct the ones that are not.
 
 A Colnect word that maps to none of your values is **reported, never written**:
 

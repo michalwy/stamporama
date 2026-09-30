@@ -9,7 +9,7 @@ are built by the pages' own issues — #1471 (list beside detail), #1474 (list b
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
 dictionaries (#1471) and every other dictionary (#1476), list beside preview carries Album, Collage and Ref card templates (#1474, #1477, #1478), and the grid of fields
 carries the plain forms (#1473); what each settled is in §5. The summary strip is built and carries
-the Allegro page (#1475, §4) and the Delcampe page (#1479).
+the Allegro page (#1475), the Delcampe page (#1479) and the Colnect page (#1480), §4.
 
 ## Context
 
@@ -78,6 +78,16 @@ only a re-point and a forget from its ⋮.
 Delcampe (#1479) is the same with two tabs, Listing profiles and Categories, and no tile flagged —
 there is no connection to lose; its Categories tab is the one register beside a card stating
 Delcampe's published list, for the same reason.
+
+Colnect (#1480) carries the strip over Catalogs, Conditions, Attributes and List sync. Its tiles flag
+nothing — an unmapped condition or attribute value is a legitimate answer, reported where it
+matters — and the attribute tile opens its tab narrowed to the values still without a Colnect word,
+by the same count the tab shows. Catalogs is list beside detail. The other three keep **rows edited
+in place, one write per control**, which is the table-edited-in-its-cells shape §5 rejected for the
+dictionaries, and deliberately: a condition's grade, a value's Colnect word and a list's three
+settings are each one answer to a fixed row with nothing to add, delete or name, so a pane with its
+own Save would add a step and hold nothing a row does not show. They are capped in width so a name
+and its answer are not read across the window.
 
 *Rejected:* a shared header only, and each page designed on its own.
 

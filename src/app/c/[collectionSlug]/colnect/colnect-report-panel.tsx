@@ -396,7 +396,7 @@ export function ColnectReportPanel({
       <div style={{ ...PANEL, padding: "1.5rem", display: "grid", gap: "0.5rem" }}>
         <div style={{ fontSize: "0.9375rem", fontWeight: 600 }}>No Colnect list is synced yet</div>
         <div style={MUTED}>
-          Settings → Colnect → Colnect list sync is where you say which of Colnect&apos;s lists this
+          The List sync tab of Settings → Colnect is where you say which of Colnect&apos;s lists this
           collection keeps in step, and what each one mirrors. Switch one on and its export can be
           loaded here.
         </div>

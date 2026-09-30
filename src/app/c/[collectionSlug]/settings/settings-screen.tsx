@@ -42,11 +42,7 @@ import { StampSizePresetsPanel } from "./stamp-size-presets-panel";
 import { TagsPanel } from "./tags-panel";
 import { AcceptanceProfilesPanel } from "./acceptance-profiles-panel";
 import { DuplicatesPanel } from "./duplicates-panel";
-import { ColnectPanel } from "./colnect-panel";
-import { ColnectConditionsPanel } from "./colnect-conditions-panel";
-import { ColnectAttributesPanel } from "./colnect-attributes-panel";
-import { ColnectPlatformPanel } from "./colnect-platform-panel";
-import { ColnectListsPanel } from "./colnect-lists-panel";
+import { ColnectSettingsBody, ColnectSummary } from "./colnect-settings-page";
 import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
 import { PhilasearchPlatformPanel } from "./philasearch-platform-panel";
@@ -186,20 +182,12 @@ interface SettingsScreenProps {
   appReleaseDate: string | null;
 }
 
-/** A heading inside a page that holds several panels of one thing — below the page title's rank. */
-const sectionHeadingStyle: React.CSSProperties = {
-  fontSize: "1rem",
-  fontWeight: 600,
-  color: "var(--color-text-primary)",
-  margin: "0 0 1rem",
-};
-
 /**
  * The entries already laid out in one of ADR-0059's body shapes, so no longer held to today's
  * column (`UNSHAPED_PAGE_WIDTH`). The dictionaries are list beside detail — the Catalog group's with
  * #1471, the rest with #1476; Album templates and Ref card templates are list beside preview (#1474,
  * #1478); the plain forms are the grid of fields (#1473); Allegro is a summary strip over three tabs
- * (#1475), Delcampe over two (#1479).
+ * (#1475), Delcampe over two (#1479) and Colnect over four (#1480).
  */
 const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "catalogs",
@@ -224,6 +212,7 @@ const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "philasearch",
   "allegro",
   "delcampe",
+  "colnect",
   "bids",
 ]);
 
@@ -255,9 +244,12 @@ function SettingsScreenBody(props: SettingsScreenProps) {
 
   // A tab inside an entry replaces rather than pushes, as the album screen's do (#1430): it is a
   // view of one page, and Back should leave the page rather than step through its tabs.
-  function choosePart(next: string) {
+  // `view` is what the tab opens with besides — the Colnect attribute tile's narrowing (#1480).
+  function choosePart(next: string, view?: Readonly<Record<string, string>>) {
     guard(() =>
-      router.replace(`${pathname}${settingsSearch(searchParams, entry.key, next)}`, { scroll: false })
+      router.replace(`${pathname}${settingsSearch(searchParams, entry.key, next, view)}`, {
+        scroll: false,
+      })
     );
   }
 
@@ -354,7 +346,7 @@ function SettingsScreenBody(props: SettingsScreenProps) {
 function entrySummary(
   entryKey: SettingsEntryKey,
   part: string | null,
-  choosePart: (part: string) => void,
+  choosePart: (part: string, view?: Readonly<Record<string, string>>) => void,
   props: SettingsScreenProps
 ): React.ReactNode {
   switch (entryKey) {
@@ -373,6 +365,17 @@ function entrySummary(
         <DelcampeSummary
           profiles={props.delcampeListingProfiles}
           categories={props.delcampeLearnedCategories}
+          active={part}
+          onOpen={choosePart}
+        />
+      );
+    case "colnect":
+      return (
+        <ColnectSummary
+          catalogs={props.initialColnectMappings}
+          conditions={props.initialColnectConditionMappings}
+          attributes={props.initialAttributes}
+          lists={props.initialColnectListMappings}
           active={part}
           onOpen={choosePart}
         />
@@ -928,47 +931,21 @@ function SettingsEntryBody({
       return <AuctionReminderPanel collectionId={collectionId} settings={auctionReminder} />;
     case "colnect":
       return (
-        <section>
-          {/* Which platform is Colnect (#406) leads the page: the mappings below it only ever
-              matter for offers headed there, and it is what switches the listing checks on. */}
-          <h3 style={sectionHeadingStyle}>Colnect platform</h3>
-          <ColnectPlatformPanel
-            collectionId={collectionId}
-            platforms={platformContacts}
-            selectedId={colnectPlatformId}
-          />
-
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect catalog mapping</h3>
-          <ColnectPanel
-            collectionId={collectionId}
-            initialMappings={initialColnectMappings}
-            vendors={initialTree.map((v) => ({
-              id: v.id,
-              name: v.name,
-              abbreviation: v.abbreviation,
-            }))}
-          />
-
-          {/* The condition side of the same translation (#404): our grades → Colnect's fixed five.
-              Same page as the catalog mapping because they answer one question — what our
-              vocabulary is called on Colnect — and are set up in one sitting. */}
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect condition mapping</h3>
-          <ColnectConditionsPanel mappings={initialColnectConditionMappings} />
-
-          {/* The third form of the same translation (#739): our four attribute dictionaries →
-              the words Colnect prints. A field rather than a select, Colnect's side being open text
-              — there is no list of every colour it names — and beside the two above it because a
-              collector sets all three up in one sitting, looking at one catalogue page. */}
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect attribute mapping</h3>
-          <ColnectAttributesPanel lists={initialAttributes} />
-
-          {/* The fourth translation on the page (#684), and the one that reads in the other
-              direction: the two above say what our vocabulary is called on Colnect, this says what
-              a list *of theirs* is a list of here. Last because it is what the export → compare →
-              fix loop (#685–#690) is configured with, and that loop presupposes the rest. */}
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Colnect list sync</h3>
-          <ColnectListsPanel collectionId={collectionId} mappings={initialColnectListMappings} />
-        </section>
+        <ColnectSettingsBody
+          part={part}
+          collectionId={collectionId}
+          platforms={platformContacts}
+          platformId={colnectPlatformId}
+          vendors={initialTree.map((v) => ({
+            id: v.id,
+            name: v.name,
+            abbreviation: v.abbreviation,
+          }))}
+          catalogs={initialColnectMappings}
+          conditions={initialColnectConditionMappings}
+          attributes={initialAttributes}
+          lists={initialColnectListMappings}
+        />
       );
     case "assistant":
       return (

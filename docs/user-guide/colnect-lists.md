@@ -8,7 +8,7 @@ sidebar, is where the middle two happen — and with the [Assistant](assistant.m
 fetched for you as well.
 
 Which of your own things each list stands for, and which side wins when the two disagree, is set up
-first under [Settings → Colnect → Colnect list sync](collections.md#colnect-list-sync). A list you
+first on the **List sync** tab of [Settings → Colnect](collections.md#colnect-list-sync). A list you
 have not switched on does not appear here.
 
 ## Loading an export
@@ -216,8 +216,8 @@ over there is what the report says you hold.
 
 Where a copy is in a condition you have **not** mapped to a Colnect grade, it is simply left out of
 what is written rather than guessed at, and the confirmation tells you how many additions that
-affects before the run starts. Map the condition under Settings → Colnect if you want those copies
-counted.
+affects before the run starts. Map the condition on the **Conditions** tab of Settings → Colnect if
+you want those copies counted.
 
 On the **Wish** list a want that accepts several conditions states no single grade, so only the count
 is written and whatever grade Colnect chose is left alone.

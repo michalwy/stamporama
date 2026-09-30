@@ -10,6 +10,7 @@ import { SECTION_LABELS, SECTION_TINTS, type SectionKey } from "../nav-sections"
 import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attribute-kinds";
 import { ALLEGRO_SETTINGS_PARTS } from "./allegro-summary";
 import { DELCAMPE_SETTINGS_PARTS } from "./delcampe-summary";
+import { COLNECT_SETTINGS_PARTS, COLNECT_VIEW_PARAMS } from "./colnect-summary";
 
 /**
  * The groups mirror the sidebar's sections, **in their tints** (#1465): a collector looking for the
@@ -263,6 +264,9 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "partners",
     label: "Colnect",
     hint: "Which platform is Colnect, and what your catalogues, grades, attributes and lists are called there.",
+    // In the order the setup happens in (#1480): the three translations of our vocabulary, then the
+    // lists, which read in the other direction and presuppose the rest.
+    parts: COLNECT_SETTINGS_PARTS,
   },
 
   {
@@ -326,24 +330,33 @@ export function resolveSettingsAddress(
 export const SETTINGS_ROW_PARAM = "row";
 
 /**
+ * What names a view of one page and tab rather than the page — the selected row, the Colnect
+ * attribute list and its narrowing (#1480). Choosing a page or a tab drops them all.
+ */
+const SETTINGS_VIEW_PARAMS: readonly string[] = [SETTINGS_ROW_PARAM, ...COLNECT_VIEW_PARAMS];
+
+/**
  * The query an entry and its tab are written as. The defaults are left out — the default entry and
  * an entry's first tab — so the plainest address stays the plainest, and every other parameter on
- * the address (the Allegro callback's outcome, say) is kept. The selected row is not: it names a row
- * of the page being left.
+ * the address (the Allegro callback's outcome, say) is kept. A view of the page being left is not:
+ * it names a row or a list there. `view` is the one the new tab opens with — the Colnect summary's
+ * attribute tile opens its tab narrowed.
  */
 export function settingsSearch(
   current: URLSearchParams,
   entryKey: string,
-  part: string | null
+  part: string | null,
+  view?: Readonly<Record<string, string>>
 ): string {
   const params = new URLSearchParams(current.toString());
-  params.delete(SETTINGS_ROW_PARAM);
+  for (const key of SETTINGS_VIEW_PARAMS) params.delete(key);
   const entry = entryByKey(entryKey);
   if (entryKey === DEFAULT_SETTINGS_ENTRY) params.delete("tab");
   else params.set("tab", entryKey);
   const firstPart = entry?.parts?.[0]?.key ?? null;
   if (part && part !== firstPart) params.set("part", part);
   else params.delete("part");
+  for (const [key, value] of Object.entries(view ?? {})) params.set(key, value);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }

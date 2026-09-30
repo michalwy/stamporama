@@ -61,7 +61,7 @@ describe("settings navigation (#1469)", () => {
     }
   });
 
-  it("gives Formats, Attributes, Allegro and Delcampe their parts as tabs, and nothing else any", () => {
+  it("gives Formats, Attributes and the marketplace pages their parts as tabs, and nothing else any", () => {
     const withParts = SETTINGS_ENTRIES.filter((e) => e.parts).map((e) => [
       e.key,
       e.parts!.map((p) => p.label),
@@ -71,6 +71,7 @@ describe("settings navigation (#1469)", () => {
       ["attributes", ["Colours", "Watermarks", "Papers", "Printing methods"]],
       ["allegro", ["Account", "Listing profiles", "Categories"]],
       ["delcampe", ["Listing profiles", "Categories"]],
+      ["colnect", ["Catalogs", "Conditions", "Attributes", "List sync"]],
     ]);
   });
 
@@ -102,7 +103,7 @@ describe("settings navigation (#1469)", () => {
         albums: "Album templates",
         shipping: "Carriers",
         duplicates: "Duplicate numbers",
-        colnect: "Colnect",
+        colnect: "Colnect / catalogs",
         allegro: "Allegro / account",
         delcampe: "Delcampe / profiles",
         philasearch: "Philasearch",
@@ -138,6 +139,17 @@ describe("settings navigation (#1469)", () => {
       assert.equal(
         settingsSearch(callback, "allegro", "profiles"),
         "?tab=allegro&allegro=connected&part=profiles"
+      );
+    });
+
+    // A view of one tab — the selected row, the Colnect attribute list and its narrowing (#1480) —
+    // does not follow the collector onto another tab; the one a tile opens with is written.
+    it("drops a tab's view on leaving it and writes the one a tab opens with", () => {
+      const view = new URLSearchParams("tab=colnect&part=attributes&kind=paper&unmapped=1&row=r1");
+      assert.equal(settingsSearch(view, "colnect", "lists"), "?tab=colnect&part=lists");
+      assert.equal(
+        settingsSearch(new URLSearchParams("tab=colnect"), "colnect", "attributes", { unmapped: "1" }),
+        "?tab=colnect&part=attributes&unmapped=1"
       );
     });
 

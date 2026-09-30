@@ -10,6 +10,7 @@ import {
   isColnectListSource,
   isColnectListSourceOfTruth,
 } from "@/lib/colnect-list-sync-rules";
+import { ListPane, countLabel } from "./list-detail";
 
 const SELECT_STYLE: React.CSSProperties = {
   padding: "0.375rem 0.5rem",
@@ -39,10 +40,10 @@ const fieldLabelStyle: React.CSSProperties = {
 };
 
 /**
- * What each of Colnect's standard lists is supposed to mirror (#684) — the third translation in this
- * tab, beside the catalog mapping (#248) and the condition mapping (#404), and the one that makes
- * the sync loop possible at all: an export can only be compared against something once the collector
- * has said what that something is.
+ * The Colnect page's List sync tab (#684, #1480): what each of Colnect's standard lists is supposed
+ * to mirror — the translation beside the catalog, condition and attribute mappings that reads in the
+ * other direction, and the one that makes the sync loop possible at all: an export can only be
+ * compared against something once the collector has said what that something is.
  *
  * All four lists are always shown, configured or not: the set is Colnect's and it is fixed, so there
  * is nothing to add and nothing to delete — the same reason the condition panel lists every
@@ -90,27 +91,11 @@ export function ColnectListsPanel({
 
   return (
     <>
-      <p
-        style={{
-          color: "var(--color-text-muted)",
-          fontSize: "0.8125rem",
-          marginBottom: "1rem",
-          lineHeight: 1.5,
-        }}
-      >
-        Colnect keeps four lists of its own. Say what each of them mirrors here, and an export of
-        that list can be compared against this collection. <strong>Source of truth</strong> is which
-        side wins when the two disagree: with <em>Stamporama</em>, an item only on Colnect is
-        proposed for removal there; with <em>Colnect</em>, it is proposed for adopting here — which
-        is what a wish list built up over years on Colnect needs. A list left unsynced is simply not
-        compared.
-      </p>
-
-      {error && (
-        <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginBottom: "0.75rem" }}>
-          {error}
-        </p>
-      )}
+      <ListPane
+        caption={`${mappings.filter((m) => m.enabled).length} of ${countLabel(mappings.length, "list", "lists")} synced`}
+        hint="Colnect keeps four lists of its own. Say what each of them mirrors here, and an export of that list can be compared against this collection. Source of truth is which side wins when the two disagree: with Stamporama, an item only on Colnect is proposed for removal there; with Colnect, it is proposed for adopting here. A list left unsynced is not compared."
+        error={error}
+      />
 
       <div
         style={{

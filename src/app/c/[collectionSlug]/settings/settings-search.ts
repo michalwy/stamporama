@@ -105,14 +105,13 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
     { label: "Sent at" },
     { label: "Time zone" },
   ],
+  // The header's platform choice, found on the first tab (#1480); the tabs come from `parts`.
   colnect: [
     { label: "Colnect platform" },
-    { label: "Colnect catalog mapping" },
-    { label: "Colnect condition mapping" },
-    { label: "Colnect attribute mapping" },
-    { label: "Colnect list sync" },
-    { label: "Mirrors" },
-    { label: "Source of truth" },
+    { label: "Without a Colnect word", part: "attributes", words: ["unmapped", "mapping"] },
+    { label: "Fill matching", part: "attributes" },
+    { label: "Mirrors", part: "lists" },
+    { label: "Source of truth", part: "lists" },
   ],
   assistant: [
     { label: "Connect Stamporama Assistant" },
