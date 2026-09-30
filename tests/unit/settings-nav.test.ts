@@ -61,7 +61,7 @@ describe("settings navigation (#1469)", () => {
     }
   });
 
-  it("gives Formats, Attributes and Allegro their parts as tabs, and nothing else any", () => {
+  it("gives Formats, Attributes, Allegro and Delcampe their parts as tabs, and nothing else any", () => {
     const withParts = SETTINGS_ENTRIES.filter((e) => e.parts).map((e) => [
       e.key,
       e.parts!.map((p) => p.label),
@@ -70,6 +70,7 @@ describe("settings navigation (#1469)", () => {
       ["formats", ["Formats", "Multipliers"]],
       ["attributes", ["Colours", "Watermarks", "Papers", "Printing methods"]],
       ["allegro", ["Account", "Listing profiles", "Categories"]],
+      ["delcampe", ["Listing profiles", "Categories"]],
     ]);
   });
 
@@ -103,7 +104,7 @@ describe("settings navigation (#1469)", () => {
         duplicates: "Duplicate numbers",
         colnect: "Colnect",
         allegro: "Allegro / account",
-        delcampe: "Delcampe",
+        delcampe: "Delcampe / profiles",
         philasearch: "Philasearch",
         assistant: "Assistant & API",
       };
@@ -146,6 +147,12 @@ describe("settings navigation (#1469)", () => {
       assert.equal(lands("allegro"), "Allegro / account");
       assert.equal(lands("allegro", "categories"), "Allegro / categories");
       assert.equal(lands("allegro", "nonsense"), "Allegro / account");
+    });
+
+    it("opens Delcampe on its listing profiles", () => {
+      assert.equal(lands("delcampe"), "Delcampe / profiles");
+      assert.equal(lands("delcampe", "categories"), "Delcampe / categories");
+      assert.equal(lands("delcampe", "account"), "Delcampe / profiles");
     });
 
     it("round-trips every entry and part through its own address", () => {

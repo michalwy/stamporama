@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
-import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { LabelWithError } from "@/app/dialog-shell";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import type {
   DelcampeListingProfileData,
   DelcampeListingProfileList,
@@ -15,9 +16,9 @@ import {
   DELCAMPE_PROMOTION_OPTIONS,
   DELCAMPE_RENEW_DURATION_MAX,
   DELCAMPE_RENEW_TOTAL_COUNT_MAX,
-  countDelcampePromotions,
   delcampeAuctionGaps,
   delcampeMinimumBidStep,
+  type DelcampeListingProfileValues,
   type DelcampePromotionKey,
 } from "@/lib/delcampe-listing-profile-rules";
 import {
@@ -26,53 +27,45 @@ import {
   setDefaultDelcampeListingProfileAction,
   updateDelcampeListingProfileAction,
 } from "@/app/actions/delcampe";
-import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import {
+  AddRowAction,
+  DetailForm,
+  DetailPlaceholder,
+  FieldNote,
+  Fields,
+  INPUT_STYLE,
+  InfoHint,
+  ListDetail,
+  ListPane,
+  ListRow,
+  ListRows,
+  RowName,
+  RowTag,
+  countLabel,
+  useListSelection,
+} from "./list-detail";
 
-// Settings → Delcampe, the listing-profile half (#608; ADR-0034) — everything an Easy Uploader row
-// carries that no offer knows about itself.
+// Settings → Delcampe → Listing profiles (#608; ADR-0034), the page's first tab (#1479): a list
+// beside the selected profile's detail, the shared shape the dictionaries use (#1471) — everything
+// an Easy Uploader row carries that no offer knows about itself.
 //
-// The list is deliberately plain: a collector has one profile, occasionally two — the second being
-// the heavier lots' shipping model. What earns the room is the **editor**, and the one thing worth
-// saying loudly in it is that the shipping model is a *name*: Delcampe's own list cannot be read
-// from here, so a model renamed there is a rejected upload and not a fault in the export.
+// A collector has one profile, occasionally two — the second being the heavier lots' shipping model
+// — so what earns the room is the **detail**, and the one thing worth saying beside a field in it is
+// that the shipping model is a *name*: Delcampe's own list cannot be read from here, so a model
+// renamed there is a rejected upload and not a fault in the export.
 //
 // The **auction group** (#620) is the same kind of thing said twice more. Its two counts are blank
 // until typed — there were no auctions to observe, so nothing was seeded — and its closing day and
-// hour are text cells written into the file verbatim, for the shipping model's reason: what spelling
-// Easy Uploader wants for them has never been confirmed, and a picker here would be a claim about a
-// format only Delcampe can settle. The panel reads the group back as what an auction row *would*
-// carry, or as the sentence saying an auction cannot be exported yet.
+// hour are text cells written into the file verbatim, for the shipping model's reason. The pane reads
+// the group back as what an auction row *would* carry, or as the sentence saying an auction cannot be
+// exported yet, and the list tags a profile that cannot. What a profile is for, and the reasoning
+// behind each group, is behind the ⓘ hints and in the user guide (#1479, following #1430).
 
 const helpTextStyle: React.CSSProperties = {
   color: "var(--color-text-muted)",
   fontSize: "0.8125rem",
   lineHeight: 1.5,
 };
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%",
-  padding: "0.5rem 0.75rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.875rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  padding: "0.5rem 1rem",
-  background: "var(--color-action-primary)",
-  color: "#fff",
-  border: "none",
-  borderRadius: "0.375rem",
-  fontSize: "0.875rem",
-  fontWeight: 500,
-  cursor: "pointer",
-};
-
-type Notice = { tone: "ok" | "error"; message: string } | null;
 
 /** Two decimals, the notation this screen reads in. The upload file writes a decimal **comma**
  *  instead — that is the export's business (#610), not this screen's. */
@@ -100,244 +93,162 @@ function auctionSummary(values: {
 export function DelcampeProfilesPanel({
   collectionId,
   list,
+  noPlatform,
+}: {
+  collectionId: string;
+  list: DelcampeListingProfileList;
+  /** What the tab says while no platform is Delcampe. */
+  noPlatform: React.ReactNode;
+}) {
+  if (!list.platformId) return <>{noPlatform}</>;
+  return <ProfilesListDetail collectionId={collectionId} list={list} />;
+}
+
+function ProfilesListDetail({
+  collectionId,
+  list,
 }: {
   collectionId: string;
   list: DelcampeListingProfileList;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [notice, setNotice] = useState<Notice>(null);
-  const [editing, setEditing] = useState<{ profile: DelcampeListingProfileData | null } | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<DelcampeListingProfileData | null>(null);
-
-  function afterWrite(message: string) {
-    setNotice({ tone: "ok", message });
-    router.refresh();
-  }
+  const refresh = () => router.refresh();
+  const sel = useListSelection(list.profiles);
+  const current = sel.current;
+  const [notice, setNotice] = useState<string | null>(null);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
+  const [isSettingDefault, startDefault] = useTransition();
 
   function makeDefault(profile: DelcampeListingProfileData) {
-    setNotice(null);
-    startTransition(async () => {
+    setDefaultError(null);
+    startDefault(async () => {
       const result = await setDefaultDelcampeListingProfileAction(profile.id);
-      if (result.status === "error") setNotice({ tone: "error", message: result.message });
-      else afterWrite(`Listings on this platform now go up with ${profile.name}.`);
+      if (result.status === "success") refresh();
+      else setDefaultError(result.message);
     });
-  }
-
-  function remove(profile: DelcampeListingProfileData) {
-    setNotice(null);
-    startTransition(async () => {
-      const result = await deleteDelcampeListingProfileAction(profile.id);
-      if (result.status === "error") {
-        setNotice({ tone: "error", message: result.message });
-        return;
-      }
-      setConfirmDelete(null);
-      // The released offers are named only when there are any, so a zero on every ordinary delete
-      // does not bury the one time it matters.
-      afterWrite(
-        result.offersReleased > 0
-          ? `Deleted ${profile.name}. ${result.offersReleased} offer(s) fall back to the platform's default.`
-          : `Deleted ${profile.name}.`
-      );
-    });
-  }
-
-  if (!list.platformId) {
-    return (
-      <p style={helpTextStyle}>
-        Name which of your platforms is Delcampe above, and its listing profiles will live here. A
-        profile is owned by that platform — it is what its upload rows are built from.
-      </p>
-    );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <p style={helpTextStyle}>
-        What every listing on <strong>{list.platformName}</strong> is uploaded with, beyond anything
-        an offer knows about itself: which of your Delcampe <strong>shipping models</strong> the row
-        names, how long and how often the listing renews itself, which of the paid promotions it
-        buys, and the bid step it states. None of it is about a stamp — the title, description, price
-        and quantity all come from the offer and the platform&rsquo;s templates.
-      </p>
-      <p style={helpTextStyle}>
-        One profile is the platform&rsquo;s <strong>default</strong> — what a listing goes up with
-        unless its offer names another. A second profile is how a heavier lot gets a different
-        shipping model.
-      </p>
-
-      {notice && (
-        <p
-          style={{
-            ...helpTextStyle,
-            color:
-              notice.tone === "error"
-                ? "var(--color-error)"
-                : "var(--color-success, var(--color-accent))",
-          }}
-        >
-          {notice.message}
-        </p>
-      )}
-
-      {list.profiles.length === 0 ? (
-        <p style={helpTextStyle}>
-          No profiles yet. An upload file needs one — it carries the shipping model, the renewal
-          settings and the bid step every row states.
-        </p>
-      ) : (
-        <div
-          style={{
-            border: "1px solid var(--color-border)",
-            borderRadius: "0.75rem",
-            overflow: "hidden",
-          }}
-        >
-          {list.profiles.map((profile, i) => {
-            const promotions = countDelcampePromotions(profile);
-            return (
-              <div
-                key={profile.id}
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  borderBottom:
-                    i < list.profiles.length - 1 ? "1px solid var(--color-border)" : "none",
-                  background: "var(--color-bg-elevated)",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <span
-                      style={{
-                        fontSize: "0.9375rem",
-                        fontWeight: 500,
-                        color: "var(--color-text-primary)",
-                      }}
-                    >
-                      {profile.name}
-                    </span>
-                    {profile.isDefault && (
-                      <span
-                        style={{
-                          fontSize: "0.6875rem",
-                          fontWeight: 600,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          padding: "0.125rem 0.375rem",
-                          borderRadius: "0.25rem",
-                          color: "var(--color-success, var(--color-accent))",
-                          border: "1px solid currentColor",
-                        }}
-                      >
-                        Default
-                      </span>
-                    )}
-                  </div>
-                  <p style={{ ...helpTextStyle, margin: "0.25rem 0 0" }}>
-                    {profile.shippingModel} · renews every {profile.renewDuration} days, up to{" "}
-                    {profile.renewTotalCount}×
-                    {profile.hasRenewableOptions ? " (options re-bought)" : ""}
-                  </p>
-                  <p style={{ ...helpTextStyle, margin: "0.125rem 0 0" }}>
-                    Bid step {money(profile.minBidStepBelow)} under{" "}
-                    {money(profile.minBidStepThreshold)}, {money(profile.minBidStepAtOrAbove)} from
-                    there ·{" "}
-                    {promotions === 0 ? "no paid promotions" : `${promotions} paid promotion(s)`}
-                  </p>
-                  {/* Stated on every profile rather than only on the ones that fill it in: whether
-                      this profile can upload an auction at all is exactly what somebody looking at
-                      the list wants to know, and an absent line reads as "fine". */}
-                  <p style={{ ...helpTextStyle, margin: "0.125rem 0 0" }}>
-                    {auctionSummary(profile)}
-                  </p>
-                </div>
-                <RowActionsMenu
-                  ariaLabel={`Actions for ${profile.name}`}
-                  actions={[
-                    {
-                      key: "edit",
-                      label: "Edit",
-                      icon: "edit",
-                      onSelect: () => setEditing({ profile }),
-                    },
-                    ...(profile.isDefault
-                      ? []
-                      : ([
-                          {
-                            key: "default",
-                            label: "Make default",
-                            icon: "primary",
-                            onSelect: () => makeDefault(profile),
-                          },
-                        ] satisfies RowAction[])),
-                    {
-                      key: "delete",
-                      label: "Delete",
-                      icon: "delete",
-                      danger: true,
-                      separatorBefore: true,
-                      onSelect: () => setConfirmDelete(profile),
-                    },
-                  ]}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div>
-        <button
-          type="button"
-          onClick={() => setEditing({ profile: null })}
-          disabled={isPending}
-          style={primaryButtonStyle}
-        >
-          Add profile
-        </button>
-      </div>
-
-      {editing && (
-        <DelcampeProfileDialog
-          collectionId={collectionId}
-          profile={editing.profile}
-          onClose={() => setEditing(null)}
-          onSaved={(name) => {
-            setEditing(null);
-            afterWrite(`Saved ${name}.`);
-          }}
-        />
-      )}
-
-      {confirmDelete && (
-        <DialogShell title={`Delete ${confirmDelete.name}?`} onClose={() => setConfirmDelete(null)}>
-          <DialogBody>
-            <p style={{ margin: 0, fontSize: "0.9375rem", lineHeight: 1.6 }}>
-              Offers naming this profile fall back to the platform&rsquo;s default.{" "}
-              {confirmDelete.isDefault
-                ? "This is the default, so the platform will have none until you set another — an upload file needs one."
-                : "Listings already uploaded are unaffected: Delcampe holds their settings from the moment the file went up."}
-            </p>
-          </DialogBody>
-          <DialogActions
-            actionLabel="Delete"
-            variant="destructive"
-            disabled={isPending}
-            onCancel={() => setConfirmDelete(null)}
-            onAction={() => remove(confirmDelete)}
-          />
-        </DialogShell>
-      )}
-    </div>
+    <>
+      <AddRowAction
+        label="Add profile"
+        onAdd={() => {
+          setNotice(null);
+          sel.startAdding();
+        }}
+      />
+      <ListDetail
+        list={
+          <ListPane
+            caption={countLabel(list.profiles.length, "profile", "profiles")}
+            hint={
+              <>
+                What every listing on {list.platformName} is uploaded with beyond the offer itself:
+                the shipping model, how the listing renews, the paid promotions and the bid step. The
+                radio picks the default — what a listing goes up with unless its offer names another.
+                A second profile is how a heavier lot gets a different shipping model.
+              </>
+            }
+            error={defaultError}
+            empty={
+              list.profiles.length === 0 &&
+              "No profiles yet. An upload file needs one — every row states a shipping model."
+            }
+          >
+            {notice && <p style={{ ...helpTextStyle, margin: "0 0 0.5rem" }}>{notice}</p>}
+            <ListRows label="Listing profiles">
+              {list.profiles.map((profile) => (
+                <ListRow
+                  key={profile.id}
+                  selected={current?.id === profile.id}
+                  onSelect={() => sel.select(profile.id)}
+                  leading={
+                    <Tooltip content={profile.isDefault ? "Default profile" : "Make default"}>
+                      <input
+                        type="radio"
+                        name={`default-delcampe-profile-${collectionId}`}
+                        aria-label={`Make ${profile.name} the default profile`}
+                        checked={profile.isDefault}
+                        disabled={isSettingDefault || profile.isDefault}
+                        onChange={() => makeDefault(profile)}
+                        style={{ margin: 0 }}
+                      />
+                    </Tooltip>
+                  }
+                >
+                  <RowName>{profile.name}</RowName>
+                  {/* Said on the row, not only in the pane: whether a profile can upload an
+                      auction at all is what somebody reading the list wants to know (#620). */}
+                  {delcampeAuctionGaps(profile).length > 0 && <RowTag>No auctions</RowTag>}
+                  {profile.isDefault && <RowTag tone="accent">Default</RowTag>}
+                </ListRow>
+              ))}
+            </ListRows>
+          </ListPane>
+        }
+        detail={
+          sel.adding || current ? (
+            <DetailForm
+              key={current ? current.id : "new"}
+              title={current ? current.name : "New listing profile"}
+              isNew={!current}
+              onSave={(fd) => {
+                const input = profileInput(fd);
+                return current
+                  ? updateDelcampeListingProfileAction(current.id, input)
+                  : createDelcampeListingProfileAction(collectionId, input);
+              }}
+              onSaved={() => {
+                setNotice(null);
+                if (!current) sel.expectCreated();
+                refresh();
+              }}
+              onCancelNew={sel.cancelAdding}
+              remove={
+                current
+                  ? {
+                      title: `Delete ${current.name}`,
+                      message: (
+                        <>
+                          Offers naming <strong>{current.name}</strong> fall back to the
+                          platform&rsquo;s default.{" "}
+                          {current.isDefault
+                            ? "This is the default, so the platform will have none until you set another — an upload file needs one."
+                            : "Listings already uploaded are unaffected: Delcampe holds their settings from the moment the file went up."}
+                        </>
+                      ),
+                      run: async () => {
+                        const result = await deleteDelcampeListingProfileAction(current.id);
+                        // The released offers are named only when there are any, so a zero on every
+                        // ordinary delete does not bury the one time it matters.
+                        if (result.status === "success" && result.offersReleased > 0) {
+                          setNotice(
+                            `Deleted ${current.name}. ${result.offersReleased} offer(s) fall back to the platform's default.`
+                          );
+                        }
+                        return result;
+                      },
+                      onDone: () => {
+                        sel.cleared();
+                        refresh();
+                      },
+                    }
+                  : undefined
+              }
+            >
+              <ProfileFields profile={current} />
+            </DetailForm>
+          ) : (
+            <DetailPlaceholder>No profiles yet. Add one to start the list.</DetailPlaceholder>
+          )
+        }
+      />
+    </>
   );
 }
 
-/** A count field held as text, so a half-typed value is not silently read as 0 while it is being
- *  edited — the server refuses anything that is not a whole number in range. */
+/** A count field read off the form. Blank is `NaN`, so a half-typed value is not silently saved as
+ *  0 — the server refuses anything that is not a whole number in range. */
 function countValue(raw: string): number {
   return raw.trim() === "" ? Number.NaN : Number(raw);
 }
@@ -348,41 +259,50 @@ function optionalCountValue(raw: string): number | null {
   return raw.trim() === "" ? null : Number(raw);
 }
 
-function DelcampeProfileDialog({
-  collectionId,
-  profile,
-  onClose,
-  onSaved,
-}: {
-  collectionId: string;
-  profile: DelcampeListingProfileData | null;
-  onClose: () => void;
-  onSaved: (name: string) => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | undefined>();
+/** What the pane's form saves. */
+function profileInput(fd: FormData): DelcampeListingProfileValues {
+  const text = (key: string) => String(fd.get(key) ?? "");
+  const ticked = (key: string) => fd.get(key) === "on";
+  return {
+    name: text("name"),
+    shippingModel: text("shippingModel"),
+    renewDuration: countValue(text("renewDuration")),
+    renewTotalCount: countValue(text("renewTotalCount")),
+    hasRenewableOptions: ticked("hasRenewableOptions"),
+    ...(Object.fromEntries(
+      DELCAMPE_PROMOTION_OPTIONS.map((option) => [option.key, ticked(option.key)])
+    ) as Record<DelcampePromotionKey, boolean>),
+    minBidStepThreshold: Number(text("minBidStepThreshold")),
+    minBidStepBelow: Number(text("minBidStepBelow")),
+    minBidStepAtOrAbove: Number(text("minBidStepAtOrAbove")),
+    // A blank auction count is `null` — not stated — rather than a zero. The two of them are the one
+    // group here that is allowed to be empty: a profile that never uploads an auction is the
+    // ordinary case, and the export is where an unstated duration is refused.
+    auctionDuration: optionalCountValue(text("auctionDuration")),
+    auctionRenewTotalCount: optionalCountValue(text("auctionRenewTotalCount")),
+    auctionEndDay: text("auctionEndDay"),
+    auctionEndTime: text("auctionEndTime"),
+  };
+}
 
-  const [name, setName] = useState(profile?.name ?? "");
-  const [shippingModel, setShippingModel] = useState(profile?.shippingModel ?? "");
-  const [renewDuration, setRenewDuration] = useState(
-    String(profile?.renewDuration ?? DELCAMPE_PROFILE_DEFAULTS.renewDuration)
+/** A small heading over a group of fields in the pane. */
+function GroupLabel({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+      <LabelWithError>{children}</LabelWithError>
+      {hint && <InfoHint>{hint}</InfoHint>}
+    </div>
   );
-  const [renewTotalCount, setRenewTotalCount] = useState(
-    String(profile?.renewTotalCount ?? DELCAMPE_PROFILE_DEFAULTS.renewTotalCount)
-  );
-  const [hasRenewableOptions, setHasRenewableOptions] = useState(
-    profile?.hasRenewableOptions ?? DELCAMPE_PROFILE_DEFAULTS.hasRenewableOptions
-  );
-  const [promotions, setPromotions] = useState<Record<DelcampePromotionKey, boolean>>(() =>
-    Object.fromEntries(
-      DELCAMPE_PROMOTION_OPTIONS.map((option) => [
-        option.key,
-        profile?.[option.key] ?? DELCAMPE_PROFILE_DEFAULTS[option.key],
-      ])
-    ) as Record<DelcampePromotionKey, boolean>
-  );
+}
+
+/**
+ * One profile's fields. **Every one is a named form control** (#1471) — the pane measures what is
+ * unsaved off the form, and the save reads it the same way. The auction group and the bid step are
+ * held in state as well, because each is read back as a sentence while it is typed.
+ */
+function ProfileFields({ profile }: { profile: DelcampeListingProfileData | null }) {
   // Blank until typed, which is what they are stored as: a text field holding "" is the honest
-  // rendering of a figure nobody has stated, and `countValue` reads it back as one.
+  // rendering of a figure nobody has stated, and `optionalCountValue` reads it back as one.
   const [auctionDuration, setAuctionDuration] = useState(
     profile?.auctionDuration == null ? "" : String(profile.auctionDuration)
   );
@@ -402,8 +322,8 @@ function DelcampeProfileDialog({
   );
 
   // The rule read back in the sentence it will be applied by, from the same pure function the export
-  // will call — the collector confirms the *boundary*, which is the part of it nobody has been able
-  // to check against Delcampe.
+  // calls — the collector confirms the *boundary*, which is the part of it nobody has been able to
+  // check against Delcampe.
   const rule = {
     threshold: Number(threshold),
     below: Number(stepBelow),
@@ -436,312 +356,274 @@ function DelcampeProfileDialog({
           auctionEndTime,
         });
 
-  function save() {
-    setError(undefined);
-    const input = {
-      name,
-      shippingModel,
-      renewDuration: countValue(renewDuration),
-      renewTotalCount: countValue(renewTotalCount),
-      hasRenewableOptions,
-      ...promotions,
-      minBidStepThreshold: Number(threshold),
-      minBidStepBelow: Number(stepBelow),
-      minBidStepAtOrAbove: Number(stepAtOrAbove),
-      // A blank auction count is `null` — not stated — rather than a zero. The two of them are the
-      // one group here that is allowed to be empty: a profile that never uploads an auction is the
-      // ordinary case, and the export is where an unstated duration is refused.
-      auctionDuration: optionalCountValue(auctionDuration),
-      auctionRenewTotalCount: optionalCountValue(auctionRenewTotalCount),
-      auctionEndDay,
-      auctionEndTime,
-    };
-    startTransition(async () => {
-      const result = profile
-        ? await updateDelcampeListingProfileAction(profile.id, input)
-        : await createDelcampeListingProfileAction(collectionId, input);
-      if (result.status === "error") setError(result.message);
-      else onSaved(name.trim());
-    });
-  }
-
   return (
-    <DialogShell
-      title={profile ? `Edit ${profile.name}` : "New listing profile"}
-      onClose={onClose}
-      maxWidth="36rem"
-    >
-      <DialogBody>
-        <div style={{ display: "grid", gap: "0.875rem" }}>
+    <Fields>
+      <div>
+        <LabelWithError htmlFor="delcampe-profile-name">Name</LabelWithError>
+        <TextInput
+          id="delcampe-profile-name"
+          name="name"
+          defaultValue={profile?.name ?? ""}
+          placeholder="e.g. Standard letter"
+          autoFocus={!profile}
+          style={INPUT_STYLE}
+          {...NO_AUTOFILL}
+        />
+        <FieldNote>Yours alone — Delcampe never sees it.</FieldNote>
+      </div>
+
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+          <LabelWithError htmlFor="delcampe-profile-shipping-model">Shipping model</LabelWithError>
+          <InfoHint>
+            The upload file carries the model&rsquo;s name and nothing else, and Delcampe&rsquo;s list
+            of models cannot be read from here — so a model renamed on Delcampe makes the upload fail,
+            with nothing this app could have warned you about beforehand.
+          </InfoHint>
+        </div>
+        <TextInput
+          id="delcampe-profile-shipping-model"
+          name="shippingModel"
+          defaultValue={profile?.shippingModel ?? ""}
+          placeholder="e.g. Fee template"
+          style={INPUT_STYLE}
+          {...NO_AUTOFILL}
+        />
+        {/* Kept beside the field: a misspelt name is a rejected upload (#608). */}
+        <FieldNote>
+          Exactly as it reads on Delcampe — renaming it there makes the upload fail.
+        </FieldNote>
+      </div>
+
+      <div>
+        <GroupLabel
+          hint={
+            <>
+              28 days × 99 renewals is shop stock: a listing that stays up until it sells. These are
+              what a quick-buy row carries; an auction takes its own figures below.
+            </>
+          }
+        >
+          Renewal
+        </GroupLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
           <div>
-            <LabelWithError htmlFor="delcampe-profile-name">Name</LabelWithError>
+            <input
+              id="delcampe-profile-renew-duration"
+              name="renewDuration"
+              aria-label="Days per run"
+              type="number"
+              min={1}
+              max={DELCAMPE_RENEW_DURATION_MAX}
+              step={1}
+              defaultValue={String(profile?.renewDuration ?? DELCAMPE_PROFILE_DEFAULTS.renewDuration)}
+              style={INPUT_STYLE}
+            />
+            <FieldNote>Days per run</FieldNote>
+          </div>
+          <div>
+            <input
+              id="delcampe-profile-renew-count"
+              name="renewTotalCount"
+              aria-label="Times it may renew"
+              type="number"
+              min={1}
+              max={DELCAMPE_RENEW_TOTAL_COUNT_MAX}
+              step={1}
+              defaultValue={String(
+                profile?.renewTotalCount ?? DELCAMPE_PROFILE_DEFAULTS.renewTotalCount
+              )}
+              style={INPUT_STYLE}
+            />
+            <FieldNote>Times it may renew</FieldNote>
+          </div>
+        </div>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "0.5rem",
+            marginTop: "0.5rem",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            name="hasRenewableOptions"
+            defaultChecked={
+              profile?.hasRenewableOptions ?? DELCAMPE_PROFILE_DEFAULTS.hasRenewableOptions
+            }
+            style={{ marginTop: "0.15rem", cursor: "pointer" }}
+          />
+          <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
+            Re-buy the paid options on every renewal
+            <FieldNote>Each renewal is charged again. Only with a promotion on.</FieldNote>
+          </span>
+        </label>
+      </div>
+
+      {/* ── Auctions (#620) ─────────────────────────────────────────────────────────────────
+          A second duration group rather than a reinterpretation of the one above, and seeded with
+          nothing: every other default here was observed on a live listing, and there are no
+          auctions to observe. The line under it is the refusal said in advance. */}
+      <div>
+        <GroupLabel
+          hint={
+            <>
+              An auction ends, so it is not shop stock: these replace the renewal figures on any
+              offer recorded as an auction, and nothing is filled in for you. The closing day and
+              hour go into the file exactly as you type them — which spelling Easy Uploader wants was
+              never confirmed. Leave them blank to let Delcampe close the auction when the duration
+              runs out.
+            </>
+          }
+        >
+          Auctions
+        </GroupLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+          <div>
+            <input
+              id="delcampe-profile-auction-duration"
+              name="auctionDuration"
+              aria-label="Days the auction runs"
+              type="number"
+              min={1}
+              max={DELCAMPE_RENEW_DURATION_MAX}
+              step={1}
+              value={auctionDuration}
+              onChange={(e) => setAuctionDuration(e.target.value)}
+              placeholder="—"
+              style={INPUT_STYLE}
+            />
+            <FieldNote>Days the auction runs</FieldNote>
+          </div>
+          <div>
+            <input
+              id="delcampe-profile-auction-renew-count"
+              name="auctionRenewTotalCount"
+              aria-label="Times it may run again"
+              type="number"
+              min={1}
+              max={DELCAMPE_RENEW_TOTAL_COUNT_MAX}
+              step={1}
+              value={auctionRenewTotalCount}
+              onChange={(e) => setAuctionRenewTotalCount(e.target.value)}
+              placeholder="—"
+              style={INPUT_STYLE}
+            />
+            <FieldNote>Times it may run again</FieldNote>
+          </div>
+          <div>
             <TextInput
-              id="delcampe-profile-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Standard letter"
-              data-autofocus-select
+              id="delcampe-profile-auction-end-day"
+              name="auctionEndDay"
+              aria-label="Closing day"
+              value={auctionEndDay}
+              onChange={(e) => setAuctionEndDay(e.target.value)}
+              placeholder="e.g. Sunday"
               style={INPUT_STYLE}
               {...NO_AUTOFILL}
             />
-            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
-              Yours alone — Delcampe never sees it. It is how you pick this profile on an offer.
-            </p>
+            <FieldNote>
+              Closing day (<code>sale_end_day</code>)
+            </FieldNote>
           </div>
-
           <div>
-            <LabelWithError htmlFor="delcampe-profile-shipping-model">Shipping model</LabelWithError>
             <TextInput
-              id="delcampe-profile-shipping-model"
-              value={shippingModel}
-              onChange={(e) => setShippingModel(e.target.value)}
-              placeholder="e.g. Fee template"
+              id="delcampe-profile-auction-end-time"
+              name="auctionEndTime"
+              aria-label="Closing hour"
+              value={auctionEndTime}
+              onChange={(e) => setAuctionEndTime(e.target.value)}
+              placeholder="e.g. 20:00"
               style={INPUT_STYLE}
               {...NO_AUTOFILL}
             />
-            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
-              Type the model&rsquo;s name <strong>exactly as it reads on Delcampe</strong>. The
-              upload file carries the name itself and nothing else, and Delcampe&rsquo;s list of
-              models cannot be read from here — so renaming one there makes the upload fail, with
-              nothing this app could have warned you about beforehand.
-            </p>
+            <FieldNote>
+              Closing hour (<code>sale_end_time</code>)
+            </FieldNote>
           </div>
+        </div>
+        <FieldNote>{auctionPreview}</FieldNote>
+      </div>
 
-          <div>
-            <LabelWithError>Renewal</LabelWithError>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-              <div>
-                <input
-                  id="delcampe-profile-renew-duration"
-                  type="number"
-                  min={1}
-                  max={DELCAMPE_RENEW_DURATION_MAX}
-                  step={1}
-                  value={renewDuration}
-                  onChange={(e) => setRenewDuration(e.target.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Days per run</p>
-              </div>
-              <div>
-                <input
-                  id="delcampe-profile-renew-count"
-                  type="number"
-                  min={1}
-                  max={DELCAMPE_RENEW_TOTAL_COUNT_MAX}
-                  step={1}
-                  value={renewTotalCount}
-                  onChange={(e) => setRenewTotalCount(e.target.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Times it may renew</p>
-              </div>
-            </div>
+      <div>
+        <GroupLabel hint="Each of these costs money on Delcampe, and the upload file states a yes or a no for every one. All are off unless you turn them on.">
+          Paid promotions
+        </GroupLabel>
+        <div style={{ display: "grid", gap: "0.25rem" }}>
+          {DELCAMPE_PROMOTION_OPTIONS.map((option) => (
             <label
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "0.5rem",
-                marginTop: "0.5rem",
-                cursor: "pointer",
-              }}
+              key={option.key}
+              style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
             >
               <input
                 type="checkbox"
-                checked={hasRenewableOptions}
-                onChange={(e) => setHasRenewableOptions(e.target.checked)}
-                disabled={isPending}
-                style={{ marginTop: "0.2rem", cursor: "pointer" }}
+                name={option.key}
+                defaultChecked={profile?.[option.key] ?? DELCAMPE_PROFILE_DEFAULTS[option.key]}
+                style={{ cursor: "pointer" }}
               />
-              <span style={{ fontSize: "0.875rem" }}>
-                Re-buy the paid options on every renewal
-                <span style={{ ...helpTextStyle, display: "block" }}>
-                  Only meaningful while one of the promotions below is on — each renewal is charged
-                  again.
-                </span>
+              <span style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
+                {option.label}
               </span>
             </label>
-            <p style={{ ...helpTextStyle, marginTop: "0.375rem" }}>
-              28 days × 99 renewals is shop stock: a listing that stays up until it sells. These two
-              are what a <strong>quick-buy</strong> row carries; an auction takes its own figures
-              below.
-            </p>
-          </div>
+          ))}
+        </div>
+      </div>
 
-          {/* ── Auctions (#620) ─────────────────────────────────────────────────────────────
-              A second duration group rather than a reinterpretation of the one above, and seeded
-              with nothing: every other default on this screen was observed on a live listing, and
-              there are no auctions to observe. An offer recorded as an auction is refused at export
-              until these are filled in, which is said here so the refusal is not a surprise. */}
-          <div>
-            <LabelWithError>Auctions</LabelWithError>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-              <div>
-                <input
-                  id="delcampe-profile-auction-duration"
-                  type="number"
-                  min={1}
-                  max={DELCAMPE_RENEW_DURATION_MAX}
-                  step={1}
-                  value={auctionDuration}
-                  onChange={(e) => setAuctionDuration(e.target.value)}
-                  disabled={isPending}
-                  placeholder="—"
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Days the auction runs</p>
-              </div>
-              <div>
-                <input
-                  id="delcampe-profile-auction-renew-count"
-                  type="number"
-                  min={1}
-                  max={DELCAMPE_RENEW_TOTAL_COUNT_MAX}
-                  step={1}
-                  value={auctionRenewTotalCount}
-                  onChange={(e) => setAuctionRenewTotalCount(e.target.value)}
-                  disabled={isPending}
-                  placeholder="—"
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Times it may run again</p>
-              </div>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "0.5rem",
-                marginTop: "0.5rem",
-              }}
-            >
-              <div>
-                <TextInput
-                  id="delcampe-profile-auction-end-day"
-                  value={auctionEndDay}
-                  onChange={(e) => setAuctionEndDay(e.target.value)}
-                  disabled={isPending}
-                  placeholder="e.g. Sunday"
-                  style={INPUT_STYLE}
-                  {...NO_AUTOFILL}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
-                  Closing day (<code>sale_end_day</code>)
-                </p>
-              </div>
-              <div>
-                <TextInput
-                  id="delcampe-profile-auction-end-time"
-                  value={auctionEndTime}
-                  onChange={(e) => setAuctionEndTime(e.target.value)}
-                  disabled={isPending}
-                  placeholder="e.g. 20:00"
-                  style={INPUT_STYLE}
-                  {...NO_AUTOFILL}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
-                  Closing hour (<code>sale_end_time</code>)
-                </p>
-              </div>
-            </div>
-            <p style={{ ...helpTextStyle, marginTop: "0.375rem" }}>{auctionPreview}</p>
-            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
-              An auction ends, so it is not shop stock: these two counts replace the renewal ones
-              above on any offer you have recorded as an auction, and nothing is filled in for you —
-              how long your auctions run is yours to state, and an auction offer is refused at export
-              until it is. The closing day and hour go into the file{" "}
-              <strong>exactly as you type them</strong>: which spelling Easy Uploader wants was never
-              confirmed, so put in what your own listings use and correct it if an upload disagrees.
-              Leave them blank to let Delcampe close the auction when the duration runs out.
-            </p>
-          </div>
-
-          <div>
-            <LabelWithError>Paid promotions</LabelWithError>
-            <div style={{ display: "grid", gap: "0.25rem" }}>
-              {DELCAMPE_PROMOTION_OPTIONS.map((option) => (
-                <label
-                  key={option.key}
-                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={promotions[option.key]}
-                    onChange={(e) =>
-                      setPromotions((current) => ({ ...current, [option.key]: e.target.checked }))
-                    }
-                    disabled={isPending}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <span style={{ fontSize: "0.875rem" }}>{option.label}</span>
-                </label>
-              ))}
-            </div>
-            <p style={{ ...helpTextStyle, marginTop: "0.375rem" }}>
-              Every one of these costs money on Delcampe, and the upload file states a yes or a no
-              for each. They are off unless you say otherwise.
-            </p>
-          </div>
-
-          <div>
-            <LabelWithError>Minimum bid step</LabelWithError>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
-              <div>
-                <NumericInput
-                  kind="amount"
-                  id="delcampe-profile-step-below"
-                  value={stepBelow}
-                  onChange={(e) => setStepBelow(e.currentTarget.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Below the threshold</p>
-              </div>
-              <div>
-                <NumericInput
-                  kind="amount"
-                  id="delcampe-profile-threshold"
-                  value={threshold}
-                  onChange={(e) => setThreshold(e.currentTarget.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>Threshold price</p>
-              </div>
-              <div>
-                <NumericInput
-                  kind="amount"
-                  id="delcampe-profile-step-above"
-                  value={stepAtOrAbove}
-                  onChange={(e) => setStepAtOrAbove(e.currentTarget.value)}
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>At or above it</p>
-              </div>
-            </div>
-            {rulePreview && (
-              <p style={{ ...helpTextStyle, marginTop: "0.375rem" }}>{rulePreview}</p>
-            )}
-            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
+      <div>
+        <GroupLabel
+          hint={
+            <>
               Delcampe&rsquo;s listings state a bid step that changes with the price — 0.01 on cheap
               items, 0.10 on dearer ones. Where exactly it changes was never confirmed, so it is a
-              setting: correct it here the moment you see a listing disagree. In the
-              platform&rsquo;s currency.
-            </p>
+              setting: correct it the moment you see a listing disagree. A listing priced exactly at
+              the threshold takes the larger step. In the platform&rsquo;s currency.
+            </>
+          }
+        >
+          Minimum bid step
+        </GroupLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
+          <div>
+            <NumericInput
+              kind="amount"
+              id="delcampe-profile-step-below"
+              name="minBidStepBelow"
+              aria-label="Below the threshold"
+              value={stepBelow}
+              onChange={(e) => setStepBelow(e.currentTarget.value)}
+              style={INPUT_STYLE}
+            />
+            <FieldNote>Below the threshold</FieldNote>
+          </div>
+          <div>
+            <NumericInput
+              kind="amount"
+              id="delcampe-profile-threshold"
+              name="minBidStepThreshold"
+              aria-label="Threshold price"
+              value={threshold}
+              onChange={(e) => setThreshold(e.currentTarget.value)}
+              style={INPUT_STYLE}
+            />
+            <FieldNote>Threshold price</FieldNote>
+          </div>
+          <div>
+            <NumericInput
+              kind="amount"
+              id="delcampe-profile-step-above"
+              name="minBidStepAtOrAbove"
+              aria-label="At or above it"
+              value={stepAtOrAbove}
+              onChange={(e) => setStepAtOrAbove(e.currentTarget.value)}
+              style={INPUT_STYLE}
+            />
+            <FieldNote>At or above it</FieldNote>
           </div>
         </div>
-      </DialogBody>
-      <DialogActions
-        actionLabel={profile ? "Save" : "Create profile"}
-        disabled={isPending || !name.trim() || !shippingModel.trim()}
-        cancelDisabled={isPending}
-        error={error}
-        onCancel={onClose}
-        onAction={save}
-      />
-    </DialogShell>
+        {rulePreview && <FieldNote>{rulePreview}</FieldNote>}
+      </div>
+    </Fields>
   );
 }

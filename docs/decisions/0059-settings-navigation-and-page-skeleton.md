@@ -9,7 +9,7 @@ are built by the pages' own issues — #1471 (list beside detail), #1474 (list b
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
 dictionaries (#1471) and every other dictionary (#1476), list beside preview carries Album, Collage and Ref card templates (#1474, #1477, #1478), and the grid of fields
 carries the plain forms (#1473); what each settled is in §5. The summary strip is built and carries
-the Allegro page (#1475, §4).
+the Allegro page (#1475, §4) and the Delcampe page (#1479).
 
 ## Context
 
@@ -75,6 +75,9 @@ Allegro's tabs use the existing shapes rather than a fourth: Account is two card
 Listing profiles is list beside detail, and Categories is the list without the detail, twice — the
 two registers publishing fills, side by side — since a learned row has no fields for a pane to edit,
 only a re-point and a forget from its ⋮.
+Delcampe (#1479) is the same with two tabs, Listing profiles and Categories, and no tile flagged —
+there is no connection to lose; its Categories tab is the one register beside a card stating
+Delcampe's published list, for the same reason.
 
 *Rejected:* a shared header only, and each page designed on its own.
 
