@@ -52,7 +52,9 @@ Every connection is a **token**, and **Settings → Assistant & API** lists them
 created for itself when you connected it, and any you made by hand. Revoking one cuts off whatever
 is using it, immediately.
 
-Each row carries two chips, and they answer different questions. Hover either for a sentence.
+Each row carries two chips, and they answer different questions. Select the row and its details,
+beside the list, say each one in a sentence — with when the token was made, when it was last used,
+and **Revoke**.
 
 **What it is for** — *Extension* or *Agent*. This is a label, so you can tell one line of the list
 from another; it does not change what the token may do.
@@ -70,8 +72,8 @@ from another; it does not change what the token may do.
 show your collection to without letting it touch anything.
 
 To make a token by hand — for a script, an agent, or a browser without the Assistant — choose
-**Generate token by hand** and pick both. The token is shown **only once**: copy it then, and if you
-lose it, revoke it and make another.
+**Generate token** at the top right of the page and pick both. The token is shown **only once**, in a
+window of its own: copy it then, and if you lose it, revoke it and make another.
 
 **To hand this collection to an AI assistant**, that is the token you want, and
 [Connecting an AI assistant](agent-api.md) is the rest of it: where to point the client, and what

@@ -2,13 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  DialogShell,
-  DialogBody,
-  DialogActions,
-  LabelWithError,
-  ConfirmDialog,
-} from "@/app/dialog-shell";
+import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import {
   createAssistantRegistrationAction,
   createAssistantTokenAction,
@@ -25,11 +19,27 @@ import {
   type AssistantTokenKind,
   type AssistantTokenScope,
 } from "@/lib/assistant-token-scope";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import {
+  AddRowAction,
+  DetailCard,
+  DetailFacts,
+  DetailForm,
+  DetailPlaceholder,
+  FieldNote,
+  Fields,
+  INPUT_STYLE,
+  InfoHint,
+  ListDetail,
+  ListPane,
+  ListRow,
+  ListRows,
+  RowName,
+  countLabel,
+  useListSelection,
+} from "./list-detail";
 
 // Settings → Assistant & API (#252, part of #155). Two ways to connect the browser extension to this
 // instance + collection:
@@ -57,26 +67,6 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /** The element id the extension looks for. Part of the contract — see `extension/src/core/registration.ts`. */
 const PAYLOAD_ELEMENT_ID = "stamporama-assistant-registration";
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%",
-  padding: "0.5rem 0.75rem",
-  border: "1px solid var(--color-border-strong)",
-  borderRadius: "0.375rem",
-  fontSize: "0.875rem",
-  color: "var(--color-text-primary)",
-  background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
-};
-
-const FORM_STYLE: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  flex: 1,
-  minHeight: 0,
-  overflow: "hidden",
-};
 
 const primaryButtonStyle: React.CSSProperties = {
   padding: "0.5rem 1rem",
@@ -117,9 +107,9 @@ function tokenChipStyle(tone: "neutral" | "warning" | "info"): React.CSSProperti
 }
 
 /**
- * What the by-hand dialog offers first. A token minted here is nearly always for something that
+ * What the by-hand form offers first. A token minted here is nearly always for something that
  * cannot register itself — a script, or an agent — and the extension has its own one-click path
- * above, so `agent` is the honest default for this dialog rather than a preference.
+ * above, so `agent` is the honest default for this form rather than a preference.
  */
 const DEFAULT_TOKEN_KIND: AssistantTokenKind = "agent";
 
@@ -147,12 +137,6 @@ interface AssistantPanelProps {
   initialTokens: AssistantTokenData[];
 }
 
-type DialogState =
-  | { kind: "none" }
-  | { kind: "gen-token" }
-  | { kind: "show-token"; token: string }
-  | { kind: "revoke-token"; token: AssistantTokenData };
-
 /** What the page hands the extension. Mirrored in `extension/src/core/registration.ts`. */
 interface RegistrationPayload {
   v: 1;
@@ -172,16 +156,18 @@ export function AssistantPanel({
   initialTokens,
 }: AssistantPanelProps) {
   const router = useRouter();
-  const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
-  const [actionState, setActionState] = useState<AssistantActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
-  const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+  // A generated token's value, shown once in its own window (#253) and then gone.
+  const [shownToken, setShownToken] = useState<string | null>(null);
 
   const [payload, setPayload] = useState<RegistrationPayload | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
   const [extStatus, setExtStatus] = useState<ExtensionStatus>(null);
   const payloadRef = useRef<HTMLDivElement | null>(null);
+
+  const sel = useListSelection(initialTokens);
+  const current = sel.adding ? null : sel.current;
 
   // Watch the payload element for the extension's verdict. Re-installed whenever a new code is
   // minted, because that replaces the node the previous observer was watching.
@@ -226,56 +212,30 @@ export function AssistantPanel({
     });
   }
 
-  function openDialog(d: DialogState) {
-    setActionState({ status: "idle" });
-    setDialog(d);
+  async function generate(fd: FormData): Promise<AssistantActionState> {
+    const result = await createAssistantTokenAction(collectionId, fd);
+    if (result.status === "success") {
+      setShownToken(result.token);
+      return { status: "success" };
+    }
+    if (result.status === "error") return result;
+    return { status: "error", message: "Failed to generate token. Please try again." };
   }
-
-  function closeDialog() {
-    if (!isPending) setDialog({ kind: "none" });
-  }
-
-  function submitGenerateToken(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    startTransition(async () => {
-      const result = await createAssistantTokenAction(collectionId, fd);
-      if (result.status === "success") {
-        setActionState({ status: "idle" });
-        setCopied(false);
-        setDialog({ kind: "show-token", token: result.token });
-        router.refresh();
-      } else if (result.status === "error") {
-        setActionState({ status: "error", message: result.message });
-      }
-    });
-  }
-
-  function submitRevokeToken(tokenId: string) {
-    startTransition(async () => {
-      const result = await revokeAssistantTokenAction(collectionId, tokenId);
-      setActionState(result);
-      if (result.status === "success") {
-        setDialog({ kind: "none" });
-        router.refresh();
-      }
-    });
-  }
-
-  const error = actionState.status === "error" ? actionState.message : undefined;
 
   return (
     <>
       {/* ── Register the extension (#252) ── */}
 
       <section>
-        <h2 style={sectionHeadingStyle}>Connect Stamporama Assistant</h2>
-        <p style={{ ...helpTextStyle, marginBottom: "1rem" }}>
-          The <strong>Stamporama Assistant</strong> browser extension matches marketplace catalog
-          pages against your stamps. Connect it from here and it learns this instance and this
-          collection by itself — there is no URL, id, or token to type. Registering again replaces
-          the connection with a fresh token, which is how you recover one you revoked or lost.
-        </p>
+        <h2 style={sectionHeadingStyle}>
+          Connect Stamporama Assistant
+          <InfoHint>
+            The Stamporama Assistant browser extension matches marketplace catalog pages against
+            your stamps. Connected from here, it learns this instance and this collection by itself —
+            there is no URL, id or token to type. Connecting again replaces the connection with a
+            fresh token, which is how you recover one you revoked or lost.
+          </InfoHint>
+        </h2>
 
         <div style={{ marginBottom: "1rem" }}>
           <button type="button" onClick={startRegistration} disabled={isPending} style={primaryButtonStyle}>
@@ -331,24 +291,26 @@ export function AssistantPanel({
         )}
       </section>
 
-      {/* ── Tokens (#253) ── */}
+      {/* ── Tokens (#253), a list beside the selected token's details (#1476) ── */}
 
       <section style={{ marginTop: "2.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
-        <h2 style={sectionHeadingStyle}>Assistant tokens</h2>
-        <p style={{ ...helpTextStyle, marginBottom: "1rem" }}>
-          Every connection — registered or generated — is a token listed here, and revoking one cuts
-          that extension off immediately. You only need to generate one by hand for something that
-          cannot register itself, such as a script or a browser without the extension; the token is
-          shown <strong>only once</strong>.
-        </p>
+        <h2 style={sectionHeadingStyle}>
+          Assistant tokens
+          <InfoHint>
+            Every connection — registered or generated — is a token listed here, and revoking one
+            cuts that client off immediately. Generate one by hand only for something that cannot
+            connect itself, such as a script or an AI agent; its value is shown only once.
+          </InfoHint>
+        </h2>
 
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "0.75rem",
+            maxWidth: "40rem",
             padding: "0.6rem 0.75rem",
-            marginBottom: "1rem",
+            marginBottom: "1.25rem",
             background: "var(--color-bg-page)",
             border: "1px solid var(--color-border)",
             borderRadius: "0.5rem",
@@ -400,214 +362,242 @@ export function AssistantPanel({
           </button>
         </div>
 
-        <div style={{ marginBottom: "1rem" }}>
-          <button
-            type="button"
-            onClick={() => openDialog({ kind: "gen-token" })}
-            style={{
-              padding: "0.5rem 1rem",
-              background: "var(--color-bg-elevated)",
-              color: "var(--color-text-primary)",
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "0.375rem",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
-          >
-            + Generate token by hand
-          </button>
-        </div>
-
-        {initialTokens.length === 0 ? (
-          <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>No tokens yet.</p>
-        ) : (
-          <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.75rem", overflow: "hidden" }}>
-            {initialTokens.map((token, i) => (
-              <div
-                key={token.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  background: "var(--color-bg-elevated)",
-                  borderBottom: i < initialTokens.length - 1 ? "1px solid var(--color-border)" : "none",
+        <AddRowAction label="Generate token" onAdd={() => sel.startAdding()} />
+        <ListDetail
+          list={
+            <ListPane
+              caption={countLabel(initialTokens.length, "token", "tokens")}
+              empty={initialTokens.length === 0 && "No tokens yet."}
+            >
+              <ListRows label="Assistant tokens">
+                {initialTokens.map((token) => (
+                  <ListRow
+                    key={token.id}
+                    selected={current?.id === token.id}
+                    onSelect={() => sel.select(token.id)}
+                  >
+                    <RowName>{tokenName(token)}</RowName>
+                    <span style={tokenChipStyle("neutral")}>
+                      {ASSISTANT_TOKEN_KIND_LABELS[token.kind]}
+                    </span>
+                    <span style={tokenChipStyle(token.scope === "read_write" ? "warning" : "info")}>
+                      {ASSISTANT_TOKEN_SCOPE_LABELS[token.scope]}
+                    </span>
+                  </ListRow>
+                ))}
+              </ListRows>
+            </ListPane>
+          }
+          detail={
+            sel.adding ? (
+              <DetailForm
+                key="new"
+                title="New token"
+                isNew
+                saveLabel="Generate"
+                savingLabel="Generating…"
+                onSave={generate}
+                onSaved={() => {
+                  sel.expectCreated();
+                  router.refresh();
+                }}
+                onCancelNew={sel.cancelAdding}
+              >
+                <NewTokenFields />
+              </DetailForm>
+            ) : current ? (
+              <DetailCard
+                key={current.id}
+                title={tokenName(current)}
+                remove={{
+                  title: "Revoke Assistant token",
+                  label: "Revoke",
+                  pendingLabel: "Revoking…",
+                  message: (
+                    <>
+                      Revoke <strong>{current.label || "this token"}</strong>? Anything using it will
+                      stop working. This cannot be undone.
+                    </>
+                  ),
+                  run: () => revokeAssistantTokenAction(collectionId, current.id),
+                  onDone: () => {
+                    sel.cleared();
+                    router.refresh();
+                  },
                 }}
               >
-                <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                  {token.label || <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>Unlabelled token</span>}
-                  <span style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.4rem", fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 400, marginTop: "0.3rem" }}>
-                    <Tooltip content={KIND_HINTS[token.kind]}>
-                      <span style={tokenChipStyle("neutral")}>
-                        {ASSISTANT_TOKEN_KIND_LABELS[token.kind]}
-                      </span>
-                    </Tooltip>
-                    <Tooltip content={SCOPE_HINTS[token.scope]}>
-                      <span style={tokenChipStyle(token.scope === "read_write" ? "warning" : "info")}>
-                        {ASSISTANT_TOKEN_SCOPE_LABELS[token.scope]}
-                      </span>
-                    </Tooltip>
-                    <span>
-                      {/* ISO date slice (UTC) — locale/timezone formatting mismatches between SSR
-                          and the client and breaks hydration near midnight. */}
-                      Created {token.createdAt.slice(0, 10)}
-                      {token.lastUsedAt ? ` · last used ${token.lastUsedAt.slice(0, 10)}` : " · never used"}
-                    </span>
-                  </span>
-                </span>
-                <RowActionsMenu
-                  ariaLabel="Token actions"
-                  actions={[
+                <DetailFacts
+                  rows={[
                     {
-                      key: "revoke",
-                      label: "Revoke",
-                      icon: "delete",
-                      danger: true,
-                      onSelect: () => openDialog({ kind: "revoke-token", token }),
+                      label: "For",
+                      value: (
+                        <>
+                          <span style={tokenChipStyle("neutral")}>
+                            {ASSISTANT_TOKEN_KIND_LABELS[current.kind]}
+                          </span>{" "}
+                          <span style={{ color: "var(--color-text-muted)" }}>
+                            {KIND_HINTS[current.kind]}
+                          </span>
+                        </>
+                      ),
+                    },
+                    {
+                      label: "May",
+                      value: (
+                        <>
+                          <span
+                            style={tokenChipStyle(current.scope === "read_write" ? "warning" : "info")}
+                          >
+                            {ASSISTANT_TOKEN_SCOPE_LABELS[current.scope]}
+                          </span>{" "}
+                          <span style={{ color: "var(--color-text-muted)" }}>
+                            {SCOPE_HINTS[current.scope]}
+                          </span>
+                        </>
+                      ),
+                    },
+                    // ISO date slice (UTC) — locale/timezone formatting mismatches between SSR and
+                    // the client and breaks hydration near midnight.
+                    { label: "Created", value: current.createdAt.slice(0, 10) },
+                    {
+                      label: "Last used",
+                      value: current.lastUsedAt ? current.lastUsedAt.slice(0, 10) : "Never",
                     },
                   ]}
                 />
-              </div>
-            ))}
-          </div>
-        )}
+              </DetailCard>
+            ) : (
+              <DetailPlaceholder>
+                No tokens yet. Connect the extension above, or generate one for a script or an agent.
+              </DetailPlaceholder>
+            )
+          }
+        />
       </section>
 
-      {/* ── Dialogs ── */}
-
-      {dialog.kind === "gen-token" && (
-        <DialogShell title="Generate Assistant token" onClose={closeDialog}>
-          <form style={FORM_STYLE} onSubmit={submitGenerateToken}>
-            <DialogBody>
-              <div>
-                <LabelWithError htmlFor="f-token-label">Label (optional)</LabelWithError>
-                <TextInput
-                  id="f-token-label"
-                  name="label"
-                  disabled={isPending}
-                  placeholder="e.g. Raspberry Pi, dev laptop"
-                  {...NO_AUTOFILL}
-                  style={INPUT_STYLE}
-                />
-                <p style={{ ...helpTextStyle, marginTop: "0.5rem" }}>
-                  A name to recognise this token later. Treat the token itself like a password.
-                </p>
-              </div>
-
-              <div style={{ marginTop: "1.25rem" }}>
-                <LabelWithError htmlFor="f-token-kind">What is it for?</LabelWithError>
-                <select
-                  id="f-token-kind"
-                  name="kind"
-                  defaultValue={DEFAULT_TOKEN_KIND}
-                  disabled={isPending}
-                  style={SELECT_STYLE}
-                >
-                  {ASSISTANT_TOKEN_KINDS.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {ASSISTANT_TOKEN_KIND_LABELS[kind]}
-                    </option>
-                  ))}
-                </select>
-                <p style={{ ...helpTextStyle, marginTop: "0.5rem" }}>
-                  A label, so you can tell one line of this list from another. It does not change
-                  what the token may do &mdash; that is the next question. The extension normally
-                  connects itself with <em>Connect Stamporama Assistant</em> above.
-                </p>
-              </div>
-
-              <div style={{ marginTop: "1.25rem" }}>
-                <LabelWithError htmlFor="f-token-scope">What may it do?</LabelWithError>
-                <select
-                  id="f-token-scope"
-                  name="scope"
-                  defaultValue={WIDEST_ASSISTANT_TOKEN_SCOPE}
-                  disabled={isPending}
-                  style={SELECT_STYLE}
-                >
-                  {ASSISTANT_TOKEN_SCOPES.map((scope) => (
-                    <option key={scope} value={scope}>
-                      {ASSISTANT_TOKEN_SCOPE_LABELS[scope]}
-                    </option>
-                  ))}
-                </select>
-                <p style={{ ...helpTextStyle, marginTop: "0.5rem" }}>
-                  <strong>Read only</strong> is the one to hand to something you are still trying
-                  out: it can look at this collection and nothing more, and anything that would
-                  change something is refused. <strong>Read and write</strong> is what the extension
-                  needs, and what a token had before this choice existed.
-                </p>
-              </div>
-            </DialogBody>
-            <DialogActions actionLabel={isPending ? "Generating…" : "Generate"} onCancel={closeDialog} disabled={isPending} error={error} />
-          </form>
-        </DialogShell>
-      )}
-
-      {dialog.kind === "show-token" && (
-        <DialogShell title="Copy your Assistant token" onClose={closeDialog}>
-          <DialogBody>
-            <p style={{ color: "var(--color-text-muted)", fontSize: "0.875rem", marginBottom: "0.75rem", lineHeight: 1.5 }}>
-              This is shown <strong>only once</strong>. Copy it now; if you lose it, revoke it and
-              generate a new one.
-            </p>
-            <code
-              style={{
-                display: "block",
-                padding: "0.75rem",
-                background: "var(--color-bg-page)",
-                border: "1px solid var(--color-border-strong)",
-                borderRadius: "0.375rem",
-                fontSize: "0.8125rem",
-                wordBreak: "break-all",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              {dialog.token}
-            </code>
-            <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard?.writeText(dialog.token).then(
-                    () => setCopied(true),
-                    () => setCopied(false)
-                  );
-                }}
-                style={{ ...primaryButtonStyle, padding: "0.4rem 0.9rem", fontSize: "0.8125rem" }}
-              >
-                Copy
-              </button>
-              {copied && <span style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>Copied <Icon name="check" size="xs" /></span>}
-            </div>
-          </DialogBody>
-          <DialogActions actionLabel="Done" onCancel={closeDialog} onAction={closeDialog} disabled={isPending} />
-        </DialogShell>
-      )}
-
-      {dialog.kind === "revoke-token" && (
-        <ConfirmDialog
-          title="Revoke Assistant token"
-          message={
-            <>
-              Revoke <strong>{dialog.token.label || "this token"}</strong>? Any extension using it will
-              stop working. This cannot be undone.
-            </>
-          }
-          actionLabel="Revoke"
-          pendingLabel="Revoking…"
-          onClose={closeDialog}
-          onConfirm={() => submitRevokeToken(dialog.token.id)}
-          isPending={isPending}
-          error={error}
-        />
-      )}
+      {shownToken && <ShowTokenDialog token={shownToken} onClose={() => setShownToken(null)} />}
     </>
   );
 }
 
+function tokenName(token: AssistantTokenData): string {
+  return token.label || "Unlabelled token";
+}
+
+/** What is asked when a token is generated by hand: a label, what it is for, and how far it reaches. */
+function NewTokenFields() {
+  return (
+    <Fields>
+      <div>
+        <LabelWithError htmlFor="f-token-label">Label (optional)</LabelWithError>
+        <TextInput
+          id="f-token-label"
+          name="label"
+          placeholder="e.g. Raspberry Pi, dev laptop"
+          autoFocus
+          {...NO_AUTOFILL}
+          style={INPUT_STYLE}
+        />
+        <FieldNote>A name to recognise it by. Treat the token itself like a password.</FieldNote>
+      </div>
+
+      <div>
+        <LabelWithError htmlFor="f-token-kind">
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+            What is it for?
+            <InfoHint>
+              A label, so you can tell one line of this list from another. It does not change what
+              the token may do — that is the next question. The extension normally connects itself
+              with Connect Stamporama Assistant above.
+            </InfoHint>
+          </span>
+        </LabelWithError>
+        <select id="f-token-kind" name="kind" defaultValue={DEFAULT_TOKEN_KIND} style={SELECT_STYLE}>
+          {ASSISTANT_TOKEN_KINDS.map((kind) => (
+            <option key={kind} value={kind}>
+              {ASSISTANT_TOKEN_KIND_LABELS[kind]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <LabelWithError htmlFor="f-token-scope">
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+            What may it do?
+            <InfoHint>
+              Read only is the one to hand to something you are still trying out: it can look at
+              this collection and nothing more, and anything that would change something is refused.
+              Read and write is what the extension needs.
+            </InfoHint>
+          </span>
+        </LabelWithError>
+        <select
+          id="f-token-scope"
+          name="scope"
+          defaultValue={WIDEST_ASSISTANT_TOKEN_SCOPE}
+          style={SELECT_STYLE}
+        >
+          {ASSISTANT_TOKEN_SCOPES.map((scope) => (
+            <option key={scope} value={scope}>
+              {ASSISTANT_TOKEN_SCOPE_LABELS[scope]}
+            </option>
+          ))}
+        </select>
+      </div>
+    </Fields>
+  );
+}
+
+/** A new token's value, **shown once**, in its own window (#253): nothing stores it to show again. */
+function ShowTokenDialog({ token, onClose }: { token: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <DialogShell title="Copy your Assistant token" onClose={onClose}>
+      <DialogBody>
+        <p style={{ color: "var(--color-text-muted)", fontSize: "0.875rem", marginBottom: "0.75rem", lineHeight: 1.5 }}>
+          This is shown <strong>only once</strong>. Copy it now; if you lose it, revoke it and
+          generate a new one.
+        </p>
+        <code
+          style={{
+            display: "block",
+            padding: "0.75rem",
+            background: "var(--color-bg-page)",
+            border: "1px solid var(--color-border-strong)",
+            borderRadius: "0.375rem",
+            fontSize: "0.8125rem",
+            wordBreak: "break-all",
+            color: "var(--color-text-primary)",
+          }}
+        >
+          {token}
+        </code>
+        <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(token).then(
+                () => setCopied(true),
+                () => setCopied(false)
+              );
+            }}
+            style={{ ...primaryButtonStyle, padding: "0.4rem 0.9rem", fontSize: "0.8125rem" }}
+          >
+            Copy
+          </button>
+          {copied && <span style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>Copied <Icon name="check" size="xs" /></span>}
+        </div>
+      </DialogBody>
+      <DialogActions actionLabel="Done" onCancel={onClose} onAction={onClose} />
+    </DialogShell>
+  );
+}
+
 const sectionHeadingStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.375rem",
   fontSize: "1rem",
   fontWeight: 600,
   color: "var(--color-text-primary)",

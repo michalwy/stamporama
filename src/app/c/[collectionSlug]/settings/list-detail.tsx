@@ -520,6 +520,135 @@ function serializeForm(form: HTMLFormElement): string {
   );
 }
 
+/** How a row is taken out of the list: the pane's destructive action and the question before it. */
+export interface RemoveRow {
+  title: string;
+  message: ReactNode;
+  run: () => Promise<ActionResult>;
+  onDone: () => void;
+  /** The verb on the button and the dialog — *Delete*, unless a row ends another way (a token is
+   *  revoked). */
+  label?: string;
+  pendingLabel?: string;
+  /** Why the row cannot go yet (a scanner still in use): the button is shown, disabled, with this
+   *  as its tooltip — the refusal is visible before anything is clicked. */
+  disabledHint?: string;
+}
+
+/** The pane's header: where the row sits, its name, and a secondary action at the right. */
+function DetailHeader({
+  title,
+  context,
+  headerAction,
+}: {
+  title: ReactNode;
+  context?: ReactNode;
+  headerAction?: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: "1rem",
+        padding: "1rem 1.5rem",
+        borderBottom: "1px solid var(--color-border)",
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        {context && (
+          <p style={{ margin: "0 0 0.125rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+            {context}
+          </p>
+        )}
+        <h3
+          style={{
+            margin: 0,
+            fontSize: "1rem",
+            fontWeight: 600,
+            color: "var(--color-text-primary)",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {title}
+        </h3>
+      </div>
+      {headerAction && <div style={{ flexShrink: 0 }}>{headerAction}</div>}
+    </div>
+  );
+}
+
+/**
+ * The pane's destructive button and its confirmation. The confirmation **portals to `<body>`**: the
+ * pane is sticky, which makes it a stacking context of its own, and a dialog left inside it would
+ * rank only within the pane — the app's header painting over it.
+ */
+function RemoveButton({
+  remove,
+  disabled,
+  onRemoved,
+}: {
+  remove: RemoveRow;
+  disabled: boolean;
+  /** Before the page moves on: the pane that goes takes its unsaved flag with it. */
+  onRemoved?: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const label = remove.label ?? "Delete";
+
+  function confirm() {
+    setError(null);
+    startTransition(async () => {
+      const result = await remove.run();
+      if (result.status !== "success") {
+        setError(result.message ?? `Could not ${label.toLowerCase()}.`);
+        return;
+      }
+      setConfirming(false);
+      onRemoved?.();
+      remove.onDone();
+    });
+  }
+
+  const button = (
+    <DialogDestructiveButton
+      onClick={() => {
+        setError(null);
+        setConfirming(true);
+      }}
+      disabled={disabled || isPending || !!remove.disabledHint}
+    >
+      <Icon name="delete" size="sm" />
+      &nbsp;{label}
+    </DialogDestructiveButton>
+  );
+
+  return (
+    <>
+      {remove.disabledHint ? <Tooltip content={remove.disabledHint}>{button}</Tooltip> : button}
+      {confirming &&
+        createPortal(
+          <ConfirmDialog
+            title={remove.title}
+            message={remove.message}
+            actionLabel={label}
+            pendingLabel={remove.pendingLabel ?? "Deleting…"}
+            isPending={isPending}
+            error={error}
+            onClose={() => {
+              if (!isPending) setConfirming(false);
+            }}
+            onConfirm={confirm}
+          />,
+          document.body
+        )}
+    </>
+  );
+}
+
 /**
  * The selected row's fields, edited in place (#1471). One form, one Save — the fields are the
  * page's `children` — with Delete beside it behind a confirmation, since that one cannot be undone.
@@ -535,6 +664,8 @@ export function DetailForm({
   context,
   isNew,
   headerAction,
+  saveLabel,
+  savingLabel,
   onSave,
   onSaved,
   onCancelNew,
@@ -547,17 +678,15 @@ export function DetailForm({
   isNew: boolean;
   /** A secondary action in the pane's header — *Add catalog name* on a vendor. */
   headerAction?: ReactNode;
+  /** The submit button's words when *Add* / *Save* do not say it — a token is *Generate*d. */
+  saveLabel?: string;
+  savingLabel?: string;
   onSave: (formData: FormData) => Promise<ActionResult>;
   /** After a successful save: refresh what the page shows. */
   onSaved: () => void;
   /** Leave an add without adding. */
   onCancelNew?: () => void;
-  remove?: {
-    title: string;
-    message: ReactNode;
-    run: () => Promise<ActionResult>;
-    onDone: () => void;
-  };
+  remove?: RemoveRow;
   children: ReactNode;
 }) {
   const { setDirty: setGuardDirty } = useLeaveGuard();
@@ -566,8 +695,6 @@ export function DetailForm({
   const [dirty, setDirty] = useState(false);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const markDirty = useCallback(
@@ -619,21 +746,6 @@ export function DetailForm({
     setRevision((r) => r + 1);
   }
 
-  function confirmDelete() {
-    if (!remove) return;
-    setDeleteError(null);
-    startTransition(async () => {
-      const result = await remove.run();
-      if (result.status !== "success") {
-        setDeleteError(result.message ?? "Could not delete.");
-        return;
-      }
-      setConfirmingDelete(false);
-      markDirty(false);
-      remove.onDone();
-    });
-  }
-
   return (
     <form
       ref={formRef}
@@ -643,36 +755,7 @@ export function DetailForm({
       onBlur={measure}
       style={PANE_STYLE}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: "1rem",
-          padding: "1rem 1.5rem",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          {context && (
-            <p style={{ margin: "0 0 0.125rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-              {context}
-            </p>
-          )}
-          <h3
-            style={{
-              margin: 0,
-              fontSize: "1rem",
-              fontWeight: 600,
-              color: "var(--color-text-primary)",
-              overflowWrap: "anywhere",
-            }}
-          >
-            {title}
-          </h3>
-        </div>
-        {headerAction && <div style={{ flexShrink: 0 }}>{headerAction}</div>}
-      </div>
+      <DetailHeader title={title} context={context} headerAction={headerAction} />
 
       <fieldset
         disabled={isPending}
@@ -685,16 +768,7 @@ export function DetailForm({
         {error && <DialogError style={{ marginBottom: "0.75rem" }}>{error}</DialogError>}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {remove && !isNew && (
-            <DialogDestructiveButton
-              onClick={() => {
-                setDeleteError(null);
-                setConfirmingDelete(true);
-              }}
-              disabled={isPending}
-            >
-              <Icon name="delete" size="sm" />
-              &nbsp;Delete
-            </DialogDestructiveButton>
+            <RemoveButton remove={remove} disabled={isPending} onRemoved={() => markDirty(false)} />
           )}
           <div style={{ flex: 1 }} />
           {isNew ? (
@@ -710,31 +784,82 @@ export function DetailForm({
             )
           )}
           <DialogPrimaryButton disabled={isPending}>
-            {isPending ? "Saving…" : isNew ? "Add" : "Save"}
+            {isPending
+              ? (savingLabel ?? "Saving…")
+              : (saveLabel ?? (isNew ? "Add" : "Save"))}
           </DialogPrimaryButton>
         </div>
       </div>
-
-      {/* Portaled: the pane is sticky, which makes it a stacking context of its own, and a dialog
-          left inside it would rank only within the pane — the app's header painting over it. */}
-      {confirmingDelete &&
-        remove &&
-        createPortal(
-          <ConfirmDialog
-            title={remove.title}
-            message={remove.message}
-            actionLabel="Delete"
-            pendingLabel="Deleting…"
-            isPending={isPending}
-            error={deleteError}
-            onClose={() => {
-              if (!isPending) setConfirmingDelete(false);
-            }}
-            onConfirm={confirmDelete}
-          />,
-          document.body
-        )}
     </form>
+  );
+}
+
+/**
+ * A pane with **nothing to save** — a row that is read, not edited (an uploaded ornament, a token):
+ * the same header and card as `DetailForm`, the page's content, and the row's own actions at the
+ * foot, Delete (or Revoke) on the left as in the form.
+ */
+export function DetailCard({
+  title,
+  context,
+  headerAction,
+  actions,
+  remove,
+  children,
+}: {
+  title: ReactNode;
+  context?: ReactNode;
+  headerAction?: ReactNode;
+  /** The row's other actions, at the foot's right. */
+  actions?: ReactNode;
+  remove?: RemoveRow;
+  children: ReactNode;
+}) {
+  return (
+    <div style={PANE_STYLE}>
+      <DetailHeader title={title} context={context} headerAction={headerAction} />
+      <div style={{ padding: "1.25rem 1.5rem" }}>{children}</div>
+      {(remove || actions) && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0 1.5rem 1.25rem",
+          }}
+        >
+          {remove && <RemoveButton remove={remove} disabled={false} />}
+          <div style={{ flex: 1 }} />
+          {actions}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a row *is*, as label and value down the pane — the facts shown rather than edited (a token's
+ * reach, a scanner's calibration).
+ */
+export function DetailFacts({ rows }: { rows: { label: string; value: ReactNode }[] }) {
+  return (
+    <dl
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(8rem, auto) minmax(0, 1fr)",
+        columnGap: "1rem",
+        rowGap: "0.5rem",
+        margin: 0,
+        fontSize: "0.875rem",
+      }}
+    >
+      {rows.map((r) => (
+        <Fragment key={r.label}>
+          <dt style={{ color: "var(--color-text-muted)" }}>{r.label}</dt>
+          <dd style={{ margin: 0, color: "var(--color-text-primary)", minWidth: 0 }}>{r.value}</dd>
+        </Fragment>
+      ))}
+    </dl>
   );
 }
 

@@ -1,26 +1,38 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ConfirmDialog, DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
-import {
-  deleteAlbumOrnamentAction,
-  getAlbumOrnamentsAction,
-  type AlbumTemplateActionState,
-} from "@/app/actions/album-templates";
+import { DialogPrimaryButton, DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
+import { deleteAlbumOrnamentAction, getAlbumOrnamentsAction } from "@/app/actions/album-templates";
 import type { AlbumOrnamentData } from "@/lib/album-ornament-store";
 import { albumOrnamentPathData, type AlbumOrnamentDrawing } from "@/lib/album-ornament-svg";
 import { ALBUM_BUILTIN_ORNAMENTS, NO_FRAME_ORNAMENT } from "@/lib/album-ornaments";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
+import { SettingsPageAction } from "./settings-page-frame";
+import {
+  DetailCard,
+  DetailPlaceholder,
+  FieldNote,
+  ListDetail,
+  ListPane,
+  ListRow,
+  ListRows,
+  RowName,
+  countLabel,
+  useListSelection,
+} from "./list-detail";
 
 // The collector's own corner ornaments (#1427): the frame field the album template's form carries,
-// and the list under Settings → Corner ornaments where an upload can be deleted.
+// and the list under Settings → Corner ornaments where one is uploaded, looked at and deleted.
 //
 // The upload goes to its route and comes back as a row; what is shown of it here is the drawing it
 // was read into — never the file — which is also exactly what the page will print.
 
 const ORNAMENTS_KEY = (collectionId: string) => ["album-ornaments", collectionId] as const;
+
+/** A stable empty list while the query loads, so the selection's ids do not change every render. */
+const NO_ORNAMENTS: AlbumOrnamentData[] = [];
 
 function useAlbumOrnaments(collectionId: string) {
   return useQuery({
@@ -193,24 +205,31 @@ export function FrameOrnamentField({
   );
 }
 
-/** Settings → Corner ornaments: the collection's own corner ornaments, each shown as it prints. */
+/**
+ * Settings → Corner ornaments: the collection's own corner ornaments as a list beside the selected
+ * one, drawn as it prints (#1476). There is nothing to edit on an ornament — it is the drawing its
+ * file was read into — so the pane shows it and offers Delete, and the page's main action is the
+ * upload, which lands selected.
+ */
 export function AlbumOrnamentsPanel({ collectionId }: { collectionId: string }) {
-  const { data: ornaments, isLoading } = useAlbumOrnaments(collectionId);
+  const { data, isLoading } = useAlbumOrnaments(collectionId);
+  const ornaments = data ?? NO_ORNAMENTS;
   const queryClient = useQueryClient();
   const upload = useUploadOrnament(collectionId);
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<AlbumOrnamentData | null>(null);
-  const [deleteState, setDeleteState] = useState<AlbumTemplateActionState>({ status: "idle" });
-  const [isPending, startTransition] = useTransition();
+  const sel = useListSelection(ornaments);
+  const current = sel.current;
 
   async function uploadFile(file: File) {
     setUploading(true);
     setUploadError(null);
     try {
       const created = await upload(file);
+      // The query has been refetched by now, so the new row is on the list to be selected.
+      sel.select(created.id);
       toast({ message: `Added the ornament "${created.name}"` });
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : String(err));
@@ -220,20 +239,9 @@ export function AlbumOrnamentsPanel({ collectionId }: { collectionId: string }) 
     }
   }
 
-  function confirmDelete(ornament: AlbumOrnamentData) {
-    startTransition(async () => {
-      const result = await deleteAlbumOrnamentAction(ornament.id);
-      setDeleteState(result);
-      if (result.status === "success") {
-        setDeleting(null);
-        await queryClient.invalidateQueries({ queryKey: ORNAMENTS_KEY(collectionId) });
-      }
-    });
-  }
-
   return (
     <>
-      <div style={{ marginBottom: "1rem", display: "flex", gap: "0.75rem", alignItems: "center" }}>
+      <SettingsPageAction>
         <input
           ref={fileInput}
           type="file"
@@ -244,82 +252,62 @@ export function AlbumOrnamentsPanel({ collectionId }: { collectionId: string }) 
             if (file) void uploadFile(file);
           }}
         />
-        <DialogSecondaryButton type="button" onClick={() => fileInput.current?.click()} disabled={uploading}>
-          {uploading ? "Reading…" : "Upload SVG…"}
-        </DialogSecondaryButton>
-        {uploadError && (
-          <span style={{ color: "var(--color-error)", fontSize: "0.8125rem" }}>{uploadError}</span>
-        )}
-      </div>
-
-      <p style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
-        Your own corner ornaments for a page frame, as SVG drawings, printed as vectors at any size.
-        Draw one for the <strong>top-left</strong> corner; the other three are mirrored from it. The
-        drawing&apos;s point 0,0 sits on the frame&apos;s line, and the lines run in to the far edges of
-        its viewBox. Solid colours only — text, pictures, gradients and transparency are refused.
-      </p>
-
-      {!isLoading && (ornaments ?? []).length === 0 && (
-        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-          No ornaments of your own yet. The built-in ones are offered in every template.
-        </p>
-      )}
-
-      {(ornaments ?? []).length > 0 && (
-        <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.75rem", overflow: "hidden" }}>
-          {(ornaments ?? []).map((o, i, all) => (
-            <div
-              key={o.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                padding: "0.5rem 1rem",
-                background: "var(--color-bg-elevated)",
-                borderBottom: i < all.length - 1 ? "1px solid var(--color-border)" : "none",
+        <DialogPrimaryButton type="button" onClick={() => fileInput.current?.click()} disabled={uploading}>
+          <Icon name="add" size="sm" />
+          &nbsp;{uploading ? "Reading…" : "Upload SVG…"}
+        </DialogPrimaryButton>
+      </SettingsPageAction>
+      <ListDetail
+        list={
+          <ListPane
+            caption={countLabel(ornaments.length, "ornament", "ornaments")}
+            hint="Your own corner ornaments for a page frame, as SVG drawings, printed as vectors at any size. Draw one for the top-left corner; the other three are mirrored from it. The drawing's point 0,0 sits on the frame's line, and the lines run in to the far edges of its viewBox. Solid colours only — text, pictures, gradients and transparency are refused."
+            error={uploadError}
+            empty={!isLoading && ornaments.length === 0 && "No ornaments of your own yet."}
+          >
+            <ListRows label="Corner ornaments">
+              {ornaments.map((o) => (
+                <ListRow key={o.id} selected={current?.id === o.id} onSelect={() => sel.select(o.id)}>
+                  <OrnamentThumb drawing={o.drawing} sizeRem={2} />
+                  <RowName>{o.name}</RowName>
+                </ListRow>
+              ))}
+            </ListRows>
+          </ListPane>
+        }
+        detail={
+          current ? (
+            <DetailCard
+              key={current.id}
+              title={current.name}
+              remove={{
+                title: "Delete ornament",
+                message: (
+                  <>
+                    Delete <strong>{current.name}</strong>? Printed cards keep the corners they were
+                    printed with. A template or an album that still uses it has to choose another
+                    first.
+                  </>
+                ),
+                run: () => deleteAlbumOrnamentAction(current.id),
+                onDone: () => {
+                  sel.cleared();
+                  void queryClient.invalidateQueries({ queryKey: ORNAMENTS_KEY(collectionId) });
+                },
               }}
             >
-              <OrnamentThumb drawing={o.drawing} />
-              <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)", fontWeight: 500 }}>
-                {o.name}
-              </span>
-              <RowActionsMenu
-                ariaLabel="Ornament actions"
-                actions={[
-                  {
-                    key: "delete",
-                    label: "Delete",
-                    icon: "delete",
-                    danger: true,
-                    onSelect: () => {
-                      setDeleteState({ status: "idle" });
-                      setDeleting(o);
-                    },
-                  },
-                ]}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {deleting && (
-        <ConfirmDialog
-          title="Delete ornament"
-          message={
-            <>
-              Delete <strong>{deleting.name}</strong>? Printed cards keep the corners they were printed
-              with. A template or an album that still uses it has to choose another first.
-            </>
-          }
-          actionLabel="Delete"
-          pendingLabel="Deleting…"
-          onClose={() => !isPending && setDeleting(null)}
-          onConfirm={() => confirmDelete(deleting)}
-          isPending={isPending}
-          error={deleteState.status === "error" ? deleteState.message : undefined}
-        />
-      )}
+              <OrnamentThumb drawing={current.drawing} sizeRem={12} />
+              <FieldNote>
+                The top-left corner, as it prints; the other three are mirrored from it.
+              </FieldNote>
+            </DetailCard>
+          ) : isLoading ? null : (
+            <DetailPlaceholder>
+              No ornaments of your own yet. The built-in ones are offered in every template.
+            </DetailPlaceholder>
+          )
+        }
+      />
     </>
   );
 }

@@ -36,15 +36,18 @@ in an order you state, because each holds a handful of entries whose sequence me
 condition scale reads best to worst). Your tags are a vocabulary you keep inventing, so the only
 order that stays useful as it grows is the one nobody has to maintain.
 
-Each row says what the tag is on — *On 3 issues, 12 stamps and 40 copies*, or *Not used yet*.
+Each row says what the tag is on — *On 3 issues, 12 stamps and 40 copies*, or *Not used yet*. Click
+one and its name and colour open beside the list, where you change them in place — see
+[Pages with a list](collections.md#pages-with-a-list); **Add tag** at the top right of the page makes
+one ahead of time.
 
 ## Renaming, recolouring and deleting
 
-**Edit** changes the name and the colour together. A rename reaches everything carrying the tag at
+A tag's pane changes the name and the colour together, with **Save**. A rename reaches everything carrying the tag at
 once; that is the point of a tag being a dictionary entry rather than a word typed onto forty
 stamps.
 
-**Delete** takes the tag off everything carrying it. The confirmation says how many issues, stamps
+**Delete**, in the same pane, takes the tag off everything carrying it. The confirmation says how many issues, stamps
 and copies that is, and nothing else about them changes — no copy, price, checklist or catalogue
 number is touched. Unlike conditions or certificate statuses, a tag in use is **not** blocked from
 being deleted: taking the label off is exactly what deleting it means.

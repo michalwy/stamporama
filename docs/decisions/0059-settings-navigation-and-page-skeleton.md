@@ -7,7 +7,7 @@ Designed in #1465 with the collector on 2026-09-29, against a wireframe. The thr
 are built by the pages' own issues — #1471 (list beside detail), #1474 (list beside preview) and
 #1473 (grid of fields) — and the summary strip by #1475. **Reverses #691's 56rem cap** on the
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
-dictionaries (#1471), list beside preview carries Album templates (#1474), and the grid of fields
+dictionaries (#1471) and every other dictionary (#1476), list beside preview carries Album templates (#1474), and the grid of fields
 carries the plain forms (#1473); what each settled is in §5.
 
 ## Context
@@ -98,6 +98,24 @@ dictionary composes them — a flat list, a grouped one (Multipliers) and a tree
 
 *Rejected in writing #1471:* selecting the row through the router, which would re-run the whole
 Settings loader on every click down a list — the address is written with `history.replaceState`.
+
+**The other dictionaries, as built (#1476).** Scanners, Tags, Hawid stock, Corner ornaments,
+Carriers, Acceptance profiles and the token list on Assistant & API take the same pieces. What they
+needed that the Catalog group did not:
+
+- **A row with nothing to save** — an ornament is the drawing its file was read into, a token cannot
+  be changed once minted — is a `DetailCard`: the pane's header and card, what the row is
+  (`DetailFacts` for label and value), and its Delete, with no Save and no Revert.
+- **The destructive action is named by the page** (a token is *revoked*) and **can be refused in
+  advance**: a scanner in use shows Delete disabled with what uses it as the reason.
+- **A tool is not a form.** A scanner's calibration stays the window-sized calibration dialog, opened
+  from the pane, which shows the calibration and offers *Remove calibration*; *Make default* is the
+  pane header's action.
+- **The page's main action is whatever adds a row**: *Upload SVG…* on Corner ornaments (the upload
+  lands selected), *Generate token* on Assistant & API, whose fields open in the pane and whose value
+  is still shown once in its own window. Assistant & API keeps connecting the extension as a section
+  above the list.
+- Tags stay **alphabetical** and undraggable, with each row's usage line.
 
 **List beside preview, as built (#1474).** `settings/list-beside-preview.tsx`, on Album templates
 first; the collage and ref card templates follow (#1477, #1478):

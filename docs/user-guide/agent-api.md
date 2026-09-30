@@ -21,7 +21,8 @@ makes both.
 ## Making the token
 
 1. Open the collection you want the assistant to see.
-2. Go to **Settings → Assistant & API** and choose **Generate token by hand**.
+2. Go to **Settings → Assistant & API** and choose **Generate token** at the top right of the page. Its
+   fields open beside the token list.
 3. Pick **Agent** for what it is for. That is only a label, so you can tell this row of the list from
    the extension's; it does not change what the token may do.
 4. Pick what it **may do**:
