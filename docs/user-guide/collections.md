@@ -1270,7 +1270,10 @@ The editor is split into sections, listed down its left side, and shows one at a
 - **Headings** — whether the album title is printed as a **running head** on every page (your
   Polska, Bohemia, Bayern and Deutsches Reich pages carry one and your Dansk pages do not, and the
   ones that do not get those millimetres back for content), and the space **above and below the
-  album title**, **above and below a chapter heading** and above and below a checklist heading.
+  album title**, **above and below a chapter heading**, above and below a checklist heading, and
+  above and below a **sub-heading** — the name a checklist prints under its issue's heading, when an
+  album prints several checklists of one issue together (see
+  [Several checklists of one issue](albums.md#several-checklists-of-one-issue)).
 
   The page headings' space starts where it always was: none around the album title, which sits on
   the top margin with the content straight under it, and for the chapter heading the checklist
@@ -1302,8 +1305,12 @@ The editor is split into sections, listed down its left side, and shows one at a
   fit inside a strip's whole outer height), while the horizontal margin is the cut. Raise the
   vertical one to move a stamp deliberately onto the next packet up. Together they replace
   AlbumEasy's single global 4 mm.
-- **Type** — a face and a size for each of the five roles: album title, chapter heading, checklist
-  heading, box label, footer. Sizes are in **points**, the unit type is set in.
+- **Type** — a face and a size for each of the six roles: album title, chapter heading, checklist
+  heading, sub-heading, box label, footer. Sizes are in **points**, the unit type is set in. The
+  sub-heading starts as Liberation Sans Italic at 10 pt with 6 mm above and 3 mm below — the
+  `STAMP_H2` sub-headings of your own pages — and every existing template and album was given exactly
+  that. The sample page has no issue printed as several checklists, so it shows no sub-heading;
+  point the preview at one of your albums to see one.
 - **Photos** — whether a box prints the photo it has, and at what opacity.
 - **Texts** — the chapter heading, the checklist heading, the box label and the footer.
 

@@ -19,6 +19,7 @@ import {
   openAlbumContinuationAction,
   removeAlbumEntryAction,
   reorderAlbumEntriesAction,
+  setAlbumEntryLayoutAction,
   reprintAlbumPageAction,
   unprintAlbumPageAction,
   updateAlbumPresetAction,
@@ -53,6 +54,12 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { AlbumNameSuggestion } from "./album-name-suggestion";
 import { MarkPrintedDialog } from "./mark-printed-dialog";
+import { ALBUM_PRINT_MODE_DEFAULTS_HINT, PrintModeSelect } from "./print-mode-select";
+import {
+  albumEffectivePrintModes,
+  albumPrintModeOffered,
+  type AlbumPrintMode,
+} from "@/lib/album-print-mode";
 import { albumYearAloneName } from "@/lib/album-print-rules";
 
 // One album (#767): what it prints, in what order, and how that falls onto sheets.
@@ -116,6 +123,17 @@ const FORM_STYLE: React.CSSProperties = {
   flex: 1,
   minHeight: 0,
   overflow: "hidden",
+};
+
+/** The print mode in an entry row (#1509) — the page editor's field, sized for a row. */
+const PRINT_MODE_SELECT: React.CSSProperties = {
+  padding: "0.1875rem 0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  maxWidth: "18rem",
 };
 
 const CHIP: React.CSSProperties = {
@@ -219,6 +237,11 @@ export function AlbumScreen({
   // stock panel's pattern, and the plan comes back with it.
   const [items, setItems] = useState(entries);
   const [syncedFrom, setSyncedFrom] = useState(entries);
+  // What each entry prints as with nothing chosen (#1509), which the row's select names as the
+  // default. The rule is pure and reads the whole album, so the screen asks it rather than the server.
+  const defaultPrintModes = albumEffectivePrintModes(
+    entries.map((e) => ({ ...e, printMode: null }))
+  );
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -623,6 +646,14 @@ export function AlbumScreen({
     );
   }
 
+  /** How one checklist prints relative to its issue, or null to follow the default (#1509). One field,
+   *  so nothing else about the entry rides along. */
+  function setPrintMode(entryId: string, mode: AlbumPrintMode | null) {
+    const form = new FormData();
+    form.set("printMode", mode ?? "");
+    run(() => setAlbumEntryLayoutAction(entryId, form));
+  }
+
   function renderEntryRow(entry: AlbumEntryData, last: boolean) {
     return (
       <div
@@ -655,6 +686,25 @@ export function AlbumScreen({
             <span style={CHIP}>Own order</span>
           </Tooltip>
         )}
+        {/* A select inside a draggable row: pressing it must not pick the row up. */}
+        <span
+          draggable={false}
+          onDragStart={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          style={{ flex: "0 0 auto" }}
+        >
+          <PrintModeSelect
+            id={`print-mode-${entry.id}`}
+            chosen={albumPrintModeOffered(entry) ? entry.printMode : null}
+            defaultMode={defaultPrintModes.get(entry.id)?.mode ?? "own"}
+            offered={albumPrintModeOffered(entry)}
+            disabled={isPending}
+            onChange={(mode) => setPrintMode(entry.id, mode)}
+            style={PRINT_MODE_SELECT}
+          />
+        </span>
         <span style={MUTED}>
           {entry.stampIds.length === 1 ? "1 stamp" : `${entry.stampIds.length} stamps`}
         </span>
@@ -1104,6 +1154,9 @@ export function AlbumScreen({
                 content="Gathered from the album's area and everything under it, in catalog order. Drag a row to change the order the album prints them in."
               >
                 <span style={HINT}>Order</span>
+              </Tooltip>
+              <Tooltip align="end" content={ALBUM_PRINT_MODE_DEFAULTS_HINT}>
+                <span style={HINT}>Several checklists of one issue</span>
               </Tooltip>
               <Tooltip
                 align="end"

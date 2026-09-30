@@ -254,6 +254,60 @@ there, exactly as the pages would print it.
   album…** on its row.
 - **Own order** on a row means this album prints that checklist's stamps in an order of its own
   rather than the one set on the checklist. **Follow the checklist's order** puts it back.
+- The select on each row says **how the checklist prints relative to its issue** — see below.
+
+### Several checklists of one issue
+
+An issue often has more than one checklist in an album — the issue itself, *Watermark X*, *Watermark
+Y*, *Imperforate*. Printed each under its own heading, they read on the page as separate issues. So
+each entry has a way of being printed:
+
+- **As its own issue** — a block of its own under its own heading, as every checklist printed before.
+- **Within its issue** — its stamps directly under the **issue's** heading, with no heading of its
+  own.
+- **Within its issue, with a sub-heading** — under the issue's heading, with the checklist's name as a
+  smaller sub-heading of its own.
+
+```
+1945, 1 IX. Westerplatte
+  [374a] [374b]
+      Imperforate
+  [XXII]
+```
+
+**The issue's heading is always the issue's title**, written with the album's checklist heading text
+(*Page template… → Texts*) and in the album's language — the issue's translation, as a checklist named
+after its issue already prints one. A missing translation is flagged in the page editor like any
+other.
+
+**Left at the default**, which is what every entry starts at:
+
+- an issue with **one** checklist in the album prints it **as its own issue**, as before;
+- an issue with **several** prints its title once: the checklist named after the issue — its main
+  checklist — **within its issue**, straight under the title, and each of the others **with a
+  sub-heading**. If none is named after the issue, every one gets a sub-heading.
+- a checklist that **spans several issues** always prints as its own issue; it has no issue to be
+  printed within, and nothing else is offered for it.
+
+The row's select shows *Default — …* with what the default currently gives, until you pick a way
+yourself. The choice belongs to **this album's entry**, not to the checklist, so the same checklist can
+be grouped in one album and printed on its own in another. Pick *Default* again to follow the rule.
+
+**Only neighbours share the title.** Checklists of one issue that follow each other print under one
+title. If another issue stands between them, the title is printed again over the ones after it.
+Nothing is reordered for you — drag the rows together if you want them under one title.
+
+On the page, the issue's title is never left alone at the foot of a sheet: it moves to the next sheet
+with the first row under it. When the issue's checklists continue on the next sheet, that sheet
+repeats the title marked **[2]** (then **[3]**…), counting the sheets of the issue; a checklist too
+long for one sheet repeats its sub-heading too, marked with **its own** count — so a sheet can read
+*1945, 1 IX. Westerplatte [3]* over *Imperforate [2]*. Two short checklists of one issue can sit side by
+side under its title; a checklist of another issue never sits beside them.
+
+The sub-heading has its own face, size and space above and below — *Page template… → Type* and
+*Headings* — starting as Arial Italic's metric twin at 10 pt, 6 mm above and 3 mm below, as the
+`STAMP_H2` sub-headings of hand-made AlbumEasy pages are set. The space above is left after the boxes
+before it; straight under the issue's title only the title's own space below separates them.
 
 ## Sheets
 
@@ -413,9 +467,13 @@ What you can set:
   value as in *Page template…*, for this album only; how strongly the pictures print stays there. As
   with the spacing, you are first told how many printed cards that match today would stop matching,
   and a printed card stays as printed.
+- **How a checklist prints relative to its issue** — as its own issue, within it, or within it with a
+  sub-heading. Select the checklist by its heading; *Printed as* in its panel is the same choice as on
+  the Entries tab and is saved as you pick it. See [Several checklists of one
+  issue](#several-checklists-of-one-issue).
 - **The order of the stamps in a block** — drag one box onto another. That writes this album's own
   order for the whole checklist; *Follow the checklist's order* puts it back.
-- **A note of your own**, set in one of the template's five voices and **filed before or after a
+- **A note of your own**, set in one of the template's six voices and **filed before or after a
   checklist** rather than dropped at a spot on a page. Reorder the album and the note goes with the
   checklist it is filed against. The side matters: a note that opens a chapter belongs *before* that
   chapter's first checklist, not after whichever one happens to precede it today — otherwise it slides
@@ -444,8 +502,8 @@ word on the sheet that would print in the collection's default language because 
 translation is missing — click the dotted outline on the canvas, or fill it in the panel, and it
 is saved on the stamp, issue, checklist or area itself straight away.
 
-That covers every text a sheet prints: the running head, the year, checklist headings, box labels
-and the footer. The running head is marked while the album is still called by its area's plain name
+That covers every text a sheet prints: the running head, the year, checklist headings, an issue's
+title over its checklists and their sub-headings, box labels and the footer. The running head is marked while the album is still called by its area's plain name
 and the area has no name in the album's language; filling that in does not rename the album, it
 offers the new name (see [above](#when-the-area-gets-a-name-in-the-albums-language-later)). Your own
 notes are not marked — they print exactly what you wrote.
@@ -599,8 +657,9 @@ is not 100% of a sheet of paper.
 ### What is on the page
 
 Everything the Sheets tab describes, drawn to size: the album's name at the top if the
-template prints it, the year, each checklist's heading, a box per slot with its label, and the
-sheet's catalog range in the footer.
+template prints it, the year, each checklist's heading — or its issue's title with sub-headings under
+it, where checklists print within their issue — a box per slot with its label, and the sheet's catalog
+range in the footer.
 
 A box also prints the picture of its stamp where there is one — the stamp's own image, or failing
 that a photo of your copy. It is **fitted, never cropped**: a stamp of a different shape from its
@@ -732,8 +791,9 @@ date** narrows it to the cards that differ:
 
 - **Stamps** — the checklist gained or lost a slot, or would now print in a different order;
 - **Size** — a box would now be cut to a different size, or from a different strip;
-- **Text** — a renamed series or area, a corrected translation, a change of language, or different
-  words on a page without stamps;
+- **Text** — a renamed series or area, a corrected translation, a change of language, a checklist you
+  have since set to print as its own issue or within its issue, or different words on a page without
+  stamps;
 - **Page** — on a page without stamps, something has moved or changed width, is set in another face,
   size or alignment, has been replaced, added or taken off, or is drawn in a different order;
 - **Template** — the album's page settings have moved since the card was set, or the card's content

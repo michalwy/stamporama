@@ -376,6 +376,7 @@ export function albumPreviewEntries(): AlbumEntryData[] {
     breakBefore: "auto",
     bandBreakBefore: false,
     pagePlacement: null,
+    printMode: null,
     boxAdjustments: {},
     rowBreaks: [],
     stampIds: checklist.stamps.map((s) => albumPreviewStampId(s.number)),

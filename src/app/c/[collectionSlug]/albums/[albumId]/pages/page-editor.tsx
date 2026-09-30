@@ -106,6 +106,8 @@ import {
 } from "./page-canvas";
 import { AlbumNameSuggestion } from "../album-name-suggestion";
 import { MarkPrintedDialog } from "../mark-printed-dialog";
+import { ALBUM_PRINT_MODE_DEFAULTS_HINT, PrintModeSelect } from "../print-mode-select";
+import type { AlbumPrintMode } from "@/lib/album-print-mode";
 import { albumYearAloneName } from "@/lib/album-print-rules";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { BTN, CHIP, FRAME, Hint, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
@@ -1093,6 +1095,12 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
                   );
                 }}
                 onBandBreak={(on) => commitBandBreak(selectedBlock, on)}
+                onPrintMode={(mode) => {
+                  // One field, for `commitSpace`'s reason; blank follows the default again (#1509).
+                  const form = new FormData();
+                  form.set("printMode", mode ?? "");
+                  run(() => setAlbumEntryLayoutAction(selectedBlock.id, form));
+                }}
                 onClearStampOrder={() =>
                   run(() => clearAlbumEntryStampOrderAction(selectedBlock.id))
                 }
@@ -2172,6 +2180,7 @@ function BlockPanel({
   onPreview,
   onSave,
   onBandBreak,
+  onPrintMode,
   onClearStampOrder,
   onClearBoxes,
   onDelete,
@@ -2188,6 +2197,9 @@ function BlockPanel({
   /** Start on its own line rather than beside the block before it, or stop (#1421). Saved on the
    *  click: a switch has no half-typed state. */
   onBandBreak: (on: boolean) => void;
+  /** How the checklist prints relative to its issue, or null to follow the default (#1509). Saved on
+   *  the change. */
+  onPrintMode: (mode: AlbumPrintMode | null) => void;
   onClearStampOrder: () => void;
   onClearBoxes: () => void;
   onDelete: () => void;
@@ -2249,6 +2261,24 @@ function BlockPanel({
           {block.boxCount === 1 ? "1 box" : `${block.boxCount} boxes`} on this sheet
         </p>
       </div>
+
+      {block.printMode && (
+        <div>
+          <LabelWithError htmlFor="print-mode">Printed as</LabelWithError>
+          <PrintModeSelect
+            id="print-mode"
+            chosen={block.printMode.chosen}
+            defaultMode={block.printMode.defaultMode}
+            offered={block.printMode.offered}
+            disabled={disabled}
+            onChange={onPrintMode}
+            style={INPUT}
+          />
+          {block.printMode.offered && (
+            <Hint more={ALBUM_PRINT_MODE_DEFAULTS_HINT}>Under its own heading or its issue&apos;s.</Hint>
+          )}
+        </div>
+      )}
 
       {block.separated && (
         <div style={{ ...FRAME, borderLeft: "3px solid var(--color-warning)" }}>

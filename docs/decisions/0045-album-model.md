@@ -3,7 +3,8 @@
 ## Status
 
 Accepted, implemented in #767. Decision 8 corrects #766 one commit after it landed. Decision 7's
-*a block moves whole* is amended by #1497 for a chapter's first page. The design it applies is #755. The pieces it reads are #763 (stamp
+*a block moves whole* is amended by #1497 for a chapter's first page. Decision 2 is amended by #1509:
+checklists of one issue may print under the issue's heading (see the consequences). The design it applies is #755. The pieces it reads are #763 (stamp
 size), #764 (stamp order within a checklist), #765 (the hawid box rule) and #766 (the album
 template); the pieces it hands over to are #768 (the PDF, **ADR-0046**), #769 (the page editor, built — see the
 consequences below), #770 (the cutting list) and #778 (printed pages, **ADR-0047**).
@@ -298,5 +299,28 @@ is a block the pairing has made worse.
   than packed. What is on it is the one thing on this track stored as a **position** — millimetres from
   the sheet's corner — and that is decision 3 holding rather than broken: the position is on the free
   page, which is a row, and no re-flow moves it. The page itself is still filed by an anchor.
+- #1509 lets **several checklists of one issue print as subsets of it**, and amends decision 2 without
+  undoing it: a block is still a checklist, but an entry now says how it prints relative to its issue
+  — `own` (a block under its own heading, every entry before #1509), `within` (under the issue's
+  heading, no heading of its own) or `within-subheading` (under the issue's heading, its name as a
+  sub-heading, a sixth type role). The rule, settled with the collector on 2026-09-30:
+  - **The mode is on the album entry** (`album_entry.printMode`), not the checklist, so one checklist
+    can be grouped in one album and printed alone in another. Null follows a **default derived on
+    read** (`album-print-mode.ts`) — one checklist of an issue in the album prints `own`; several print
+    the one named after the issue `within` and the rest `within-subheading`. Derived, not stored, for
+    decision 3's reason: it moves as checklists are gathered, and a stored default would go stale. A
+    checklist spanning issues is always `own`.
+  - **The issue heading is always the issue's title**, rendered with the checklist heading's template
+    in the album's language, and **only neighbours share it**: consecutive entries of one issue in the
+    two `within` modes are one run; another issue between them prints it again. Nothing is reordered —
+    a layout that re-sorts what the collector arranged is one he cannot predict (decision 6).
+  - **It is packed as part of the band under it**, set across the full width, so it moves with that
+    band and is never alone at a sheet's foot; blocks pair only within one run. A run continuing on
+    the next sheet repeats it marked `[2]`, `[3]` by the run's sheets, cards in the binder counted; a
+    split checklist's sub-heading carries its own part (both marked, the collector's choice).
+  - **Printed cards do not change and are not reported by the defaults.** A card records each block's
+    mode and run sheet (`AlbumPlacedBlock.printMode`, `groupPart`, `groupHeading`); its reference is
+    planned in the mode the card printed unless the collector has since set one, and a card stored
+    before #1509 reads as `own` throughout. Setting a mode is a change like any other and is reported.
 - Anyone reaching for a foreign key from `album` to `album_template`, or for an `album_page` table
   holding live pages, is undoing decisions 4 and 3 rather than tidying up. Read this file first.

@@ -30,6 +30,7 @@ import {
   type AlbumTextBlockSide,
 } from "./album-corrections";
 import type { AlbumBlockBreak, AlbumTextRole } from "./album-layout";
+import { albumPrintModeOffered, asAlbumPrintMode, type AlbumPrintMode } from "./album-print-mode";
 import {
   asAlbumFreeElementKind,
   asAlbumFreeTextAlign,
@@ -118,6 +119,8 @@ const PRESET_SELECT = {
   titleSpaceBelowMm: true,
   chapterSpaceAboveMm: true,
   chapterSpaceBelowMm: true,
+  subheadingSpaceAboveMm: true,
+  subheadingSpaceBelowMm: true,
   verticalClearanceMm: true,
   horizontalMarginMm: true,
   titleFace: true,
@@ -127,6 +130,8 @@ const PRESET_SELECT = {
   chapterSizePt: true,
   headingFace: true,
   headingSizePt: true,
+  subheadingFace: true,
+  subheadingSizePt: true,
   labelFace: true,
   labelSizePt: true,
   footerFace: true,
@@ -471,6 +476,9 @@ export interface AlbumEntryData {
    *  block rather than the page because a live page has no row, and this way the override follows
    *  the content through a re-flow. */
   pagePlacement: AlbumVerticalPlacement | null;
+  /** How the entry prints relative to its issue (#1509) — the collector's own choice, or null to
+   *  follow the default, which is derived from the album's other entries (`album-print-mode.ts`). */
+  printMode: AlbumPrintMode | null;
   /** Per-box size corrections, by stamp (#769). Keyed inside the entry because a **box is a slot
    *  rather than a stamp** (ADR-0047 §2): one stamp on two checklists of one issue is two boxes, and
    *  correcting one must not correct the other. Absent means the box rule's own answer stands. */
@@ -501,6 +509,7 @@ const ENTRY_SELECT = {
   breakBefore: true,
   bandBreakBefore: true,
   pagePlacement: true,
+  printMode: true,
   stampOrder: { select: { stampId: true, sortOrder: true } },
   boxAdjustments: { select: { stampId: true, widthDeltaMm: true, heightDeltaMm: true } },
   rowBreaks: { select: { stampId: true } },
@@ -563,6 +572,7 @@ function toEntryData(row: EntryRow): AlbumEntryData {
     breakBefore: asAlbumBlockBreak(row.breakBefore),
     bandBreakBefore: row.bandBreakBefore,
     pagePlacement: asAlbumPagePlacement(row.pagePlacement),
+    printMode: asAlbumPrintMode(row.printMode),
     boxAdjustments: Object.fromEntries(
       row.boxAdjustments.map((a) => [
         a.stampId,
@@ -784,13 +794,35 @@ export interface AlbumBlockLayoutInput {
   pagePlacement?: AlbumVerticalPlacement | null;
 }
 
+/** How a checklist block is printed relative to its issue (#1509), as the editor and the Entries tab
+ *  set it. Null follows the default again. A note carries none: it is not an issue. */
+export interface AlbumEntryLayoutInput extends AlbumBlockLayoutInput {
+  printMode?: AlbumPrintMode | null;
+}
+
+/** Thrown for a print mode an entry cannot take. The message reaches the collector. */
+export class AlbumPrintModeError extends Error {}
+
 export async function setAlbumEntryLayout(
   ownerId: string,
   entryId: string,
-  input: AlbumBlockLayoutInput
+  input: AlbumEntryLayoutInput
 ): Promise<void> {
   const { collectionId } = await resolveEntryAlbum(entryId);
   await assertCollectionOwner(ownerId, collectionId);
+  // A checklist spanning issues has no issue to be printed within (#1509): only its own mode, which is
+  // what null already gives it, and the screens do not offer the others.
+  if (input.printMode && input.printMode !== "own") {
+    const entry = await prisma.albumEntry.findUnique({
+      where: { id: entryId },
+      select: { checklist: { select: { issueId: true } } },
+    });
+    if (!entry || !albumPrintModeOffered(entry.checklist)) {
+      throw new AlbumPrintModeError(
+        "This checklist spans issues, so it has no issue to be printed within."
+      );
+    }
+  }
   await prisma.albumEntry.update({
     where: { id: entryId },
     data: {
@@ -799,6 +831,7 @@ export async function setAlbumEntryLayout(
       ...(input.breakBefore === undefined ? {} : { breakBefore: input.breakBefore }),
       ...(input.bandBreakBefore === undefined ? {} : { bandBreakBefore: input.bandBreakBefore }),
       ...(input.pagePlacement === undefined ? {} : { pagePlacement: input.pagePlacement }),
+      ...(input.printMode === undefined ? {} : { printMode: input.printMode }),
     },
   });
 }

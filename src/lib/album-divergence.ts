@@ -101,6 +101,9 @@ export interface AlbumComparableBlock {
    *  about a note somebody typed. */
   kind?: "entry" | "text" | "page";
   heading: string;
+  /** The issue heading printed over this block on the sheet (#1509), or blank where none is — which
+   *  is every block of a card stored before #1509. */
+  groupHeading?: string;
   boxes: AlbumComparableBox[];
 }
 
@@ -433,11 +436,19 @@ export function compareAlbumPages(
       continue;
     }
     const d = textDivergence(
-      block.kind === "text" ? "A note" : "A checklist heading",
+      block.kind === "text"
+        ? "A note"
+        : block.groupHeading || now.groupHeading
+          ? "A checklist's sub-heading"
+          : "A checklist heading",
       block.heading,
       now.heading
     );
     if (d) found.push(d);
+    // The issue heading a checklist printed within its issue stands under (#1509) — a renamed issue,
+    // a filled-in translation, or a checklist now printed as its own issue or within it.
+    const issue = textDivergence("An issue heading", block.groupHeading ?? "", now.groupHeading ?? "");
+    if (issue) found.push(issue);
   }
   if (relabelled > 0) {
     found.push({

@@ -38,6 +38,7 @@ import {
   type AlbumDivergence,
 } from "./album-divergence";
 import type { AlbumEntryData } from "./albums";
+import type { AlbumPrintMode } from "./album-print-mode";
 
 // What the collector does about paper (#778): marking sheets printed, un-printing them, answering a
 // divergence with a continuation page or a reprint, and the report that says which cards need any of
@@ -937,6 +938,23 @@ function planPrintedCardReference(
     notesAt.set(at, [...(notesAt.get(at) ?? []), note]);
   }
 
+  // How the card printed each of its checklists relative to its issue (#1509), off its own snapshots:
+  // the mode, and the sheet of the issue's run its first block stood on. A card stored before #1509
+  // records neither and printed every checklist as its own issue.
+  const printedAs = new Map<string, { mode: AlbumPrintMode; groupPart: number | null }>();
+  for (const pageId of group.pageIds) {
+    for (const block of snapshots.get(pageId)?.page.blocks ?? []) {
+      if ((block.kind ?? "entry") !== "entry" || printedAs.has(block.entryId)) continue;
+      printedAs.set(block.entryId, {
+        mode: block.printMode ?? "own",
+        groupPart: block.groupPart ?? null,
+      });
+    }
+  }
+  // The runs the card's checklists form, as the reference plans them — so each run starts from the
+  // sheet of the issue's run the card's first block of it stood on.
+  const runStarted = new Set<string>();
+
   const blocks: AlbumBlockSpec<AlbumBoxData>[] = [];
   for (const note of notesAt.get("#before") ?? []) blocks.push(albumNoteBlock(note, null));
   for (const entry of groupEntries) {
@@ -951,18 +969,17 @@ function planPrintedCardReference(
       return true;
     });
     if (stampIds.length > 0) {
-      blocks.push({
-        entryId: entry.id,
-        heading: context.checklistHeading(entry),
-        kind: "entry",
-        boxes: context.boxesFor(entry, stampIds),
-        printedPageIds: null,
-        spaceBeforeMm: entry.spaceBeforeMm,
-        spaceAfterMm: entry.spaceAfterMm,
-        breakBefore: entry.breakBefore,
-        bandBreakBefore: entry.bandBreakBefore,
-        pagePlacement: entry.pagePlacement,
-      });
+      // The mode the collector chose, else the one the card was printed in (#1509). A default is a
+      // derivation: it moving — a second checklist of the issue gathered, or #1509 landing at all —
+      // does not make a card in the binder wrong, and the report must not say it does. A mode the
+      // collector sets is a change to the card like any other, and is reported.
+      const was = printedAs.get(entry.id);
+      const mode = entry.printMode ?? was?.mode ?? "own";
+      const key = entry.issueId ?? "";
+      const opens = !runStarted.has(key);
+      if (opens) runStarted.add(key);
+      const sheetsBefore = opens && was?.groupPart ? was.groupPart - 1 : 0;
+      blocks.push(context.entryBlock(entry, stampIds, mode, null, sheetsBefore));
     }
     for (const note of notesAt.get(`${entry.id}#after`) ?? [])
       blocks.push(albumNoteBlock(note, null));
@@ -1021,6 +1038,10 @@ export function snapshotComparablePage(snapshot: AlbumPageSnapshot): AlbumCompar
       heading:
         snapshot.page.blocks.find((b) => b.entryId === block.entryId && b.part === block.part)
           ?.heading ?? "",
+      // Blank on a card stored before #1509, which printed every checklist as its own issue.
+      groupHeading:
+        snapshot.page.blocks.find((b) => b.entryId === block.entryId && b.part === block.part)
+          ?.groupHeading ?? "",
       boxes: block.boxes.map((box) => ({
         stampId: box.stampId,
         widthMm: box.widthMm,

@@ -268,7 +268,8 @@ describe("album PDF (#768)", () => {
       if (base) baseFonts.push(String(base));
       if (obj.get(PDFName.of("FontFile2"))) withGlyphBytes += 1;
     }
-    // The template sets four distinct faces across its five roles.
+    // The template sets five distinct faces across its six roles — the sub-heading's italic (#1509) the
+    // fifth.
     assert.ok(
       baseFonts.some((n) => n.includes("LiberationSerif")),
       `the faces the album is set in: ${baseFonts.join(", ")}`
@@ -278,7 +279,7 @@ describe("album PDF (#768)", () => {
       `checklist headings are set in Arial Bold Italic's metric twin: ${baseFonts.join(", ")}`
     );
     // The whole point: the glyphs travel with the file, so the sheet is the same everywhere.
-    assert.equal(withGlyphBytes, 4, "every face carries its own glyph bytes");
+    assert.equal(withGlyphBytes, 5, "every face carries its own glyph bytes");
   });
 
   it("renders one sheet on its own, and names the file after it", async () => {

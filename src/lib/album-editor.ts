@@ -35,6 +35,11 @@ import type { AlbumDivergence } from "./album-divergence";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import { resolveAlbumPhotos } from "./album-photos";
 import type { AlbumBoxAdjustmentValue } from "./album-corrections";
+import {
+  albumEffectivePrintModes,
+  albumPrintModeOffered,
+  type AlbumPrintMode,
+} from "./album-print-mode";
 import type {
   AlbumData,
   AlbumEntryData,
@@ -103,6 +108,8 @@ export type AlbumSheetSource = Pick<
   | "textGaps"
   | "titleGaps"
   | "frameOrnament"
+  | "issueHeadingGaps"
+  | "subheadingGaps"
 >;
 
 /** How a run of text is set, resolved once here so the canvas and the PDF put ink in the same place. */
@@ -224,6 +231,11 @@ export interface AlbumEditorBlock {
   part: number;
   /** What this sheet printed for it — the marked `[2]`, `[3]` heading on a continuation sheet. */
   heading: string;
+  /** Where the sheet's `headings` hold this block's own heading, and the issue heading printed over it
+   *  (#1509) — null where it has none. Stated, because a sheet's headings are no longer one per block
+   *  that has a heading: an issue heading stands over a run of them. */
+  headingIndex: number | null;
+  issueHeadingIndex: number | null;
   /** How the editor names it in a list: the checklist's name, or the note's role. */
   name: string;
   firstBoxIndex: number;
@@ -251,6 +263,10 @@ export interface AlbumEditorBlock {
   text: string;
   /** Where a note is filed (#769). Null for a checklist, whose place in the album is its own order. */
   anchor: { albumEntryId: string | null; side: "before" | "after" } | null;
+  /** How this checklist prints relative to its issue (#1509): the collector's own choice or null, what
+   *  the default rule gives it now, and whether a choice is offered at all — never for a checklist
+   *  spanning issues. Null for a note, a free page, and on a printed sheet. */
+  printMode: { chosen: AlbumPrintMode | null; defaultMode: AlbumPrintMode; offered: boolean } | null;
   /** True when this block asked **not** to be separated from what is above it and could not have it —
    *  it opens a sheet, so what it wanted to stay with is on the one before. Shown, always: a
    *  constraint dropped silently is one the collector finds out about with the card in his hand. */
@@ -495,6 +511,10 @@ export function liveSheet(
   const freePageById = new Map(context.freePages.map((p) => [p.id, p]));
 
   const pageStampIds = layout.boxes.map((b) => b.box.stampId);
+  // What each entry would print as with nothing chosen (#1509) — the select names the default as such.
+  const defaultModes = albumEffectivePrintModes(
+    context.entries.map((e) => ({ ...e, printMode: null })),
+  );
   const chapterEntries = context.entries.filter(
     (e) => (e.year === null ? "" : String(e.year)) === layout.chapterKey,
   );
@@ -513,21 +533,34 @@ export function liveSheet(
     const slice = layout.boxes.slice(cursor, cursor + block.boxCount);
     cursor += block.boxCount;
 
+    // The issue heading printed over this block (#1509) comes first in the sheet's headings, then the
+    // block's own — each a placed text in the order the layout set them.
+    const placedIssue = block.groupHeading ? layout.headings[headings.length] : undefined;
+    const issueHeadingIndex = placedIssue ? headings.length : null;
+    if (placedIssue) {
+      headings.push(
+        editorText(placedIssue, album, entry ? context.issueHeadingGaps(entry) : []),
+      );
+    }
     const placedHeading = layout.headings[headings.length];
+    const headingIndex = placedHeading && block.heading ? headings.length : null;
     if (placedHeading && block.heading) {
       headings.push(
         editorText(
           placedHeading,
           album,
           // A note is the collector's own words and resolves no tokens, so it can fall back on
-          // nothing; a checklist heading is a template over the stamps of its own block.
-          note
+          // nothing; a sub-heading is the checklist's name alone (#1509); a checklist heading is a
+          // template over the stamps of its own block.
+          note || !entry
             ? []
-            : context.textGaps(
-                album.checklistTemplate,
-                slice.map((b) => b.box.stampId),
-                entry,
-              ),
+            : block.printMode === "within-subheading"
+              ? context.subheadingGaps(entry)
+              : context.textGaps(
+                  album.checklistTemplate,
+                  slice.map((b) => b.box.stampId),
+                  entry,
+                ),
         ),
       );
     }
@@ -573,6 +606,8 @@ export function liveSheet(
       kind: block.kind ?? "entry",
       part: block.part,
       heading: block.heading,
+      headingIndex,
+      issueHeadingIndex,
       name: freePage
         ? freePageName(freePage)
         : note
@@ -605,6 +640,14 @@ export function liveSheet(
       anchor: note
         ? { albumEntryId: note.anchorAlbumEntryId, side: note.side }
         : null,
+      printMode:
+        entry && !note && block.kind !== "page"
+          ? {
+              chosen: albumPrintModeOffered(entry) ? entry.printMode : null,
+              defaultMode: defaultModes.get(entry.id)?.mode ?? "own",
+              offered: albumPrintModeOffered(entry),
+            }
+          : null,
       separated: block.separated === true,
     });
   }
@@ -721,15 +764,25 @@ function printedSheet(
   });
 
   let cursor = 0;
+  let headingAt = 0;
   const blocks: AlbumEditorBlock[] = layout.blocks.map((block) => {
     const first = cursor;
     cursor += block.boxCount;
+    // The card's headings in the order they were set: an issue heading over a block first (#1509),
+    // then the block's own.
+    const issueHeadingIndex = block.groupHeading ? headingAt++ : null;
+    const headingIndex = block.heading ? headingAt++ : null;
     return {
       id: block.entryId,
       kind: block.kind ?? "entry",
       part: block.part,
       heading: block.heading,
-      name: block.kind === "page" ? "A page without stamps" : block.heading || "(no heading)",
+      headingIndex,
+      issueHeadingIndex,
+      name:
+        block.kind === "page"
+          ? "A page without stamps"
+          : block.heading || block.groupHeading || "(no heading)",
       firstBoxIndex: first,
       boxCount: block.boxCount,
       correction: null,
@@ -738,6 +791,7 @@ function printedSheet(
       role: "heading",
       text: "",
       anchor: null,
+      printMode: null,
       // A card is a stored result: whatever the packer could not grant when it was planned is
       // already on the paper, and there is nothing left to warn about.
       separated: false,

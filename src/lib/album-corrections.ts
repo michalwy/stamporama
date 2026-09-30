@@ -62,7 +62,9 @@ export function asAlbumBlockBreak(raw: string): AlbumBlockBreak {
 }
 
 /**
- * The roles a free text block may be set in — the template's own five, and nothing new.
+ * The roles a free text block may be set in — the template's own six, and nothing new. The sixth,
+ * the sub-heading, arrived with #1509 for a checklist printed within its issue, and a note may take
+ * its voice like any other.
  *
  * Reusing them is the whole of what "from the template's text roles" (#769) buys. A sixth type
  * setting for notes would be a face and a size the collector has to configure before a note can be
@@ -72,6 +74,7 @@ export function asAlbumBlockBreak(raw: string): AlbumBlockBreak {
 export const ALBUM_TEXT_BLOCK_ROLES = [
   { key: "chapter", label: "Chapter heading", hint: "The year's own size" },
   { key: "heading", label: "Checklist heading", hint: "The ordinary block heading" },
+  { key: "subheading", label: "Sub-heading", hint: "A checklist's name under its issue" },
   { key: "label", label: "Box label", hint: "The small print under a mount" },
   { key: "footer", label: "Footer", hint: "The smallest voice on the sheet" },
   { key: "title", label: "Running head", hint: "The album's own name size" },

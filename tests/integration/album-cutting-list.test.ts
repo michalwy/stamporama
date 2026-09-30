@@ -247,8 +247,9 @@ describe("the hawid cutting list (#770)", () => {
     // with the card already in front of him.
     const { list } = await cuttingList(twoListsAlbumId);
     const sheet = list.sheets[0];
-    // Two blocks on one card, headed by the album's own checklist template.
-    assert.deepEqual(sheet.headings, ["1945. Basic", "1945. Specialized"]);
+    // Two blocks on one card, under their issue's title — the album's own checklist template — each
+    // with its name as a sub-heading, since neither is named after the issue (#1509).
+    assert.deepEqual(sheet.headings, ["1945. Dwie listy", "Basic", "Specialized"]);
     assert.equal(sheet.boxCount, 2);
     assert.deepEqual(
       sheet.cuts.map((c) => [c.widthMm, c.count]),

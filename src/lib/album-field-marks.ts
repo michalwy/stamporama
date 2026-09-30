@@ -76,6 +76,8 @@ export const ALBUM_PRESET_SECTIONS = [
       "chapterSpaceBelowMm",
       "headingSpaceAboveMm",
       "headingSpaceBelowMm",
+      "subheadingSpaceAboveMm",
+      "subheadingSpaceBelowMm",
     ],
   },
   {
@@ -107,6 +109,8 @@ export const ALBUM_PRESET_SECTIONS = [
       "chapterSizePt",
       "headingFace",
       "headingSizePt",
+      "subheadingFace",
+      "subheadingSizePt",
       "labelFace",
       "labelSizePt",
       "footerFace",
@@ -331,6 +335,7 @@ export function albumFieldMarks(field: AlbumPresetField, sheet: AlbumMarkSheet):
   const titleOutline = () => (sheet.title ? [outline(sheet.title)] : []);
   const chapterOutline = () => (sheet.chapter ? [outline(sheet.chapter)] : []);
   const headingOutlines = () => textsOf(sheet, "heading").map(outline);
+  const subheadings = textsOf(sheet, "subheading");
   const footerOutline = () => (sheet.footer ? [outline(sheet.footer)] : []);
   const titleInFrame = albumTitleInFrame(p);
 
@@ -431,14 +436,30 @@ export function albumFieldMarks(field: AlbumPresetField, sheet: AlbumMarkSheet):
       if (!sheet.chapter) return [];
       return [distance("y", bottom(sheet.chapter), p.chapterSpaceBelowMm, middleX(sheet.chapter))];
     case "headingSpaceAboveMm": {
-      const h = sheet.headings[0];
+      const h = textsOf(sheet, "heading")[0];
       if (!h) return [];
       return [distance("y", h.yMm - p.headingSpaceAboveMm, p.headingSpaceAboveMm, middleX(h))];
     }
     case "headingSpaceBelowMm": {
-      const h = sheet.headings[0];
+      const h = textsOf(sheet, "heading")[0];
       if (!h) return [];
       return [distance("y", bottom(h), p.headingSpaceBelowMm, middleX(h))];
+    }
+    case "subheadingSpaceAboveMm": {
+      // Read only where a sub-heading follows boxes (#1509); directly under its issue's heading the
+      // heading's own space below is what separates them, and this value places nothing there.
+      const h = subheadings.find((s) =>
+        sheet.boxes.some(
+          (b) => bottom(b) <= s.yMm + SAME_MM && b.xMm < right(s) && right(b) > s.xMm
+        )
+      );
+      if (!h) return [];
+      return [distance("y", h.yMm - p.subheadingSpaceAboveMm, p.subheadingSpaceAboveMm, middleX(h))];
+    }
+    case "subheadingSpaceBelowMm": {
+      const h = subheadings[0];
+      if (!h) return [];
+      return [distance("y", bottom(h), p.subheadingSpaceBelowMm, middleX(h))];
     }
 
     // ── Boxes & spacing ──
@@ -504,6 +525,9 @@ export function albumFieldMarks(field: AlbumPresetField, sheet: AlbumMarkSheet):
     case "headingSizePt":
     case "checklistTemplate":
       return headingOutlines();
+    case "subheadingFace":
+    case "subheadingSizePt":
+      return subheadings.map(outline);
     case "labelFace":
     case "labelSizePt":
     case "boxLabelTemplate":
