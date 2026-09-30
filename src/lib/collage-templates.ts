@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import type { CollageTemplateInput } from "./collage-template-rules";
+import { copyName } from "./template-copy-name";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -61,13 +62,48 @@ export async function getCollageTemplates(
   });
 }
 
+/** Creates a template and answers its id, so the page that made it can select it (#1477). */
 export async function createCollageTemplate(
   ownerId: string,
   collectionId: string,
   data: CollageTemplateInput
-): Promise<void> {
+): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.collageTemplate.create({ data: { collectionId, ...data } });
+  const created = await prisma.collageTemplate.create({
+    data: { collectionId, ...data },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** A copy of a template under the first free *(copy)* name, answering the copy's id (#1477) — the
+ *  album templates' Duplicate (#1474), for the shape the two pages share. Every value is carried
+ *  over; nothing links the two afterwards, and no platform's default moves to the copy. */
+export async function duplicateCollageTemplate(ownerId: string, templateId: string): Promise<string> {
+  const collectionId = await resolveTemplateCollection(templateId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const source = await prisma.collageTemplate.findUniqueOrThrow({
+    where: { id: templateId },
+    select: {
+      name: true,
+      gridMode: true,
+      pairSides: true,
+      rows: true,
+      columns: true,
+      gapPercent: true,
+      background: true,
+      labelPercent: true,
+    },
+  });
+  const siblings = await prisma.collageTemplate.findMany({
+    where: { collectionId },
+    select: { name: true },
+  });
+  const created = await prisma.collageTemplate.create({
+    data: { ...source, collectionId, name: copyName(source.name, siblings.map((t) => t.name)) },
+    select: { id: true },
+  });
+  return created.id;
 }
 
 export async function updateCollageTemplate(

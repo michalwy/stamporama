@@ -1064,7 +1064,32 @@ shipping method or named on a sale can't be deleted — detach it there first.
 
 Offer photos put several stamps on one image. How many fit sensibly is a property of **stamp size**, not of the platform: many small definitives sit comfortably where only a few large commemoratives do. Rather than setting those numbers by hand on every offer, keep them as named, reusable **collage templates** under **Settings → Collage templates**.
 
-A template holds:
+The page lists your templates on the left, each with a one-line note of its grid, gap and strip.
+Select one and the right-hand side shows its values and **a preview of the collage it lays out**.
+**Add template** is at the top of the page; each row's **⋮** has **Edit…**, **Duplicate** (a copy
+under a *(copy)* name, every value carried over) and **Delete**. The selected template is part of
+the address, so a link or a reload opens the same one.
+
+### The preview
+
+The preview draws one image of the template on **numbered placeholder stamps** — no photos, so it
+works for a template no offer has used yet — with the gap, the label strips and the background as
+set. A paired template shows each stamp's **front** and **back** side by side in its cell. The
+placeholders are all one size: a real collage keeps each stamp's true size, so a page of mixed stamps
+packs a little differently, but the grid, the spacing, the strip and the colour are exactly what a
+rendered collage gets — the preview is laid out by the same rules the collage is.
+
+**Stamps** above the drawing sets how many placeholders it lays out, from one up to a full image. It
+starts at a full image, and it is the way to see the **Grid** choice: at a full image a fixed and an
+automatic grid are the same picture, and the difference only shows with fewer stamps — four under a
+3 × 3 are a row of three and one trailing on the fixed grid, and a 2 × 2 on the automatic one. The
+count belongs to the preview and is never saved.
+
+**Edit…** opens the template in a window with the fields on the left and the same preview on the
+right, redrawn as you type. A value that could not be saved — a blank number, one out of range —
+leaves the last drawing up and says what is wrong beneath it; nothing changes until you **Save**.
+
+### What a template holds
 
 - **Grid** — how the two numbers below are read. **Fixed grid** fills every row to the number of columns you typed and leaves the last row as short as it needs to be. **Automatic** treats them as limits only and arranges each collage from however many stamps it actually holds: under a 3 × 3 template, four stamps come out 2 × 2 and five come out 3 + 2, instead of a full row with one stamp trailing under it. Pick automatic when your offers vary in size, which is most of them — it is what saves editing the template between listings. Templates you made before this existed are on the fixed grid.
 - **Front and back in one cell** — whether each cell holds a stamp's *two* scans side by side, under one label, instead of a single scan. Off by default. It changes what a cell holds, never the grid: a 3 × 3 template still fits nine stamps to an image, each one twice as wide. See [paired front and back](offers.md#paired-front-and-back) for what it does to a listing.
@@ -1073,7 +1098,7 @@ A template holds:
 - **Label strip (% of image)** — the height of the strip drawn below each stamp for its labels, and with it the size of the label text. Takes tenths (`1.5`, or `1,5`), because the difference between a readable caption and one shouting over the stamps is well under a whole percent; **1–2%** is the usual range. Set it to **0** for no strip.
 - **Background** — the canvas colour behind the stamps, which is also what the label strip is drawn on. A new template starts on **black**: a scan carries its own pale margins, so on a white canvas the stamps' edges dissolve into the background and the collage reads as stamps floating in nothing. Pick any colour you like — the label text flips between white and black on its own so the captions stay readable — and a template you already made keeps the colour it was made with.
 
-Five things are worth knowing:
+A few things are worth knowing:
 
 - **Both sizes are shares, not pixels.** You cannot know in advance how many pixels a scan will
   have, nor how far a platform's size limit will shrink the finished image — so a strip measured in

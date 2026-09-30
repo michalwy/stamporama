@@ -8,6 +8,7 @@ import {
   createCollageTemplate,
   updateCollageTemplate,
   deleteCollageTemplate,
+  duplicateCollageTemplate,
   getCollageTemplates,
   type CollageTemplateData,
 } from "@/lib/collage-templates";
@@ -15,7 +16,8 @@ import { parseCollageTemplateInput } from "@/lib/collage-template-rules";
 
 export type CollageTemplateActionState =
   | { status: "idle" }
-  | { status: "success" }
+  /** `id` is the template an add or a duplicate made, so the page can select it (#1477). */
+  | { status: "success"; id?: string }
   | { status: "error"; message: string };
 
 async function getSession() {
@@ -53,8 +55,8 @@ export async function createCollageTemplateAction(
   const parsed = readForm(formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
-    await createCollageTemplate(session.user.id, collectionId, parsed.value);
-    return { status: "success" };
+    const id = await createCollageTemplate(session.user.id, collectionId, parsed.value);
+    return { status: "success", id };
   } catch {
     return { status: "error", message: "Failed to create collage template. Please try again." };
   }
@@ -84,5 +86,18 @@ export async function deleteCollageTemplateAction(
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to delete collage template. Please try again." };
+  }
+}
+
+/** A copy of the template under a *(copy)* name, every value carried over (#1477). */
+export async function duplicateCollageTemplateAction(
+  templateId: string
+): Promise<CollageTemplateActionState> {
+  const session = await getSession();
+  try {
+    const id = await duplicateCollageTemplate(session.user.id, templateId);
+    return { status: "success", id };
+  } catch {
+    return { status: "error", message: "Failed to duplicate collage template. Please try again." };
   }
 }

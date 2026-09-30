@@ -1,9 +1,9 @@
 import sharp from "sharp";
 import {
-  collageGap,
+  collageCells,
   layOutCollage,
-  pairedCellGap,
   trueSizeScales,
+  type CollageCell,
   type CollageLayout,
   type CollageLayoutStyle,
   type CollageTileSize,
@@ -178,8 +178,9 @@ async function rescaleTile(tile: DecodedTile, scale: number): Promise<DecodedTil
 }
 
 /**
- * Joins a cell's two scans into one tile (#694): front, a gap, back, each centred against the taller
- * of the two, on the collage's own background so the seam is invisible.
+ * Joins a cell's two scans into one tile (#694), where `collageCells` placed them: front, a gap,
+ * back, each centred against the taller of the two, on the collage's own background so the seam is
+ * invisible.
  *
  * The result is an ordinary decoded tile, which is the point — from here on nothing downstream can
  * tell a paired cell from a single scan, so the layout, the label strip and the output limits are
@@ -188,26 +189,25 @@ async function rescaleTile(tile: DecodedTile, scale: number): Promise<DecodedTil
 async function joinPair(
   main: DecodedTile,
   pair: DecodedTile,
-  gap: number,
+  cell: CollageCell,
   background: string
 ): Promise<DecodedTile> {
-  const width = main.width + gap + pair.width;
-  const height = Math.max(main.height, pair.height);
+  const [mainAt, pairAt] = cell.scans;
   const { data, info } = await sharp({
-    create: { width, height, channels: 3, background },
+    create: { width: cell.width, height: cell.height, channels: 3, background },
   })
     .composite([
       {
         input: main.data,
         raw: { width: main.width, height: main.height, channels: main.channels },
-        left: 0,
-        top: Math.round((height - main.height) / 2),
+        left: mainAt.x,
+        top: mainAt.y,
       },
       {
         input: pair.data,
         raw: { width: pair.width, height: pair.height, channels: pair.channels },
-        left: main.width + gap,
-        top: Math.round((height - pair.height) / 2),
+        left: pairAt.x,
+        top: pairAt.y,
       },
     ])
     .raw()
@@ -286,22 +286,14 @@ export async function renderCollage(
     ).map((scale, index) => rescaleTile(decoded[index], scale))
   );
 
-  // The gap the pairs are spaced by is the collage's own, asked for before they are joined. Safe to
-  // ask this early: it is taken of tile *heights*, and joining a cell changes only its width.
+  // Where each scan sits in its cell, by the one rule the template preview draws with (#1477). The
+  // gap the pairs are spaced by is the collage's own, asked for before they are joined.
   const cells: DecodedTile[][] = sources.map(() => []);
   scaled.forEach((tile, index) => cells[scans[index].cell].push(tile));
-  const gap = collageGap(
-    cells.map((cell) => ({
-      width: 0,
-      height: cell.reduce((tallest, tile) => Math.max(tallest, tile.height), 0),
-    })),
-    style.gapPercent
-  );
+  const placed = collageCells(cells, style.gapPercent).cells;
   const tiles = await Promise.all(
-    cells.map((cell) =>
-      cell.length > 1
-        ? joinPair(cell[0], cell[1], pairedCellGap(gap), style.background)
-        : cell[0]
+    cells.map((cell, index) =>
+      cell.length > 1 ? joinPair(cell[0], cell[1], placed[index], style.background) : cell[0]
     )
   );
 

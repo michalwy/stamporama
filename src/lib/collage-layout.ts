@@ -1,6 +1,6 @@
 /**
  * Pure geometry for offer photo collages (#310) — no `sharp`, no Prisma, so the packing rules are
- * unit-testable on plain numbers and could later drive a client-side preview.
+ * unit-testable on plain numbers and drive the collage template preview in the browser (#1477).
  *
  * True proportions
  * ----------------
@@ -375,6 +375,87 @@ export const PAIR_GAP_SHARE = 0.5;
 /** The space between a paired cell's two scans, from the collage's own gap. */
 export function pairedCellGap(gap: number): number {
   return Math.max(0, Math.round(gap * PAIR_GAP_SHARE));
+}
+
+/**
+ * How many tiles go on a row for the cells an image will hold — the column rule as generation asks
+ * it (#413/#514/#694): paired cells scored as the one wide tile each composites to, every scan first
+ * put on the image's common scale. Named so the template preview (#1477) asks it the same way the
+ * renderer's caller does, rather than composing the two steps a second time.
+ */
+export function collageColumnsFor(
+  tiles: readonly CollagePlannedTileSize[],
+  grid: CollageGrid
+): number {
+  return resolveCollageColumns(pairedTrueScaledSizes(tiles), grid);
+}
+
+/** Where one scan sits inside its cell, relative to the cell's top-left corner. */
+export interface CollageCellScan {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** One cell as the layout sees it — a tile — and the scans drawn in it: one, or a pair (#694). */
+export interface CollageCell {
+  width: number;
+  height: number;
+  scans: CollageCellScan[];
+}
+
+/**
+ * The cells of one collage, from the scans each holds (#694): a single scan is its own cell, and a
+ * pair is the two side by side, `pairedCellGap` apart, each centred against the taller.
+ *
+ * The one statement of that geometry. The renderer composites a pair's bytes by it and the template
+ * preview (#1477) draws its placeholder scans by it, so the preview cannot put a back where a
+ * rendered collage would not. `layOutCollage` still never sees a pair — it is handed these cells as
+ * ordinary tiles.
+ *
+ * The gap is the collage's own, asked of the cells' heights before they are joined — safe, because
+ * joining changes only a cell's width.
+ */
+export function collageCells(
+  cells: readonly (readonly CollageTileSize[])[],
+  gapPercent: number
+): { gap: number; cells: CollageCell[] } {
+  const gap = collageGap(
+    cells.map((scans) => ({
+      width: 0,
+      height: scans.reduce((tallest, scan) => Math.max(tallest, scan.height), 0),
+    })),
+    gapPercent
+  );
+  const inner = pairedCellGap(gap);
+  return {
+    gap,
+    cells: cells.map((scans) => {
+      const [main, pair] = scans;
+      if (!pair) {
+        return {
+          width: main.width,
+          height: main.height,
+          scans: [{ x: 0, y: 0, width: main.width, height: main.height }],
+        };
+      }
+      const height = Math.max(main.height, pair.height);
+      return {
+        width: main.width + inner + pair.width,
+        height,
+        scans: [
+          { x: 0, y: Math.round((height - main.height) / 2), width: main.width, height: main.height },
+          {
+            x: main.width + inner,
+            y: Math.round((height - pair.height) / 2),
+            width: pair.width,
+            height: pair.height,
+          },
+        ],
+      };
+    }),
+  };
 }
 
 /** The share of the canvas's height all the strips together may take. A rail, not a setting: a

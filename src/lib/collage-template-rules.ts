@@ -257,3 +257,46 @@ export function parseCollageTemplateInput(raw: {
     },
   };
 }
+
+type CollageTemplateValues = Omit<CollageTemplateInput, "name" | "gridMode"> & { gridMode: string };
+
+/** The grid in words — `3 × 3`, or `up to 3 × 3` where the two numbers are only bounds (#413). */
+function collageGridWords(template: CollageTemplateValues): string {
+  const size = `${template.rows} × ${template.columns}`;
+  return normalizeCollageGridMode(template.gridMode) === "auto" ? `up to ${size}` : size;
+}
+
+/** A template in one line, for its row on the Settings page (#1477): the grid, whether cells pair,
+ *  the gap and the strip — enough to tell two templates apart without selecting either. */
+export function collageTemplateSummary(template: CollageTemplateValues): string {
+  const parts = [
+    normalizeCollageGridMode(template.gridMode) === "auto"
+      ? `auto, ${collageGridWords(template)}`
+      : collageGridWords(template),
+    ...(template.pairSides ? ["front+back cells"] : []),
+    `gap ${template.gapPercent}%`,
+    template.labelPercent > 0 ? `strip ${template.labelPercent}%` : "no strip",
+  ];
+  return parts.join(" · ");
+}
+
+/** A template's values as label and value, for the summary beside its preview (#1477). The drawing
+ *  shows the look; these are the figures it does not print — every one of them, since a collage
+ *  template has only six. */
+export function collageTemplateSummaryRows(
+  template: CollageTemplateValues
+): { label: string; value: string }[] {
+  const mode = normalizeCollageGridMode(template.gridMode);
+  const capacity = template.rows * template.columns;
+  return [
+    { label: "Grid", value: `${COLLAGE_GRID_MODE_LABELS[mode]}, ${collageGridWords(template)}` },
+    { label: "Per image", value: capacity === 1 ? "1 stamp" : `Up to ${capacity} stamps` },
+    { label: "Cells", value: template.pairSides ? "Front and back" : "One scan" },
+    { label: "Gap", value: `${template.gapPercent}% of stamp` },
+    {
+      label: "Label strip",
+      value: template.labelPercent > 0 ? `${template.labelPercent}% of image` : "None",
+    },
+    { label: "Background", value: template.background },
+  ];
+}
