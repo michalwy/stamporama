@@ -8,6 +8,7 @@ import {
   createRefCardTemplate,
   updateRefCardTemplate,
   deleteRefCardTemplate,
+  duplicateRefCardTemplate,
   getRefCardTemplates,
   RefCardTemplateNameTakenError,
   type RefCardTemplateData,
@@ -19,7 +20,7 @@ import { parseRefCardTemplateInput } from "@/lib/ref-card-template-rules";
 
 export type RefCardTemplateActionState =
   | { status: "idle" }
-  /** `id` is the template a create made, which the Settings page then selects (#1478); an edit or
+  /** `id` is the template a create or a duplicate made, which the Settings page then selects (#1478); an edit or
    *  a delete has none to hand back. */
   | { status: "success"; id?: string }
   | { status: "error"; message: string };
@@ -84,6 +85,19 @@ export async function updateRefCardTemplateAction(
     return { status: "success" };
   } catch (err) {
     return toErrorState(err, "Failed to save the ref card template. Please try again.");
+  }
+}
+
+/** A copy of the template under a *(copy)* name, every measurement carried over (#1478). */
+export async function duplicateRefCardTemplateAction(
+  templateId: string
+): Promise<RefCardTemplateActionState> {
+  const session = await getSession();
+  try {
+    const id = await duplicateRefCardTemplate(session.user.id, templateId);
+    return { status: "success", id };
+  } catch (err) {
+    return toErrorState(err, "Failed to duplicate the ref card template. Please try again.");
   }
 }
 

@@ -15,6 +15,7 @@ import {
   createRefCardTemplateAction,
   updateRefCardTemplateAction,
   deleteRefCardTemplateAction,
+  duplicateRefCardTemplateAction,
   type RefCardTemplateActionState,
 } from "@/app/actions/ref-card-templates";
 import type { RefCardTemplateData } from "@/lib/ref-card-templates";
@@ -268,7 +269,7 @@ export function RefCardTemplatesPanel({
     if (!isPending) setDialog({ kind: "none" });
   }
 
-  /** A template made by an add is selected, so its card is what is on screen next; a deleted one's
+  /** A template made by an add or a duplicate is selected, so its card is what is on screen next; a deleted one's
    *  address is cleared, and the first template takes its place. */
   function handleSuccess(result: Extract<RefCardTemplateActionState, { status: "success" }>) {
     if (result.id) select(result.id);
@@ -292,6 +293,15 @@ export function RefCardTemplatesPanel({
   function submitDelete(action: () => Promise<RefCardTemplateActionState>) {
     startTransition(async () => {
       const result = await action();
+      setActionState(result);
+      if (result.status === "success") handleSuccess(result);
+    });
+  }
+
+  function duplicate(template: RefCardTemplateData) {
+    setActionState({ status: "idle" });
+    startTransition(async () => {
+      const result = await duplicateRefCardTemplateAction(template.id);
       setActionState(result);
       if (result.status === "success") handleSuccess(result);
     });
@@ -333,6 +343,13 @@ export function RefCardTemplatesPanel({
                 label: "Edit…",
                 icon: "edit",
                 onSelect: () => openDialog({ kind: "edit", template }),
+              },
+              {
+                key: "duplicate",
+                label: "Duplicate",
+                icon: "duplicate",
+                disabled: isPending,
+                onSelect: () => duplicate(template),
               },
               {
                 key: "delete",
