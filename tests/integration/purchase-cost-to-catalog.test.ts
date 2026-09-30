@@ -20,8 +20,12 @@ import type { LotSummary } from "../../src/lib/lots";
 // snapshot, and that the two summaries agree — and the three lots the figure has to keep apart:
 //
 //  - **closed**, priced throughout, with a not-delivered copy whose share went to the others;
-//  - **open and partly priced**, whose figure is only an upper bound and stays out of the order's;
+//  - **open and partly priced**, whose figure is only an upper bound and makes the order's one too
+//    (#1510);
 //  - **open and unpriced**, which has no figure at all.
+//
+// A second order holds only partly priced open lots — an order being sorted — whose figure is then
+// wholly an upper bound (#1510).
 
 const TS = Date.now();
 
@@ -32,6 +36,7 @@ describe("purchase cost as a share of catalogue (#1395)", () => {
   let closedLotId: string;
   let partLotId: string;
   let unpricedLotId: string;
+  let sortingPurchaseId: string;
 
   before(async () => {
     userId = `test-user-costcat-${TS}`;
@@ -114,6 +119,23 @@ describe("purchase cost as a share of catalogue (#1395)", () => {
     // Open and nothing priced: no figure.
     unpricedLotId = await createLot(userId, purchaseId, 4, null);
     await intake(unpricedLotId, unpricedStampId);
+
+    // Being sorted: two open lots, each partly priced — 1 EUR against 2 EUR, and 2 EUR against 4 EUR.
+    sortingPurchaseId = (
+      await createPurchase(userId, collectionId, {
+        purchasedAt: "2026-09-02",
+        currency: "EUR",
+        status: "arrived",
+      })
+    ).id;
+    const firstSortingLotId = await createLot(userId, sortingPurchaseId, 1, null);
+    await intake(firstSortingLotId, pricedStampId);
+    await intake(firstSortingLotId, unpricedStampId);
+    const secondSortingLotId = await createLot(userId, sortingPurchaseId, 2, null);
+    await intake(secondSortingLotId, pricedStampId);
+    await intake(secondSortingLotId, pricedStampId);
+    await intake(secondSortingLotId, unpricedStampId);
+    await intake(secondSortingLotId, unpricedStampId);
   });
 
   after(async () => {
@@ -123,8 +145,11 @@ describe("purchase cost as a share of catalogue (#1395)", () => {
 
   /** The screen's own reading: the lot's state and pool off the purchase read model, beside the
    * basis the summary gathered. */
-  async function lotsWith(bases: Record<string, LotCatalogBasis>): Promise<CostToCatalogLot[]> {
-    const detail = await getPurchaseDetail(userId, purchaseId);
+  async function lotsWith(
+    bases: Record<string, LotCatalogBasis>,
+    ofPurchaseId = purchaseId
+  ): Promise<CostToCatalogLot[]> {
+    const detail = await getPurchaseDetail(userId, ofPurchaseId);
     assert.ok(detail);
     return detail.lots.map((l: LotSummary) => ({
       open: l.status === "open",
@@ -185,19 +210,36 @@ describe("purchase cost as a share of catalogue (#1395)", () => {
     );
   });
 
-  it("reads the order over the lots with a figure, and counts the copies it leaves out", async () => {
+  it("reads the order over every lot with a figure, as an upper bound, and counts the copies it leaves out", async () => {
     const summary = await getPurchaseIntakeSummary(userId, collectionId, purchaseId);
     // The order's summary gathers each lot exactly as the lot's own does.
     for (const lotId of [closedLotId, partLotId, unpricedLotId]) {
       const own = await getLotIntakeSummary(userId, collectionId, lotId);
       assert.deepEqual(summary.lotCatalogBasis[lotId], own.catalogBasis);
     }
+    // The closed lot's 10 against 4 and the partly priced one's 3 against 2; the unpriced lot is out.
     const r = orderCostToCatalog(await lotsWith(summary.lotCatalogBasis));
-    assert.equal(r?.kind, "settled");
-    assert.equal(r?.cost, 10);
-    assert.equal(r?.value, 4);
-    assert.equal(r?.coveredCount, 2);
+    assert.equal(r?.kind, "at_most");
+    assert.equal(r?.cost, 13);
+    assert.equal(r?.value, 6);
+    assert.equal(formatCostPercent(costPercent(r!)), "217%");
+    assert.equal(r?.coveredCount, 3);
     assert.equal(r?.copyCount, 5);
+    assert.equal(r?.unpricedCount, 2);
+    assert.equal(r?.noFigureCount, 1);
+  });
+
+  it("states an order whose lots are all upper bounds as one, over the order's unpriced copies", async () => {
+    const summary = await getPurchaseIntakeSummary(userId, collectionId, sortingPurchaseId);
+    const r = orderCostToCatalog(await lotsWith(summary.lotCatalogBasis, sortingPurchaseId));
+    assert.equal(r?.kind, "at_most");
+    assert.equal(r?.cost, 3);
+    assert.equal(r?.value, 6);
+    assert.equal(formatCostPercent(costPercent(r!)), "50%");
+    assert.equal(r?.coveredCount, 3);
+    assert.equal(r?.copyCount, 6);
+    assert.equal(r?.unpricedCount, 3);
+    assert.equal(r?.noFigureCount, 0);
   });
 
   it("is whole-order whatever the list is filtered to", async () => {
