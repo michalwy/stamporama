@@ -9,21 +9,22 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID and #1452 translations; both wrappers exist and the registry carries **fifty-six operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations and #1512 checklists; both wrappers exist and the registry carries **sixty-four operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1168's bid recommendation, and #1037's catalog-number
-resolver. Seven counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1168's bid recommendation, and #1037's catalog-number
+resolver. Eight counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
 carries thirty operations* (from #1036 until #1390), *the registry carries forty-one operations*
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
-*the registry carries fifty-three operations* (from #1438 until #1445) and *the registry carries
-fifty-four operations* (from #1445 until #1452).
+*the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
+fifty-four operations* (from #1445 until #1452) and *the registry carries fifty-six operations* (from
+#1452 until #1512).
 
-**Twenty-eight of them write** since #1452 added one; *twenty-seven of them write* was the count from
-#1445 until then, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
+**Thirty-four of them write** since #1512 added six; *twenty-eight of them write* was the count from
+#1452 until then, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
@@ -134,6 +135,7 @@ src/lib/agent-api/
   catalog-edits.ts  the "key: value" entries, the date bounds, the duplicate refusal (#1438)
   colnect-ids.ts    reading a Colnect item-ID, the answer, the refusal for one held (#1445)
   translations.ts   the text kinds, the `kind.field.id` key, the language check, the answers (#1452)
+  checklist-reads.ts  the checklist row, the order they are listed in, the refusals (#1512)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -155,10 +157,11 @@ src/lib/agent-api/
     catalog-edits.ts  the five catalogue writes (#1438)                  ← server-side
     colnect-ids.ts  set_stamp_colnect_id (#1445)                        ← server-side
     translations.ts find_missing_translations / set_translations (#1452) ← server-side
+    checklists.ts   the eight checklist operations (#1512)              ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1554,10 +1557,17 @@ manual value.
 **Nothing is deleted, moved or reordered**, and it is held the way the other boundaries are.
 `CATALOG_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts` keeps `deleteIssue`,
 `deleteStamp`, `deleteStampCatalogNumber`, `removeStampFromIssue`, `mergeIssues`, `moveStampNode`,
-`reparentStampNode`, `moveIssueToArea`, `reorderIssueMembers`, `deleteChecklist` and
-`reorderChecklistStamps` out of every operation module, and `tests/integration/agent-api-catalog-edits.test.ts`
-pins the exact list of writes under `/issues` and `/stamps` and fails on a delete-, move- or
-reorder-shaped name. New stamps take the issue's order as the dialogs' generation gives it (#549).
+`reparentStampNode`, `moveIssueToArea`, `reorderIssueMembers` and `reorderChecklists` out of every
+operation module, and `tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of
+writes under `/issues` and `/stamps` and fails on a delete-, move- or reorder-shaped name. New stamps
+take the issue's order as the dialogs' generation gives it (#549).
+
+**#1512 lifted this for checklists, and for exactly its operations** — see *Changing checklists*
+below. Until then the map also held `deleteChecklist` and `reorderChecklistStamps`; both moved to
+`CHECKLIST_WRITES`, and `reorderChecklists` — the order of an issue's checklists among themselves,
+which nobody asked for — joined the map instead. `remove_checklist_stamps` is exempted **by name,
+with its reason**, from the catalogue test's name guard, which it would otherwise trip on
+`remove_…stamp`.
 
 **`resolveStampRefs` and `loadStampLabels` moved out of `sizes.ts` into `operations/stamp-refs.ts`**
 so the two modules share one way of naming a stamp and reading its numbers back.
@@ -1603,6 +1613,72 @@ in step* (#689). `set_stamp_colnect_id` is exempted **by name, with its reason**
 `tests/integration/agent-api-trades.test.ts`, rather than by narrowing the word list or renaming the
 operation to slip past it: it sends nothing, claims nothing about a list and clears no report, and
 `markColnectApplied` stays out through the import guard.
+
+## Changing checklists
+
+**Eight operations, six of which write** (#1512): a checklist created on an issue or spanning several
+(#1416), renamed and translated, its stamps added, taken off and put in order (#764), and one no album
+prints deleted — *make a checklist of the watermark Y stamps of this issue*, *take the reprints out of
+this one*. What a checklist is, and how completeness and gaps are computed, did not change.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_checklists` | no | the checklists, spanning ones first, then each issue's by year; narrowed by `issue_id`, `spanning`, `name` (`GET /checklists`) |
+| `list_checklist_stamps` | no | one checklist's stamps in their order, paged, with the checklist (`GET /checklists/{checklist_id}/stamps`) |
+| `create_checklist` | yes | an empty checklist on an issue, or without `issue_id` spanning issues |
+| `update_checklist` | yes | its name and translated names, only what is sent |
+| `add_checklist_stamps` | yes | stamps appended in the order sent |
+| `remove_checklist_stamps` | yes | stamps taken off, the stamps kept (`POST …/stamps/remove`) |
+| `set_checklist_order` | yes | the stamps sent first, the rest after them as they were (`POST …/order`) |
+| `delete_checklist` | yes | a checklist no album prints |
+
+**The reads answer what `get_issue` and `find_checklist_gaps` did not**: `get_issue` names an issue's
+checklists and their sizes and nothing spanning issues, and the gap read names only what is missing.
+A `list_checklists` row is the whole checklist but its stamps — #712's move for a want row — so there
+is no *read one checklist* verb; its stamps are a paged list of their own because a spanning set can
+run to hundreds, and `list_checklist_stamps` carries the checklist row beside the page.
+
+**Every write is the editors' own.** `createChecklist`, `renameChecklist`, `setChecklistStamps` (the
+remove, which is the editor's *save the set* with the survivors keeping their order),
+`reorderChecklistStamps` and `deleteChecklist`, and for an add `addStampsToSpanningChecklist` — the
+Issues list's selection bar — or `addStampsToIssueChecklist`, which #1512 added beside it for an
+issue's own checklist. **That one function is where the screens' rule for an issue's checklist now
+lives**: the editor on the issue offers only the issue's members (`useIssueMembers`), so nothing on the
+server had to say it, and `addStampsToSpanningChecklist` refuses an issue's checklist outright for the
+reason ADR-0020 §7 gives. The new function admits the issue's `IssueMember` rows only; the operation
+checks first so its refusal can name the stamps. Translated names go through `translationWrites`, the
+catalogue writes' `"language: name"` spelling (#1438), over the same languages the name dialog offers.
+**A checklist still named after its issue** follows the issue's translation (`resolveChecklistName`)
+until it is renamed or given its own, and the API writes the same columns, so that holds unchanged.
+
+**A repeated name is advisory, as in `ChecklistNameDialog`**: the answer carries `sameNameAs` with the
+other checklists' ids and the name is kept (#178's rule for an issue name).
+
+**An add refuses; a remove and an order report.** An add is a statement about what the set contains,
+so a stamp that names nothing — `resolveStampRefs`, the size and catalogue writes' resolver — or one an
+issue's checklist may not hold refuses the whole call. A remove and an order are idempotent over a
+stale list, as #1512 decided: an entry the resolver cannot place is reported under `notFound` with the
+reason (`unfoundStamp`), a stamp not on the checklist under `notOnChecklist`, and the rest is done.
+`set_checklist_order` is `reorderChecklistStamps` whole — named stamps first, the others after them in
+their relative order — and says how many it placed and how many it `keptAfter`.
+
+**Delete refuses what an album prints.** On the screen the confirmation names the albums
+(`getChecklistUsage`, `ChecklistUsageNote`) and the delete cascades their cards away; through the API
+it is refused with the albums named, so no printed page loses a block the collector has not looked
+at. **#1512's issue body named *a series run* as a second user, and the tree says otherwise**: a run of
+scan tiles (#1225) reads a checklist once and keeps no reference to it (`getChecklistUsage`'s own
+comment, and `AlbumEntry` is the schema's only relation to `Checklist` besides its own rows), so an
+album is the one thing there is to refuse on.
+
+**A printed card is not touched.** The divergence report (#778) compares a snapshot with what the
+collection would now produce, at read time, so a membership or order change made here shows up on a
+printed card exactly as one made on the screen, and nothing is reprinted.
+
+**The boundary moved by exactly these operations.** `CHECKLIST_WRITES` in
+`tests/unit/agent-api-operation-boundary.test.ts` pins the checklist writes `operations/checklists.ts`
+imports and fails if any other operation module imports one; `reorderChecklists` joined
+`CATALOG_BOUNDARY`. `tests/integration/agent-api-checklists.test.ts` pins the exact list of operations
+under `/checklists`.
 
 ## Translating the collection's texts
 
@@ -1677,7 +1753,8 @@ exist cannot be.
   undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
 - **The agent never deletes, moves or reorders an issue, a stamp or a variant** (#1438). See
-  *Building the catalogue* above.
+  *Building the catalogue* above. **Checklists are the one exception** (#1512): it deletes one no
+  album prints and sets the order of its stamps, and nothing else — see *Changing checklists*.
 
 Do not add a publish-shaped, send-shaped, auction-writing or copy-touching operation to the
 registry, whatever it is called, nor one that deletes a size preset or deletes, moves or reorders an

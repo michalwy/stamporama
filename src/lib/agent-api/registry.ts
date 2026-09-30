@@ -12,7 +12,8 @@
 // forty-one; #1415 added the seven size operations, four of which write, taking it to forty-eight;
 // #1438 added the five catalogue writes, taking it to fifty-three; #1445 added
 // `set_stamp_colnect_id`, taking it to fifty-four; #1452 added the two translation operations,
-// taking it to **fifty-six**. Each one is an entry here
+// taking it to fifty-six; #1512 added the eight checklist operations, six of which write, taking it
+// to **sixty-four**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -31,7 +32,10 @@
 // listing in the mail is one of them — then purchases (#1390), in the order an order confirmation
 // is entered: is it already here, who sold it, the purchase, its lots, its expenses — then the
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
-// their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then stamp sizes (#1415), in the order a size read off a catalogue is put on a series: the presets already
+// their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then
+// checklists (#1512), in the order a set is put together: the checklists already kept, one's stamps
+// in order, a new one, its name, its stamps added, taken off and put in order, and last deleting
+// one — then stamp sizes (#1415), in the order a size read off a catalogue is put on a series: the presets already
 // kept, one stamp's size and where it comes from, a new or corrected preset, one stamp, and the
 // apply, previewed before it is run — then translations (#1452), what a language is missing before
 // what fills it. **`recommend_bid` is last because it is the
@@ -120,6 +124,16 @@ import {
 } from "./operations/catalog-edits";
 import { setStampColnectIdOperation } from "./operations/colnect-ids";
 import {
+  addChecklistStampsOperation,
+  createChecklistOperation,
+  deleteChecklistOperation,
+  listChecklistsOperation,
+  listChecklistStampsOperation,
+  removeChecklistStampsOperation,
+  setChecklistOrderOperation,
+  updateChecklistOperation,
+} from "./operations/checklists";
+import {
   applyStampSizeOperation,
   createSizePresetOperation,
   getStampSizeOperation,
@@ -180,6 +194,14 @@ export const OPERATIONS: readonly Operation[] = [
   updateIssueOperation,
   updateStampOperation,
   setStampColnectIdOperation,
+  listChecklistsOperation,
+  listChecklistStampsOperation,
+  createChecklistOperation,
+  updateChecklistOperation,
+  addChecklistStampsOperation,
+  removeChecklistStampsOperation,
+  setChecklistOrderOperation,
+  deleteChecklistOperation,
   listSizePresetsOperation,
   getStampSizeOperation,
   createSizePresetOperation,

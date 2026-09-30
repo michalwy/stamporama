@@ -491,16 +491,60 @@ export async function addStampsToSpanningChecklist(
   if (checklist.issueId !== null) {
     throw new Error("Stamps are added to an issue's checklist from the issue itself.");
   }
-  const wanted = [...new Set(stampIds)];
-  if (wanted.length === 0) return 0;
   const valid = new Set(
     (
       await prisma.stamp.findMany({
-        where: { id: { in: wanted }, collectionId: checklist.collectionId },
+        where: { id: { in: [...new Set(stampIds)] }, collectionId: checklist.collectionId },
         select: { id: true },
       })
     ).map((s) => s.id)
   );
+  return appendChecklistStamps(checklistId, stampIds, valid);
+}
+
+/**
+ * Add stamps to an issue's own checklist — the agent API's add (#1512), where the editor on the issue
+ * saves the whole set with {@link setChecklistStamps}. **Only that issue's stamps are admitted**, the
+ * rule the editor applies by offering nothing else (ADR-0020 §7, ADR-0031 §5): a stamp of another
+ * publication counted as one of this issue's set is what anchoring a checklist to an issue prevents.
+ * Others are dropped, as stamps outside the collection are everywhere here; a caller that wants to
+ * say so checks first. Appended in the order given, one already on it left where it is. Returns how
+ * many were added.
+ */
+export async function addStampsToIssueChecklist(
+  ownerId: string,
+  checklistId: string,
+  stampIds: string[]
+): Promise<number> {
+  const checklist = await prisma.checklist.findUnique({
+    where: { id: checklistId },
+    select: { collectionId: true, issueId: true },
+  });
+  if (!checklist) throw new Error("Checklist not found.");
+  await assertCollectionOwner(ownerId, checklist.collectionId);
+  if (checklist.issueId === null) {
+    throw new Error("A checklist spanning issues takes stamps with addStampsToSpanningChecklist.");
+  }
+  const valid = new Set(
+    (
+      await prisma.issueMember.findMany({
+        where: { issueId: checklist.issueId, stampId: { in: [...new Set(stampIds)] } },
+        select: { stampId: true },
+      })
+    ).map((m) => m.stampId)
+  );
+  return appendChecklistStamps(checklistId, stampIds, valid);
+}
+
+/** The additive half both adds share: `stampIds` in the order given, restricted to `valid`, appended
+ *  after the checklist's last stamp; one already on it keeps its place. */
+async function appendChecklistStamps(
+  checklistId: string,
+  stampIds: string[],
+  valid: ReadonlySet<string>
+): Promise<number> {
+  const wanted = [...new Set(stampIds)];
+  if (wanted.length === 0) return 0;
   return prisma.$transaction(async (tx) => {
     const before = await tx.checklistStamp.findMany({
       where: { checklistId },

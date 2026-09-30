@@ -446,10 +446,15 @@ describe("the catalogue writes (#1438)", () => {
       for (const name of CATALOG_OPERATIONS) {
         assert.equal(OPERATIONS.find((op) => op.name === name)?.writes, true, name);
       }
+      // **A named exception, with its reason, rather than a narrower pattern** (#1512): the
+      // collector allowed a checklist's stamps to be taken off it, and the stamps themselves stay in
+      // the catalogue. `agent-api-checklists.test.ts` pins the checklist operations exactly.
+      const exempt = new Set(["remove_checklist_stamps"]);
       const destructive = OPERATIONS.filter(
         (op) =>
-          op.method === "DELETE" && /^\/(issues|stamps)/.test(op.path) ||
-          /^(delete|remove|move|merge|reorder|reparent)_.*(issue|stamp|variant)/.test(op.name)
+          !exempt.has(op.name) &&
+          (op.method === "DELETE" && /^\/(issues|stamps)/.test(op.path) ||
+            /^(delete|remove|move|merge|reorder|reparent)_.*(issue|stamp|variant)/.test(op.name))
       );
       assert.deepEqual(destructive.map((op) => op.name), []);
     });
