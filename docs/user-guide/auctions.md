@@ -86,7 +86,8 @@ on an auction and it captures the address, title, offer number, seller, closing 
 into a small window, shows you which parcel the lot would land in, and saves it on one click. Capturing the same
 listing again refreshes its bid rather than making a second lot.
 
-It needs one setting first — **Settings → Allegro**, naming which of your platforms *is* Allegro —
+It needs one setting first — the **Platform** choice at the top of **Settings → Allegro**, naming
+which of your platforms *is* Allegro —
 and it never reads the lot's contents: what a lot holds is still entered here, on the lot itself.
 
 On **Philasearch** the same click reads a house's lot: the house as the seller, the house's sale as

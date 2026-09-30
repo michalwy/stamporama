@@ -11,6 +11,27 @@ Stamporama talks to Allegro in two independent ways, both set up under **Setting
 The two are separate on purpose. The first is about a marketplace you buy on; the second is about
 the account you sell from.
 
+## The Allegro page
+
+**Settings → Allegro** has the platform choice at the top right, beside the page title, and three
+tabs under a strip of figures:
+
+- **Account** — the application you registered and the connection made with it. This is the tab the
+  page opens on, and the one Allegro sends you back to after signing in.
+- **Listing profiles** — what your listings are published with; see [Listing
+  profiles](#listing-profiles).
+- **Categories** — what publishing has taught Stamporama; see [Learned
+  categories](#learned-categories).
+
+The strip above the tabs says where each stands — the connection, how many profiles you have and
+which is the default, and how many categories have been learned — and clicking a figure opens its
+tab. The connection's figure turns amber, with a warning sign, when it needs you: **Not connected
+yet**, or **Needs reconnecting** once Allegro has stopped accepting the stored grant. The tab says
+the same words.
+
+Explanations sit behind the ⓘ beside a field or a heading rather than on the page; this guide has
+the rest.
+
 ## What connecting gives you
 
 Two things. The **Sold on Allegro** worklist — see below, where an order can be turned into a sale
@@ -35,7 +56,7 @@ instance uses an application you register yourself. It is free and takes a few m
      **without a redirect** — Allegro calls this a device / non-web application. This is the normal
      case.
    - If your Stamporama **does** have a public HTTPS address, you may instead register a web
-     application and give it the redirect URI shown on the Settings → Allegro page. It must match
+     application and give it the redirect URI shown on the **Account** tab of Settings → Allegro. It must match
      exactly, character for character.
 4. Grant it access:
    - **Read access to your offers and orders** — required. The sold-listing worklist and the bid
@@ -67,7 +88,7 @@ Otherwise, generate one:
 openssl rand -base64 32
 ```
 
-Put it in your `.env` as `STAMPORAMA_SECRET_KEY` and restart Stamporama. Until you do, the Allegro
+Put it in your `.env` as `STAMPORAMA_SECRET_KEY` and restart Stamporama. Until you do, the Account
 tab will say so and refuse to save an application.
 
 Two things worth knowing:
@@ -79,7 +100,7 @@ Two things worth knowing:
 
 ## Connecting
 
-Open **Settings → Allegro**, fill in the client ID, the application name and the secret, tick **Use
+Open **Settings → Allegro** — it opens on the **Account** tab — fill in the client ID, the application name and the secret, tick **Use
 Allegro's sandbox** if you registered a sandbox application, and press **Save application**.
 
 ### Application name
@@ -112,7 +133,7 @@ The code is good for a few minutes. If it expires, press the button again.
 ### Sign in on Allegro instead
 
 Offered only when your instance has a configured address (`BETTER_AUTH_URL`). Pressing it sends you
-to Allegro, you confirm, and Allegro sends you straight back to Settings → Allegro, connected. It is
+to Allegro, you confirm, and Allegro sends you straight back to the Account tab, connected. It is
 one round trip rather than a wait — but it needs the redirect URI shown on the tab to be registered
 with your application, exactly as printed.
 
@@ -174,10 +195,20 @@ warranty, where the parcel is sent from, and whether you issue an invoice. All o
 a 1918 Polish issue and a modern block — it changes when you move house or add a courier, not when
 you list something else.
 
-So it is held once, as a named **listing profile** under Settings → Allegro, and every listing
+So it is held once, as a named **listing profile** on the **Listing profiles** tab of Settings →
+Allegro, and every listing
 published from here is published with one. Publishing (coming with the offer-publishing feature)
 needs a profile; without one there is nothing to send Allegro as the delivery and returns half of a
 listing.
+
+### Editing them
+
+The tab lists your profiles on the left; the one you pick opens beside the list with all its fields,
+and **Save** keeps what you changed (**Revert** undoes it before you save). **Add profile**, at the
+top right, opens an empty one in the same place — it needs the account connected, since a profile is
+built from that account's own lists. A profile you already have can be edited while the connection
+is down: its selects keep showing what it points at. Moving to another profile, tab or page with
+unsaved changes asks first.
 
 ### What is in one
 
@@ -205,8 +236,9 @@ only there** — Stamporama reads them and lets you pick, and cannot create them
 set it up on Allegro (Sales settings → Delivery price lists, and the after-sales conditions beside
 it) and press **Refresh from Allegro** in the editor.
 
-Nothing is remembered between openings: the lists are read from your account every time the editor
-opens, so a rate set you added a minute ago is there. What is saved is *which one you picked*. That
+Nothing is remembered between visits: the lists are read from your account every time you open the
+tab, so a rate set you added a minute ago is there — or press **Refresh from Allegro** without
+leaving it. What is saved is *which one you picked*. That
 choice is checked against Allegro when a listing is actually published — not when you save the
 profile, so a profile can be edited while the connection happens to be down, and a rate set deleted
 on Allegro is caught at the one moment it matters.
@@ -214,7 +246,7 @@ on Allegro is caught at the one moment it matters.
 ### The default, and per-offer overrides
 
 One profile is the platform's **default**: what every listing goes out with. The first profile you
-create becomes it automatically; **Make default** on any other moves it. An individual offer can
+create becomes it automatically; the round button beside any other in the list moves it there. An individual offer can
 name a different profile — for a heavier package wanting a different rate set, or a run posted while
 you are away from home — and an offer that names nothing simply uses the default.
 
@@ -260,14 +292,14 @@ still asks about its area, condition and subtype — it just does not ask about 
 
 ### Correcting one
 
-Settings → Allegro → **Learned categories** lists everything the collection has learned, with how
-often each association has been used and when it was last confirmed.
+Settings → Allegro → **Categories** lists everything the collection has learned, with how often each
+association has been used and when it was last confirmed.
 
 - **Change category** re-points a row at another category, chosen from Allegro's tree. Its count
   starts again from that one choice, since the new category has never actually been published into.
 - **Forget** removes the row. The next offer of that kind asks again.
 
-Remembered parameter answers are listed below, and can be forgotten one by one — the next listing in
+Remembered parameter answers are listed beside them, and can be forgotten one by one — the next listing in
 that category then asks for the value again.
 
 Listings already published are never affected by either: Allegro holds their category from the
@@ -393,7 +425,7 @@ Account (not registered as a Business Account)."* That is Allegro's rule about y
 fault in the offer, and nothing you change here will get past it.
 
 Stamporama remembers it, so it stops sending listings that are going to be refused. From then on it
-is shown under **Settings → Allegro**, under the application's permissions, and every publish is
+is shown on the **Account** tab of **Settings → Allegro**, under the application's permissions, and every publish is
 refused up front with the same sentence. It is checked again whenever you reconnect or change the
 registered application — so if you do register a business account, or point the instance at a sandbox
 application, connecting again is all that is needed.
