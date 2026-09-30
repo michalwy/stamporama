@@ -4,6 +4,8 @@ import {
   parseAlbumPageSelection,
   albumPdfFileName,
   AlbumPageSelectionError,
+  albumYearAloneName,
+  albumYearSheetApart,
 } from "../../src/lib/album-print-rules";
 
 describe("parseAlbumPageSelection", () => {
@@ -54,5 +56,33 @@ describe("albumPdfFileName", () => {
     assert.equal(albumPdfFileName("Deutschland 1949–1990", 1, [0]), "Deutschland 1949 1990.pdf");
     assert.equal(albumPdfFileName("Україна", 1, [0]), "Україна.pdf");
     assert.equal(albumPdfFileName("  /  ", 1, [0]), "Album.pdf");
+  });
+});
+
+describe("a year alone on its sheet (#1498)", () => {
+  const sheet = (chapterKey: string, yearAlone = false, live = true) => ({ chapterKey, live, yearAlone });
+
+  it("is named by its year, having no range", () => {
+    assert.equal(albumYearAloneName("1950"), "The 1950 heading, on its own");
+    assert.equal(albumYearAloneName(""), "The chapter heading, on its own");
+  });
+
+  it("is said to be left behind when the run straight after it is marked", () => {
+    const pages = [sheet("1950", true), sheet("1950"), sheet("1950")];
+    assert.equal(albumYearSheetApart(pages, [2, 3]), 1);
+  });
+
+  it("is not said for a run it is not straight ahead of, or of another chapter", () => {
+    assert.equal(albumYearSheetApart([sheet("1950", true), sheet("1950"), sheet("1950")], [3]), null);
+    assert.equal(albumYearSheetApart([sheet("1949", true), sheet("1950")], [2]), null);
+  });
+
+  it("is not said once the year's sheet is itself a card", () => {
+    assert.equal(albumYearSheetApart([sheet("1950", true, false), sheet("1950")], [2]), null);
+  });
+
+  it("is not said for the first sheet, or for a card's empty run", () => {
+    assert.equal(albumYearSheetApart([sheet("1950")], [1]), null);
+    assert.equal(albumYearSheetApart([sheet("1950", true), sheet("1950")], []), null);
   });
 });

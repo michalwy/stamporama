@@ -763,12 +763,14 @@ realistic pages therefore stays green over all three, and none of them was found
 tests. So when you take a figure off something here, name what it is a figure *of* — and then build
 the input where the two disagree.
 
-The consequence of the third fix is one to leave alone: **a year heading can now sit on a sheet by
-itself**, where the chapter's first page is short by that heading and the block under it needs a full
-one. That is what "a block moves whole" costs. Pulling a later checklist forward to fill the gap
-would break catalogue order, and splitting is the bug that was just fixed; #769 is where the
-collector closes such a gap by hand, on the pages where it actually bothers him, which is the right
-place for a judgement about paper.
+The consequence of the third fix was **a year heading alone on a sheet**, wherever the chapter's
+first page was short by that heading and the block under it needed a full one. #768 called that the
+price of "a block moves whole" and left it alone. **#1497 reversed it** once the collector had it in
+front of him: on a chapter's first page the block now starts under the year and splits — see *A
+chapter's first page, and the card that carries the year* below. The measurement itself was not
+touched, and must not be: the split under the year is its own rule (`underYear` in
+`planAlbumPages`), so "taller than an entire page" still means an ordinary empty page, and the
+partly-filled-page test in `tests/unit/album-layout.test.ts` is what tells the two apart.
 
 ### The second family: re-emitting what a printed sheet already holds
 
@@ -921,10 +923,46 @@ Both reachable only once a sheet could actually be printed, and both now pinned 
   separates a sheet's blocks, and #767 then emitted that card twice — listed twice, drawn twice,
   reprinted twice. There is no arrangement that makes a reordered printed sheet read correctly; there
   is one that keeps it a single card.
-- **A chapter whose first block is on paper does not print its year again.** The card carries it.
-  Otherwise an album with every chapter printed is a run of blank sheets each headed with a year.
-  (Not the same case as #768's year heading legitimately alone on a sheet — there the content under it
-  moved to the next *live* page.)
+- **A chapter whose year is on a printed card does not print it again.** Otherwise an album with
+  every chapter printed is a run of blank sheets each headed with a year. #778 asked this of the
+  chapter's first **block**, and #1498 found it wrong exactly where the year stood alone ahead of that
+  block: marking the series dropped the year's sheet and the year reached no card at all. It is asked
+  of the **card** now — below.
+
+## A chapter's first page, and the card that carries the year (#1497, #1498)
+
+Two issues settled with the collector on 2026-09-30, one about packing and one about paper, built
+together because the second's case is what the first leaves behind. ADR-0045 §7 and ADR-0047 §4 carry
+the amendments; what is worth not re-deriving:
+
+- **Under the year, a block starts rather than moves** (#1497). `underYear` in `planAlbumPages` is a
+  chapter's first page with the heading placed and no block yet. A single-band unit that does not fit
+  there splits from there (`splitBlockAcrossPages`, `[2]` marks and all) — also one a full page would
+  hold whole — as long as `startsHere`: its lead, heading and first row fit. A block with no rows (a
+  note, an empty checklist) cannot start and moves. Anything already on the page, a note included,
+  makes it an ordinary page again.
+- **A keep-together outranks it** (settled 2026-09-30): a unit of more than one band that a full page
+  holds moves whole off the year, as before. A pair that does not fit is unpaired and the rule applied
+  to its first block — its first rows have to match for the pair to be as short as its taller block,
+  or `alignBandMounts` makes it taller than any page and it unpairs by the old rule, which is how the
+  first version of that test passed on the old code too.
+- **Whether a year prints is a fact about a card** (#1498). `AlbumChapterSpec.headingOnPaper` and
+  `headingCardId` are the caller's answers; the layout no longer looks for an opener. `planAlbumFrom`
+  answers from `album_printed_page.chapterHeadingKey` — an index over the snapshot, like the stamp
+  rows, written from `snapshotChapterHeadingKey` at marking and back-filled from the snapshot JSON by
+  the migration. A card of one of the chapter's own blocks with that key answers it; so does a card
+  with the key and nothing else, which the index claims in `byChapterHeading` (or it would read as
+  orphaned) and the plan files at the head of the chapter.
+- **The year's sheet is live until it is itself printed.** It is in no `runWith` (no block is on it),
+  so marking the series never takes it along; `yearSheetApart` on the listing is what the dialog says
+  before a mark, and `yearAlone` is how both screens and *Printed cards* name it, having no range.
+- **Its reprint and its report.** A year card awaiting reprint is discarded when another card carries
+  the same key — not at the next mark of anything, which the stamp-less rule in
+  `discardCoveredReprints` would otherwise have done. The report compares it against the chapter's
+  heading planned alone (a chapter of no blocks), and says so when no checklist of that year is left.
+- **Keys are chapter keys, so two runs of one year share one.** An album reordered so 1938 appears
+  twice hands year cards to the runs in turn; it is the same imprecision chapters already have (*Two
+  sharp edges worth knowing*, above).
 
 ## The page editor (#769)
 
@@ -989,10 +1027,11 @@ Six things worth not re-deriving:
   would take the card's own account of the note away with it, and `diffAlbumPlanPages` now reports
   a note on a card that the album no longer has — the one thing that could otherwise vanish into
   silence, since a note carries no stamps for the stamp rules to catch.
-- **The chapter's opener is not always `blocks[0]`.** A live note filed at the head of the album sits
-  in front of a printed first block and was on no card, so reading it as the opener would print the
-  year a second time on a live sheet in front of the card that carries it — ADR-0047 §4's family
-  arriving through the editor. `planAlbumPages` skips live text blocks for that one question.
+- **A live note at a chapter's head does not decide its year.** It sits in front of a printed first
+  block and was on no card; when #769 read the chapter's *opener* off the blocks, taking the note for
+  it would have printed the year a second time in front of the card that carries it — ADR-0047 §4's
+  family arriving through the editor. Since #1498 no block decides it: the plan asks whether a card
+  carries the year (below), and a note in front changes nothing.
 - **A note names its own sheet** (`album_text_block.printedPageId`), the same seam
   `AlbumEntry.continuesPrintedPageId` is, and the *index* answers which sheet that is
   (`AlbumPrintedIndex.byTextBlock`) so a reprint brings the note back with the checklist beside it.
@@ -1454,10 +1493,11 @@ correction. Three things worth not re-deriving:
   from, and both screens use one `MarkPrintedDialog`. The integration test pins the editor's runs
   and fingerprint against the overview's, asked from the **middle** sheet of a three-sheet run.
 - **After marking, the editor goes to the card by its id (`?card=`), never by its position.**
-  Marking can move positions: a year heading alone on a sheet ahead of the run
-  (#768's legitimate shape) is no longer planned once the chapter's first block is on paper, so
-  every later sheet moves up one. `markAlbumPagesPrinted` returns each card's id with the position
-  it was marked from; `?card=` resolves it the way `?page=` resolves a free page.
+  A position is only true of the plan it was read from, and marking re-plans. The case #1487 met — a
+  year heading alone ahead of the run, dropped once the chapter's first block was on paper, so every
+  later sheet moved up one — is gone (#1498 keeps that sheet), and the rule stays: it was never about
+  that one case. `markAlbumPagesPrinted` returns each card's id with the position it was marked from;
+  `?card=` resolves it the way `?page=` resolves a free page.
 - **A download waits for a save on its way.** A typed figure commits on blur, and the blur comes
   before the click, so a click that lands while `isPending` is held and made again once the save has
   landed. Otherwise the PDF would be the plan from before the correction just made.
@@ -1477,8 +1517,9 @@ first.** `album-free-page.ts` is the pure vocabulary (bounds, the 300 dpi rule, 
   for its chapter's first checklist is kept open rather than emitted alone in front of the free page.
   That condition is the one the unit suite breaks on (`tests/unit/album-free-page.test.ts`), with four
   failures, if it is made unconditional. It shares a band with nothing (`measureBand`), a keep-together
-  cannot cross it (`keepTogether`), and it is skipped when finding a chapter's opener — a printed free
-  page at a chapter's head is not the card that carries the year.
+  cannot cross it (`keepTogether`), and its card never carries its chapter's year — its
+  `chapterHeadingKey` is null whatever it prints (#1498), because a free page at a chapter's head is
+  not the card that carries the year.
 - **Within one slot a free page goes outside the notes** (`slotBlocks` in `album-plan.ts`): before an
   entry it comes first, after an entry last, so a note stays beside its checklist.
 - **The chapter heading is the page's own statement** (`AlbumFreePageSpec.chapterHeading`), resolved in

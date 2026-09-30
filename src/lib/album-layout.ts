@@ -412,6 +412,19 @@ export interface AlbumChapterSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
   /** The rendered chapter heading. Blank reserves nothing but still starts a page. */
   heading: string;
   blocks: readonly AlbumBlockSpec<T>[];
+  /** Whether a **printed card carries this chapter's heading** (#1498, ADR-0047 §4). When it does, the
+   *  plan prints no year of its own: the card in the binder has it, and a second one on a live sheet
+   *  would be a blank card headed with the year filed in front of the real one.
+   *
+   *  The caller's answer, because it is a fact about a card — what the collector marked printed — and
+   *  not about where a block sits now. *The chapter's first block is on paper* was the old question,
+   *  and it was wrong exactly when the year stood alone on a sheet of its own ahead of that block: the
+   *  year then reached no card at all. Absent is false. */
+  headingOnPaper?: boolean;
+  /** A printed card that carries **this chapter's heading and nothing else** (#1498) — the year alone
+   *  on its sheet, marked printed on its own. Filed at the head of the chapter, where it was planned,
+   *  and it answers {@link headingOnPaper} by itself. */
+  headingCardId?: string | null;
 }
 
 /** A box as the plan places it. `box` is the caller's own row, handed straight back. */
@@ -1195,7 +1208,7 @@ export function albumBandOffsetsMm(
  * The whole rule, in order:
  *
  * - A **chapter starts a page** and prints its heading once, across the full content width, at the
- *   head of that page.
+ *   head of that page — unless a printed card already carries it (#1498).
  * - Blocks stack down the page in **bands**. Consecutive blocks share a band when they are narrow
  *   enough and the template allows it (see {@link measureBand}); one block per band is the ordinary
  *   case.
@@ -1204,6 +1217,10 @@ export function albumBandOffsetsMm(
  *   pairing never makes a page worse.
  * - Only a single block **taller than an entire empty page** is split, at a row boundary; every page
  *   of it after the first is marked a continuation.
+ * - The exception is **a chapter's first page with nothing under its year yet** (#1497): a block that
+ *   does not fit there in full starts there anyway, split like one too tall for a page, as long as
+ *   its heading and first row fit. Otherwise the year stays alone on its sheet. A keep-together unit
+ *   still moves whole off it when a full page can hold it.
  * - A block already on **printed sheets** (#778) is not planned at all. The plan closes whatever page
  *   it was filling, files those sheets in its place, and resumes on fresh paper — it steps over them
  *   rather than routing content around them, because they are in a binder and nothing the planner
@@ -1236,6 +1253,10 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
    * was broken across two cards, marked *Continued*, on a template whose ordinary page holds
    * 260 mm. The rule is "a block moves whole; only a block taller than an entire page is split"
    * (ADR-0045 §7), and an entire page is this.
+   *
+   * #1497 has since reversed the outcome on that one page — the collector wants the series started
+   * under the year rather than the year left alone — but as a rule of its own (`underYear` below),
+   * not by measuring against the wrong page again: "taller than an entire page" still means this.
    */
   const fullContentHeightMm = pageContent(frame, 0).heightMm;
 
@@ -1275,32 +1296,30 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
   };
 
   for (const chapter of chapters) {
-    // A chapter opens a page and prints its heading at the head of it — unless its **first block is
-    // already on paper** (#778), in which case the card in the binder carries that heading and the
-    // plan must not print a second one. Emitting the year on a live sheet of its own here would put
-    // a blank card headed 1938 in front of the printed card headed 1938, which is what an album with
-    // every chapter printed would otherwise be a whole run of.
+    // A chapter opens a page and prints its heading at the head of it — unless a **printed card
+    // already carries that heading** (#778, #1498), in which case the plan must not print a second
+    // one. Emitting the year on a live sheet here would put a blank card headed 1938 in front of the
+    // printed card headed 1938, which is what an album with every chapter printed would otherwise be a
+    // whole run of.
     //
-    // Not the same case as a year heading legitimately alone on a sheet (#768): there the content
-    // under it moved to the next *live* page and the heading is still the plan's to print.
-    //
-    // The block that answers this is the first one that **could have carried the heading**, which is
-    // not always `blocks[0]`: a live text block the collector has since filed at the head of the
-    // album (#769) sits in front of it and was on no card. Reading it as the opener would print a
-    // second 1938 on a live sheet in front of the card headed 1938 — this family of bug arriving
-    // through the editor rather than through a reorder. A note that is itself on paper *is* an
-    // opener, because it is on the card that carries the year.
-    //
-    // A **free page** (#1429) never answers it. It is a sheet of its own, which prints its chapter's
-    // heading only if its own switch says so and never instead of the chapter's first stamp sheet.
-    const opener = chapter.blocks.find(
-      (b) =>
-        b.kind !== "page" &&
-        (b.kind !== "text" || (b.printedPageIds?.length ?? 0) > 0),
-    );
-    const opensOnPaper = !!opener?.printedPageIds?.length;
+    // The question is the card, not the block: #778 asked whether the chapter's first block was on
+    // paper, and a year standing alone on its sheet ahead of that block (#768's shape) then reached
+    // no card at all — the series under it was printed, the year's sheet was dropped from the plan,
+    // and nothing in the binder said 1938. Now that sheet stays live until it is itself printed, and
+    // once it is, it is filed here, at the head of its chapter, as the card that carries the year.
+    const headingOnPaper = !!chapter.headingOnPaper || !!chapter.headingCardId;
+    if (chapter.headingCardId && !filed.has(chapter.headingCardId)) {
+      const sheet: Extract<AlbumPlannedPage<T>, { kind: "printed" }> = {
+        kind: "printed",
+        printedPageId: chapter.headingCardId,
+        chapterKey: chapter.key,
+        entryIds: [],
+      };
+      pages.push(sheet);
+      filed.set(chapter.headingCardId, sheet);
+    }
     const chapterFace = albumRoleFace(preset, "chapter");
-    const chapterLines = opensOnPaper
+    const chapterLines = headingOnPaper
       ? []
       : wrapAlbumText(
           chapter.heading,
@@ -1444,6 +1463,14 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       // `roomier` is false there, and every remaining branch places something.
       const roomier =
         !atTop || page.content.heightMm + FIT_EPSILON < fullContentHeightMm;
+      // **The chapter's first page, with nothing under its year yet** (#1497). The one page that is
+      // short by a heading, and so the one where "does not fit, so move it" costs a card exactly where
+      // it is easiest not to: the year was left alone on its sheet and the series went to the next.
+      // Here a series that does not fit in full starts under the year anyway and continues on the
+      // sheets after it — also one that would have fitted a full page whole. Only when not even its
+      // heading and first row fit does the year stay alone. Every other page moves a block whole, as
+      // it always has: a page already holding something is not this one.
+      const underYear = page.chapter !== null && page.blocks.length === 0;
 
       // The whole unit fits where the pen is: place every band of it.
       if (unitHeightMm <= spaceMm + FIT_EPSILON) {
@@ -1455,8 +1482,15 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       }
       // It fits an empty page, just not what is left of this one: move it whole. A unit of one band
       // is the ordinary case and this is the rule that has always been here; a longer unit is the
-      // collector's *keep these together* being honoured.
-      if (roomier && unitHeightMm <= fullContentHeightMm + FIT_EPSILON) {
+      // collector's *keep these together* being honoured — under the year too, where it outranks
+      // #1497's rule (settled with the collector on 2026-09-30): a keep-together is something he
+      // asked for on that block, and starting the first series under the year would part it from the
+      // one that asked to stay with it.
+      if (
+        roomier &&
+        unitHeightMm <= fullContentHeightMm + FIT_EPSILON &&
+        (!underYear || unit.length > 1)
+      ) {
         emit(page);
         page = freshPage(chapter.key);
         continue;
@@ -1471,12 +1505,23 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
           i += band.blocks.length;
           continue;
         }
-        if (roomier) {
+        if (roomier && !underYear) {
           emit(page);
           page = freshPage(chapter.key);
           continue;
         }
       }
+      // Under the year, whether the block can **start** there: its lead, its heading and its first row.
+      // A block with no rows — a note, a checklist with nothing gathered yet — has nothing to continue
+      // with, so it starts there only by fitting whole, which it did not.
+      const startsHere = (measured: MeasuredBlock<T>): boolean =>
+        measured.rows.length > 0 &&
+        rowsThatFit(
+          measured.rows,
+          roundSizeMm(measured.leadMm + measured.heading.costMm + measured.alignMm),
+          spaceMm,
+          preset.boxGapYMm,
+        ) > 0;
       // Too tall even for an empty page. If it is a pairing, unpair it — pairing must never make a
       // page worse — and let the loop try the first block on its own.
       if (band.blocks.length > 1) {
@@ -1496,7 +1541,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
           i += 1;
           continue;
         }
-        if (roomier) {
+        if (underYear ? !startsHere(single) : roomier) {
           emit(page);
           page = freshPage(chapter.key);
           continue;
@@ -1514,12 +1559,13 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
         i += 1;
         continue;
       }
-      if (roomier) {
+      if (underYear ? !startsHere(band.blocks[0]) : roomier) {
         emit(page);
         page = freshPage(chapter.key);
         continue;
       }
-      // One block, taller than a whole page, and the pen is at the top of one: it splits.
+      // One block, taller than a whole page with the pen at the top of one — or one that starts under
+      // its chapter's year (#1497): it splits.
       page = splitBlockAcrossPages(
         band.blocks[0],
         page,

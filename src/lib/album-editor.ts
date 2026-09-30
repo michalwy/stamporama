@@ -325,6 +325,10 @@ export interface AlbumEditorData {
     /** The sheets that go onto paper with this one, as positions including its own — the album
      *  screen's `runWith`, so *Mark printed* in the editor sends the same run (#1487). Empty on a card. */
     runWith: number[];
+    /** A sheet carrying only its chapter's year (#1498), named by the year rather than by a range. */
+    yearAlone: boolean;
+    /** The year's own sheet ahead of this run, which marking the run leaves live (#1498). */
+    yearSheetApart: number | null;
   }[];
   sheet: AlbumEditorSheet | null;
   /** The fingerprint of the plan these positions were read from (#778), sent back with a mark so a
@@ -812,6 +816,8 @@ export async function getAlbumEditorData(
         ? { id: freeId, label: freePage ? freePageName(freePage) : "A page without stamps" }
         : null,
       runWith: overview.pages[i].runWith,
+      yearAlone: overview.pages[i].yearAlone,
+      yearSheetApart: overview.pages[i].yearSheetApart,
     };
   });
 

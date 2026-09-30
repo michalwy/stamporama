@@ -281,6 +281,20 @@ A chapter is a **year**, and a year starts a new sheet with its heading printed 
 the shape your hand-written pages already have. Checklists stack down the sheet; one that does not
 fit moves whole to the next, and only a checklist too tall for an entire page is ever split.
 
+**A year's first sheet is the exception.** It is short by the year's heading, so a checklist that
+does not fit under the year in full **starts there anyway** — its heading and first row under the
+year, the rest on the next sheets — even one that would have fitted a full sheet whole. Five souvenir
+sheets that go two to a card therefore make three sheets, the first with the year and one of them,
+rather than a card carrying nothing but the year. Two things stay as they were:
+
+- if not even the checklist's heading and its first row fit under the year, the year is left **alone
+  on its sheet** and the checklist starts on the next one;
+- once a checklist is under the year, the next one that does not fit moves whole to a fresh sheet,
+  as on every other sheet — and so do two checklists you asked to **keep together**, when a full
+  sheet holds them both.
+
+Cards already printed do not change; sheets not yet printed follow this.
+
 When one is split, every sheet after the first repeats the checklist's heading with the sheet's
 number in brackets after it — `Bloki okolicznościowe [2]`, then `[3]`. The first sheet carries no
 mark. That is your `(cd.)`, with the number added so four cards of one long checklist can be put back
@@ -685,6 +699,14 @@ plan is not a state the album can hold.
 A page without stamps is marked printed like any other sheet, and is a card of its own. The list names
 it *A page without stamps*, since it has no catalog range to be named by, and it is left off the
 cutting list — there is nothing on it to cut.
+
+**A year alone on its sheet is a sheet of its own, too.** It is listed by its year — *The 1950
+heading, on its own* — and is downloaded and marked printed on its own, never together with the
+checklist after it. Marking that checklist leaves the year's sheet in the plan, and the dialog says
+so before it stores anything; mark the year when it has gone onto paper. Once it is a card, the year
+is not printed again above the checklists of that year still to come. The album asks whether a
+**card** carries the year, not whether the year's first checklist is on paper — so a year whose
+first checklist is printed on a card of its own still has its sheet waiting to be printed.
 
 ### What a printed card keeps
 

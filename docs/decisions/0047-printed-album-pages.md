@@ -5,7 +5,7 @@
 Accepted, implemented in #778. It completes the model of [ADR-0045](0045-album-model.md) (#767) and
 is drawn by the renderer of [ADR-0046](0046-album-pdf-rendering.md) (#768). The design is #755, which
 states every decision below in the collector's own terms; this file records why each is shaped the
-way it is in the code.
+way it is in the code. Decision 4's rule on a chapter's year is amended by #1498.
 
 ## Context
 
@@ -108,10 +108,31 @@ Two smaller corrections came with it, both reachable only now that a printed she
   printing, separating a sheet's blocks; #767 then emitted that sheet twice, which would list, draw
   and reprint one card twice. There is no arrangement that makes a reordered printed sheet read
   correctly, but there is one that keeps it a single card.
-- **A chapter whose first block is on paper does not print its year again.** The card in the binder
+- **A chapter whose year is on a printed card does not print it again.** The card in the binder
   carries that heading, and an album with every chapter printed would otherwise be a run of blank
-  sheets each headed with a year. (Not the same case as a year heading legitimately alone on a sheet,
-  ADR-0046 — there the content under it moved to the next *live* page.)
+  sheets each headed with a year.
+
+  **Amended by #1498: the question is the card, not the block.** #778 wrote this as *a chapter whose
+  first block is on paper*, on the reasoning that the card carries the heading — which is true only
+  when the year is on that card. Where the year stood alone on its sheet ahead of the chapter's first
+  series (ADR-0046's shape, rarer since #1497 but still reached when not even a series' heading and
+  first row fit under the year), marking the series printed took the year's sheet out of the plan and
+  the year then reached **no card at all**: neither the printed series nor any sheet still to print.
+  So the rule now asks **whether a printed card actually carries the year**:
+
+  - a card that printed its chapter's heading says so in `album_printed_page.chapterHeadingKey` — an
+    index over the snapshot like `album_printed_page_stamp` (§2), written with it and from nowhere
+    else, and back-filled from the snapshots by the migration that added it. A free page's card
+    (ADR-0058) is never one, whatever it prints: a free page does not carry the year for its chapter;
+  - the year's sheet **stays in the plan as a sheet of its own**, live, until it is itself marked
+    printed — to be downloaded and marked separately, never together with the series after it. It is
+    in no run (`runWith`), because no block is on it, and the listing says before a mark that marking
+    the series leaves it behind (`yearSheetApart`);
+  - once printed, a card carrying the year **and nothing else** is claimed by its chapter
+    (`AlbumPrintedIndex.byChapterHeading`) — it holds no stamp, note or free page that could claim it,
+    and would otherwise read as orphaned — and is filed at the head of that chapter;
+  - its reprint is finished when another card carries that year, and the divergence report compares
+    it against the chapter's heading planned alone.
 
 The two are **one family**, and it is not the measurement family `docs/agents/albums.md` records for
 this module: their shape is *the live plan producing again something a printed sheet already accounts

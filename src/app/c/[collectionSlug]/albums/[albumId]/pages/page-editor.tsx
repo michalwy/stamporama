@@ -106,6 +106,7 @@ import {
 } from "./page-canvas";
 import { AlbumNameSuggestion } from "../album-name-suggestion";
 import { MarkPrintedDialog } from "../mark-printed-dialog";
+import { albumYearAloneName } from "@/lib/album-print-rules";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { BTN, CHIP, FRAME, Hint, INPUT, MUTED, mm, PanelHeading } from "./editor-styles";
 import {
@@ -238,7 +239,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
   const sheetRow = sheet ? data.sheets[sheet.position - 1] : undefined;
   const runNames = (sheetRow?.runWith ?? []).map((position) => {
     const row = data.sheets[position - 1];
-    return row?.free?.label ?? (row?.range || `sheet ${position}`);
+    return row?.free?.label ?? ((row && sheetName(row)) || `sheet ${position}`);
   });
 
   function markPrinted() {
@@ -254,8 +255,8 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
       setSelection(null);
       setPreview(null);
       toast({ message: result.message });
-      // To the card this sheet became, by its id: marking can move the positions — a year heading
-      // alone on a sheet ahead of the run is no longer planned once the chapter is on paper.
+      // To the card this sheet became, by its id: a position is only true of the plan it was read
+      // from, and marking re-plans.
       const card = result.cards.find((c) => c.sheet === sheetRow.position);
       if (!card) {
         router.refresh();
@@ -849,7 +850,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
             <span key={position}>
               {i > 0 ? ", " : ""}
               <Link href={sheetHref(position)} style={{ color: "var(--color-text-primary)" }}>
-                {data.sheets[position - 1]?.range || position}
+                {(data.sheets[position - 1] && sheetName(data.sheets[position - 1])) || position}
               </Link>
             </span>
           ))}
@@ -892,7 +893,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
               }}
             >
               <span style={{ fontWeight: row.position === sheet?.position ? 600 : 400 }}>
-                {row.free ? row.free.label : row.range || "(no catalog numbers)"}
+                {row.free ? row.free.label : sheetName(row) || "(no catalog numbers)"}
               </span>
               <span style={{ ...MUTED, display: "block", fontSize: "0.75rem" }}>
                 {row.free ? "page without stamps · " : ""}
@@ -1233,10 +1234,15 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
           label={
             sheetRow.runWith.length > 1
               ? `sheets ${runNames.join(", ")}`
-              : sheetRow.range || "this sheet"
+              : sheetName(sheetRow) || "this sheet"
           }
           count={sheetRow.runWith.length}
           together={sheetRow.runWith.length > 1}
+          yearApart={
+            sheetRow.yearSheetApart !== null
+              ? `${albumYearAloneName(sheetRow.chapterKey)} (sheet ${sheetRow.yearSheetApart})`
+              : null
+          }
           isPending={isPending}
           error={markError ?? undefined}
           onClose={() => !isPending && setMarkingPrinted(false)}
@@ -1323,7 +1329,8 @@ function SheetPanel({
       <div>
         <PanelHeading>Sheet {sheet.position}</PanelHeading>
         <div style={{ fontSize: "0.9375rem", fontWeight: 600 }}>
-          {sheet.range || "(no catalog numbers on this sheet)"}
+          {sheet.range ||
+            (isYearAlone(sheet) ? albumYearAloneName(sheet.chapterKey) : "(no catalog numbers on this sheet)")}
         </div>
         <p style={{ ...MUTED, margin: "0.25rem 0 0", lineHeight: 1.5 }}>
           {sheet.boxes.length === 1 ? "1 box" : `${sheet.boxes.length} boxes`} ·{" "}
@@ -1626,7 +1633,8 @@ function PrintedSheetPanel({
       <div>
         <PanelHeading>On paper</PanelHeading>
         <div style={{ fontSize: "0.9375rem", fontWeight: 600 }}>
-          {sheet.range || "(no catalog numbers on this card)"}
+          {sheet.range ||
+            (isYearAlone(sheet) ? albumYearAloneName(sheet.chapterKey) : "(no catalog numbers on this card)")}
         </div>
         <p style={{ ...MUTED, margin: "0.25rem 0 0", lineHeight: 1.5 }}>
           {sheet.printedAt
@@ -2588,4 +2596,15 @@ function AddNoteDialog({
       </form>
     </DialogShell>
   );
+}
+
+/** A sheet's name in the editor: its range, or — for a sheet carrying only its chapter's year, which
+ *  has none (#1498) — the year. Blank for anything else without a range, which each caller words. */
+function sheetName(row: { range: string; chapterKey: string; yearAlone: boolean }): string {
+  return row.range || (row.yearAlone ? albumYearAloneName(row.chapterKey) : "");
+}
+
+/** A sheet drawn in the editor that carries only its chapter's year (#1498). */
+function isYearAlone(sheet: AlbumEditorSheet): boolean {
+  return !!sheet.chapter && sheet.blocks.length === 0 && !sheet.free;
 }

@@ -23,6 +23,7 @@ import { resolveAlbumPhotos } from "./album-photos";
 import {
   ALBUM_SNAPSHOT_VERSION,
   snapshotBlocks,
+  snapshotChapterHeadingKey,
   snapshotFreePageId,
   snapshotPictureIds,
   snapshotStampRows,
@@ -88,9 +89,10 @@ export class AlbumPrintError extends Error {}
 /** What one card would be, before it exists: which sheets, and what they will be called. */
 export interface AlbumMarkPrintedResult {
   ranges: string[];
-  /** Each card made, with the position it was marked from. Marking can move the positions — a year
-   *  heading alone on a sheet ahead of the run is no longer planned once the chapter's first block is
-   *  on paper — so a screen that was looking at one of these sheets goes on to it by its id (#1487). */
+  /** Each card made, with the position it was marked from. A position is only true of the plan it
+   *  was read from, and marking re-plans — #1487 met a year heading alone ahead of the run being
+   *  dropped, which #1498 has since undone, and the rule is not how that one case came out — so a
+   *  screen that was looking at one of these sheets goes on to it by its id. */
   cards: { sheet: number; id: string }[];
 }
 
@@ -218,6 +220,7 @@ export async function markAlbumPagesPrinted(
           albumId,
           range: write.snapshot.range,
           snapshot: write.snapshot as unknown as Prisma.InputJsonValue,
+          chapterHeadingKey: snapshotChapterHeadingKey(write.snapshot),
           stamps: { createMany: { data: write.rows } },
           pictures: { createMany: { data: write.pictureIds.map((pictureId) => ({ pictureId })) } },
         },
@@ -264,25 +267,39 @@ async function discardCoveredReprints(tx: DbTransaction, albumId: string): Promi
     where: { albumId, reprintingAt: { not: null } },
     select: {
       id: true,
+      chapterHeadingKey: true,
       stamps: { select: { stampId: true } },
       _count: { select: { textBlocks: true, freePages: true } },
     },
   });
   if (waiting.length === 0) return;
-  const live = await tx.albumPrintedPageStamp.findMany({
-    where: { printedPage: { albumId, reprintingAt: null } },
-    select: { stampId: true },
-  });
+  const [live, headed] = await Promise.all([
+    tx.albumPrintedPageStamp.findMany({
+      where: { printedPage: { albumId, reprintingAt: null } },
+      select: { stampId: true },
+    }),
+    tx.albumPrintedPage.findMany({
+      where: { albumId, reprintingAt: null, chapterHeadingKey: { not: null } },
+      select: { chapterHeadingKey: true },
+    }),
+  ]);
   const covered = new Set(live.map((r) => r.stampId));
+  const headingsOnPaper = new Set(headed.map((r) => r.chapterHeadingKey));
   const done = waiting
     .filter((page) =>
       page.stamps.length > 0
         ? page.stamps.every((s) => covered.has(s.stampId))
-        : // A card of **no stamps** — a free page (#1429), or a sheet holding only a note — has nothing
-          // the rule above can cover. Its reprint has happened when what it carried has gone onto a
-          // new card: marking that card printed moves the page's (or the note's) own row onto it, so
-          // nothing names this one any more.
-          page._count.textBlocks === 0 && page._count.freePages === 0
+        : page._count.textBlocks > 0 || page._count.freePages > 0
+          ? // A card of **no stamps** — a free page (#1429), or a sheet holding only a note — has
+            // nothing the rule above can cover. Its reprint has happened when what it carried has gone
+            // onto a new card: marking that card printed moves the page's (or the note's) own row onto
+            // it, so nothing names this one any more.
+            false
+          : // A card carrying **only a chapter's year** (#1498) is replaced when another card carries
+            // that year — the new year sheet, or a series that now starts under it (#1497). Until then
+            // it stands: discarding it the moment anything else is marked would leave the binder's
+            // year card unaccounted for while the plan still prints a new one.
+            page.chapterHeadingKey === null || headingsOnPaper.has(page.chapterHeadingKey)
     )
     .map((page) => page.id);
   if (done.length > 0) await tx.albumPrintedPage.deleteMany({ where: { id: { in: done } } });
@@ -364,6 +381,7 @@ async function requirePrintedPage(
       range: true,
       printedAt: true,
       reprintingAt: true,
+      chapterHeadingKey: true,
       albumId: true,
       album: { select: { collection: { select: { ownerId: true } } } },
     },
@@ -373,7 +391,13 @@ async function requirePrintedPage(
   }
   return {
     albumId: row.albumId,
-    row: { id: row.id, range: row.range, printedAt: row.printedAt, reprintingAt: row.reprintingAt },
+    row: {
+      id: row.id,
+      range: row.range,
+      printedAt: row.printedAt,
+      reprintingAt: row.reprintingAt,
+      chapterHeadingKey: row.chapterHeadingKey,
+    },
   };
 }
 
@@ -402,6 +426,19 @@ export async function describeAlbumUnprint(
         "discarded and cannot be recovered."
     );
     said.push("The page returns to the live plan and will be drawn from what it holds today.");
+    if (row.reprintingAt) {
+      said.push("This sheet is already awaiting a reprint; un-printing it instead forgets the old card entirely.");
+    }
+    said.push("The card itself stays in the binder. The album simply stops knowing about it.");
+    return said;
+  }
+
+  if (snapshot.page.blocks.length === 0 && snapshot.page.chapter) {
+    // A card carrying only a chapter's year (#1498): no boxes and no checklists, just the heading.
+    said.push("The stored year heading, in the face it was set in, is discarded and cannot be recovered.");
+    said.push(
+      "Unless another card carries this year, it returns to the live plan at the head of its chapter."
+    );
     if (row.reprintingAt) {
       said.push("This sheet is already awaiting a reprint; un-printing it instead forgets the old card entirely.");
     }
@@ -542,6 +579,9 @@ export interface AlbumPrintedSheetReport {
   reprinting: boolean;
   /** A card of a page without stamps (#1429), which has no range to be named by. */
   free: boolean;
+  /** The chapter key of a card carrying only that chapter's year (#1498), or null. It has no range to
+   *  be named by either. */
+  yearAlone: string | null;
   divergences: AlbumDivergence[];
   entries: AlbumPrintedEntryReport[];
 }
@@ -581,6 +621,13 @@ export async function getAlbumPrintedReport(
   const freeCards = new Set(
     [...snapshots].filter(([, snapshot]) => snapshot.page.free).map(([id]) => id)
   );
+  // Every card carrying only a year, the ones awaiting a reprint included: the index leaves those out,
+  // and the listing still has to name them.
+  const yearAloneKey = new Map(
+    [...snapshots]
+      .filter(([, snapshot]) => snapshot.page.blocks.length === 0 && !!snapshot.page.chapter && !snapshot.page.free)
+      .map(([id, snapshot]) => [id, snapshot.chapterKey])
+  );
   for (const [id, row] of printed.pages) {
     sheets.set(id, {
       id,
@@ -588,6 +635,7 @@ export async function getAlbumPrintedReport(
       printedAt: row.printedAt.toISOString(),
       reprinting: row.reprintingAt !== null,
       free: freeCards.has(id),
+      yearAlone: yearAloneKey.get(id) ?? null,
       divergences: [],
       entries: [],
     });
@@ -597,7 +645,8 @@ export async function getAlbumPrintedReport(
     printed.byEntry,
     snapshots,
     printed.byTextBlock,
-    printed.byFreePage
+    printed.byFreePage,
+    printed.byChapterHeading
   )) {
     const groupSheets = group.pageIds.filter((id) => {
       const row = printed.pages.get(id);
@@ -615,6 +664,18 @@ export async function getAlbumPrintedReport(
     if (printedPages.length === 0) continue;
 
     const reference = planPrintedCardReference(context, groupEntries, group, snapshots, photoIdFor);
+
+    // A year's own card (#1498) whose year no checklist in the album is filed under any more. It is
+    // claimed by its chapter, so it is not orphaned in the index's sense, and the plan files it nowhere
+    // — so it is said here, where an orphaned card is.
+    if (group.headingKey !== null && reference.length === 0) {
+      sheets.get(groupSheets[0])?.divergences.push({
+        kind: "stamps",
+        detail:
+          "Nothing in the album is filed under this year any more — every checklist this heading stood over has left it.",
+      });
+      continue;
+    }
 
     for (const pair of diffAlbumPlans(printedPages, reference)) {
       // A sheet the reference needs and no card holds is content with nowhere to go — the state a
@@ -703,6 +764,9 @@ interface PrintedCardGroup {
   /** The free page the card is (#1429), or null for a card of stamps. A free page is always a card of
    *  its own. */
   freePageId: string | null;
+  /** The chapter whose year the card carries **and nothing else** (#1498), or null. Such a card is
+   *  always one of its own too. */
+  headingKey: string | null;
 }
 
 /**
@@ -731,7 +795,10 @@ function printedCardGroups(
   byTextBlock: ReadonlyMap<string, string>,
   /** Which card each free page is on (#1429). A free page is a sheet of its own, so its card is always
    *  a group of one — and without this it would be no group at all, for a note's reason. */
-  byFreePage: ReadonlyMap<string, string> = new Map()
+  byFreePage: ReadonlyMap<string, string> = new Map(),
+  /** The cards carrying a chapter's year alone (#1498), by chapter key — a group of one each, for a
+   *  note's reason again. */
+  byChapterHeading: ReadonlyMap<string, readonly string[]> = new Map()
 ): PrintedCardGroup[] {
   const parent = new Map<string, string>();
   const find = (id: string): string => {
@@ -766,7 +833,7 @@ function printedCardGroups(
     const root = find(id);
     let group = groups.get(root);
     if (!group) {
-      group = { pageIds: [], entryIds: new Set(), freePageId: null };
+      group = { pageIds: [], entryIds: new Set(), freePageId: null, headingKey: null };
       groups.set(root, group);
     }
     if (!group.pageIds.includes(id)) group.pageIds.push(id);
@@ -784,6 +851,12 @@ function printedCardGroups(
   for (const [freePageId, pageId] of byFreePage) {
     if (!parent.has(pageId)) parent.set(pageId, pageId);
     groupFor(pageId).freePageId = freePageId;
+  }
+  for (const [key, pageIds] of byChapterHeading) {
+    for (const pageId of pageIds) {
+      if (!parent.has(pageId)) parent.set(pageId, pageId);
+      groupFor(pageId).headingKey = key;
+    }
   }
   return [...groups.values()];
 }
@@ -818,6 +891,23 @@ function planPrintedCardReference(
       albumTextMetrics
     );
     return context.finish(plan).map((sheet) => albumComparablePage(context.album, sheet));
+  }
+
+  // A card carrying a chapter's year and nothing else (#1498) is that heading, planned alone: a chapter
+  // of no blocks is a page holding only its heading. Rendered from the chapter's first checklist, as
+  // the plan renders it; with no checklist of that year left there is nothing to compare it against.
+  if (group.headingKey !== null) {
+    const opener = context.entries.find(
+      (e) => (e.year === null ? "" : String(e.year)) === group.headingKey
+    );
+    if (!opener) return [];
+    const plan = planAlbumPages<AlbumBoxData>(
+      [{ key: group.headingKey, heading: context.chapterHeading([opener]), blocks: [] }],
+      context.album,
+      context.album.name,
+      albumTextMetrics
+    );
+    return context.finish(plan).map((page) => albumComparablePage(context.album, page));
   }
 
   const onOtherCards = new Set<string>();
