@@ -1142,7 +1142,9 @@ reload or a bookmark comes back to it.
 measurements on the left, the same card on the right, redrawn as you type. A value the template
 could not be saved with — a field left empty, or a ref that no longer fits on the card — leaves the
 last card drawn and says why beneath it. **Add template** at the top of the page starts a new one
-from the built-in card's measurements, and the template you add is the one shown next.
+from the built-in card's measurements. Each template's **⋮** has *Edit…*, **Duplicate** — a copy of
+all four measurements, named *… (copy)* — and *Delete*. A template you add or duplicate is the one
+shown next.
 
 The difference worth knowing here: a collage template is **copied** onto an offer when you pick it,
 while a ref card template is read as the sheet prints and copied nowhere. Nothing about a printed

@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import type { RefCardGeometry, RefCardTemplateInput } from "./ref-card-template-rules";
+import { copyName } from "./template-copy-name";
 
 // The collection's ref-card formats (#569) — `collage-templates.ts`'s shape, this being the second
 // named dictionary of its kind, with one difference that runs through the whole module: a ref-card
@@ -90,6 +91,40 @@ export async function createRefCardTemplate(
     return created.id;
   } catch (err) {
     rethrowNameClash(err, data.name);
+  }
+}
+
+/** A copy of a template under the first free *(copy)* name, answering the copy's id (#1478) — the
+ *  album templates' duplicate (#1474), and for its reason: a variant of a card is most of the
+ *  measurements of one already described. Nothing links the two afterwards. */
+export async function duplicateRefCardTemplate(ownerId: string, templateId: string): Promise<string> {
+  const collectionId = await resolveTemplateCollection(templateId);
+  await assertCollectionOwner(ownerId, collectionId);
+  const source = await prisma.refCardTemplate.findUniqueOrThrow({
+    where: { id: templateId },
+    select: TEMPLATE_SELECT,
+  });
+  const siblings = await prisma.refCardTemplate.findMany({
+    where: { collectionId },
+    select: { name: true },
+  });
+  const copy = copyName(source.name, siblings.map((t) => t.name));
+  try {
+    const created = await prisma.refCardTemplate.create({
+      // The measurements alone — never the row's own id or timestamps.
+      data: {
+        collectionId,
+        name: copy,
+        cardWidthMm: source.cardWidthMm,
+        cardHeightMm: source.cardHeightMm,
+        fontSizeMm: source.fontSizeMm,
+        paddingTopMm: source.paddingTopMm,
+      },
+      select: { id: true },
+    });
+    return created.id;
+  } catch (err) {
+    rethrowNameClash(err, copy);
   }
 }
 
