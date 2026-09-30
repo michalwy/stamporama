@@ -443,6 +443,11 @@ describe("the agent API's operation modules (#1415)", () => {
  * moving a stamp to another issue or under another parent, merging two issues, moving an issue to
  * another area and reordering the stamp tree are decisions for the screen. Each entry names its
  * module, so the control below can check the name is still a real export there.
+ *
+ * **#1512 lifted it for checklists, and for exactly its operations**: deleting a checklist nothing
+ * prints and setting the order of a checklist's stamps (`deleteChecklist`, `reorderChecklistStamps`)
+ * left this map for {@link CHECKLIST_WRITES}. The order of an issue's checklists among themselves
+ * (`reorderChecklists`) was not asked for and joined it instead.
  */
 const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["deleteIssue", { module: "src/lib/issues.ts", why: "deletes an issue" }],
@@ -454,8 +459,7 @@ const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["reparentStampNode", { module: "src/lib/issues.ts", why: "moves a stamp under another parent" }],
   ["moveIssueToArea", { module: "src/lib/issues.ts", why: "moves an issue to another area" }],
   ["reorderIssueMembers", { module: "src/lib/issues.ts", why: "rewrites the collector's order of the stamp tree" }],
-  ["deleteChecklist", { module: "src/lib/checklists.ts", why: "deletes a checklist" }],
-  ["reorderChecklistStamps", { module: "src/lib/checklists.ts", why: "rewrites a checklist's order" }],
+  ["reorderChecklists", { module: "src/lib/checklists.ts", why: "rewrites the collector's order of an issue's checklists" }],
 ]);
 
 describe("the agent API's operation modules (#1438)", () => {
@@ -488,6 +492,52 @@ describe("the agent API's operation modules (#1438)", () => {
         new RegExp(`export async function ${name}\\(`),
         `\`${name}\` is not an export of ${module} any more`
       );
+    }
+  });
+});
+
+/**
+ * **The checklist writes the agent may make, and the one module that may make them** (#1512). The
+ * collector allowed a checklist to be created, renamed and translated, its stamps added, removed and
+ * put in order, and one nothing prints to be deleted — and nothing else: every other catalogue
+ * delete, move and reorder stays in {@link CATALOG_BOUNDARY}. Pinned both ways: the checklist module
+ * imports exactly these writes, and no other operation module imports any of them, so a delete or a
+ * reorder cannot arrive through a module whose own guards were written for something else.
+ */
+const CHECKLIST_WRITES = [
+  "createChecklist",
+  "renameChecklist",
+  "addStampsToSpanningChecklist",
+  "addStampsToIssueChecklist",
+  "setChecklistStamps",
+  "reorderChecklistStamps",
+  "deleteChecklist",
+] as const;
+
+describe("the agent API's operation modules (#1512)", () => {
+  it("make checklist writes only in the checklist module, and only the ones allowed", () => {
+    const allowed = new Set<string>(CHECKLIST_WRITES);
+    const checklistModule = path.join(AGENT_API, "operations/checklists.ts");
+    const fromChecklists = importedBindings(checklistModule)
+      .filter((binding) => binding.from === "../../checklists")
+      .map((binding) => binding.name);
+    const writes = fromChecklists.filter((name) => /^(create|rename|add|set|reorder|delete|remove|put|ensure)/.test(name));
+    assert.deepEqual([...writes].sort(), [...CHECKLIST_WRITES].sort());
+
+    const elsewhere: string[] = [];
+    for (const file of operationModules()) {
+      if (file === checklistModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (allowed.has(name)) elsewhere.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(elsewhere, [], "checklist writes belong to operations/checklists.ts alone (#1512)");
+  });
+
+  it("names only real exports of src/lib/checklists.ts", () => {
+    const domain = readFileSync(path.join(ROOT, "src/lib/checklists.ts"), "utf8");
+    for (const name of CHECKLIST_WRITES) {
+      assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of src/lib/checklists.ts any more`);
     }
   });
 });

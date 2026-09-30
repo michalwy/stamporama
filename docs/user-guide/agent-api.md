@@ -207,7 +207,7 @@ catalogue the area does not keep.
 stamp or a variant, never takes a catalogue number off a stamp, never moves a stamp to another issue
 or under another stamp, never merges two issues or moves one to another area, and never changes the
 order of an issue's stamps. Those stay on the issue's and the stamp's own screens, where everything
-it creates can be seen and corrected.
+it creates can be seen and corrected. Checklists are the one exception, below.
 
 **It can also record a stamp's Colnect item-ID** — the number in the stamp's Colnect address, which
 listing on Colnect, the Colnect links and the Colnect list sync all go by. An assistant reading a
@@ -224,6 +224,32 @@ does it, so the listing and the links use it straight away. Two things hold:
 On a stamp with variants the item-ID is about that stamp itself. Listing a copy you have not
 identified down to the variant under its cheapest variant is worked out when you list it, and is
 never written onto the parent stamp.
+
+On **checklists** — the sets of stamps you count as one complete unit — it can build and tidy them
+for you: *a checklist of the watermark Y stamps of this issue*, *a checklist of all Grosik
+1928–1932*, *take the reprints out of this one*. It can:
+
+- **list your checklists**, each with the issue it belongs to — or, for one spanning issues, every
+  issue its stamps come from — how many stamps it holds and which albums print it, and **read a
+  checklist's stamps in their order**. A **read only** token can do this much;
+- **create a checklist** on an issue, or one spanning issues like the ones on the *Checklists* screen;
+- **rename one** and set or take off its name in your other languages;
+- **add stamps** to it, at the end of its order. An issue's own checklist takes only that issue's
+  stamps, as its editor on the issue offers only those; a stamp of another issue is refused, and
+  belongs on a checklist spanning issues;
+- **take stamps off** it. The stamps themselves stay in your catalogue and in their issue — only the
+  set stops counting them;
+- **set the order** its stamps read in, the one an album page prints them in: the stamps it names
+  come first, in the order named, and any it leaves out follow them as they were;
+- **delete a checklist no album prints.** One that an album prints is refused, and the assistant is
+  told which albums — take it out of them first, or delete it yourself on the screen, where the
+  confirmation says what it takes with it.
+
+Taking a stamp off or setting the order is safe to repeat: a stamp that is not on the checklist, or a
+number it cannot place, is reported and the rest is still done. A checklist printed in an album
+changes just as it would from the screen — the printed card reports the difference, and nothing is
+reprinted. It **cannot change the order of an issue's checklists** among themselves; that stays on
+the issue.
 
 On **translations**, it can translate your texts into the languages you list or print in — the names of your areas,
 issues, checklists and stamps, and the names and abbreviations of your conditions, certificates,

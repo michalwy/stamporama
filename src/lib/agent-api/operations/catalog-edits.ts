@@ -233,7 +233,7 @@ async function translationLanguages(context: OperationContext) {
  * The translated names an edit or a creation writes: `names` sets, `clear_names` removes. A language
  * named in both is refused rather than decided.
  */
-async function translationWrites(
+export async function translationWrites(
   context: OperationContext,
   params: ParsedParams
 ): Promise<TranslationValueMap | undefined> {
@@ -254,7 +254,7 @@ async function translationWrites(
   return writes;
 }
 
-const NAMES_PARAMETER: ParameterSpec = {
+export const NAMES_PARAMETER: ParameterSpec = {
   name: "names",
   in: "body",
   type: "string[]",
@@ -263,7 +263,7 @@ const NAMES_PARAMETER: ParameterSpec = {
     'The name in other languages, one `"language: name"` entry each — `["de: Freimarken"]`. Only the languages this collection lists or prints in are accepted, never its own language, which is `name`.',
 };
 
-const CLEAR_NAMES_PARAMETER: ParameterSpec = {
+export const CLEAR_NAMES_PARAMETER: ParameterSpec = {
   name: "clear_names",
   in: "body",
   type: "string[]",
