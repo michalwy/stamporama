@@ -67,6 +67,10 @@ cp -R .next/types .next-typecheck/types
 sed 's#\./\.next/types/#./types/#g' next-env.d.ts > .next-typecheck/env.d.ts
 prelude=$((SECONDS - prelude_started))
 
+# Two costs in the build are known, measured and kept, so do not re-file them as discoveries.
+# `next build` type-checks the same program as `tsc` below (#889), and it finds no build cache
+# (#890). Neither can shorten a required run while this job finishes under `Integration tests`.
+# The numbers and the reasons are in `docs/agents/platform.md`.
 names=(lint typecheck build)
 commands=(
   "pnpm lint"
