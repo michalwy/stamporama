@@ -206,6 +206,14 @@ export function snapshotFreePageId(snapshot: AlbumPageSnapshot): string | null {
   return snapshot.page.free?.id ?? null;
 }
 
+/** The chapter whose heading a card prints (#1498), by key — the `chapterHeadingKey` index column —
+ *  or null for a card that prints none. A free page's card is null whatever it prints: a free page
+ *  never carries the year for its chapter (ADR-0058), so it must not answer whether one is on paper.
+ *  The migration that added the column back-filled it by this same rule, in SQL. */
+export function snapshotChapterHeadingKey(snapshot: AlbumPageSnapshot): string | null {
+  return snapshot.page.chapter && !snapshot.page.free ? snapshot.chapterKey : null;
+}
+
 /** Every `Photo.id` a sheet printed, so a renderer reads exactly the pictures the card carries. */
 export function snapshotPhotoIds(snapshot: AlbumPageSnapshot): string[] {
   const ids = new Set<string>();

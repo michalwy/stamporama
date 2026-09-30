@@ -132,3 +132,33 @@ export function albumPlanFingerprint(
   }
   return hash.toString(16).padStart(8, "0");
 }
+
+/**
+ * What a sheet carrying **only its chapter's year** (#1498) is called on a screen. It has no catalog
+ * range to be named by, and "no catalog numbers on this sheet" would read as a sheet of stamps whose
+ * numbers are missing.
+ */
+export function albumYearAloneName(chapterKey: string): string {
+  return chapterKey ? `The ${chapterKey} heading, on its own` : "The chapter heading, on its own";
+}
+
+/**
+ * The year's own sheet standing directly ahead of a run, which marking the run printed **leaves
+ * behind** (#1498) — as a one-based position, or null when there is none.
+ *
+ * A year alone on its sheet is a sheet of its own and goes onto paper on its own: it is in no run,
+ * because no block is on it. Marking the series under it is therefore a different act from marking
+ * the year, and the collector is told so before either is done rather than finding the year still
+ * live afterwards. `pages` is the listing the run's positions were read from.
+ */
+export function albumYearSheetApart(
+  pages: readonly { chapterKey: string; live: boolean; yearAlone: boolean }[],
+  runWith: readonly number[]
+): number | null {
+  if (runWith.length === 0) return null;
+  const first = Math.min(...runWith);
+  const run = pages[first - 1];
+  const before = pages[first - 2];
+  if (!run || !before) return null;
+  return before.live && before.yearAlone && before.chapterKey === run.chapterKey ? first - 1 : null;
+}

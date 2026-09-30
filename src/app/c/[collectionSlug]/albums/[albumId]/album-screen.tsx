@@ -53,6 +53,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { AlbumNameSuggestion } from "./album-name-suggestion";
 import { MarkPrintedDialog } from "./mark-printed-dialog";
+import { albumYearAloneName } from "@/lib/album-print-rules";
 
 // One album (#767): what it prints, in what order, and how that falls onto sheets.
 //
@@ -226,6 +227,8 @@ export function AlbumScreen({
     sheets: number[];
     label: string;
     together?: boolean;
+    /** The year's own sheet ahead of the run, left live by this mark (#1498). */
+    yearApart?: string | null;
   } | null>(null);
   const [unprint, setUnprint] = useState<{ id: string; range: string } | null>(null);
   // Keyed by the card it describes rather than cleared when the dialog closes: what is being thrown
@@ -302,7 +305,11 @@ export function AlbumScreen({
         icon: "delete",
         danger: true,
         separatorBefore: true,
-        onSelect: () => setUnprint({ id: sheet.id, range: sheet.range }),
+        onSelect: () =>
+          setUnprint({
+            id: sheet.id,
+            range: sheet.range || (sheet.yearAlone !== null ? albumYearAloneName(sheet.yearAlone) : ""),
+          }),
       },
     ];
   }
@@ -481,7 +488,7 @@ export function AlbumScreen({
             icon: "revert",
             danger: true,
             separatorBefore: true,
-            onSelect: () => setUnprint({ id: page.printedPageId!, range: page.range }),
+            onSelect: () => setUnprint({ id: page.printedPageId!, range: sheetName(page) }),
           },
         ]
       : [
@@ -517,8 +524,12 @@ export function AlbumScreen({
                 label:
                   page.runWith.length > 1
                     ? `sheets ${page.runWith.join(", ")}`
-                    : page.range || "this sheet",
+                    : sheetName(page) || "this sheet",
                 together: page.runWith.length > 1,
+                yearApart:
+                  page.yearSheetApart !== null
+                    ? `${albumYearAloneName(page.chapterKey)} (sheet ${page.yearSheetApart})`
+                    : null,
               }),
           },
         ];
@@ -548,7 +559,7 @@ export function AlbumScreen({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-              {page.range ||
+              {sheetName(page) ||
                 (page.free ? "A page without stamps" : "(no catalog numbers on this sheet)")}
             </span>
             {page.printedPageId ? (
@@ -1162,7 +1173,11 @@ export function AlbumScreen({
                       style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}
                     >
                       {sheet.range ||
-                        (sheet.free ? "A page without stamps" : "(no catalog numbers on this card)")}
+                        (sheet.free
+                          ? "A page without stamps"
+                          : sheet.yearAlone !== null
+                            ? albumYearAloneName(sheet.yearAlone)
+                            : "(no catalog numbers on this card)")}
                     </span>
                     <span style={MUTED}>
                       printed {new Date(sheet.printedAt).toLocaleDateString()}
@@ -1289,6 +1304,7 @@ export function AlbumScreen({
           label={markPrinted.label}
           count={markPrinted.sheets.length}
           together={markPrinted.together}
+          yearApart={markPrinted.yearApart}
           isPending={isPending}
           error={error ?? undefined}
           onClose={() => !isPending && setMarkPrinted(null)}
@@ -1480,4 +1496,10 @@ function SheetThumbnail({
       </Link>
     </Tooltip>
   );
+}
+
+/** A sheet's name on this screen: its range, or — for a sheet carrying only its chapter's year, which
+ *  has none (#1498) — the year. Blank for anything else without a range, which each caller words. */
+function sheetName(page: AlbumPlanOverview["pages"][number]): string {
+  return page.range || (page.yearAlone ? albumYearAloneName(page.chapterKey) : "");
 }

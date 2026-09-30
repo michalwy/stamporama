@@ -44,7 +44,7 @@ import { albumNameState, type AlbumNameState } from "./album-name";
 import { resolveAlbumFrameOrnament } from "./album-ornament-store";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import { getAlbumPrintedIndex, type AlbumPrintedIndex } from "./album-printed-pages";
-import { albumPlanFingerprint } from "./album-print-rules";
+import { albumPlanFingerprint, albumYearSheetApart } from "./album-print-rules";
 import { albumComparableFreeElements, type AlbumComparablePage } from "./album-divergence";
 import {
   albumPlacedFooter,
@@ -663,7 +663,24 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
     into.blocks.push(...tailBlocks);
   }
 
-  const pages = context.finish(planAlbumPages(chapters, album, album.name, albumTextMetrics));
+  // Whether a printed card carries each chapter's year (#1498, ADR-0047 §4) — asked of the cards, not
+  // of the chapter's first block. A card of one of the chapter's own blocks that printed its heading
+  // answers it; so does a card carrying the heading and nothing else, which is filed at the head of
+  // the chapter. Two runs of one year (an album reordered so years interleave) take such cards in turn.
+  const headingCards = new Map(
+    [...printed.byChapterHeading].map(([key, ids]) => [key, [...ids]])
+  );
+  const withHeadings = chapters.map((chapter) => ({
+    ...chapter,
+    headingOnPaper: chapter.blocks.some((block) =>
+      (block.printedPageIds ?? []).some(
+        (id) => printed.pages.get(id)?.chapterHeadingKey === chapter.key
+      )
+    ),
+    headingCardId: headingCards.get(chapter.key)?.shift() ?? null,
+  }));
+
+  const pages = context.finish(planAlbumPages(withHeadings, album, album.name, albumTextMetrics));
   return {
     album,
     entries,
@@ -884,6 +901,13 @@ export interface AlbumPlanPageView {
   headings: string[];
   /** A page without stamps (#1429), which a list names by what it says rather than by a range. */
   free: boolean;
+  /** A sheet carrying **only its chapter's year** (#1498) — live, or a card marked printed on its own —
+   *  which a list names by its year rather than by a range it does not have. */
+  yearAlone: boolean;
+  /** The year's own sheet standing directly ahead of this sheet's run, as a one-based position, which
+   *  marking the run printed leaves live (#1498) — so *Mark printed* can say so first. Null when there
+   *  is none, and always on a card. */
+  yearSheetApart: number | null;
   /** A heading continued from the previous page — a block too tall for one column. The PDF marks
    *  such a sheet `[2]`, `[3]` on the heading itself (#768); this flag is just the chip. */
   continued: boolean;
@@ -955,6 +979,17 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
   }
 
   const freeCards = new Set(result.printed.byFreePage.values());
+  const yearCards = new Set([...result.printed.byChapterHeading.values()].flat());
+  const yearAlone = result.pages.map((page) =>
+    page.layout.kind === "printed"
+      ? yearCards.has(page.layout.printedPageId)
+      : !!page.layout.chapter && page.layout.blocks.length === 0 && !page.layout.free
+  );
+  const listed = result.pages.map((page, i) => ({
+    chapterKey: page.layout.chapterKey,
+    live: page.layout.kind === "live",
+    yearAlone: yearAlone[i],
+  }));
   return {
     emptyStock: result.emptyStock,
     fingerprint: albumPlanFingerprint(albumPlanPrint(result.pages)),
@@ -969,6 +1004,8 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
           runWith: [],
           headings: [],
           free: freeCards.has(page.layout.printedPageId),
+          yearAlone: yearAlone[index],
+          yearSheetApart: null,
           continued: false,
           boxCount: 0,
           oversizeCount: 0,
@@ -990,6 +1027,8 @@ export function albumPlanOverview(result: AlbumPlanResult): AlbumPlanOverview {
             )
           : page.layout.headings.map((h) => h.lines.join(" ")),
         free: !!page.layout.free,
+        yearAlone: yearAlone[index],
+        yearSheetApart: albumYearSheetApart(listed, runOf.get(index) ?? [index + 1]),
         continued: page.layout.blocks.some((b) => b.part > 1),
         boxCount: boxes.length,
         oversizeCount: boxes.filter((b) => b.strip === null).length,

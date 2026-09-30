@@ -461,19 +461,116 @@ describe("planAlbumPages and printed sheets", () => {
   it("plans an album whose every checklist is on paper as no live pages at all", () => {
     const plan = planAlbumPages(
       [
-        chapter("1938", "1938", [block("a", "One", [], "printed-1")]),
-        chapter("1939", "1939", [block("b", "Two", [], "printed-2")]),
+        { ...chapter("1938", "1938", [block("a", "One", [], "printed-1")]), headingOnPaper: true },
+        { ...chapter("1939", "1939", [block("b", "Two", [], "printed-2")]), headingOnPaper: true },
       ],
       preset(),
       "Album",
       metrics
     );
-    // Nothing live at all. A chapter whose first block is on paper does not print its year again:
-    // the card in the binder carries it, and a blank sheet headed 1938 filed in front of the printed
-    // sheet headed 1938 is what an album with every chapter printed would otherwise be a run of.
+    // Nothing live at all. A chapter whose year is on a printed card does not print it again: the card
+    // in the binder carries it, and a blank sheet headed 1938 filed in front of the printed sheet
+    // headed 1938 is what an album with every chapter printed would otherwise be a run of.
     assert.deepEqual(
       plan.pages.map((p) => p.kind),
       ["printed", "printed"]
+    );
+  });
+});
+
+/**
+ * Whether a chapter prints its year is a question about a **card** (#1498, ADR-0047 §4), not about
+ * where the chapter's first block is. #778 asked the second, and a year that stood alone on its sheet
+ * ahead of a printed series then reached no card at all.
+ */
+describe("planAlbumPages and the card that carries the year (#1498)", () => {
+  it("still prints the year when the first series is on paper but no card carries it", () => {
+    // The year stood alone on its sheet and only the series after it was marked printed.
+    const plan = planAlbumPages(
+      [chapter("1938", "1938", [block("a", "One", [], "printed-1")])],
+      preset(),
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => p.kind),
+      ["live", "printed"]
+    );
+    const [year] = live(plan.pages);
+    assert.deepEqual(year.chapter?.lines, ["1938"], "the year's sheet stays in the plan");
+    assert.equal(year.blocks.length, 0, "on a sheet of its own");
+  });
+
+  it("does not print the year when a card carries it, whichever block is on that card", () => {
+    const plan = planAlbumPages(
+      [{ ...chapter("1938", "1938", [block("a", "One", [], "printed-1")]), headingOnPaper: true }],
+      preset(),
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => p.kind),
+      ["printed"]
+    );
+  });
+
+  it("files the year's own card at the head of its chapter, and prints no second year", () => {
+    const plan = planAlbumPages(
+      [
+        {
+          ...chapter("1938", "1938", [
+            block("a", "One", [], "printed-1"),
+            block("b", "Two", [box(30, 36)]),
+          ]),
+          headingCardId: "year-1938",
+        },
+      ],
+      preset(),
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => (p.kind === "printed" ? p.printedPageId : "live")),
+      ["year-1938", "printed-1", "live"]
+    );
+    const [rest] = live(plan.pages);
+    assert.equal(rest.chapter, null);
+  });
+
+  it("files the year's card ahead of a series still live, which then starts on fresh paper", () => {
+    // Marked printed on its own before the series under it: the card carries the year, so the live
+    // series does not print it again.
+    const plan = planAlbumPages(
+      [{ ...chapter("1938", "1938", [block("a", "One", [box(30, 36)])]), headingCardId: "year-1938" }],
+      preset(),
+      "Album",
+      metrics
+    );
+    assert.deepEqual(
+      plan.pages.map((p) => p.kind),
+      ["printed", "live"]
+    );
+    const [series] = live(plan.pages);
+    assert.equal(series.chapter, null);
+    assert.deepEqual(
+      series.blocks.map((b) => b.entryId),
+      ["a"]
+    );
+  });
+
+  it("files a year's card once, even when a reordered album names its chapter twice", () => {
+    const plan = planAlbumPages(
+      [
+        { ...chapter("1938", "1938", [block("a", "One", [box(30, 36)])]), headingCardId: "year-1938" },
+        { ...chapter("1938", "1938", [block("b", "Two", [box(30, 36)])]), headingCardId: "year-1938" },
+      ],
+      preset(),
+      "Album",
+      metrics
+    );
+    assert.equal(
+      plan.pages.filter((p) => p.kind === "printed").length,
+      1
     );
   });
 });
@@ -575,16 +672,17 @@ describe("planAlbumPages on the rare shapes", () => {
    * A block that fits an ordinary page but not the chapter's first one, which is short by the year
    * heading.
    *
-   * It must move whole. Measuring "taller than an entire page" against the page *being filled*
-   * rather than against an ordinary empty one broke this: a 252 mm checklist met a 235 mm chapter
-   * page and was split across two cards and marked *Continued*, on a template whose ordinary page
-   * holds 260 mm.
+   * #768 moved it whole, leaving the year alone on its sheet; #1497 reverses that on this one page —
+   * it starts under the year and continues on the next sheet. What must **not** come back is #768's
+   * bug: the block is split because it is under a year, not because "taller than an entire page" was
+   * measured against the page being filled. The partly-filled case below is the one that tells the
+   * two apart.
    */
-  it("moves a block whole off a chapter's first page rather than splitting it there", () => {
+  it("starts a block under the year heading and continues it on the next sheet (#1497)", () => {
     // 6 mm lead + 120 + 6 gap + 120 = 252 mm. The page holds 260; under a year heading, 235.
     const pages = live(
       planAlbumPages(
-        [chapter("1938", "1938", [block("a", "", [box(180, 120), box(180, 120)])])],
+        [chapter("1938", "1938", [block("a", "Walka", [box(180, 120), box(180, 120)])])],
         preset(),
         "Album",
         metrics
@@ -593,9 +691,127 @@ describe("planAlbumPages on the rare shapes", () => {
 
     assert.equal(pages.length, 2);
     assert.ok(pages[0].chapter, "the year heading opens the chapter");
-    assert.equal(pages[0].boxes.length, 0, "and is the only thing on its sheet");
-    assert.equal(pages[1].boxes.length, 2);
-    assert.equal(pages[1].blocks[0].part, 1, "it moved; it was not broken");
+    assert.equal(pages[0].boxes.length, 1, "and the series starts under it");
+    assert.deepEqual(
+      pages.map((p) => p.blocks[0].part),
+      [1, 2]
+    );
+    assert.deepEqual(
+      pages.map((p) => p.headings[0].lines.join(" ")),
+      ["Walka", "Walka [2]"],
+      "its second card is marked [2]"
+    );
+  });
+
+  /** The collector's own case (#1497): five souvenir sheets, two to a card. #768's rule made four
+   *  sheets — the year alone, then 2 + 2 + 1. Started under the year, it is three. */
+  it("puts five souvenir sheets, two to a card, on three sheets with one under the year", () => {
+    const boxes = Array.from({ length: 5 }, (_, n) => box(180, 120, `s${n}`));
+    const pages = live(
+      planAlbumPages(
+        // No checklist heading, so the arithmetic is the rare-shapes case above: 6 + 120 per row and
+        // 6 between, two rows to a 260 mm card, one under the year's 235.
+        [chapter("1950", "1950", [block("a", "", boxes)])],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages.length, 3);
+    assert.deepEqual(pages[0].chapter?.lines, ["1950"]);
+    assert.deepEqual(
+      pages.map((p) => p.boxes.map((b) => b.box.label)),
+      [["s0"], ["s1", "s2"], ["s3", "s4"]]
+    );
+  });
+
+  it("leaves the year alone when not even the heading and first row fit under it", () => {
+    // 6 + 11 (heading) + 220 = 237 mm for the first row alone: more than the 235 under the year. With
+    // the second row, 237 + 6 + 10 = 253, which a full page holds.
+    const pages = live(
+      planAlbumPages(
+        [chapter("1938", "1938", [block("a", "Walka", [box(180, 220), box(180, 10)])])],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages.length, 2);
+    assert.ok(pages[0].chapter);
+    assert.equal(pages[0].blocks.length, 0, "the year stands alone");
+    assert.equal(pages[1].blocks[0].part, 1, "and the series starts whole on the next sheet");
+  });
+
+  it("still moves a block whole off a page that already holds a series under the year", () => {
+    // A (6 + 36 = 42 mm) fits under the year; B is 252 mm and fits a full page but not the 193 left.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("1938", "1938", [
+            block("a", "", [box(180, 36)]),
+            block("b", "", [box(180, 120), box(180, 120)]),
+          ]),
+        ],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.deepEqual(
+      pages.map((p) => p.blocks.map((b) => `${b.entryId}${b.part}`)),
+      [["a1"], ["b1"]]
+    );
+  });
+
+  it("unpairs two series that do not fit under the year together, and starts the first there", () => {
+    // Both 80 mm wide and broken into rows by hand, so they pair by width. A is 6 + 100 + 6 + 100 =
+    // 212 mm; B is 6 + 100 + 6 + 140 = 252. Their first rows match, so nothing is aligned and the pair
+    // is as tall as B — a full page holds it, the 235 under the year does not, and #768's rule moved
+    // it whole, leaving the year alone. Unpaired, A fits under the year and B takes the next sheet.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("1938", "1938", [
+            block("a", "", [box(80, 100), { ...box(80, 100), rowBreakBefore: true }]),
+            block("b", "", [box(80, 100), { ...box(80, 140), rowBreakBefore: true }]),
+          ]),
+        ],
+        preset(),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.ok(pages[0].chapter);
+    assert.deepEqual(
+      pages.map((p) => p.blocks.map((b) => `${b.entryId}${b.part}`)),
+      [["a1"], ["b1"]],
+      "the first series under the year, on its own, and the second whole on the next sheet"
+    );
+  });
+
+  it("moves a keep-together pair whole off the year when a full page holds it", () => {
+    // Settled with the collector (2026-09-30): the keep-together outranks #1497. A (6 + 11 + 100 =
+    // 117 mm) fits under the year on its own; with B kept to it they are 234 + 6 = 240-odd mm, which
+    // a full page holds and the space under the year does not.
+    const pages = live(
+      planAlbumPages(
+        [
+          chapter("1938", "1938", [
+            block("a", "A", [box(190, 100)]),
+            { ...block("b", "B", [box(190, 100)]), breakBefore: "avoid" as const },
+          ]),
+        ],
+        preset({ blocksPerBand: 1 }),
+        "Album",
+        metrics
+      ).pages
+    );
+    assert.equal(pages.length, 2);
+    assert.equal(pages[0].blocks.length, 0, "the year stays alone");
+    assert.deepEqual(
+      pages[1].blocks.map((b) => b.entryId),
+      ["a", "b"]
+    );
   });
 
   /** The same shape from the other side: a chapter heading is enough on its own to make a page, and
@@ -1024,15 +1240,19 @@ describe("planAlbumPages and the collector's corrections", () => {
 
   it("does not reprint a chapter's year because a note was filed in front of a printed card", () => {
     // The printed-sheet family (ADR-0047 §4) arriving through the editor. The card in the binder
-    // carries 1938; a note typed today sits in front of it and was on no card, so reading the note
-    // as the block that opens the chapter would file a blank sheet headed 1938 ahead of the real one
-    // — which is exactly what an album with every chapter printed used to come out as.
+    // carries 1938; a note typed today sits in front of it and was on no card, so printing the year
+    // over the note would file a blank sheet headed 1938 ahead of the real one — which is exactly what
+    // an album with every chapter printed used to come out as. Since #1498 the card answers it, not
+    // whichever block the chapter happens to open with.
     const plan = planAlbumPages(
       [
-        chapter("1938", "1938", [
-          corrected("t1", "Kasowane", [], { kind: "text" }),
-          block("a", "A", [], "printed-1"),
-        ]),
+        {
+          ...chapter("1938", "1938", [
+            corrected("t1", "Kasowane", [], { kind: "text" }),
+            block("a", "A", [], "printed-1"),
+          ]),
+          headingOnPaper: true,
+        },
       ],
       stacked,
       "Album",
@@ -1045,13 +1265,16 @@ describe("planAlbumPages and the collector's corrections", () => {
       ["t1"]
     );
 
-    // A note that is itself on the card *is* an opener: the card carries it and the year together.
+    // A note that is itself on the card is stepped over with it: the card carries it and the year.
     const printedNote = planAlbumPages(
       [
-        chapter("1938", "1938", [
-          corrected("t1", "Kasowane", [], { kind: "text", printedPageIds: ["printed-1"] }),
-          block("a", "A", [], "printed-1"),
-        ]),
+        {
+          ...chapter("1938", "1938", [
+            corrected("t1", "Kasowane", [], { kind: "text", printedPageIds: ["printed-1"] }),
+            block("a", "A", [], "printed-1"),
+          ]),
+          headingOnPaper: true,
+        },
       ],
       stacked,
       "Album",
@@ -1070,14 +1293,17 @@ describe("planAlbumPages and the collector's corrections", () => {
     // emitting something the card already accounts for.
     const plan = planAlbumPages(
       [
-        chapter("1938", "1938", [
-          corrected("a", "A", [], {
-            printedPageIds: ["printed-1"],
-            breakBefore: "always",
-            spaceBeforeMm: 50,
-          }),
-          block("b", "B", [box(30, 36)]),
-        ]),
+        {
+          ...chapter("1938", "1938", [
+            corrected("a", "A", [], {
+              printedPageIds: ["printed-1"],
+              breakBefore: "always",
+              spaceBeforeMm: 50,
+            }),
+            block("b", "B", [box(30, 36)]),
+          ]),
+          headingOnPaper: true,
+        },
       ],
       stacked,
       "Album",

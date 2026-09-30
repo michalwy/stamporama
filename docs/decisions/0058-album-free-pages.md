@@ -38,7 +38,8 @@ In the plan it is a block of kind `page`. It is **never packed**: it closes the 
 unless nothing is on it yet, so a chapter's year heading waiting for its first block is not left alone
 on a card in front of it — and is laid out on a sheet of its own. It shares a band with nothing, and a
 keep-together cannot cross it. It never answers *which block opens this chapter*, so it never takes a
-chapter's year off its first stamp sheet.
+chapter's year off its first stamp sheet — and since #1498, which asks whether a **card** carries the
+year, its card never counts as one whatever it prints (`chapterHeadingKey` is null on it).
 
 The frame is printed on it. The running head, the chapter heading and the footer are the page's own
 switches, off by default; each, when on, is placed exactly where every other sheet places it.

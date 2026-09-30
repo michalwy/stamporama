@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted, implemented in #767. Decision 8 corrects #766 one commit after it landed. The design it applies is #755. The pieces it reads are #763 (stamp
+Accepted, implemented in #767. Decision 8 corrects #766 one commit after it landed. Decision 7's
+*a block moves whole* is amended by #1497 for a chapter's first page. The design it applies is #755. The pieces it reads are #763 (stamp
 size), #764 (stamp order within a checklist), #765 (the hawid box rule) and #766 (the album
 template); the pieces it hands over to are #768 (the PDF, **ADR-0046**), #769 (the page editor, built — see the
 consequences below), #770 (the cutting list) and #778 (printed pages, **ADR-0047**).
@@ -191,6 +192,23 @@ Four packing rules, all of them read off the collector's own pages rather than i
   marked. A block's height includes its own lead and does not change when it moves — collapsing that
   lead at the top of a page would make "does not fit, so move it" ill-defined, since the block would
   shrink on the way and might then have fitted where it was.
+
+  **Amended by #1497: a chapter's first page is the exception.** It is the one page short by a
+  heading, and moving a block whole off it left the year alone on a card of its own exactly where a
+  card is easiest to save. So on a chapter's first page, with nothing under the year yet, a block
+  that does not fit in full **starts there anyway** — its heading and first row under the year, the
+  rest on the sheets after it, marked `[2]`, `[3]` as any split is — and that holds also for a block
+  that would have fitted a full page whole. Only when not even its heading and first row fit does the
+  year stay alone on its sheet. Two limits, both settled with the collector on 2026-09-30: a page
+  that already holds something is not this page, so a block that does not fit there moves whole as
+  always; and a **keep-together** unit (#769) that a full page can hold still moves whole off the
+  year, since starting its first block there would part it from the one that asked to stay with it.
+  A paired band that does not fit under the year is unpaired first and the rule applied to its first
+  block, as pairing must never make a page worse. **This reverses the outcome #768 settled** (see the
+  consequences): #768 made such a block move whole; it now starts under the year. It does not reverse
+  #768's fix — "taller than an entire page" is still measured against an ordinary empty page, and the
+  split under the year is a rule of its own rather than that measurement going wrong again. Cards
+  already printed do not change; live sheets re-plan.
 - **Blocks stack in bands, and a band is not a column.** See decision 8.
 
 ### 8. Blocks share bands; the page is never divided into columns
@@ -232,14 +250,17 @@ is a block the pairing has made worse.
   (ADR-0047 §4). The deliberate silence stands and is what the continuation page answers — a stamp
   that joins a checklist whose card is printed appears **nowhere** until the collector gives it a
   home. Two corrections came with it, both reachable only once a sheet could actually be printed: a
-  sheet is filed **once** however the entries have since been reordered, and a chapter whose first
-  block is on paper does not print its year a second time.
+  sheet is filed **once** however the entries have since been reordered, and a chapter does not print
+  its year a second time — asked, since #1498, of whether a printed card carries the year rather than
+  of whether the chapter's first block is on paper (ADR-0047 §4).
 - #768 replaced `album-metrics.ts` in place, and — re-reading this geometry under a renderer's
   premise, which is what the issue asked for — corrected one thing in `album-layout.ts`: *taller than
   an entire page* was measured against the page being filled rather than against an ordinary empty
   one, so a block that fits a sheet whole was split across two when it met a chapter's first page,
   which is short by the year heading. Decision 7's third packing rule is what it now obeys. Nothing
-  else in `album-layout.ts` moved, and no other file did. See ADR-0046.
+  else in `album-layout.ts` moved, and no other file did. See ADR-0046. **#1497 has since reversed the
+  outcome on that page** — the block starts under the year rather than moving whole — by an exception
+  stated in decision 7, not by undoing the measurement.
 - #769 attaches its relative corrections to entries and stamps, which survive a re-flow, rather than
   to pages, which are not rows. It is built: three columns on `album_entry` (space before, space
   after, where a page may break above it), an `album_box_adjustment` row per **box** — keyed

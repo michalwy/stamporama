@@ -426,11 +426,19 @@ const planBlock = (
   printedPageIds: printedPageIds.length ? printedPageIds : null,
 });
 
+/** A chapter whose opening card, when it is printed, carries the year — as a card that opened its
+ *  chapter does. Whether the year is on paper is the caller's answer since #1498, and these stand-ins
+ *  give the one a real album's opening card would. */
 const planChapter = (
   key: string,
   heading: string,
   blocks: ReturnType<typeof planBlock>[]
-): AlbumChapterSpec<ReturnType<typeof planBox>> => ({ key, heading, blocks });
+): AlbumChapterSpec<ReturnType<typeof planBox>> => ({
+  key,
+  heading,
+  blocks,
+  headingOnPaper: !!blocks[0]?.printedPageIds,
+});
 
 /** The plan's pages as the cutting list takes them — `AlbumPlanPage` without the footer, which this
  *  list does not read. Ranges are stand-ins; naming a page is `album-plan.ts`'s job. */

@@ -643,13 +643,13 @@ describe("printed album pages (#778)", () => {
       carrying
     );
 
-    // The positions move: the year heading that sat alone on the first sheet is no longer planned
-    // once the chapter's first block is on paper. So the sheet that was open is found again by its
-    // card's id, never by its position.
+    // The sheet that was open is found again by its card's id, never by its position: a position is
+    // only true of the plan it was read from. (#1487 wrote this against a year heading alone on the
+    // first sheet, which the mark dropped and moved every sheet up one; since #1497 the series starts
+    // under that year, and since #1498 a year alone would have stayed — the rule outlived its case.)
     const card = cards.find((c) => c.sheet === row.position)!;
     const after = await getAlbumEditorData(userId, album, { printedPageId: card.id });
     assert.ok(after?.sheet);
-    assert.notEqual(after.sheet.position, row.position, "this shape is the one where positions move");
     assert.equal(after.sheet.printedPageId, card.id);
     assert.equal(after.sheet.range, row.range);
     assert.equal(after.sheet.readOnly, true);
@@ -659,12 +659,166 @@ describe("printed album pages (#778)", () => {
     await prisma.album.delete({ where: { id: album } });
   });
 
+  it("keeps a year alone on its sheet in the plan when the series after it is printed (#1498)", async () => {
+    // A single mount so tall that not even the checklist's heading and its one row fit under the year
+    // heading, though a full page holds them: the one shape where #1497 still leaves the year alone.
+    const issue = await prisma.issue.create({
+      data: {
+        collectionId,
+        issueNo: 194100,
+        collectionAreaId: areaId,
+        name: "Wysoki",
+        year: 1941,
+        primaryCatalogSortKey: "0000000600",
+      },
+    });
+    const vendor = await prisma.catalogVendor.findFirstOrThrow({ where: { collectionId } });
+    const tall = await prisma.stamp.create({
+      data: {
+        collectionId,
+        name: "Stamp 600",
+        issuedYear: 1941,
+        widthMm: 180,
+        heightMm: 220,
+        primaryCatalogSortKey: "0000000600",
+        catalogNumbers: { create: [{ catalogVendorId: vendor.id, number: "600" }] },
+        stampAreaLinks: { create: [{ collectionAreaId: areaId, isPrimary: true }] },
+      },
+    });
+    await prisma.checklist.create({
+      data: {
+        collectionId,
+        issueId: issue.id,
+        name: "Wysoki",
+        sortOrder: 0,
+        stamps: { create: [{ stampId: tall.id, sortOrder: 0 }] },
+      },
+    });
+    const album = await createAlbum(
+      userId,
+      collectionId,
+      { name: "Rok osobno", collectionAreaId: areaId, language: "en" },
+      null
+    );
+    await prisma.albumEntry.deleteMany({
+      where: { albumId: album, checklist: { issueId: { not: issue.id } } },
+    });
+
+    // The year alone, then the series on the next sheet — and the listing says that marking the
+    // series leaves the year behind, before anything is marked.
+    let { plan, overview } = await listing(album);
+    assert.deepEqual(
+      overview.pages.map((p) => [p.yearAlone, p.boxCount]),
+      [
+        [true, 0],
+        [false, 1],
+      ]
+    );
+    assert.deepEqual(overview.pages[1].runWith, [2], "the year's sheet is not in the series' run");
+    assert.equal(overview.pages[1].yearSheetApart, 1);
+    const editor = await getAlbumEditorData(userId, album, 2);
+    assert.equal(editor?.sheets[1].yearSheetApart, 1, "and the editor says it too");
+
+    // Marking the series does not mark the year, and the year's sheet stays in the plan, live.
+    await markAlbumPagesPrinted(userId, album, [2], overview.fingerprint);
+    ({ plan, overview } = await listing(album));
+    assert.deepEqual(
+      overview.pages.map((p) => [p.printedPageId === null, p.yearAlone]),
+      [
+        [true, true],
+        [false, false],
+      ]
+    );
+    const yearSheet = plan.pages[0].layout;
+    assert.ok(yearSheet.kind === "live" && yearSheet.chapter, "the year still reaches a sheet");
+    // It downloads on its own.
+    assert.equal((await renderAlbumPdf(plan, "1")).pageCount, 1);
+
+    // Marked on its own, it is filed at the head of its chapter and the year is not printed again.
+    await markAlbumPagesPrinted(userId, album, [1], overview.fingerprint);
+    ({ plan, overview } = await listing(album));
+    assert.deepEqual(
+      overview.pages.map((p) => [p.printedPageId !== null, p.yearAlone]),
+      [
+        [true, true],
+        [true, false],
+      ]
+    );
+    const yearCard = overview.pages[0].printedPageId!;
+    const stored = await prisma.albumPrintedPage.findUniqueOrThrow({ where: { id: yearCard } });
+    assert.equal(stored.chapterHeadingKey, "1941");
+    assert.deepEqual(plan.printed.orphanedPageIds, [], "claimed by its chapter, not orphaned");
+    const report = await getAlbumPrintedReport(userId, album);
+    assert.deepEqual(report.sheets.flatMap((s) => s.divergences), [], "both cards still match");
+    assert.deepEqual(
+      report.sheets.map((s) => s.yearAlone ?? "").sort(),
+      ["", "1941"],
+      "the year's card is named by its year"
+    );
+    assert.match((await describeAlbumUnprint(userId, yearCard)).join(" "), /year heading/);
+
+    // The series back in the live plan starts on fresh paper under the card that carries its year.
+    const seriesCard = overview.pages[1].printedPageId!;
+    await unprintAlbumPage(userId, seriesCard);
+    ({ plan } = await listing(album));
+    assert.deepEqual(
+      plan.pages.map((p) => p.layout.kind),
+      ["printed", "live"]
+    );
+    const series = plan.pages[1].layout;
+    assert.ok(series.kind === "live" && series.chapter === null, "no second year");
+
+    // A reprint of the year card puts the year back in the plan, and the old card stands until the
+    // new year sheet is marked printed in its turn.
+    await reprintAlbumPage(userId, yearCard);
+    ({ plan, overview } = await listing(album));
+    assert.deepEqual(
+      overview.pages.map((p) => [p.printedPageId === null, p.yearAlone]),
+      [
+        [true, true],
+        [true, false],
+      ]
+    );
+    await markAlbumPagesPrinted(userId, album, [2], overview.fingerprint);
+    assert.ok(
+      await prisma.albumPrintedPage.findUnique({ where: { id: yearCard } }),
+      "marking the series is not the year's reprint"
+    );
+    ({ overview } = await listing(album));
+    await markAlbumPagesPrinted(userId, album, [1], overview.fingerprint);
+    assert.equal(
+      await prisma.albumPrintedPage.findUnique({ where: { id: yearCard } }),
+      null,
+      "the new year card replaces the old one"
+    );
+
+    await prisma.album.delete({ where: { id: album } });
+    await prisma.checklist.deleteMany({ where: { issueId: issue.id } });
+    await prisma.stamp.delete({ where: { id: tall.id } });
+    await prisma.issue.delete({ where: { id: issue.id } });
+  });
+
   it("marks a checklist that runs across three sheets whole, or not at all", async () => {
     const { overview } = await listing(bigAlbumId);
     const carrying = overview.pages
       .map((p, i) => (p.boxCount > 0 ? i + 1 : null))
       .filter((n): n is number => n !== null);
     assert.equal(carrying.length, 3, "five souvenir sheets, two to a card");
+    // Three sheets in all, not four (#1497): the series starts under the year rather than leaving the
+    // year alone on a card of its own. On this template two souvenir sheets fit under the year as
+    // well as on a full card — the collector's own template fits one there, and the unit suite pins
+    // that arithmetic.
+    assert.equal(overview.pages.length, 3);
+    assert.deepEqual(
+      overview.pages.map((p) => p.boxCount),
+      [2, 2, 1]
+    );
+    assert.equal(overview.pages[0].continued, false);
+    assert.equal(overview.pages[1].continued, true);
+    assert.equal(overview.pages.some((p) => p.yearAlone), false);
+    const { plan: before } = await listing(bigAlbumId);
+    const first = before.pages[0].layout;
+    assert.ok(first.kind === "live" && first.chapter, "the year heads the first sheet");
     // The listing says which sheets go onto paper together rather than leaving the collector to work
     // it out from a refusal.
     assert.deepEqual(overview.pages[carrying[0] - 1].runWith, carrying);

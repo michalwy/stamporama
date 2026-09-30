@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ALBUM_SNAPSHOT_VERSION, parseAlbumSnapshot } from "../../src/lib/album-snapshot";
+import {
+  ALBUM_SNAPSHOT_VERSION,
+  parseAlbumSnapshot,
+  snapshotChapterHeadingKey,
+} from "../../src/lib/album-snapshot";
 import { DEFAULT_ALBUM_PRESET } from "../../src/lib/album-template-rules";
 import { albumBuiltinOrnament } from "../../src/lib/album-ornaments";
 
@@ -78,5 +82,38 @@ describe("a card stored before the footer was placed on its own (#1457)", () => 
     const older: Record<string, unknown> = { ...before };
     delete older.borderGapMm;
     assert.equal(parseAlbumSnapshot(stored(older)).preset.footerOffsetMm, 3.2);
+  });
+});
+
+describe("the chapter heading a card carries (#1498)", () => {
+  const year = { role: "chapter", lines: ["1950"], xMm: 10, yMm: 31, widthMm: 190, heightMm: 12 };
+
+  it("names the chapter of a card that printed its heading, alone or above a series", () => {
+    const alone = parseAlbumSnapshot(
+      stored(DEFAULT_ALBUM_PRESET, {
+        page: { kind: "live", boxes: [], blocks: [], placement: "top", chapter: year },
+      })
+    );
+    assert.equal(snapshotChapterHeadingKey(alone), "1950");
+  });
+
+  it("names none for a card that printed no heading", () => {
+    assert.equal(snapshotChapterHeadingKey(parseAlbumSnapshot(stored(DEFAULT_ALBUM_PRESET))), null);
+  });
+
+  it("names none for a free page, whatever it printed: it never carries the year (ADR-0058)", () => {
+    const free = parseAlbumSnapshot(
+      stored(DEFAULT_ALBUM_PRESET, {
+        page: {
+          kind: "live",
+          boxes: [],
+          blocks: [],
+          placement: "top",
+          chapter: year,
+          free: { id: "fp", elements: [] },
+        },
+      })
+    );
+    assert.equal(snapshotChapterHeadingKey(free), null);
   });
 });

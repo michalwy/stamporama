@@ -1552,6 +1552,13 @@ model AlbumPrintedPage {
   // Not the same act as un-printing, which throws the snapshot away outright and says so first.
   reprintingAt DateTime?
 
+  // The chapter whose heading this card prints (#1498) — its key, or null for a card that prints
+  // none. An index over `snapshot` like the stamps below, written with it and from nowhere else: the
+  // planner asks on every read whether a card carries a chapter's year, and a card carrying the year
+  // and nothing else is filed at the head of its chapter by it. A free page's card is null whatever
+  // it prints, because a free page never carries the year for its chapter (ADR-0058).
+  chapterHeadingKey String?
+
   album              Album                   @relation(fields: [albumId], references: [id], onDelete: Cascade)
   stamps             AlbumPrintedPageStamp[]
   // Entries whose open continuation page answers this sheet.

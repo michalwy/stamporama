@@ -32,6 +32,9 @@ export interface AlbumPrintedPageRow {
    *  back in the live plan and this row survives only to say that a card matching it is still in the
    *  binder, until a new sheet is marked printed in its turn. */
   reprintingAt: Date | null;
+  /** The chapter whose heading the card prints (#1498), by key, or null for a card that prints none —
+   *  a free page's card included, which never carries the year for its chapter (ADR-0058). */
+  chapterHeadingKey: string | null;
 }
 
 /** What one album entry has on paper. */
@@ -59,6 +62,11 @@ export interface AlbumPrintedIndex {
   /** Which card each free page (#1429) is on, for cards that are not being reprinted — read here for
    *  the reason {@link byTextBlock} is. */
   byFreePage: Map<string, string>;
+  /** Cards that carry a chapter's heading **and nothing else** (#1498) — the year alone on its sheet,
+   *  marked printed on its own — by chapter key, in printing order, for cards that are not being
+   *  reprinted. The planner files one at the head of its chapter; nothing else names such a card, so
+   *  without this it would read as orphaned. */
+  byChapterHeading: Map<string, string[]>;
   /** Printed sheets no live entry names any more, so nothing in the plan can file them. A card in a
    *  binder whose stamps have all left the album is not a row to sweep — it is a divergence, and the
    *  report is where it is said. */
@@ -77,7 +85,7 @@ export async function getAlbumPrintedIndex(albumId: string): Promise<AlbumPrinte
   const rows = await prisma.albumPrintedPage.findMany({
     where: { albumId },
     orderBy: [{ printedAt: "asc" }, { id: "asc" }],
-    select: { id: true, range: true, printedAt: true, reprintingAt: true },
+    select: { id: true, range: true, printedAt: true, reprintingAt: true, chapterHeadingKey: true },
   });
   const pages = new Map(rows.map((r) => [r.id, r]));
 
@@ -138,11 +146,24 @@ export async function getAlbumPrintedIndex(albumId: string): Promise<AlbumPrinte
     claimed.add(page.printedPageId);
   }
 
+  // A card holding its chapter's year and nothing else (#1498) claims no stamp, note or free page — it
+  // is claimed by its chapter. `rows` are in printing order, so a chapter's cards are too.
+  const byChapterHeading = new Map<string, string[]>();
+  for (const row of rows) {
+    if (row.reprintingAt || row.chapterHeadingKey === null || claimed.has(row.id)) continue;
+    byChapterHeading.set(row.chapterHeadingKey, [
+      ...(byChapterHeading.get(row.chapterHeadingKey) ?? []),
+      row.id,
+    ]);
+    claimed.add(row.id);
+  }
+
   return {
     pages,
     byEntry,
     byTextBlock,
     byFreePage,
+    byChapterHeading,
     orphanedPageIds: rows
       .filter((r) => !r.reprintingAt && !claimed.has(r.id))
       .map((r) => r.id),
