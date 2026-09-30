@@ -41,9 +41,8 @@ const SOURCES: Partial<Record<SettingsEntryKey, readonly string[]>> = {
   philasearch: ["philasearch-platform-panel.tsx"],
   "auction-reminder": ["auction-reminder-panel.tsx"],
   colnect: [
-    "settings-screen.tsx",
-    "colnect-platform-panel.tsx",
-    "colnect-panel.tsx",
+    "colnect-settings-page.tsx",
+    "colnect-catalogs-panel.tsx",
     "colnect-conditions-panel.tsx",
     "colnect-attributes-panel.tsx",
     "colnect-lists-panel.tsx",
@@ -92,17 +91,9 @@ describe("settings search (#1470)", () => {
   it("counts the entry's name towards a field, but not alone", () => {
     assert.deepEqual(shape("allegro profiles"), [["allegro", ["Listing profiles"]]]);
     assert.deepEqual(shape("colnect"), [
-      [
-        "colnect",
-        [
-          "Colnect platform",
-          "Colnect catalog mapping",
-          "Colnect condition mapping",
-          "Colnect attribute mapping",
-          "Colnect list sync",
-        ],
-      ],
+      ["colnect", ["Colnect platform", "Without a Colnect word"]],
     ]);
+    assert.deepEqual(shape("colnect unmapped"), [["colnect", ["Without a Colnect word"]]]);
   });
 
   it("keeps the navigation's order across entries", () => {

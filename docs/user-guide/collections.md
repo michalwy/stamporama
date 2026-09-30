@@ -485,31 +485,56 @@ The **Add stamp** and **Edit stamp** dialogs include a **Colnect** field in the 
 
 When a stamp has **no** item-ID yet, the same tag appears with a **magnifying-glass** icon instead of the open-in-new-tab arrow: there is no page to open, so it runs a **search** on colnect.com for the stamp's catalog number instead. What it searches for is exactly what [clicking the catalog chip copies](inventory.md#copying-a-catalog-number) — the area prefix and the number, without your catalog's abbreviation (`PL 3690`), since Colnect knows country codes but not your abbreviations. Hover it to see the query. It is the quickest way to find the item and record its ID, after which the tag turns back into the ordinary catalog link. A stamp with no catalog number at all has nothing to search by, so no tag appears.
 
+## The Colnect page
+
+**Settings → Colnect** (under *Partners*) has the platform choice at the top right, beside the page
+title, and four tabs under a strip of figures:
+
+- **Catalogs** — which of your catalogs each Colnect abbreviation means; see [Colnect catalog
+  mapping](#colnect-catalog-mapping). The page opens on this tab.
+- **Conditions** — which of Colnect's grades each of your conditions means; see [Colnect condition
+  mapping](#colnect-condition-mapping).
+- **Attributes** — what Colnect calls your colours, watermarks, papers and printing methods; see
+  [Colnect attribute mapping](#colnect-attribute-mapping).
+- **List sync** — what each of Colnect's own lists mirrors here; see [Colnect list
+  sync](#colnect-list-sync).
+
+The strip above the tabs says where each stands — how many catalogs are mapped, how many of your
+conditions have a grade, how many attribute values still have no Colnect word, and which lists are
+set to sync — and clicking a figure opens its tab. The attribute figure opens the Attributes tab
+narrowed to the values still without a word, and it is the same number the tab's **Without a
+Colnect word** filter shows.
+
+Explanations sit behind the ⓘ beside a list or a field rather than on the page; this guide has the
+rest.
+
 ## Colnect platform
 
-**Settings → Colnect** starts by asking which of your [platforms](contacts.md) *is* Colnect. Pick it
-from the list — every contact carrying the **Platform** role is offered — and the choice saves on the
-spot. Only one platform can be Colnect, so picking a different one moves the marker rather than
-adding a second.
+The platform choice at the top of **Settings → Colnect** says which of your [platforms](contacts.md)
+*is* Colnect. Pick it from the list — every contact carrying the **Platform** role is offered — and
+the choice saves on the spot. Only one platform can be Colnect, so picking a different one moves the
+marker rather than adding a second. With no platform in the collection yet there is nothing to pick,
+and the page says how to add one.
 
 Naming it is what turns on the [listing checks](offers.md#what-the-assistant-cant-post) in the bulk
 listing workspace: offers headed for that platform are tested against what Colnect's sale form needs
 — an item-ID on every stamp, a grade for every condition, and sets that are interchangeable — before
 you hand one to the Assistant. Leave it **— not set —** and nothing is checked anywhere; every
 platform is listed by hand, exactly as before. It changes nothing else: templates, limits, photos,
-pricing and publishing all work the same either way.
-
-The two mappings below only ever matter for that platform, which is why they sit under it.
+pricing and publishing all work the same either way. The mappings in the tabs are the collection's
+and work whether or not a platform is chosen.
 
 ## Colnect catalog mapping
 
-Colnect catalog pages list numbers under Colnect's own catalog abbreviations (`Mi`, `Sn`, `Yt`, `Sg`, `AFA`, `Pol`…), which don't all match yours — notably Colnect's `Pol` is **Fischer**, which you may abbreviate `Fi`. **Settings → Colnect** lets you record, per collection, which local catalog each Colnect abbreviation means.
+Colnect catalog pages list numbers under Colnect's own catalog abbreviations (`Mi`, `Sn`, `Yt`, `Sg`, `AFA`, `Pol`…), which don't all match yours — notably Colnect's `Pol` is **Fischer**, which you may abbreviate `Fi`. The **Catalogs** tab of **Settings → Colnect** records, per collection, which local catalog each Colnect abbreviation means.
 
-You only need a row where the abbreviations **differ**. Any Colnect abbreviation without a row automatically maps to a local catalog whose abbreviation is spelled the **same** (case-insensitive) — so `Mi` → your Michel needs no row. Anything still unmatched is simply **ignored**, never an error. Each row is a Colnect abbreviation plus the local catalog it points to; an abbreviation can be mapped only once per collection. (This mapping is preparation for future Colnect number-matching; on its own it changes nothing about your stamps.)
+You only need a mapping where the abbreviations **differ**. Any Colnect abbreviation without one automatically maps to a local catalog whose abbreviation is spelled the **same** (case-insensitive) — so `Mi` → your Michel needs none. Anything still unmatched is simply **ignored**, never an error. Each mapping is a Colnect abbreviation plus the local catalog it points to; an abbreviation can be mapped only once per collection. (This mapping is preparation for future Colnect number-matching; on its own it changes nothing about your stamps.)
+
+The tab is a [list beside the selected mapping's detail](#pages-with-a-list): pick a mapping on the left to change its **Colnect abbreviation** or the **local catalog** it maps to, and **Save**; **Delete** removes it. **Add mapping**, at the top right, opens an empty one in the same place — it waits until the collection has a catalog to map to.
 
 ## Colnect condition mapping
 
-Your [conditions](#stamp-conditions) are your own — the names, abbreviations and order you chose. Colnect's sale form instead offers a **fixed list of five grades**, the same under every item. Listing a copy there means translating between the two, so the same **Settings → Colnect** page records it once, below the catalog mapping.
+Your [conditions](#stamp-conditions) are your own — the names, abbreviations and order you chose. Colnect's sale form instead offers a **fixed list of five grades**, the same under every item. Listing a copy there means translating between the two, so the **Conditions** tab of **Settings → Colnect** records it once.
 
 Every one of your conditions gets a row, with a picker holding Colnect's five grades:
 
@@ -521,13 +546,29 @@ Every one of your conditions gets a row, with a picker holding Colnect's five gr
 | U - Used |
 | CTO - Cancelled To Order |
 
-Pick the one each condition means; each change saves on the spot, so there is nothing to submit. Leave a condition on **— not mapped —** when you never list it on Colnect — a First Day Cover has no grade there, and that is a legitimate blank rather than a mistake. Unlike the catalog mapping there is **no automatic fallback**: nothing is guessed from a name or an abbreviation, because a wrong grade on a listing you publish is worse than one you fill in yourself. A copy whose condition is unmapped simply cannot be listed on Colnect, and the [bulk listing workspace says so](offers.md#what-the-assistant-cant-post) before you start filling a form.
+Pick the one each condition means; each change saves on the spot, so there is nothing to submit. Leave a condition on **— not mapped —** when you never list it on Colnect — a First Day Cover has no grade there, and that is a legitimate blank rather than a mistake. Unlike the catalog mapping there is **no automatic fallback**: nothing is guessed from a name or an abbreviation, because a wrong grade on a listing you publish is worse than one you fill in yourself. A copy whose condition is unmapped simply cannot be listed on Colnect, and the [bulk listing workspace says so](offers.md#what-the-assistant-cant-post) before you start filling a form. The line above the list counts how many of your conditions have a grade.
+
+## Colnect attribute mapping
+
+The **Attributes** tab of **Settings → Colnect** says what Colnect calls each of your
+[colours, watermarks, papers and printing methods](#filling-attributes-from-colnect). Colnect prints
+them as words of its own — *Carmine*, *Grey Red* — so this is a field rather than a picker: type the
+word as Colnect prints it beside your value, and it saves when you leave the field or press Enter.
+A blank field is the unmapped state.
+
+The tab shows **one list at a time**; pick it with **List** above the rows. **Without a Colnect
+word** narrows every list to the values still blank, with the number of them beside it — the same
+number the summary strip shows, and clicking that figure opens the tab already narrowed. **Fill
+matching** fills in every blank value of the list shown with the value's own name, where no other
+value in that list has already taken the word; you correct the ones that are not right. Nothing is
+ever created from a Colnect page: a Colnect word that maps to none of your values is reported, and
+the Assistant fills in the rest.
 
 ## Colnect list sync
 
 Colnect keeps four lists of its own — **Collection**, **Swap**, **Wish** and **Sell** — and an exchange usually starts from one of them: a possible partner opens your Swap list to see whether there is anything they want. That only works if the list still says what you actually hold for trade. Colnect offers no way to push your data there, but it does **export** a list as a CSV file, so keeping the two in step is a loop: export the list, load it here, look at what differs, and fix whichever side is wrong.
 
-**Settings → Colnect → Colnect list sync** is where you say what each of those lists is supposed to mirror. Every one of the four is listed, whether or not you have set it up:
+The **List sync** tab of **Settings → Colnect** is where you say what each of those lists is supposed to mirror. Every one of the four is listed, whether or not you have set it up:
 
 | Colnect list | Mirrors, by default | Source of truth |
 | --- | --- | --- |
@@ -540,7 +581,7 @@ Colnect keeps four lists of its own — **Collection**, **Swap**, **Wish** and *
 
 **Source of truth** is which side wins when the two disagree, and therefore what gets proposed about an item that is on Colnect but not here: with **Stamporama**, removing it there; with **Colnect**, adopting it here. Wish starts on **Colnect** on purpose — a wish list built up over years of clicking *I want this* runs to tens of thousands of entries against far fewer wants recorded here, and treating this side as right would open with a proposal to delete all of them.
 
-**Sync** switches a list on. A list left off is simply never compared, and switching it off later parks it without forgetting how you set it up. Each control saves on the spot, so there is nothing to submit. A list switched on appears on the **[Colnect](colnect-lists.md)** screen, which is where the export is loaded and the differences are read.
+**Sync** switches a list on. A list left off is simply never compared, and switching it off later parks it without forgetting how you set it up. Each control saves on the spot, so there is nothing to submit, and the line above the lists counts how many are synced. A list switched on appears on the **[Colnect](colnect-lists.md)** screen, which is where the export is loaded and the differences are read.
 
 Comparison is by **[Colnect ID](#colnect-id)**: a stamp that carries one can be found in an export, and a stamp that does not is not comparable at all — it is neither a match nor a difference. Filling those IDs in is what the [Assistant](assistant.md) is for.
 
@@ -1020,8 +1061,8 @@ The four lists translate exactly like [subtypes](#subtypes-in-other-languages) �
 
 ### Filling attributes from Colnect
 
-The four lists carry one more field, on the **Settings → Colnect** page rather than here: what Colnect
-calls each value. With that mapping in place the [Assistant](assistant.md#when-colnect-knows-what-the-stamp-is)
+The four lists carry one more field, on the **Attributes** tab of **Settings → Colnect** rather than
+here: what Colnect calls each value (see [Colnect attribute mapping](#colnect-attribute-mapping)). With that mapping in place the [Assistant](assistant.md#when-colnect-knows-what-the-stamp-is)
 fills a matched stamp's attributes straight off its Colnect catalogue page — the fastest way to get
 these six filled in on a collection of any size. Denomination and perforation need no mapping.
 

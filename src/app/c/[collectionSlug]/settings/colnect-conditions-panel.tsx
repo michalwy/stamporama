@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { setColnectConditionMappingAction } from "@/app/actions/colnect";
 import type { ColnectConditionMappingData } from "@/lib/colnect";
 import { COLNECT_CONDITIONS } from "@/lib/colnect-conditions";
+import { ListPane, countLabel } from "./list-detail";
 
 const SELECT_STYLE: React.CSSProperties = {
   padding: "0.375rem 0.5rem",
@@ -28,9 +29,9 @@ const abbrBadgeStyle: React.CSSProperties = {
 };
 
 /**
- * Which Colnect grade each of our conditions means (#404) — the condition-side counterpart of the
- * catalog mapping above it, in the same tab for the same reason: both translate our own vocabulary
- * into Colnect's, once, so a listing never asks again.
+ * The Colnect page's Conditions tab (#404, #1480): which Colnect grade each of our conditions means
+ * — the condition-side counterpart of the catalog mapping, both translating our own vocabulary into
+ * Colnect's once, so a listing never asks again.
  *
  * Every condition gets a row, whether or not it is mapped — a blank select **is** the unmapped
  * state, which is a legitimate answer (a cover grade on a platform with no cover option) and which
@@ -63,34 +64,22 @@ export function ColnectConditionsPanel({
 
   if (mappings.length === 0) {
     return (
-      <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-        This collection has no conditions yet. Add them under the <strong>Conditions</strong> tab,
+      <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
+        This collection has no conditions yet. Add them on the <strong>Conditions</strong> page,
         then say what Colnect calls each of them here.
       </p>
     );
   }
 
+  const mapped = mappings.filter((m) => m.colnectValue).length;
+
   return (
     <>
-      <p
-        style={{
-          color: "var(--color-text-muted)",
-          fontSize: "0.8125rem",
-          marginBottom: "1rem",
-          lineHeight: 1.5,
-        }}
-      >
-        Colnect&rsquo;s sale form offers five fixed grades. Say which of them each of your conditions
-        means, and a listing never has to ask again. Leave a condition on{" "}
-        <em>— not mapped —</em> when you never list it on Colnect; copies in that condition simply
-        cannot be listed there, and nothing is ever guessed for you.
-      </p>
-
-      {error && (
-        <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginBottom: "0.75rem" }}>
-          {error}
-        </p>
-      )}
+      <ListPane
+        caption={`${mapped} of ${countLabel(mappings.length, "condition", "conditions")} mapped`}
+        hint="Colnect's sale form offers five fixed grades. Say which of them each of your conditions means, and a listing never has to ask again. Leave a condition not mapped when you never list it on Colnect: copies in it cannot be listed there, and nothing is ever guessed for you."
+        error={error}
+      />
 
       <div
         style={{
