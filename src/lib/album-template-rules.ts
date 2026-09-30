@@ -27,7 +27,7 @@
 //
 // {@link DEFAULT_ALBUM_PRESET} is the geometry of the collector's own album sources — A4, 10 mm
 // margins, `ALBUM_PAGES_SPACING (1.0 6.0)`, `STAMP_BOXES_SIZE_ADJUST(4)` as the two clearances that
-// single global figure becomes, and the five faces and sizes his pages are actually set in. A new
+// single global figure becomes, and the six faces and sizes his pages are actually set in. A new
 // template therefore starts as the album he already prints, which is the only starting point that
 // is not a number somebody made up.
 
@@ -174,12 +174,14 @@ export const ALBUM_FOOTER_PLACEMENTS = [
 
 export type AlbumFooterPlacement = (typeof ALBUM_FOOTER_PLACEMENTS)[number]["key"];
 
-/** The five roles type is set for. Ordered as they appear down a page, which is the order the
- *  form shows them in. */
+/** The six roles type is set for. Ordered as they appear down a page, which is the order the
+ *  form shows them in. The sub-heading is #1509's: a checklist printed within its issue, under the
+ *  issue's heading, names itself in it. */
 export const ALBUM_TYPE_ROLES = [
   { key: "title", label: "Album title" },
   { key: "chapter", label: "Chapter heading" },
   { key: "heading", label: "Checklist heading" },
+  { key: "subheading", label: "Sub-heading" },
   { key: "label", label: "Box label" },
   { key: "footer", label: "Footer" },
 ] as const;
@@ -247,6 +249,11 @@ export interface AlbumRenderPreset {
    *  longer the checklist heading's. A blank chapter heading reserves neither. */
   chapterSpaceAboveMm: number;
   chapterSpaceBelowMm: number;
+  /** Above and below a checklist's sub-heading (#1509) — a checklist printed within its issue names
+   *  itself under the issue's heading. Above is read only where the sub-heading follows other boxes;
+   *  directly under the issue's heading the heading's own space below separates them. */
+  subheadingSpaceAboveMm: number;
+  subheadingSpaceBelowMm: number;
 
   // Hawid clearances, fed to `planHawidBox` (#765)
   verticalClearanceMm: number;
@@ -263,6 +270,8 @@ export interface AlbumRenderPreset {
   chapterSizePt: number;
   headingFace: string;
   headingSizePt: number;
+  subheadingFace: string;
+  subheadingSizePt: number;
   labelFace: string;
   labelSizePt: number;
   footerFace: string;
@@ -345,6 +354,10 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   titleSpaceBelowMm: 0,
   chapterSpaceAboveMm: 8,
   chapterSpaceBelowMm: 5,
+  // His `STAMP_H2` sub-headings (#1509): 37 of the 44 in his sources leave `3` under themselves, and
+  // one that follows a row of boxes is set after the rows' own `6.0`, with nothing added.
+  subheadingSpaceAboveMm: 6,
+  subheadingSpaceBelowMm: 3,
 
   // The two numbers `STAMP_BOXES_SIZE_ADJUST(4)` becomes. Its single global figure is exactly what
   // #765 exists to replace, so the starting point is that figure on both axes and the collector
@@ -352,9 +365,9 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   verticalClearanceMm: 4,
   horizontalMarginMm: 4,
 
-  // The five faces and sizes his pages are set in: `HEADER "Times New Roman"` at 26,
+  // The faces and sizes his pages are set in: `HEADER "Times New Roman"` at 26,
   // `YEAR_H "Times New Roman Bold"` at 24, `STAMP_H1 "Arial Bold Italic"` at 12,
-  // `STAMP "Arial"`, and `PAGE_TEXT_CENTER(FOOTER 8 …)`.
+  // `STAMP_H2 "Arial Italic"` at 10 (#1509), `STAMP "Arial"`, and `PAGE_TEXT_CENTER(FOOTER 8 …)`.
   titleFace: "liberation-serif",
   titleSizePt: 26,
   // His PL, DE-BM, DE-BY and DR pages all carry the running head; DA does not. On is the majority
@@ -364,6 +377,9 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   chapterSizePt: 24,
   headingFace: "liberation-sans-bold-italic",
   headingSizePt: 12,
+  // `STAMP_H2 "Arial Italic"` at 10 — the sub-heading under a `STAMP_H1` issue heading (#1509).
+  subheadingFace: "liberation-sans-italic",
+  subheadingSizePt: 10,
   labelFace: "liberation-sans",
   labelSizePt: 8,
   footerFace: "liberation-sans",
@@ -389,6 +405,17 @@ export const DEFAULT_ALBUM_PRESET: AlbumRenderPreset = {
   boxLabelTemplate: "{catalog::}",
   footerTemplate: "{pageRange}",
 };
+
+/** The sub-heading values #1509's migration gave every existing template and album — and so what a
+ *  card stored before the role existed reads (`parseAlbumSnapshot`). The same four figures as
+ *  {@link DEFAULT_ALBUM_PRESET}'s today, kept apart because that default may move and these may not:
+ *  a card is compared against the values its album was actually given. */
+export const ALBUM_SUBHEADING_BEFORE_1509 = {
+  subheadingFace: "liberation-sans-italic",
+  subheadingSizePt: 10,
+  subheadingSpaceAboveMm: 6,
+  subheadingSpaceBelowMm: 3,
+} as const satisfies Partial<AlbumRenderPreset>;
 
 /** A template as the dictionary holds one: the preset, plus the name it is picked by. */
 export interface AlbumTemplateInput extends AlbumRenderPreset {
@@ -454,6 +481,8 @@ export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawI
     titleSpaceBelowMm: str("titleSpaceBelowMm"),
     chapterSpaceAboveMm: str("chapterSpaceAboveMm"),
     chapterSpaceBelowMm: str("chapterSpaceBelowMm"),
+    subheadingSpaceAboveMm: str("subheadingSpaceAboveMm"),
+    subheadingSpaceBelowMm: str("subheadingSpaceBelowMm"),
     verticalClearanceMm: str("verticalClearanceMm"),
     horizontalMarginMm: str("horizontalMarginMm"),
     titleFace: str("titleFace"),
@@ -462,6 +491,8 @@ export function readAlbumPresetFields(formData: FormData): AlbumRenderPresetRawI
     chapterSizePt: str("chapterSizePt"),
     headingFace: str("headingFace"),
     headingSizePt: str("headingSizePt"),
+    subheadingFace: str("subheadingFace"),
+    subheadingSizePt: str("subheadingSizePt"),
     labelFace: str("labelFace"),
     labelSizePt: str("labelSizePt"),
     footerFace: str("footerFace"),
@@ -722,6 +753,20 @@ export function parseAlbumRenderPreset(
     MAX_SPACING_MM
   );
   if (!chapterSpaceBelowMm.ok) return chapterSpaceBelowMm;
+  const subheadingSpaceAboveMm = mm(
+    "subheadingSpaceAboveMm",
+    "Space above a sub-heading",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!subheadingSpaceAboveMm.ok) return subheadingSpaceAboveMm;
+  const subheadingSpaceBelowMm = mm(
+    "subheadingSpaceBelowMm",
+    "Space below a sub-heading",
+    MIN_SPACING_MM,
+    MAX_SPACING_MM
+  );
+  if (!subheadingSpaceBelowMm.ok) return subheadingSpaceBelowMm;
 
   const verticalClearanceMm = mm(
     "verticalClearanceMm",
@@ -750,6 +795,10 @@ export function parseAlbumRenderPreset(
   if (!headingFace.ok) return headingFace;
   const headingSizePt = parseTypeSize(raw.headingSizePt, "Checklist heading size");
   if (!headingSizePt.ok) return headingSizePt;
+  const subheadingFace = parseFace(raw.subheadingFace, "Sub-heading");
+  if (!subheadingFace.ok) return subheadingFace;
+  const subheadingSizePt = parseTypeSize(raw.subheadingSizePt, "Sub-heading size");
+  if (!subheadingSizePt.ok) return subheadingSizePt;
   const labelFace = parseFace(raw.labelFace, "Box label");
   if (!labelFace.ok) return labelFace;
   const labelSizePt = parseTypeSize(raw.labelSizePt, "Box label size");
@@ -813,6 +862,8 @@ export function parseAlbumRenderPreset(
       titleSpaceBelowMm: titleSpaceBelowMm.value,
       chapterSpaceAboveMm: chapterSpaceAboveMm.value,
       chapterSpaceBelowMm: chapterSpaceBelowMm.value,
+      subheadingSpaceAboveMm: subheadingSpaceAboveMm.value,
+      subheadingSpaceBelowMm: subheadingSpaceBelowMm.value,
       verticalClearanceMm: verticalClearanceMm.value,
       horizontalMarginMm: horizontalMarginMm.value,
       titleFace: titleFace.value,
@@ -821,6 +872,8 @@ export function parseAlbumRenderPreset(
       chapterSizePt: chapterSizePt.value,
       headingFace: headingFace.value,
       headingSizePt: headingSizePt.value,
+      subheadingFace: subheadingFace.value,
+      subheadingSizePt: subheadingSizePt.value,
       labelFace: labelFace.value,
       labelSizePt: labelSizePt.value,
       footerFace: footerFace.value,

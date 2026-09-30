@@ -53,6 +53,7 @@ import {
   updateAlbumTextBlock,
   AlbumFreePageError,
   AlbumNameTakenError,
+  AlbumPrintModeError,
   type AlbumBlockLayoutInput,
   type AlbumEntryData,
 } from "@/lib/albums";
@@ -86,6 +87,7 @@ import {
   AlbumPrintError,
 } from "@/lib/album-printing";
 import { albumPlanContext } from "@/lib/album-plan";
+import { asAlbumPrintMode } from "@/lib/album-print-mode";
 
 // Server actions for albums (#767), `actions/hawid-stock.ts`'s shape: `FormData` in, a state out,
 // every rule in the library beneath.
@@ -121,6 +123,8 @@ function toErrorState(
   // checklist chosen, a sheet already on paper — so its own words reach them rather than a "please
   // try again" they cannot act on.
   if (err instanceof AlbumPrintError) return { status: "error", message: err.message };
+  // A mode a checklist spanning issues cannot take (#1509).
+  if (err instanceof AlbumPrintModeError) return { status: "error", message: err.message };
   return { status: "error", message: fallback };
 }
 
@@ -643,7 +647,8 @@ function readBlockLayout(
   };
 }
 
-/** Space before, space after, and where a page may break above one checklist. */
+/** Space before, space after, where a page may break above one checklist, and how it prints relative
+ *  to its issue (#1509). */
 export async function setAlbumEntryLayoutAction(
   entryId: string,
   formData: FormData
@@ -651,8 +656,18 @@ export async function setAlbumEntryLayoutAction(
   const session = await getSession();
   const layout = readBlockLayout(formData);
   if (!layout.ok) return { status: "error", message: layout.message };
+  // Absent leaves it alone, blank follows the default again, and a word this build does not know is
+  // refused rather than read as the default.
+  const modeRaw = (formData.get("printMode") as string | null)?.trim() ?? null;
+  const printMode = modeRaw ? asAlbumPrintMode(modeRaw) : null;
+  if (modeRaw && printMode === null) {
+    return { status: "error", message: "That is not a way a checklist can be printed." };
+  }
   try {
-    await setAlbumEntryLayout(session.user.id, entryId, layout.value);
+    await setAlbumEntryLayout(session.user.id, entryId, {
+      ...layout.value,
+      ...(modeRaw === null ? {} : { printMode }),
+    });
     return { status: "success" };
   } catch (err) {
     return toErrorState(err, "Could not change how this block is laid out.");

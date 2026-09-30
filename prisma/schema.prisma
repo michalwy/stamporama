@@ -1048,6 +1048,10 @@ model AlbumTemplate {
   /// the chapter heading shared until then.
   chapterSpaceAboveMm Float
   chapterSpaceBelowMm Float
+  /// Above and below a checklist's sub-heading under its issue's heading (#1509). The defaults are
+  /// the collector's own `STAMP_H2`: the rows' 6 mm above, 3 mm below.
+  subheadingSpaceAboveMm Float @default(6)
+  subheadingSpaceBelowMm Float @default(3)
 
   // ── Hawid margins (#765) ──
   // The clearances the box rule adds to a stamp. The **vertical** one is added before a strip is
@@ -1076,6 +1080,10 @@ model AlbumTemplate {
   chapterSizePt Float
   headingFace   String
   headingSizePt Float
+  // The sixth role (#1509): a checklist printed within its issue names itself under the issue's
+  // heading. `STAMP_H2 "Arial Italic"` at 10 pt in the collector's own sources.
+  subheadingFace   String @default("liberation-sans-italic")
+  subheadingSizePt Float  @default(10)
   labelFace     String
   labelSizePt   Float
   footerFace    String
@@ -1232,6 +1240,10 @@ model Album {
   /// the chapter heading shared until then.
   chapterSpaceAboveMm Float
   chapterSpaceBelowMm Float
+  /// Above and below a checklist's sub-heading under its issue's heading (#1509). The defaults are
+  /// the collector's own `STAMP_H2`: the rows' 6 mm above, 3 mm below.
+  subheadingSpaceAboveMm Float @default(6)
+  subheadingSpaceBelowMm Float @default(3)
 
   verticalClearanceMm Float
   horizontalMarginMm  Float
@@ -1246,6 +1258,10 @@ model Album {
   chapterSizePt Float
   headingFace   String
   headingSizePt Float
+  // The sixth role (#1509): a checklist printed within its issue names itself under the issue's
+  // heading. `STAMP_H2 "Arial Italic"` at 10 pt in the collector's own sources.
+  subheadingFace   String @default("liberation-sans-italic")
+  subheadingSizePt Float  @default(10)
   labelFace     String
   labelSizePt   Float
   footerFace    String
@@ -1341,6 +1357,12 @@ model AlbumEntry {
   // correction here is: a live page has no row and its identity moves with its contents, so the
   // override follows the content that opens the page through a re-flow.
   pagePlacement String?
+  // How this entry prints relative to its issue (#1509): `own` (a block under its own heading),
+  // `within` (under the issue's heading, no heading of its own) or `within-subheading` (under the
+  // issue's heading, its name as a sub-heading) — or null to follow the default, which is derived on
+  // read from the album's other entries (`album-print-mode.ts`). On the entry, not the checklist, so
+  // one checklist can be grouped in one album and printed on its own in another.
+  printMode String?
 
   album             Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
   checklist         Checklist              @relation(fields: [checklistId], references: [id], onDelete: Cascade)

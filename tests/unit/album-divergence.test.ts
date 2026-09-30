@@ -226,6 +226,38 @@ describe("compareAlbumPages", () => {
     assert.match(found.map((d) => d.detail).join(" "), /1 box label reads differently now\./);
   });
 
+  it("says what an issue heading now reads over a checklist printed within its issue (#1509)", () => {
+    const within = (groupHeading: string) =>
+      page("PL 1-1", [box("a")], {
+        blocks: [{ entryId: "e1", part: 1, heading: "Watermark X", groupHeading, boxes: [box("a")] }],
+      });
+    const found = compareAlbumPages(within("1940, Issue"), within("1940, Issue renamed"));
+    assert.deepEqual(kinds(found), ["text"]);
+    assert.match(found[0].detail, /An issue heading would now read "1940, Issue renamed"; the card reads "1940, Issue"\./);
+  });
+
+  it("reads a card stored before #1509, which carries no issue heading, as matching one that prints none", () => {
+    const stored = page("PL 1-1", [box("a")]);
+    const now = page("PL 1-1", [box("a")], {
+      blocks: [{ entryId: "e1", part: 1, heading: "Wystawa", groupHeading: "", boxes: [box("a")] }],
+    });
+    assert.deepEqual(compareAlbumPages(stored, now), []);
+  });
+
+  it("says a checklist now printed within its issue carries a heading the card does not", () => {
+    const found = compareAlbumPages(
+      page("PL 1-1", [box("a")]),
+      page("PL 1-1", [box("a")], {
+        blocks: [
+          { entryId: "e1", part: 1, heading: "Watermark X", groupHeading: "1940, Issue", boxes: [box("a")] },
+        ],
+      })
+    );
+    const said = found.map((d) => d.detail).join(" ");
+    assert.match(said, /A checklist's sub-heading would now read "Watermark X"; the card reads "Wystawa"\./);
+    assert.match(said, /An issue heading would now read "1940, Issue"; the card carries none\./);
+  });
+
   it("says the album is now printed in another language", () => {
     const found = compareAlbumPages(
       page("PL 1-1", [box("a")]),

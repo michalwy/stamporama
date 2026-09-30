@@ -964,6 +964,52 @@ the amendments; what is worth not re-deriving:
   twice hands year cards to the runs in turn; it is the same imprecision chapters already have (*Two
   sharp edges worth knowing*, above).
 
+## Checklists printed within their issue (#1509)
+
+Settled with the collector on 2026-09-30; ADR-0045's consequences carry the rule. An entry prints
+`own`, `within` or `within-subheading` (`album-print-mode.ts`), null following a default derived on
+read. What is worth not re-deriving:
+
+- **Counted before it was built.** His sources set exactly this: `STAMP_H1 12` over the issue and
+  `STAMP_H2 10` (Arial Italic) per variety — **44** of them, 30 in `DA.txt`, 37 with `3` under
+  themselves (6 with `5`, one `1.5` between the lines of a two-line one). `PL-1945.txt:178` is the textbook case (Westerplatte, its imperforate under a
+  sub-heading) and `PL-ON GG.txt:121` the one continued sheet: `(cd)` on the H1, the H2 repeated. The
+  sub-heading became a **sixth type role** with its own space above and below (the collector's choice
+  over reusing the heading's), and every existing row was migrated to those `STAMP_H2` figures, which
+  `parseAlbumSnapshot` gives an older card too — so the migration reports nothing.
+- **The issue heading is a band prefix, not a block.** `AlbumBlockSpec.group` names the run; the
+  heading is measured into the height of the band under it (`MeasuredBand.prefix`), set across the
+  full content width, and placed by `placeBand` / the splitter before the band's blocks. That is what
+  keeps it off a sheet's foot with no rule of its own: it moves whole with the band, and `startsHere`
+  under a year counts it. A separate heading block with a keep-with-next would have needed the
+  keep-together fallback taught never to drop it.
+- **A block's height does change when it moves, and only upward.** A run's later checklist measures
+  with its own lead at the foot of a sheet and with the repeated heading on a fresh one. That is safe
+  where the opposite (shrinking) would oscillate: it did not fit, so it moves, and on the fresh sheet
+  it is measured again — splitting there if it must. `keepTogether` measures its bands against a
+  simulated run (`RunView`) so a unit spanning two runs heads each.
+- **Blocks pair only within a run** (`measureBand`'s group-key check). The heading is full width, so a
+  stranger beside a run's checklist would sit under a heading that is not its own.
+- **Notes and free pages are transparent to runs**; an ungrouped entry — another issue, or one of this
+  issue printed `own` — ends one. Runs reset per chapter.
+- **Marks are the collector's "both, each its own".** The issue heading carries the run's sheet
+  (`IssueRun.sheets`, cards in the binder counted once each via `printed`); a split checklist's
+  sub-heading carries its own part. A card's reference starts its run from the card's recorded
+  `groupPart` (`AlbumBlockGroup.sheetsBefore`), or the reference would read `[2]` as unmarked.
+- **The reference plans a card in the mode it printed**, from its snapshot's `printMode`, unless the
+  entry has an explicit mode now. A default is a derivation — a checklist gathered later can move it —
+  and "not reported as diverged by this change alone" is the issue's requirement; an explicit mode is
+  the collector changing the card and is reported. A card stored before #1509 records no mode and
+  reads `own`.
+- **Headings are no longer one per headed block.** `AlbumEditorBlock.headingIndex` / `issueHeadingIndex`
+  say where a block's texts are in the sheet's `headings`; the canvas's heading-to-block walks read
+  them. Anything new that indexes `headings` by counting headed blocks is the bug.
+- **The issue heading renders over every checklist of the issue in the album**, so every run of it —
+  live or a card's reference — reads one string, even with a stamp-level token in the template.
+- **The sample page has no run**: his 1950–1951 pages print none, and a third chapter would be
+  unseen behind a preview that draws two. The sub-heading's marks are empty there by design; pointed
+  at a real album the preview shows them.
+
 ## The page editor (#769)
 
 Where the collector overrules the layout. `album-corrections.ts` is the pure vocabulary and the one

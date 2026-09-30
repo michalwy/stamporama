@@ -40,6 +40,12 @@ import {
 import { albumTextMetrics } from "./album-metrics";
 import { languageLabel, normalizeLanguage } from "./languages";
 import { resolveChecklistName } from "./checklist-name";
+import {
+  albumEffectivePrintModes,
+  albumPrintedWithinIssue,
+  type AlbumEffectivePrintMode,
+  type AlbumPrintMode,
+} from "./album-print-mode";
 import { albumNameState, type AlbumNameState } from "./album-name";
 import { resolveAlbumFrameOrnament } from "./album-ornament-store";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
@@ -239,6 +245,31 @@ export interface AlbumPlanContext {
   boxesFor(entry: AlbumEntryData, stampIds: readonly string[]): AlbumBoxData[];
   /** The entry's checklist heading, rendered in the album's language. */
   checklistHeading(entry: AlbumEntryData): string;
+  /** How each entry prints relative to its issue (#1509), by entry id — the collector's own choice or
+   *  the default, which reads the whole album. */
+  printModes: Map<string, AlbumEffectivePrintMode>;
+  /**
+   * The heading an issue's checklists print under (#1509): the checklist template rendered with the
+   * **issue's** title in the album's language — its translation, as a checklist named after its issue
+   * already prints one — over the stamps of every checklist of that issue in the album. Every run of
+   * the issue, live or a card's reference, reads the one string.
+   */
+  issueHeading(entry: AlbumEntryData): string;
+  /** The entry's name as its sub-heading prints it (#1509) — the checklist's own name in the album's
+   *  language, and nothing else. */
+  subheading(entry: AlbumEntryData): string;
+  /** What the issue heading and a sub-heading fell back on (#1308's flag, for #1509's texts). */
+  issueHeadingGaps(entry: AlbumEntryData): TitleFallback[];
+  subheadingGaps(entry: AlbumEntryData): TitleFallback[];
+  /** An entry's block as the plan places it, in `mode` — its heading, voice and issue run (#1509). The
+   *  one place a mode becomes a block, so the live plan and a card's reference cannot disagree on it. */
+  entryBlock(
+    entry: AlbumEntryData,
+    stampIds: readonly string[],
+    mode: AlbumPrintMode,
+    printedPageIds: readonly string[] | null,
+    sheetsBefore?: number
+  ): AlbumBlockSpec<AlbumBoxData>;
   /** The chapter heading a year group of these entries prints. */
   chapterHeading(entries: readonly AlbumEntryData[]): string;
   /**
@@ -317,6 +348,22 @@ export async function albumPlanContext(
       : null;
   const nameState = albumNameState(areas, album, language);
   const checklistNameOf = (entry: AlbumEntryData) => resolveChecklistName(entry, language);
+  // The issue's own title in the album's language (#1509): the checklist rule read for a checklist
+  // named after its issue, which is exactly what `resolveChecklistName` does for one — the issue's
+  // translation, else the default-language title flagged against the issue.
+  const issueNameOf = (entry: AlbumEntryData) =>
+    resolveChecklistName(
+      {
+        checklistId: entry.checklistId,
+        checklistName: entry.issueName ?? entry.checklistName,
+        checklistNameByLanguage: {},
+        issueId: entry.issueId,
+        issueName: entry.issueName,
+        issueNameByLanguage: entry.issueNameByLanguage,
+      },
+      language
+    );
+  const printModes = albumEffectivePrintModes(entries);
 
   const stampIds = [...new Set(entries.flatMap((e) => e.stampIds))];
   const rows = stampIds.length
@@ -428,6 +475,22 @@ export async function albumPlanContext(
       .flatMap((e) => e.stampIds)
       .map((id) => copyById.get(id))
       .filter((c): c is TitleTemplateCopy => !!c);
+  const issueEntries = (entry: AlbumEntryData) =>
+    entry.issueId ? entries.filter((e) => e.issueId === entry.issueId) : [entry];
+
+  const checklistHeading = (entry: AlbumEntryData) =>
+    renderAlbumText(album.checklistTemplate, copiesOf([entry]), {
+      albumName: album.name,
+      // In the album's language (#1308): the checklist's own translation, else its issue's while it
+      // is still named after the issue.
+      checklistName: checklistNameOf(entry).value,
+    });
+  const issueHeading = (entry: AlbumEntryData) =>
+    renderAlbumText(album.checklistTemplate, copiesOf(issueEntries(entry)), {
+      albumName: album.name,
+      checklistName: issueNameOf(entry).value,
+    });
+  const subheading = (entry: AlbumEntryData) => checklistNameOf(entry).value;
 
   return {
     album,
@@ -443,13 +506,61 @@ export async function albumPlanContext(
     // The running head is the album's name itself rather than a template, so its gap is the name's.
     titleGaps: album.printTitle && nameState.gap ? [nameState.gap] : [],
     boxesFor,
-    checklistHeading: (entry) =>
-      renderAlbumText(album.checklistTemplate, copiesOf([entry]), {
-        albumName: album.name,
-        // In the album's language (#1308): the checklist's own translation, else its issue's while it
-        // is still named after the issue.
-        checklistName: checklistNameOf(entry).value,
-      }),
+    checklistHeading,
+    printModes,
+    issueHeading,
+    subheading,
+    issueHeadingGaps: (entry) => {
+      if (!album.checklistTemplate.trim()) return [];
+      const issueName = issueNameOf(entry);
+      // `textGaps`' walk, with the issue's title in `{checklistName}`'s place: its translation is
+      // the one a gap here asks for.
+      return templateFallbacks(
+        album.checklistTemplate,
+        [{ title: null, copies: copiesOf(issueEntries(entry)) }],
+        null,
+        {
+          albumName: album.name,
+          checklistName: issueName.value,
+          fallbacks: { albumName: nameState.gap, checklistName: issueName.fallback },
+        }
+      );
+    },
+    subheadingGaps: (entry) => {
+      const gap = checklistNameOf(entry).fallback;
+      return gap ? [gap] : [];
+    },
+    entryBlock: (entry, stampIds, mode, printedPageIds, sheetsBefore = 0) => {
+      const within = albumPrintedWithinIssue(mode) && entry.issueId !== null;
+      return {
+        entryId: entry.id,
+        kind: "entry",
+        heading: !within
+          ? checklistHeading(entry)
+          : mode === "within-subheading"
+            ? subheading(entry)
+            : "",
+        ...(within && mode === "within-subheading" ? { role: "subheading" as const } : {}),
+        ...(within
+          ? {
+              group: {
+                key: entry.issueId!,
+                heading: issueHeading(entry),
+                ...(sheetsBefore > 0 ? { sheetsBefore } : {}),
+              },
+            }
+          : {}),
+        printMode: within ? mode : "own",
+        // A block already on paper **states no boxes** — see `planAlbumFrom`.
+        boxes: printedPageIds?.length ? [] : boxesFor(entry, stampIds),
+        printedPageIds: printedPageIds?.length ? printedPageIds : null,
+        spaceBeforeMm: entry.spaceBeforeMm,
+        spaceAfterMm: entry.spaceAfterMm,
+        breakBefore: entry.breakBefore,
+        bandBreakBefore: entry.bandBreakBefore,
+        pagePlacement: entry.pagePlacement,
+      };
+    },
     chapterHeading: (forEntries) =>
       renderAlbumText(album.chapterTemplate, copiesOf(forEntries), { albumName: album.name }),
     textGaps: (template, stampIds, entry = null) => {
@@ -583,22 +694,14 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
       headNotesFiled = true;
     }
     chapter.blocks.push(...slotBlocks(entry.id, "before"));
-    const heading = context.checklistHeading(entry);
+    // How it prints relative to its issue (#1509): as its own issue, or under the issue's heading
+    // with or without a sub-heading. Consecutive entries of one issue printed within it share one
+    // heading — the layout reads that off the blocks' group, never off anything reordered here.
+    const mode = context.printModes.get(entry.id)?.mode ?? "own";
     const onPaper = printed.byEntry.get(entry.id);
 
     if (!onPaper) {
-      chapter.blocks.push({
-        entryId: entry.id,
-        heading,
-        kind: "entry",
-        boxes: context.boxesFor(entry, entry.stampIds),
-        printedPageIds: null,
-        spaceBeforeMm: entry.spaceBeforeMm,
-        spaceAfterMm: entry.spaceAfterMm,
-        breakBefore: entry.breakBefore,
-        bandBreakBefore: entry.bandBreakBefore,
-        pagePlacement: entry.pagePlacement,
-      });
+      chapter.blocks.push(context.entryBlock(entry, entry.stampIds, mode, null));
       chapter.blocks.push(...slotBlocks(entry.id, "after"));
       continue;
     }
@@ -606,23 +709,13 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
     // A block already on paper **states no boxes**. What is on that card is in its snapshot, and
     // resolving a live figure here — even one nothing draws — is exactly what a printed page must
     // not do: the layout steps over the block whole, and a box computed for it could only ever be a
-    // second, quieter answer to a question the snapshot has already answered.
-    chapter.blocks.push({
-      entryId: entry.id,
-      heading,
-      kind: "entry",
-      boxes: [],
-      printedPageIds: onPaper.printedPageIds,
-      // A block on paper carries the collector's corrections all the same, and they change nothing:
-      // the layout steps over it before it ever measures one. They are here because the block is the
-      // entry, and an entry that comes back into the plan — a reprint (#778) — must come back with
-      // the corrections it had, not with none.
-      spaceBeforeMm: entry.spaceBeforeMm,
-      spaceAfterMm: entry.spaceAfterMm,
-      breakBefore: entry.breakBefore,
-      bandBreakBefore: entry.bandBreakBefore,
-      pagePlacement: entry.pagePlacement,
-    });
+    // second, quieter answer to a question the snapshot has already answered. It carries the
+    // collector's corrections all the same, and they change nothing: the layout steps over it before
+    // it ever measures one. They are here because the block is the entry, and an entry that comes
+    // back into the plan — a reprint (#778) — must come back with the corrections it had, not with
+    // none. Its issue run is here for the same reason, and because a card of a run is one of the
+    // run's sheets (#1509): the run's next live sheet is marked as the one after it.
+    chapter.blocks.push(context.entryBlock(entry, [], mode, onPaper.printedPageIds));
 
     // The **continuation page** (#778): the stamps of this entry that are on no sheet yet, filed
     // straight after the sheets that already carry it, with a catalog range of its own. Only when
@@ -631,18 +724,7 @@ export function planAlbumFrom(context: AlbumPlanContext): AlbumPlanResult {
     if (entry.continuesPrintedPageId) {
       const waiting = entry.stampIds.filter((id) => !onPaper.stampIds.has(id));
       if (waiting.length > 0) {
-        chapter.blocks.push({
-          entryId: entry.id,
-          heading,
-          kind: "entry",
-          boxes: context.boxesFor(entry, waiting),
-          printedPageIds: null,
-          spaceBeforeMm: entry.spaceBeforeMm,
-          spaceAfterMm: entry.spaceAfterMm,
-          breakBefore: entry.breakBefore,
-          bandBreakBefore: entry.bandBreakBefore,
-          pagePlacement: entry.pagePlacement,
-        });
+        chapter.blocks.push(context.entryBlock(entry, waiting, mode, null));
       }
     }
     chapter.blocks.push(...slotBlocks(entry.id, "after"));
@@ -1105,6 +1187,7 @@ export function albumComparablePage(
       part: block.part,
       kind: block.kind ?? "entry",
       heading: block.heading,
+      groupHeading: block.groupHeading ?? "",
       boxes,
     };
   });

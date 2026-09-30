@@ -57,6 +57,7 @@ import type {
   AlbumPlannedPage,
 } from "./album-layout";
 import { albumFooterOffsetFromMarginMm } from "./album-frame";
+import { ALBUM_SUBHEADING_BEFORE_1509 } from "./album-template-rules";
 import type { AlbumOrnamentDrawing } from "./album-ornament-svg";
 import type { AlbumRenderPreset } from "./album-template-rules";
 
@@ -268,7 +269,9 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
   // One stored before #1428 printed its title below the frame, and the gap is the migration's
   // default for the same reason. One stored before #1457 printed its footer on the bottom margin,
   // inside the frame: it reads the offset the migration gave its album, worked out from the card's
-  // own margin and frame, so a card whose album has not moved reports nothing.
+  // own margin and frame, so a card whose album has not moved reports nothing. One stored before
+  // #1509 had no sub-heading role, and reads the four values the migration gave every album: a card
+  // whose album has not moved them reports nothing.
   const stored = snapshot as AlbumPageSnapshot;
   const preset = stored.preset;
   if (
@@ -286,6 +289,10 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
     preset.footerPlacement !== undefined &&
     preset.footerOffsetMm !== undefined &&
     preset.footerFrameGapMm !== undefined &&
+    preset.subheadingFace !== undefined &&
+    preset.subheadingSizePt !== undefined &&
+    preset.subheadingSpaceAboveMm !== undefined &&
+    preset.subheadingSpaceBelowMm !== undefined &&
     stored.frameOrnament !== undefined &&
     stored.page.placement !== undefined
   ) {
@@ -310,6 +317,12 @@ export function parseAlbumSnapshot(value: unknown): AlbumPageSnapshot {
       footerPlacement: preset.footerPlacement ?? "inside-frame",
       footerOffsetMm: preset.footerOffsetMm ?? albumFooterOffsetFromMarginMm({ ...preset, borderGapMm }),
       footerFrameGapMm: preset.footerFrameGapMm ?? 5,
+      subheadingFace: preset.subheadingFace ?? ALBUM_SUBHEADING_BEFORE_1509.subheadingFace,
+      subheadingSizePt: preset.subheadingSizePt ?? ALBUM_SUBHEADING_BEFORE_1509.subheadingSizePt,
+      subheadingSpaceAboveMm:
+        preset.subheadingSpaceAboveMm ?? ALBUM_SUBHEADING_BEFORE_1509.subheadingSpaceAboveMm,
+      subheadingSpaceBelowMm:
+        preset.subheadingSpaceBelowMm ?? ALBUM_SUBHEADING_BEFORE_1509.subheadingSpaceBelowMm,
     },
     frameOrnament: stored.frameOrnament ?? null,
     page: { ...stored.page, placement: stored.page.placement ?? "top" },

@@ -511,8 +511,9 @@ export async function renderAlbumPdf(
   const fonts = await embedFaces(doc, pages.map((p) => p.preset));
   const fontFor: FontResolver = (faceId) => {
     const held = fonts.get(faceId);
-    // Unreachable: a role's face is a template column and `embedFaces` covered all five. Stated
-    // rather than asserted away, because a sixth role added later would land exactly here.
+    // Unreachable: a role's face is a template column and `embedFaces` covered all six. Stated
+    // rather than asserted away, because a seventh role added later would land exactly here — as
+    // the sub-heading (#1509) would have.
     if (!held) throw new AlbumPdfError(`No embedded face for "${faceId}".`);
     return held;
   };
@@ -570,9 +571,9 @@ export async function renderAlbumPdf(
 }
 
 /**
- * Embed every face the album's five roles name.
+ * Embed every face the album's six roles name.
  *
- * Five template columns rather than a scan of the pages: the set is known before a box is read, so
+ * Six template columns rather than a scan of the pages: the set is known before a box is read, so
  * the whole of pdf-lib's asynchrony is spent here and the drawing that follows is synchronous.
  *
  * Subsetting is on. The spike printed and measured a subset sheet with diacritics through fontkit,
@@ -584,7 +585,7 @@ async function embedFaces(
   presets: readonly AlbumRenderPreset[]
 ): Promise<Map<string, PDFFont>> {
   const fonts = new Map<string, PDFFont>();
-  const roles = ["title", "chapter", "heading", "label", "footer"] as const;
+  const roles = ["title", "chapter", "heading", "subheading", "label", "footer"] as const;
   for (const preset of presets) {
     for (const role of roles) {
       const { face } = albumRoleFace(preset, role);

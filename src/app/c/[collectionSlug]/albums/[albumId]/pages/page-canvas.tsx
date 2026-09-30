@@ -572,11 +572,13 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
         />
       ))}
 
-      {/* Headings, in the order the blocks that own them were placed. */}
+      {/* Headings, in the order the blocks that own them were placed. An issue heading (#1509) is
+          owned by the block it stands over, the first of its run on the sheet. */}
       {sheet.headings.map((heading, i) => {
-        const block = sheet.blocks.filter(
-          (b): b is AlbumEditorBlock & { kind: "entry" | "text" } => !!b.heading && b.kind !== "page"
-        )[i];
+        const block = sheet.blocks.find(
+          (b): b is AlbumEditorBlock & { kind: "entry" | "text" } =>
+            b.kind !== "page" && (b.headingIndex === i || b.issueHeadingIndex === i)
+        );
         const dy = block ? spaceOffset(block.id) : 0;
         const bandMm = Math.max(heading.heightMm, heading.face.lineHeightMm);
         const lifted = carry?.kind === "block" && !!block && carry.blockId === block.id;
@@ -1216,9 +1218,8 @@ function blockBottomMm(sheet: AlbumEditorSheet, blockId: string): number | null 
     }
     const slice = sheet.boxes.slice(cursor, cursor + block.boxCount);
     if (slice.length === 0) {
-      const withHeadings = sheet.blocks.filter((b) => b.heading);
-      const at = withHeadings.findIndex((b) => b.id === blockId);
-      const heading = at >= 0 ? sheet.headings[at] : undefined;
+      const at = block.headingIndex ?? block.issueHeadingIndex;
+      const heading = at !== null ? sheet.headings[at] : undefined;
       return heading ? heading.yMm + heading.heightMm : null;
     }
     return Math.max(
@@ -1234,14 +1235,14 @@ function blockBottomMm(sheet: AlbumEditorSheet, blockId: string): number | null 
 }
 
 /** The top-left corner of a block on this sheet: its heading's if it has one — the heading spans the
- *  block's own column — otherwise its first box's. Where the line tab hangs (#1421). */
+ *  block's own column — otherwise its first box's. Where the line tab hangs (#1421). An issue heading
+ *  over it (#1509) spans the whole band, not the block's column, so it is not the block's corner. */
 function blockCornerMm(
   sheet: AlbumEditorSheet,
   blockId: string
 ): { xMm: number; yMm: number } | null {
-  const withHeadings = sheet.blocks.filter((b) => b.heading);
-  const headingIndex = withHeadings.findIndex((b) => b.id === blockId);
-  const heading = headingIndex >= 0 ? sheet.headings[headingIndex] : undefined;
+  const own = sheet.blocks.find((b) => b.id === blockId)?.headingIndex ?? null;
+  const heading = own !== null ? sheet.headings[own] : undefined;
   if (heading) return { xMm: heading.xMm, yMm: heading.yMm };
   let cursor = 0;
   for (const block of sheet.blocks) {
@@ -1254,14 +1255,15 @@ function blockCornerMm(
   return null;
 }
 
-/** The top of a block on this sheet: its heading if it has one, otherwise its first box. Used only
- *  to hang the space handle where the collector would reach for it — the number it writes is the
- *  correction, not this coordinate. */
+/** The top of a block on this sheet: the issue heading over it if it opens one (#1509) — its space
+ *  before is spent above that heading — else its heading if it has one, otherwise its first box. Used
+ *  only to hang the space handle where the collector would reach for it — the number it writes is
+ *  the correction, not this coordinate. */
 function blockTopMm(sheet: AlbumEditorSheet, blockId: string): number | null {
-  const withHeadings = sheet.blocks.filter((b) => b.heading);
-  const headingIndex = withHeadings.findIndex((b) => b.id === blockId);
-  if (headingIndex >= 0 && sheet.headings[headingIndex]) {
-    return sheet.headings[headingIndex].yMm;
+  const block = sheet.blocks.find((b) => b.id === blockId);
+  const at = block?.issueHeadingIndex ?? block?.headingIndex ?? null;
+  if (at !== null && sheet.headings[at]) {
+    return sheet.headings[at].yMm;
   }
   let cursor = 0;
   for (const block of sheet.blocks) {

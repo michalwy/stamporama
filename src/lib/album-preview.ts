@@ -129,6 +129,10 @@ function sampleSheetSource(
     textGaps: () => [],
     titleGaps: [],
     frameOrnament,
+    // Every sample checklist is an issue of its own and prints as one (#1509), so nothing resolves
+    // an issue heading or a sub-heading here, and a sample falls back on nothing anyway.
+    issueHeadingGaps: () => [],
+    subheadingGaps: () => [],
   };
 }
 

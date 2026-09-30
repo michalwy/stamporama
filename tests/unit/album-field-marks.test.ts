@@ -349,3 +349,82 @@ describe("what a field marks on the preview", () => {
     }
   });
 });
+
+describe("what the sub-heading's fields mark (#1509)", () => {
+  /** A sheet holding one issue run: the main checklist under the issue heading, then a checklist
+   *  under its own sub-heading — too wide to share a band, so the sub-heading follows boxes. */
+  function runSheet(): AlbumMarkSheet {
+    const preset = DEFAULT_ALBUM_PRESET;
+    const group = { key: "issue", heading: "1945, 1 IX. 6. rocznica walk o Westerplatte." };
+    const mount = { widthMm: 55, heightMm: 38, label: "374a" };
+    const plan = planAlbumPages(
+      [
+        {
+          key: "1945",
+          heading: "",
+          blocks: [
+            { entryId: "main", heading: "", boxes: [mount, mount, mount, mount], group },
+            {
+              entryId: "imperf",
+              heading: "Nieząbkowany znaczek z dodatkowym napisem",
+              role: "subheading" as const,
+              boxes: [mount, mount, mount, mount],
+              group,
+            },
+          ],
+        },
+      ],
+      preset,
+      "Polska",
+      albumTextMetrics
+    );
+    const [page] = plan.pages;
+    assert.equal(page.kind, "live");
+    if (page.kind !== "live") throw new Error("unreachable");
+    return {
+      preset,
+      frameOrnament: null,
+      content: page.content,
+      title: page.title,
+      chapter: page.chapter,
+      headings: page.headings,
+      footer: page.footer,
+      boxes: page.boxes,
+    };
+  }
+
+  it("spaces a sub-heading from the boxes above it and from its own row", () => {
+    const sheet = runSheet();
+    const sub = sheet.headings.find((h) => h.role === "subheading");
+    assert.ok(sub);
+    const above = only(albumFieldMarks("subheadingSpaceAboveMm", sheet));
+    near(above.toMm, sub.yMm, "ends on the sub-heading");
+    const lastAbove = Math.max(
+      ...sheet.boxes.filter((b) => b.entryId === "main").map((b) => bottom(b.label ?? b))
+    );
+    near(above.fromMm, lastAbove, "starts under the boxes before it");
+    const below = only(albumFieldMarks("subheadingSpaceBelowMm", sheet));
+    near(below.fromMm, bottom(sub), "starts under the sub-heading");
+    const firstRow = sheet.boxes.find((b) => b.entryId === "imperf");
+    assert.ok(firstRow);
+    near(below.toMm, firstRow.yMm, "and ends on its row");
+  });
+
+  it("outlines every sub-heading for its face and size, and nothing on a sheet without one", () => {
+    const sheet = runSheet();
+    assert.equal(albumFieldMarks("subheadingFace", sheet).length, 1);
+    assert.equal(albumFieldMarks("subheadingSizePt", sheet).length, 1);
+    const [sample] = sheets();
+    assert.deepEqual(albumFieldMarks("subheadingFace", sample), []);
+    assert.deepEqual(albumFieldMarks("subheadingSpaceAboveMm", sample), []);
+    assert.deepEqual(albumFieldMarks("subheadingSpaceBelowMm", sample), []);
+  });
+
+  it("keeps the checklist heading's space on a heading, not on a sub-heading", () => {
+    const sheet = runSheet();
+    const mark = only(albumFieldMarks("headingSpaceBelowMm", sheet));
+    const issue = sheet.headings.find((h) => h.role === "heading");
+    assert.ok(issue);
+    near(mark.fromMm, bottom(issue), "starts under the issue heading");
+  });
+});

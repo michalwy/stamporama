@@ -20,6 +20,9 @@
 //   page divided into columns, and the difference matters — see the note there.
 // - A **chapter** is one year (#755). Its heading is printed once, at the head of the chapter, and a
 //   chapter **starts a page**.
+// - An **issue run** is consecutive checklists of one issue printed *within* it (#1509): one heading,
+//   the issue's, over all of them, and each checklist's own name at most a sub-heading under it. See
+//   {@link AlbumBlockGroup}.
 // - A **free page** is a page without stamps (#1429) — a title page, a section divider — filed before
 //   or after an entry like a note, and laid out on a sheet of its own with whatever the collector put
 //   on it, where he put it. It is never packed among blocks: see {@link placeFreePage}.
@@ -83,6 +86,7 @@ import type {
   AlbumVerticalPlacement,
 } from "./album-template-rules";
 import type { AlbumFreeTextAlign } from "./album-free-page";
+import type { AlbumPrintMode } from "./album-print-mode";
 import { roundSizeMm } from "./stamp-size";
 import {
   albumFooterInFrame,
@@ -110,9 +114,10 @@ export interface AlbumTextMetrics {
   lineHeightMm(faceId: string, sizePt: number): number;
 }
 
-/** The five roles a template sets type for (#766), as this module names them. */
+/** The roles a template sets type for (#766), as this module names them. The sub-heading is #1509's:
+ *  a checklist printed within its issue names itself under the issue's heading. */
 export type AlbumTextRole =
-  "title" | "chapter" | "heading" | "label" | "footer";
+  "title" | "chapter" | "heading" | "subheading" | "label" | "footer";
 
 /** The face and size a role is set in. One lookup, so the packing code never reaches for a
  *  differently-named pair of columns per role. */
@@ -127,6 +132,8 @@ export function albumRoleFace(
       return { face: preset.chapterFace, sizePt: preset.chapterSizePt };
     case "heading":
       return { face: preset.headingFace, sizePt: preset.headingSizePt };
+    case "subheading":
+      return { face: preset.subheadingFace, sizePt: preset.subheadingSizePt };
     case "label":
       return { face: preset.labelFace, sizePt: preset.labelSizePt };
     case "footer":
@@ -343,14 +350,49 @@ export interface AlbumPlacedFreePage {
   elements: AlbumPlacedFreeElement[];
 }
 
+/**
+ * The issue a block is printed **within** (#1509): its stamps sit under the issue's heading rather than
+ * under a heading of their own, and the block's own `heading` is at most a sub-heading.
+ *
+ * **Only neighbours share a heading.** Consecutive entry blocks with one `key` are one run and the
+ * heading prints once over them; an entry block without the key — another issue, or one of this
+ * issue printed as its own — ends the run, and the next block of the issue prints the heading again.
+ * Notes and free pages end nothing: they are not issues. Nothing is reordered to bring a run together.
+ *
+ * The heading is **never alone at the foot of a sheet**: it is measured as part of the band under it
+ * and moves with it. And a run that continues on the next sheet — a checklist of it that did not fit,
+ * or one too tall for a sheet — **repeats the heading** there, marked `[2]`, `[3]` by the run's sheets,
+ * as a split checklist repeats its own (#768). A sub-heading of a split checklist carries its own
+ * part, which is a different number (settled with the collector on 2026-09-30).
+ */
+export interface AlbumBlockGroup {
+  /** What makes blocks one run: the issue. Two runs of one issue separated by something else share
+   *  the key and are still two runs. */
+  key: string;
+  /** The issue's heading, rendered in the album's language. Blank prints nothing and reserves nothing,
+   *  and the blocks under it are then spaced as if it were there — a blank template is a real value. */
+  heading: string;
+  /** Sheets of this run already in the binder ahead of what this plan places — so the first sheet it
+   *  places is marked as the one after them. The live plan counts the cards it steps over itself and
+   *  leaves this at 0; a printed card's reference, planned alone (#778), states it. */
+  sheetsBefore?: number;
+}
+
 /** One block to place: a checklist's heading and its boxes, in the order the album prints them. */
 export interface AlbumBlockSpec<T extends AlbumBoxSpec = AlbumBoxSpec> {
   /** The album entry this block is, carried through so a placement joins back to its rows. For a
    *  `text` block it is that block's own id — the caller's handle on the row, either way. */
   entryId: string;
-  /** The rendered checklist heading, already in the album's language. Blank reserves nothing. */
+  /** The rendered checklist heading, already in the album's language. Blank reserves nothing. For a
+   *  block printed within its issue ({@link group}) this is its sub-heading, or blank. */
   heading: string;
   boxes: readonly T[];
+  /** The issue this block is printed within (#1509), or absent for one printed as its own issue. Read
+   *  on an `entry` block only. */
+  group?: AlbumBlockGroup | null;
+  /** How the entry prints (#1509), carried onto the placement unread, so a card records the mode it
+   *  was printed in and its reference can be planned the same way. */
+  printMode?: AlbumPrintMode;
   /** A checklist, a block of the collector's own text (#769), or a page without stamps (#1429).
    *  Absent means `entry`. */
   kind?: AlbumBlockKind;
@@ -461,6 +503,17 @@ export interface AlbumPlacedBlock {
    *  page is the *placed* text and holds nothing for a blank heading, so it cannot be indexed by
    *  block — this is the per-block answer. */
   heading: string;
+  /** The issue heading printed **above this block on this sheet** (#1509), as printed — marked `[2]`,
+   *  `[3]` on a sheet after the run's first. Absent where none is: a block printed as its own issue,
+   *  one following another of its issue on the same sheet, and every placement stored before #1509.
+   *  One block per sheet carries it, the first of its run there. */
+  groupHeading?: string;
+  /** Which sheet of its issue's run this is (#1509), for a block printed within its issue — counting
+   *  the run's cards already in the binder. What a card's reference starts its run from. */
+  groupPart?: number;
+  /** How the entry printed on this sheet (#1509) — the spec's, carried. Absent on a placement stored
+   *  before #1509, which printed every entry as its own issue. */
+  printMode?: AlbumPrintMode;
   /** Index of the block's first box on this page, into the block's own box list. */
   firstBoxIndex: number;
   boxCount: number;
@@ -750,6 +803,8 @@ interface MeasuredBlock<T extends AlbumBoxSpec> {
   spec: AlbumBlockSpec<T>;
   /** The heading as the block's **first** sheet prints it, unmarked. */
   heading: MeasuredHeading;
+  /** The lead before any correction — what band alignment is measured from (#779). */
+  autoLeadMm: number;
   /** The space separating this block from whatever is above it, whether or not it has a heading,
    *  plus the collector's own correction (#769). Part of the block, so its height never changes when
    *  it moves. */
@@ -819,17 +874,43 @@ function measureHeading(
     costMm: lines.length
       ? roundSizeMm(
           lines.length * metrics.lineHeightMm(face.face, face.sizePt) +
-            preset.headingSpaceBelowMm,
+            roleSpacing(preset, role).belowMm,
         )
       : 0,
   };
 }
 
+/** The space above and below a heading set in `role`. A sub-heading has its own (#1509) — the
+ *  collector's `STAMP_H2` sits closer to its boxes than a `STAMP_H1` does — and every other role
+ *  takes the checklist heading's, as a note in any voice always has. */
+function roleSpacing(
+  preset: AlbumRenderPreset,
+  role: AlbumTextRole,
+): { aboveMm: number; belowMm: number } {
+  return role === "subheading"
+    ? { aboveMm: preset.subheadingSpaceAboveMm, belowMm: preset.subheadingSpaceBelowMm }
+    : { aboveMm: preset.headingSpaceAboveMm, belowMm: preset.headingSpaceBelowMm };
+}
+
+/**
+ * Where a block stands to an issue heading on its sheet (#1509): `none` — no heading over it, the
+ * ordinary block; `first` — the first block directly under one, whose own space before went above the
+ * heading; `beside` — a block sharing that band, directly under the same heading.
+ */
+type UnderIssue = "none" | "first" | "beside";
+
 /** The space the layout leaves above a block before any correction: with a heading, the template's
- *  "space above a heading"; without one, the ordinary row gap, so two unheaded blocks do not run
- *  together. */
-function automaticLeadMm(heading: MeasuredHeading, preset: AlbumRenderPreset): number {
-  return heading.lines.length ? preset.headingSpaceAboveMm : preset.boxGapYMm;
+ *  "space above a heading" (a sub-heading's own, #1509); without one, the ordinary row gap, so two
+ *  unheaded blocks do not run together. Directly under an issue heading there is none — the issue
+ *  heading's space below already separates them, as `STAMP_H1 … 5` does in his sources. */
+function automaticLeadMm(
+  heading: MeasuredHeading,
+  preset: AlbumRenderPreset,
+  role: AlbumTextRole,
+  under: UnderIssue,
+): number {
+  if (under !== "none") return 0;
+  return heading.lines.length ? roleSpacing(preset, role).aboveMm : preset.boxGapYMm;
 }
 
 /**
@@ -866,7 +947,7 @@ function alignBandMounts<T extends AlbumBoxSpec>(
     const first = block.rows[0];
     if (!first) return null;
     return {
-      rowsTopMm: automaticLeadMm(block.heading, preset) + block.heading.costMm,
+      rowsTopMm: block.autoLeadMm + block.heading.costMm,
       centreMm: (above ? first.labelHeightMm + first.labelGapMm : 0) + first.boxHeightMm / 2,
     };
   });
@@ -895,15 +976,19 @@ function measureBlock<T extends AlbumBoxSpec>(
   widthMm: number,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
+  under: UnderIssue = "none",
 ): MeasuredBlock<T> {
   const role = blockRole(block);
   const heading = measureHeading(block.heading, widthMm, preset, metrics, role);
+  const autoLeadMm = automaticLeadMm(heading, preset, role, under);
   // The correction rides on the automatic lead rather than beside it, and floors at zero:
-  // `PAGE_VSPACE` closes gaps in his sources and never overlaps blocks.
-  const leadMm = Math.max(
-    0,
-    roundSizeMm(automaticLeadMm(heading, preset) + (block.spaceBeforeMm ?? 0)),
-  );
+  // `PAGE_VSPACE` closes gaps in his sources and never overlaps blocks. The first block under an
+  // issue heading has spent its correction above that heading (#1509) — *more space before this
+  // series* is above where the series visibly starts.
+  const leadMm =
+    under === "first"
+      ? 0
+      : Math.max(0, roundSizeMm(autoLeadMm + (block.spaceBeforeMm ?? 0)));
   const trailingMm = Math.max(0, roundSizeMm(block.spaceAfterMm ?? 0));
 
   const labelFace = albumRoleFace(preset, "label");
@@ -960,6 +1045,7 @@ function measureBlock<T extends AlbumBoxSpec>(
   return {
     spec: block,
     heading,
+    autoLeadMm,
     leadMm,
     trailingMm,
     alignMm: 0,
@@ -1006,7 +1092,97 @@ interface MeasuredBand<T extends AlbumBoxSpec> {
   blocks: MeasuredBlock<T>[];
   /** What each block in the band was measured at, and is placed at. */
   blockWidthMm: number;
+  /** The issue heading over the band (#1509), or null. Set across the full content width, above every
+   *  block of the band, and part of its height — which is what keeps it from being left alone at the
+   *  foot of a sheet: it moves with the band under it. */
+  prefix: IssuePrefix | null;
+  /** The sheet of its issue's run this band opens on the page it is measured for (#1509) — set when
+   *  the band's first block is a run's first there, whether or not the heading prints anything. */
+  groupPart: number | null;
   heightMm: number;
+}
+
+/** An issue heading as a band prints it (#1509). */
+interface IssuePrefix {
+  heading: MeasuredHeading;
+  /** Above it: the heading's space above, plus the first block's own correction. */
+  leadMm: number;
+}
+
+/**
+ * What the packer knows about the issue run it is in (#1509) — see {@link AlbumBlockGroup}.
+ *
+ * `headedOn` is the page carrying the run's heading, while that page is the one being filled: a block
+ * of the run landing there needs no heading, and one landing anywhere else does.
+ */
+interface IssueRun {
+  key: string;
+  /** Sheets the run has been on so far, its cards in the binder included — the part the next sheet's
+   *  heading is marked with, less one. */
+  sheets: number;
+  /** Printed sheets already counted, so a card holding two of the run's checklists counts once. */
+  printed: Set<string>;
+  headedOn: object | null;
+}
+
+/** The run a measurement is taken against: the run, and whether the page being filled carries its
+ *  heading already. A copy, so a unit of several bands can be measured without touching the real one. */
+interface RunView {
+  key: string;
+  sheets: number;
+  onPage: boolean;
+}
+
+function runView(run: IssueRun | null, page: object): RunView | null {
+  return run ? { key: run.key, sheets: run.sheets, onPage: run.headedOn === page } : null;
+}
+
+/** Whether a block takes part in issue runs at all: an entry does, a note and a free page do not —
+ *  they are not issues, so they neither join a run nor end one. */
+function isEntryBlock(block: AlbumBlockSpec): boolean {
+  return (block.kind ?? "entry") === "entry";
+}
+
+/** The sheet of its run a band opened by `block` would print the issue heading for, or null when it
+ *  prints none — the block is its own issue, or the run's heading is already on this page. */
+function issuePart(block: AlbumBlockSpec, run: RunView | null): number | null {
+  const group = block.group;
+  if (!group || !isEntryBlock(block)) return null;
+  if (run && run.key === group.key) return run.onPage ? null : run.sheets + 1;
+  return (group.sheetsBefore ?? 0) + 1;
+}
+
+/** The run after a band opened by `block` is placed. An ungrouped entry ends the run; a note or a free
+ *  page leaves it as it was. */
+function runAfter(block: AlbumBlockSpec, run: RunView | null, part: number | null): RunView | null {
+  if (!isEntryBlock(block)) return run;
+  const group = block.group;
+  if (!group) return null;
+  if (part !== null) return { key: group.key, sheets: part, onPage: true };
+  return run;
+}
+
+/** The issue heading a band prints for `block` at `part`, measured across the content width — or null
+ *  for a heading with nothing to print. */
+function measureIssuePrefix(
+  block: AlbumBlockSpec,
+  part: number,
+  contentWidthMm: number,
+  preset: AlbumRenderPreset,
+  metrics: AlbumTextMetrics,
+): IssuePrefix | null {
+  const text = albumContinuationHeading(block.group?.heading ?? "", part);
+  const heading = measureHeading(text, contentWidthMm, preset, metrics, "heading");
+  if (!heading.lines.length) return null;
+  return {
+    heading,
+    leadMm: Math.max(0, roundSizeMm(preset.headingSpaceAboveMm + (block.spaceBeforeMm ?? 0))),
+  };
+}
+
+/** What an issue heading adds to the height of what it stands over. */
+function prefixMm(prefix: IssuePrefix | null): number {
+  return prefix ? roundSizeMm(prefix.leadMm + prefix.heading.costMm) : 0;
 }
 
 /**
@@ -1029,6 +1205,11 @@ interface MeasuredBand<T extends AlbumBoxSpec> {
  * `PAGE_COLUMN_START(50 …)` does. A block only joins if its **natural width** — its boxes on one
  * line — fits the share it would get: a block that would have to wrap to be paired is a block the
  * pairing has made worse.
+ *
+ * **Blocks pair only within one issue run** (#1509). An issue heading is set across the whole band,
+ * so a block of another issue beside a run's checklist would sit under a heading that is not its own
+ * — his `DA.txt:987` sets the issue's `STAMP_H1` across the page and pairs its two watermarks under
+ * it in a `PAGE_COLUMN_START`, three times over, and never a stranger.
  */
 function measureBand<T extends AlbumBoxSpec>(
   blocks: readonly AlbumBlockSpec<T>[],
@@ -1036,8 +1217,10 @@ function measureBand<T extends AlbumBoxSpec>(
   preset: AlbumRenderPreset,
   contentWidthMm: number,
   metrics: AlbumTextMetrics,
+  run: RunView | null = null,
 ): MeasuredBand<T> {
   const cap = Math.max(1, Math.round(preset.blocksPerBand));
+  const groupKey = (block: AlbumBlockSpec) => (isEntryBlock(block) ? (block.group?.key ?? null) : null);
   // Only an unbroken run of live blocks can share a band: a printed sheet is a page boundary. So is
   // a **forced break** (#769) — a band is one horizontal slice of one page, so pairing a block that
   // has been told to start a sheet of its own with the block above it would quietly overrule the
@@ -1052,10 +1235,15 @@ function measureBand<T extends AlbumBoxSpec>(
     blocks[from + available].kind !== "page" &&
     (available === 0 ||
       (blocks[from + available].breakBefore !== "always" &&
-        !blocks[from + available].bandBreakBefore))
+        !blocks[from + available].bandBreakBefore &&
+        groupKey(blocks[from + available]) === groupKey(blocks[from])))
   ) {
     available += 1;
   }
+
+  const part = issuePart(blocks[from], run);
+  const prefix =
+    part === null ? null : measureIssuePrefix(blocks[from], part, contentWidthMm, preset, metrics);
 
   for (let n = available; n > 1; n -= 1) {
     const widthMm = roundSizeMm(
@@ -1068,24 +1256,42 @@ function measureBand<T extends AlbumBoxSpec>(
     );
     if (!fits) continue;
     const measured = alignBandMounts(
-      slice.map((block) => measureBlock(block, widthMm, preset, metrics)),
+      slice.map((block, i) =>
+        measureBlock(block, widthMm, preset, metrics, prefix ? (i === 0 ? "first" : "beside") : "none"),
+      ),
       preset,
     );
     return {
       blocks: measured,
       blockWidthMm: widthMm,
-      heightMm: measured.reduce(
-        (tallest, block) => Math.max(tallest, block.heightMm),
-        0,
+      prefix,
+      groupPart: part,
+      heightMm: roundSizeMm(
+        prefixMm(prefix) +
+          measured.reduce((tallest, block) => Math.max(tallest, block.heightMm), 0),
       ),
     };
   }
 
-  const only = measureBlock(blocks[from], contentWidthMm, preset, metrics);
+  return soloBand(blocks[from], contentWidthMm, preset, metrics, prefix, part);
+}
+
+/** One block on a band of its own, under the issue heading the band prints (#1509), if any. */
+function soloBand<T extends AlbumBoxSpec>(
+  block: AlbumBlockSpec<T>,
+  contentWidthMm: number,
+  preset: AlbumRenderPreset,
+  metrics: AlbumTextMetrics,
+  prefix: IssuePrefix | null,
+  part: number | null,
+): MeasuredBand<T> {
+  const only = measureBlock(block, contentWidthMm, preset, metrics, prefix ? "first" : "none");
   return {
     blocks: [only],
     blockWidthMm: contentWidthMm,
-    heightMm: only.heightMm,
+    prefix,
+    groupPart: part,
+    heightMm: roundSizeMm(prefixMm(prefix) + only.heightMm),
   };
 }
 
@@ -1102,6 +1308,9 @@ function measureBand<T extends AlbumBoxSpec>(
  *
  * The run stops at a **printed sheet**, which is a page boundary nothing may be kept together across,
  * and at a **forced break**, which is the collector saying the opposite in the same breath.
+ *
+ * Each band is measured against the issue run as the bands before it in the unit leave it (#1509): the
+ * first band of a run on this page carries the run's heading, and the ones after it do not.
  */
 function keepTogether<T extends AlbumBoxSpec>(
   blocks: readonly AlbumBlockSpec<T>[],
@@ -1109,12 +1318,15 @@ function keepTogether<T extends AlbumBoxSpec>(
   preset: AlbumRenderPreset,
   contentWidthMm: number,
   metrics: AlbumTextMetrics,
+  run: RunView | null = null,
 ): MeasuredBand<T>[] {
   const unit: MeasuredBand<T>[] = [];
   let at = from;
+  let view = run;
   for (;;) {
-    const band = measureBand(blocks, at, preset, contentWidthMm, metrics);
+    const band = measureBand(blocks, at, preset, contentWidthMm, metrics, view);
     unit.push(band);
+    view = runAfter(blocks[at], view, band.groupPart);
     at += band.blocks.length;
     const next = blocks[at];
     if (
@@ -1353,6 +1565,13 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
     }
 
     let i = 0;
+    // The issue run the chapter is in (#1509). A run is consecutive checklists of one issue, and one
+    // issue is one year, so a chapter boundary ends any run.
+    const runs: { current: IssueRun | null } = { current: null };
+    const nextPage = (finished: OpenPage<T>): OpenPage<T> => {
+      emit(finished);
+      return freshPage(chapter.key);
+    };
 
     while (i < chapter.blocks.length) {
       const block = chapter.blocks[i];
@@ -1420,6 +1639,28 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
           filed.set(id, sheet);
         }
         if (opened) page = freshPage(chapter.key);
+        // A checklist of an issue run on a card (#1509): the card is a sheet of the run, so the run's
+        // next live sheet is marked as the one after it. An entry printed as its own issue ends the run.
+        const group = block.group;
+        if (isEntryBlock(block)) {
+          if (!group) {
+            runs.current = null;
+          } else {
+            if (runs.current?.key !== group.key) {
+              runs.current = {
+                key: group.key,
+                sheets: group.sheetsBefore ?? 0,
+                printed: new Set(),
+                headedOn: null,
+              };
+            }
+            for (const id of printedIds) {
+              if (runs.current.printed.has(id)) continue;
+              runs.current.printed.add(id);
+              runs.current.sheets += 1;
+            }
+          }
+        }
         i += 1;
         continue;
       }
@@ -1445,6 +1686,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
         preset,
         page.content.widthMm,
         metrics,
+        runView(runs.current, page),
       );
       const band = unit[0];
       const unitHeightMm = roundSizeMm(
@@ -1475,7 +1717,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       // The whole unit fits where the pen is: place every band of it.
       if (unitHeightMm <= spaceMm + FIT_EPSILON) {
         for (const held of unit) {
-          placeBand(held, page, preset, metrics);
+          placeBand(held, page, preset, metrics, runs);
           i += held.blocks.length;
         }
         continue;
@@ -1501,7 +1743,7 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
       // a run of them taller than a sheet has no arrangement that satisfies it.
       if (unit.length > 1) {
         if (band.heightMm <= spaceMm + FIT_EPSILON) {
-          placeBand(band, page, preset, metrics);
+          placeBand(band, page, preset, metrics, runs);
           i += band.blocks.length;
           continue;
         }
@@ -1511,71 +1753,61 @@ export function planAlbumPages<T extends AlbumBoxSpec>(
           continue;
         }
       }
-      // Under the year, whether the block can **start** there: its lead, its heading and its first row.
-      // A block with no rows — a note, a checklist with nothing gathered yet — has nothing to continue
-      // with, so it starts there only by fitting whole, which it did not.
-      const startsHere = (measured: MeasuredBlock<T>): boolean =>
-        measured.rows.length > 0 &&
-        rowsThatFit(
-          measured.rows,
-          roundSizeMm(measured.leadMm + measured.heading.costMm + measured.alignMm),
-          spaceMm,
-          preset.boxGapYMm,
-        ) > 0;
+      // Under the year, whether the block can **start** there: its lead, its heading and its first row
+      // — under the issue heading it opens with, if it prints within its issue (#1509), which is what
+      // keeps that heading from being left alone under the year. A block with no rows — a note, a
+      // checklist with nothing gathered yet — has nothing to continue with, so it starts there only by
+      // fitting whole, which it did not.
+      const startsHere = (held: MeasuredBand<T>): boolean => {
+        const measured = held.blocks[0];
+        return (
+          measured.rows.length > 0 &&
+          rowsThatFit(
+            measured.rows,
+            roundSizeMm(
+              prefixMm(held.prefix) +
+                measured.leadMm +
+                measured.heading.costMm +
+                measured.alignMm,
+            ),
+            spaceMm,
+            preset.boxGapYMm,
+          ) > 0
+        );
+      };
       // Too tall even for an empty page. If it is a pairing, unpair it — pairing must never make a
-      // page worse — and let the loop try the first block on its own.
+      // page worse — and let the loop try the first block on its own, under the same issue heading.
       if (band.blocks.length > 1) {
-        const single = measureBlock(
+        const solo = soloBand(
           block,
           page.content.widthMm,
           preset,
           metrics,
+          band.prefix,
+          band.groupPart,
         );
-        const solo: MeasuredBand<T> = {
-          blocks: [single],
-          blockWidthMm: page.content.widthMm,
-          heightMm: single.heightMm,
-        };
         if (solo.heightMm <= spaceMm + FIT_EPSILON) {
-          placeBand(solo, page, preset, metrics);
+          placeBand(solo, page, preset, metrics, runs);
           i += 1;
           continue;
         }
-        if (underYear ? !startsHere(single) : roomier) {
+        if (underYear ? !startsHere(solo) : roomier) {
           emit(page);
           page = freshPage(chapter.key);
           continue;
         }
-        page = splitBlockAcrossPages(
-          solo.blocks[0],
-          page,
-          preset,
-          metrics,
-          (finished) => {
-            emit(finished);
-            return freshPage(chapter.key);
-          },
-        );
+        page = splitBlockAcrossPages(solo, page, preset, metrics, nextPage, runs);
         i += 1;
         continue;
       }
-      if (underYear ? !startsHere(band.blocks[0]) : roomier) {
+      if (underYear ? !startsHere(band) : roomier) {
         emit(page);
         page = freshPage(chapter.key);
         continue;
       }
       // One block, taller than a whole page with the pen at the top of one — or one that starts under
       // its chapter's year (#1497): it splits.
-      page = splitBlockAcrossPages(
-        band.blocks[0],
-        page,
-        preset,
-        metrics,
-        (finished) => {
-          emit(finished);
-          return freshPage(chapter.key);
-        },
-      );
+      page = splitBlockAcrossPages(band, page, preset, metrics, nextPage, runs);
       i += 1;
     }
     emit(page);
@@ -1723,9 +1955,15 @@ function placeFreePage<T extends AlbumBoxSpec>(
  * If not even one row fits an empty page — a heading taller than the sheet, or one enormous mount —
  * the row is placed anyway and overhangs. Refusing to place it would be a plan that never terminates,
  * and a mount drawn off the paper is at least a visible, fixable mistake.
+ *
+ * A block printed **within its issue** (#1509) takes the issue heading with it onto every sheet after
+ * the first, marked by the run's own sheet count — `[2]` over the run's second sheet — while its
+ * sub-heading, if it has one, carries the block's own part. The two numbers differ as soon as the run
+ * had a sheet before this block began, and that is the collector's choice (2026-09-30): each says
+ * what it is a continuation of.
  */
 function splitBlockAcrossPages<T extends AlbumBoxSpec>(
-  measured: MeasuredBlock<T>,
+  band: MeasuredBand<T>,
   page: OpenPage<T>,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
@@ -1733,7 +1971,9 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
   // caller's `page` is the one this started on, and emitting that one on every turn of the loop
   // would publish the first page N times and lose the rest.
   nextPage: (finished: OpenPage<T>) => OpenPage<T>,
+  runs: { current: IssueRun | null },
 ): OpenPage<T> {
+  const measured = band.blocks[0];
   let current = page;
   let rowIndex = 0;
   let part = 1;
@@ -1753,8 +1993,21 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
             metrics,
             blockRole(measured.spec),
           );
+    // The issue heading over this sheet's share (#1509): the band's own on the first, and on every
+    // sheet after it the run's next — measured, like the block's own, as the sheet is made.
+    const groupPart =
+      part === 1 ? band.groupPart : issuePart(measured.spec, runView(runs.current, current));
+    const prefix =
+      part === 1
+        ? band.prefix
+        : groupPart === null
+          ? null
+          : measureIssuePrefix(measured.spec, groupPart, current.content.widthMm, preset, metrics);
+    // Under an issue heading a block has no lead of its own: the heading's space below separates
+    // them, and its correction went above the heading.
+    const leadMm = part === 1 || !prefix ? measured.leadMm : 0;
     const rest = measured.rows.slice(rowIndex);
-    const fixedMm = roundSizeMm(measured.leadMm + heading.costMm);
+    const fixedMm = roundSizeMm(prefixMm(prefix) + leadMm + heading.costMm);
     const spaceMm = roundSizeMm(
       current.content.yMm + current.content.heightMm - current.penMm,
     );
@@ -1765,9 +2018,12 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
 
     // Each sheet's share of a split block is a band of that sheet (#1419).
     openBand(current);
+    const issueHeading = placeIssuePrefix(current, prefix, preset, metrics);
+    enterRun(runs, measured.spec, groupPart, current);
     placeBlock(
       measured,
       heading,
+      leadMm,
       rowIndex,
       Math.min(take, rest.length),
       part,
@@ -1778,12 +2034,77 @@ function splitBlockAcrossPages<T extends AlbumBoxSpec>(
         xMm: current.content.xMm,
         widthMm: current.content.widthMm,
       },
+      issuePlacement(measured.spec, issueHeading, runs),
     );
     rowIndex += Math.max(1, Math.min(take, rest.length));
     part += 1;
     if (rowIndex >= measured.rows.length) return current;
     current = nextPage(current);
   }
+}
+
+/**
+ * Set an issue heading at the pen, across the content width, and advance the pen past it (#1509).
+ * Returns the heading as printed, or null when there is none.
+ */
+function placeIssuePrefix<T extends AlbumBoxSpec>(
+  page: OpenPage<T>,
+  prefix: IssuePrefix | null,
+  preset: AlbumRenderPreset,
+  metrics: AlbumTextMetrics,
+): string | null {
+  if (!prefix) return null;
+  const face = albumRoleFace(preset, "heading");
+  page.penMm = roundSizeMm(page.penMm + prefix.leadMm);
+  page.headings.push({
+    role: "heading",
+    lines: prefix.heading.lines,
+    xMm: page.content.xMm,
+    yMm: page.penMm,
+    widthMm: page.content.widthMm,
+    heightMm: roundSizeMm(prefix.heading.lines.length * metrics.lineHeightMm(face.face, face.sizePt)),
+  });
+  page.penMm = roundSizeMm(page.penMm + prefix.heading.costMm);
+  return prefix.heading.lines.join(" ");
+}
+
+/** Move the packer's issue run on past a block being placed on `page` (#1509): an ungrouped entry ends
+ *  it, a grouped one joins or opens it, and one opening the run's sheet here marks the page as carrying
+ *  its heading. A note or a free page leaves it as it was. */
+function enterRun<T extends AlbumBoxSpec>(
+  runs: { current: IssueRun | null },
+  spec: AlbumBlockSpec,
+  part: number | null,
+  page: OpenPage<T>,
+): void {
+  if (!isEntryBlock(spec)) return;
+  const group = spec.group;
+  if (!group) {
+    runs.current = null;
+    return;
+  }
+  if (!runs.current || runs.current.key !== group.key) {
+    runs.current = {
+      key: group.key,
+      sheets: group.sheetsBefore ?? 0,
+      printed: new Set(),
+      headedOn: null,
+    };
+  }
+  if (part !== null) {
+    runs.current.sheets = part;
+    runs.current.headedOn = page;
+  }
+}
+
+/** What a placement records of its issue run (#1509). */
+function issuePlacement(
+  spec: AlbumBlockSpec,
+  heading: string | null,
+  runs: { current: IssueRun | null },
+): { heading: string | null; part: number | null } {
+  const grouped = isEntryBlock(spec) && !!spec.group && runs.current !== null;
+  return { heading, part: grouped ? runs.current!.sheets : null };
 }
 
 /** Note that a band starts here, so the vertical placement can move it as one (#1419). */
@@ -1830,14 +2151,19 @@ function placeContent<T extends AlbumBoxSpec>(
   return albumEffectivePlacement(chosen, page.bands.length);
 }
 
-/** Place a whole band at the pen, side by side, and advance the pen past the tallest of them. */
+/** Place a whole band at the pen, side by side, and advance the pen past the tallest of them — under
+ *  the issue heading the band opens with, if it prints one (#1509). */
 function placeBand<T extends AlbumBoxSpec>(
   band: MeasuredBand<T>,
   page: OpenPage<T>,
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
+  runs: { current: IssueRun | null },
 ): void {
   openBand(page);
+  const bandTop = page.penMm;
+  const issueHeading = placeIssuePrefix(page, band.prefix, preset, metrics);
+  enterRun(runs, band.blocks[0].spec, band.groupPart, page);
   const top = page.penMm;
   for (let i = 0; i < band.blocks.length; i += 1) {
     // Every block in a band starts at the band's top, so two paired checklists read as one row of
@@ -1846,6 +2172,7 @@ function placeBand<T extends AlbumBoxSpec>(
     placeBlock(
       band.blocks[i],
       band.blocks[i].heading,
+      band.blocks[i].leadMm,
       0,
       band.blocks[i].rows.length,
       1,
@@ -1858,10 +2185,11 @@ function placeBand<T extends AlbumBoxSpec>(
         ),
         widthMm: band.blockWidthMm,
       },
+      issuePlacement(band.blocks[i].spec, i === 0 ? issueHeading : null, runs),
     );
     if (i > 0) page.blocks[page.blocks.length - 1].beside = true;
   }
-  page.penMm = roundSizeMm(top + band.heightMm);
+  page.penMm = roundSizeMm(bandTop + band.heightMm);
 }
 
 /** Place a block's lead, heading and `count` of its rows at the pen, in the given column of the
@@ -1870,6 +2198,9 @@ function placeBlock<T extends AlbumBoxSpec>(
   measured: MeasuredBlock<T>,
   /** The heading **this sheet** prints — the block's own on its first, the marked one after that. */
   heading: MeasuredHeading,
+  /** The space above it on this sheet — the block's own, or none directly under an issue heading
+   *  (#1509). */
+  leadMm: number,
   fromRow: number,
   count: number,
   part: number,
@@ -1877,10 +2208,12 @@ function placeBlock<T extends AlbumBoxSpec>(
   preset: AlbumRenderPreset,
   metrics: AlbumTextMetrics,
   at: { xMm: number; widthMm: number },
+  /** The issue heading printed over this block here and the run's sheet, or nulls (#1509). */
+  issue: { heading: string | null; part: number | null } = { heading: null, part: null },
 ): void {
   // The block that opens a sheet decides how that sheet is placed (#1419).
   if (page.blocks.length === 0) page.opener = measured.spec.pagePlacement ?? null;
-  page.penMm = roundSizeMm(page.penMm + measured.leadMm);
+  page.penMm = roundSizeMm(page.penMm + leadMm);
 
   const role = blockRole(measured.spec);
   if (heading.lines.length) {
@@ -1967,6 +2300,9 @@ function placeBlock<T extends AlbumBoxSpec>(
     kind: measured.spec.kind ?? "entry",
     part,
     heading: heading.lines.join(" "),
+    ...(issue.heading !== null ? { groupHeading: issue.heading } : {}),
+    ...(issue.part !== null ? { groupPart: issue.part } : {}),
+    ...(measured.spec.printMode ? { printMode: measured.spec.printMode } : {}),
     firstBoxIndex,
     boxCount: placed,
     // Read off the page rather than off the packer's own branches: a block that got what it asked

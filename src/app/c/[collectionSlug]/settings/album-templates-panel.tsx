@@ -405,7 +405,7 @@ function TypeRow({
   size,
   disabled,
 }: {
-  role: "title" | "chapter" | "heading" | "label" | "footer";
+  role: "title" | "chapter" | "heading" | "subheading" | "label" | "footer";
   label: string;
   face: string;
   size: number;
@@ -843,7 +843,23 @@ export function AlbumPresetForm({
                     value={preset.headingSpaceBelowMm}
                     disabled={isPending}
                   />
+                  <div />
+                  <MmField
+                    name="subheadingSpaceAboveMm"
+                    label="Above a sub-heading"
+                    value={preset.subheadingSpaceAboveMm}
+                    disabled={isPending}
+                  />
+                  <MmField
+                    name="subheadingSpaceBelowMm"
+                    label="Below a sub-heading"
+                    value={preset.subheadingSpaceBelowMm}
+                    disabled={isPending}
+                  />
                 </div>
+                <p style={{ ...HINT_STYLE, marginBottom: 0 }}>
+                  A sub-heading names a checklist printed under its issue&apos;s heading.
+                </p>
               </>
             )}
 
@@ -949,6 +965,7 @@ export function AlbumPresetForm({
                   <TypeRow role="title" label="Album title" face={preset.titleFace} size={preset.titleSizePt} disabled={isPending} />
                   <TypeRow role="chapter" label="Chapter heading" face={preset.chapterFace} size={preset.chapterSizePt} disabled={isPending} />
                   <TypeRow role="heading" label="Checklist heading" face={preset.headingFace} size={preset.headingSizePt} disabled={isPending} />
+                  <TypeRow role="subheading" label="Sub-heading" face={preset.subheadingFace} size={preset.subheadingSizePt} disabled={isPending} />
                   <TypeRow role="label" label="Box label" face={preset.labelFace} size={preset.labelSizePt} disabled={isPending} />
                   <TypeRow role="footer" label="Footer" face={preset.footerFace} size={preset.footerSizePt} disabled={isPending} />
                 </div>
