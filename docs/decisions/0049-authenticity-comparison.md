@@ -17,8 +17,12 @@ with the stamp and everything beneath it on offer (`src/lib/reference-candidates
 The work is tracked in #1000 (the seeded `Forgery` subtype and its migration), #1001
 (`Photo.sourceUrl`), #1002 (the subtype filter on the copies list), #1003 (a picture in the
 identify-variant dialog), #1004 (the two-photo comparison view), #1005 (reaching the references from
-both identification surfaces), #1006 (quarter-turning a sideways photo, per tile) and #1007 (keeping
-a forgery out of Colnect and the want list, which this ADR leaves **open** — see below).
+both identification surfaces) and #1006 (quarter-turning a sideways photo, per tile).
+
+> **Amended by #1009: #1007 is not tracked work.** This list once ended with #1007 — keeping a
+> forgery out of Colnect and the want list — named as left **open**. The collector closed it the
+> same day, 2026-09-08, as contrary to this design; the decision and its reason are recorded under
+> *What this deliberately does not do*.
 
 It rests on ADR-0010 (subtypes and `actsAsVariant`), ADR-0033 §6 (the scan viewport), #137 (photos on
 a stamp) and #585/#598/#614/#625 (the identification viewer and its measuring tools), and it adds
@@ -250,6 +254,30 @@ Recorded so that each is not re-proposed as an oversight.
 - **No authenticity status, examination history, expert workflow or dispatch list on `Item`.**
 - **No mechanism for a verdict whose reference changed.** Decision 2 removes the dependency that would
   make one necessary.
+- **No special case for a forgery anywhere — not for a Colnect identity, not for a want list, not
+  for anything else** (#1007, rejected by the collector on 2026-09-08, the day this ADR merged):
+
+  > *Forgeries are variants with no special treatment at all. Anyone who does not want to track
+  > them simply never creates that variant type.*
+  >
+  > — the collector, 2026-09-08, translated from Polish
+
+  The design session had flagged *a forgery stamp being offered a Colnect identity or reaching a
+  want list* as a behaviour to close, and the flag became a proposal. It was the one paragraph here
+  arguing against the rest: the strength of decision 1 is that a forgery is an ordinary child stamp
+  under an ordinary dictionary row — no flag, no sentinel, no code that knows what a forgery is — and
+  a rule keeping forgeries out of Colnect is exactly that code. **The question it left unsettled was
+  evidence for the rejection, not a gap**: `actsAsVariant = false` does not distinguish a forgery
+  from an Overprint, and keying on the seeded row's *name* would be wrong because it is an editable
+  dictionary row the collector may rename. Both are true, and both are the design working — there is
+  no distinguisher because none is wanted. The question also generalises: if offering a Colnect
+  identity to a distinct-entry child is wrong, it is wrong for Error, Plate flaw and Overprint too,
+  and that is a question about ADR-0010 §1 that predates this design.
+
+  This ADR carried #1007 as open for a few hours after merging — a decision record is not
+  stale-proof merely by being a record, and what made this one stale was the design being
+  *sharpened*, not weakened. The paragraph is kept as a rejection rather than deleted so that the
+  proposal is not made again.
 - **No automatic judgement, scoring or "likely forgery" signal.** The tool composes two pictures and
   reports one measured number. It states nothing about authenticity, and it must not begin to.
 - **No perforation gauge or watermark work.** Already built (#598, #614, #625), and already compared
@@ -265,11 +293,11 @@ Recorded so that each is not re-proposed as an oversight.
   new table, no new relation, no new owner on `Photo`.
 - A forgery becomes ordinary inventory: valued, searchable, storable, sellable, and excluded from
   completeness and from lowest-child valuation by the mechanism ADR-0010 already provides.
-- Two behaviours need a deliberate look during implementation, both narrow and both named above: a
-  reference extra reaching an album page for a stamp with no `main` photo, and a forgery stamp being
-  offered a Colnect identity or reaching a want list (#1007). **Neither is closed by this ADR**, and
-  #1007 in particular has an unsettled question in it: `actsAsVariant = false` does not distinguish a
-  forgery from an Overprint, and keying on the seeded row's *name* is wrong, because it is an ordinary
-  editable dictionary row the collector may rename.
+- One behaviour needs a deliberate look during implementation, narrow and named above (decision 3):
+  a reference extra reaching an album page for a stamp with no `main` photo, through
+  `src/lib/album-photos.ts`. **It is not closed by this ADR** and it is still live.
+- A forgery stamp is offered a Colnect identity and can reach a want list like any other stamp. That
+  was once listed here beside the album behaviour as an open question (#1007); it was rejected on
+  2026-09-08 — see *What this deliberately does not do*.
 - The comparison view is the only substantial new surface, and it is new because nothing existing can
   display a picture that is not a crop of a scanned sheet.
