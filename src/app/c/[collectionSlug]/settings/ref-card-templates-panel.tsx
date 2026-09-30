@@ -8,6 +8,8 @@ import {
   DialogActions,
   LabelWithError,
   ConfirmDialog,
+  DialogPrimaryButton,
+  DialogSecondaryButton,
 } from "@/app/dialog-shell";
 import {
   createRefCardTemplateAction,
@@ -25,19 +27,26 @@ import {
   MIN_FONT_MM,
   MIN_PADDING_MM,
   REF_CARD_MM_STEP,
+  parseRefCardGeometry,
   refCardGeometrySummary,
+  refCardSummaryRows,
+  type RefCardGeometry,
 } from "@/lib/ref-card-template-rules";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { Icon } from "@/app/icons";
+import { ListBesidePreview, useSettingsSelection } from "./list-beside-preview";
+import { SettingsPageAction } from "./settings-page-frame";
+import { RefCardTemplatePreview } from "./ref-card-template-preview";
 
-// The collection's ref-card formats (#569), edited the way collage templates are — the second named
-// dictionary of its kind, so the CRUD, the dialogs and the row shape are that panel's rather than
-// invented ones.
+// The collection's ref-card formats (#569). On the Settings page, the list beside the selected
+// template's card (#1478; `list-beside-preview.tsx`, the album templates' shape); in the editor, the
+// four measurements with the same card beside them, redrawn as they are typed.
 //
-// The one thing said differently: a collage template is **copied** onto an offer, so its panel has
-// to promise that editing one leaves prepared offers alone. Here there is nothing to promise —
-// the sheet reads a template at print time and paper is not a record — so the note says what it is
-// instead: an edit changes the next print.
+// The one thing said differently from the other template pages: a collage or album template is
+// **copied** onto what uses it, so its page has to promise that an edit leaves those alone. Here
+// there is nothing to promise — the sheet reads a template at print time and paper is not a record
+// — so an edit changes the next print and nothing else. That is the user guide's to say, not a
+// paragraph on the page (#1430).
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -66,6 +75,13 @@ const HINT_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
+/** The editor: the fields' column and the card beside it. Wide enough that the card is drawn larger
+ *  than it prints — the point of a preview of something 45 mm wide — and a fixed height, so the
+ *  window does not resize as a *Not redrawn* line comes and goes. */
+const EDITOR_WIDTH = "60rem";
+const EDITOR_HEIGHT = "min(100vh - 4rem, 34rem)";
+const FIELDS_WIDTH = "22rem";
+
 interface RefCardTemplatesPanelProps {
   collectionId: string;
   initialTemplates: RefCardTemplateData[];
@@ -84,16 +100,14 @@ function MillimetreField({
   defaultValue,
   min,
   max,
-  hint,
   isPending,
 }: {
   id: string;
-  name: string;
+  name: keyof RefCardGeometry;
   label: string;
   defaultValue: number;
   min: number;
   max: number;
-  hint?: string;
   isPending: boolean;
 }) {
   return (
@@ -110,11 +124,31 @@ function MillimetreField({
         disabled={isPending}
         style={INPUT_STYLE}
       />
-      {hint && <span style={HINT_STYLE}>{hint}</span>}
     </div>
   );
 }
 
+/** The four measurements as the form holds them, read off its own `FormData` — the values a save
+ *  would send, so the preview draws what would be stored. */
+function readGeometry(form: HTMLFormElement) {
+  const fd = new FormData(form);
+  const str = (key: keyof RefCardGeometry) => ((fd.get(key) as string | null) ?? "").trim();
+  return parseRefCardGeometry({
+    cardWidthMm: str("cardWidthMm"),
+    cardHeightMm: str("cardHeightMm"),
+    fontSizeMm: str("fontSizeMm"),
+    paddingTopMm: str("paddingTopMm"),
+  });
+}
+
+/**
+ * The fields, with the card beside them following every change (#1478).
+ *
+ * The fields stay **uncontrolled**: one handler on their column re-reads the whole form through the
+ * parser a save goes through, so there is no second copy of the template to fall out of step with
+ * what *Save* sends. A value the save would refuse — a field blanked mid-edit, a padding past the
+ * card — leaves the last card that parsed on screen and says why it is not redrawn.
+ */
 function RefCardTemplateForm({
   template,
   isPending,
@@ -122,74 +156,94 @@ function RefCardTemplateForm({
   template?: RefCardTemplateData;
   isPending: boolean;
 }) {
-  const start = template ?? DEFAULT_REF_CARD_GEOMETRY;
+  const start: RefCardGeometry = template ?? DEFAULT_REF_CARD_GEOMETRY;
+  const [card, setCard] = useState<RefCardGeometry>(start);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  function redraw(e: React.FormEvent<HTMLDivElement>) {
+    const form = (e.target as HTMLInputElement).form;
+    if (!form) return;
+    const parsed = readGeometry(form);
+    if (parsed.ok) {
+      setCard(parsed.value);
+      setProblem(null);
+    } else {
+      setProblem(parsed.message);
+    }
+  }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <div>
-        <LabelWithError htmlFor="f-refcard-name">Name</LabelWithError>
-        <TextInput
-          id="f-refcard-name"
-          name="name"
-          defaultValue={template?.name}
-          disabled={isPending}
-          placeholder="e.g. Postcard pocket"
-          style={INPUT_STYLE}
-        />
+    <div style={{ display: "flex", gap: "1.5rem", height: "100%", minWidth: 0 }}>
+      <div
+        style={{ flex: `0 0 ${FIELDS_WIDTH}`, display: "flex", flexDirection: "column", gap: "1rem", overflowY: "auto" }}
+        onChange={redraw}
+      >
+        <div>
+          <LabelWithError htmlFor="f-refcard-name">Name</LabelWithError>
+          <TextInput
+            id="f-refcard-name"
+            name="name"
+            defaultValue={template?.name}
+            disabled={isPending}
+            placeholder="e.g. Postcard pocket"
+            style={INPUT_STYLE}
+          />
+        </div>
+
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <MillimetreField
+              id="f-refcard-width"
+              name="cardWidthMm"
+              label="Card width (mm)"
+              defaultValue={start.cardWidthMm}
+              min={MIN_CARD_MM}
+              max={MAX_CARD_MM}
+              isPending={isPending}
+            />
+            <MillimetreField
+              id="f-refcard-height"
+              name="cardHeightMm"
+              label="Card height (mm)"
+              defaultValue={start.cardHeightMm}
+              min={MIN_CARD_MM}
+              max={MAX_CARD_MM}
+              isPending={isPending}
+            />
+          </div>
+          {/* No rows or columns: the sheet fills each row with as many cards as the paper takes. */}
+          <span style={HINT_STYLE}>The card you cut; the sheet fits as many across as the paper takes.</span>
+        </div>
+
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <MillimetreField
+              id="f-refcard-font"
+              name="fontSizeMm"
+              label="Ref size (mm)"
+              defaultValue={start.fontSizeMm}
+              min={MIN_FONT_MM}
+              max={MAX_FONT_MM}
+              isPending={isPending}
+            />
+            <MillimetreField
+              id="f-refcard-padding"
+              name="paddingTopMm"
+              label="Top padding (mm)"
+              defaultValue={start.paddingTopMm}
+              min={MIN_PADDING_MM}
+              max={MAX_PADDING_MM}
+              isPending={isPending}
+            />
+          </div>
+          {/* The ref sits at the top: the rest of the card disappears into the pocket. */}
+          <span style={HINT_STYLE}>How far down the card the ref starts; the rest goes into the pocket.</span>
+        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-        <MillimetreField
-          id="f-refcard-width"
-          name="cardWidthMm"
-          label="Card width (mm)"
-          defaultValue={start.cardWidthMm}
-          min={MIN_CARD_MM}
-          max={MAX_CARD_MM}
-          isPending={isPending}
-        />
-        <MillimetreField
-          id="f-refcard-height"
-          name="cardHeightMm"
-          label="Card height (mm)"
-          defaultValue={start.cardHeightMm}
-          min={MIN_CARD_MM}
-          max={MAX_CARD_MM}
-          isPending={isPending}
-        />
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <RefCardTemplatePreview card={card} problem={problem} />
       </div>
-      {/* No rows or columns: the sheet fills each row with as many cards as the paper takes, so one
-          template prints on A4 and on Letter without being asked which. */}
-      <span style={{ ...HINT_STYLE, marginTop: "-0.75rem" }}>
-        Measure the card you actually use. The sheet fits as many across the page as the paper
-        allows, so there is nothing to say about rows or columns — how many cards get printed is the
-        length of the strip you ask for.
-      </span>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-        <MillimetreField
-          id="f-refcard-font"
-          name="fontSizeMm"
-          label="Ref size (mm)"
-          defaultValue={start.fontSizeMm}
-          min={MIN_FONT_MM}
-          max={MAX_FONT_MM}
-          isPending={isPending}
-        />
-        <MillimetreField
-          id="f-refcard-padding"
-          name="paddingTopMm"
-          label="Top padding (mm)"
-          defaultValue={start.paddingTopMm}
-          min={MIN_PADDING_MM}
-          max={MAX_PADDING_MM}
-          isPending={isPending}
-        />
-      </div>
-      <span style={{ ...HINT_STYLE, marginTop: "-0.75rem" }}>
-        The ref sits at the top of the card rather than in the middle: the rest of it disappears into
-        the pocket once the stamps are packed, so the padding is how far down the number starts.
-      </span>
     </div>
   );
 }
@@ -202,6 +256,8 @@ export function RefCardTemplatesPanel({
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [actionState, setActionState] = useState<RefCardTemplateActionState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
+  const [selectedId, select] = useSettingsSelection(initialTemplates);
+  const selected = initialTemplates.find((t) => t.id === selectedId) ?? null;
 
   function openDialog(d: DialogState) {
     setActionState({ status: "idle" });
@@ -212,7 +268,11 @@ export function RefCardTemplatesPanel({
     if (!isPending) setDialog({ kind: "none" });
   }
 
-  function handleSuccess() {
+  /** A template made by an add is selected, so its card is what is on screen next; a deleted one's
+   *  address is cleared, and the first template takes its place. */
+  function handleSuccess(result: Extract<RefCardTemplateActionState, { status: "success" }>) {
+    if (result.id) select(result.id);
+    else if (dialog.kind === "delete") select(null);
     setDialog({ kind: "none" });
     router.refresh();
   }
@@ -225,7 +285,7 @@ export function RefCardTemplatesPanel({
     startTransition(async () => {
       const result = await action(new FormData(e.currentTarget));
       setActionState(result);
-      if (result.status === "success") handleSuccess();
+      if (result.status === "success") handleSuccess(result);
     });
   }
 
@@ -233,7 +293,7 @@ export function RefCardTemplatesPanel({
     startTransition(async () => {
       const result = await action();
       setActionState(result);
-      if (result.status === "success") handleSuccess();
+      if (result.status === "success") handleSuccess(result);
     });
   }
 
@@ -243,31 +303,11 @@ export function RefCardTemplatesPanel({
 
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
-        <button
-          type="button"
-          onClick={() => openDialog({ kind: "add" })}
-          style={{
-            padding: "0.5rem 1rem",
-            background: "var(--color-action-primary)",
-            color: "#fff",
-            border: "none",
-            borderRadius: "0.375rem",
-            fontSize: "0.875rem",
-            fontWeight: 500,
-            cursor: "pointer",
-          }}
-        >
-          + Add ref card template
-        </button>
-      </div>
-
-      <p style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
-        A ref card template is the size of the blank cards printed from{" "}
-        <strong>Locations → Print blank ref cards…</strong>, in millimetres, so the strip matches the
-        stationery you actually cut it into. The sheet reads the template as it prints, and paper is
-        not a record — editing one changes the next sheet and nothing else.
-      </p>
+      <SettingsPageAction>
+        <DialogPrimaryButton type="button" onClick={() => openDialog({ kind: "add" })}>
+          <Icon name="add" /> Add template
+        </DialogPrimaryButton>
+      </SettingsPageAction>
 
       {listError && (
         <p style={{ color: "var(--color-error)", fontSize: "0.8125rem", marginBottom: "1rem" }}>
@@ -275,75 +315,61 @@ export function RefCardTemplatesPanel({
         </p>
       )}
 
-      {initialTemplates.length === 0 && (
-        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-          No ref card templates yet. The sheet prints a built-in default card (
+      {initialTemplates.length === 0 ? (
+        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem", maxWidth: "40rem" }}>
+          No ref card templates yet. The sheet prints a built-in card (
           {refCardGeometrySummary(DEFAULT_REF_CARD_GEOMETRY)}) until you add one.
         </p>
+      ) : (
+        <ListBesidePreview
+          label="Ref card templates"
+          items={initialTemplates.map((template) => ({
+            id: template.id,
+            name: template.name,
+            note: refCardGeometrySummary(template),
+            actions: [
+              {
+                key: "edit",
+                label: "Edit…",
+                icon: "edit",
+                onSelect: () => openDialog({ kind: "edit", template }),
+              },
+              {
+                key: "delete",
+                label: "Delete",
+                icon: "delete",
+                danger: true,
+                separatorBefore: true,
+                onSelect: () => openDialog({ kind: "delete", template }),
+              },
+            ],
+          }))}
+          selectedId={selectedId}
+          onSelect={select}
+          selected={
+            selected && {
+              title: selected.name,
+              actions: (
+                <DialogSecondaryButton onClick={() => openDialog({ kind: "edit", template: selected })}>
+                  <Icon name="edit" /> Edit…
+                </DialogSecondaryButton>
+              ),
+              summary: refCardSummaryRows(selected),
+              preview: <RefCardTemplatePreview card={selected} />,
+            }
+          }
+        />
       )}
-
-      <div
-        style={{
-          border: initialTemplates.length > 0 ? "1px solid var(--color-border)" : "none",
-          borderRadius: "0.75rem",
-          overflow: "hidden",
-        }}
-      >
-        {initialTemplates.map((template, i) => (
-          <div
-            key={template.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-              padding: "0.75rem 1rem",
-              background: "var(--color-bg-elevated)",
-              borderBottom:
-                i < initialTemplates.length - 1 ? "1px solid var(--color-border)" : "none",
-            }}
-          >
-            <span
-              style={{
-                flex: 1,
-                fontSize: "0.9375rem",
-                color: "var(--color-text-primary)",
-                fontWeight: 500,
-              }}
-            >
-              {template.name}
-            </span>
-
-            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-              {refCardGeometrySummary(template)}
-            </span>
-
-            <RowActionsMenu
-              ariaLabel="Ref card template actions"
-              actions={[
-                {
-                  key: "edit",
-                  label: "Edit",
-                  icon: "edit",
-                  onSelect: () => openDialog({ kind: "edit", template }),
-                },
-                {
-                  key: "delete",
-                  label: "Delete",
-                  icon: "delete",
-                  danger: true,
-                  separatorBefore: true,
-                  onSelect: () => openDialog({ kind: "delete", template }),
-                },
-              ]}
-            />
-          </div>
-        ))}
-      </div>
 
       {/* ── Dialogs ── */}
 
       {dialog.kind === "add" && (
-        <DialogShell title="Add ref card template" onClose={closeDialog}>
+        <DialogShell
+          title="Add ref card template"
+          onClose={closeDialog}
+          maxWidth={EDITOR_WIDTH}
+          height={EDITOR_HEIGHT}
+        >
           <form
             style={FORM_STYLE}
             onSubmit={(e) => submitAction((fd) => createRefCardTemplateAction(collectionId, fd), e)}
@@ -362,7 +388,12 @@ export function RefCardTemplatesPanel({
       )}
 
       {dialog.kind === "edit" && (
-        <DialogShell title="Edit ref card template" onClose={closeDialog}>
+        <DialogShell
+          title="Edit ref card template"
+          onClose={closeDialog}
+          maxWidth={EDITOR_WIDTH}
+          height={EDITOR_HEIGHT}
+        >
           <form
             style={FORM_STYLE}
             onSubmit={(e) =>

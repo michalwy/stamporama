@@ -84,18 +84,23 @@ export function parseMillimetres(
   return { ok: true, value };
 }
 
-/** Validates the raw strings the Settings form submits. Reports the first problem found; the panel
- *  surfaces the message inline in the dialog, the collage template panel's idiom (#307). */
-export function parseRefCardTemplateInput(raw: {
-  name: string;
+/** The four measurements as the form holds them, before they are numbers. */
+export interface RefCardGeometryFields {
   cardWidthMm: string;
   cardHeightMm: string;
   fontSizeMm: string;
   paddingTopMm: string;
-}): RefCardTemplateParseResult {
-  const name = raw.name.trim();
-  if (!name) return { ok: false, message: "Name is required." };
+}
 
+export type RefCardGeometryParseResult =
+  | { ok: true; value: RefCardGeometry }
+  | { ok: false; message: string };
+
+/**
+ * The measurements alone — what a save stores and what the editor's preview draws (#1478). One
+ * parser for both, so the preview can never draw a card the template would refuse to store.
+ */
+export function parseRefCardGeometry(raw: RefCardGeometryFields): RefCardGeometryParseResult {
   const cardWidthMm = parseMillimetres(raw.cardWidthMm, "Card width", MIN_CARD_MM, MAX_CARD_MM);
   if (!cardWidthMm.ok) return cardWidthMm;
 
@@ -125,7 +130,6 @@ export function parseRefCardTemplateInput(raw: {
   return {
     ok: true,
     value: {
-      name,
       cardWidthMm: cardWidthMm.value,
       cardHeightMm: cardHeightMm.value,
       fontSizeMm: fontSizeMm.value,
@@ -134,7 +138,58 @@ export function parseRefCardTemplateInput(raw: {
   };
 }
 
+/** Validates the raw strings the Settings form submits. Reports the first problem found; the panel
+ *  surfaces the message inline in the dialog, the collage template panel's idiom (#307). */
+export function parseRefCardTemplateInput(
+  raw: RefCardGeometryFields & { name: string }
+): RefCardTemplateParseResult {
+  const name = raw.name.trim();
+  if (!name) return { ok: false, message: "Name is required." };
+
+  const geometry = parseRefCardGeometry(raw);
+  if (!geometry.ok) return geometry;
+
+  return { ok: true, value: { name, ...geometry.value } };
+}
+
 /** A template in words, for the Settings row and the sheet's picker: `45 × 24 mm · ref 6 mm`. */
 export function refCardGeometrySummary(g: RefCardGeometry): string {
   return `${g.cardWidthMm} × ${g.cardHeightMm} mm · ref ${g.fontSizeMm} mm from ${g.paddingTopMm} mm`;
+}
+
+/** The template's main values, for the Settings page beside its preview (#1478). */
+export function refCardSummaryRows(g: RefCardGeometry): { label: string; value: string }[] {
+  return [
+    { label: "Card", value: `${g.cardWidthMm} × ${g.cardHeightMm} mm` },
+    { label: "Ref", value: `${g.fontSizeMm} mm` },
+    { label: "Top padding", value: `${g.paddingTopMm} mm` },
+  ];
+}
+
+/** What the preview's card carries: a ref of the shape a strip prints, four characters being the
+ *  common case (`locationRefStrip` counts up from refs like this). */
+export const REF_CARD_SAMPLE_REF = "A147";
+
+/** A CSS millimetre in CSS pixels — the browser's own fixed ratio (96 px to the inch), so a card
+ *  drawn at scale 1 is drawn at the size the sheet prints it. */
+export const CSS_PX_PER_MM = 96 / 25.4;
+
+/** How much of the room the preview's card may take, so it never touches the frame's edges. */
+const PREVIEW_FILL = 0.9;
+
+/**
+ * The factor the preview draws a card at (#1478): as large as fits the room it is given, in both
+ * directions, so the card keeps its proportions whatever they are. A **scale, not a layout** — every
+ * millimetre of the card is multiplied by it and nothing else is measured, so the preview and the
+ * printed card differ in size and in nothing else. Null while the room is not known yet (the server
+ * render, the first frame), rather than a guess that would jump once measured.
+ */
+export function refCardPreviewScale(
+  card: Pick<RefCardGeometry, "cardWidthMm" | "cardHeightMm">,
+  frame: { width: number; height: number }
+): number | null {
+  if (frame.width <= 0 || frame.height <= 0) return null;
+  const across = (frame.width * PREVIEW_FILL) / (card.cardWidthMm * CSS_PX_PER_MM);
+  const down = (frame.height * PREVIEW_FILL) / (card.cardHeightMm * CSS_PX_PER_MM);
+  return Math.min(across, down);
 }

@@ -19,7 +19,9 @@ import { parseRefCardTemplateInput } from "@/lib/ref-card-template-rules";
 
 export type RefCardTemplateActionState =
   | { status: "idle" }
-  | { status: "success" }
+  /** `id` is the template a create made, which the Settings page then selects (#1478); an edit or
+   *  a delete has none to hand back. */
+  | { status: "success"; id?: string }
   | { status: "error"; message: string };
 
 async function getSession() {
@@ -63,8 +65,8 @@ export async function createRefCardTemplateAction(
   const parsed = readForm(formData);
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {
-    await createRefCardTemplate(session.user.id, collectionId, parsed.value);
-    return { status: "success" };
+    const id = await createRefCardTemplate(session.user.id, collectionId, parsed.value);
+    return { status: "success", id };
   } catch (err) {
     return toErrorState(err, "Failed to create the ref card template. Please try again.");
   }

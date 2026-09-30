@@ -13,6 +13,7 @@ import { locationRefStrip, parseRefCardCount } from "@/lib/location-ref";
 import { getAppVersionLabel } from "@/lib/version";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
+import { RefCard, REF_CARD_CUT_RULE } from "@/app/c/[collectionSlug]/shared/ref-card";
 import { RefCardsControls } from "./ref-cards-controls";
 
 export const metadata: Metadata = { title: "Blank ref cards" };
@@ -26,10 +27,6 @@ interface RefCardsPageProps {
     templateId?: string;
   }>;
 }
-
-/** One line, shared by the cards' right/bottom edges and the container's top/left, so every rule on
- *  the sheet is the same weight whichever of the two drew it. */
-const CUT_RULE = "1px dashed var(--color-border-strong)";
 
 /**
  * A printable strip of **blank ref cards** (#565) — the index cards a collector calls *fiszki*,
@@ -166,42 +163,21 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
             // container closes the **top and left**, so every interior line is exactly one line —
             // two neighbours keeping their own borders would print a double rule, and a cut down
             // the middle of it leaves ink on both halves. One cut separates two cards.
-            borderTop: CUT_RULE,
-            borderLeft: CUT_RULE,
+            borderTop: REF_CARD_CUT_RULE,
+            borderLeft: REF_CARD_CUT_RULE,
           }}
         >
           {strip.map((ref) => (
-            <div
+            // The card itself is `RefCard`, the drawing the Settings preview shows too (#1478).
+            <RefCard
               key={ref}
-              style={{
-                // Dashed, because the rule is a cut guide rather than part of the card.
-                borderRight: CUT_RULE,
-                borderBottom: CUT_RULE,
-                boxSizing: "border-box",
-                height: `${card.cardHeightMm}mm`,
-                // The ref is pinned to the top, not centred: the rest of the card disappears into
-                // the transport card's pocket once the stamps are packed onto it.
-                paddingTop: `${card.paddingTopMm}mm`,
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "center",
-                // Cards never straddle a page break — half a card is waste paper.
-                breakInside: "avoid",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: `${card.fontSizeMm}mm`,
-                  lineHeight: 1,
-                  fontWeight: 700,
-                  letterSpacing: "0.05em",
-                  fontVariantNumeric: "tabular-nums",
-                  color: "var(--color-text-primary)",
-                }}
-              >
-                {ref}
-              </span>
-            </div>
+              card={card}
+              refText={ref}
+              // Dashed, because the rule is a cut guide rather than part of the card.
+              edges={{ borderRight: REF_CARD_CUT_RULE, borderBottom: REF_CARD_CUT_RULE }}
+              // Cards never straddle a page break — half a card is waste paper.
+              style={{ breakInside: "avoid" }}
+            />
           ))}
         </div>
       )}
