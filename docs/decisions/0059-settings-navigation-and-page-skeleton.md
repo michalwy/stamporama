@@ -8,7 +8,8 @@ are built by the pages' own issues — #1471 (list beside detail), #1474 (list b
 #1473 (grid of fields) — and the summary strip by #1475. **Reverses #691's 56rem cap** on the
 Settings screen as a whole (§6). List beside detail is built and carries the Catalog group's
 dictionaries (#1471) and every other dictionary (#1476), list beside preview carries Album, Collage and Ref card templates (#1474, #1477, #1478), and the grid of fields
-carries the plain forms (#1473); what each settled is in §5.
+carries the plain forms (#1473); what each settled is in §5. The summary strip is built and carries
+the Allegro page (#1475, §4).
 
 ## Context
 
@@ -64,6 +65,16 @@ Every page sits in `SettingsPageFrame`: a header naming the **group** (in its ti
 **summary strip**; optional **tabs**; then the body. Standing explanations follow #1430 and #1460 —
 at most one sentence under the title, the rest in hints beside what they explain and in the user
 guide, and a sentence that prevents a costly mistake stays beside its action.
+
+**The summary strip** (#1475) is `settings-summary-strip.tsx`: one tile per tab, each saying where
+that tab's thing stands and opening it, the shown tab's tile marked. A tile that needs the collector
+is flagged in the warning tone with its icon. Allegro is the first page to carry it — the
+connection, the listing profiles and the categories learned — and Delcampe and Colnect take the same
+piece. The screen builds the strip and hands it to the frame, since a tile's click is a tab choice.
+Allegro's tabs use the existing shapes rather than a fourth: Account is two cards of the grid,
+Listing profiles is list beside detail, and Categories is the list without the detail, twice — the
+two registers publishing fills, side by side — since a learned row has no fields for a pane to edit,
+only a re-point and a forget from its ⋮.
 
 *Rejected:* a shared header only, and each page designed on its own.
 

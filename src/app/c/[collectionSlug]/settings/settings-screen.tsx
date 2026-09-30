@@ -47,10 +47,7 @@ import { ColnectConditionsPanel } from "./colnect-conditions-panel";
 import { ColnectAttributesPanel } from "./colnect-attributes-panel";
 import { ColnectPlatformPanel } from "./colnect-platform-panel";
 import { ColnectListsPanel } from "./colnect-lists-panel";
-import { AllegroPlatformPanel } from "./allegro-platform-panel";
-import { AllegroConnectionPanel } from "./allegro-connection-panel";
-import { AllegroProfilesPanel } from "./allegro-profiles-panel";
-import { AllegroCategoriesPanel } from "./allegro-categories-panel";
+import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampePlatformPanel } from "./delcampe-platform-panel";
 import { DelcampeProfilesPanel } from "./delcampe-profiles-panel";
 import { DelcampeCategoriesPanel } from "./delcampe-categories-panel";
@@ -203,7 +200,8 @@ const sectionHeadingStyle: React.CSSProperties = {
  * The entries already laid out in one of ADR-0059's body shapes, so no longer held to today's
  * column (`UNSHAPED_PAGE_WIDTH`). The dictionaries are list beside detail — the Catalog group's with
  * #1471, the rest with #1476; Album templates and Ref card templates are list beside preview (#1474,
- * #1478); the plain forms are the grid of fields (#1473).
+ * #1478); the plain forms are the grid of fields (#1473); Allegro is a summary strip over three tabs
+ * (#1475).
  */
 const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "catalogs",
@@ -226,6 +224,7 @@ const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "storage",
   "duplicates",
   "philasearch",
+  "allegro",
   "bids",
 ]);
 
@@ -294,7 +293,14 @@ function SettingsScreenBody(props: SettingsScreenProps) {
     let frame = 0;
     let tries = 0;
     const attempt = () => {
-      const found = findField(root, target);
+      // A marketplace page's platform choice is portalled into the header (#1473, #1475), outside
+      // the body, so a field the body does not have is looked for among the frame's labelled
+      // controls — by its `aria-label` only, never its text, for the title's reason above.
+      const found =
+        findField(root, target) ??
+        (target.kind === "field" && frameRef.current
+          ? findLabelled(frameRef.current, target.label)
+          : null);
       if (found || ++tries > FIELD_LOOKUP_FRAMES) {
         if (found) markField(found, root, target.label);
         setTarget(null);
@@ -327,6 +333,7 @@ function SettingsScreenBody(props: SettingsScreenProps) {
           title={entry.label}
           hint={entry.hint}
           unshaped={!RESHAPED_ENTRIES.has(entry.key)}
+          summary={entrySummary(entry.key, part, choosePart, props)}
           tabs={
             entry.parts && part ? { parts: entry.parts, active: part, onChoose: choosePart } : undefined
           }
@@ -338,6 +345,33 @@ function SettingsScreenBody(props: SettingsScreenProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * The summary strip over an entry's tabs (#1475; ADR-0059 §4), for the entries that have one. Built
+ * here rather than portalled up by the body, as the main action is, because each tile opens a tab —
+ * and choosing a tab, through the leave guard, is the screen's.
+ */
+function entrySummary(
+  entryKey: SettingsEntryKey,
+  part: string | null,
+  choosePart: (part: string) => void,
+  props: SettingsScreenProps
+): React.ReactNode {
+  switch (entryKey) {
+    case "allegro":
+      return (
+        <AllegroSummary
+          connection={props.allegroConnection}
+          profiles={props.allegroListingProfiles}
+          categories={props.allegroLearnedCategories}
+          active={part}
+          onOpen={choosePart}
+        />
+      );
+    default:
+      return undefined;
+  }
 }
 
 interface FieldTarget {
@@ -378,9 +412,17 @@ function findField(root: HTMLElement, target: FieldTarget): HTMLElement | null {
       return el;
     }
   }
+  return findLabelled(root, target.label);
+}
+
+/** The visible control under `root` whose `aria-label` is `label`. */
+function findLabelled(root: HTMLElement, label: string): HTMLElement | null {
+  const want = normalizeSettingsText(label);
   return (
     Array.from(root.querySelectorAll<HTMLElement>("[aria-label]")).find(
-      (el) => visible(el) && normalizeSettingsText(el.getAttribute("aria-label") ?? "") === want
+      (el) =>
+        el.getClientRects().length > 0 &&
+        normalizeSettingsText(el.getAttribute("aria-label") ?? "") === want
     ) ?? null
   );
 }
@@ -830,44 +872,15 @@ function SettingsEntryBody({
       return <CarriersPanel collectionId={collectionId} initialCarriers={initialCarriers} />;
     case "allegro":
       return (
-        <section>
-          {/* Which platform is Allegro leads the page — the same question the Colnect page leads
-              with, asked separately because a collection may well buy on one platform and sell on
-              another. */}
-          <h3 style={sectionHeadingStyle}>Allegro platform</h3>
-          <AllegroPlatformPanel
-            collectionId={collectionId}
-            platforms={platformContacts}
-            selectedId={allegroPlatformId}
-          />
-
-          {/* The instance's own API access to the collector's Allegro account (#476). Below the
-              platform picker because the picker is what names the marketplace at all, and a
-              connection to an account the collection has no platform for would land nowhere. */}
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Allegro account</h3>
-          <AllegroConnectionPanel collectionId={collectionId} status={allegroConnection} />
-
-          {/* What a listing is published *with* (#486). After the account because it is built from
-              dictionaries only a connected account can be asked for — the order here is the order
-              the setup actually happens in: name the platform, connect the account, then say what
-              its listings carry. */}
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Listing profiles</h3>
-          <AllegroProfilesPanel
-            collectionId={collectionId}
-            list={allegroListingProfiles}
-            connected={allegroConnection.connected && !allegroConnection.needsReconnect}
-          />
-
-          {/* What the app has *learned* rather than what the collector configured (#488). Last,
-              because it fills itself in from publishing and is read here only to be corrected —
-              a wrong association must never need a wrong listing to fix it. */}
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Learned categories</h3>
-          <AllegroCategoriesPanel
-            collectionId={collectionId}
-            list={allegroLearnedCategories}
-            connected={allegroConnection.connected && !allegroConnection.needsReconnect}
-          />
-        </section>
+        <AllegroSettingsBody
+          part={part}
+          collectionId={collectionId}
+          platforms={platformContacts}
+          platformId={allegroPlatformId}
+          connection={allegroConnection}
+          profiles={allegroListingProfiles}
+          categories={allegroLearnedCategories}
+        />
       );
     case "delcampe":
       return (

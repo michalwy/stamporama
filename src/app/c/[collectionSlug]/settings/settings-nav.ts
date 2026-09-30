@@ -8,6 +8,7 @@
 
 import { SECTION_LABELS, SECTION_TINTS, type SectionKey } from "../nav-sections";
 import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attribute-kinds";
+import { ALLEGRO_SETTINGS_PARTS } from "./allegro-summary";
 
 /**
  * The groups mirror the sidebar's sections, **in their tints** (#1465): a collector looking for the
@@ -216,6 +217,9 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "selling",
     label: "Allegro",
     hint: "Which platform is Allegro, the account this instance publishes with, and what its listings carry.",
+    // Account first (#1475): it is the default, so the sign-in callback's plain `?tab=allegro` lands
+    // on it without naming a part.
+    parts: ALLEGRO_SETTINGS_PARTS,
   },
   {
     key: "delcampe",

@@ -61,7 +61,7 @@ describe("settings navigation (#1469)", () => {
     }
   });
 
-  it("gives Formats and Attributes their parts as tabs, and nothing else any", () => {
+  it("gives Formats, Attributes and Allegro their parts as tabs, and nothing else any", () => {
     const withParts = SETTINGS_ENTRIES.filter((e) => e.parts).map((e) => [
       e.key,
       e.parts!.map((p) => p.label),
@@ -69,6 +69,7 @@ describe("settings navigation (#1469)", () => {
     assert.deepEqual(withParts, [
       ["formats", ["Formats", "Multipliers"]],
       ["attributes", ["Colours", "Watermarks", "Papers", "Printing methods"]],
+      ["allegro", ["Account", "Listing profiles", "Categories"]],
     ]);
   });
 
@@ -101,7 +102,7 @@ describe("settings navigation (#1469)", () => {
         shipping: "Carriers",
         duplicates: "Duplicate numbers",
         colnect: "Colnect",
-        allegro: "Allegro",
+        allegro: "Allegro / account",
         delcampe: "Delcampe",
         philasearch: "Philasearch",
         assistant: "Assistant & API",
@@ -133,6 +134,18 @@ describe("settings navigation (#1469)", () => {
       // The Allegro callback's outcome survives choosing a tab; a stale part does not.
       const callback = new URLSearchParams("tab=allegro&allegro=connected&part=x");
       assert.equal(settingsSearch(callback, "allegro", null), "?tab=allegro&allegro=connected");
+      assert.equal(
+        settingsSearch(callback, "allegro", "profiles"),
+        "?tab=allegro&allegro=connected&part=profiles"
+      );
+    });
+
+    // The sign-in callback redirects to `?tab=allegro` and nothing more (#1475): the outcome it
+    // carries is rendered by the Account tab, so that tab has to be the one a bare address opens.
+    it("lands the Allegro sign-in callback on the Account tab", () => {
+      assert.equal(lands("allegro"), "Allegro / account");
+      assert.equal(lands("allegro", "categories"), "Allegro / categories");
+      assert.equal(lands("allegro", "nonsense"), "Allegro / account");
     });
 
     it("round-trips every entry and part through its own address", () => {

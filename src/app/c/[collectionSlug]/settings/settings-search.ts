@@ -70,19 +70,22 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   refcards: [],
   collages: [],
   shipping: [],
+  // The header's platform choice is found on the first tab; the tabs themselves come from `parts`.
   allegro: [
     { label: "Allegro platform" },
-    { label: "Allegro account" },
+    { label: "Application", words: ["account"] },
     { label: "Client ID" },
     { label: "Application name" },
     { label: "Client secret" },
     { label: "Use Allegro’s sandbox" },
     { label: "Connection" },
     { label: "Permissions granted to this application" },
-    { label: "Listing profiles" },
-    { label: "Learned categories" },
-    { label: "What each kind of stamp was listed as" },
-    { label: "What each category’s parameters were answered with" },
+    { label: "What each kind of stamp was listed as", part: "categories", words: ["learned"] },
+    {
+      label: "What each category’s parameters were answered with",
+      part: "categories",
+      words: ["learned"],
+    },
   ],
   delcampe: [
     { label: "Delcampe platform" },

@@ -13,17 +13,33 @@ import {
 import type { AllegroConnectionStatus, AllegroDevicePrompt } from "@/lib/allegro-connection";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { SettingsFieldCard } from "./settings-field-grid";
+import { FieldNote, InfoHint } from "./list-detail";
+import { ALLEGRO_CONNECTION_WORDS, allegroConnectionState } from "./allegro-summary";
 
-// Settings → Allegro, the connection half (#476; ADR-0023).
+// Settings → Allegro → Account (#476; ADR-0023), the page's first tab (#1475).
 //
 // Self-hosting is what makes this a setup step at all: no OAuth application can ship in a public
 // image, so each instance registers its own at `apps.developer.allegro.pl` and the credentials are
-// something the collector enters here. That is a real new thing to explain, and this panel is where
-// it is explained rather than only in the guide.
+// something the collector enters here. The explanation of that lives behind the ⓘ and in the user
+// guide (#1475, following #1430): the tab keeps one line pointing at where to register, and the
+// sentences that prevent a costly mistake — the missing secret key, a change of application
+// dropping the connection — beside what they are about.
 //
-// **Device code leads.** It needs no redirect URI and no public address, so it behaves identically
-// on localhost and on a VPS behind NAT. The authorization code flow sits below it, offered — never
-// instead of it — and only where the instance has a configured address to send Allegro back to.
+// Two cards of the grid (ADR-0059 §5): the registered **application**, and the **connection** made
+// with it. **Device code leads.** It needs no redirect URI and no public address, so it behaves
+// identically on localhost and on a VPS behind NAT. The authorization code flow sits beside it,
+// offered — never instead of it — and only where the instance has a configured address to send
+// Allegro back to.
+
+/** Two cards to a row on a desktop window, and never so wide that a field runs across it. */
+const ACCOUNT_GRID: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(24rem, 1fr))",
+  gap: "1.25rem",
+  alignItems: "stretch",
+  maxWidth: "76rem",
+};
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -70,13 +86,6 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 500,
   color: "var(--color-text-secondary)",
   marginBottom: "0.25rem",
-};
-
-const cardStyle: React.CSSProperties = {
-  padding: "1rem",
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.75rem",
-  background: "var(--color-bg-elevated)",
 };
 
 const codeStyle: React.CSSProperties = {
@@ -292,29 +301,28 @@ export function AllegroConnectionPanel({
   }
 
   const canConnect = status.configured && status.hasClientSecret && !device;
+  const state = allegroConnectionState(status);
+  const developerLink = (
+    <a
+      href="https://apps.developer.allegro.pl"
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: "var(--color-accent)" }}
+    >
+      apps.developer.allegro.pl
+    </a>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-      <p style={helpTextStyle}>
-        Give this instance its own access to your Allegro account through Allegro&rsquo;s API, so
-        your own offers and orders can be read here directly instead of off the page. Because
-        Stamporama is self-hosted, it ships with no Allegro application of its own: register one at{" "}
-        <a
-          href="https://apps.developer.allegro.pl"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "var(--color-accent)" }}
-        >
-          apps.developer.allegro.pl
-        </a>{" "}
-        and paste its ID and secret below. Nothing is read from Allegro yet — this connects, and the
-        sold-listing and order features build on it.
-      </p>
-
+      {/* The one standing warning the tab keeps (#1475): without the key nothing here can be saved,
+          and the reason is in a file rather than on the screen. */}
       {!status.secretKeyConfigured && (
         <p
           style={{
             ...helpTextStyle,
+            margin: 0,
+            maxWidth: "76rem",
             color: "var(--color-error)",
             border: "1px solid var(--color-error)",
             borderRadius: "0.5rem",
@@ -332,6 +340,7 @@ export function AllegroConnectionPanel({
         <p
           style={{
             ...helpTextStyle,
+            margin: 0,
             color:
               notice.tone === "error"
                 ? "var(--color-error)"
@@ -344,335 +353,334 @@ export function AllegroConnectionPanel({
         </p>
       )}
 
-      {/* --- The registered application ------------------------------------------------- */}
-      <div style={cardStyle}>
-        <div style={{ display: "grid", gap: "0.75rem", maxWidth: "32rem" }}>
-          <div>
-            <label htmlFor="allegro-client-id" style={labelStyle}>
-              Client ID
-            </label>
-            <TextInput
-              id="allegro-client-id"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              style={INPUT_STYLE}
-              {...NO_AUTOFILL}
-            />
-          </div>
-          <div>
-            <label htmlFor="allegro-application-name" style={labelStyle}>
-              Application name
-            </label>
-            <TextInput
-              id="allegro-application-name"
-              value={applicationName}
-              onChange={(e) => setApplicationName(e.target.value)}
-              placeholder="Stamporama"
-              style={INPUT_STYLE}
-              {...NO_AUTOFILL}
-            />
-            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
-              What you called this application on Allegro. Every request identifies itself with it —
-              Allegro requires that, so they can reach you rather than simply cutting an application
-              off. Leave it blank and requests say <code style={codeStyle}>Stamporama</code>.
-            </p>
-          </div>
-          <div>
-            <label htmlFor="allegro-client-secret" style={labelStyle}>
-              Client secret
-            </label>
-            <input
-              id="allegro-client-secret"
-              type="password"
-              value={clientSecret}
-              onChange={(e) => setClientSecret(e.target.value)}
-              placeholder={status.hasClientSecret ? "•••••••• (leave blank to keep)" : ""}
-              style={INPUT_STYLE}
-              {...NO_AUTOFILL}
-            />
-            <p style={{ ...helpTextStyle, marginTop: "0.25rem" }}>
-              Stored encrypted and never shown again. Leave blank to keep the one already saved.
-            </p>
-          </div>
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              fontSize: "0.875rem",
-              color: "var(--color-text-primary)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={sandbox}
-              onChange={(e) => setSandbox(e.target.checked)}
-            />
-            Use Allegro&rsquo;s sandbox
-          </label>
-          <p style={helpTextStyle}>
-            A sandbox application is registered separately and has its own ID and secret. Changing
-            either of these, or this toggle, drops the current connection — a token belongs to the
-            application that issued it.
-          </p>
-          <div>
-            <button
-              type="button"
-              onClick={save}
-              disabled={isPending || !clientId.trim()}
-              style={primaryButtonStyle}
-            >
-              Save application
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* --- Connecting ------------------------------------------------------------------ */}
-      <div style={cardStyle}>
-        <h3
-          style={{
-            fontSize: "0.9375rem",
-            fontWeight: 600,
-            margin: "0 0 0.5rem",
-            color: "var(--color-text-primary)",
-          }}
+      <div style={ACCOUNT_GRID}>
+        {/* --- The registered application ----------------------------------------------- */}
+        <SettingsFieldCard
+          label="Application"
+          hint={<>Registered by you at {developerLink}.</>}
+          tooltip="Stamporama is self-hosted, so it ships with no Allegro application of its own: this instance uses one you register, with the access you grant it there. Paste its ID and secret here."
         >
-          Connection
-        </h3>
-
-        {status.connected && !status.needsReconnect && (
-          <p style={{ ...helpTextStyle, marginBottom: "0.75rem" }}>
-            {status.accountLogin ? (
-              <>
-                Connected as <strong>{status.accountLogin}</strong>
-              </>
-            ) : (
-              // No name is not an unknown state — it is an application without profile access,
-              // which every other thing this connection is for works fine without.
-              <>
-                <strong>Connected</strong> (the application has no profile access, so Allegro does
-                not say which account this is)
-              </>
-            )}
-            {status.sandbox ? " (sandbox)" : ""}. Token last refreshed{" "}
-            {lastRefreshedAt}; it expires {expiresAt} and is
-            renewed automatically before then.
-          </p>
-        )}
-
-        {status.needsReconnect && (
-          <p style={{ ...helpTextStyle, color: "var(--color-error)", marginBottom: "0.75rem" }}>
-            <strong>Needs reconnecting.</strong> {status.lastError ?? "The stored grant no longer works."}
-          </p>
-        )}
-
-        {!status.connected && !status.needsReconnect && (
-          <p style={{ ...helpTextStyle, marginBottom: "0.75rem" }}>
-            Not connected yet.
-          </p>
-        )}
-
-        {/* --- What this connection is permitted to do (#485) --------------------------- */}
-        {status.connected && (
-          <div
-            style={{
-              border: "1px solid var(--color-border)",
-              borderRadius: "0.5rem",
-              padding: "0.75rem",
-              marginBottom: "0.75rem",
-            }}
-          >
-            <p
+          <div style={{ display: "grid", gap: "0.875rem", maxWidth: "32rem" }}>
+            <div>
+              <label htmlFor="allegro-client-id" style={labelStyle}>
+                Client ID
+              </label>
+              <TextInput
+                id="allegro-client-id"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                style={INPUT_STYLE}
+                {...NO_AUTOFILL}
+              />
+            </div>
+            <div>
+              <label htmlFor="allegro-application-name" style={labelStyle}>
+                Application name
+              </label>
+              <TextInput
+                id="allegro-application-name"
+                value={applicationName}
+                onChange={(e) => setApplicationName(e.target.value)}
+                placeholder="Stamporama"
+                style={INPUT_STYLE}
+                {...NO_AUTOFILL}
+              />
+              <FieldNote>What you called it on Allegro — every request names it.</FieldNote>
+            </div>
+            <div>
+              <label htmlFor="allegro-client-secret" style={labelStyle}>
+                Client secret
+              </label>
+              <input
+                id="allegro-client-secret"
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={status.hasClientSecret ? "•••••••• (leave blank to keep)" : ""}
+                style={INPUT_STYLE}
+                {...NO_AUTOFILL}
+              />
+              <FieldNote>Stored encrypted and never shown again.</FieldNote>
+            </div>
+            <label
               style={{
-                ...helpTextStyle,
-                margin: "0 0 0.5rem",
-                fontWeight: 600,
-                color: "var(--color-text-secondary)",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                fontSize: "0.875rem",
+                color: "var(--color-text-primary)",
               }}
             >
-              Permissions granted to this application
-            </p>
+              <input
+                type="checkbox"
+                checked={sandbox}
+                onChange={(e) => setSandbox(e.target.checked)}
+              />
+              Use Allegro&rsquo;s sandbox
+            </label>
+            <div>
+              <button
+                type="button"
+                onClick={save}
+                disabled={isPending || !clientId.trim()}
+                style={primaryButtonStyle}
+              >
+                Save application
+              </button>
+              {/* Kept beside the button: it is the one save on this tab that undoes something. */}
+              {status.connected && (
+                <FieldNote>
+                  A different client ID or sandbox setting drops the current connection.
+                </FieldNote>
+              )}
+            </div>
+          </div>
+        </SettingsFieldCard>
 
-            {status.scopes ? (
-              <ul style={{ ...helpTextStyle, margin: "0 0 0.5rem", paddingLeft: "1.1rem" }}>
-                {status.scopes.map((scope) => (
-                  <li key={scope}>
-                    {SCOPE_LABELS[scope] ?? <code style={codeStyle}>{scope}</code>}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              // Not the same as "none": the token could not be read this way, and saying the
-              // application grants nothing on that basis would be a claim with nothing behind it.
-              <p style={{ ...helpTextStyle, margin: "0 0 0.5rem" }}>
-                Stamporama cannot tell which permissions this connection carries. That is not a
-                fault — it only means the list below cannot be checked for you.
-              </p>
-            )}
+        {/* --- Connecting ------------------------------------------------------------------ */}
+        <SettingsFieldCard
+          label="Connection"
+          tooltip={
+            status.redirectUri
+              ? "Connect with a code works on any installation: Allegro shows a short code to confirm in your own browser. Sign in on Allegro is one round trip instead, and needs the redirect URI below registered with your application."
+              : "Connect with a code works on any installation: Allegro shows a short code to confirm in your own browser. Signing in on Allegro directly needs this instance to have a configured address (BETTER_AUTH_URL) for Allegro to send you back to."
+          }
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <ConnectionState
+              status={status}
+              state={state}
+              lastRefreshedAt={lastRefreshedAt}
+              expiresAt={expiresAt}
+            />
 
-            <p style={{ ...helpTextStyle, margin: 0 }}>
-              {status.canPublishOffers === true ? (
-                <>
-                  Publishing offers from here is <strong>allowed</strong> by this application.
-                </>
-              ) : (
-                <>
-                  {status.canPublishOffers === false && (
+            {/* --- What this connection is permitted to do (#485) ------------------------- */}
+            {status.connected && (
+              <div
+                style={{
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
+                  padding: "0.75rem",
+                }}
+              >
+                <p
+                  style={{
+                    ...helpTextStyle,
+                    margin: "0 0 0.5rem",
+                    fontWeight: 600,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  Permissions granted to this application
+                </p>
+
+                {status.scopes ? (
+                  <ul style={{ ...helpTextStyle, margin: "0 0 0.5rem", paddingLeft: "1.1rem" }}>
+                    {status.scopes.map((scope) => (
+                      <li key={scope}>
+                        {SCOPE_LABELS[scope] ?? <code style={codeStyle}>{scope}</code>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  // Not the same as "none": the token could not be read this way, and saying the
+                  // application grants nothing on that basis would be a claim with nothing behind it.
+                  <p style={{ ...helpTextStyle, margin: "0 0 0.5rem" }}>
+                    Stamporama cannot tell which permissions this connection carries.
+                  </p>
+                )}
+
+                <p style={{ ...helpTextStyle, margin: 0 }}>
+                  {status.canPublishOffers === true ? (
                     <>
-                      <strong>Publishing offers from here is not allowed yet.</strong>{" "}
+                      Publishing offers from here is <strong>allowed</strong> by this application.
+                    </>
+                  ) : (
+                    <>
+                      {status.canPublishOffers === false && (
+                        <>
+                          <strong>Publishing offers from here is not allowed yet.</strong>{" "}
+                        </>
+                      )}
+                      Publishing needs write access to your offers: grant it at {developerLink},
+                      then <strong>reconnect here</strong>.
                     </>
                   )}
-                  Creating a listing on Allegro needs your application to grant write access to your
-                  offers. Stamporama asks for no permissions of its own, so this can only be changed
-                  where the application is registered: tick it at{" "}
+                </p>
+
+                {/* The account's own eligibility, which is a different question from the
+                    application's permissions and is why it sits under them rather than in place of
+                    them (#477). Allegro's selling endpoints are open to business accounts only, and
+                    nothing about that is visible until a listing is actually published — so this
+                    appears the first time Allegro says it, in Allegro's own words. It is
+                    deliberately not a broken connection: everything else here keeps working. */}
+                {status.publishRefusedReason && (
+                  <p
+                    style={{
+                      ...helpTextStyle,
+                      margin: "0.5rem 0 0",
+                      paddingTop: "0.5rem",
+                      borderTop: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <strong style={{ color: "var(--color-text-secondary)" }}>
+                      Allegro will not publish listings from this account through the API.
+                    </strong>{" "}
+                    It said: &ldquo;{status.publishRefusedReason}&rdquo;{" "}
+                    <InfoHint>
+                      Reading your orders and bids is unaffected — only creating a listing from here
+                      is. Post those on Allegro yourself. This is re-checked whenever you reconnect
+                      or change the application.
+                    </InfoHint>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {device && (
+              <div
+                style={{
+                  border: "1px solid var(--color-border-strong)",
+                  borderRadius: "0.5rem",
+                  padding: "0.75rem",
+                }}
+              >
+                <p style={{ ...helpTextStyle, marginTop: 0 }}>
+                  Open{" "}
                   <a
-                    href="https://apps.developer.allegro.pl"
+                    href={device.verificationUriComplete ?? device.verificationUri}
                     target="_blank"
                     rel="noreferrer"
                     style={{ color: "var(--color-accent)" }}
                   >
-                    apps.developer.allegro.pl
+                    {device.verificationUri}
                   </a>{" "}
-                  and then <strong>reconnect here</strong> — an existing connection keeps the
-                  permissions it was granted with.
+                  and enter this code:
+                </p>
+                <p
+                  style={{
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                    fontSize: "1.5rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.15em",
+                    margin: "0.5rem 0",
+                    color: "var(--color-text-primary)",
+                  }}
+                >
+                  {device.userCode}
+                </p>
+                <p style={{ ...helpTextStyle, marginBottom: 0 }}>
+                  Waiting for you to confirm — this page finishes on its own. The code is good for
+                  about {Math.round(device.expiresInSeconds / 60)} minutes.
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={connectByDevice}
+                disabled={isPending || !canConnect}
+                style={primaryButtonStyle}
+              >
+                {status.connected ? "Reconnect with a code" : "Connect with a code"}
+              </button>
+              {status.redirectUri && (
+                <button
+                  type="button"
+                  onClick={connectByCode}
+                  disabled={isPending || !canConnect}
+                  style={secondaryButtonStyle}
+                >
+                  Sign in on Allegro instead
+                </button>
+              )}
+              {status.connected && (
+                <>
+                  <button
+                    type="button"
+                    onClick={test}
+                    disabled={isPending}
+                    style={secondaryButtonStyle}
+                  >
+                    Test connection
+                  </button>
+                  <button
+                    type="button"
+                    onClick={disconnect}
+                    disabled={isPending}
+                    style={{ ...secondaryButtonStyle, color: "var(--color-error)" }}
+                  >
+                    Disconnect
+                  </button>
                 </>
               )}
-            </p>
+            </div>
 
-            {/* The account's own eligibility, which is a different question from the application's
-                permissions and is why it sits under them rather than in place of them (#477).
-                Allegro's selling endpoints are open to business accounts only, and nothing about
-                that is visible until a listing is actually published — so this appears the first
-                time Allegro says it, in Allegro's own words. It is deliberately not a broken
-                connection: everything else here keeps working. */}
-            {status.publishRefusedReason && (
-              <p
-                style={{
-                  ...helpTextStyle,
-                  margin: "0.5rem 0 0",
-                  paddingTop: "0.5rem",
-                  borderTop: "1px solid var(--color-border)",
-                }}
-              >
-                <strong style={{ color: "var(--color-text-secondary)" }}>
-                  Allegro will not publish listings from this account through the API.
-                </strong>{" "}
-                It said: &ldquo;{status.publishRefusedReason}&rdquo; Reading your orders and bids is
-                unaffected — only creating a listing from here is. Post those on Allegro yourself.
-                This is re-checked whenever you reconnect or change the application.
+            {/* Something to copy into Allegro, so it stays on the page rather than in a hint. */}
+            {status.redirectUri && (
+              <p style={{ ...helpTextStyle, margin: 0 }}>
+                Redirect URI: <code style={codeStyle}>{status.redirectUri}</code>
               </p>
             )}
           </div>
-        )}
-
-        {device && (
-          <div
-            style={{
-              border: "1px solid var(--color-border-strong)",
-              borderRadius: "0.5rem",
-              padding: "0.75rem",
-              marginBottom: "0.75rem",
-            }}
-          >
-            <p style={{ ...helpTextStyle, marginTop: 0 }}>
-              Open{" "}
-              <a
-                href={device.verificationUriComplete ?? device.verificationUri}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "var(--color-accent)" }}
-              >
-                {device.verificationUri}
-              </a>{" "}
-              and enter this code:
-            </p>
-            <p
-              style={{
-                fontFamily: "var(--font-mono, ui-monospace, monospace)",
-                fontSize: "1.5rem",
-                fontWeight: 600,
-                letterSpacing: "0.15em",
-                margin: "0.5rem 0",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              {device.userCode}
-            </p>
-            <p style={{ ...helpTextStyle, marginBottom: 0 }}>
-              Waiting for you to confirm — this page finishes on its own. The code is good for about{" "}
-              {Math.round(device.expiresInSeconds / 60)} minutes.
-            </p>
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={connectByDevice}
-            disabled={isPending || !canConnect}
-            style={primaryButtonStyle}
-          >
-            {status.connected ? "Reconnect with a code" : "Connect with a code"}
-          </button>
-          {status.redirectUri && (
-            <button
-              type="button"
-              onClick={connectByCode}
-              disabled={isPending || !canConnect}
-              style={secondaryButtonStyle}
-            >
-              Sign in on Allegro instead
-            </button>
-          )}
-          {status.connected && (
-            <>
-              <button
-                type="button"
-                onClick={test}
-                disabled={isPending}
-                style={secondaryButtonStyle}
-              >
-                Test connection
-              </button>
-              <button
-                type="button"
-                onClick={disconnect}
-                disabled={isPending}
-                style={{ ...secondaryButtonStyle, color: "var(--color-error)" }}
-              >
-                Disconnect
-              </button>
-            </>
-          )}
-        </div>
-
-        {!status.configured && (
-          <p style={{ ...helpTextStyle, marginTop: "0.75rem" }}>
-            Save the application above first.
-          </p>
-        )}
-
-        <p style={{ ...helpTextStyle, marginTop: "0.75rem" }}>
-          <strong>Connect with a code</strong> works on any installation, including one with no
-          address of its own: Allegro shows you a short code to confirm in your own browser.
-          {status.redirectUri ? (
-            <>
-              {" "}
-              <strong>Sign in on Allegro</strong> is one round trip instead, and needs this exact
-              redirect URI registered with your application:{" "}
-              <code style={codeStyle}>{status.redirectUri}</code>
-            </>
-          ) : (
-            <>
-              {" "}
-              Signing in on Allegro directly is not offered here, because this instance has no
-              configured address (<code style={codeStyle}>BETTER_AUTH_URL</code>) for Allegro to send
-              you back to.
-            </>
-          )}
-        </p>
+        </SettingsFieldCard>
       </div>
     </div>
+  );
+}
+
+/**
+ * Where the connection stands, in the words the summary strip's tile uses (`allegro-summary.ts`) —
+ * the tile flags the same two states this line reddens or leaves plain.
+ */
+function ConnectionState({
+  status,
+  state,
+  lastRefreshedAt,
+  expiresAt,
+}: {
+  status: AllegroConnectionStatus;
+  state: ReturnType<typeof allegroConnectionState>;
+  lastRefreshedAt: string;
+  expiresAt: string;
+}) {
+  const words = ALLEGRO_CONNECTION_WORDS[state];
+  if (state === "needs-reconnect") {
+    return (
+      <p style={{ ...helpTextStyle, margin: 0, color: "var(--color-error)" }}>
+        <strong>{words}.</strong> {status.lastError ?? "The stored grant no longer works."}
+      </p>
+    );
+  }
+  if (state === "not-connected") {
+    return (
+      <p style={{ ...helpTextStyle, margin: 0 }}>
+        <strong>{words}.</strong>
+        {!status.configured && " Save the application first."}
+      </p>
+    );
+  }
+  return (
+    <p style={{ ...helpTextStyle, margin: 0 }}>
+      <strong>{words}</strong>
+      {status.accountLogin ? (
+        <>
+          {" "}
+          as <strong>{status.accountLogin}</strong>
+        </>
+      ) : (
+        // No name is not an unknown state — it is an application without profile access, which
+        // every other thing this connection is for works fine without.
+        <>
+          {" "}
+          <InfoHint>
+            The application has no profile access, so Allegro does not say which account this is.
+          </InfoHint>
+        </>
+      )}
+      {status.sandbox ? " (sandbox)" : ""}. Token last refreshed {lastRefreshedAt}; it expires{" "}
+      {expiresAt} and is renewed automatically before then.
+    </p>
   );
 }

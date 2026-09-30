@@ -28,8 +28,7 @@ const SOURCES: Partial<Record<SettingsEntryKey, readonly string[]>> = {
   bids: ["settings-panel.tsx"],
   duplicates: ["duplicates-panel.tsx"],
   allegro: [
-    "settings-screen.tsx",
-    "allegro-platform-panel.tsx",
+    "allegro-settings-page.tsx",
     "allegro-connection-panel.tsx",
     "allegro-profiles-panel.tsx",
     "allegro-categories-panel.tsx",
