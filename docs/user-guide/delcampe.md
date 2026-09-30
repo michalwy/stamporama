@@ -6,13 +6,32 @@ every other platform's: the title and description come from that platform contac
 photo plan. What is different is how a listing gets there — Delcampe takes an uploaded file rather
 than a form filled in by the browser extension.
 
-Everything on this page lives under **Settings → Delcampe**.
+Everything on this page is set up under **Settings → Delcampe**.
+
+## The Delcampe page
+
+**Settings → Delcampe** has the platform choice at the top right, beside the page title, and two
+tabs under a strip of figures:
+
+- **Listing profiles** — what your upload rows carry; see [Listing profiles](#listing-profiles).
+  This is the tab the page opens on.
+- **Categories** — what finishing offers has taught Stamporama, and the state of Delcampe's own
+  category list; see [Categories](#categories).
+
+The strip above the tabs says where each stands — how many profiles you have and which is the
+default, how many kinds of stamp have a category mapped, and whether Delcampe's list has been read
+on this instance and when — and clicking a figure opens its tab. There is no account to connect:
+Delcampe listings go up as a file you upload yourself.
+
+Hover the ⓘ beside a heading or a field for what it means; the sections below say the same at
+length.
 
 ## Which platform is Delcampe
 
-The first setting on the tab, and the one everything else hangs off. Pick the contact you use for
-Delcampe — it needs the **Platform** role (see [Contacts](contacts.md)) — and its currency, listing
-templates and photo limits are set on the contact itself, exactly as for any other platform.
+The choice at the top of the page, and the one everything else hangs off. Pick the contact you use
+for Delcampe — it needs the **Platform** role (see [Contacts](contacts.md)) — and its currency,
+listing templates and photo limits are set on the contact itself, exactly as for any other platform.
+Until you pick one, both tabs say so.
 
 Only one platform can be Delcampe at a time. Naming it does **not** switch the
 [Assistant](assistant.md) on: there is no Delcampe form for the extension to fill, so no
@@ -31,6 +50,12 @@ An upload row states a few things no offer knows about itself:
 A **listing profile** is one answer to all four at once. One profile is the platform's *default* —
 what every listing goes up with — and an offer can name a different one. That is what the second
 profile is for: the standard letter for most lots, something heavier and tracked for the rest.
+
+The **Listing profiles** tab lists your profiles on the left, with the chosen one's settings beside
+them. Click a profile to open it, change what you need and **Save**; **Revert** puts back what was
+saved, and leaving a profile with unsaved changes asks first. **Add profile**, at the top right,
+opens an empty one. The radio button in front of a profile makes it the default. A profile tagged
+**No auctions** does not yet say how long an auction runs — see [Auctions](#auctions).
 
 ### The shipping model is a name, and it has to be exact
 
@@ -83,7 +108,8 @@ dearer ones. Where exactly it changes was never confirmed, so it is a setting ra
 buried in the code: a **threshold price**, the step used **below** it, and the step used **at or
 above** it. A listing priced exactly at the threshold takes the larger step.
 
-The line under the fields reads the rule back to you in the form it will be applied. If you ever see
+The line under the fields reads the rule back to you in the form it will be applied, as it is
+typed. If you ever see
 a Delcampe listing state a different step, correct the threshold here.
 
 ## Categories
@@ -119,9 +145,10 @@ category in its own right *and* has categories under it.
 
 The list you are searching is **Delcampe's own**, read from the page Delcampe publishes it on.
 Delcampe has no interface for this that Stamporama can use, so the list is fetched once a day and
-kept locally. Settings → Delcampe says how many categories it holds and when it last read them, and
-has a button to read them again — worth pressing when you have just set the instance up, since until
-the first read there is nothing to search.
+kept locally. The **Categories** tab of Settings → Delcampe says, beside what has been learned, how
+many categories the list holds and when it was last read, and has a **Read it now** button — worth
+pressing when you have just set the instance up, since until the first read the picker searches the
+list this release was built with.
 
 A **number you type is always accepted**, whether or not it is in that list. Delcampe's own selling
 form is the authority; a category created since the last read still works.
@@ -134,7 +161,7 @@ On the offer: **Change category** picks a different one for this offer only, and
 throws that away and asks the register what it says now. Use the first when this particular lot is
 the exception — a souvenir sheet among singles is exactly that.
 
-Under Settings → Delcampe: the **Categories** panel lists what has been learned, and a row can be
+Under Settings → Delcampe: the **Categories** tab lists what has been learned, and a row can be
 pointed at a different category or forgotten. Use this when the *rule* is wrong rather than the one
 offer. A re-pointed row starts its count again, since the new category is one nothing has been
 uploaded into yet.
@@ -340,6 +367,7 @@ moment the file went up.
 
 ## Deleting a profile
 
-Nothing blocks it. Offers that named it fall back to the platform's default, and Stamporama tells
+**Delete**, at the foot of the profile on the Listing profiles tab. Nothing blocks it. Offers that
+named it fall back to the platform's default, and Stamporama tells
 you how many did. If you delete the **default**, the platform is left without one — no other profile
 is promoted in its place, because which settings your next upload carries is your decision.

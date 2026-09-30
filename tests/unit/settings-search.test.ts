@@ -34,8 +34,7 @@ const SOURCES: Partial<Record<SettingsEntryKey, readonly string[]>> = {
     "allegro-categories-panel.tsx",
   ],
   delcampe: [
-    "settings-screen.tsx",
-    "delcampe-platform-panel.tsx",
+    "delcampe-settings-page.tsx",
     "delcampe-profiles-panel.tsx",
     "delcampe-categories-panel.tsx",
   ],

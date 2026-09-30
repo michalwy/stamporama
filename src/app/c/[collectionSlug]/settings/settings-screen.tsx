@@ -48,9 +48,7 @@ import { ColnectAttributesPanel } from "./colnect-attributes-panel";
 import { ColnectPlatformPanel } from "./colnect-platform-panel";
 import { ColnectListsPanel } from "./colnect-lists-panel";
 import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
-import { DelcampePlatformPanel } from "./delcampe-platform-panel";
-import { DelcampeProfilesPanel } from "./delcampe-profiles-panel";
-import { DelcampeCategoriesPanel } from "./delcampe-categories-panel";
+import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
 import { PhilasearchPlatformPanel } from "./philasearch-platform-panel";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
@@ -201,7 +199,7 @@ const sectionHeadingStyle: React.CSSProperties = {
  * column (`UNSHAPED_PAGE_WIDTH`). The dictionaries are list beside detail — the Catalog group's with
  * #1471, the rest with #1476; Album templates and Ref card templates are list beside preview (#1474,
  * #1478); the plain forms are the grid of fields (#1473); Allegro is a summary strip over three tabs
- * (#1475).
+ * (#1475), Delcampe over two (#1479).
  */
 const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "catalogs",
@@ -225,6 +223,7 @@ const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "duplicates",
   "philasearch",
   "allegro",
+  "delcampe",
   "bids",
 ]);
 
@@ -365,6 +364,15 @@ function entrySummary(
           connection={props.allegroConnection}
           profiles={props.allegroListingProfiles}
           categories={props.allegroLearnedCategories}
+          active={part}
+          onOpen={choosePart}
+        />
+      );
+    case "delcampe":
+      return (
+        <DelcampeSummary
+          profiles={props.delcampeListingProfiles}
+          categories={props.delcampeLearnedCategories}
           active={part}
           onOpen={choosePart}
         />
@@ -884,26 +892,14 @@ function SettingsEntryBody({
       );
     case "delcampe":
       return (
-        <section>
-          {/* The same question the other two marketplace pages lead with (#608). Delcampe has no
-              connection half to follow it: listings go up as an uploaded file, so what comes after
-              naming the platform is what that file's rows carry. */}
-          <h3 style={sectionHeadingStyle}>Delcampe platform</h3>
-          <DelcampePlatformPanel
-            collectionId={collectionId}
-            platforms={platformContacts}
-            selectedId={delcampePlatformId}
-          />
-
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Listing profiles</h3>
-          <DelcampeProfilesPanel collectionId={collectionId} list={delcampeListingProfiles} />
-
-          {/* Third and last, for the Allegro page's reason (#609): a profile is what the collector
-              configures, and this is what the app has learned — read here only to be corrected, and
-              to say how current Delcampe's own category list is. */}
-          <h3 style={{ ...sectionHeadingStyle, marginTop: "2rem" }}>Categories</h3>
-          <DelcampeCategoriesPanel list={delcampeLearnedCategories} />
-        </section>
+        <DelcampeSettingsBody
+          part={part}
+          collectionId={collectionId}
+          platforms={platformContacts}
+          platformId={delcampePlatformId}
+          profiles={delcampeListingProfiles}
+          categories={delcampeLearnedCategories}
+        />
       );
     case "philasearch":
       // The whole page (#742): a marketplace this collection only bids on needs nothing else.

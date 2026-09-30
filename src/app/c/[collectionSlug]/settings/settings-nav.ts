@@ -9,6 +9,7 @@
 import { SECTION_LABELS, SECTION_TINTS, type SectionKey } from "../nav-sections";
 import { STAMP_ATTRIBUTE_KINDS, STAMP_ATTRIBUTE_LABELS } from "@/lib/stamp-attribute-kinds";
 import { ALLEGRO_SETTINGS_PARTS } from "./allegro-summary";
+import { DELCAMPE_SETTINGS_PARTS } from "./delcampe-summary";
 
 /**
  * The groups mirror the sidebar's sections, **in their tints** (#1465): a collector looking for the
@@ -226,6 +227,7 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "selling",
     label: "Delcampe",
     hint: "Which platform is Delcampe, and what the rows of an upload file carry.",
+    parts: DELCAMPE_SETTINGS_PARTS,
   },
   {
     key: "philasearch",

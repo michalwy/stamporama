@@ -87,12 +87,11 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
       words: ["learned"],
     },
   ],
+  // The header's platform choice is found on the first tab; the tabs themselves come from `parts`.
   delcampe: [
     { label: "Delcampe platform" },
-    { label: "Listing profiles" },
-    { label: "Categories" },
-    { label: "Delcampe’s own category list" },
-    { label: "What each kind of stamp was uploaded as" },
+    { label: "Delcampe’s own category list", part: "categories" },
+    { label: "What each kind of stamp was uploaded as", part: "categories", words: ["learned"] },
   ],
   philasearch: [{ label: "Philasearch platform" }],
   acceptance: [],
