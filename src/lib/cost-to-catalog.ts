@@ -9,15 +9,19 @@
 // valued into it. A lot whose pool cannot be stated in it has no figure — it is never compared
 // across two currencies.
 //
-// Three rules, settled with the collector on 2026-09-26:
+// Three rules, settled with the collector on 2026-09-26 (the second amended for the order on
+// 2026-09-30, #1510):
 //
 //  - **Only the copies the cost is split over count.** A not-delivered copy's share went to the
 //    others (ADR-0009 §5), so it is out of both sides; a damaged or since-disposed one stays in,
 //    the money having been spent on it.
 //  - **An open lot is an estimate** — its cost has not been frozen onto copies yet. Where some of its
 //    copies have no catalogue value, the whole pool against the value of the rest is an **upper
-//    bound**, not a figure: pricing the others can only bring it down. Such a lot says so, and the
-//    order leaves it out of its own figure, which then says how many copies it is over.
+//    bound**, not a figure: pricing the others can only bring it down. Such a lot says so, and so
+//    does an order with such a lot behind its figure — the lot is counted, not left out (#1510): an
+//    order being sorted is one whose lots are all in that state, and it is when the collector
+//    looks. A lot with **no** figure is still left out, and the order says how many copies it is
+//    over.
 //  - **A copy's own figure is shown only where it differs from its lot's.** The pool is split by the
 //    very catalogue value this compares against, so every copy of a lot shares its lot's figure by
 //    construction; one only drifts from it when its catalogue value has changed since the lot was
@@ -104,6 +108,9 @@ export interface CostToCatalog {
   copyCount: number;
   /** Copies in scope with no catalogue value. */
   unpricedCount: number;
+  /** Copies in lots with no figure of their own, which the order's figure leaves out — always 0 on a
+   * lot's. */
+  noFigureCount: number;
 }
 
 /** A lot as the figure needs it, beside its copies' basis. */
@@ -128,6 +135,7 @@ export function lotCostToCatalog(lot: CostToCatalogLot): CostToCatalog | null {
       coveredCount: basis.copyCount - basis.unpricedCount,
       copyCount: basis.copyCount,
       unpricedCount: basis.unpricedCount,
+      noFigureCount: 0,
     };
   }
   if (basis.frozenValue <= 0) return null;
@@ -138,37 +146,46 @@ export function lotCostToCatalog(lot: CostToCatalogLot): CostToCatalog | null {
     coveredCount: basis.frozenCount,
     copyCount: basis.copyCount,
     unpricedCount: basis.unpricedCount,
+    noFigureCount: 0,
   };
 }
 
-/** The order's figure: every lot's that is a figure, summed. A lot whose own is only an upper bound
- * — or that has none — is left out, and its copies are what `coveredCount` then falls short by. An
- * order with any open lot behind the figure is an estimate. */
+/** The order's figure: every lot's figure, summed. With any lot behind it only an upper bound, the
+ * order's is one too (#1510), its unpriced count being the order's; otherwise it is an estimate while
+ * any lot behind it is open. A lot with no figure at all is left out, and its copies are what
+ * `coveredCount` then falls short by (`noFigureCount`). */
 export function orderCostToCatalog(lots: CostToCatalogLot[]): CostToCatalog | null {
   let cost = 0;
   let value = 0;
   let coveredCount = 0;
   let copyCount = 0;
   let unpricedCount = 0;
+  let noFigureCount = 0;
   let estimate = false;
+  let atMost = false;
   for (const lot of lots) {
     copyCount += lot.basis.copyCount;
     unpricedCount += lot.basis.unpricedCount;
     const r = lotCostToCatalog(lot);
-    if (!r || r.kind === "at_most") continue;
+    if (!r) {
+      noFigureCount += lot.basis.copyCount;
+      continue;
+    }
     cost += r.cost;
     value += r.value;
     coveredCount += r.coveredCount;
     if (r.kind === "estimate") estimate = true;
+    if (r.kind === "at_most") atMost = true;
   }
   if (value <= 0) return null;
   return {
-    kind: estimate ? "estimate" : "settled",
+    kind: atMost ? "at_most" : estimate ? "estimate" : "settled",
     cost,
     value,
     coveredCount,
     copyCount,
     unpricedCount,
+    noFigureCount,
   };
 }
 

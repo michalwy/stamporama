@@ -343,14 +343,18 @@ cost too small to reach one reads `<1%` rather than `0%`.
 - **An open lot with copies still unpriced** says *at most 40% of catalog (3 unpriced)*: the lot's
   whole cost against only the copies that have a price is an upper bound, and pricing the rest can
   only bring it down.
-- **The order's** percentage adds up its lots' figures — only the lots that have one. A lot whose
-  figure is only an *at most*, or that has none, is left out, and the percentage then says how many
-  copies it is over (*over 812 of 1227 copies*). While any lot behind it is open, it is an estimate
-  too. Non-inventory expenses are not part of it: they are not what the copies cost.
+- **The order's** percentage adds up its lots' figures, the *at most* ones included. While any lot
+  behind it is only an *at most*, the order's is one too — *at most 35% of catalog (12 unpriced)*,
+  counting the unpriced copies across the whole order — so an order you are still sorting has a
+  figure from the first copy you price. Once every copy is priced it is an ordinary percentage; while
+  any lot behind it is open, it is an estimate. A lot with no figure at all — no copy with a catalog
+  value, or no rate to your base currency — is left out, and the percentage then says how many copies
+  it is over (*over 812 of 1227 copies*). Non-inventory expenses are not part of it: they are not what
+  the copies cost.
 - **With no catalog value at all** there is no percentage — never `0%`.
 - A copy that **never arrived** is out of the figure; its share of the cost went to the others.
 
-Hover the percentage for the two amounts behind it.
+Hover the percentage for the two amounts behind it, and on an *at most* how many copies are unpriced.
 
 **A copy's own percentage appears only where it differs from its lot's.** A lot's cost is split
 across its copies by their catalog value, so every copy costs the same share of its catalogue as the

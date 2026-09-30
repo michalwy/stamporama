@@ -1078,7 +1078,8 @@ export function PurchaseDetailPanel({
     // under it would state something untrue. Its opening value leads instead (#1325).
     spend: openingBalance ? undefined : purchase.spend,
     openingValue: purchase.openingValue ?? undefined,
-    // What the order cost as a share of catalogue (#1395), over the lots whose own figure is one.
+    // What the order cost as a share of catalogue (#1395), over every lot with a figure of its own —
+    // an upper bound when any of those is (#1510).
     costToCatalog:
       orderSummary && !openingBalance
         ? orderCostToCatalog(

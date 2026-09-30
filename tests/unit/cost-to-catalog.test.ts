@@ -15,7 +15,8 @@ import {
 // What a purchase cost as a share of its copies' catalogue value (#1395). The cases pinned here are
 // the ones a reader could not tell apart on screen: a partly priced scope said over only its priced
 // copies, an unpriced one with no figure at all, an open lot with unpriced copies stated as an upper
-// bound and kept out of the order's figure, and a copy's own figure appearing only where it differs.
+// bound and making the order's figure one too (#1510), and a copy's own figure appearing only where it
+// differs.
 
 const copy = (
   catalogValue: number | null,
@@ -125,16 +126,56 @@ describe("orderCostToCatalog", () => {
     assert.equal(formatCostPercent(costPercent(r!)), "23%");
   });
 
-  it("leaves out a lot whose own figure is only an upper bound, and says how many copies it covers", () => {
+  it("is an upper bound when every lot's own figure is one, counting the order's unpriced copies", () => {
+    const r = orderCostToCatalog([
+      openLot(20, [copy(40), copy(null)]),
+      openLot(15, [copy(60), copy(null), copy(null)]),
+    ]);
+    assert.equal(r?.kind, "at_most");
+    assert.equal(r?.cost, 35);
+    assert.equal(r?.value, 100);
+    assert.equal(formatCostPercent(costPercent(r!)), "35%");
+    assert.equal(r?.unpricedCount, 3);
+    assert.equal(r?.coveredCount, 2);
+    assert.equal(r?.copyCount, 5);
+    assert.equal(r?.noFigureCount, 0);
+  });
+
+  it("counts a lot whose own figure is only an upper bound beside full ones, and is one too", () => {
     const r = orderCostToCatalog([
       closedLot([copy(100, 30)]),
-      openLot(500, [copy(10), copy(null)]),
+      openLot(10, [copy(100)]),
+      openLot(20, [copy(50), copy(null)]),
     ]);
-    assert.equal(r?.kind, "settled");
-    assert.equal(r?.cost, 30);
-    assert.equal(r?.value, 100);
+    assert.equal(r?.kind, "at_most");
+    assert.equal(r?.cost, 60);
+    assert.equal(r?.value, 250);
+    assert.equal(formatCostPercent(costPercent(r!)), "24%");
+    assert.equal(r?.unpricedCount, 1);
+    assert.equal(r?.coveredCount, 3);
+    assert.equal(r?.copyCount, 4);
+  });
+
+  it("still leaves out a lot with no figure at all, and counts its copies", () => {
+    const r = orderCostToCatalog([
+      openLot(20, [copy(40), copy(null)]),
+      openLot(null, [copy(30), copy(30)]),
+      openLot(5, [copy(null)]),
+    ]);
+    assert.equal(r?.kind, "at_most");
+    assert.equal(r?.cost, 20);
+    assert.equal(r?.value, 40);
     assert.equal(r?.coveredCount, 1);
-    assert.equal(r?.copyCount, 3);
+    assert.equal(r?.copyCount, 5);
+    assert.equal(r?.unpricedCount, 2);
+    assert.equal(r?.noFigureCount, 3);
+
+    const settled = orderCostToCatalog([closedLot([copy(100, 30)]), openLot(null, [copy(30)])]);
+    assert.equal(settled?.kind, "settled");
+    assert.equal(settled?.cost, 30);
+    assert.equal(settled?.coveredCount, 1);
+    assert.equal(settled?.copyCount, 2);
+    assert.equal(settled?.noFigureCount, 1);
   });
 
   it("has no figure when no lot has one", () => {

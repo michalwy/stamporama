@@ -427,8 +427,10 @@ function SpendRow({
  *
  * An estimate is marked as one in #238's vocabulary, `~` and muted italic: an open lot's cost has not
  * been frozen onto its copies. An open lot with unpriced copies is only an **upper bound** and says
- * *at most*, with how many are unpriced; a figure over fewer copies than the scope holds says how
- * many it is over. The amounts behind it are in the tooltip.
+ * *at most*, with how many are unpriced — and so does an order with such a lot behind its figure,
+ * counting the order's unpriced copies (#1510). A figure over fewer copies than the scope holds says
+ * how many it is over; on an *at most* one only a lot left out of it entirely does, the unpriced
+ * count already saying the rest. The amounts behind it are in the tooltip.
  */
 function CostToCatalogNote({
   ratio,
@@ -446,24 +448,28 @@ function CostToCatalogNote({
     ratio.kind === "at_most"
       ? `at most ${pct} of catalog`
       : `${settled ? "" : "~"}${pct} of catalog`;
+  const over = `over ${ratio.coveredCount} of ${ratio.copyCount} ${copiesWord(ratio.copyCount)}`;
   const coverage =
     ratio.kind === "at_most"
-      ? `${ratio.unpricedCount} unpriced`
+      ? `${ratio.unpricedCount} unpriced${ratio.noFigureCount > 0 ? `, ${over}` : ""}`
       : ratio.coveredCount < ratio.copyCount
-        ? `over ${ratio.coveredCount} of ${ratio.copyCount} ${copiesWord(ratio.copyCount)}`
+        ? over
         : null;
   const amounts = `${ratio.cost.toFixed(2)} ${currency} against ${ratio.value.toFixed(2)} ${currency} of catalog value`;
   const scope = lot ? "this lot" : "this order";
   const tooltip =
     ratio.kind === "at_most"
-      ? `An upper bound: ${ratio.unpricedCount} ${copiesWord(ratio.unpricedCount)} in ${scope} have no catalog price yet, and pricing them can only bring it down — ${amounts}.`
+      ? `An upper bound: ${ratio.unpricedCount} ${copiesWord(ratio.unpricedCount)} in ${scope} have no catalog price yet, and pricing ${lot ? "them" : "those in its open lots"} can only bring it down — ${amounts}.`
       : ratio.kind === "estimate"
         ? `An estimate: ${lot ? "the lot is" : "some of its lots are"} still open, so the cost is not yet frozen onto copies — ${amounts}.`
         : `What ${scope} cost as a share of its copies' catalog value — ${amounts}.`;
   const partial =
-    ratio.kind !== "at_most" && ratio.coveredCount < ratio.copyCount
-      ? ` Only copies with a catalog value${lot ? "" : ", in lots with every copy priced or closed,"} are counted.`
-      : "";
+    (ratio.kind !== "at_most" && ratio.coveredCount < ratio.copyCount
+      ? " Only copies with a catalog value are counted."
+      : "") +
+    (ratio.noFigureCount > 0
+      ? ` Lots with no figure of their own — no copy with a catalog value, or no exchange rate to ${currency} — are left out.`
+      : "");
   return (
     <Tooltip content={tooltip + partial}>
       <span style={{ color: "var(--color-text-muted)" }}>
