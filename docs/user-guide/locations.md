@@ -87,8 +87,9 @@ double line for you to cut down the middle of.
 
 The size of a ref card is set by the pocket it has to fit, so it is yours to state rather than ours
 to guess. Keep your sizes as named **ref card templates** under **Settings → Ref card templates**, and pick
-one from the **Card format** control above the sheet. A template holds four measurements, all in
-millimetres:
+one from the **Card format** control above the sheet; that page shows each template's card as it will
+print ([Ref card templates](collections.md#ref-card-templates)). A template holds four measurements,
+all in millimetres:
 
 - **Card width** and **Card height** — the card you actually cut, measured against the transport
   card it slips into.

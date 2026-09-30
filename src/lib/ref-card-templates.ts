@@ -75,14 +75,19 @@ function rethrowNameClash(err: unknown, name: string): never {
   throw err;
 }
 
+/** Returns the new template's id, which the Settings page selects (#1478). */
 export async function createRefCardTemplate(
   ownerId: string,
   collectionId: string,
   data: RefCardTemplateInput
-): Promise<void> {
+): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   try {
-    await prisma.refCardTemplate.create({ data: { collectionId, ...data } });
+    const created = await prisma.refCardTemplate.create({
+      data: { collectionId, ...data },
+      select: { id: true },
+    });
+    return created.id;
   } catch (err) {
     rethrowNameClash(err, data.name);
   }

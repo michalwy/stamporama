@@ -1132,6 +1132,18 @@ the Locations screen, in millimetres. See
 [Printing blank ref cards → Card formats](locations.md#card-formats) for what each measurement means
 and how the sheet uses it.
 
+The page lists your templates on the left, each with its size, its ref size and its top padding.
+Click one and the right side shows **its card**: one card at its own proportions, carrying a sample
+ref, drawn by the same rules the sheet prints with — only enlarged to fit, and the line under it says
+by how much. Its measurements are above it. The selected template is in the page's address, so a
+reload or a bookmark comes back to it.
+
+**Edit…** above the card, or in a template's **⋮**, opens the editor: the name and the four
+measurements on the left, the same card on the right, redrawn as you type. A value the template
+could not be saved with — a field left empty, or a ref that no longer fits on the card — leaves the
+last card drawn and says why beneath it. **Add template** at the top of the page starts a new one
+from the built-in card's measurements, and the template you add is the one shown next.
+
 The difference worth knowing here: a collage template is **copied** onto an offer when you pick it,
 while a ref card template is read as the sheet prints and copied nowhere. Nothing about a printed
 sheet is recorded, so editing or deleting one of these changes only what you print next.
