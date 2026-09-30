@@ -6,6 +6,7 @@ import {
   duplicateCollageTemplate,
   getCollageTemplates,
 } from "../../src/lib/collage-templates";
+import type { CollageTemplateInput } from "../../src/lib/collage-template-rules";
 
 // The Collage templates page in Settings (#1477): a template is created and duplicated with its id
 // handed back, so the page can select what it just made.
@@ -24,7 +25,7 @@ describe("collage template duplicate (#1477)", () => {
   let collectionId: string;
   let sourceId: string;
 
-  const values = {
+  const values: Omit<CollageTemplateInput, "name"> = {
     gridMode: "auto",
     pairSides: true,
     rows: 4,
@@ -84,8 +85,18 @@ describe("collage template duplicate (#1477)", () => {
     const second = templates.find((t) => t.id === secondId)!;
     assert.equal(first.name, "Definitives (copy)");
     assert.equal(second.name, "Definitives (copy 2)");
-    const { id: _id, name: _name, ...copied } = first;
-    assert.deepEqual(copied, values);
+    assert.deepEqual(
+      {
+        gridMode: first.gridMode,
+        pairSides: first.pairSides,
+        rows: first.rows,
+        columns: first.columns,
+        gapPercent: first.gapPercent,
+        background: first.background,
+        labelPercent: first.labelPercent,
+      },
+      values
+    );
   });
 
   it("leaves the source alone when the copy is edited", async () => {
