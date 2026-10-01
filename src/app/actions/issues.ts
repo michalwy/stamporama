@@ -668,10 +668,14 @@ export async function addStampRangeToIssueAction(
 
   // The size preset chosen in the dialog (#807), or none: an empty value is the control left alone.
   const sizePresetId = ((formData.get("sizePresetId") as string | null) ?? "").trim() || null;
+  // The checklist the run joins when it was added from that checklist's branch (#1520); absent, the
+  // issue's first, as ever.
+  const checklistId = ((formData.get("checklistId") as string | null) ?? "").trim() || null;
 
   try {
     await addStampRangeToIssue(session.user.id, collectionId, issueId, built.input, {
       sizePresetId,
+      checklistId,
     });
     return { status: "success", issueId };
   } catch {

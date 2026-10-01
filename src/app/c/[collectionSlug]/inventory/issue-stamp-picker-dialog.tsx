@@ -11,6 +11,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import {
   buildStampTree,
+  filterStampTreeByChecklists,
   type VendorMap,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { useIssueMembers } from "./use-inventory-query";
@@ -23,6 +24,9 @@ export interface IssuePickerContext {
   name: string | null;
   year: number | null;
   collectionAreaId: string;
+  /** Offer only this checklist's stamps — adding a copy from a checklist's branch (#1520). The
+   *  branch's own narrowing, so an unlisted base a listed variant hangs under is still drawn. */
+  checklist?: { id: string; name: string };
 }
 
 /** Popup stamp/variant tree scoped to a single issue, for adding a copy from the issue list
@@ -45,7 +49,12 @@ export function IssueStampPickerDialog({
 }) {
   const { data: members = [], isLoading } = useIssueMembers(collectionId, issue.id);
 
-  const tree = useMemo(() => buildStampTree(members), [members]);
+  const tree = useMemo(
+    () =>
+      filterStampTreeByChecklists(buildStampTree(members), issue.checklist ? [issue.checklist.id] : [])
+        .tree,
+    [members, issue.checklist]
+  );
 
   const vendorMap = useMemo<VendorMap>(
     () =>
@@ -94,7 +103,9 @@ export function IssueStampPickerDialog({
 
   return createPortal(
     <DialogShell
-      title={`Select a stamp · ${issue.name ?? "(unnamed issue)"}`}
+      title={`Select a stamp · ${issue.name ?? "(unnamed issue)"}${
+        issue.checklist ? ` — ${issue.checklist.name}` : ""
+      }`}
       onClose={onClose}
       maxWidth="min(94vw, 56rem)"
       height={PICKER_DIALOG_HEIGHT}
@@ -103,7 +114,9 @@ export function IssueStampPickerDialog({
         {isLoading ? (
           <p style={HINT_STYLE}>Loading stamps…</p>
         ) : tree.length === 0 ? (
-          <p style={HINT_STYLE}>This issue has no stamps yet.</p>
+          <p style={HINT_STYLE}>
+            {issue.checklist ? "This checklist has no stamps yet." : "This issue has no stamps yet."}
+          </p>
         ) : (
           tree.map((treeNode, i) => (
             <SelectableStampNode

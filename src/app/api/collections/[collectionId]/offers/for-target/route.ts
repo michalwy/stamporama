@@ -3,9 +3,10 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listOffersForTarget, type OfferLookupTarget } from "@/lib/offers";
 
-// Every offer referencing a copy of one target — a copy, a stamp, or an issue (#276, #349) — across
-// all platforms and all states, for the read-only "View offers" popup. Unpaginated: a target sits on
-// a handful of listings at most. A static segment, so it takes precedence over `[offerId]`.
+// Every offer referencing a copy of one target — a copy, a stamp, an issue (#276, #349) or one of
+// its checklists (#1520) — across all platforms and all states, for the read-only "View offers"
+// popup. Unpaginated: a target sits on a handful of listings at most. A static segment, so it takes
+// precedence over `[offerId]`.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -20,6 +21,7 @@ export async function GET(
   const itemId = sp.get("itemId");
   const stampId = sp.get("stampId");
   const issueId = sp.get("issueId");
+  const checklistId = sp.get("checklistId");
 
   // Exactly one target, narrowest first. No target at all is answered as "nothing to show" rather
   // than as an error — the popup is a read.
@@ -29,7 +31,9 @@ export async function GET(
       ? { kind: "stamp", stampId }
       : issueId
         ? { kind: "issue", issueId }
-        : null;
+        : checklistId
+          ? { kind: "checklist", checklistId }
+          : null;
   if (!target) {
     return NextResponse.json({ items: [] });
   }

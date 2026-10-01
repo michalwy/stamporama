@@ -63,12 +63,16 @@ export function useAddIssueWantsAction({
   collectionId,
   issueId,
   checklistCount,
+  checklistId,
 }: {
   collectionId: string;
   issueId: string;
   /** The issue's checklists, counted — the row already knows, and an issue with none has nothing
    *  to want. */
   checklistCount: number;
+  /** Run it over this one checklist of the issue — from its branch on the Issues list (#1520), as
+   *  the completeness card does. */
+  checklistId?: string;
 }): { action: RowAction; dialog: React.ReactNode } {
   const [open, setOpen] = useState(false);
 
@@ -87,6 +91,7 @@ export function useAddIssueWantsAction({
     <AddIssueWantsDialog
       collectionId={collectionId}
       issueId={issueId}
+      checklistId={checklistId}
       onClose={() => setOpen(false)}
     />
   ) : null;

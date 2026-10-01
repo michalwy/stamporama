@@ -81,6 +81,8 @@ export interface InventoryItemFilters extends TagFilterOpts {
   stampId?: string;
   /** Restrict to copies of any stamp in an issue (issue-level inventory popup, #110). */
   issueId?: string;
+  /** Restrict to copies of a checklist's stamps (a checklist branch's copies popup, #1520). */
+  checklistId?: string;
   /** Restrict to copies stored in a location or its descendants (subtree, #56). */
   locationId?: string;
   /** Narrow {@link locationId} to that location alone, dropping its descendants (#385). */
@@ -210,6 +212,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
   if (filters.stampId) params.set("stampId", filters.stampId);
   if (filters.issueId) params.set("issueId", filters.issueId);
+  if (filters.checklistId) params.set("checklistId", filters.checklistId);
   if (filters.locationId) params.set("locationId", filters.locationId);
   if (filters.locationExact) params.set("locationExact", "true");
   if (filters.locationRef) params.set("locationRef", filters.locationRef);

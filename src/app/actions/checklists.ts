@@ -23,6 +23,8 @@ import {
   getSpanningChecklistOverview,
   type SpanningChecklistOverview,
 } from "@/lib/spanning-checklists";
+import { getIssueCompleteness } from "@/lib/checklist-completeness";
+import { headlineCompleteness } from "@/lib/checklist-completeness-rules";
 import type { RunChecklist } from "@/lib/issue-run";
 import type { TranslationValueMap } from "@/lib/translations";
 
@@ -48,6 +50,31 @@ export async function getChecklistsForIssueAction(
 ): Promise<ChecklistData[]> {
   const session = await getSession();
   return getChecklistsForIssue(session.user.id, collectionId, issueId);
+}
+
+/** How complete one checklist of an issue is, as its branch heading on the Issues list says it. */
+export interface ChecklistHeadline {
+  owned: number;
+  completeSets: number;
+}
+
+/**
+ * Each of an issue's checklists summed up by the issue page's own cell (#1278) — any disposition,
+ * any condition, every format — for the branch headings of the Issues list's tree mode (#1520). The
+ * same grid read, so a heading and the issue page cannot disagree.
+ */
+export async function getIssueChecklistHeadlinesAction(
+  collectionId: string,
+  issueId: string
+): Promise<Record<string, ChecklistHeadline>> {
+  const session = await getSession();
+  const { checklists } = await getIssueCompleteness(session.user.id, collectionId, issueId);
+  return Object.fromEntries(
+    checklists.map((grid) => {
+      const { owned, completeSets } = headlineCompleteness(grid);
+      return [grid.checklistId, { owned, completeSets }];
+    })
+  );
 }
 
 /** One checklist as a run of scan tiles reads it (#1225) — its stamps in its own order and the

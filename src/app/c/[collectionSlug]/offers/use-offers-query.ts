@@ -260,7 +260,9 @@ export function useOffersForTarget(
       ? { itemId: target.itemId }
       : target.kind === "stamp"
         ? { stampId: target.stampId }
-        : { issueId: target.issueId };
+        : target.kind === "issue"
+          ? { issueId: target.issueId }
+          : { checklistId: target.checklistId };
   return useQuery<OfferListItem[]>({
     queryKey: ["offers", collectionId, "for-target", param] as const,
     queryFn: async () => {

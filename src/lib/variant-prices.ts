@@ -19,6 +19,7 @@ import { unpricedVariantCells, type CoverageVariant } from "./variant-price-cove
 import type { RawCatalogPrice } from "./catalog-price";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { roundAmount } from "./decimal-input";
+import { withIssueAncestors } from "./checklist-branches";
 
 // The variant price grid (#618): a grid over a **tree**, because that is the shape of the source.
 //
@@ -63,7 +64,15 @@ export type VariantPriceScope =
        */
       subtree?: boolean;
     }
-  | { kind: "issue"; issueId: string };
+  | {
+      kind: "issue";
+      issueId: string;
+      /**
+       * Draw only this checklist's stamps of the issue (#1520), with the ancestors they hang under —
+       * the rows of its branch on the Issues list, which is where the grid is opened from with it.
+       */
+      checklistId?: string;
+    };
 
 /**
  * The axes an **offer-opened** grid is narrowed to (#633): the `condition × certificate × format`
@@ -454,15 +463,29 @@ async function resolveScope(
     await assertCollectionOwner(ownerId, issue.collectionId);
     const members = await prisma.issueMember.findMany({
       where: { issueId: scope.issueId },
-      select: { stampId: true, sortOrder: true },
+      select: { stampId: true, sortOrder: true, stamp: { select: { parentId: true } } },
       orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
     });
+    const issueLabel = issue.name ?? (issue.year != null ? String(issue.year) : "(unnamed issue)");
+    const checklist = scope.checklistId
+      ? await prisma.checklist.findFirst({
+          where: { id: scope.checklistId, issueId: scope.issueId },
+          select: { name: true, stamps: { select: { stampId: true } } },
+        })
+      : null;
+    if (scope.checklistId && !checklist) throw new Error("Checklist not found.");
+    const inScope = checklist
+      ? withIssueAncestors(
+          members.map((m) => ({ stampId: m.stampId, parentId: m.stamp.parentId })),
+          new Set(checklist.stamps.map((s) => s.stampId))
+        )
+      : null;
+    const scoped = inScope ? members.filter((m) => inScope.has(m.stampId)) : members;
     return {
       collectionId: issue.collectionId,
-      stampIds: members.map((m) => m.stampId),
-      sortOrderByStamp: new Map(members.map((m) => [m.stampId, m.sortOrder])),
-      scopeLabelIssue:
-        issue.name ?? (issue.year != null ? String(issue.year) : "(unnamed issue)"),
+      stampIds: scoped.map((m) => m.stampId),
+      sortOrderByStamp: new Map(scoped.map((m) => [m.stampId, m.sortOrder])),
+      scopeLabelIssue: checklist ? `${issueLabel} — ${checklist.name}` : issueLabel,
       areaId: issue.collectionAreaId,
     };
   }

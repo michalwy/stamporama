@@ -40,6 +40,7 @@ import { ApplySizePresetDialog } from "./apply-size-preset-dialog";
 import type { TranslationValueMap } from "@/lib/translations";
 import { ChecklistNameDialog } from "./checklist-name-dialog";
 import { ChecklistUsageNote } from "./checklist-usage-note";
+import { useInvalidateStampsAndIssues } from "./use-invalidate-stamps-and-issues";
 
 // The checklists of one issue, edited from that issue's row (#531; ADR-0031). The anchor is never a
 // field: the screen this was opened from already answered "which issue", which is ADR-0020 §7's
@@ -402,6 +403,143 @@ export function ChecklistsDialog({
       )}
     </>
   );
+}
+
+/**
+ * One checklist's own actions, for a menu that is already *about* that checklist — its branch on the
+ * Issues list in tree mode (#1520). The same four `ChecklistsDialog` offers per row, opening the same
+ * editors over the same checklist, so a branch is a second way into one editor rather than a second
+ * editor: choose its stamps, order them, rename it with its translations, delete it.
+ *
+ * The checklist's full record (its translations, its stamp ids in order) is read only once one of
+ * them is chosen; the branch heading has the name and the count, and nothing more is needed to draw
+ * the menu.
+ */
+export function useChecklistEditActions(
+  scope: ChecklistsScope,
+  checklistId: string
+): { actions: RowAction[]; dialog: React.ReactNode } {
+  const { collectionId, issueId } = scope;
+  const queryClient = useQueryClient();
+  const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
+  const [isPending, startTransition] = useTransition();
+  const [editing, setEditing] = useState<"stamps" | "order" | "rename" | "delete" | null>(null);
+  const [error, setError] = useState<string | undefined>();
+
+  const queryKey = ["checklists", collectionId, issueId] as const;
+  const { data: checklists } = useQuery<ChecklistData[]>({
+    queryKey,
+    queryFn: () => getChecklistsForIssueAction(collectionId, issueId),
+    enabled: editing !== null,
+  });
+  const checklist = checklists?.find((c) => c.id === checklistId);
+
+  function close() {
+    if (isPending) return;
+    setEditing(null);
+    setError(undefined);
+  }
+
+  function run(fn: () => Promise<ChecklistActionState>, onDone: () => void) {
+    startTransition(async () => {
+      const result = await fn();
+      if (result.status === "success") {
+        setError(undefined);
+        void queryClient.invalidateQueries({ queryKey });
+        // The branch headings, the stamp rows' chips and the badge all read the issue's checklists,
+        // and a stamp row on the Stamps list names them too (#918).
+        void invalidateStampsAndIssues(collectionId);
+        void queryClient.invalidateQueries({ queryKey: ["checklistPriceDetails", collectionId] });
+        onDone();
+      } else if (result.status === "error") {
+        setError(result.message);
+      }
+    });
+  }
+
+  const actions: RowAction[] = [
+    { key: "checklist-stamps", label: "Choose stamps…", icon: "list", onSelect: () => setEditing("stamps") },
+    { key: "checklist-order", label: "Order stamps…", icon: "reorder", onSelect: () => setEditing("order") },
+    { key: "checklist-rename", label: "Rename…", icon: "edit", onSelect: () => setEditing("rename") },
+    {
+      key: "checklist-delete",
+      label: "Delete checklist",
+      icon: "delete",
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => setEditing("delete"),
+    },
+  ];
+
+  // Nothing is drawn until the record is here: every one of these editors starts from it.
+  const dialog =
+    editing && checklist ? (
+      editing === "stamps" ? (
+        <ChecklistStampsDialog
+          collectionId={collectionId}
+          issueId={issueId}
+          vendorMap={scope.vendorMap}
+          primaryVendorId={scope.primaryVendorId}
+          checklist={checklist}
+          isPending={isPending}
+          error={error}
+          onCancel={close}
+          onSave={(stampIds) =>
+            run(() => setChecklistStampsAction(checklist.id, stampIds), () => setEditing(null))
+          }
+        />
+      ) : editing === "order" ? (
+        <ChecklistStampOrderDialog
+          collectionId={collectionId}
+          issueId={issueId}
+          vendorMap={scope.vendorMap}
+          primaryVendorId={scope.primaryVendorId}
+          checklist={checklist}
+          isPending={isPending}
+          error={error}
+          onClose={close}
+          onReorder={(stampIds) =>
+            run(() => reorderChecklistStampsAction(checklist.id, stampIds), () => {})
+          }
+        />
+      ) : editing === "rename" ? (
+        <ChecklistNameDialog
+          collectionId={collectionId}
+          title="Rename checklist"
+          initial={checklist}
+          siblings={checklists ?? []}
+          siblingsLabel="on this issue"
+          isPending={isPending}
+          error={error}
+          onCancel={close}
+          onSubmit={(name, translations) =>
+            run(
+              () => renameChecklistAction(checklist.id, name, translations),
+              () => setEditing(null)
+            )
+          }
+        />
+      ) : (
+        <ConfirmDialog
+          title="Delete checklist"
+          message={
+            <>
+              Delete <strong>{checklist.name}</strong>? The stamps stay in the issue — only the goal
+              they were a set for goes, along with its completeness figures.
+              <ChecklistUsageNote checklistId={checklist.id} />
+            </>
+          }
+          actionLabel="Delete"
+          pendingLabel="Deleting…"
+          onClose={close}
+          onConfirm={() => run(() => deleteChecklistAction(checklist.id), () => setEditing(null))}
+          isPending={isPending}
+          error={error}
+        />
+      )
+    ) : null;
+
+  return { actions, dialog };
 }
 
 /**

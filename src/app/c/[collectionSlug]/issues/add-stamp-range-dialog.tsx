@@ -70,6 +70,9 @@ interface AddStampRangeDialogProps {
   collectionId: string;
   issueId: string;
   issueName: string;
+  /** The checklist the stamps join in place of the issue's first — a range added from that
+   *  checklist's branch on the Issues list (#1520). Named in the dialog; the caller sends it. */
+  checklistName?: string;
   areaId: string;
   vendors: AreaCatalogEntry[];
   primaryVendorId: string | null;
@@ -83,6 +86,7 @@ export function AddStampRangeDialog({
   collectionId,
   issueId,
   issueName,
+  checklistName,
   areaId,
   vendors,
   primaryVendorId,
@@ -222,7 +226,14 @@ export function AddStampRangeDialog({
         <DialogBody>
           <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
             Add stamps to <strong>{issueName}</strong> by catalog-number range. New stamps
-            join this issue as additional root nodes.
+            join this issue as additional root nodes
+            {checklistName ? (
+              <>
+                , on the checklist <strong>{checklistName}</strong>.
+              </>
+            ) : (
+              "."
+            )}
           </p>
 
           {sortedVendors.length === 0 ? (

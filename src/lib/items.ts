@@ -1047,6 +1047,9 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
   stampIds?: string[];
   /** Restrict to copies of any stamp belonging to an issue (issue-level inventory popup, #110). */
   issueId?: string;
+  /** Restrict to copies of the stamps a checklist lists — exactly, as {@link issueId} is exact —
+   *  for the copies popup a checklist's branch on the Issues list opens (#1520). */
+  checklistId?: string;
   /** Restrict to copies stored in this location or any of its descendants (#56). The literal
    *  {@link NO_LOCATION} matches the copies filed **nowhere** — null *is* a value here, exactly as
    *  `"single"` is for format, and an absent filter cannot express it. Needed to address the
@@ -1210,6 +1213,9 @@ function buildItemWhere(
     // issue group of copies belonging to no series addresses its own members with.
     stampWhere.issueMemberships =
       filters.issueId === NO_ISSUE ? { none: {} } : { some: { issueId: filters.issueId } };
+  }
+  if (filters.checklistId) {
+    stampWhere.checklistEntries = { some: { checklistId: filters.checklistId } };
   }
   if (filters.areaIds && filters.areaIds.length > 0) {
     // `NO_AREA` is a value on this axis, as `NO_ISSUE` is on the issue one (#1401): the copies whose

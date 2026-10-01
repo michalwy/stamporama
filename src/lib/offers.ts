@@ -2566,7 +2566,10 @@ const ITEM_OFFER_RANK: Record<OfferState, number> = {
 export type OfferLookupTarget =
   | { kind: "item"; itemId: string }
   | { kind: "stamp"; stampId: string }
-  | { kind: "issue"; issueId: string };
+  | { kind: "issue"; issueId: string }
+  /** The copies of a checklist's stamps (#1520) — its branch on the Issues list. Exact, as an
+   *  issue's are: a checklist lists the stamps it counts. */
+  | { kind: "checklist"; checklistId: string };
 
 /** The copies a target covers, as the `OfferSetItem` filter reaching them. A stamp matches
  * **exactly**, never rolled up from its variant children — the same rule the copies popup and the
@@ -2581,6 +2584,10 @@ function offerTargetItemWhere(target: OfferLookupTarget): Prisma.OfferSetItemWhe
     case "issue":
       return {
         item: { stamp: { issueMemberships: { some: { issueId: target.issueId } } } },
+      };
+    case "checklist":
+      return {
+        item: { stamp: { checklistEntries: { some: { checklistId: target.checklistId } } } },
       };
   }
 }
