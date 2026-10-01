@@ -327,7 +327,9 @@ describe("what a field marks on the preview", () => {
 
   it("outlines every text a face reaches, and nothing else", () => {
     const [sheet] = sheets();
-    assert.equal(albumFieldMarks("headingFace", sheet).length, sheet.headings.length);
+    // The first sheet is the sample's issue run (#1518): one issue heading, one checklist heading.
+    assert.equal(albumFieldMarks("headingFace", sheet).length, sheet.headings.filter((h) => h.role === "heading").length);
+    assert.equal(albumFieldMarks("subheadingFace", sheet).length, sheet.headings.filter((h) => h.role === "subheading").length);
     assert.equal(albumFieldMarks("labelSizePt", sheet).length, sheet.boxes.filter((b) => b.label).length);
     assert.equal(albumFieldMarks("chapterTemplate", sheet).length, sheet.chapter ? 1 : 0);
     assert.equal(albumFieldMarks("footerFace", sheet).length, sheet.footer ? 1 : 0);
@@ -414,10 +416,35 @@ describe("what the sub-heading's fields mark (#1509)", () => {
     const sheet = runSheet();
     assert.equal(albumFieldMarks("subheadingFace", sheet).length, 1);
     assert.equal(albumFieldMarks("subheadingSizePt", sheet).length, 1);
-    const [sample] = sheets();
-    assert.deepEqual(albumFieldMarks("subheadingFace", sample), []);
-    assert.deepEqual(albumFieldMarks("subheadingSpaceAboveMm", sample), []);
-    assert.deepEqual(albumFieldMarks("subheadingSpaceBelowMm", sample), []);
+    const [, plain] = sheets();
+    assert.deepEqual(albumFieldMarks("subheadingFace", plain), []);
+    assert.deepEqual(albumFieldMarks("subheadingSpaceAboveMm", plain), []);
+    assert.deepEqual(albumFieldMarks("subheadingSpaceBelowMm", plain), []);
+  });
+
+  it("marks every field of both headings on the sample's own issue run (#1518)", () => {
+    // The preview's sample, not a sheet built for the test: pointing at a field of either heading
+    // has to mark it on what the dialog actually draws.
+    const [run] = sheets();
+    const issue = run.headings.find((h) => h.role === "heading");
+    const checklist = run.headings.find((h) => h.role === "subheading");
+    assert.ok(issue && checklist, "the sample's first sheet carries an issue heading and a checklist heading");
+    for (const field of [
+      "headingSpaceAboveMm",
+      "headingSpaceBelowMm",
+      "headingFace",
+      "headingSizePt",
+      "subheadingSpaceAboveMm",
+      "subheadingSpaceBelowMm",
+      "subheadingFace",
+      "subheadingSizePt",
+    ] as const) {
+      assert.ok(albumFieldMarks(field, run).length > 0, `${field} marks nothing on the sample`);
+    }
+    const above = only(albumFieldMarks("subheadingSpaceAboveMm", run));
+    near(above.toMm, checklist.yMm, "the checklist heading's space above ends on it");
+    const below = only(albumFieldMarks("subheadingSpaceBelowMm", run));
+    near(below.fromMm, bottom(checklist), "and its space below starts under it");
   });
 
   it("keeps the checklist heading's space on a heading, not on a sub-heading", () => {

@@ -74,14 +74,16 @@ import {
 
 /** How many sheets the preview shows. Two, because a chapter heading, the space above a heading and
  *  a block that did not fit only show themselves across a page boundary — and the sample produces
- *  exactly two by having two chapters, so no pagination is built for it (#795). */
-export const ALBUM_PREVIEW_SHEETS = 2;
+ *  them by having chapters, so no pagination is built for it (#795). Three since #1518: an issue
+ *  printed as two checklists is on none of his 1950–1951 pages and fits on neither sheet, so it is a
+ *  chapter of its own, and a real album is shown as far as its third sheet too. */
+export const ALBUM_PREVIEW_SHEETS = 3;
 
 /** What the dialog draws, and everything it has to be able to say about where the sheet came from. */
 export interface AlbumTemplatePreview {
   sheets: AlbumEditorSheet[];
-  /** How many sheets the whole plan has, so the dialog can say it is showing the first two of nine
-   *  rather than implying the album is two pages long. */
+  /** How many sheets the whole plan has, so the dialog can say it is showing the first three of nine
+   *  rather than implying the album is three pages long. */
   totalSheets: number;
   /** True when the collection has described no hawid stock, which makes **every** box a pocket. */
   emptyStock: boolean;
@@ -129,8 +131,8 @@ function sampleSheetSource(
     textGaps: () => [],
     titleGaps: [],
     frameOrnament,
-    // Every sample checklist is an issue of its own and prints as one (#1509), so nothing resolves
-    // an issue heading or a sub-heading here, and a sample falls back on nothing anyway.
+    // A sample resolves in no language, so its issue heading and its checklist heading under it
+    // (#1509, #1518) fall back on nothing either.
     issueHeadingGaps: () => [],
     subheadingGaps: () => [],
   };

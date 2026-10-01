@@ -18,7 +18,7 @@
 // `albums.md` opens by saying to count something in the sources before writing the code, and this is
 // a file that would otherwise have been entirely made up. So it is not: every stamp below is one of
 // the collector's own, at the size **he measured**, under the heading **he wrote**, taken from
-// `~/Documents/AlbumEasy/PL/PL-1950.txt` and `PL-1951.txt` and cited line by line. The sample even
+// `~/Documents/AlbumEasy/PL/PL-1945.txt`, `PL-1950.txt` and `PL-1951.txt` and cited line by line. The sample even
 // reproduces one of his printed pages — `1951, 15 XI` puts the two Festiwal Muzyki Polskiej stamps
 // and the Zjazd PZF souvenir sheet on one card, which is where they are in his binder.
 //
@@ -30,15 +30,15 @@
 // ## What the set has to contain, and why each part is here
 //
 // The measure of a sample page is not that it looks like an album — it is that **every number the
-// collector is about to change does something visible on it**. So the seven checklists were chosen
-// out of those two files for these six properties:
+// collector is about to change does something visible on it**. So the nine checklists were chosen
+// out of those three files for these seven properties:
 //
-// - **Four mount heights** — 23, 26, 32 and 45 mm. Box height is the height of the shortest strip in
-//   the drawer the piece fits into (#765), so a page of one size selects one strip and says nothing
-//   about the vertical clearance. Four spread across the range a collector actually stocks means
-//   raising it moves *some* of them onto the next packet and leaves the rest, which is the behaviour
-//   the field has and the thing a single size hides. Against an ordinary drawer they come out on
-//   four different strips.
+// - **Five mount heights** — 23, 26, 32, 34 and 45 mm (the 34 is Westerplatte's, below). Box height
+//   is the height of the shortest strip in the drawer the piece fits into (#765), so a page of one
+//   size selects one strip and says nothing about the vertical clearance. Several spread across the
+//   range a collector actually stocks means raising it moves *some* of them onto the next packet and
+//   leaves the rest, which is the behaviour the field has and the thing a single size hides. Against
+//   an ordinary drawer they come out on five different strips.
 // - **A souvenir sheet no strip is tall enough for** — his 91 × 120 mm Zjazd PZF block, which needs
 //   124 mm of hawid and gets a pocket instead (#765). The oversize case, reached the way it is
 //   reached on real material rather than by choosing a figure that produces it.
@@ -55,6 +55,12 @@
 // - **Two chapters**, because a chapter starts a page (#767): the sample is two sheets without any
 //   pagination being built for it, and the running head, the chapter heading, the footer and the
 //   space above a heading only show themselves across a page boundary.
+// - **An issue printed as two checklists** (#1518) — *6. rocznica walk o Westerplatte*, its two
+//   stamps directly under the issue heading and its imperforate under a checklist heading of its own,
+//   which is how `PL-1945.txt` sets it with `STAMP_H1` and `STAMP_H2`. Neither 1950 nor 1951 has one
+//   on his pages and neither sheet has the room for one, so it is a **third chapter, ahead of both**,
+//   and the preview draws three sheets. The two checklists are arranged by the default rule
+//   (`albumEffectivePrintModes`), not stated, so the sample shows what an album does with them.
 //
 // ## It states its own sizes, and never inherits one
 //
@@ -77,6 +83,7 @@ import {
   type AlbumRenderPreset,
 } from "./album-template-rules";
 import type { AlbumChapterSpec } from "./album-layout";
+import { albumEffectivePrintModes, albumPrintedWithinIssue } from "./album-print-mode";
 import type { AlbumBoxData } from "./album-plan";
 import type { AlbumEntryData } from "./albums";
 import type { HawidStripData } from "./hawid-stock";
@@ -108,6 +115,8 @@ interface SampleStamp {
 interface SampleChecklist {
   id: string;
   name: string;
+  /** The issue it is a checklist of. Two checklists of one issue are printed within it (#1509). */
+  issueId: string;
   issueName: string;
   year: number;
   month: number;
@@ -156,11 +165,47 @@ function run(
 /**
  * The sample album, in the order it prints.
  *
- * Two chapters, seven checklists, eighteen stamps, every one of them the collector's own. See the
+ * Three chapters, nine checklists, twenty-one stamps, every one of them the collector's own. See the
  * module header for what each block is doing; the short version is that no two of them exercise the
  * same setting, and that nothing here was made up.
  */
 export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
+  {
+    key: "1945",
+    year: 1945,
+    // `PL-1945.txt:178`: one issue, two checklists — the issue heading, its two stamps, then the
+    // imperforate under a `STAMP_H2` heading of its own (#1518). The first is named after the issue,
+    // so the default rule prints it straight under the issue heading and the second under its name.
+    checklists: [
+      {
+        id: "sample-1945-westerplatte",
+        name: "6. rocznica walk o Westerplatte",
+        issueId: "sample-issue-1945-westerplatte",
+        issueName: "6. rocznica walk o Westerplatte",
+        year: 1945,
+        month: 9,
+        day: 1,
+        // `1945, 1 IX. 6. rocznica walk o Westerplatte.`, two at 51 × 34.
+        stamps: [
+          stamp("374a", "Westerplatte 374a", 51, 34),
+          stamp("374b", "Westerplatte 374b", 51, 34),
+        ],
+      },
+      {
+        id: "sample-1945-termopile",
+        // His two `STAMP_H2` lines, as the one name they are.
+        name: 'Nieząbkowany znaczek z dodatkowym napisem "POLSKIE TERMOPILE", niedoszły do obiegu wskutek zmiany treści górnego napisu',
+        issueId: "sample-issue-1945-westerplatte",
+        issueName: "6. rocznica walk o Westerplatte",
+        year: 1945,
+        month: 9,
+        day: 1,
+        // One at 51 × 34, under the same issue — wider with its partner than half a band, so it
+        // follows the boxes above it and the space above its heading has something to show.
+        stamps: [stamp("XXII", "Polskie Termopile", 51, 34)],
+      },
+    ],
+  },
   {
     key: "1950",
     year: 1950,
@@ -168,6 +213,7 @@ export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
       {
         id: "sample-1950-odbudowa",
         name: "Odbudowa Warszawy",
+        issueId: "sample-1950-odbudowa",
         issueName: "Odbudowa Warszawy",
         year: 1950,
         month: 4,
@@ -183,6 +229,7 @@ export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
       {
         id: "sample-1950-bierut",
         name: "Bolesław Bierut",
+        issueId: "sample-1950-bierut",
         issueName: "Bolesław Bierut",
         year: 1950,
         month: 6,
@@ -195,6 +242,7 @@ export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
       {
         id: "sample-1950-plan",
         name: "Plan 6-letni",
+        issueId: "sample-1950-plan",
         issueName: "Plan sześcioletni",
         year: 1950,
         month: 7,
@@ -210,6 +258,7 @@ export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
       {
         id: "sample-1950-pokoj",
         name: "I Kongres Pokoju",
+        issueId: "sample-1950-pokoj",
         issueName: "I Kongres Pokoju",
         year: 1950,
         month: 8,
@@ -227,6 +276,7 @@ export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
       {
         id: "sample-1951-festiwal",
         name: "III Światowy Festiwal Młodych Bojowników o Pokój w Berlinie",
+        issueId: "sample-1951-festiwal",
         issueName: "III Światowy Festiwal Młodych Bojowników o Pokój",
         year: 1951,
         month: 8,
@@ -239,6 +289,7 @@ export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
       {
         id: "sample-1951-muzyka",
         name: "Festiwal Muzyki Polskiej",
+        issueId: "sample-1951-muzyka",
         issueName: "Festiwal Muzyki Polskiej",
         year: 1951,
         month: 11,
@@ -252,6 +303,7 @@ export const ALBUM_PREVIEW_CHAPTERS: readonly SampleChapter[] = [
       {
         id: "sample-1951-blok",
         name: "Ogólnokrajowy Zjazd PZF",
+        issueId: "sample-1951-blok",
         issueName: "Ogólnokrajowy Zjazd PZF",
         year: 1951,
         month: 11,
@@ -366,7 +418,7 @@ export function albumPreviewEntries(): AlbumEntryData[] {
     checklistId: checklist.id,
     checklistName: checklist.name,
     checklistNameByLanguage: {},
-    issueId: checklist.id,
+    issueId: checklist.issueId,
     issueName: checklist.issueName,
     issueNameByLanguage: {},
     year: checklist.year,
@@ -455,28 +507,56 @@ export function albumPreviewChapters(
       .flatMap((c) => c.stamps)
       .map((s) => copies.get(albumPreviewStampId(s.number)))
       .filter((c): c is NonNullable<typeof c> => !!c);
+  // How each prints relative to its issue (#1509), by the album's own default rule — the sample states
+  // no mode, so it shows what an album does with an issue of several checklists.
+  const modes = albumEffectivePrintModes(albumPreviewEntries());
+  const headingOf = (checklists: readonly SampleChecklist[], checklistName: string) =>
+    renderAlbumText(preset.checklistTemplate, copiesOf(checklists), {
+      albumName: ALBUM_PREVIEW_ALBUM_NAME,
+      checklistName,
+    });
 
   return ALBUM_PREVIEW_CHAPTERS.map((chapter) => ({
     key: chapter.key,
     heading: renderAlbumText(preset.chapterTemplate, copiesOf(chapter.checklists), {
       albumName: ALBUM_PREVIEW_ALBUM_NAME,
     }),
-    blocks: chapter.checklists.map((checklist) => ({
-      entryId: checklist.id,
-      kind: "entry" as const,
-      heading: renderAlbumText(preset.checklistTemplate, copiesOf([checklist]), {
-        albumName: ALBUM_PREVIEW_ALBUM_NAME,
-        checklistName: checklist.name,
-      }),
-      boxes: albumPreviewBoxes(
-        preset,
-        stock,
-        checklist.stamps.map((s) => albumPreviewStampId(s.number)),
-      ),
-      printedPageIds: null,
-      spaceBeforeMm: 0,
-      spaceAfterMm: 0,
-      breakBefore: "auto" as const,
-    })),
+    blocks: chapter.checklists.map((checklist) => {
+      const mode = modes.get(checklist.id)?.mode ?? "own";
+      const within = albumPrintedWithinIssue(mode);
+      return {
+        entryId: checklist.id,
+        kind: "entry" as const,
+        // `planAlbumFrom`'s `entryBlock`, on sample data: the issue heading over a run, the
+        // checklist's own name under it in the checklist heading's role, or a heading of its own.
+        heading: !within
+          ? headingOf([checklist], checklist.name)
+          : mode === "within-subheading"
+            ? checklist.name
+            : "",
+        ...(mode === "within-subheading" ? { role: "subheading" as const } : {}),
+        ...(within
+          ? {
+              group: {
+                key: checklist.issueId,
+                heading: headingOf(
+                  ALBUM_PREVIEW_CHECKLISTS.filter((c) => c.issueId === checklist.issueId),
+                  checklist.issueName,
+                ),
+              },
+            }
+          : {}),
+        printMode: mode,
+        boxes: albumPreviewBoxes(
+          preset,
+          stock,
+          checklist.stamps.map((s) => albumPreviewStampId(s.number)),
+        ),
+        printedPageIds: null,
+        spaceBeforeMm: 0,
+        spaceAfterMm: 0,
+        breakBefore: "auto" as const,
+      };
+    }),
   }));
 }

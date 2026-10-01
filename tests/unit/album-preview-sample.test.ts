@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { planAlbumPages } from "../../src/lib/album-layout";
+import { albumPlacedTextFace, planAlbumPages } from "../../src/lib/album-layout";
 import { albumTextMetrics } from "../../src/lib/album-metrics";
 import { planHawidBox } from "../../src/lib/hawid";
 import {
@@ -58,6 +58,13 @@ function allStampIds(): string[] {
   return albumPreviewEntries().flatMap((e) => e.stampIds);
 }
 
+/** The sheet a chapter of the sample starts on. */
+function sheetOf(pages: ReturnType<typeof plan>["pages"], key: string) {
+  const page = pages.find((p) => p.kind === "live" && p.chapterKey === key);
+  if (!page || page.kind !== "live") return assert.fail(`no live sheet for ${key}`);
+  return page;
+}
+
 function plan(over: Partial<AlbumRenderPreset> = {}) {
   const p = preset(over);
   return planAlbumPages(
@@ -81,7 +88,7 @@ describe("the album template's sample page", () => {
     // sheet landed inside somebody else's block.
     const numbers = albumPreviewEntries().flatMap((e) => e.stampIds);
     assert.equal(new Set(numbers).size, numbers.length);
-    assert.equal(numbers.length, 18);
+    assert.equal(numbers.length, 21);
   });
 
   it("draws its boxes from the box rule and from nothing else", () => {
@@ -108,7 +115,7 @@ describe("the album template's sample page", () => {
     // field behave on screen the way it behaves on paper.
     const boxes = albumPreviewBoxes(preset(), stock, allStampIds());
     const strips = new Set(boxes.map((b) => b.strip?.id).filter((id): id is string => !!id));
-    assert.equal(strips.size, 4, `${strips.size} strips selected, not four`);
+    assert.equal(strips.size, 5, `${strips.size} strips selected, not five`);
   });
 
   it("contains exactly one piece no strip is tall enough for", () => {
@@ -133,11 +140,9 @@ describe("the album template's sample page", () => {
   });
 
   it("fills a row and starts a second", () => {
-    const page = plan().pages[0];
-    assert.equal(page.kind, "live");
-    if (page.kind !== "live") return;
+    const page = sheetOf(plan().pages, "1950");
     const bierut = page.blocks.find((b) => b.entryId === "sample-1950-bierut");
-    assert.ok(bierut, "the eight-definitive block is not on the first sheet");
+    assert.ok(bierut, "the eight-definitive block is not on the 1950 sheet");
     const boxes = page.boxes.filter((b) => b.entryId === "sample-1950-bierut");
     assert.equal(boxes.length, 8);
     assert.ok(
@@ -147,8 +152,7 @@ describe("the album template's sample page", () => {
   });
 
   it("puts two short checklists side by side at the default ceiling of two", () => {
-    const page = plan().pages[0];
-    if (page.kind !== "live") return assert.fail("first sheet is not live");
+    const page = sheetOf(plan().pages, "1950");
     const plan6 = page.boxes.filter((b) => b.entryId === "sample-1950-plan");
     const pokoj = page.boxes.filter((b) => b.entryId === "sample-1950-pokoj");
     assert.ok(plan6.length > 0 && pokoj.length > 0);
@@ -180,13 +184,13 @@ describe("the album template's sample page", () => {
     );
   });
 
-  it("is two sheets at the defaults, one per chapter", () => {
-    // Two, because a chapter heading, the running head, the footer and the space above a heading
-    // only show themselves across a page boundary — and two chapters is how the sample gets there
-    // without any pagination being built for it (#795). A third page would push the whole of 1950
-    // behind a preview that draws two.
+  it("is three sheets at the defaults, one per chapter, and the preview draws all three", () => {
+    // A chapter heading, the running head, the footer and the space above a heading only show
+    // themselves across a page boundary, and chapters are how the sample gets there without any
+    // pagination being built for it (#795). The issue run is a chapter of its own (#1518), so a
+    // fourth page would push one of them behind a preview that draws three.
     const pages = plan().pages;
-    assert.equal(pages.length, 2);
+    assert.equal(pages.length, 3);
     assert.deepEqual(
       pages.map((p) => (p.kind === "live" ? p.chapterKey : "printed")),
       ALBUM_PREVIEW_CHAPTERS.map((c) => c.key),
@@ -197,7 +201,7 @@ describe("the album template's sample page", () => {
     const [first] = plan().pages;
     if (first.kind !== "live") return assert.fail("first sheet is not live");
     assert.ok(first.chapter, "no chapter heading");
-    assert.deepEqual(first.chapter?.lines, ["1950"]);
+    assert.deepEqual(first.chapter?.lines, ["1945"]);
     assert.ok(first.title, "no running head");
     assert.deepEqual(first.title?.lines, [ALBUM_PREVIEW_ALBUM_NAME]);
     assert.ok(first.footer, "no footer band");
@@ -218,17 +222,20 @@ describe("the album template's sample page", () => {
     assert.equal(boxes[0].label, "");
     const chapters = albumPreviewChapters(preset({ chapterTemplate: "", checklistTemplate: "" }), stock);
     assert.ok(chapters.every((c) => c.heading === ""));
-    assert.ok(chapters.every((c) => c.blocks.every((b) => b.heading === "")));
+    const blocks = chapters.flatMap((c) => c.blocks);
+    assert.ok(blocks.every((b) => (b.group?.heading ?? "") === ""), "an issue heading is printed");
+    // A checklist heading under its issue is the checklist's name alone, as on a real album (#1509):
+    // no template reaches it, so a blank one leaves it standing.
+    assert.ok(blocks.every((b) => b.role === "subheading" || b.heading === ""));
   });
 
   it("carries a heading that wraps at the default type size", () => {
     // Where a heading breaks moves with the face and the size, and a sample of short headings would
     // never show it. This one is the collector's own — *III Światowy Festiwal Młodych Bojowników o
     // Pokój w Berlinie*, `PL-1951.txt` — and it breaks inside a shared band at 12 pt Liberation.
-    const second = plan().pages[1];
-    if (second.kind !== "live") return assert.fail("second sheet is not live");
+    const second = sheetOf(plan().pages, "1951");
     const wrapped = second.headings.filter((h) => h.lines.length > 1);
-    assert.equal(wrapped.length, 1, "no heading on the second sheet wraps");
+    assert.equal(wrapped.length, 1, "no heading on the 1951 sheet wraps");
     assert.ok(wrapped[0].lines[0].startsWith("1951, 5 VIII."));
   });
 
@@ -244,5 +251,55 @@ describe("the album template's sample page", () => {
         }
       }
     }
+  });
+});
+
+describe("the sample's issue printed as two checklists (#1518)", () => {
+  // `PL-1945.txt:178`: the issue heading over Westerplatte, its two stamps directly under it, then the
+  // imperforate under a checklist heading of its own — #1509's default for an issue with several
+  // checklists, which the sample reaches through the rule rather than by stating it.
+  const run = () => sheetOf(plan().pages, "1945");
+
+  it("prints the issue heading once, the main checklist under it, then a checklist heading", () => {
+    const page = run();
+    assert.deepEqual(
+      page.headings.map((h) => h.role),
+      ["heading", "subheading"],
+    );
+    const [issue, checklist] = page.headings;
+    assert.deepEqual(issue.lines, ["1945, 1 IX. 6. rocznica walk o Westerplatte"]);
+    assert.ok(checklist.lines[0].startsWith("Nieząbkowany znaczek"));
+    const main = page.boxes.filter((b) => b.entryId === "sample-1945-westerplatte");
+    const imperf = page.boxes.filter((b) => b.entryId === "sample-1945-termopile");
+    assert.equal(main.length, 2);
+    assert.equal(imperf.length, 1);
+    assert.ok(Math.min(...main.map((b) => b.yMm)) > issue.yMm, "the main checklist is under the issue heading");
+    assert.ok(checklist.yMm > Math.max(...main.map((b) => b.yMm + b.heightMm)), "the checklist heading follows its boxes");
+    assert.ok(imperf[0].yMm > checklist.yMm, "and the imperforate is under its own heading");
+  });
+
+  it("moves with every setting of either heading", () => {
+    const at = (over: Partial<AlbumRenderPreset>) => {
+      const page = sheetOf(plan(over).pages, "1945");
+      const checklist = page.headings.find((h) => h.role === "subheading")!;
+      const issue = page.headings.find((h) => h.role === "heading")!;
+      return { issue, checklist, imperf: page.boxes.find((b) => b.entryId === "sample-1945-termopile")! };
+    };
+    const base = at({});
+    const differs = (over: Partial<AlbumRenderPreset>, read: (s: ReturnType<typeof at>) => unknown) =>
+      assert.notDeepEqual(read(at(over)), read(base), `${Object.keys(over).join(", ")} changes nothing`);
+    differs({ subheadingSpaceAboveMm: 12 }, (s) => s.checklist.yMm);
+    differs({ subheadingSpaceBelowMm: 9 }, (s) => s.imperf.yMm);
+    differs({ subheadingSizePt: 14 }, (s) => s.checklist.heightMm);
+    differs({ headingSpaceAboveMm: 14 }, (s) => s.issue.yMm);
+    differs({ headingSpaceBelowMm: 11 }, (s) => s.checklist.yMm);
+    differs({ headingSizePt: 16 }, (s) => s.issue.heightMm);
+    // A face is drawn rather than placed: each heading is set in its own role's, so a face chosen for
+    // one reaches its example and leaves the other alone.
+    const faces = { headingFace: "liberation-serif-bold", subheadingFace: "liberation-sans-narrow-italic" };
+    const set = at(faces);
+    const p = preset(faces);
+    assert.equal(albumPlacedTextFace(p, set.issue).face, faces.headingFace);
+    assert.equal(albumPlacedTextFace(p, set.checklist).face, faces.subheadingFace);
   });
 });
