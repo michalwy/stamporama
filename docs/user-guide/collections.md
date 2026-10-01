@@ -1309,8 +1309,7 @@ The editor is split into sections, listed down its left side, and shows one at a
   heading, checklist heading, box label, footer. Sizes are in **points**, the unit type is set in. The
   checklist heading starts as Liberation Sans Italic at 10 pt with 6 mm above and 3 mm below — the
   `STAMP_H2` headings of your own pages — and every existing template and album was given exactly
-  that. The sample page has no issue printed as several checklists, so it shows no checklist
-  heading; point the preview at one of your albums to see one.
+  that. The sample page shows one on its 1945 sheet.
 - **Photos** — whether a box prints the photo it has, and at what opacity.
 - **Texts** — the chapter heading, the issue heading, the box label and the footer. A checklist
   heading prints the checklist's name alone, so it has no text of its own here.
@@ -1367,13 +1366,16 @@ It is drawn the same way the printed card is: the same box rule, the same packin
 measured against the same embedded faces. So a change you can see here is a change that will be on
 the paper, which is the only thing that makes the preview worth consulting.
 
-By default it draws a **sample page** — two sheets, 1950 and 1951, built out of your own AlbumEasy
-files. The stamps are yours at the sizes you measured, under the headings you wrote, chosen so that
-every setting in the dialog does something visible: four different mount heights so the vertical
-clearance has some boxes to move and not others, the run of eight Bierut definitives that fills a row
-and starts a second, two short checklists sharing a band in each chapter, a heading long enough to
-wrap, and the Zjazd PZF souvenir sheet, which no strip is tall enough for and which comes out as a
-pocket. The 1951 sheet is one of your own printed pages, block and all.
+By default it draws a **sample page** — three sheets, 1945, 1950 and 1951, built out of your own
+AlbumEasy files. The stamps are yours at the sizes you measured, under the headings you wrote, chosen
+so that every setting in the dialog does something visible: five different mount heights so the
+vertical clearance has some boxes to move and not others, the run of eight Bierut definitives that
+fills a row and starts a second, two short checklists sharing a band in 1950 and 1951, a heading long
+enough to wrap, and the Zjazd PZF souvenir sheet, which no strip is tall enough for and which comes
+out as a pocket. The 1945 sheet is Westerplatte printed as two checklists of one issue — the issue
+heading, 374a and 374b straight under it, then the imperforate XXII under a checklist heading of its
+own — so both headings' settings have something to move. The 1951 sheet is one of your own printed
+pages, block and all. Pointed at one of your albums, the preview draws its first three sheets.
 
 It is still a *sample*: nothing on it is a copy you own, and none of it is in any album.
 

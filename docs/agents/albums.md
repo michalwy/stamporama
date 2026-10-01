@@ -1006,9 +1006,13 @@ read. What is worth not re-deriving:
   them. Anything new that indexes `headings` by counting headed blocks is the bug.
 - **The issue heading renders over every checklist of the issue in the album**, so every run of it —
   live or a card's reference — reads one string, even with a stamp-level token in the template.
-- **The sample page has no run**: his 1950–1951 pages print none, and a third chapter would be
-  unseen behind a preview that draws two. The checklist heading's marks are empty there by design;
-  pointed at a real album the preview shows them.
+- **The sample page's run is a chapter of its own** (#1518). His 1950–1951 pages print none and
+  neither sheet had the 80–115 mm one needs, so `PL-1945.txt:178` — Westerplatte, 374a/374b under the
+  issue heading, XXII under its `STAMP_H2` — is a 1945 chapter ahead of both, and the preview draws
+  **three** sheets (`ALBUM_PREVIEW_SHEETS`, which a real album's preview shares). The collector chose
+  that over splitting a 1950–1951 issue his pages never split, and over dropping 1950. The sample
+  states no mode: `albumPreviewChapters` runs `albumEffectivePrintModes` over its entries and builds
+  the blocks the way `entryBlock` does, so it shows what an album does with such an issue.
 - **The code's names are not the collector's** (#1517). The role the code calls `heading` — and the
   `checklistTemplate` text it prints — is the **issue heading** on screen: the top heading of every
   series, a checklist printed as its own issue included (even one spanning issues). The role the code
