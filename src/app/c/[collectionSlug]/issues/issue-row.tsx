@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import { matchedStampsInIssue, type StampFilterQuery } from "@/lib/issue-stamp-match";
-import { useIssueMembers, useInvalidateIssues } from "./use-issues-query";
+import { useIssueMembers, useInvalidateIssues, issueKeys } from "./use-issues-query";
+import { getIssueChecklistHeadlinesAction } from "@/app/actions/checklists";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { RecomputeRangeDialog } from "./recompute-range-dialog";
 import type { IssueListItem, StampNodeData } from "@/lib/issues";
@@ -73,7 +74,16 @@ import {
   type RowsInView,
 } from "@/app/c/[collectionSlug]/inventory/use-rows-in-view";
 import { descendantsAmongMembers, stampIdsInTree } from "@/lib/stamp-tree-selection";
+import { checklistColorMap } from "@/lib/checklist-colors";
+import { checklistBranches, countOffChecklist } from "@/lib/checklist-branches";
+import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/app/icons";
+import {
+  ChecklistChips,
+  type ChecklistChipData,
+} from "@/app/c/[collectionSlug]/shared/checklist-chip";
+import { ChecklistBranch, type ChecklistBranchContext } from "./checklist-branch";
+import type { ChecklistDisplayMode } from "./checklist-display-switcher";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
 
@@ -141,6 +151,10 @@ interface StampTreeNodeProps {
   /** True when a stamp above this one in the tree is ticked, so this one is carried with it. */
   ancestorSelected: boolean;
   onToggleTick: (stampId: string) => void;
+  /** The issue's checklists in its order, coloured (#1519), when it has more than one — each row
+   *  names the ones its stamp is on. Null with a single checklist, where every chip would say the
+   *  same thing. */
+  checklistChips: ChecklistChipData[] | null;
 }
 
 function StampTreeNode({
@@ -172,6 +186,7 @@ function StampTreeNode({
   selection,
   ancestorSelected,
   onToggleTick,
+  checklistChips,
 }: StampTreeNodeProps) {
   const [hovered, setHovered] = useState(false);
   const { node, children } = treeNode;
@@ -392,15 +407,32 @@ function StampTreeNode({
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              {/* The title and, right after it, the checklists this stamp is on (#1519) — on the
+                  first line, where a run of rows is scanned, rather than among the chips below. */}
               <span
                 style={{
                   flex: 1,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  minWidth: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
                 }}
               >
-                <StampTitle node={node} />
+                <span
+                  style={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <StampTitle node={node} />
+                </span>
+                {checklistChips && (
+                  <ChecklistChips
+                    checklists={checklistChips.filter((c) => node.checklistIds.includes(c.id))}
+                  />
+                )}
               </span>
 
               {/* Edit · add the lettered run the catalogue splits this stamp into · add a copy
@@ -484,6 +516,7 @@ function StampTreeNode({
               selection={selection}
               ancestorSelected={selected}
               onToggleTick={onToggleTick}
+              checklistChips={checklistChips}
             />
           )}
         />
@@ -525,9 +558,11 @@ export interface IssueRowCallbacks {
   onEdit: (issue: IssueListItem) => void;
   onDelete: (issue: IssueListItem) => void;
   onMoveIssueArea: (issue: IssueListItem) => void;
-  onAddStampRange: (issue: IssueListItem) => void;
+  /** `checklist` is the one the run joins, when it was added from that checklist's branch (#1520). */
+  onAddStampRange: (issue: IssueListItem, checklist?: { id: string; name: string }) => void;
   onMergeIssue: (issue: IssueListItem) => void;
-  onAddStamp: (issueId: string, parent?: AddStampParent) => void;
+  /** `checklistId` is the checklist the new stamp starts on, from that checklist's branch (#1520). */
+  onAddStamp: (issueId: string, parent?: AddStampParent, checklistId?: string) => void;
   /** A whole run of variants under one stamp (#722). Takes the issue rather than its id, because
    *  the dialog needs the area and prefix context the row already resolved. */
   onAddVariantRange: (issue: IssueListItem, parent: AddVariantRangeParent) => void;
@@ -567,6 +602,8 @@ interface IssueRowProps {
   stampFilter?: StampFilterQuery;
   /** The list's stamp selection (#808); absent draws no boxes. */
   selection?: StampTreeSelection;
+  /** How an issue with several checklists shows its stamps (#1520): branches, or one run. */
+  checklistDisplay?: ChecklistDisplayMode;
 }
 
 export function IssueRow({
@@ -588,6 +625,7 @@ export function IssueRow({
   formats,
   stampFilter,
   selection,
+  checklistDisplay = "tree",
 }: IssueRowProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
   const [hovered, setHovered] = useState(false);
@@ -642,15 +680,55 @@ export function IssueRow({
     () => (stampFilter ? matchedStampsInIssue(issue, loadedMembers, stampFilter, vendorMap) : null),
     [issue, loadedMembers, stampFilter, vendorMap]
   );
+  // Several checklists are drawn as branches in tree mode (#1520) — except while reordering, which
+  // works on the issue's one tree: a drag inside a branch would move a stamp past a sibling the
+  // branch does not show, and the server refuses a partial group. The chip filter has nothing to do
+  // beside branches, which already separate the checklists, so it is not applied there.
+  const multiChecklist = issue.checklists.length > 1;
+  const asBranches = checklistDisplay === "tree" && multiChecklist && !treeReorder.active;
   // Both narrowings are dropped while reordering: dragging inside a narrowed tree would move a
   // stamp past a sibling that was never on screen, and the server refuses a partial group.
-  const effectiveChecklistIds = treeReorder.active ? [] : treeChecklistIds;
+  const effectiveChecklistIds = treeReorder.active || asBranches ? [] : treeChecklistIds;
   const effectiveMatchedIds = treeReorder.active ? null : matchedStampIds;
+  const fullTree = buildStampTree(treeReorder.members);
   const { tree: stampTree, contextIds: treeContextIds } = filterStampTreeBy(
-    buildStampTree(treeReorder.members),
+    fullTree,
     effectiveChecklistIds,
     effectiveMatchedIds
   );
+  const branches = asBranches
+    ? checklistBranches(fullTree, issue.checklists, effectiveMatchedIds)
+    : null;
+
+  // Each checklist's colour, by its place in the issue's order (#1519): the row chips, the filter
+  // chips and the branch headings all read it from here, so they cannot disagree.
+  const checklistColors = useMemo(() => checklistColorMap(issue.checklists), [issue.checklists]);
+  const checklistChips = useMemo<ChecklistChipData[] | null>(
+    () =>
+      issue.checklists.length > 1
+        ? issue.checklists.map((c) => ({
+            id: c.id,
+            name: c.name,
+            tokens: checklistColors.get(c.id)!,
+          }))
+        : null,
+    [issue.checklists, checklistColors]
+  );
+
+  // Which branches are open (#1520). Collapsed by default, so opening an issue shows its checklists
+  // rather than its stamps — but open while the list's search narrowed the tree, for #631's reason:
+  // a match behind a collapsed arrow is a match nobody sees. The collector's own toggle wins either
+  // way, and lasts while the issue stays open.
+  const [branchToggles, setBranchToggles] = useState<Record<string, boolean>>({});
+  const branchOpen = (key: string) => branchToggles[key] ?? !!effectiveMatchedIds;
+
+  // Each checklist's completeness, as its branch heading states it — read only while branches are
+  // on screen. Under the members key, so whatever refreshes this issue's tree refreshes these too.
+  const { data: checklistHeadlines } = useQuery({
+    queryKey: [...issueKeys.members(collectionId, issue.id).slice(0, 4), "checklist-headlines"],
+    queryFn: () => getIssueChecklistHeadlinesAction(collectionId, issue.id),
+    enabled: isExpanded && asBranches,
+  });
 
   // The stamps this row is drawing, reported for the bar's *in view* count (#808). The narrowed tree
   // and not the members: a stamp the checklist chips or the list's search hid is ticked and out of
@@ -792,6 +870,84 @@ export function IssueRow({
     },
   ];
 
+  const resolvedAreaName =
+    areaName ?? areas.find((a) => a.id === issue.collectionAreaId)?.name ?? null;
+
+  /** One stamp row of this issue's tree, at `depth` — straight under the issue, or one level in under
+   *  a checklist's branch (#1520), where nothing is reordered. */
+  const renderStampNode = (
+    treeNode: StampTreeNodeData,
+    nodeIsLast: boolean,
+    drag: StampNodeDragProps | null,
+    depth: number,
+    contextIds: Set<string>
+  ) => (
+    <StampTreeNode
+      treeNode={treeNode}
+      depth={depth}
+      contextIds={contextIds}
+      collectionId={collectionId}
+      areas={areas}
+      baseCurrency={baseCurrency}
+      primaryVendorId={primaryVendorId}
+      vendorMap={vendorMap}
+      isLast={nodeIsLast}
+      issueName={issue.name}
+      issueYear={issue.year}
+      areaName={resolvedAreaName}
+      displayCondition={displayCondition}
+      displayFormat={displayFormat}
+      expandStamp={expandStamp}
+      onPriceSaved={() => void invalidateStampsAndIssues(collectionId)}
+      onEdit={(stampId) => {
+        const stampNode = members?.find((m) => m.stampId === stampId);
+        if (stampNode) callbacks.onEditStamp(issue.id, stampNode);
+      }}
+      onAddChild={(parentStampId) => {
+        const parentNode = members?.find((m) => m.stampId === parentStampId);
+        callbacks.onAddStamp(issue.id, {
+          stampId: parentStampId,
+          catalogNumbers: parentNode?.catalogNumbers ?? [],
+          issuedYear: parentNode?.issuedYear ?? null,
+        });
+      }}
+      onAddVariantRange={(parentStampId) => {
+        const parentNode = members?.find((m) => m.stampId === parentStampId);
+        callbacks.onAddVariantRange(issue, {
+          stampId: parentStampId,
+          name: parentNode?.name ?? null,
+          catalogNumbers: parentNode?.catalogNumbers ?? [],
+        });
+      }}
+      onDelete={(stampId, stampName) => callbacks.onDeleteStamp(issue.id, stampId, stampName)}
+      onMove={(stampId) => callbacks.onMoveStamp(issue.id, stampId)}
+      onReparent={(stampId) => callbacks.onReparentStamp(issue.id, stampId)}
+      narrowed={!!effectiveMatchedIds}
+      reorder={depth === 0 ? treeReorder.reorder : null}
+      drag={drag}
+      selection={selection ?? null}
+      ancestorSelected={false}
+      onToggleTick={toggleTick}
+      checklistChips={checklistChips}
+    />
+  );
+
+  // What a checklist's branch needs to act (#1520): the row's own maps, and its add callbacks with
+  // the checklist the new stamps join.
+  const branchContext: ChecklistBranchContext = {
+    issue,
+    collectionId,
+    areas,
+    baseCurrency,
+    vendorMap,
+    primaryVendorId,
+    onAddStamp: (checklistId) => callbacks.onAddStamp(issue.id, undefined, checklistId),
+    onAddStampRange: (checklistId) => {
+      const checklist = issue.checklists.find((c) => c.id === checklistId);
+      callbacks.onAddStampRange(issue, checklist && { id: checklist.id, name: checklist.name });
+    },
+  };
+
   return (
     <div
       style={{
@@ -813,7 +969,11 @@ export function IssueRow({
         {/* Expand/collapse toggle sits first, before the photo. */}
         <button
           type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => {
+            // Branches opened by hand stay open while the issue does (#1520), and no longer.
+            if (isExpanded) setBranchToggles({});
+            setIsExpanded(!isExpanded);
+          }}
           aria-label={isExpanded ? "Collapse" : "Expand"}
           style={{
             alignSelf: "center",
@@ -1101,8 +1261,9 @@ export function IssueRow({
             <>
               {/* Narrowing the tree by checklist (#531) — only where there is a choice to make.
                   Hidden while reordering: a drag inside a narrowed tree would move a stamp past a
-                  sibling that was never on screen. */}
-              {issue.checklists.length > 1 && !treeReorder.active && (
+                  sibling that was never on screen. And beside branches (#1520), which already
+                  separate the checklists. */}
+              {multiChecklist && !treeReorder.active && !asBranches && (
                 <div
                   style={{
                     display: "flex",
@@ -1119,79 +1280,69 @@ export function IssueRow({
                     checklists={issue.checklists}
                     selected={treeChecklistIds}
                     onChange={setTreeChecklistIds}
+                    colors={checklistColors}
                   />
                 </div>
               )}
-              <StampTreeGroup
-                nodes={stampTree}
-                parentStampId={null}
-                reorder={treeReorder.reorder}
-                renderNode={({ node: treeNode, isLast, drag }) => (
-                <StampTreeNode
-                  treeNode={treeNode}
-                  depth={0}
-                  contextIds={treeContextIds}
-                  collectionId={collectionId}
-                  areas={areas}
-                  baseCurrency={baseCurrency}
-                  primaryVendorId={primaryVendorId}
-                  vendorMap={vendorMap}
-                  isLast={isLast}
-                  issueName={issue.name}
-                  issueYear={issue.year}
-                  areaName={
-                    areaName ??
-                    areas.find((a) => a.id === issue.collectionAreaId)?.name ??
-                    null
-                  }
-                  displayCondition={displayCondition}
-                  displayFormat={displayFormat}
-                  expandStamp={expandStamp}
-                  onPriceSaved={() => void invalidateStampsAndIssues(collectionId)}
-                  onEdit={(stampId) => {
-                    const stampNode = members?.find(
-                      (m) => m.stampId === stampId
+              {branches ? (
+                branches
+                  // A branch the list's search emptied says nothing; the rest are what matched.
+                  .filter((b) => !effectiveMatchedIds || b.tree.length > 0)
+                  .map((branch) => {
+                    const key = branch.checklistId ?? "none";
+                    const checklist = branch.checklistId
+                      ? (issue.checklists.find((c) => c.id === branch.checklistId) ?? null)
+                      : null;
+                    return (
+                      <ChecklistBranch
+                        key={key}
+                        checklist={checklist}
+                        stampCount={checklist ? checklist.stampCount : countOffChecklist(fullTree)}
+                        tokens={checklist ? checklistColors.get(checklist.id) : undefined}
+                        headline={checklist ? checklistHeadlines?.[checklist.id] : undefined}
+                        open={branchOpen(key)}
+                        onToggle={() =>
+                          setBranchToggles((prev) => ({ ...prev, [key]: !branchOpen(key) }))
+                        }
+                        context={branchContext}
+                      >
+                        {branch.tree.length === 0 ? (
+                          <div
+                            style={{
+                              padding: "0.5rem 0 0.5rem 2.25rem",
+                              fontSize: "0.8125rem",
+                              color: "var(--color-text-muted)",
+                              fontStyle: "italic",
+                              borderBottom: "1px solid var(--color-border)",
+                            }}
+                          >
+                            No stamps on this checklist yet.
+                          </div>
+                        ) : (
+                          <StampTreeGroup
+                            nodes={branch.tree}
+                            parentStampId={null}
+                            reorder={null}
+                            renderNode={({ node: treeNode, drag }) =>
+                              // One level in, under the heading; every row keeps its rule, since
+                              // the next branch's heading follows the last of them.
+                              renderStampNode(treeNode, false, drag, 1, branch.contextIds)
+                            }
+                          />
+                        )}
+                      </ChecklistBranch>
                     );
-                    if (stampNode) callbacks.onEditStamp(issue.id, stampNode);
-                  }}
-                  onAddChild={(parentStampId) => {
-                    const parentNode = members?.find(
-                      (m) => m.stampId === parentStampId
-                    );
-                    callbacks.onAddStamp(issue.id, {
-                      stampId: parentStampId,
-                      catalogNumbers: parentNode?.catalogNumbers ?? [],
-                      issuedYear: parentNode?.issuedYear ?? null,
-                    });
-                  }}
-                  onAddVariantRange={(parentStampId) => {
-                    const parentNode = members?.find(
-                      (m) => m.stampId === parentStampId
-                    );
-                    callbacks.onAddVariantRange(issue, {
-                      stampId: parentStampId,
-                      name: parentNode?.name ?? null,
-                      catalogNumbers: parentNode?.catalogNumbers ?? [],
-                    });
-                  }}
-                  onDelete={(stampId, stampName) =>
-                    callbacks.onDeleteStamp(issue.id, stampId, stampName)
-                  }
-                  onMove={(stampId) =>
-                    callbacks.onMoveStamp(issue.id, stampId)
-                  }
-                  onReparent={(stampId) =>
-                    callbacks.onReparentStamp(issue.id, stampId)
-                  }
-                  narrowed={!!effectiveMatchedIds}
+                  })
+              ) : (
+                <StampTreeGroup
+                  nodes={stampTree}
+                  parentStampId={null}
                   reorder={treeReorder.reorder}
-                  drag={drag}
-                  selection={selection ?? null}
-                  ancestorSelected={false}
-                  onToggleTick={toggleTick}
+                  renderNode={({ node: treeNode, isLast, drag }) =>
+                    renderStampNode(treeNode, isLast, drag, 0, treeContextIds)
+                  }
                 />
-                )}
-              />
+              )}
               {/* Add-stamp button pinned at the bottom of the tree (#180), mirroring the
                   "+ New stamp" button in the browse-stamps picker. Opens the add-stamp dialog
                   with this issue pre-filled. The reorder toggle (#549) sits beside it: both are

@@ -21,13 +21,17 @@ async function getSession() {
 }
 
 export async function getIssueCatalogNumberGridAction(
-  issueId: string
+  issueId: string,
+  checklistId?: string
 ): Promise<
   { status: "success"; grid: CatalogNumberGridData } | { status: "error"; message: string }
 > {
   const session = await getSession();
   try {
-    return { status: "success", grid: await getIssueCatalogNumberGrid(session.user.id, issueId) };
+    return {
+      status: "success",
+      grid: await getIssueCatalogNumberGrid(session.user.id, issueId, checklistId),
+    };
   } catch (err) {
     return {
       status: "error",

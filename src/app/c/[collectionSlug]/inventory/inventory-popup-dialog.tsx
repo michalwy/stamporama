@@ -20,7 +20,9 @@ import { InventoryCopyList } from "./inventory-copy-list";
  * in an issue (#110). The label is shown in the dialog title. */
 export type InventoryPopupTarget =
   | { kind: "stamp"; stampId: string; label: string }
-  | { kind: "issue"; issueId: string; label: string };
+  | { kind: "issue"; issueId: string; label: string }
+  /** The copies of a checklist's stamps, from its branch on the Issues list (#1520). */
+  | { kind: "checklist"; checklistId: string; label: string };
 
 /** The **null** value on the two axes that have one — *Single* (ADR-0020) and *No certificate*
  * (ADR-0006 §2). A tickable value like any other, since a null is a real answer here and an absent
@@ -92,7 +94,11 @@ export function InventoryPopupDialog({
 
   const filters: InventoryItemFilters = useMemo(
     () => ({
-      ...(target.kind === "stamp" ? { stampId: target.stampId } : { issueId: target.issueId }),
+      ...(target.kind === "stamp"
+        ? { stampId: target.stampId }
+        : target.kind === "issue"
+          ? { issueId: target.issueId }
+          : { checklistId: target.checklistId }),
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       formatIds: formatIds.length > 0 ? formatIds : undefined,
       certificateStatusIds:
@@ -222,7 +228,11 @@ export function InventoryPopupDialog({
             {filtering
               ? "No copies match these filters."
               : `No copies recorded ${
-                  target.kind === "stamp" ? "for this stamp" : "in this issue"
+                  target.kind === "stamp"
+                    ? "for this stamp"
+                    : target.kind === "issue"
+                      ? "in this issue"
+                      : "of a stamp on this checklist"
                 } yet.`}
           </div>
         )}

@@ -27,6 +27,7 @@ import {
 } from "@/app/actions/issues";
 import { MoveIssueAreaDialog } from "./move-issue-area-dialog";
 import { AddStampRangeDialog } from "./add-stamp-range-dialog";
+import { ChecklistDisplaySwitcher, useChecklistDisplayMode } from "./checklist-display-switcher";
 import {
   AddVariantRangeDialog,
   type AddVariantRangeParent,
@@ -136,10 +137,17 @@ type DialogState =
       kind: "add-stamp";
       issueId?: string;
       parent?: AddStampParent;
+      /** Start the stamp on this checklist — added from its branch (#1520). */
+      checklistId?: string;
     }
   | { kind: "edit-stamp"; issueId: string; stamp: StampNodeData }
   | { kind: "move-issue-area"; issue: IssueListItem }
-  | { kind: "add-stamp-range"; issue: IssueListItem }
+  | {
+      kind: "add-stamp-range";
+      issue: IssueListItem;
+      /** The checklist the run joins — added from its branch (#1520). */
+      checklist?: { id: string; name: string };
+    }
   | { kind: "add-variant-range"; issue: IssueListItem; parent: AddVariantRangeParent }
   | { kind: "merge-issue"; issue: IssueListItem }
   | {
@@ -225,6 +233,8 @@ export function IssuesListPanel({
   const { conditions, displayConditionId, setDisplayConditionId } =
     useDisplayCondition(collectionId);
   const { formats, displayFormatId, setDisplayFormatId } = useDisplayFormat(collectionId);
+  // Branches or one run for an issue with several checklists (#1520), for every issue at once.
+  const [checklistDisplay, setChecklistDisplay] = useChecklistDisplayMode(collectionId);
 
   const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
     const seen = new Map<string, CatalogVendorOption>();
@@ -563,11 +573,13 @@ export function IssuesListPanel({
     onEdit: (issue) => openDialog({ kind: "edit-issue", issue }),
     onDelete: (issue) => openDialog({ kind: "delete-issue", issue }),
     onMoveIssueArea: (issue) => openDialog({ kind: "move-issue-area", issue }),
-    onAddStampRange: (issue) => openDialog({ kind: "add-stamp-range", issue }),
+    onAddStampRange: (issue, checklist) =>
+      openDialog({ kind: "add-stamp-range", issue, checklist }),
     onAddVariantRange: (issue, parent) =>
       openDialog({ kind: "add-variant-range", issue, parent }),
     onMergeIssue: (issue) => openDialog({ kind: "merge-issue", issue }),
-    onAddStamp: (issueId, parent) => openDialog({ kind: "add-stamp", issueId, parent }),
+    onAddStamp: (issueId, parent, checklistId) =>
+      openDialog({ kind: "add-stamp", issueId, parent, checklistId }),
     onEditStamp: (issueId, stamp) =>
       openDialog({ kind: "edit-stamp", issueId, stamp }),
     onDeleteStamp: (issueId, stampId, stampName) =>
@@ -771,6 +783,7 @@ export function IssuesListPanel({
             value={displayFormatId}
             onChange={setDisplayFormatId}
           />
+          <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
           {/* The collector's own labels (#1182). The **issue's** tags: nothing is inherited, so an
               issue matches on what is hung on it and never on what is hung on the stamps inside
               it — and the expanded tree under a matching row is left exactly as it was, because a
@@ -849,6 +862,7 @@ export function IssuesListPanel({
                   formats={formats}
                   stampFilter={stampFilter}
                   selection={stampSelection}
+                  checklistDisplay={checklistDisplay}
                 />
               );
             })}
@@ -1049,6 +1063,7 @@ export function IssuesListPanel({
               areaVendors={uniqueAreaVendors}
               prefilledIssueId={issue.id}
               prefilledParentStampId={dialog.parent?.stampId}
+              prefilledChecklistIds={dialog.checklistId ? [dialog.checklistId] : undefined}
               prefilledParentIssuedYear={dialog.parent?.issuedYear ?? null}
               defaultCatalogNumbers={dialog.parent?.catalogNumbers}
               isPending={isPending}
@@ -1116,6 +1131,7 @@ export function IssuesListPanel({
               collectionId={collectionId}
               issueId={dialog.issue.id}
               issueName={issueLabel}
+              checklistName={dialog.checklist?.name}
               areaId={areaId}
               vendors={[...vendorMapFor(areaId, dialog.issue.id).values()]}
               primaryVendorId={effectivePrimaryVendorId(areas, areaId)}
@@ -1124,6 +1140,7 @@ export function IssuesListPanel({
               onClose={closeDialog}
               onSubmit={(fd) =>
                 startTransition(async () => {
+                  if (dialog.checklist) fd.set("checklistId", dialog.checklist.id);
                   const result = await addStampRangeToIssueAction(
                     collectionId,
                     dialog.issue.id,

@@ -113,8 +113,10 @@ export function VariantPriceGridDialog({
   // The subtree flag is part of the key: the same stamp answers with a different tree under it
   // (#679), and one cached payload serving both would draw whichever was opened first.
   const scopeSubtree = scope.kind === "stamp" && scope.subtree === true;
+  // And the checklist, for the same reason: one issue answers with its own branch's rows (#1520).
+  const scopeChecklist = scope.kind === "issue" ? (scope.checklistId ?? null) : null;
   const { data, isLoading, error } = useQuery({
-    queryKey: ["variantPriceGrid", scope.kind, scopeKey, scopeSubtree] as const,
+    queryKey: ["variantPriceGrid", scope.kind, scopeKey, scopeSubtree, scopeChecklist] as const,
     queryFn: async () => {
       const { getVariantPriceGridAction } = await import("@/app/actions/variant-prices");
       const r = await getVariantPriceGridAction(scope);

@@ -711,9 +711,32 @@ the **priority** the whole run is wanted on (MNH only, no certificate needed, hi
 always says how many wants it will create before it writes anything. See
 [Straight from the Issue list](wants.md#straight-from-the-issue-list).
 
+### Which checklists a stamp is on
+
+On the **Issues** list, when an issue carries **more than one** checklist, every stamp row of its expanded tree names the checklists that stamp is on, as small rounded chips right after its title — one per checklist, none for a stamp on none of them. Each checklist has **its own colour**, taken from its place in the issue's order of checklists, so it is the same colour every time you open the issue; the **Checklist** filter chips and the branch headings below wear the same colours. A long name is shortened on the chip; hover it for the whole name. An issue with a single checklist shows no such chips — they would say the same thing on every row.
+
+### Checklists as branches
+
+The **Checklists** control in the Issues list's toolbar decides how an expanded issue with several checklists shows its stamps. It applies to every issue and is remembered.
+
+- **Tree** (the default) — each checklist is a **branch** under the issue, collapsed when the issue opens, so you see the sets first. A branch's heading names the checklist in its colour, with its stamp count and how complete it is (stamps held over stamps on it, in any condition, and how many complete sets — the figure the issue's own page shows). Click the heading to open it. A stamp on two checklists appears under both; stamps on none of them get a branch of their own, **Not on a checklist**, shown only when there are any. A branch you open stays open until you collapse the issue. While a search narrows the list, the branches holding a match start open and the others are left out.
+- **Flat** — every stamp in one run, with the **Checklist** filter chips described below.
+
+An issue with one checklist has no branches in either mode: its stamps sit straight under it.
+
+A checklist's branch has its own **⋮** menu with the issue's actions that make sense for one checklist, each acting on **that checklist's stamps** only:
+
+- **Add stamp** and **Add stamp range…** add the new stamps to the issue **and to this checklist** (rather than the issue's first one).
+- **Add copy** offers only this checklist's stamps to pick from; **View copies** and **View offers** list the copies and offers of its stamps; **Show valuation** opens its own valuation.
+- **Price variants…** and **Edit catalog numbers…** open the grids over this checklist's stamps, with any stamp they hang under for context.
+- **Add missing to want list…** and **Apply size…** work on this checklist, as from the issue's checklists editor.
+- The checklist's own: **Choose stamps…**, **Order stamps…**, **Rename…** (with its translations) and **Delete checklist**, which asks first and says what uses it.
+
+What belongs to the issue as a whole — moving or merging it, recomputing its declared range, its format multipliers, editing or deleting it, opening its page — stays on the issue's own row. While **Reorder** is on, the tree is shown whole, without branches.
+
 ### Showing one checklist at a time
 
-When an issue carries **more than one** checklist, expanding its row puts a **Checklist** filter above the stamp tree — and the same control sits in the header of the **Stamps** card on the issue's detail page. Every checklist the issue carries is there **by name, as its own chip**, so you can see what you are choosing between before you choose: click one and the tree narrows to the stamps on it, click a second and it shows the stamps on either.
+When an issue carries **more than one** checklist, expanding its row in **Flat** mode puts a **Checklist** filter above the stamp tree — and the same control sits in the header of the **Stamps** card on the issue's detail page. On the Issues list each chip wears its checklist's colour. Every checklist the issue carries is there **by name, as its own chip**, so you can see what you are choosing between before you choose: click one and the tree narrows to the stamps on it, click a second and it shows the stamps on either.
 
 A stamp that is not on the picked checklists disappears, with one exception: a **parent whose variant did make the cut stays**, dimmed. `309AP` on its own is a number nobody can place, so the `309` it hangs under remains as context — visibly not part of the set, but there to read the numbering off.
 

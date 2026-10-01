@@ -41,6 +41,7 @@ export const OFFERS_EMPTY_TEXT: Record<OfferLookupTarget["kind"], string> = {
   item: "This copy is not listed in any offer yet.",
   stamp: "No copy of this stamp is listed in any offer yet.",
   issue: "No copy from this issue is listed in any offer yet.",
+  checklist: "No copy of a stamp on this checklist is listed in any offer yet.",
 };
 
 /** One offer as a read-only row: label on top, then platform / state / quantity / listing link and

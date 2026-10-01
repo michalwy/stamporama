@@ -62,6 +62,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     catalogNumber: sp.get("catalogNumber") || undefined,
     stampId: sp.get("stampId") || undefined,
     issueId: sp.get("issueId") || undefined,
+    checklistId: sp.get("checklistId") || undefined,
     locationId: sp.get("locationId") || undefined,
     // "This location only" (#385) — absent means #56's subtree, the default.
     locationExact: boolParam(sp.get("locationExact")),

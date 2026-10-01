@@ -7,6 +7,7 @@ import { recomputeIssueSortKeys, recomputeStampSortKeys } from "./catalog-sort-k
 import { enforceStampCatalogDuplicates } from "./duplicate-catalog";
 import { flattenMemberTree } from "./issue-member-order";
 import { recomputeDeclaredRange } from "./catalog-number";
+import { withIssueAncestors } from "./checklist-branches";
 
 // The catalogue-number grid (#1346): every stamp of an issue, variants included, against every
 // catalogue the stamp form offers for the issue's area — the variant price grid's shape (#618) over
@@ -80,10 +81,17 @@ export interface CatalogNumberWrite {
   number: string | null;
 }
 
-/** Everything the grid draws, in one read. */
+/**
+ * Everything the grid draws, in one read.
+ *
+ * `checklistId` narrows the rows to that checklist's stamps of the issue and the ancestors they
+ * hang under (#1520) — its branch's rows on the Issues list, where the grid is opened with it. The
+ * writes are the issue's either way, so nothing else changes.
+ */
 export async function getIssueCatalogNumberGrid(
   ownerId: string,
-  issueId: string
+  issueId: string,
+  checklistId?: string
 ): Promise<CatalogNumberGridData> {
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
@@ -93,7 +101,7 @@ export async function getIssueCatalogNumberGrid(
       name: true,
       year: true,
       collection: { select: { duplicateCatalogMode: true } },
-      checklists: { select: { stamps: { select: { stampId: true } } } },
+      checklists: { select: { id: true, name: true, stamps: { select: { stampId: true } } } },
     },
   });
   if (!issue) throw new Error("Issue not found.");
@@ -138,9 +146,18 @@ export async function getIssueCatalogNumberGrid(
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
   const onChecklist = new Set(issue.checklists.flatMap((c) => c.stamps.map((s) => s.stampId)));
-  const byId = new Map(members.map((m) => [m.stampId, m]));
+  const checklist = checklistId ? issue.checklists.find((c) => c.id === checklistId) : null;
+  if (checklistId && !checklist) throw new Error("Checklist not found.");
+  const inScope = checklist
+    ? withIssueAncestors(
+        members.map((m) => ({ stampId: m.stampId, parentId: m.stamp.parentId })),
+        new Set(checklist.stamps.map((s) => s.stampId))
+      )
+    : null;
+  const scoped = inScope ? members.filter((m) => inScope.has(m.stampId)) : members;
+  const byId = new Map(scoped.map((m) => [m.stampId, m]));
   const rows: CatalogNumberGridRow[] = flattenMemberTree(
-    members.map((m) => ({ stampId: m.stampId, parentId: m.stamp.parentId, sortOrder: m.sortOrder }))
+    scoped.map((m) => ({ stampId: m.stampId, parentId: m.stamp.parentId, sortOrder: m.sortOrder }))
   ).map(({ stampId, depth }) => {
     const stamp = byId.get(stampId)!.stamp;
     return {
@@ -155,13 +172,14 @@ export async function getIssueCatalogNumberGrid(
   });
 
   const columnIds = new Set(columns.map((c) => c.catalogVendorId));
+  const issueLabel = issue.name ?? (issue.year != null ? String(issue.year) : "(unnamed issue)");
   return {
     issueId,
     collectionId: issue.collectionId,
-    scopeLabel: issue.name ?? (issue.year != null ? String(issue.year) : "(unnamed issue)"),
+    scopeLabel: checklist ? `${issueLabel} — ${checklist.name}` : issueLabel,
     columns,
     rows,
-    numbers: members.flatMap((m) =>
+    numbers: scoped.flatMap((m) =>
       m.stamp.catalogNumbers
         .filter((cn) => columnIds.has(cn.catalogVendorId))
         .map((cn) => ({ stampId: m.stampId, catalogVendorId: cn.catalogVendorId, number: cn.number }))

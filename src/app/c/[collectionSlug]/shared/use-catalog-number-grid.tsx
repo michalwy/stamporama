@@ -11,9 +11,12 @@ import { CatalogNumberGridDialog } from "./catalog-number-grid-dialog";
  */
 export function useCatalogNumberGrid({
   issueId,
+  checklistId,
   onSaved,
 }: {
   issueId: string;
+  /** Narrow the grid to one checklist's stamps — a checklist's branch on the Issues list (#1520). */
+  checklistId?: string;
   /** Called once per dialog that actually wrote something — the issue's tree, its catalog chips and
    *  its declared range are stale then. */
   onSaved?: () => void;
@@ -30,6 +33,7 @@ export function useCatalogNumberGrid({
     dialog: open ? (
       <CatalogNumberGridDialog
         issueId={issueId}
+        checklistId={checklistId}
         onClose={() => setOpen(false)}
         onSaved={onSaved}
       />

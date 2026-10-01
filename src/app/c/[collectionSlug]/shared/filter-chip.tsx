@@ -1,5 +1,7 @@
 "use client";
 
+import type { TagColorTokens } from "@/lib/tag-colors";
+
 /** The toolbar control box every list-screen filter shares — chips and selects alike, so a row of
  * them lines up whatever it is made of. */
 export const FILTER_CONTROL_STYLE: React.CSSProperties = {
@@ -28,6 +30,7 @@ export function FilterChip({
   alarm,
   active,
   toggle = false,
+  tint: ownTint,
   onClick,
 }: {
   label: string;
@@ -49,11 +52,29 @@ export function FilterChip({
    * all — the control it replaced on that filter was a checkbox list and announced its ticks.
    */
   toggle?: boolean;
+  /**
+   * The thing this chip selects has a colour of its own, and the chip wears it in place of the
+   * accent (#1519): an issue's checklist chips are drawn in the colours its stamp rows' checklist
+   * chips are, so a row's chip and the filter that selects it read as one thing. Outlined in the
+   * colour while off, filled with it while on — the same two states the accent gives.
+   */
+  tint?: TagColorTokens;
   onClick: () => void;
 }) {
   // The active selection keeps the accent treatment; an alarming chip takes the error tint only
   // while it is not the current selection, so "which filter am I on" stays readable.
   const tint = active ? "accent" : alarm ? "error" : null;
+  const colors = ownTint
+    ? {
+        color: ownTint.color,
+        borderColor: active ? ownTint.color : ownTint.border,
+        background: active ? ownTint.background : "var(--color-bg-elevated)",
+      }
+    : {
+        color: tint ? `var(--color-${tint})` : "var(--color-text-secondary)",
+        borderColor: tint ? `var(--color-${tint})` : "var(--color-border-strong)",
+        background: tint ? `var(--color-${tint}-soft)` : "var(--color-bg-elevated)",
+      };
   return (
     <button
       type="button"
@@ -74,9 +95,7 @@ export function FilterChip({
         whiteSpace: "nowrap",
         flexShrink: 0,
         fontWeight: active || alarm ? 600 : 400,
-        color: tint ? `var(--color-${tint})` : "var(--color-text-secondary)",
-        borderColor: tint ? `var(--color-${tint})` : "var(--color-border-strong)",
-        background: tint ? `var(--color-${tint}-soft)` : "var(--color-bg-elevated)",
+        ...colors,
       }}
     >
       {label}

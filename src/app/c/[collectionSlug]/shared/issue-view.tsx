@@ -12,6 +12,7 @@ import type {
   IssueChecklistTotals,
 } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
+import type { TagColorTokens } from "@/lib/tag-colors";
 import { Tooltip } from "./tooltip";
 import {
   ISSUE_PRIMARY_CHIP,
@@ -99,15 +100,21 @@ export function buildStampTree(members: StampNodeData[]): StampTreeNodeData[] {
  * checkbox list and said which boxes were ticked; a row of buttons distinguished only by an accent
  * tint would have said nothing at all to a reader, which is the one thing the swap could have cost
  * and does not.
+ *
+ * `colors` paints each chip in its checklist's colour (#1519) — passed by the Issues list, whose
+ * stamp rows name their checklists in the same colours, so a row's chip and the filter selecting it
+ * read as one thing. A surface without those row chips passes nothing and keeps the accent.
  */
 export function ChecklistTreeFilter({
   checklists,
   selected,
   onChange,
+  colors,
 }: {
   checklists: { id: string; name: string }[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  colors?: ReadonlyMap<string, TagColorTokens>;
 }) {
   if (checklists.length === 0) return null;
   return (
@@ -125,6 +132,7 @@ export function ChecklistTreeFilter({
           label={c.name}
           active={selected.includes(c.id)}
           toggle
+          tint={colors?.get(c.id)}
           onClick={() =>
             onChange(
               selected.includes(c.id)

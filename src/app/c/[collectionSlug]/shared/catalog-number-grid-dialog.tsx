@@ -29,21 +29,24 @@ import { TextInput } from "./text-input";
  */
 export function CatalogNumberGridDialog({
   issueId,
+  checklistId,
   onClose,
   onSaved,
 }: {
   issueId: string;
+  /** Only this checklist's stamps of the issue, opened from its branch on the Issues list (#1520). */
+  checklistId?: string;
   onClose: () => void;
   /** Called once on close, and only when something was written. */
   onSaved?: () => void;
 }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["catalogNumberGrid", issueId] as const,
+    queryKey: ["catalogNumberGrid", issueId, checklistId ?? null] as const,
     queryFn: async () => {
       const { getIssueCatalogNumberGridAction } = await import(
         "@/app/actions/issue-catalog-numbers"
       );
-      const r = await getIssueCatalogNumberGridAction(issueId);
+      const r = await getIssueCatalogNumberGridAction(issueId, checklistId);
       if (r.status === "error") throw new Error(r.message);
       return r.grid;
     },

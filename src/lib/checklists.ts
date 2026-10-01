@@ -727,6 +727,24 @@ export async function ensureIssueChecklist(
 }
 
 /**
+ * A checklist the caller named, confirmed to be one of this issue's own — a stamp range added from
+ * a checklist's branch on the Issues list joins it (#1520), and a stale or foreign id must fail the
+ * add rather than reach into another issue's goals. Runs on the caller's transaction client.
+ */
+export async function assertIssueChecklist(
+  tx: DbTransaction,
+  issueId: string,
+  checklistId: string
+): Promise<string> {
+  const found = await tx.checklist.findFirst({
+    where: { id: checklistId, issueId },
+    select: { id: true },
+  });
+  if (!found) throw new Error("Checklist not found on this issue.");
+  return found.id;
+}
+
+/**
  * {@link ensureIssueChecklist} for a caller with no transaction of its own. The stamp form's
  * "required for completeness" box lands here: on an issue that already has checklists the
  * collector picks them explicitly, and on one that has none the box means what it always

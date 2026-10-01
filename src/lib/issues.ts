@@ -48,7 +48,7 @@ import {
   type StampCopyCounts,
 } from "./copy-counts";
 import { allocateEntityNumber } from "./items";
-import { ensureIssueChecklist, putStampOnChecklists } from "./checklists";
+import { assertIssueChecklist, ensureIssueChecklist, putStampOnChecklists } from "./checklists";
 import { parseEntityNoSearch } from "./quick-jump";
 import { checkSiblingGroup, sortOrderAssignments } from "./issue-member-order";
 import { getStampSizePresetPair, type StampSizePresetPair } from "./stamp-size-presets";
@@ -1697,6 +1697,9 @@ async function createRangeStamps(
     /** A size preset's pair, written onto every stamp as it is created (#807). Absent, the stamps
      *  state no size — exactly as before presets existed. */
     size?: StampSizePresetPair | null;
+    /** The checklist of this issue the run joins in place of the first (#1520) — a range added
+     *  from a checklist's branch on the Issues list. Ignored under a parent, as the default is. */
+    checklistId?: string | null;
   }
 ): Promise<string[]> {
   const { collectionId, areaId, issueId, issuedYear, input, parent, size } = params;
@@ -1734,7 +1737,9 @@ async function createRangeStamps(
   });
 
   if (!parent) {
-    const checklistId = await ensureIssueChecklist(tx, collectionId, issueId);
+    const checklistId = params.checklistId
+      ? await assertIssueChecklist(tx, issueId, params.checklistId)
+      : await ensureIssueChecklist(tx, collectionId, issueId);
     // Appended after whatever the checklist already carries, in the order the numbers were typed
     // (#764) — the same reading of a bulk add as the members above.
     const last = await tx.checklistStamp.aggregate({
@@ -1876,7 +1881,12 @@ export async function addStampRangeToIssue(
   collectionId: string,
   issueId: string,
   input: AutoCreateStampsInput,
-  options: { maxStamps?: number; sizePresetId?: string | null } = {}
+  options: {
+    maxStamps?: number;
+    sizePresetId?: string | null;
+    /** The checklist the run joins instead of the issue's first (#1520). */
+    checklistId?: string | null;
+  } = {}
 ): Promise<string[]> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
@@ -1899,6 +1909,7 @@ export async function addStampRangeToIssue(
       issuedYear: issue?.year ?? null,
       input,
       size,
+      checklistId: options.checklistId,
     })
   );
   await recomputeStampSortKeys(collectionId, stampIds);
