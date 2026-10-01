@@ -18,6 +18,7 @@ import {
   setAuctionLotBid,
   setAuctionLotMaxBid,
   setAuctionLotMyBid,
+  setAuctionLotMyBidAndCeiling,
   setAuctionSaleStatus,
   settleAuctionSale,
   touchAuctionLotChecked,
@@ -363,7 +364,31 @@ export async function setAuctionLotMyBidAction(
   }
 }
 
-/** The inline ceiling edit from the list. */
+/** *Bid this* and its undo (#1515): the bid and the separate ceiling in one write. A blank ceiling
+ * is the ordinary case — it then follows the bid. */
+export async function setAuctionLotMyBidAndCeilingAction(
+  lotId: string,
+  rawBid: string,
+  rawMax: string
+): Promise<AuctionActionState> {
+  const session = await getSession();
+  const bid = parseAuctionAmount(rawBid, "My bid");
+  if (!bid.ok) return { status: "error", message: bid.message };
+  const max = parseAuctionAmount(rawMax, "My ceiling");
+  if (!max.ok) return { status: "error", message: max.message };
+  try {
+    await setAuctionLotMyBidAndCeiling(session.user.id, lotId, {
+      myBid: bid.value,
+      maxBid: max.value,
+    });
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to record your bid.");
+  }
+}
+
+/** The ceiling set apart from the bid (#1515), from the list. Blank clears it, and the ceiling
+ * follows the bid again. */
 export async function setAuctionLotMaxBidAction(
   lotId: string,
   rawMax: string

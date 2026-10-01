@@ -1329,7 +1329,7 @@ listing turns up again.
 **A row states the three amounts apart** — the auction's `currentBid` (an observation, dated by
 `checkedAt`), the collector's `myBid` (a proxy maximum, a commitment) and `ceiling` (a private
 valuation, already all-in) — which is `auctions.md`'s rule that the three are constantly confused and
-must not be merged. `ceilingBid` is the screen's `bidRoom`. `ended` says the closing time has passed
+must not be merged. `ceiling` is the one the lot is **held to** (#1515): unless `ceilingSetApart`, it follows the bid and is `myBidAllIn`. `ceilingBid` is the screen's `bidRoom`. `ended` says the closing time has passed
 with nothing recorded, and there `standing` is where the bidding was last seen rather than a result —
 the screen's *Won?* with its question mark. `overCeiling: false` survives and an unrecorded
 comparison is absent, which is the row's own three states.

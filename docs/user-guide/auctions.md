@@ -55,7 +55,8 @@ and the settlement follows from them:
      editable on the sale itself afterwards.
 3. Fill in the lot: the **listing URL**, **lot number** and **title**, when it **closes**, then the
    auction's own figures — the **starting price** and the **current bid** — and finally yours:
-   **my bid** and **my ceiling**.
+   **my bid**, and a **separate ceiling** only if you want one apart from the bid — left empty, the
+   ceiling follows your bid ([A ceiling of your own](#a-ceiling-of-your-own)).
 
 Leave the **title** blank and the lot is **named after what it holds**: the catalogue numbers with
 their prefix, collapsed into ranges, then the issue when every line shares one — *Mi·PL 1-12 ·
@@ -108,28 +109,25 @@ to…** box takes as `lot 3` ([Quick jump](quick-jump.md)). The boxed chip besid
 **house's** lot number, as printed in the catalogue or captured from the marketplace; only some
 lots have one, and it repeats freely across sales.
 
-The right of each row is a small grid in **two halves, divided by a rule**: what the lot **costs**,
-and what it is **worth**. Each half has its own two row labels, because the two lines mean something
-different on each side.
+The right of each row holds three blocks — **Auction**, **My bid** and **Recommended** — with a rule
+between what the lot **costs** and what it is **worth**:
 
-What it costs:
-
-| | **Auction** | **Mine** | **Ceiling** |
+| | **Auction** | **My bid** | **Recommended** |
 |---|---|---|---|
-| **bid** | what the lot stands at | what you placed | the most you could bid |
-| **all-in** | what that would cost | what yours would cost | the most it is worth to you |
+| **bid** | what the lot stands at | what you placed | [what it is worth bidding](#what-a-lot-is-worth-bidding), and **Bid this** |
+| **all-in** | what that would cost | what yours would cost | *83.38 left · catalogue 160.00* |
+| **ceiling** | | a ceiling you [set apart](#a-ceiling-of-your-own), when you have one | |
 
-What it is worth:
+The **recommendation** is the figure the row is decided from, so it is the large one, and **Bid
+this** beside it places your bid there in one click — see
+[Bidding the recommendation](#bidding-the-recommendation). The small line under it says what is left
+of the recommendation at the current price, and then the lot's **catalogue value**. The catalogue
+matters less than the recommendation, so it is a note rather than a column; hover it for the
+catalogue headroom, and click it to edit what the lot contains.
 
-| | **Catalogue** | **Recommended** |
-|---|---|---|
-| **value** | what the contents are worth | [what it is worth bidding](#what-a-lot-is-worth-bidding) |
-| **headroom** | what is left over | what is left before you overpay |
-
-Two answers to the same question, deliberately side by side: the catalogue says what the contents
-list at, the recommendation what your own recorded results suggest paying for them. Each headroom is
-that column's figure less what the lot costs at the current bid — so one tells you whether you are
-buying under the book, and the other whether you are still inside what the evidence says.
+There is **no ceiling column**. Your ceiling follows your bid: unless you set one apart, the most you
+will pay for a lot is what your bid costs all-in, and that is already on the row as your bid's
+all-in line.
 
 Every figure is in the **sale's** currency — a lot has none of its own — and where that is not the
 currency your collection counts in, a smaller `≈ 25.00 EUR` sits under it. On the flat watchlist
@@ -139,50 +137,36 @@ full, and the parcel's totals with it. The rate is today's, except on a lot whos
 recorded — that one keeps the rate of the day it closed, because a lost lot is a *dated* price
 observation and revaluing it would make it say something that was never true.
 
-On **your own** figures — *Mine* and *Ceiling*, both their bid and their all-in line — that
-converted line is **editable**. What is being decided while you bid is how much of your own money
-leaves the account, so `≈ 300.00 PLN` under a ceiling can be clicked and retyped as `350`, and what
-gets stored is the SEK (or EUR, or CHF) figure that comes to. It is the same two-sided editing the
-bid and its all-in already have, with a third side: whichever one you type into, the sale's currency
-is what is kept, because that is what the platform's bid box takes and what the invoice will say.
-An empty figure still offers the line, so a limit can be **named** in your own currency rather than
-only corrected in it, and clearing it clears the amount in both. What the lot **stands at** is not
-editable this way: that number is copied off the listing, in the currency the listing states it in.
+On **your own** figures — *My bid*, both its bid and its all-in line, and a ceiling set apart —
+that converted line is **editable**. What is being decided while you bid is how much of your own
+money leaves the account, so `≈ 300.00 PLN` under your bid can be clicked and retyped as `350`, and
+what gets stored is the SEK (or EUR, or CHF) figure that comes to. Whichever one you type into, the
+sale's currency is what is kept, because that is what the platform's bid box takes and what the
+invoice will say. An empty figure still offers the line, so a bid can be **named** in your own
+currency rather than only corrected in it, and clearing it clears the amount in both. What the lot
+**stands at** is not editable this way: that number is copied off the listing, in the currency the
+listing states it in.
 
 On the **cost** side each figure exists twice: the **bid** line is hammer prices, the **all-in**
-line is the same figure with the seller's premium added. Exactly one of each pair is what gets
-stored — the auction's bid and yours are bids, a ceiling is a valuation of the total — and the other
-is worked out from it and shown muted. The ceiling's muted half is exactly what *Bid my ceiling*
-would place.
+line is the same figure with the seller's premium added. The bid is what gets stored, and the all-in
+is worked out from it and shown muted.
 
-In your own two columns, **Mine** and **Ceiling**, you can type into **either half**. The two cells
-are one fact said two ways, so say it whichever way you have it to hand: put `50` in your **all-in**
-cell and the bid that costs that much is stored; put `40` in the ceiling's **bid** cell and the
-ceiling becomes what bidding 40 would cost you. Which of the two is the one actually kept is not
-something you need to think about.
-
-Both directions round to the cent that keeps the figure you typed intact: an **all-in** target
-reads back as the total you asked for, and a bid typed into the ceiling's bid cell stays placeable
-under the ceiling it produces. The **Auction** column is one-way on purpose: that bid is an
-observation of what someone else did, and there is nothing to state twice about it.
-
-The **worth** side is not a third and fourth of those. Its top line, **value**, is the catalogue
-value of what you said the lot holds — see [What a lot contains](#what-a-lot-contains) below — so it
-stays empty until you have described the lot. Its bottom line, **headroom**, is a *subtraction*, not a
-recomputation: catalogue value **less** the auction's all-in cost, i.e. the cell above it less the
-cell in the **Auction / all-in** corner. That is why the labels differ. Nothing on this side is a
-bid, and nothing on it is a cost.
+In **My bid** you can type into **either half**. The two cells are one fact said two ways, so say it
+whichever way you have it to hand: put `50` in the **all-in** cell and the bid that costs that much
+is stored, rounded so the total reads back as the one you typed. The **Auction** block is one-way on
+purpose: that bid is an observation of what someone else did, and there is nothing to state twice
+about it.
 
 A lot with nothing described yet says so, with an amber **Not described** chip among the row's other
 chips — on this list and on the lot's card on its parcel's screen. It is not an error: an empty
-composition is where every lot starts, and the chip is there because everything on the **worth**
-side stays blank until it is filled in. Cancelled lots never carry it. The **Not described** filter
+composition is where every lot starts, and the chip is there because the **Recommended** block stays
+blank until it is filled in. Cancelled lots never carry it. The **Not described** filter
 below collects them.
 
 Shipping is deliberately in none of them. It belongs to the parcel, so it is added once on the
 sale, not once per lot.
 
-**Auction** and **Mine** are two different facts, and keeping them apart is the point: `40` on its
+**Auction** and **My bid** are two different facts, and keeping them apart is the point: `40` on its
 own cannot tell "I am leading at 40" from "someone outbid me at 40". Once both are recorded the row
 says **Leading** or **Outbid** — worked out on every read, never a flag you set, because a flag
 would be wrong the moment the price moved.
@@ -192,8 +176,8 @@ Each figure is tinted about its own side. Yours is **green** while it still cove
 what turns **red**, because the price running away from you is the thing you might still answer.
 Red is never used on your own figure for that: there it already means *over ceiling*.
 
-A colour applies to the **whole column, both of its lines**. The bid and the all-in under it are one
-figure expressed twice, so your bid is green on both lines while it leads, and the auction's column
+A colour applies to the **whole block, both of its lines**. The bid and the all-in under it are one
+figure expressed twice, so your bid is green on both lines while it leads, and the auction's block
 is red on both when the price has passed either your bid or your ceiling. Weight is what still tells
 the two lines apart — the one that gets stored is solid, the one computed from it is muted. Once a
 result has been recorded the tinting stops altogether: leading and outbid are positions in a race
@@ -203,9 +187,10 @@ Once the closing time has passed the same comparison becomes a result: **Won?** 
 question mark is honest — it is inferred from the last bid you recorded, not from the platform.
 Recording the outcome on the lot replaces it with a plain **Won** or **Lost**.
 
-Your figures turn **amber** when the bid you placed would, all-in, cost more than your ceiling. That
-is a different kind of news from the price running away from you — it is your own commitment, and
-the only one of the two you can still take back.
+Your figures turn **amber** when the bid you placed would, all-in, cost more than a ceiling you
+[set apart](#a-ceiling-of-your-own). That is a different kind of news from the price running away
+from you — it is your own commitment, and the only one of the two you can still take back. A ceiling
+that follows your bid can never do this: it *is* your bid.
 
 **Clicking a row opens the parcel it belongs to**, with that lot scrolled to and its card open.
 The card **flashes once** as it arrives — a tint and a brief outline — and then reads like every
@@ -240,55 +225,72 @@ a duplicate warning, the quick jump. **A link naming a lot the sale no longer ho
 moved — opens the sale as it is and leaves the lot in the address bar, so you can see that the link
 asked for something that is not there rather than a page that quietly tidied itself.
 
-### Bidding to your ceiling
+### Bidding the recommendation
 
-**Bid my ceiling** in the row's ⋮ menu records the largest bid that still fits inside your ceiling —
-and that is *not* the ceiling itself. The ceiling is an all-in figure; a platform's bid box takes a
-hammer price. On a house charging 20% plus a 2 fee, a ceiling of 100 means bidding **81.66**, which
-costs 99.99 all-in; bidding 100 would cost 122.
+On nearly every lot the decision is the same: bid what the lot is worth bidding, and go no further.
+**Bid this**, beside the recommended figure, does exactly that in one click. It is always there, not
+only when you hover the row.
 
-It rounds down, so the all-in never creeps past the limit, and it is unavailable when there is no
-ceiling yet or when the fees alone already exceed it — the menu says which. Placing the bid at the
-platform is still yours to do; this records what you placed.
+The recommendation is an **all-in** figure, while a platform's bid box takes a hammer price, so *Bid
+this* records the **largest bid whose all-in still fits inside it**: on a house charging 20% plus a 2
+fee, a recommendation of 100 means bidding **81.66**, which costs 99.99 all-in. Your ceiling then
+follows that bid — and a ceiling you had set apart is cleared, because one click sets both. On a lot
+with no premium the two figures are simply equal.
 
-### Filling a figure in from one you already have
+A small note in the corner confirms the bid with an **Undo**, since the bid it replaced may have
+been one you typed. Undo puts back both figures as they were, a separate ceiling included. Placing
+the bid at the platform is still yours to do; this records what you placed.
 
-Three of these figures are worth copying rather than retyping, and each is offered twice: as an
-entry in the row's ⋮ menu, and as a small button that appears when you hover the row, just right of
-the column it fills. The button is labelled with the **column the figure comes from**, shortened —
-`CEIL` for your ceiling, `CAT` for catalogue value — so it says what it does without needing to be
-learned.
+There is no *Bid this* on a lot with nothing to recommend. A lot not yet described shows a dash that
+says so; a described lot nothing could price opens the recommendation panel to say why. On a closed
+or settled lot there is nothing left to bid on, so the button is not offered either.
 
-| Action | Button | Writes | From |
-|---|---|---|---|
-| **Bid my ceiling** | `CEIL` | Mine / bid | your ceiling |
-| **Bid catalogue value** | `CAT` | Mine / bid | the lot's catalogue value |
-| **Ceiling = catalogue value** | `CAT` | Ceiling | the lot's catalogue value |
-| **Ceiling = recommended bid** | `REC` | Ceiling | the [fair figure](#what-a-lot-is-worth-bidding) |
+The **bargain floor** and the **walk-away** figure are bid the same way: from the row's ⋮ menu
+(*Bid the bargain floor*, *Bid the walk-away figure*), or by clicking a level in the
+[recommendation panel](#the-three-figures).
 
-The buttons sit **between the two lines** of their column, not on either one, because a quick fill
-sets the column as a whole: fill in a bid and the all-in under it follows, set the ceiling and the
-bid it allows follows. Where a column offers two, they are stacked one under the other. They sit
-just **after** the figures rather than before them — amounts are right-aligned, so that is the side
-their own number is on.
+### A ceiling of your own
 
-The two that place a **bid** go through the same arithmetic *Bid my ceiling* does, because both
-sources are all-in figures and a bid box is not: on a house charging 20%, a catalogue value of 100
-means bidding **83.33**. The two that set the **ceiling** copy across unchanged — a ceiling is
-itself an all-in valuation, so there is nothing to convert.
+Your ceiling **follows your bid**: whether the bid came from *Bid this* or you typed it in, the most
+the lot may cost you is what that bid costs all-in, and it moves whenever the bid does. Everything
+measured against a ceiling — *Over ceiling*, *Can still bid*, the [exposure
+bar](#what-it-can-cost-you--the-bar-above-the-toolbar), the morning email — reads it that way. So a
+lot carrying only a bid is over its ceiling exactly when it is outbid.
 
-`CAT` and `REC` sit one under the other on the ceiling column, and both stay: *what the catalogue
-says* and *what it is worth bidding* are different statements, and the catalogue one is still the
-honest answer on a lot nothing has been recorded against. `REC` always writes the **fair** figure;
-the floor and the walk-away are taken from the panel or the ⋮ menu instead.
+When you do want a limit apart from the bid — bid low now, but go to 120 if it comes to that — choose
+**Set ceiling…** in the row's ⋮ menu. A ceiling set apart is shown under your bid (*ceiling 120.00*),
+stays where it is when the bid changes, and can be edited there in place. It turns **amber**, with
+your bid, when the bid costs more than it all-in. **Clear ceiling** in the same menu lets it follow
+the bid again, and so does clearing the figure under the bid. The **Separate ceiling** field when
+you add or edit a lot is the same thing: left empty, the ceiling follows the bid.
 
-Every one of them is a starting point, never a link: the field stays yours to edit afterwards, and
-nothing recomputes it if the catalogue value later changes.
+Lots tracked before this worked the old way keep their figures: a ceiling that was simply the bid's
+own all-in — including one set with the old `REC` and then bid with `CEIL`, a cent apart from
+rounding — now follows the bid, and any other ceiling shows as one set apart.
 
-An action whose source is missing is shown greyed out with the reason underneath, rather than
-hidden — most often *describe what the lot holds first*, since catalogue value follows from
-[what you say a lot contains](#what-a-lot-contains). The ceiling can be filled in on a lot that has
-already closed; the two that place a bid cannot, because there is nothing left to bid on.
+### The rarer fills, in the ⋮ menu
+
+| Action | Writes | From |
+|---|---|---|
+| **Bid the recommendation** | My bid, ceiling follows | the [fair figure](#what-a-lot-is-worth-bidding) — the same as *Bid this* |
+| **Bid the bargain floor** / **Bid the walk-away figure** | My bid, ceiling follows | the other two levels |
+| **Bid catalogue value** | My bid | the lot's catalogue value |
+| **Bid my ceiling** | My bid | a ceiling you set apart |
+| **Set ceiling…** | a ceiling set apart | what you type |
+| **Ceiling = catalogue value** | a ceiling set apart | the lot's catalogue value |
+| **Clear ceiling** | — | lets the ceiling follow your bid again |
+
+Anything placing a **bid** goes through the same arithmetic as *Bid this*, because every source is
+an all-in figure and a bid box is not: on a house charging 20%, a catalogue value of 100 means
+bidding **83.33**. *Bid catalogue value* and *Bid my ceiling* leave a ceiling you set apart where it
+is. A ceiling copies its source unchanged — it is itself an all-in valuation.
+
+Every one of them is a starting point, never a link: the figure stays yours to edit afterwards, and
+nothing recomputes it if the catalogue value later changes. An entry whose source is missing is
+shown greyed out with the reason underneath, rather than hidden — most often *describe what the lot
+holds first*, since catalogue value and the recommendation follow from
+[what you say a lot contains](#what-a-lot-contains). A ceiling can be set on a lot that has already
+closed; nothing that places a bid can, because there is nothing left to bid on.
 
 ### Closing times
 
@@ -460,8 +462,9 @@ Two figures, and the gap between them is the decision:
 - **At ceiling** — the same, if you carried every open lot up to **your own ceiling**. This is the
   one that says whether there is room to keep bidding.
 
-A ceiling is already an all-in figure ([Bidding to your ceiling](#bidding-to-your-ceiling)), so it
-counts as it stands — the premium is never added to it a second time. Where the bid you placed is
+A ceiling is already an all-in figure ([A ceiling of your own](#a-ceiling-of-your-own)), so it
+counts as it stands — the premium is never added to it a second time. A lot whose ceiling follows its
+bid counts at that bid in both figures. Where the bid you placed is
 *higher* than the ceiling, that bid is what counts: it is money committed whatever your valuation
 of the lot says.
 
@@ -478,6 +481,9 @@ The note beside them says how many lots were counted, then the lots already past
 it calls out the two things that would make the totals read lower than the truth: lots carrying
 **neither a bid nor a ceiling**, which cannot be costed at all, and lots in a currency with **no
 rate** into yours, which are left out rather than added as though the two currencies were one.
+
+Because a ceiling follows the bid unless you set one apart, a lot you have only bid on drops out of
+both figures as soon as it is outbid: the price has passed your bid and the ceiling that follows it.
 
 The same pair sits on a sale's own screen, beside its all-in total, for one parcel.
 
@@ -765,8 +771,8 @@ everything else in the menu is not.
 
 ### Headroom
 
-The footer of the editor, and the row labelled **headroom** in the worth half of the grid, is the
-catalogue value less what the lot actually costs you.
+The footer of the editor, and the hover hint on the row's catalogue value, is the catalogue value
+less what the lot actually costs you.
 
 > headroom = catalogue value − (bid + the seller's premium)
 
@@ -896,9 +902,9 @@ answer is not one number: it is three — a **floor**, below which the lot is a 
 figure itself, and a **walk-away**, past which it belongs to somebody else. A single figure would
 state a precision this evidence does not have; three state a decision.
 
-The **Recommended** column on the right of each row carries the fair figure, and clicking it opens
-everything behind that number. The `REC` button on the ceiling column writes the same figure
-straight into your ceiling without opening anything.
+The **Recommended** block on the right of each row carries the fair figure, and clicking it opens
+everything behind that number. **Bid this** beside it bids that figure without opening anything —
+see [Bidding the recommendation](#bidding-the-recommendation).
 
 ### The three figures
 
@@ -914,13 +920,14 @@ separates the two; shipping is not counted, because a parcel ships once however 
 
 `fair` is the sum over the lot's lines, and **nothing is added for a complete series or taken off
 for a big lot**. Both are real market effects and both are yours to judge — the floor percentage is
-where "multi-line lots go cheap" belongs, and the ceiling field stays editable in any case.
+where "multi-line lots go cheap" belongs, and your bid stays editable in any case.
 
-**Any of the three can become your ceiling.** Click a level in the panel and it is written there and
-the panel closes; the same three are in the row's ⋮ menu as *Ceiling = bargain floor / recommended
-bid / walk-away*. Which one to take is a judgement — how badly you want the lot, how thin the
+**Any of the three can be bid.** Click a level in the panel and it is bid exactly as *Bid this* bids
+the fair figure — the largest bid inside it, your ceiling following — and the panel closes, with the
+same **Undo**. The same three are in the row's ⋮ menu as *Bid the recommendation / bargain floor /
+walk-away figure*. Which one to take is a judgement — how badly you want the lot, how thin the
 evidence is — which is why the panel is where it is made: the results it is built from are on the
-same screen. The row's own `REC` button stays on **fair**, so a row you are only scanning still has
+same screen. The row's own *Bid this* stays on **fair**, so a row you are only scanning still has
 exactly one answer on it.
 
 ### Where each line's figure comes from
@@ -981,7 +988,7 @@ group it used and how many results are behind it — *"55% — Polska Ludowa, mi
 
 The **catalogue fallback** above is what fills that gap until then, and 100% is chosen so it changes
 nothing: before anything has been learned, a catalogue-anchored recommendation is exactly the
-catalogue value the `CAT` quick fill already writes. It stops being consulted as soon as there is
+catalogue value *Bid catalogue value* already places. It stops being consulted as soon as there is
 evidence.
 
 There is no setting for the percentage itself, and there is deliberately no way to override it: you

@@ -883,6 +883,12 @@ export function AuctionLotsPanel({
                         return setAuctionLotMaxBidAction(row.id, value);
                       })
                     }
+                    onSetBidAndCeiling={(row, myBid, maxBid) =>
+                      runLotAction(async () => {
+                        const { setAuctionLotMyBidAndCeilingAction } = await import("@/app/actions/auctions");
+                        return setAuctionLotMyBidAndCeilingAction(row.id, myBid, maxBid);
+                      })
+                    }
                     onMarkChecked={(row) =>
                       runLotAction(async () => {
                         const { touchAuctionLotCheckedAction } = await import(
@@ -927,6 +933,12 @@ export function AuctionLotsPanel({
                     runLotAction(async () => {
                       const { setAuctionLotMaxBidAction } = await import("@/app/actions/auctions");
                       return setAuctionLotMaxBidAction(row.id, value);
+                    })
+                  }
+                  onSetBidAndCeiling={(row, myBid, maxBid) =>
+                    runLotAction(async () => {
+                      const { setAuctionLotMyBidAndCeilingAction } = await import("@/app/actions/auctions");
+                      return setAuctionLotMyBidAndCeilingAction(row.id, myBid, maxBid);
                     })
                   }
                   onMarkChecked={(row) =>

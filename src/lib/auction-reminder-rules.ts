@@ -1,5 +1,6 @@
 import {
   bidStanding,
+  ceilingOf,
   isOutpriced,
   lotHasSignal,
   maxBidWithin,
@@ -237,10 +238,12 @@ export function describeReminderStanding(lot: ReminderLot, now: Date): string {
     maxBid: lot.maxBid,
     fees: lot.fees,
   };
+  // The ceiling as it is held (#1515): set apart, else the bid's own all-in.
+  const held = ceilingOf(lot, lot.fees);
   if (lotHasSignal("bid-possible", signalInput, now)) {
-    parts.push(`can still bid up to ${money(maxBidWithin(lot.maxBid, lot.fees), c)}`);
+    parts.push(`can still bid up to ${money(maxBidWithin(held, lot.fees), c)}`);
   }
-  const ceiling = money(lot.maxBid, c);
+  const ceiling = money(held, c);
   if (ceiling) parts.push(`ceiling ${ceiling} all-in`);
   return parts.join(" · ");
 }

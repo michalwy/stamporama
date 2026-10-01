@@ -643,13 +643,13 @@ export function AuctionLotFormDialog({
               />
             </div>
             <div style={{ minWidth: 0 }}>
-              <LabelWithError htmlFor="auction-max">My ceiling</LabelWithError>
+              <LabelWithError htmlFor="auction-max">Separate ceiling</LabelWithError>
               <NumericInput
                 kind="amount"
                 id="auction-max"
                 value={maxBid}
                 onChange={(e) => setMaxBid(e.target.value)}
-                placeholder="—"
+                placeholder="follows bid"
                 style={INPUT_STYLE}
               />
             </div>
@@ -657,7 +657,8 @@ export function AuctionLotFormDialog({
           <p style={{ ...NOTE, marginBottom: "1rem" }}>
             Amounts are in {currency || "the sale's currency"}: the current bid is what the lot
             stands at, <em>my bid</em> is what you have placed at the platform, and the ceiling is
-            what the lot is worth to you all-in, premium included.
+            what the lot is worth to you all-in, premium included. Left empty, the ceiling follows
+            your bid; one entered here stays put when the bid changes.
           </p>
 
           {composing && (

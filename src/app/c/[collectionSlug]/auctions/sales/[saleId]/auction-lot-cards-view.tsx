@@ -382,6 +382,7 @@ interface LotCardProps {
   onSetBid: (lot: AuctionLotDetailView, value: string) => void;
   onSetMyBid: (lot: AuctionLotDetailView, value: string) => void;
   onSetMaxBid: (lot: AuctionLotDetailView, value: string) => void;
+  onSetBidAndCeiling: (lot: AuctionLotDetailView, myBid: string, maxBid: string) => void;
   onMarkChecked: (lot: AuctionLotDetailView) => void;
   /** Refresh after the row recorded an outcome (#354). */
   onChanged: () => void;
@@ -405,6 +406,7 @@ function LotCard({
   onSetBid,
   onSetMyBid,
   onSetMaxBid,
+  onSetBidAndCeiling,
   onMarkChecked,
   onChanged,
 }: LotCardProps) {
@@ -474,6 +476,7 @@ function LotCard({
           onSetBid={(_, value) => onSetBid(lot, value)}
           onSetMyBid={(_, value) => onSetMyBid(lot, value)}
           onSetMaxBid={(_, value) => onSetMaxBid(lot, value)}
+          onSetBidAndCeiling={(_, myBid, maxBid) => onSetBidAndCeiling(lot, myBid, maxBid)}
           onMarkChecked={() => onMarkChecked(lot)}
           // On this screen the composition is right below the row, so the row's ⋮ entry and its
           // catalogue cell **open** the card rather than an editor dialog — and only open it, since
@@ -562,6 +565,7 @@ interface AuctionLotCardsViewProps {
   onSetBid: (lot: AuctionLotDetailView, value: string) => void;
   onSetMyBid: (lot: AuctionLotDetailView, value: string) => void;
   onSetMaxBid: (lot: AuctionLotDetailView, value: string) => void;
+  onSetBidAndCeiling: (lot: AuctionLotDetailView, myBid: string, maxBid: string) => void;
   onMarkChecked: (lot: AuctionLotDetailView) => void;
 }
 
@@ -593,6 +597,7 @@ export function AuctionLotCardsView({
   onSetBid,
   onSetMyBid,
   onSetMaxBid,
+  onSetBidAndCeiling,
   onMarkChecked,
 }: AuctionLotCardsViewProps) {
   const hydrated = useHydrated();
@@ -916,6 +921,7 @@ export function AuctionLotCardsView({
               onSetBid={onSetBid}
               onSetMyBid={onSetMyBid}
               onSetMaxBid={onSetMaxBid}
+              onSetBidAndCeiling={onSetBidAndCeiling}
               onMarkChecked={onMarkChecked}
               onChanged={onChanged}
             />

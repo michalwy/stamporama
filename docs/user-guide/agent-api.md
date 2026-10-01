@@ -279,7 +279,7 @@ stamps, the grade, whether there is a certificate, whether it is a block rather 
 many — and it comes back with three figures: a floor under which the lot is a bargain, a fair figure
 your own recorded results support, and a walk-away past which it belongs to somebody else. If the
 opening price is above the walk-away, that is the end of it, and you never had to look. It is the
-same arithmetic the *REC* figure on your own lots screen shows, out of the same code, so the two
+same arithmetic the *Recommended* figure on your own lots screen shows, out of the same code, so the two
 cannot tell you different things. Nothing is created by asking — no lot, no sale, nothing on your
 watchlist — and a **read only** token can ask it.
 

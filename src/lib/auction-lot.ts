@@ -173,6 +173,30 @@ export function ceilingAllowing(bid: Amount, fees: AuctionFees = {}): string | n
 }
 
 /**
+ * The ceiling a lot is held to: the one **set apart** when there is one, else what the collector's
+ * own bid costs all-in (#1515).
+ *
+ * A ceiling **follows the bid unless it is set apart**. The collector almost always bids and caps a
+ * lot at the same figure, so `AuctionLot.maxBid` stores only a ceiling chosen *separately* from the
+ * bid — from the row's ⋮ menu or the lot's form — and stays put until it is cleared. Null there means
+ * "my ceiling is my bid": it moves whenever the bid does, whether the bid came from *Bid this* or was
+ * typed by hand, and it is never stored, so a later change of premium cannot leave it behind.
+ *
+ * Every reader that compares against a ceiling goes through this — the signals, the exposure totals,
+ * the morning reminder, the agent's reads — so a lot carrying only a bid is capped at that bid
+ * everywhere at once. Premium only, never shipping: like {@link allIn} on a row, a ceiling is about
+ * one lot, and shipping belongs to the parcel. Null when neither figure is recorded.
+ */
+export function ceilingOf(
+  lot: { myBid?: Amount; maxBid?: Amount },
+  fees: AuctionFees = {}
+): string | null {
+  const apart = num(lot.maxBid);
+  if (apart !== null) return money(apart);
+  return allIn(lot.myBid, { premiumPercent: fees.premiumPercent, premiumFixed: fees.premiumFixed });
+}
+
+/**
  * Where the collector stands on a lot, derived from what they placed against what it now stands at.
  *
  * - `leading` — their bid is at or above the current price, so nobody has passed them.
@@ -324,6 +348,7 @@ export interface LotSignalInput {
   endsAt: Date;
   currentBid?: Amount;
   myBid?: Amount;
+  /** The ceiling set apart from the bid; absent follows the bid ({@link ceilingOf}, #1515). */
   maxBid?: Amount;
   fees?: AuctionFees;
 }
@@ -351,15 +376,16 @@ export function lotHasSignal(signal: LotSignal, lot: LotSignalInput, now: Date):
     case "over-ceiling": {
       if (ended) return false;
       const cost = allIn(lot.currentBid, lot.fees);
-      const cap = num(lot.maxBid);
+      const cap = num(ceilingOf(lot, lot.fees));
       return cost !== null && cap !== null && Number(cost) > cap;
     }
     case "bid-possible": {
       if (ended) return false;
       // Room is measured against the *hammer* price, since that is what a bid box takes: the most
       // that fits inside the ceiling has to be above both what the lot stands at and what has
-      // already been placed, or there is nothing left to do here.
-      const room = maxBidWithin(lot.maxBid, lot.fees);
+      // already been placed, or there is nothing left to do here. A ceiling that follows the bid
+      // (#1515) leaves no room above it by definition.
+      const room = maxBidWithin(ceilingOf(lot, lot.fees), lot.fees);
       if (room === null) return false;
       const roomValue = Number(room);
       const current = num(lot.currentBid);
@@ -534,8 +560,9 @@ export interface AuctionLotSummaryRow {
   wonTie?: boolean | null;
   /** The live bid while the lot is open. */
   currentBid?: Amount;
-  /** The collector's own ceiling — an **all-in** valuation (ADR-0021 §6), not a hammer price. Read
-   * by {@link AuctionSaleSummary.ceilingTotal}, and against `currentBid` by {@link isOutpriced}. */
+  /** The collector's ceiling **set apart** from the bid — an **all-in** valuation (ADR-0021 §6), not
+   * a hammer price. Absent means it follows the bid (#1515); {@link ceilingOf} reads either. Read by
+   * {@link AuctionSaleSummary.ceilingTotal}, and against `currentBid` by {@link isOutpriced}. */
   maxBid?: Amount;
   /** What the lot fetched once it closed. Preferred over `currentBid` when present: it is the
    * settled figure, and the last observed bid is only ever an approximation of it. */
@@ -646,7 +673,9 @@ export function isOutpriced(
 ): boolean {
   if (bidStanding(lot.myBid, lot.currentBid) === "leading") return false;
   const cost = allIn(lot.currentBid, fees);
-  const cap = num(lot.maxBid);
+  // The ceiling as it is held (#1515): one set apart, else the bid's own all-in — so a lot whose
+  // ceiling follows its bid is out of reach exactly when it is outbid.
+  const cap = num(ceilingOf(lot, fees));
   return cost !== null && cap !== null && Number(cost) > cap;
 }
 
@@ -732,7 +761,9 @@ export function summarizeAuctionSale(
     // at. The ceiling enters `ceilingTotal` as it stands — it is an all-in valuation already.
     const placed = num(lot.myBid);
     const placedCost = placed === null ? null : allInValue(placed, perLotFees);
-    const ceiling = num(lot.maxBid);
+    // The ceiling as it is held (#1515) — set apart, else following the bid, when it can only
+    // equal `placedCost` and the `max` below changes nothing.
+    const ceiling = num(ceilingOf(lot, perLotFees));
     if (placedCost !== null) committedTotal += placedCost;
     if (placedCost === null && ceiling === null) uncappedCount++;
     else ceilingTotal += Math.max(placedCost ?? 0, ceiling ?? 0);
