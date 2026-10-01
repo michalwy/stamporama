@@ -11,6 +11,7 @@ import {
   type TitleTemplateCopy,
 } from "../../src/lib/offer-title-template";
 import {
+  ALBUM_TYPE_ROLES,
   DEFAULT_ALBUM_PRESET,
   albumHawidMargins,
   albumTemplateSummary,
@@ -23,6 +24,8 @@ import {
   type AlbumTemplateRawInput,
 } from "../../src/lib/album-template-rules";
 import { ALBUM_FACES, findAlbumFace, isAlbumFaceId } from "../../src/lib/album-fonts";
+import { ALBUM_TEXT_BLOCK_ROLES } from "../../src/lib/album-corrections";
+import { ALBUM_PRINT_MODES } from "../../src/lib/album-print-mode";
 import { planHawidBox } from "../../src/lib/hawid";
 
 // The album template (#766): the preset's parsing rules, the faces it may name, and the tokens its
@@ -201,6 +204,30 @@ describe("parseAlbumTemplateInput", () => {
       assert.match(parseError({ [key]: "-1" }), name);
       assert.match(parseError({ [key]: "100.5" }), name);
       assert.match(parseError({ [key]: "" }), name);
+    }
+  });
+
+  it("names the series' top heading the issue heading and the one under it the checklist heading (#1517)", () => {
+    // The stored names stay `heading` and `subheading`; only the words the collector reads changed.
+    const fields = [
+      ["headingSpaceAboveMm", /^Space above an issue heading/],
+      ["headingSpaceBelowMm", /^Space below an issue heading/],
+      ["subheadingSpaceAboveMm", /^Space above a checklist heading/],
+      ["subheadingSpaceBelowMm", /^Space below a checklist heading/],
+      ["headingSizePt", /^Issue heading size/],
+      ["subheadingSizePt", /^Checklist heading size/],
+    ] as const;
+    for (const [key, name] of fields) assert.match(parseError({ [key]: "-1" }), name);
+    assert.match(parseError({ headingFace: "no-such-face" }), /Issue heading/);
+    assert.match(parseError({ subheadingFace: "no-such-face" }), /Checklist heading/);
+    const roles = new Map(ALBUM_TYPE_ROLES.map((r) => [r.key, r.label]));
+    assert.equal(roles.get("heading"), "Issue heading");
+    assert.equal(roles.get("subheading"), "Checklist heading");
+    const voices = new Map(ALBUM_TEXT_BLOCK_ROLES.map((r) => [r.key, r.label]));
+    assert.equal(voices.get("heading"), "Issue heading");
+    assert.equal(voices.get("subheading"), "Checklist heading");
+    for (const label of [...roles.values(), ...voices.values(), ...ALBUM_PRINT_MODES.map((m) => m.label)]) {
+      assert.doesNotMatch(label, /sub-?heading/i, `"${label}" still says sub-heading`);
     }
   });
 

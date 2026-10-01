@@ -439,8 +439,8 @@ export function compareAlbumPages(
       block.kind === "text"
         ? "A note"
         : block.groupHeading || now.groupHeading
-          ? "A checklist's sub-heading"
-          : "A checklist heading",
+          ? "A checklist heading"
+          : "An issue heading",
       block.heading,
       now.heading
     );

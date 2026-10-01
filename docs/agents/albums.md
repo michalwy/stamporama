@@ -1007,8 +1007,14 @@ read. What is worth not re-deriving:
 - **The issue heading renders over every checklist of the issue in the album**, so every run of it —
   live or a card's reference — reads one string, even with a stamp-level token in the template.
 - **The sample page has no run**: his 1950–1951 pages print none, and a third chapter would be
-  unseen behind a preview that draws two. The sub-heading's marks are empty there by design; pointed
-  at a real album the preview shows them.
+  unseen behind a preview that draws two. The checklist heading's marks are empty there by design;
+  pointed at a real album the preview shows them.
+- **The code's names are not the collector's** (#1517). The role the code calls `heading` — and the
+  `checklistTemplate` text it prints — is the **issue heading** on screen: the top heading of every
+  series, a checklist printed as its own issue included (even one spanning issues). The role the code
+  calls `subheading` is the **checklist heading**: a checklist's name under its issue. Only the
+  labels moved; the columns, the role keys and `within-subheading` kept their names, so nothing saved
+  changed. A new label for either role takes the screen's name, never the code's.
 
 ## The page editor (#769)
 

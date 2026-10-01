@@ -222,7 +222,7 @@ describe("compareAlbumPages", () => {
     );
     assert.deepEqual(kinds(found), ["text", "text", "text"]);
     assert.match(found.map((d) => d.detail).join(" "), /The footer would now read "PL 1"; the card reads "PL 1-1"\./);
-    assert.match(found.map((d) => d.detail).join(" "), /A checklist heading would now read "Wystawa Warszawska"/);
+    assert.match(found.map((d) => d.detail).join(" "), /An issue heading would now read "Wystawa Warszawska"/);
     assert.match(found.map((d) => d.detail).join(" "), /1 box label reads differently now\./);
   });
 
@@ -254,7 +254,7 @@ describe("compareAlbumPages", () => {
       })
     );
     const said = found.map((d) => d.detail).join(" ");
-    assert.match(said, /A checklist's sub-heading would now read "Watermark X"; the card reads "Wystawa"\./);
+    assert.match(said, /A checklist heading would now read "Watermark X"; the card reads "Wystawa"\./);
     assert.match(said, /An issue heading would now read "1940, Issue"; the card carries none\./);
   });
 

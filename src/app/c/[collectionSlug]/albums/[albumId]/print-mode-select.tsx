@@ -9,7 +9,7 @@ import {
 
 /** What the defaults are, said once for both screens (#1509) — the rest is the user guide's. */
 export const ALBUM_PRINT_MODE_DEFAULTS_HINT =
-  "Left at the default, an issue's only checklist in the album prints as its own issue. An issue with several prints its title once: the checklist named after the issue straight under it, each other one under a sub-heading of its own name. Only neighbours share the title — another issue between them prints it again.";
+  "Left at the default, an issue's only checklist in the album prints as its own issue. An issue with several prints its title once: the checklist named after the issue straight under it, each other one under a checklist heading of its own name. Only neighbours share the title — another issue between them prints it again.";
 
 /**
  * How one checklist prints relative to its issue (#1509) — one control for the album's Entries tab and

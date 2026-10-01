@@ -38,8 +38,8 @@ export const ALBUM_PRINT_MODES = [
   { key: "within", label: "Within its issue", hint: "Under the issue's heading, no heading of its own" },
   {
     key: "within-subheading",
-    label: "Within its issue, with a sub-heading",
-    hint: "Under the issue's heading, its name as a sub-heading",
+    label: "Within its issue, under a checklist heading",
+    hint: "Under the issue heading, its name as a checklist heading",
   },
 ] as const;
 

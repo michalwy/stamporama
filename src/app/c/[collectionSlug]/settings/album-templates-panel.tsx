@@ -205,12 +205,12 @@ const TEXT_FIELDS: readonly {
     label: "Chapter heading",
     tokens: ALBUM_CHAPTER_TOKENS,
     description:
-      "Printed above each group of checklists. A chapter is a year, so the year and the area are all it can name — the series itself belongs in the checklist heading below.",
+      "Printed above each group of checklists. A chapter is a year, so the year and the area are all it can name — the series itself belongs in the issue heading below.",
     emptyPreview: "Empty — chapters print no heading.",
   },
   {
     key: "checklistTemplate",
-    label: "Checklist heading",
+    label: "Issue heading",
     tokens: ALBUM_CHECKLIST_TOKENS,
     description:
       "The line above each series. {issueDate} is the catalogue's own date for the earliest stamp on the checklist — bare it reads 22 VII, or use {issueDate:numeric} / {issueDate:iso}.",
@@ -833,32 +833,32 @@ export function AlbumPresetForm({
                   <div />
                   <MmField
                     name="headingSpaceAboveMm"
-                    label="Above a checklist heading"
+                    label="Above an issue heading"
                     value={preset.headingSpaceAboveMm}
                     disabled={isPending}
                   />
                   <MmField
                     name="headingSpaceBelowMm"
-                    label="Below a checklist heading"
+                    label="Below an issue heading"
                     value={preset.headingSpaceBelowMm}
                     disabled={isPending}
                   />
                   <div />
                   <MmField
                     name="subheadingSpaceAboveMm"
-                    label="Above a sub-heading"
+                    label="Above a checklist heading"
                     value={preset.subheadingSpaceAboveMm}
                     disabled={isPending}
                   />
                   <MmField
                     name="subheadingSpaceBelowMm"
-                    label="Below a sub-heading"
+                    label="Below a checklist heading"
                     value={preset.subheadingSpaceBelowMm}
                     disabled={isPending}
                   />
                 </div>
                 <p style={{ ...HINT_STYLE, marginBottom: 0 }}>
-                  A sub-heading names a checklist printed under its issue&apos;s heading.
+                  A checklist heading names a checklist printed within its issue, under the issue heading.
                 </p>
               </>
             )}
@@ -964,8 +964,8 @@ export function AlbumPresetForm({
                 <div style={GRID_STYLE}>
                   <TypeRow role="title" label="Album title" face={preset.titleFace} size={preset.titleSizePt} disabled={isPending} />
                   <TypeRow role="chapter" label="Chapter heading" face={preset.chapterFace} size={preset.chapterSizePt} disabled={isPending} />
-                  <TypeRow role="heading" label="Checklist heading" face={preset.headingFace} size={preset.headingSizePt} disabled={isPending} />
-                  <TypeRow role="subheading" label="Sub-heading" face={preset.subheadingFace} size={preset.subheadingSizePt} disabled={isPending} />
+                  <TypeRow role="heading" label="Issue heading" face={preset.headingFace} size={preset.headingSizePt} disabled={isPending} />
+                  <TypeRow role="subheading" label="Checklist heading" face={preset.subheadingFace} size={preset.subheadingSizePt} disabled={isPending} />
                   <TypeRow role="label" label="Box label" face={preset.labelFace} size={preset.labelSizePt} disabled={isPending} />
                   <TypeRow role="footer" label="Footer" face={preset.footerFace} size={preset.footerSizePt} disabled={isPending} />
                 </div>
