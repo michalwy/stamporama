@@ -180,7 +180,7 @@ reports the change.
 
 ## The language is the album's own, and it changes the plan
 
-An album is printed in one language. Names, checklist headings and everything else resolve to that
+An album is printed in one language. Names, headings and everything else resolve to that
 language wherever you have a translation and fall back to the collection's own where you do not —
 the same fallback a generated listing title uses.
 
@@ -192,8 +192,9 @@ rather than being chosen when you print.
 Changing it re-plans the album. Pages you have already printed stay in the language they were
 printed in.
 
-A **checklist heading** prints the checklist's name. A checklist named after its issue — which is
-how an issue's first checklist is named — uses the **issue's** translation, so an issue translated
+The **issue heading** over a series prints the checklist's name through `{checklistName}`, and a
+**checklist heading** under an issue prints the checklist's name alone. A checklist named after its
+issue — which is how an issue's first checklist is named — uses the **issue's** translation, so an issue translated
 for your listings is already translated here. A checklist you named yourself (*Imperforate*, *With
 tabs*) has its own translations, next to its name in the checklist's **Rename** dialog. If you give a
 checklist named after its issue a translation of its own, that one is used.
@@ -263,10 +264,10 @@ Y*, *Imperforate*. Printed each under its own heading, they read on the page as 
 each entry has a way of being printed:
 
 - **As its own issue** — a block of its own under its own heading, as every checklist printed before.
-- **Within its issue** — its stamps directly under the **issue's** heading, with no heading of its
+- **Within its issue** — its stamps directly under the **issue heading**, with no heading of its
   own.
-- **Within its issue, with a sub-heading** — under the issue's heading, with the checklist's name as a
-  smaller sub-heading of its own.
+- **Within its issue, under a checklist heading** — under the issue heading, with the checklist's name
+  as a smaller **checklist heading** of its own.
 
 ```
 1945, 1 IX. Westerplatte
@@ -275,7 +276,7 @@ each entry has a way of being printed:
   [XXII]
 ```
 
-**The issue's heading is always the issue's title**, written with the album's checklist heading text
+**The issue heading is always the issue's title**, written with the album's issue heading text
 (*Page template… → Texts*) and in the album's language — the issue's translation, as a checklist named
 after its issue already prints one. A missing translation is flagged in the page editor like any
 other.
@@ -284,8 +285,8 @@ other.
 
 - an issue with **one** checklist in the album prints it **as its own issue**, as before;
 - an issue with **several** prints its title once: the checklist named after the issue — its main
-  checklist — **within its issue**, straight under the title, and each of the others **with a
-  sub-heading**. If none is named after the issue, every one gets a sub-heading.
+  checklist — **within its issue**, straight under the title, and each of the others **under a
+  checklist heading**. If none is named after the issue, every one gets a checklist heading.
 - a checklist that **spans several issues** always prints as its own issue; it has no issue to be
   printed within, and nothing else is offered for it.
 
@@ -300,14 +301,16 @@ Nothing is reordered for you — drag the rows together if you want them under o
 On the page, the issue's title is never left alone at the foot of a sheet: it moves to the next sheet
 with the first row under it. When the issue's checklists continue on the next sheet, that sheet
 repeats the title marked **[2]** (then **[3]**…), counting the sheets of the issue; a checklist too
-long for one sheet repeats its sub-heading too, marked with **its own** count — so a sheet can read
+long for one sheet repeats its checklist heading too, marked with **its own** count — so a sheet can read
 *1945, 1 IX. Westerplatte [3]* over *Imperforate [2]*. Two short checklists of one issue can sit side by
 side under its title; a checklist of another issue never sits beside them.
 
-The sub-heading has its own face, size and space above and below — *Page template… → Type* and
-*Headings* — starting as Arial Italic's metric twin at 10 pt, 6 mm above and 3 mm below, as the
-`STAMP_H2` sub-headings of hand-made AlbumEasy pages are set. The space above is left after the boxes
-before it; straight under the issue's title only the title's own space below separates them.
+The checklist heading has its own face, size and space above and below — *Page template… → Type*
+and *Headings* — starting as Arial Italic's metric twin at 10 pt, 6 mm above and 3 mm below, as the
+`STAMP_H2` headings of hand-made AlbumEasy pages are set. The space above is left after the boxes
+before it; straight under the issue's title only the issue heading's own space below separates them.
+The issue heading's settings are the ones every series' top heading uses — a checklist printed as its
+own issue included, even one spanning several issues.
 
 ## Sheets
 
@@ -467,8 +470,8 @@ What you can set:
   value as in *Page template…*, for this album only; how strongly the pictures print stays there. As
   with the spacing, you are first told how many printed cards that match today would stop matching,
   and a printed card stays as printed.
-- **How a checklist prints relative to its issue** — as its own issue, within it, or within it with a
-  sub-heading. Select the checklist by its heading; *Printed as* in its panel is the same choice as on
+- **How a checklist prints relative to its issue** — as its own issue, within it, or within it under
+  a checklist heading. Select the checklist by its heading; *Printed as* in its panel is the same choice as on
   the Entries tab and is saved as you pick it. See [Several checklists of one
   issue](#several-checklists-of-one-issue).
 - **The order of the stamps in a block** — drag one box onto another. That writes this album's own
@@ -502,8 +505,8 @@ word on the sheet that would print in the collection's default language because 
 translation is missing — click the dotted outline on the canvas, or fill it in the panel, and it
 is saved on the stamp, issue, checklist or area itself straight away.
 
-That covers every text a sheet prints: the running head, the year, checklist headings, an issue's
-title over its checklists and their sub-headings, box labels and the footer. The running head is marked while the album is still called by its area's plain name
+That covers every text a sheet prints: the running head, the year, issue headings, the checklist
+headings under them, box labels and the footer. The running head is marked while the album is still called by its area's plain name
 and the area has no name in the album's language; filling that in does not rename the album, it
 offers the new name (see [above](#when-the-area-gets-a-name-in-the-albums-language-later)). Your own
 notes are not marked — they print exactly what you wrote.
@@ -565,9 +568,9 @@ has none, so a footer that only says that prints nothing.)
 selected so you can type at once:
 
 - **A heading or a text** is set in one of **the template's own faces** — the chapter heading's, the
-  checklist heading's and so on — at a **size you choose** in points, left, centred or right. A heading
-  starts in the chapter heading's face and a text in the checklist heading's, but both can be set in
-  any. Line breaks you type are kept, and a line too long for the width wraps.
+  issue heading's, the checklist heading's and so on — at a **size you choose** in points, left,
+  centred or right. A heading starts in the chapter heading's face and a text in the issue heading's,
+  but both can be set in any. Line breaks you type are kept, and a line too long for the width wraps.
 - **A picture** is chosen from the collection's **picture library**, which is shared by every album:
   a coat of arms uploaded once can go on the title page of one album and the section pages of another.
   Upload an **SVG, PNG or JPEG** from the same dialog. An SVG made of plain shapes in solid colours
@@ -657,8 +660,8 @@ is not 100% of a sheet of paper.
 ### What is on the page
 
 Everything the Sheets tab describes, drawn to size: the album's name at the top if the
-template prints it, the year, each checklist's heading — or its issue's title with sub-headings under
-it, where checklists print within their issue — a box per slot with its label, and the sheet's catalog
+template prints it, the year, each series' issue heading — with checklist headings under it, where
+checklists print within their issue — a box per slot with its label, and the sheet's catalog
 range in the footer.
 
 A box also prints the picture of its stamp where there is one — the stamp's own image, or failing

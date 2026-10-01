@@ -1270,15 +1270,15 @@ The editor is split into sections, listed down its left side, and shows one at a
 - **Headings** — whether the album title is printed as a **running head** on every page (your
   Polska, Bohemia, Bayern and Deutsches Reich pages carry one and your Dansk pages do not, and the
   ones that do not get those millimetres back for content), and the space **above and below the
-  album title**, **above and below a chapter heading**, above and below a checklist heading, and
-  above and below a **sub-heading** — the name a checklist prints under its issue's heading, when an
-  album prints several checklists of one issue together (see
+  album title**, **above and below a chapter heading**, above and below an **issue heading** — the
+  top heading of every series — and above and below a **checklist heading** — the name a checklist
+  prints under its issue heading, when an album prints several checklists of one issue together (see
   [Several checklists of one issue](albums.md#several-checklists-of-one-issue)).
 
   The page headings' space starts where it always was: none around the album title, which sits on
-  the top margin with the content straight under it, and for the chapter heading the checklist
+  the top margin with the content straight under it, and for the chapter heading the issue
   heading's figures, which it shared until it had its own. Existing albums and templates were given
-  exactly that, so nothing moved; from now on changing a checklist heading's space leaves the
+  exactly that, so nothing moved; from now on changing an issue heading's space leaves the
   chapter heading where it is. Neither is decoration: more room around a heading is less room for
   the series under it, so a series can move to the next sheet. An album title that is not printed,
   or a blank chapter heading, reserves none of its space. With the content placed centred or
@@ -1305,14 +1305,15 @@ The editor is split into sections, listed down its left side, and shows one at a
   fit inside a strip's whole outer height), while the horizontal margin is the cut. Raise the
   vertical one to move a stamp deliberately onto the next packet up. Together they replace
   AlbumEasy's single global 4 mm.
-- **Type** — a face and a size for each of the six roles: album title, chapter heading, checklist
-  heading, sub-heading, box label, footer. Sizes are in **points**, the unit type is set in. The
-  sub-heading starts as Liberation Sans Italic at 10 pt with 6 mm above and 3 mm below — the
-  `STAMP_H2` sub-headings of your own pages — and every existing template and album was given exactly
-  that. The sample page has no issue printed as several checklists, so it shows no sub-heading;
-  point the preview at one of your albums to see one.
+- **Type** — a face and a size for each of the six roles: album title, chapter heading, issue
+  heading, checklist heading, box label, footer. Sizes are in **points**, the unit type is set in. The
+  checklist heading starts as Liberation Sans Italic at 10 pt with 6 mm above and 3 mm below — the
+  `STAMP_H2` headings of your own pages — and every existing template and album was given exactly
+  that. The sample page has no issue printed as several checklists, so it shows no checklist
+  heading; point the preview at one of your albums to see one.
 - **Photos** — whether a box prints the photo it has, and at what opacity.
-- **Texts** — the chapter heading, the checklist heading, the box label and the footer.
+- **Texts** — the chapter heading, the issue heading, the box label and the footer. A checklist
+  heading prints the checklist's name alone, so it has no text of its own here.
 
 Every value shows its unit beside it — **mm** for anything on the paper, **pt** for type, **%** for
 the photos' opacity. A section holding a value you have changed but not yet saved carries a **dot**
@@ -1352,7 +1353,7 @@ what that value moves, before you change anything:
   space below a heading from under that heading, the gap between rows from the bottom of a row's
   labels;
 - an **element** — the frame, the corner ornaments, a kind of heading, the box labels, the boxes —
-  is outlined, every one of it on the sheet, so a face chosen for the checklist headings is seen to
+  is outlined, every one of it on the sheet, so a face chosen for the issue headings is seen to
   reach all of them.
 
 The marks are read off the page as it is drawn, the same placement the page editor and the PDF use,

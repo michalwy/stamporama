@@ -73,8 +73,8 @@ export function asAlbumBlockBreak(raw: string): AlbumBlockBreak {
  */
 export const ALBUM_TEXT_BLOCK_ROLES = [
   { key: "chapter", label: "Chapter heading", hint: "The year's own size" },
-  { key: "heading", label: "Checklist heading", hint: "The ordinary block heading" },
-  { key: "subheading", label: "Sub-heading", hint: "A checklist's name under its issue" },
+  { key: "heading", label: "Issue heading", hint: "The top heading of a series" },
+  { key: "subheading", label: "Checklist heading", hint: "A checklist's name under its issue" },
   { key: "label", label: "Box label", hint: "The small print under a mount" },
   { key: "footer", label: "Footer", hint: "The smallest voice on the sheet" },
   { key: "title", label: "Running head", hint: "The album's own name size" },

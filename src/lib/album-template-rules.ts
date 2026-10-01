@@ -180,8 +180,8 @@ export type AlbumFooterPlacement = (typeof ALBUM_FOOTER_PLACEMENTS)[number]["key
 export const ALBUM_TYPE_ROLES = [
   { key: "title", label: "Album title" },
   { key: "chapter", label: "Chapter heading" },
-  { key: "heading", label: "Checklist heading" },
-  { key: "subheading", label: "Sub-heading" },
+  { key: "heading", label: "Issue heading" },
+  { key: "subheading", label: "Checklist heading" },
   { key: "label", label: "Box label" },
   { key: "footer", label: "Footer" },
 ] as const;
@@ -711,14 +711,14 @@ export function parseAlbumRenderPreset(
   if (!boxGaps.ok) return boxGaps;
   const headingSpaceAboveMm = mm(
     "headingSpaceAboveMm",
-    "Space above a heading",
+    "Space above an issue heading",
     MIN_SPACING_MM,
     MAX_SPACING_MM
   );
   if (!headingSpaceAboveMm.ok) return headingSpaceAboveMm;
   const headingSpaceBelowMm = mm(
     "headingSpaceBelowMm",
-    "Space below a heading",
+    "Space below an issue heading",
     MIN_SPACING_MM,
     MAX_SPACING_MM
   );
@@ -755,14 +755,14 @@ export function parseAlbumRenderPreset(
   if (!chapterSpaceBelowMm.ok) return chapterSpaceBelowMm;
   const subheadingSpaceAboveMm = mm(
     "subheadingSpaceAboveMm",
-    "Space above a sub-heading",
+    "Space above a checklist heading",
     MIN_SPACING_MM,
     MAX_SPACING_MM
   );
   if (!subheadingSpaceAboveMm.ok) return subheadingSpaceAboveMm;
   const subheadingSpaceBelowMm = mm(
     "subheadingSpaceBelowMm",
-    "Space below a sub-heading",
+    "Space below a checklist heading",
     MIN_SPACING_MM,
     MAX_SPACING_MM
   );
@@ -791,13 +791,13 @@ export function parseAlbumRenderPreset(
   if (!chapterFace.ok) return chapterFace;
   const chapterSizePt = parseTypeSize(raw.chapterSizePt, "Chapter heading size");
   if (!chapterSizePt.ok) return chapterSizePt;
-  const headingFace = parseFace(raw.headingFace, "Checklist heading");
+  const headingFace = parseFace(raw.headingFace, "Issue heading");
   if (!headingFace.ok) return headingFace;
-  const headingSizePt = parseTypeSize(raw.headingSizePt, "Checklist heading size");
+  const headingSizePt = parseTypeSize(raw.headingSizePt, "Issue heading size");
   if (!headingSizePt.ok) return headingSizePt;
-  const subheadingFace = parseFace(raw.subheadingFace, "Sub-heading");
+  const subheadingFace = parseFace(raw.subheadingFace, "Checklist heading");
   if (!subheadingFace.ok) return subheadingFace;
-  const subheadingSizePt = parseTypeSize(raw.subheadingSizePt, "Sub-heading size");
+  const subheadingSizePt = parseTypeSize(raw.subheadingSizePt, "Checklist heading size");
   if (!subheadingSizePt.ok) return subheadingSizePt;
   const labelFace = parseFace(raw.labelFace, "Box label");
   if (!labelFace.ok) return labelFace;
