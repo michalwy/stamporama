@@ -18,8 +18,9 @@ import {
 // trigger. Everything that makes the figure *arguable* lives here, one click away:
 //
 //   - the three levels, each as the all-in valuation and as the hammer bid to type — and each one
-//     **clickable**, writing itself into the ceiling. Which level to take is a judgement, so it is
-//     made where the evidence for it is on screen rather than from a word in a scanned row.
+//     **clickable**, bidding it exactly as the row's *Bid this* bids `fair` (#1515): the bid that
+//     fits inside the level, with the ceiling following it. Which level to take is a judgement, so
+//     it is made where the evidence for it is on screen rather than from a word in a scanned row.
 //   - one row per composition line, saying what anchored it and what the evidence behind it was
 //   - for a market anchor: the median with `n`, the span of results and ADR-0022's confidence badge
 //   - for a catalogue anchor: **the ratio, the bucket it was learned from, and its `n`** — naming
@@ -32,8 +33,8 @@ import {
 // over clip their overflow, and an ended row is drawn at `opacity: 0.6`, which would otherwise trap
 // a fixed panel in the row's own stacking context.
 //
-// Nothing here is stored and nothing here is a control. The one figure a collector commits to is
-// the ceiling they type or fill, and this is the paperwork behind it.
+// Nothing here is stored. The one figure a collector commits to is the bid they place, and this is
+// the paperwork behind it.
 
 const PANEL_Z_INDEX = 200;
 
@@ -98,15 +99,15 @@ function percent(ratio: number): string {
 /**
  * One of the three levels: what the lot is worth all-in, and the bid that fits inside it.
  *
- * Both, always, for the reason the ceiling cell already shows both (ADR-0029 §5): a recommendation
+ * Both, always, for the reason the *My bid* block shows both (ADR-0029 §5): a recommendation
  * for an all-in valuation is an all-in figure, and a platform's bid box takes a hammer price. A
  * level whose fees alone eat the figure has **no** bid behind it, which is a real answer and reads
  * as one rather than as a zero.
  *
- * The whole row is **one button** that writes this level into the ceiling. Not the two figures
- * separately: they are one figure stated twice, and offering the bid side as its own target would
- * be offering to store a hammer price in an all-in field. `onPick` is absent on a settled lot,
- * where the figures are still worth reading and nothing here may be written.
+ * The whole row is **one button** that bids this level (#1515): the hammer price that fits inside
+ * it, with the ceiling following that bid. Not the two figures separately — they are one figure
+ * stated twice. `onPick` is absent on a settled or closed lot, where the figures are still worth
+ * reading and nothing here may be written, and a level whose fees alone eat it has no bid to place.
  */
 function LevelRow({
   label,
@@ -120,10 +121,10 @@ function LevelRow({
   hint?: string;
   level: { allIn: string; bid: string | null } | null;
   emphasis?: boolean;
-  onPick?: (allIn: string) => void;
+  onPick?: (level: { allIn: string; bid: string }) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const pickable = level !== null && onPick !== undefined;
+  const pickable = level !== null && level.bid !== null && onPick !== undefined;
   const cells = (
     <>
       <span style={{ ...MUTED, justifySelf: "start", whiteSpace: "nowrap" }}>
@@ -149,8 +150,8 @@ function LevelRow({
   return (
     <button
       type="button"
-      aria-label={`Set the ceiling to the ${label} figure, ${level.allIn}`}
-      onClick={() => onPick(level.allIn)}
+      aria-label={`Bid the ${label} figure, ${level.bid}`}
+      onClick={() => onPick({ allIn: level.allIn, bid: level.bid! })}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -304,7 +305,7 @@ export function BidRecommendationPopover({
   collectionId,
   lotId,
   currency,
-  onPickCeiling,
+  onPickLevel,
   children,
 }: {
   collectionId: string;
@@ -312,11 +313,11 @@ export function BidRecommendationPopover({
   /** The sale's currency, for the panel's own heading. */
   currency: string;
   /**
-   * Write a level into the lot's ceiling. Omitted on a settled lot, where the figures are still
-   * worth reading and nothing may be written — the panel then renders its three levels as plain
-   * rows rather than as buttons that would refuse.
+   * Bid a level (#1515) — `name` is the level's own word, for the undo that follows. Omitted on a
+   * settled or closed lot, where the figures are still worth reading and nothing may be written —
+   * the panel then renders its three levels as plain rows rather than as buttons that would refuse.
    */
-  onPickCeiling?: (allIn: string) => void;
+  onPickLevel?: (name: "floor" | "fair" | "walkAway", level: { allIn: string; bid: string }) => void;
   /** What the cell shows: the fair figure, as the row draws its amounts. */
   children: React.ReactNode;
 }) {
@@ -379,10 +380,10 @@ export function BidRecommendationPopover({
   const data = evidence.data ?? null;
 
   /** Taking a level **closes the panel**: the decision it was opened for has been made, and a panel
-   * left standing over the row would hide the ceiling it just wrote. */
-  const pick = onPickCeiling
-    ? (allIn: string) => {
-        onPickCeiling(allIn);
+   * left standing over the row would hide the bid it just wrote. */
+  const pick = onPickLevel
+    ? (name: "floor" | "fair" | "walkAway") => (level: { allIn: string; bid: string }) => {
+        onPickLevel(name, level);
         setOpen(false);
       }
     : undefined;
@@ -461,7 +462,7 @@ export function BidRecommendationPopover({
 
             {data && (
               <>
-                {/* The three levels, against the two readings every figure on the ceiling cell
+                {/* The three levels, against the two readings every figure in the *My bid* block
                     already has: what it is worth all-in, and what to type into a bid box. */}
                 <div
                   style={{
@@ -480,26 +481,26 @@ export function BidRecommendationPopover({
                     label="floor"
                     hint={`${data.band.bidFloorPercent}%`}
                     level={data.recommendation.floor}
-                    onPick={pick}
+                    onPick={pick?.("floor")}
                   />
                   <LevelRow
                     label="fair"
                     level={data.recommendation.fair}
                     emphasis
-                    onPick={pick}
+                    onPick={pick?.("fair")}
                   />
                   <LevelRow
                     label="walk-away"
                     hint={`${data.band.bidCeilingPercent}%`}
                     level={data.recommendation.walkAway}
-                    onPick={pick}
+                    onPick={pick?.("walkAway")}
                   />
                 </div>
 
                 {/* Said once, under all three, rather than as a hint on each: which level to take is
                     one decision, and three copies of the same sentence would read as three. */}
                 {pick && data.recommendation.fair !== null && (
-                  <span style={MUTED}>Click a figure to make it your ceiling.</span>
+                  <span style={MUTED}>Click a figure to bid it — your ceiling follows the bid.</span>
                 )}
 
                 <div style={RULE} />

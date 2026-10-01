@@ -51,6 +51,8 @@ export interface WatchlistLotRow {
   readonly myBid: string | null;
   readonly myAllIn: string | null;
   readonly maxBid: string | null;
+  readonly ceiling: string | null;
+  readonly ceilingSetApart: boolean;
   readonly bidRoom: string | null;
   readonly standing: "leading" | "outbid" | null;
   readonly overCeiling: boolean | null;
@@ -87,8 +89,11 @@ export interface AgentWatchlistLot {
   /** The proxy maximum the collector placed with the platform — a commitment, not an observation. */
   readonly myBid?: string;
   readonly myBidAllIn?: string;
-  /** The collector's ceiling. **Already an all-in figure**, premium included. */
+  /** The collector's ceiling. **Already an all-in figure**, premium included. Unless
+   * {@link ceilingSetApart}, it follows the bid: it is then {@link myBidAllIn} (#1515). */
   readonly ceiling?: string;
+  /** The ceiling was set apart from the bid and stays put when the bid changes. */
+  readonly ceilingSetApart: boolean;
   /** The highest hammer price whose all-in cost still fits inside {@link ceiling}. */
   readonly ceilingBid?: string;
   /** `leading` while the placed bid still covers the price, `outbid` once it does not. */
@@ -148,7 +153,8 @@ export function watchlistLot(row: WatchlistLotRow, now: Date, path: string): Age
     checkedAt: row.checkedAt?.toISOString(),
     myBid: row.myBid,
     myBidAllIn: row.myAllIn,
-    ceiling: row.maxBid,
+    ceiling: row.ceiling,
+    ceilingSetApart: row.ceilingSetApart,
     ceilingBid: row.bidRoom,
     standing: row.standing,
     overCeiling: row.overCeiling,

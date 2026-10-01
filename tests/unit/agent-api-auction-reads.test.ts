@@ -43,6 +43,8 @@ function rowOf(overrides: Partial<WatchlistLotRow> = {}): WatchlistLotRow {
     myBid: "50.00",
     myAllIn: "56.00",
     maxBid: "70.00",
+    ceiling: "70.00",
+    ceilingSetApart: true,
     bidRoom: "62.72",
     standing: "leading",
     overCeiling: false,
@@ -69,8 +71,24 @@ describe("watchlistLot", () => {
     assert.equal(lot.path, PATH);
   });
 
+  it("reports the ceiling the lot is held to, and whether it was set apart from the bid (#1515)", () => {
+    const apart = watchlistLot(rowOf(), NOW, PATH);
+    assert.equal(apart.ceiling, "70.00");
+    assert.equal(apart.ceilingSetApart, true);
+
+    // A ceiling that follows the bid is the bid's own all-in — the screen's `ceiling` — and
+    // `ceilingSetApart: false` is an answer, so it survives.
+    const follows = watchlistLot(
+      rowOf({ maxBid: null, ceiling: "56.00", ceilingSetApart: false, bidRoom: "50.00" }),
+      NOW,
+      PATH
+    );
+    assert.equal(follows.ceiling, "56.00");
+    assert.equal(follows.ceilingSetApart, false);
+  });
+
   it("carries exactly the signals the lots toolbar's own predicate gives the row", () => {
-    const row = rowOf({ currentBid: "60.00", allIn: "67.00", standing: "outbid", maxBid: "55.00" });
+    const row = rowOf({ currentBid: "60.00", allIn: "67.00", standing: "outbid", maxBid: "55.00", ceiling: "55.00" });
     const expected = LOT_SIGNALS.filter((signal) =>
       lotHasSignal(
         signal,
@@ -114,6 +132,8 @@ describe("watchlistLot", () => {
         myBid: null,
         myAllIn: null,
         maxBid: null,
+        ceiling: null,
+        ceilingSetApart: false,
         bidRoom: null,
         standing: null,
         overCeiling: null,

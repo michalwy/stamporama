@@ -4064,7 +4064,9 @@ model AuctionLot {
   // Who is leading is **derived** from this against `currentBid`, never stored: a stored flag would
   // be a third thing to keep current by hand, and it would go stale the moment the bid moves.
   myBid          Decimal? @db.Decimal(10, 2)
-  // The collector's own ceiling, and what the lot actually fetched. `finalPrice` is optional
+  // The collector's ceiling **set apart** from the bid (#1515), and what the lot actually fetched.
+  // Null `maxBid` is the ordinary case: the ceiling then follows the bid — it is what `myBid` costs
+  // all-in, read through `ceilingOf` and never stored. `finalPrice` is optional
   // because a lot that simply vanished from view yields no datapoint (#24) — that is not an error
   // state, just an absent observation.
   maxBid         Decimal? @db.Decimal(10, 2)

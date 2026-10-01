@@ -74,6 +74,13 @@ export interface ToastInput {
   href?: string;
   /** The link's own words; defaults to a plain "View". Say what is being opened where it helps. */
   linkLabel?: string;
+  /**
+   * One thing to do about what just happened, as a button — in practice **Undo** (#1515), for a
+   * one-click action that overwrote a figure the collector may have typed by hand. Pressing it
+   * dismisses the toast. Lingers as long as a link does, for the same reason: it is something to
+   * reach for.
+   */
+  action?: { label: string; onSelect: () => void };
   /** Milliseconds on screen. Defaults to {@link LINGER_MS}, or {@link LINGER_WITH_LINK_MS} when the
    * toast carries a link. Pass one only where the default is genuinely wrong. */
   durationMs?: number;
@@ -201,7 +208,8 @@ function ToastViewport({
 
 function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
   const tone = TONE[toast.tone ?? "success"];
-  const duration = toast.durationMs ?? (toast.href ? LINGER_WITH_LINK_MS : LINGER_MS);
+  const duration =
+    toast.durationMs ?? (toast.href || toast.action ? LINGER_WITH_LINK_MS : LINGER_MS);
   // Paused while the pointer is over the toast or the keyboard is inside it — a link that vanishes
   // as it is being reached for is worse than no link.
   const [paused, setPaused] = useState(false);
@@ -264,6 +272,30 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
             >
               {toast.linkLabel ?? "View"} →
             </Link>
+          </>
+        )}
+        {toast.action && (
+          <>
+            {" "}
+            <button
+              type="button"
+              onClick={() => {
+                toast.action!.onSelect();
+                onDismiss();
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                font: "inherit",
+                color: "var(--color-accent)",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {toast.action.label}
+            </button>
           </>
         )}
       </span>

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   allIn,
   bidStanding,
+  ceilingOf,
   headroom,
   lotHasSignal,
   lotNeedsComposition,
@@ -272,11 +273,27 @@ describe("summarizeAuctionSale", () => {
     assert.equal(s.ceilingTotal, "256.00");
   });
 
-  it("keeps a lot with no ceiling recorded, whatever it stands at", () => {
-    // Nothing has been passed: there is no ceiling to pass.
+  it("passes a ceiling that follows the bid exactly when the bid is passed (#1515)", () => {
+    // No ceiling set apart, so it is the bid's own all-in, 121. Outbid at 500, the lot is past both.
     const s = summarizeAuctionSale([lot({ myBid: "100", currentBid: "500", maxBid: null })], FEES);
+    assert.equal(s.outpricedCount, 1);
+    assert.equal(s.committedTotal, "15.00");
+    // Still leading, it is costed at the bid in both totals — the ceiling *is* that bid.
+    const leading = summarizeAuctionSale(
+      [lot({ myBid: "100", currentBid: "90", maxBid: null })],
+      FEES
+    );
+    assert.equal(leading.outpricedCount, 0);
+    assert.equal(leading.committedTotal, "136.00");
+    assert.equal(leading.ceilingTotal, "136.00");
+    assert.equal(leading.uncappedCount, 0);
+  });
+
+  it("keeps a lot with neither a bid nor a ceiling, whatever it stands at", () => {
+    // Nothing has been passed: there is no ceiling to pass, and no bid for one to follow.
+    const s = summarizeAuctionSale([lot({ myBid: null, currentBid: "500", maxBid: null })], FEES);
     assert.equal(s.outpricedCount, 0);
-    assert.equal(s.committedTotal, "136.00");
+    assert.equal(s.uncappedCount, 1);
   });
 
   it("never calls a won lot outpriced", () => {
@@ -426,6 +443,28 @@ describe("bidStanding", () => {
 
 // lotHasSignal — the derived states the toolbar filters by ----------------------
 
+describe("ceilingOf", () => {
+  const fees = { premiumPercent: "20", premiumFixed: "1", shippingCost: "15" };
+
+  it("is the ceiling set apart, as it stands, whatever the bid", () => {
+    assert.equal(ceilingOf({ myBid: "100", maxBid: "300" }, fees), "300.00");
+    // Below the bid's all-in too: that is the amber case, and the ceiling still holds.
+    assert.equal(ceilingOf({ myBid: "100", maxBid: "50" }, fees), "50.00");
+    assert.equal(ceilingOf({ myBid: null, maxBid: "80" }, fees), "80.00");
+  });
+
+  it("follows the bid when none is set apart — its all-in, premium only, never shipping", () => {
+    // 100 + 20% + 1 = 121; the parcel's 15 of shipping is not a lot's.
+    assert.equal(ceilingOf({ myBid: "100", maxBid: null }, fees), "121.00");
+    assert.equal(ceilingOf({ myBid: "100" }, {}), "100.00");
+  });
+
+  it("is nothing when neither figure is recorded", () => {
+    assert.equal(ceilingOf({ myBid: null, maxBid: null }, fees), null);
+    assert.equal(ceilingOf({ myBid: "", maxBid: "" }, fees), null);
+  });
+});
+
 describe("lotHasSignal", () => {
   const now = new Date("2026-07-28T12:00:00.000Z");
   const later = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -451,6 +490,19 @@ describe("lotHasSignal", () => {
     );
     // No ceiling: the question cannot be answered, so the lot is not offered as actionable.
     assert.equal(lotHasSignal("bid-possible", live({ currentBid: "55" }), now), false);
+    // A ceiling that follows the bid (#1515) leaves no room above what is already placed.
+    assert.equal(lotHasSignal("bid-possible", live({ currentBid: "55", myBid: "60" }), now), false);
+  });
+
+  it("holds a lot with no ceiling set apart to its bid's all-in (#1515)", () => {
+    // Bid 60 → 68 all-in is the ceiling. Outbid at 61 (69.10 all-in), the price is past it too.
+    assert.equal(lotHasSignal("over-ceiling", live({ currentBid: "61", myBid: "60" }), now), true);
+    assert.equal(lotHasSignal("over-ceiling", live({ currentBid: "60", myBid: "60" }), now), false);
+    // A ceiling set apart is the one held, whatever the bid costs.
+    assert.equal(
+      lotHasSignal("over-ceiling", live({ currentBid: "61", myBid: "60", maxBid: "100" }), now),
+      false
+    );
   });
 
   it("separates leading from outbid, and neither survives the close", () => {

@@ -206,6 +206,14 @@ a fixed lot fee are a large share of what leaves the bank account. Shipping belo
 so the sale-level rollup adds it **once** however many lots are in the sale — which is only
 expressible because of §1.
 
+**Amended by #1515: the ceiling follows the bid unless it is set apart.** The ceiling stays an
+all-in valuation, but `maxBid` now stores only one chosen **separately** from the bid; null means
+the ceiling is `allIn(myBid)` (premium only), read through `ceilingOf` by every comparison and never
+stored, so it moves with the bid however the bid is written. The collector nearly always set the
+two to one figure, and a stored copy would have had to be kept in step on every path that writes a
+bid. The lots screen therefore has no Ceiling column; a ceiling set apart is shown under the bid.
+`docs/agents/auctions.md` carries the detail.
+
 Four things settled when this was built (#353), all of them consequences of the reuse rather than
 new policy:
 

@@ -217,6 +217,18 @@ support; it just belongs on a surface that is read rather than scanned, which th
 Three quick fills stacked in the row's gutter stay rejected, on the original argument. A section in
 the lot dialog was rejected because bidding happens on the list.
 
+**Amended by #1515: a level is bid, not written into the ceiling, and the row is three blocks.**
+The collector almost always set the bid and the ceiling to the recommendation — `REC`, then `CEIL`,
+two small hover targets on a grid that gave the ceiling and the catalogue value the recommendation's
+weight. The row now has *Auction*, *My bid* and *Recommended* blocks: `fair` is the prominent figure
+of the last, with an always-visible **Bid this** beside it and a secondary line under it (the
+recommended headroom, then the catalogue value, whose own headroom moved into its hover hint). *Bid
+this* places the largest bid whose all-in fits inside `fair` and lets the ceiling follow it
+(ADR-0021 §6 as amended), with an undo. The popover's levels and the `⋮` entries bid their level the
+same way. `REC` and the catalogue and ceiling gutters are gone; the rarer fills are `⋮` entries.
+What survives from this section is its argument: the row carries one answer, `fair`, and the other
+two levels are taken where their evidence is.
+
 ### 9. Three collection settings, and the ratio is not one of them
 
 ```

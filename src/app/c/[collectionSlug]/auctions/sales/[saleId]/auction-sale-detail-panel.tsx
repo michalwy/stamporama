@@ -607,6 +607,12 @@ export function AuctionSaleDetailPanel({
               return setAuctionLotMaxBidAction(row.id, value);
             })
           }
+          onSetBidAndCeiling={(row, myBid, maxBid) =>
+            runLotAction(async () => {
+              const { setAuctionLotMyBidAndCeilingAction } = await import("@/app/actions/auctions");
+              return setAuctionLotMyBidAndCeilingAction(row.id, myBid, maxBid);
+            })
+          }
           onMarkChecked={(row) =>
             runLotAction(async () => {
               const { touchAuctionLotCheckedAction } = await import("@/app/actions/auctions");

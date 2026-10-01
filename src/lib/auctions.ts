@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import {
   allIn,
   bidStanding,
+  ceilingOf,
   headroom,
   lotHasSignal,
   lotOutcome,
@@ -239,7 +240,15 @@ export interface AuctionLotListItem {
   checkedAt: Date | null;
   /** What the collector has placed at the platform — a commitment, not an observation. */
   myBid: string | null;
+  /** The ceiling **set apart** from the bid, as stored — null when the ceiling follows the bid
+   * (#1515). What the lot is actually held to is {@link ceiling}. */
   maxBid: string | null;
+  /** The ceiling the lot is held to: {@link maxBid} when one is set apart, else what {@link myBid}
+   * costs all-in (`ceilingOf`, #1515). Every comparison on the row is made against this. */
+  ceiling: string | null;
+  /** Whether the ceiling was set apart from the bid — the row then shows it under the bid, and it
+   * stays put when the bid changes until it is cleared. */
+  ceilingSetApart: boolean;
   finalPrice: string | null;
   /** Where the lot is in its life, as recorded: `open | closed | cancelled`. */
   status: AuctionLotStatus;
@@ -414,7 +423,8 @@ function toLotListItem(
   // What the collector's own bid would cost if it took the lot — the figure their ceiling is
   // actually about, and the only one they can still do something about.
   const myAllIn = allIn(money(row.myBid), fees);
-  const ceiling = money(row.maxBid);
+  // The ceiling as it is held (#1515): set apart, else following the bid.
+  const ceiling = ceilingOf({ myBid: money(row.myBid), maxBid: money(row.maxBid) }, fees);
   return {
     id: row.id,
     saleId: sale.id,
@@ -438,7 +448,9 @@ function toLotListItem(
     currentBid: money(row.currentBid),
     checkedAt: row.checkedAt,
     myBid: money(row.myBid),
-    maxBid: ceiling,
+    maxBid: money(row.maxBid),
+    ceiling,
+    ceilingSetApart: row.maxBid !== null,
     finalPrice: money(row.finalPrice),
     status,
     wonTie: row.wonTie,
@@ -2567,7 +2579,8 @@ export async function setAuctionLotMyBid(
   await prisma.auctionLot.update({ where: { id: lotId }, data: { myBid } });
 }
 
-/** Set the collector's ceiling from the list, the same one-click path the bid takes. */
+/** Set a ceiling **apart** from the bid from the list (#1515), or clear it with null — the ceiling
+ * then follows the bid again (`ceilingOf`). */
 export async function setAuctionLotMaxBid(
   ownerId: string,
   lotId: string,
@@ -2576,6 +2589,24 @@ export async function setAuctionLotMaxBid(
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
   await prisma.auctionLot.update({ where: { id: lotId }, data: { maxBid } });
+}
+
+/**
+ * Record the bid and the separate ceiling in one write (#1515): *Bid this* places a recommended bid
+ * and lets the ceiling follow it (`maxBid` null), and its undo puts both figures back exactly as they
+ * were. One update, so the row can never be read with the new bid against the old ceiling.
+ */
+export async function setAuctionLotMyBidAndCeiling(
+  ownerId: string,
+  lotId: string,
+  figures: { myBid: string | null; maxBid: string | null }
+): Promise<void> {
+  const lot = await assertLotOwner(ownerId, lotId);
+  assertLotEditable(lot);
+  await prisma.auctionLot.update({
+    where: { id: lotId },
+    data: { myBid: figures.myBid, maxBid: figures.maxBid },
+  });
 }
 
 // ── Outcome (#354) ──────────────────────────────────────────────────────────
