@@ -6,9 +6,17 @@ import { useQuery } from "@tanstack/react-query";
 import { DialogShell, DialogBody, DialogFooter, DialogPrimaryButton } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { formatAmountInput } from "@/lib/decimal-input";
 import { fillCertificateCell, formatPricePercent } from "@/lib/certificate-price-fill";
+import {
+  factorFromSetPrices,
+  formatPriceFactor,
+  parsePriceFactor,
+  planConditionFill,
+} from "@/lib/condition-price-fill";
 import {
   derivedCellAmount,
   lowestVariantAmount,
@@ -83,6 +91,13 @@ import type {
  * empty cell on screen — this edition, this format, every row that can be typed in — from the same
  * cell's *None* figure at the status's percentage, written cell by cell exactly as typing them would
  * be. One status at a time, and nothing off screen: what it wrote is what the grid then shows.
+ *
+ * **A condition can be filled from another by a factor** (#1529), for the catalogue that prices a
+ * set's stamps one by one in MNH and gives only the set's total in MH. The factor is the two set
+ * prices (MH 10 ÷ MNH 30) or typed outright, and the fill is *Fill from None*'s in every other
+ * respect: empty target cells on screen only, a cell with no source price left empty, locked
+ * umbrella rows skipped, each one written through the cell's own commit. It needs two columns on
+ * screen, so a narrowed grid does not offer it.
  *
  * The three axes a cell is keyed on beyond stamp × condition are chosen **once above the grid**:
  * the catalog edition (which fixes the vendor and the currency), the certificate (defaulting to
@@ -240,6 +255,15 @@ function VariantPriceGrid({
   /** While the fill's writes are going out (#1242) — one press must not start a second pass over the
    *  same cells. */
   const [filling, setFilling] = useState(false);
+  /** *Fill from another condition* (#1529): the panel, its two conditions and how the factor is
+   *  given. The set prices are typed here only to work the factor out and are never stored. */
+  const [conditionFillOpen, setConditionFillOpen] = useState(false);
+  const [fillSourceId, setFillSourceId] = useState<string>(() => conditions[0]?.id ?? "");
+  const [fillTargetId, setFillTargetId] = useState<string>(() => conditions[1]?.id ?? "");
+  const [factorMode, setFactorMode] = useState<"set" | "factor">("set");
+  const [setSourcePrice, setSetSourcePrice] = useState("");
+  const [setTargetPrice, setSetTargetPrice] = useState("");
+  const [factorText, setFactorText] = useState("");
 
   const factorFor = useMemo(() => {
     const map = new Map<string, number>();
@@ -435,6 +459,52 @@ function VariantPriceGrid({
     setFilling(false);
   }
 
+  const fillSource = conditions.find((c) => c.id === fillSourceId) ?? null;
+  const fillTarget = conditions.find((c) => c.id === fillTargetId) ?? null;
+  const factorParse =
+    factorMode === "set"
+      ? factorFromSetPrices(setSourcePrice, setTargetPrice)
+      : parsePriceFactor(factorText);
+  /** Nothing typed yet — the message is a prompt then, not a refusal. */
+  const factorBlank =
+    factorMode === "set"
+      ? setSourcePrice.trim() === "" || setTargetPrice.trim() === ""
+      : factorText.trim() === "";
+
+  /**
+   * The cells *Fill from another condition* writes (#1529): every empty target cell that can be
+   * typed in, from the same stamp's source cell on this edition, certificate and format tab, times
+   * the factor. The rule is `planConditionFill`'s; a derived placeholder is not a figure, so it is
+   * neither a source nor a filled target.
+   */
+  const conditionFills =
+    editionId && fillSource && fillTarget && fillSource.id !== fillTarget.id && factorParse.ok
+      ? planConditionFill({
+          rows: grid.rows.map((row) => ({ stampId: row.stampId, locked: isLocked(row) })),
+          source: (id) => values.get(cellKey(id, editionId, fillSource.id, certId, formatId)) ?? "",
+          current: (id) => values.get(cellKey(id, editionId, fillTarget.id, certId, formatId)) ?? "",
+          factor: factorParse.factor,
+        })
+      : [];
+
+  /** As {@link fillFromNone}: every fill on screen at once, then each through the cell's commit. */
+  async function fillFromCondition() {
+    if (!editionId || !fillTarget || conditionFills.length === 0) return;
+    const targetId = fillTarget.id;
+    setFilling(true);
+    setValues((prev) => {
+      const next = new Map(prev);
+      for (const f of conditionFills) {
+        next.set(cellKey(f.stampId, editionId, targetId, certId, formatId), f.value);
+      }
+      return next;
+    });
+    for (const f of conditionFills) {
+      await commit(f.stampId, targetId, f.value);
+    }
+    setFilling(false);
+  }
+
   /** What an empty cell would be worth on this format tab: the single's figure times the stamp's
    *  multiplier. Null on the Single tab (there is nothing to derive from), with no multiplier, and
    *  with no single price — a derived figure is an inference from two facts and says nothing
@@ -607,7 +677,141 @@ function VariantPriceGrid({
             </button>
           </Tooltip>
         )}
+        {/* Two columns at least (#1529): one condition has nothing to be filled from, which is
+            also what keeps it out of a grid narrowed to the copy in hand. */}
+        {conditions.length >= 2 && (
+          <button
+            type="button"
+            aria-expanded={conditionFillOpen}
+            onClick={() => setConditionFillOpen((open) => !open)}
+            style={{ ...FILL_BTN, cursor: "pointer" }}
+          >
+            <Icon name="factors" size="xs" /> Fill from another condition
+          </button>
+        )}
       </div>
+
+      {conditionFillOpen && conditions.length >= 2 && (
+        <div style={FILL_PANEL}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: "1rem" }}>
+            <label style={CONTROL_LABEL}>
+              From
+              <select
+                value={fillSourceId}
+                onChange={(e) => setFillSourceId(e.target.value)}
+                style={SELECT_STYLE}
+              >
+                {conditions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.abbreviation} · {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={CONTROL_LABEL}>
+              To
+              <select
+                value={fillTargetId}
+                onChange={(e) => setFillTargetId(e.target.value)}
+                style={SELECT_STYLE}
+              >
+                {conditions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.abbreviation} · {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Segmented
+              label="Factor from"
+              value={factorMode}
+              onChange={setFactorMode}
+              options={[
+                { value: "set", label: "Set prices" },
+                { value: "factor", label: "Factor" },
+              ]}
+            />
+            {factorMode === "set" ? (
+              <>
+                <label style={CONTROL_LABEL}>
+                  Set in {fillSource?.abbreviation ?? "source"}
+                  <NumericInput
+                    kind="amount"
+                    value={setSourcePrice}
+                    onChange={(e) => setSetSourcePrice(e.target.value)}
+                    placeholder="30.00"
+                    style={FACTOR_INPUT}
+                  />
+                </label>
+                <label style={CONTROL_LABEL}>
+                  Set in {fillTarget?.abbreviation ?? "target"}
+                  <NumericInput
+                    kind="amount"
+                    value={setTargetPrice}
+                    onChange={(e) => setSetTargetPrice(e.target.value)}
+                    placeholder="10.00"
+                    style={FACTOR_INPUT}
+                  />
+                </label>
+              </>
+            ) : (
+              <label style={CONTROL_LABEL}>
+                Factor
+                <TextInput
+                  value={factorText}
+                  onChange={(e) => setFactorText(e.target.value)}
+                  placeholder="0.333 or 33.3%"
+                  style={FACTOR_INPUT}
+                />
+              </label>
+            )}
+            {factorParse.ok && (
+              // The factor the set prices give, read before anything is filled (#1529).
+              <span style={{ ...MUTED, paddingBottom: "0.45rem", fontFamily: "monospace" }}>
+                = {formatPriceFactor(factorParse.factor)}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.75rem" }}>
+            {fillSourceId === fillTargetId ? (
+              <span style={{ ...MUTED, color: "var(--color-error)" }}>
+                Choose two different conditions.
+              </span>
+            ) : !factorParse.ok ? (
+              <span style={{ ...MUTED, ...(factorBlank ? null : { color: "var(--color-error)" }) }}>
+                {factorParse.message}
+              </span>
+            ) : conditionFills.length === 0 ? (
+              <span style={MUTED}>
+                Nothing to fill: every {fillTarget?.abbreviation} cell on screen is already priced,
+                or has no {fillSource?.abbreviation} price.
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void fillFromCondition()}
+                disabled={filling}
+                style={{
+                  ...FILL_BTN,
+                  opacity: filling ? 0.5 : 1,
+                  cursor: filling ? "default" : "pointer",
+                }}
+              >
+                Fill{" "}
+                {conditionFills.length === 1
+                  ? "1 empty"
+                  : `${conditionFills.length} empty`}{" "}
+                {fillTarget?.abbreviation} {conditionFills.length === 1 ? "cell" : "cells"} from{" "}
+                {fillSource?.abbreviation} {formatPriceFactor(factorParse.factor)}
+              </button>
+            )}
+            <span style={{ ...MUTED, fontSize: "0.6875rem" }}>
+              Empty cells only, on this edition, certificate and format.
+            </span>
+          </div>
+        </div>
+      )}
 
       {!narrowed && grid.formats.length > 0 && (
         <div>
@@ -862,6 +1066,31 @@ const FILL_BTN: React.CSSProperties = {
   fontWeight: 500,
   color: "var(--color-text-secondary)",
   background: "var(--color-bg-elevated)",
+};
+
+/** *Fill from another condition* (#1529): the panel the toggle opens under the controls row. */
+const FILL_PANEL: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.75rem",
+  padding: "0.75rem",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.5rem",
+  background: "var(--color-bg-page)",
+};
+
+const FACTOR_INPUT: React.CSSProperties = {
+  padding: "0.375rem 0.5rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.875rem",
+  fontWeight: 400,
+  textTransform: "none",
+  letterSpacing: "normal",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  width: "7rem",
+  textAlign: "right",
 };
 
 const CELL_INPUT: React.CSSProperties = {

@@ -57,6 +57,35 @@ would.
 
 It fills one certificate at a time — choose the next one in the select and press again.
 
+### Filling one condition from another
+
+Catalogues often price a set's stamps one by one in one condition only — say **MNH** — and give
+just the whole set's price in another — **MH**. Each stamp's MH price is then its MNH price times
+*set MH ÷ set MNH*. **Fill from another condition**, beside the Certificate select, does that sum
+for you. Choose:
+
+- **From** — the condition whose prices you have (MNH), and **To** — the one to fill (MH).
+- **Factor from** — either **Set prices**: type the whole set's price in each condition and the
+  grid shows the factor they give, or **Factor**: type it yourself, as a number (`0.333`) or a
+  percentage (`33.3%`).
+
+Example: a set costs **30** in MNH and **10** in MH, so the factor is **×0.333** — every MH price is
+a third of the MNH one. A stamp at MNH 4.50 gets MH 1.50.
+
+The button then says what it is about to do — *Fill 12 empty MH cells from MNH ×0.333* — and one
+press fills them, on this edition, certificate and format tab, saving each one as typing it would.
+
+- A cell **already priced** in the target condition stays as it is, so a price copied from the
+  catalogue is never replaced.
+- A cell whose **source** condition has no price stays empty.
+- Locked **umbrella** rows are skipped, as Tab skips them.
+- Results are rounded to two decimal places, and they are ordinary prices: changing a source
+  price afterwards does not change them. The set prices are only used to work the factor out and
+  are not stored.
+- A factor of zero or less, or a set price of zero, is refused and nothing is filled.
+
+It needs at least two condition columns, so a grid narrowed to one copy does not offer it.
+
 ### Umbrella rows
 
 A row marked *umbrella* has variants of its own, so its value **is** the lowest of theirs.
