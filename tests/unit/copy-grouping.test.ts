@@ -11,9 +11,11 @@ import {
 import { DEFAULT_GROUP_AXES } from "../../src/lib/copy-groups";
 
 const NO_SPLITS = DEFAULT_GROUP_AXES;
-const FORMAT = { format: true, certificate: false };
-const CERTIFICATE = { format: false, certificate: true };
-const BOTH = { format: true, certificate: true };
+const CONDITION = { condition: true, format: false, certificate: false };
+const FORMAT = { condition: false, format: true, certificate: false };
+const CERTIFICATE = { condition: false, format: false, certificate: true };
+const BOTH = { condition: false, format: true, certificate: true };
+const ALL = { condition: true, format: true, certificate: true };
 
 describe("describeCopyGrouping", () => {
   it("reads the mode's own name when the splits cannot apply", () => {
@@ -31,6 +33,8 @@ describe("describeCopyGrouping", () => {
     assert.equal(describeCopyGrouping("duplicates", FORMAT), "Duplicates + format");
     assert.equal(describeCopyGrouping("duplicates", CERTIFICATE), "Duplicates + certificate");
     assert.equal(describeCopyGrouping("duplicates", BOTH), "Duplicates + 2 splits");
+    assert.equal(describeCopyGrouping("duplicates", CONDITION), "Duplicates + condition");
+    assert.equal(describeCopyGrouping("duplicates", ALL), "Duplicates + 3 splits");
   });
 
   it("never grows past the trigger it has to fit in", () => {
@@ -43,7 +47,7 @@ describe("describeCopyGrouping", () => {
     // the five modes.
     const shown = [
       ...Object.values(COPY_GROUP_MODE_LABEL),
-      ...([NO_SPLITS, FORMAT, CERTIFICATE, BOTH].map((axes) =>
+      ...([NO_SPLITS, CONDITION, FORMAT, CERTIFICATE, BOTH, ALL].map((axes) =>
         describeCopyGrouping("duplicates", axes)
       )),
     ];

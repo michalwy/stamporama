@@ -9,8 +9,8 @@ import {
 import { createOffer } from "../../src/lib/offers";
 
 // Duplicate grouping on the Copies list (#372). What is worth pinning down is the *key*: the fixed
-// `stamp × condition` part (Colnect refuses a second offer for the same stamp in the same
-// condition) and the two optional axes — and, since #692, that the grouping applies **no
+// stamp, and the three optional axes — condition (off by default since #1537, which is when the
+// row learned to say which conditions it holds), format and certificate — and, since #692, that the grouping applies **no
 // eligibility of its own**: it collapses exactly the copies the filters let through, so a
 // not-for-sale or still-undelivered copy is grouped like any other and a sold one is out only
 // because the list hides sold copies by default. Plus the two derived figures a group carries
@@ -22,6 +22,9 @@ const ts = Date.now();
 /** What the Copies list route always sends (#207): sold and traded-away copies stay out until the
  * collector asks for them. Since #692 it is the *only* thing keeping a copy out of a group. */
 const LIST_DEFAULTS = { excludeGone: true } as const;
+
+/** *Split by condition* on — #372's `stamp × condition` key, the default until #1537. */
+const BY_CONDITION = { condition: true, format: false, certificate: false };
 
 describe("duplicate groups", () => {
   let userId: string;
@@ -96,7 +99,7 @@ describe("duplicate groups", () => {
       formatId: pairFormatId,
       ...sellable,
     });
-    // Same stamp, other condition — never joined to the group above.
+    // Same stamp, other condition — joined to the group above only while condition is not split.
     await createItem(userId, collectionId, { stampId, conditionId: usedId, ...sellable });
     // Another stamp, so the page holds more than one group.
     await createItem(userId, collectionId, {
@@ -162,8 +165,37 @@ describe("duplicate groups", () => {
     await prisma.user.delete({ where: { id: userId } });
   });
 
-  it("groups by stamp × condition, biggest stack first", async () => {
+  it("groups every condition of a stamp together by default, naming each with its count", async () => {
     const { groups } = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
+    // Chopin (7 — six MNH, one Used), Curie (2).
+    assert.deepEqual(
+      groups.map((g) => g.count),
+      [7, 2]
+    );
+    const chopin = groups[0];
+    assert.equal(chopin.stampId, stampId);
+    assert.equal(chopin.conditionId, null);
+    assert.deepEqual(
+      chopin.conditions.map((c) => [c.abbreviation, c.count]),
+      [
+        ["MNH", 6],
+        ["U", 1],
+      ]
+    );
+    assert.equal(chopin.mixedCondition, true);
+    const curie = groups[1];
+    assert.deepEqual(
+      curie.conditions.map((c) => [c.id, c.count]),
+      [[mnhId, 2]]
+    );
+    assert.equal(curie.mixedCondition, false);
+  });
+
+  it("groups by stamp × condition with Split by condition on, biggest stack first", async () => {
+    const { groups } = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
+      axes: BY_CONDITION,
+    });
     // Chopin/MNH (6 — four sellable, one not for sale, one still in transit), Curie/MNH (2),
     // Chopin/Used (1) — count descending.
     assert.deepEqual(
@@ -173,9 +205,13 @@ describe("duplicate groups", () => {
     const top = groups[0];
     assert.equal(top.stampId, stampId);
     assert.equal(top.conditionId, mnhId);
-    assert.equal(top.conditionAbbreviation, "MNH");
-    // The two conditions of the same stamp are never merged.
+    assert.deepEqual(
+      top.conditions.map((c) => c.abbreviation),
+      ["MNH"]
+    );
+    // The two conditions of the same stamp are not merged, and so are not mixed.
     assert.equal(groups.filter((g) => g.stampId === stampId).length, 2);
+    assert.ok(groups.every((g) => !g.mixedCondition));
   });
 
   it("groups exactly the copies the filters let through (#692)", async () => {
@@ -192,14 +228,20 @@ describe("duplicate groups", () => {
   });
 
   it("reports how many of a group are already listed", async () => {
-    const { groups } = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
+    const { groups } = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
+      axes: BY_CONDITION,
+    });
     const top = groups.find((g) => g.stampId === stampId && g.conditionId === mnhId)!;
     assert.equal(top.listedCount, 1);
     assert.equal(groups.find((g) => g.stampId === otherStampId)!.listedCount, 0);
   });
 
   it("marks a group mixed on the axes left at any", async () => {
-    const { groups } = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
+    const { groups } = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
+      axes: BY_CONDITION,
+    });
     const top = groups.find((g) => g.stampId === stampId && g.conditionId === mnhId)!;
     assert.equal(top.mixedFormat, true);
     assert.equal(top.mixedCertificate, true);
@@ -211,7 +253,7 @@ describe("duplicate groups", () => {
   it("splits on format and certificate when those axes join the key", async () => {
     const { groups } = await listItemDuplicateGroups(userId, collectionId, {
       ...LIST_DEFAULTS,
-      axes: { format: true, certificate: true },
+      axes: { condition: true, format: true, certificate: true },
     });
     const chopinMnh = groups.filter((g) => g.stampId === stampId && g.conditionId === mnhId);
     // Six copies become three groups: four plain singles, one certified single, one pair.
@@ -219,8 +261,8 @@ describe("duplicate groups", () => {
       chopinMnh.map((g) => g.count).sort(),
       [1, 1, 4]
     );
-    // With both axes on, nothing can be mixed by construction.
-    assert.ok(groups.every((g) => !g.mixedFormat && !g.mixedCertificate));
+    // With every axis on, nothing can be mixed by construction.
+    assert.ok(groups.every((g) => !g.mixedCondition && !g.mixedFormat && !g.mixedCertificate));
     const pair = chopinMnh.find((g) => g.formatId === pairFormatId)!;
     assert.equal(pair.count, 1);
     assert.equal(pair.formatAbbreviation, "pair");
@@ -235,7 +277,11 @@ describe("duplicate groups", () => {
       conditionIds: [usedId],
     });
     assert.equal(groups.length, 1);
-    assert.equal(groups[0].conditionId, usedId);
+    assert.deepEqual(
+      groups[0].conditions.map((c) => c.id),
+      [usedId]
+    );
+    assert.equal(groups[0].mixedCondition, false);
     assert.equal(groups[0].count, 1);
   });
 
@@ -285,12 +331,14 @@ describe("duplicate groups", () => {
   it("paginates without splitting a group across a page boundary", async () => {
     const first = await listItemDuplicateGroups(userId, collectionId, {
       ...LIST_DEFAULTS,
+      axes: BY_CONDITION,
       pageSize: 2,
     });
     assert.equal(first.groups.length, 2);
     assert.equal(first.nextCursor, "2");
     const second = await listItemDuplicateGroups(userId, collectionId, {
       ...LIST_DEFAULTS,
+      axes: BY_CONDITION,
       pageSize: 2,
       offset: 2,
     });
@@ -298,5 +346,107 @@ describe("duplicate groups", () => {
     assert.equal(second.nextCursor, null);
     const keys = [...first.groups, ...second.groups].map((g) => g.key);
     assert.equal(new Set(keys).size, 3);
+  });
+});
+
+// A group mixing conditions values its members differently, and says so rather than picking one
+// figure (#1537) — the same *varies* a group mixed on format or certificate shows.
+describe("duplicate groups — catalogue value across conditions", () => {
+  let userId: string;
+  let collectionId: string;
+  let mnhId: string;
+  let usedId: string;
+
+  before(async () => {
+    userId = `test-user-dupgroups-cv-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: `Test User dupgroups-cv-${ts}`,
+        email: `test-dupgroups-cv-${ts}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: { slug: `col-dupgroups-cv-${ts}`, name: "Dup CV", baseCurrency: "EUR", ownerId: userId },
+      })
+    ).id;
+    const vendorId = (
+      await prisma.catalogVendor.create({ data: { collectionId, name: "Michel", abbreviation: "Mi" } })
+    ).id;
+    const catalogName = await prisma.catalogName.create({
+      data: { vendorId, name: "Michel Europa", currency: "EUR" },
+    });
+    const editionId = (
+      await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2026 } })
+    ).id;
+    const areaId = (
+      await prisma.collectionArea.create({
+        data: { collectionId, name: "Poland", primaryCatalogNameId: catalogName.id },
+      })
+    ).id;
+    await prisma.collectionAreaCatalog.create({
+      data: { collectionAreaId: areaId, catalogNameId: catalogName.id },
+    });
+    mnhId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Mint never hinged", abbreviation: "MNH", sortOrder: 0 },
+      })
+    ).id;
+    usedId = (
+      await prisma.stampCondition.create({
+        data: { collectionId, name: "Used", abbreviation: "U", sortOrder: 1 },
+      })
+    ).id;
+    const stampId = (
+      await prisma.stamp.create({
+        data: {
+          collectionId,
+          name: "Chopin",
+          stampAreaLinks: { create: [{ collectionAreaId: areaId, isPrimary: true }] },
+        },
+      })
+    ).id;
+    for (const [conditionId, price] of [
+      [mnhId, "10.00"],
+      [usedId, "2.00"],
+    ]) {
+      await prisma.stampCatalogPrice.create({
+        data: { stampId, catalogEditionId: editionId, conditionId, price, currency: "EUR" },
+      });
+    }
+    await createItem(userId, collectionId, { stampId, conditionId: mnhId });
+    await createItem(userId, collectionId, { stampId, conditionId: usedId });
+  });
+
+  after(async () => {
+    await prisma.item.deleteMany({ where: { collectionId } });
+    await prisma.stampCatalogPrice.deleteMany({ where: { stamp: { collectionId } } });
+    await prisma.stamp.deleteMany({ where: { collectionId } });
+    await prisma.stampCondition.deleteMany({ where: { collectionId } });
+    await prisma.collectionAreaCatalog.deleteMany({ where: { collectionArea: { collectionId } } });
+    await prisma.collectionArea.deleteMany({ where: { collectionId } });
+    await prisma.catalogEdition.deleteMany({ where: { catalogName: { vendor: { collectionId } } } });
+    await prisma.catalogName.deleteMany({ where: { vendor: { collectionId } } });
+    await prisma.catalogVendor.deleteMany({ where: { collectionId } });
+    await prisma.collection.delete({ where: { id: collectionId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  it("shows varies for a group mixing conditions, one figure each once split", async () => {
+    const mixed = await listItemDuplicateGroups(userId, collectionId, LIST_DEFAULTS);
+    assert.equal(mixed.groups.length, 1);
+    assert.equal(mixed.groups[0].value, null);
+    assert.equal(mixed.groups[0].valueVaries, true);
+
+    const split = await listItemDuplicateGroups(userId, collectionId, {
+      ...LIST_DEFAULTS,
+      axes: BY_CONDITION,
+    });
+    assert.equal(split.groups.length, 2);
+    assert.ok(split.groups.every((g) => g.value !== null && !g.valueVaries));
   });
 });

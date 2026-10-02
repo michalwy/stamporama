@@ -1,33 +1,57 @@
 // Duplicate grouping for the Copies list (#372) — the pure half. No React, no Prisma, so the
 // server read, the client panel and the unit tests share one derivation.
 //
-// A **duplicate group** is a bag of interchangeable copies: the stock you would list on Colnect as
-// one offer with a quantity, since it refuses more than one offer for the same stamp in the same
-// condition. Hence the key's fixed part, `stamp × condition`. Condition is not optional — a group
-// mixing conditions would produce an offer that cannot be posted.
+// A **duplicate group** is a bag of copies of one stamp. The key's only fixed part is the stamp;
+// the three other axes a copy carries — **condition**, physical **format** (ADR-0020) and
+// **certificate** — are *configurable*: off means the field does not split the group (any value),
+// on means it joins the key. With all three on the key is exactly the key catalogue valuation is
+// computed on (`valuateItemRows`), so every group then has one unambiguous per-copy figure.
 //
-// The two remaining axes a copy carries — physical **format** (ADR-0020) and **certificate** — are
-// *configurable*: off means the field does not split the group (any value), on means it joins the
-// key. With both on the key is exactly the key catalogue valuation is computed on
-// (`valuateItemRows`), so every group then has one unambiguous per-copy figure.
+// Condition was fixed until #1537. #372 keyed every group on `stamp × condition` because Colnect
+// refuses more than one offer for the same stamp in the same condition, so a group mixing
+// conditions read as an offer that could not be posted. But the grouping answers a second question
+// too — *do I hold this stamp in several conditions?* — and that one was spread across a group per
+// condition. So condition became a switch like the other two, **off by default**, and the Colnect
+// rule is met where an offer is actually made: a minority condition is an outlier left out of the
+// quick select-all, the listing flow's *one single-copy set each* is unchanged, and the Colnect
+// reading of the key survives as {@link COLNECT_GROUP_AXES}, which is what the offer collision
+// check (#513) compares on.
 //
 // Grouping is **not filtering**. The sidebar's condition / format / certificate filters narrow
 // *which copies you look at*; these toggles decide *what counts as the same item*. Both compose.
 
-/** Which of the optional axes join the grouping key. Both off is the plain Colnect rule. */
+/** Which of the optional axes join the grouping key. */
 export interface CopyGroupAxes {
+  condition: boolean;
   format: boolean;
   certificate: boolean;
 }
 
-export const DEFAULT_GROUP_AXES: CopyGroupAxes = { format: false, certificate: false };
+/** The Copies list's default (#1537): one group per stamp, whatever the copies' condition. */
+export const DEFAULT_GROUP_AXES: CopyGroupAxes = {
+  condition: false,
+  format: false,
+  certificate: false,
+};
+
+/** The key as Colnect reads it: one quantity offer per stamp × condition (#372), format and
+ * certificate not splitting it. What the offer collision check compares on. */
+export const COLNECT_GROUP_AXES: CopyGroupAxes = {
+  condition: true,
+  format: false,
+  certificate: false,
+};
+
+/** One of the axes a group can be split on, or left mixed. */
+export type CopyGroupAxis = keyof CopyGroupAxes;
 
 /** The dimensions a copy is grouped on. `formatId`/`certificateStatusId` are null both when the
  * copy carries no such value *and* when the axis is off — {@link copyGroupKey} zeroes an axis that
- * is not part of the key, so a key never claims a value it did not group on. */
+ * is not part of the key, so a key never claims a value it did not group on. A copy always carries
+ * a condition, so `conditionId` is null only when that axis is off. */
 export interface CopyGroupKey {
   stampId: string;
-  conditionId: string;
+  conditionId: string | null;
   formatId: string | null;
   certificateStatusId: string | null;
 }
@@ -50,7 +74,7 @@ const NONE = "none";
 export function copyGroupKey(copy: GroupableCopy, axes: CopyGroupAxes): CopyGroupKey {
   return {
     stampId: copy.stampId,
-    conditionId: copy.conditionId,
+    conditionId: axes.condition ? copy.conditionId : null,
     formatId: axes.format ? copy.formatId : null,
     certificateStatusId: axes.certificate ? copy.certificateStatusId : null,
   };
@@ -64,7 +88,7 @@ export function copyGroupKey(copy: GroupableCopy, axes: CopyGroupAxes): CopyGrou
 export function encodeCopyGroupKey(key: CopyGroupKey, axes: CopyGroupAxes): string {
   return [
     key.stampId,
-    key.conditionId,
+    axes.condition ? (key.conditionId ?? NONE) : "",
     axes.format ? (key.formatId ?? NONE) : "",
     axes.certificate ? (key.certificateStatusId ?? NONE) : "",
   ].join("|");
@@ -77,23 +101,28 @@ export function decodeCopyGroupKey(
 ): { key: CopyGroupKey; axes: CopyGroupAxes } | null {
   const parts = encoded.split("|");
   if (parts.length !== 4) return null;
-  const [stampId, conditionId, format, certificate] = parts;
-  if (!stampId || !conditionId) return null;
+  const [stampId, condition, format, certificate] = parts;
+  if (!stampId) return null;
   return {
     key: {
       stampId,
-      conditionId,
+      conditionId: condition === "" || condition === NONE ? null : condition,
       formatId: format === "" ? null : format === NONE ? null : format,
       certificateStatusId: certificate === "" ? null : certificate === NONE ? null : certificate,
     },
-    axes: { format: format !== "", certificate: certificate !== "" },
+    axes: {
+      condition: condition !== "",
+      format: format !== "",
+      certificate: certificate !== "",
+    },
   };
 }
 
 /** The axes currently set to *any* — the ones a group can be **mixed** on. With an axis joined to
  * the key, a mixed marker cannot occur by construction. */
-export function anyAxes(axes: CopyGroupAxes): ("format" | "certificate")[] {
-  const out: ("format" | "certificate")[] = [];
+export function anyAxes(axes: CopyGroupAxes): CopyGroupAxis[] {
+  const out: CopyGroupAxis[] = [];
+  if (!axes.condition) out.push("condition");
   if (!axes.format) out.push("format");
   if (!axes.certificate) out.push("certificate");
   return out;
@@ -104,8 +133,9 @@ export function anyAxes(axes: CopyGroupAxes): ("format" | "certificate")[] {
 export function mixedAxes(
   members: GroupableCopy[],
   axes: CopyGroupAxes
-): { format: boolean; certificate: boolean } {
+): Record<CopyGroupAxis, boolean> {
   return {
+    condition: !axes.condition && distinct(members.map((m) => m.conditionId)).length > 1,
     format: !axes.format && distinct(members.map((m) => m.formatId)).length > 1,
     certificate:
       !axes.certificate && distinct(members.map((m) => m.certificateStatusId)).length > 1,
@@ -129,8 +159,7 @@ export function outlierCopyIds<T extends GroupableCopy & { id: string }>(
   const out = new Set<string>();
   if (members.length < 2) return out;
   for (const axis of anyAxes(axes)) {
-    const valueOf = (m: GroupableCopy) =>
-      axis === "format" ? m.formatId : m.certificateStatusId;
+    const valueOf = (m: GroupableCopy) => axisValue(m, axis);
     const modal = modalValue(members.map(valueOf));
     if (modal === undefined) continue; // no majority — nothing is the exception here
     for (const m of members) {
@@ -160,6 +189,17 @@ function modalValue(values: (string | null)[]): string | null | undefined {
     }
   }
   return tied ? undefined : best;
+}
+
+function axisValue(copy: GroupableCopy, axis: CopyGroupAxis): string | null {
+  switch (axis) {
+    case "condition":
+      return copy.conditionId;
+    case "format":
+      return copy.formatId;
+    case "certificate":
+      return copy.certificateStatusId;
+  }
 }
 
 function distinct(values: (string | null)[]): (string | null)[] {

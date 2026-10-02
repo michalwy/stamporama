@@ -235,7 +235,7 @@ right, from *which copies* to *how they are shown*.
     "copies with no photo, counting the ones that have sold". The holdings totals and year panel
     follow all four; the totals always account for no-longer-held copies, on their own **Written
     off** line.
-- **Grouping** — a dropdown that also holds duplicate grouping's two **Split by …** switches. See
+- **Grouping** — a dropdown that also holds duplicate grouping's three **Split by …** switches. See
   [Grouping the list](#grouping-the-list).
 - **Sort** — by date added, ascending or descending. Greyed under any grouping, which brings its
   own order: duplicate groups run by how many copies each holds, filing groups by where the copies
@@ -1338,12 +1338,12 @@ different questions:
 - **Group by issue** — what have I got of this series? ([Grouping by
   issue](#grouping-by-issue))
 
-The dropdown also carries the two **Split by …** switches that duplicate grouping uses (below).
+The dropdown also carries the three **Split by …** switches that duplicate grouping uses (below).
 They are in there from the moment it opens, under a heading saying when they apply, rather than
 appearing on the toolbar once you have picked *Group duplicates* — so you can see what duplicate
 grouping offers before choosing it, and picking a grouping never moves the controls beside it. They
 are greyed while another grouping is in effect, because they only ever change what counts as a
-duplicate. With one on, the closed dropdown says so (*Duplicates + format*); with both, it counts
+duplicate. With one on, the closed dropdown says so (*Duplicates + condition*); with more, it counts
 them (*Duplicates + 2 splits*).
 
 Only one can be in effect, and the choice is remembered per collection. Every group row works the
@@ -1368,23 +1368,29 @@ exactly like any other copy, since where a piece is kept is a fact about the pie
 
 ## Grouping duplicates
 
-When you hold several identical copies, the interesting row is not the copy — it is the **stack**.
-Pick **Group duplicates** and the list collapses to one row per duplicate, with its count up front
-(`×10`). Expand a row (the **caret**) to see the individual copies underneath.
+When you hold several copies of one stamp, the interesting row is not the copy — it is the
+**stack**. Pick **Group duplicates** and the list collapses to one row per stamp, with its count up
+front (`×10`). Expand a row (the **caret**) to see the individual copies underneath.
 
-**What the group is keyed on sits beside the count**: the **condition** always, and the format and
-the certificate when you have split by them. The rest of the row describes the stamp, exactly as an
-ungrouped copy row does. A last line appears only when the group has something extra to say — that
-it is mixed, or that some of its copies are already listed — so a plain stack is one line shorter
-than one that needs a warning.
+**The conditions sit beside the count.** A stack held in one condition shows that condition, as a
+copy row does. A stack held in several shows each with its count — `MNH ×2` `MH ×1` — because
+which conditions you hold a stamp in is often exactly what you grouped the list to find out. The
+format and the certificate join them when you have split by those. The rest of the row describes the
+stamp, exactly as an ungrouped copy row does. A last line appears only when the group has something
+extra to say — that it is mixed, or that some of its copies are already listed — so a plain stack is
+one line shorter than one that needs a warning.
 
-Two copies count as duplicates when they are the **same stamp in the same condition**. Condition is
-never optional: Colnect refuses more than one offer for the same stamp in the same condition and
-expects a quantity offer instead, so a group mixing conditions could not be posted. A piece carrying
-several stamps is never a duplicate of anything: it goes in the **Several stamps** row at the end.
+Two copies count as duplicates when they are the **same stamp**, whatever their condition. A piece
+carrying several stamps is never a duplicate of anything: it goes in the **Several stamps** row at
+the end.
 
-Two further switches, inside the grouping dropdown, each add an axis to that rule:
+Three switches, inside the grouping dropdown, each add an axis to that rule:
 
+- **Split by condition** — copies in different conditions become different items. This is the
+  reading for **choosing what to sell**: Colnect refuses more than one offer for the same stamp in
+  the same condition and expects a quantity offer instead, so a stack you mean to list there as one
+  quantity should be one condition. It used to be the only way duplicates were grouped; it is now
+  off unless you turn it on.
 - **Split by format** — a pair or a block becomes a different item from a single, rather than
   joining the same group. Only shown once your collection has [formats](#pairs-blocks-and-other-multiples).
 - **Split by certificate** — a certified copy becomes a different item from an uncertified one. Only
@@ -1394,13 +1400,14 @@ They stay visible under every grouping and are greyed unless duplicate grouping 
 effect. A switch you left on keeps showing as on while it is greyed: it is waiting for the next time
 you group duplicates, not silently applying to the grouping you are looking at.
 
-Leave both off and you get the plain rule. Turn both on and each group has one unambiguous per-copy
-**catalog value**, because the key is then exactly what a catalog price is recorded against. A group
-whose members value differently shows *varies* instead of a figure.
+Leave them all off and you get the plain rule: one row per stamp. Turn all three on and each group
+has one unambiguous per-copy **catalog value**, because the key is then exactly what a catalog price
+is recorded against. A group whose members value differently — an MNH and a used copy, say — shows
+*varies* instead of a figure.
 
-Where members disagree on an axis you left off, the row says so — **mixed formats**, **mixed
-certificates**. With that axis switched on, the marking cannot appear: the copies are in different
-groups.
+Where members disagree on an axis you left off, the row says so — **mixed conditions**, **mixed
+formats**, **mixed certificates**. With that axis switched on, the marking cannot appear: the copies
+are in different groups.
 
 Grouping and filtering are **different questions** and both apply. The sidebar and toolbar filters
 decide *which copies you are looking at*; the toggles decide *what counts as the same item*. Grouping
@@ -1431,7 +1438,10 @@ deal with them together.
 Copies that **differ from the rest of the group** on an axis you left off are highlighted with a
 *differs from the group* mark and are **left out of Select all** — tick them by hand if you do want
 them. The odd one out is worked out from what the majority actually is: in a stock of ten certified
-blocks and one plain single, the single is the exception, not the blocks.
+blocks and one plain single, the single is the exception, not the blocks; in a stack of five MNH
+copies and one used, the used copy is. Where no condition is in the majority — two MNH, two used —
+nothing is marked and **Select all** ticks the lot, so for a listing that has to be one condition,
+turn on **Split by condition** first.
 
 From there it is the ordinary bar: **🏷 Add selected to offer**, whose **Add as** control decides
 between **one single-copy set each** (a quantity of duplicates — what platforms that allow one
