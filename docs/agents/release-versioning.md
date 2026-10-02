@@ -80,6 +80,10 @@ and every one of them comes back clean.
    gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'
    ```
 
+   **`Publish extension (Chrome Web Store)` is the one job whose conclusion does not say what it
+   did.** It reports `success` both when it submitted the extension and when there was nothing to
+   submit, so read its notice instead — see [*Publishing the extension*](#publishing-the-extension).
+
    **It runs after the tag exists, so it cannot gate the tag — it gates everything after it**, which
    is steps 6 and 7 and is the whole of what anybody consumes. A tag carrying no Release and no
    `latest` is not reachable: `docker-compose.prod.yml` and `scripts/install.sh` pull
@@ -148,12 +152,44 @@ it to the unlisted Chrome Web Store listing (#288, ADR-0017). The switch exists 
 rejects an upload while a previous version is still in review; when it is off, releases proceed and
 the extension is submitted later by flipping it back on.
 
-A green job means *submitted for review*, not live, so a release note should not promise the
-extension is already updated — and it may equally mean **nothing was submitted**: the job asks the
-store which version it already holds (published or in review) and skips when `extension/` has not
-changed since that release's tag, because most releases touch nothing there and every submission
-costs a review. So the extension's live version legitimately trails the app's; only mention it in a
-release note when the job actually submitted something.
+**A green job does not say whether anything was submitted.** The job reports **`success`** both when
+it submitted a package and when it found nothing to submit — it does not skip, it runs and exits
+cleanly — so `gh run view <id> --json jobs` cannot tell the two apart (#1154). **The job's notice is
+the only thing that separates them**, and it is one of exactly two:
+
+| Notice | Meaning |
+| --- | --- |
+| `Submitted for review. It goes live once the store approves it.` | Submitted — *in review*, not live |
+| `Nothing shipped in extension/ changed since <tag> — nothing to submit.` | Nothing was submitted |
+
+Read it from the job's annotations:
+
+```bash
+gh run view <id> --json jobs --jq '.jobs[] | select(.name | startswith("Publish extension")) | .databaseId'
+gh api 'repos/{owner}/{repo}/check-runs/<job-id>/annotations' --jq '.[].message'
+```
+
+**Do not grep the job log for `::notice::`.** The log echoes the step's script before running it, so
+both messages appear in every run's log whichever one fired; the one that fired is rendered
+`##[notice]…`. Measured on v0.140.0's tag run (34579424931): conclusion `success`, and the single
+annotation `Nothing shipped in extension/ changed since v0.133.0 — nothing to submit.` A
+**`skipped`** conclusion is a third, different case: `CWS_PUBLISH_ENABLED` is off and the job never
+ran.
+
+**The baseline is not the previous tag.** The job asks the store which version it already holds —
+the newer of the published and the in-review revision — and diffs what the ZIP is built from between
+that release's tag and the one being built. When every submission has gone through, that is **the
+last release whose shipped `extension/` content changed**, and it can be many releases back: for
+v0.140.0 it was **v0.133.0, seven releases back**. So do not recompute it as
+`git diff <previous tag>..vX.Y.Z -- extension/`. On v0.140.0 that happened to agree, because both
+windows were empty; it disagrees as soon as a change sits in a release whose submission failed or was
+cut while publishing was paused, and on a change to the extension's README or unit tests, which the
+job excludes because they never reach the ZIP. The notice names the baseline the job used — read it
+there.
+
+Most releases touch nothing under `extension/` and every submission costs a review, so the
+extension's live version legitimately trails the app's. **Mention the extension in a release note
+only when the notice says it was submitted**, and then as submitted for review, not as updated.
 
 ## Who may cut a release
 
