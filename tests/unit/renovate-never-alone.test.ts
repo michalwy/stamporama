@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 // rather than a reading of it (#1116, out of #1113).
 //
 // **This is a backstop, not a gate, and the difference is the load-bearing part of it.**
-// `renovate.json` is *inside* the `Detect changes` safe list in `.github/workflows/ci.yml`, so a
+// `renovate.json` is *inside* the `Detect changes` safe list in `scripts/detect-changes.sh`, so a
 // pull request that touches only that file reports `Unit tests` as **skipped** — this test does not
 // run on the change it exists to guard. #1114 is the worked example: a `renovate.json`-only pull
 // request, merged 2026-09-10, with `Unit tests`, `Static checks`, `Integration tests` and

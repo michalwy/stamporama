@@ -65,15 +65,15 @@ and every one of them comes back clean.
    tag's own run below.
 
    Throughout, you are reading a run's **job conclusions** and never classifying commits. The safe
-   list is the `case` glob in the `Detect changes` job in
-   [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) and that glob is the record; nothing
-   here asks you to decide which commits were "code-bearing".
+   list is the `case` glob in [`scripts/detect-changes.sh`](../../scripts/detect-changes.sh), which
+   the `Detect changes` job runs, and that glob is the record; nothing here asks you to decide which
+   commits were "code-bearing".
 4. **Tag the merged commit on `main`** and push the tag.
 5. **Wait for the tag's own run and read it. This is the run that checks the release.** Pushing
    the tag starts a run on the tagged commit, and **a tag build is never gated on
-   `Detect changes`** — the first `case` in that job matches `refs/tags/*` and runs everything,
-   whatever the diff. So this one run exercises the exact tree being released, all four suites, and
-   the image and the extension are published on top of them. The tag run is the one whose
+   `Detect changes`** — its script matches `refs/tags/*` before it looks at the diff and runs
+   everything, whatever the diff. So this one run exercises the exact tree being released, all four
+   suites, and the image and the extension are published on top of them. The tag run is the one whose
    `headBranch` is the tag:
 
    ```bash
