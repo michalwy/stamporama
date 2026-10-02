@@ -11,6 +11,7 @@ import {
   runBlockers,
   runChoices,
   runPriceSubjects,
+  runStart,
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
@@ -224,6 +225,22 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
     it("moves on after correcting a tile that had a stamp while another still waits", () => {
       const run = assignInTurn(["t1", "t2", "t3", "t4", "t5"], sequence, new Map([["t2", "s1"]]));
       assert.equal(nextWithoutStamp(run, "t2"), "t5");
+    });
+  });
+
+  describe("how a run starts (#1526)", () => {
+    it("starts in turn when the ticked tiles are as many as the checklist's stamps", () => {
+      assert.equal(runStart(4, 4), "in-turn");
+      assert.equal(runStart(1, 1), "in-turn");
+    });
+
+    it("starts with nothing assigned when there are fewer tiles or more", () => {
+      assert.equal(runStart(5, 12), "unassigned");
+      assert.equal(runStart(6, 4), "unassigned");
+    });
+
+    it("starts in turn on a checklist with no stamps yet, so the ones added reach the tiles", () => {
+      assert.equal(runStart(3, 0), "in-turn");
     });
   });
 

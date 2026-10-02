@@ -30,6 +30,7 @@ import {
   runBlockers,
   runChoices,
   runPriceSubjects,
+  runStart,
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
@@ -88,7 +89,8 @@ import { TextInput } from "./text-input";
  * the checklist's stamps, in its own order, in the order they were ticked (`issue-run.ts` decides
  * which), so what the collector does here is **correct** — the tile that skips a value, the one that
  * is another stamp of the issue, the stray ticked by mistake — and answer the copy details once,
- * overriding them on the pieces that differ.
+ * overriding them on the pieces that differ. That is when the tiles are as many as the checklist's
+ * stamps; with any other count the run starts with nothing assigned, to be picked tile by tile (#1526).
  *
  * **Three columns, because three things are looked at together.** The piece, at the size and with
  * the tools a single tile has (#585's viewer, #598's measuring, #625's watermark) — never a reduced
@@ -291,6 +293,23 @@ export function IssueRunDialog({
   const active = inRun.find((p) => p.tileId === activeId) ?? inRun[0] ?? null;
   const activeIndex = active ? inRun.indexOf(active) : -1;
   const activeAssignment = active ? assignments[activeIndex] : null;
+
+  /** How the run starts (#1526), decided once, as the checklist is first read: in turn when the ticked
+   * tiles are as many as its stamps, otherwise as after *Clear assignments*, the first tile in hand.
+   * Adjusted while rendering rather than in an effect, so no frame is drawn with the in-turn answers;
+   * a refetch after a stamp is added does not decide it again. */
+  const [startDecided, setStartDecided] = useState(false);
+  /** The checklist's stamp count, while the run stands on the unassigned start — what the note above
+   * the run says. Gone once the collector assigns in turn after all. */
+  const [unassignedStart, setUnassignedStart] = useState<number | null>(null);
+  if (!startDecided && checklist) {
+    setStartDecided(true);
+    if (runStart(pieces.length, checklist.stampIds.length) === "unassigned") {
+      setUnassignedStart(checklist.stampIds.length);
+      setCorrections(clearedAssignments(pieces.map((p) => p.tileId)));
+      setActiveId(pieces[0]?.tileId ?? "");
+    }
+  }
 
   /** What the open viewer is gauging (#740), and the watermark the collector says they can see. */
   const [gauge, setGauge] = useState<number | null>(null);
@@ -530,6 +549,7 @@ export function IssueRunDialog({
   /** *Assign in turn*: the whole run back to the in-turn assignment, the counterpart of clearing. */
   function assignAllInTurn() {
     setCorrections(new Map());
+    setUnassignedStart(null);
   }
 
   function takeOut(tileId: string) {
@@ -726,8 +746,17 @@ export function IssueRunDialog({
             }}
           >
             <p style={{ ...MUTED, fontSize: "0.8125rem" }}>
-              The tiles take this checklist&rsquo;s stamps in its own order, in the order you ticked
-              them. Correct a tile that skips a value, or is another stamp, on the right.
+              {unassignedStart === null ? (
+                <>
+                  The tiles take this checklist&rsquo;s stamps in its own order, in the order you
+                  ticked them. Correct a tile that skips a value, or is another stamp, on the right.
+                </>
+              ) : (
+                <>
+                  Pick each tile&rsquo;s stamp on the right; picking one moves to the next tile
+                  without a stamp.
+                </>
+              )}
             </p>
 
             <section style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
@@ -836,6 +865,14 @@ export function IssueRunDialog({
                   </Tooltip>
                 )}
               </div>
+              {/* Why nothing is assigned (#1526), under the Assign in turn that undoes it. */}
+              {unassignedStart !== null && (
+                <p style={MUTED}>
+                  {pieces.length} {pieces.length === 1 ? "tile" : "tiles"}, {unassignedStart}{" "}
+                  {unassignedStart === 1 ? "stamp" : "stamps"} on the checklist, so the run starts
+                  with nothing assigned.
+                </p>
+              )}
               {/* The values are typed on the rows below (#1229); what the rows cannot say goes here. */}
               {priceSubjects.length > 0 ? (
                 prices.isLoading || (prices.isFetching && valueKeys.length === 0) ? (

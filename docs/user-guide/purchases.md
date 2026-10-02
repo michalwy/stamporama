@@ -1107,23 +1107,28 @@ certificate, format, lot, location with its ref, disposition) and **the run**: e
 the stamp it has taken. On the right is the tile in hand again: **its stamp** — the checklist's
 stamps first, then the other stamps of its issue — and **its own details**.
 
-- **The tiles take the checklist's stamps in the checklist's own order** — the order its **Order
-  stamps…** screen shows, whether or not you ever rearranged it — the first tile you ticked the first
-  stamp, the second the second. Whatever the checklist holds is the sequence, **variants included**:
-  a checklist of imperforate variants is a run of imperforate variants.
-- **Fewer tiles than stamps is normal** — you have several of the set, so the tiles take the first
-  stamps. Click the tile that skips a value and press the stamp it really is. **Any stamp of the
-  issue can be chosen**, not only the checklist's: under *On the checklist* come the checklist's
-  stamps, and under *Other stamps of …* the rest — so the perforated piece in an imperforate run still
-  has somewhere to go. *Back to its turn* undoes a correction. A correction does not move the tiles
-  after it.
-- **Only a few random stamps of the set? Clear the run and assign by hand.** Taking turns is right
-  when the card holds the whole set; when it holds a scattering of it, every tile starts on a wrong
-  stamp. **Clear assignments**, beside *The run*, leaves every tile without a stamp and puts the first
-  tile in hand, and the note above the run counts the tiles still waiting — *5 without a stamp*. Then
-  **press the stamp the tile in hand is**: it is assigned, and the next tile without a stamp comes into
-  hand at once, so it is one click per tile. (The same happens whenever you pick a stamp while some
-  tile still has none — a correction moves you on too. With none left, the tile in hand stays.)
+- **When you ticked as many tiles as the checklist has stamps, the tiles take them in turn** — the
+  card holds the whole set. They go in the checklist's own order — the order its **Order stamps…**
+  screen shows, whether or not you ever rearranged it — the first tile you ticked the first stamp, the
+  second the second. Whatever the checklist holds is the sequence, **variants included**: a checklist
+  of imperforate variants is a run of imperforate variants.
+- **When you ticked fewer, or more, the run starts with nothing assigned** — you have a scattering of
+  the set, and taking turns would put almost every tile on a wrong stamp. The first tile is in hand,
+  and the note above the run says why — *5 tiles, 12 stamps on the checklist, so the run starts with
+  nothing assigned*. **Press the stamp the tile in hand is**: it is assigned, and the next tile without
+  a stamp comes into hand at once, so it is one click per tile. **Assign in turn**, beside *The run*,
+  gives the tiles the checklist's stamps in order after all — with fewer tiles than stamps, the first
+  ones. Which start the run gets is decided once, as the step opens: taking a tile out of the run
+  afterwards does not change it. A checklist with no stamps yet starts in turn, so the stamps you add
+  to it reach the tiles.
+- **Correct a tile by clicking it and pressing the stamp it really is.** **Any stamp of the issue can
+  be chosen**, not only the checklist's: under *On the checklist* come the checklist's stamps, and
+  under *Other stamps of …* the rest — so the perforated piece in an imperforate run still has
+  somewhere to go. *Back to its turn* undoes a correction. A correction does not move the tiles after
+  it, and whenever you pick a stamp while some tile still has none, the next such tile comes into hand.
+  With none left, the tile in hand stays.
+- **Clear assignments**, beside *The run*, leaves every tile without a stamp and puts the first tile in
+  hand, at any point — the note above the run counts the tiles still waiting, *5 without a stamp*.
   **Assign in turn** puts the whole run back on its turns; *Back to its turn* does it for one tile.
 - **Stamps already used in the run are marked** on the right with the tile that took them — *taken by
   #3* — so you can see what is left. A taken stamp can still be pressed.
