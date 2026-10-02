@@ -103,7 +103,7 @@ Stamporama uses [Prisma](https://www.prisma.io/) with the `@prisma/adapter-pg` d
 
 | Context | Command | Notes |
 |---|---|---|
-| Local development | `pnpm prisma:migrate` | Applies + generates new migration against local dev DB |
+| Writing a migration | By hand under `prisma/migrations/`, then `pnpm prisma:generate` | Never `prisma migrate dev`, `migrate reset` or `db push` — see `AGENTS.md` (#989) |
 | Docker Compose (any stack) | `prisma migrate deploy` | Runs automatically on container start before `pnpm start`/`pnpm dev` |
 | Integration tests | `pnpm exec prisma migrate deploy` | Applied automatically by `pnpm test:integration` |
 | CI (integration job) | `pnpm exec prisma migrate deploy` | Runs against a fresh service-container DB |

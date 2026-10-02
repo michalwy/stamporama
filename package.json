@@ -4,7 +4,7 @@
   "packageManager": "pnpm@12.4.1",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -14,7 +14,6 @@
     "pretypecheck": "scripts/ensure-prisma-client.sh",
     "typecheck": "next typegen && tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "photos:migrate:gcs": "tsx scripts/migrate-photos-to-gcs.ts",
     "delcampe:categories": "tsx --tsconfig scripts/tsconfig.json scripts/refresh-delcampe-categories.ts",
