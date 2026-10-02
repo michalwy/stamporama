@@ -1117,6 +1117,16 @@ stamps first, then the other stamps of its issue — and **its own details**.
   stamps, and under *Other stamps of …* the rest — so the perforated piece in an imperforate run still
   has somewhere to go. *Back to its turn* undoes a correction. A correction does not move the tiles
   after it.
+- **Only a few random stamps of the set? Clear the run and assign by hand.** Taking turns is right
+  when the card holds the whole set; when it holds a scattering of it, every tile starts on a wrong
+  stamp. **Clear assignments**, beside *The run*, leaves every tile without a stamp and puts the first
+  tile in hand, and the note above the run counts the tiles still waiting — *5 without a stamp*. Then
+  **press the stamp the tile in hand is**: it is assigned, and the next tile without a stamp comes into
+  hand at once, so it is one click per tile. (The same happens whenever you pick a stamp while some
+  tile still has none — a correction moves you on too. With none left, the tile in hand stays.)
+  **Assign in turn** puts the whole run back on its turns; *Back to its turn* does it for one tile.
+- **Stamps already used in the run are marked** on the right with the tile that took them — *taken by
+  #3* — so you can see what is left. A taken stamp can still be pressed.
 - **Two tiles on the same stamp is allowed** — duplicates are real — and the run says *Same stamp as
   #3* so a slip is noticed.
 - **A tile on an umbrella is flagged.** Checklists often hold a stamp that has variants of its own
