@@ -7,13 +7,19 @@ import { DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { INPUT_STYLE } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
-import { resolveLocationRefChoice, type LocationRefUsage } from "@/lib/location-ref";
+import {
+  countUnderRef,
+  refFillFigures,
+  resolveLocationRefChoice,
+  type LocationRefInUse,
+  type LocationRefUsage,
+} from "@/lib/location-ref";
 import { TextInput } from "./text-input";
 
 /** The refs already written in one storage location, and the next one to suggest (#565). Read when
  * a filing dialog's location changes — the whole set at once, because a location holds as many refs
- * as it has cards in it, and having them client-side is what lets the dialog answer *"`A147`
- * already holds 12 copies"* the moment a ref is typed instead of a round trip per keystroke. */
+ * as it has cards in it, and having them client-side is what lets the dialog say how full `A147` is
+ * the moment a ref is typed instead of a round trip per keystroke. */
 export function useLocationRefUsage(collectionId: string, locationId: string) {
   return useQuery<LocationRefUsage>({
     queryKey: ["location-ref-usage", collectionId, locationId] as const,
@@ -35,7 +41,7 @@ export function useLocationRefUsage(collectionId: string, locationId: string) {
  *
  * **One component rather than two fields that agree today.** Both dialogs ask the same question of
  * the same location, and the answer has four moving parts — the card being packed, the next blank
- * one, whether the typed ref is already in use, and whether that collision is the expected one — so
+ * one, what the typed ref holds before and after, and whether landing on it is the expected act — so
  * a second implementation is a second set of those four to keep in step. Filing from the Copies
  * list was the field without them, and remembering where a box's numbering stood is exactly what
  * Store had already stopped asking of the collector.
@@ -58,6 +64,12 @@ export function useLocationRefUsage(collectionId: string, locationId: string) {
  * to *"where is this strip actually up to"*. The caller drops `typedRef` back to null when the
  * location changes; the counter belongs to the location, so a ref typed for the last one means
  * nothing here.
+ *
+ * **What the card holds now, what is going on, and what it will hold after** (#1535) is a strip of
+ * three figures under the box rather than a sentence: cards are filled up to what they take, so
+ * those are the numbers packing is done by, and a total left to arithmetic is the one most often
+ * got wrong. A copy of the batch already on the card is neither added nor counted twice, which is
+ * why the caller hands in {@link filingRefs} as well as the count.
  */
 export function LocationRefField({
   id,
@@ -65,8 +77,11 @@ export function LocationRefField({
   typedRef,
   onTypedRefChange,
   disabled = false,
-  /** What the copies being filed are called in the collision line — *"Adding 5 copies to it"*. */
-  countLabel,
+  /** How many copies are being filed. */
+  count,
+  /** The copies being filed that already sit in this location, by ref — undefined while still
+   *  being read, which holds the figure strip back rather than showing an *Adding* that is wrong. */
+  filingRefs,
   /** Where a strip of blank cards is printed from, when the dialog offers that link (#565). Store
    *  does; Bulk edit does not, because printing is a step before packing rather than after it. */
   printCardsHref,
@@ -83,7 +98,8 @@ export function LocationRefField({
   typedRef: string | null;
   onTypedRefChange: (ref: string) => void;
   disabled?: boolean;
-  countLabel: string;
+  count: number;
+  filingRefs: readonly LocationRefInUse[] | undefined;
   printCardsHref?: (printFrom: string) => string;
   extraHint?: ReactNode;
   /** The caller's own {@link useLocationRefUsage} — it needs the same reading for its action label
@@ -152,27 +168,72 @@ export function LocationRefField({
           </Link>
         )}
       </p>
-      {/* A ref already in use is a **confirmation, not an error**: a card holding twenty stamps is
-          rarely filled in one sitting, so topping one up is the normal path. It is still worth
-          saying out loud, because an unexpected collision (a typo) reads differently from an
-          expected one — so landing on the card being packed says so in the quiet voice, while any
-          other collision keeps the warning colour. Without the split, the default state of the
-          dialog would carry a warning, and a warning shown every time is one nobody reads on the
-          day it means something. */}
-      {locationId && collision > 0 && (
-        <p
-          style={{
-            margin: "0.5rem 0 0",
-            fontSize: "0.75rem",
-            color: continuingCurrentCard
-              ? "var(--color-text-secondary)"
-              : "var(--color-warning)",
-          }}
-        >
-          <Icon name={continuingCurrentCard ? "check" : "warning"} size="sm" /> {trimmed} already
-          holds {collision} cop{collision === 1 ? "y" : "ies"} here. Adding {countLabel} to it.
-        </p>
+      {/* What the card holds now, what is going on, and the total after (#1535). Shown for any
+          ref, a fresh card included — *now 0* reads the same way — and only once both reads are
+          in, since an *Adding* computed before the batch's own refs arrive would count a copy
+          already on the card a second time.
+
+          Landing on a ref already in use is a **confirmation, not an error** (#629): a card holding
+          twenty stamps is rarely filled in one sitting, so topping one up is the normal path. An
+          unexpected collision (a typo) still reads differently from the expected one, so the card
+          being packed is marked quietly and any other card already in use keeps the warning
+          colour. Without the split, the default state of the dialog would carry a warning, and a
+          warning shown every time is one nobody reads on the day it means something. */}
+      {locationId && trimmed && usage.data && filingRefs && (
+        <RefFillStrip
+          refLabel={trimmed}
+          figures={refFillFigures(collision, count, countUnderRef(filingRefs, trimmed))}
+          tone={collision === 0 ? "new" : continuingCurrentCard ? "current" : "other"}
+        />
       )}
     </div>
+  );
+}
+
+/** The three figures under the ref box (#1535): *On A147 now 40 · Adding 10 · After 50*, the total
+ * set larger since it is the one the card is packed against. */
+function RefFillStrip({
+  refLabel,
+  figures,
+  tone,
+}: {
+  refLabel: string;
+  figures: { now: number; adding: number; after: number };
+  /** `new` — nothing under this ref yet; `current` — the card the location is up to; `other` — a
+   *  card in use that is not the current one, which may be a typo. */
+  tone: "new" | "current" | "other";
+}) {
+  const color = tone === "other" ? "var(--color-warning)" : "var(--color-text-secondary)";
+  const figure = { color: tone === "other" ? color : "var(--color-text-primary)", fontWeight: 600 };
+  return (
+    <p
+      style={{
+        margin: "0.5rem 0 0",
+        display: "flex",
+        alignItems: "baseline",
+        flexWrap: "wrap",
+        gap: "0.375rem",
+        fontSize: "0.75rem",
+        color,
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {tone !== "new" && (
+        <span style={{ alignSelf: "center", display: "inline-flex" }}>
+          <Icon name={tone === "current" ? "check" : "warning"} size="sm" />
+        </span>
+      )}
+      <span>
+        On {refLabel} now <span style={figure}>{figures.now}</span>
+      </span>
+      <span aria-hidden>·</span>
+      <span>
+        Adding <span style={figure}>{figures.adding}</span>
+      </span>
+      <span aria-hidden>·</span>
+      <span>
+        After <span style={{ ...figure, fontSize: "0.9375rem" }}>{figures.after}</span>
+      </span>
+    </p>
   );
 }

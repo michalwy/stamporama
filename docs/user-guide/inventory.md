@@ -1264,10 +1264,12 @@ number filled in. Both are suggestions: the field stays yours to edit. Pick a di
 the suggestion follows it, unless you have typed a ref of your own, which always stands.
 
 A location nothing has ever been ref'd in offers nothing and stays blank, which is the normal case
-for an album or stockbook, and there is no **Next ref** to press. Filing onto a ref **already in
-use** is not an error — the dialog says *"A147 already holds 12 copies here. Adding 5 copies to
-it."* On the card that location is up to that line is a quiet confirmation; on any other ref it
-turns into a warning, which is what catches a typo.
+for an album or stockbook, and there is no **Next ref** to press. Under the box, the same strip of
+three figures as in Store — *On A147 now 12 · Adding 5 · After 17* — says how many copies the card
+holds now, how many go on, and how many it will hold after; picked copies already on that card are
+not added a second time. Filing onto a ref **already in use** is not an error: on the card that
+location is up to the strip carries a quiet tick, and on any other ref it turns into a warning,
+which is what catches a typo.
 
 **Leave as is** and **Clear** write no ref at all, so neither suggests anything.
 

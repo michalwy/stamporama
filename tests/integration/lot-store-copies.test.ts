@@ -7,6 +7,7 @@ import {
   bulkUpdateLotItems,
   bulkUpdateLotItemsScoped,
   countLotBulkScope,
+  listLotBulkScopeRefs,
   readLotBulkScope,
 } from "../../src/lib/lots";
 import { createPurchase, setPurchaseStatus } from "../../src/lib/purchases";
@@ -377,6 +378,32 @@ describe("storing sorted copies (#565/#571)", () => {
       await countLotBulkScope(userId, collectionId, { lotId, selectors: [{ filter: "to-sort" }] }),
       1
     );
+  });
+
+  it("tallies which copies of a selection already sit on each ref of a location (#1535)", async () => {
+    const location = await prisma.location.create({
+      data: { collectionId, name: `Figure box ${Date.now()}`, assignable: true },
+    });
+    const lotId = await arrivedLot();
+    const ids = await addCopies(lotId, 5);
+    // Two packed onto A20 in an earlier sitting, one onto A21, one elsewhere, one not filed yet.
+    await bulkUpdateLotItems(userId, ids.slice(0, 2), { locationId: location.id, locationRef: "A20" });
+    await bulkUpdateLotItems(userId, [ids[2]], { locationId: location.id, locationRef: "A21" });
+    await bulkUpdateLotItems(userId, [ids[3]], { locationId: albumId, locationRef: "A20" });
+    // A copy of another lot on the same card is the card's, not the selection's.
+    const other = await addCopies(await arrivedLot(), 1);
+    await bulkUpdateLotItems(userId, other, { locationId: location.id, locationRef: "A20" });
+
+    assert.deepEqual(await listLotBulkScopeRefs(userId, collectionId, { lotId }, location.id), [
+      { ref: "A20", count: 2 },
+      { ref: "A21", count: 1 },
+    ]);
+    // A row's own single copy goes as a bare id list, with no lot or order around it.
+    assert.deepEqual(
+      await listLotBulkScopeRefs(userId, collectionId, { itemIds: [ids[0], ids[4]] }, location.id),
+      [{ ref: "A20", count: 1 }]
+    );
+    assert.deepEqual(await listLotBulkScopeRefs(userId, collectionId, {}, location.id), []);
   });
 
   it("reads a selection off the wire exactly as it was sent", () => {

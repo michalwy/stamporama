@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import {
-  compareLocationRef,
+  foldLocationRefCounts,
   highestLocationRef,
   nextLocationRef,
   type LocationRefUsage,
@@ -109,16 +109,9 @@ export async function getLocationRefUsage(
     _count: { id: true },
   });
 
-  const counts = new Map<string, number>();
-  for (const g of grouped) {
-    const ref = g.locationRef?.trim();
-    if (!ref) continue;
-    counts.set(ref, (counts.get(ref) ?? 0) + g._count.id);
-  }
-
-  const refs = [...counts.entries()]
-    .map(([ref, count]) => ({ ref, count }))
-    .sort((a, b) => compareLocationRef(a.ref, b.ref));
+  const refs = foldLocationRefCounts(
+    grouped.map((g) => ({ ref: g.locationRef, count: g._count.id }))
+  );
   const written = refs.map((r) => r.ref);
   return {
     refs,

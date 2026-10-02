@@ -2105,10 +2105,16 @@ A location nothing has ever been ref'd in offers nothing and stays blank, which 
 for an album or stockbook: there the location *is* the address, and there is no **Next ref** to
 press.
 
-Filing onto a ref that is **already in use** is not an error — it is the default. The dialog says
-*"A147 already holds 12 copies"* and the button reads **Add to A147**. On the current card that
-line is a quiet confirmation; on any other ref it turns into a warning, which is what catches the
-typo.
+Under the box, a strip of three figures says what storing does to that card — *On A147 now 12 ·
+Adding 5 · After 17* — so you can fill a card up to what it takes without doing the sum yourself.
+The figures count **copies**: a cover carrying several stamps is one. A copy you are storing that is
+already on that card is not counted twice: it is left out of *Adding*, and *After* is the number of
+different copies the card will hold. A new card reads *now 0*, and the strip disappears while the
+box is empty. It follows the location and the ref as you change them.
+
+Filing onto a ref that is **already in use** is not an error — it is the default, and the button
+reads **Add to A147**. On the current card the strip carries a quiet tick; on any other ref already
+in use it turns into a warning, which is what catches the typo.
 
 Blank cards are printed **before** you pack — see
 [Printing blank ref cards](locations.md#printing-blank-ref-cards).

@@ -68,6 +68,9 @@ describe("what a write on one lot re-reads (#1409)", () => {
     assert.equal(staleAfterWrite(lotCopiesKeys.purchaseReturn(C, P), C, none), true);
     assert.equal(staleAfterWrite(lotCopiesKeys.purchaseCompleteness(C, P), C, none), true);
     assert.equal(staleAfterWrite(["lot-copies", C, "selection-count", []], C, none), true);
+    // The Store dialog's tally of refs (#1535): its fourth segment is a location id, so it must not
+    // be read as an untouched lot's header and kept.
+    assert.equal(staleAfterWrite(["lot-copies", C, "selection-refs", "loc1", []], C, none), true);
   });
 
   it("re-reads everything when the write cannot say what it touched", () => {

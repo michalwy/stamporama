@@ -21,7 +21,7 @@ import {
   LocationRefField,
   useLocationRefUsage,
 } from "@/app/c/[collectionSlug]/shared/location-ref-field";
-import { resolveLocationRefChoice } from "@/lib/location-ref";
+import { resolveLocationRefChoice, tallyLocationRefs } from "@/lib/location-ref";
 
 const HINT_STYLE: React.CSSProperties = {
   margin: "0.375rem 0 0",
@@ -124,7 +124,8 @@ const NO_FLAG_CHANGES: Record<DispositionFlag, FlagOp> = {
  * with the box left blank clears the refs the copies carried — a slot name from the old album
  * addresses nothing in the new one. It is Store's field itself (`LocationRefField`, #1334), not a
  * second one that agrees with it: the chosen location's own counter fills the box, *Next ref*
- * starts a new card, and a ref already in use says how many copies it holds. Filing from this list
+ * starts a new card, and the strip under it says what the card holds now, what is being added and
+ * what it will hold after (#1535). Filing from this list
  * used to mean remembering where a box's numbering stood, which is the one thing Store had already
  * stopped asking.
  *
@@ -201,6 +202,12 @@ export function BulkEditCopiesDialog({
     locationMode === "move" ? locationId : ""
   );
   const { trimmed: trimmedRef } = resolveLocationRefChoice(typedRef, refUsage.data);
+  // The picked copies already in the chosen location, by ref, so the field's figure strip adds only
+  // the ones not on the card yet (#1535). The rows carry their own address; no read is needed.
+  const filingRefs = useMemo(
+    () => (locationId ? tallyLocationRefs(copies, locationId) : []),
+    [copies, locationId]
+  );
 
   const count = copies.length;
   const copiesLabel = `${count} cop${count === 1 ? "y" : "ies"}`;
@@ -349,7 +356,8 @@ export function BulkEditCopiesDialog({
                         typedRef={typedRef}
                         onTypedRefChange={setTypedRef}
                         disabled={isPending}
-                        countLabel={copiesLabel}
+                        count={count}
+                        filingRefs={filingRefs}
                         usage={refUsage}
                         extraHint="Cleared on every picked copy if you empty the box — a ref addresses a place inside the location they are leaving."
                       />

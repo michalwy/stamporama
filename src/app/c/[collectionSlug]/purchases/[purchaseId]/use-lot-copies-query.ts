@@ -13,6 +13,7 @@ import type {
 import type { SetCompletenessByIssue } from "@/lib/lot-set-completeness";
 import type { PurchaseReturn } from "@/lib/purchase-return";
 import type { CopyContainer } from "@/lib/lot-selection";
+import type { LocationRefInUse } from "@/lib/location-ref";
 import { formatTilePhotoRoles, type TilePhotoRole } from "@/lib/tile-photo-roles";
 import { formatIntakeGroupAxes, type IntakeGroupAxis } from "@/lib/intake-groups";
 import { lotCopiesKeys, staleAfterWrite } from "./lot-copies-keys";
@@ -109,6 +110,32 @@ export function useLotSelectionCount(collectionId: string, scope: BulkScopeClien
     },
     placeholderData: (prev) => prev,
     enabled: !!scope,
+  });
+}
+
+/** Which copies of a selection already sit in `locationId`, tallied by ref (#1535) — what the Store
+ * dialog's figure strip subtracts from *Adding*. Under the `lot-copies` key, so the refresh after
+ * any intake write reads it again. Disabled until a location is chosen: a ref names nothing
+ * without one. */
+export function useLotSelectionRefs(
+  collectionId: string,
+  scope: BulkScopeClient,
+  locationId: string
+) {
+  const fields = bulkScopeFields(scope);
+  return useQuery<LocationRefInUse[]>({
+    queryKey: ["lot-copies", collectionId, "selection-refs", locationId, fields] as const,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/purchases/selection-refs?${new URLSearchParams([
+          ["locationId", locationId],
+          ...fields,
+        ]).toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to read the selection's refs");
+      return res.json();
+    },
+    enabled: !!locationId,
   });
 }
 

@@ -82,6 +82,7 @@ import {
   usePurchaseSetCompleteness,
   useInvalidateLotCopies,
   useLotSelectionCount,
+  useLotSelectionRefs,
   bulkScopeFields,
   type BulkScopeClient,
   type IntakeFilterParams,
@@ -2248,6 +2249,7 @@ function useCopyEditing(ctx: {
       {bulkStore && (
         <StoreCopiesDialog
           count={bulkTargetCount(bulkStore)}
+          scope={bulkStore.kind === "ids" ? { itemIds: bulkStore.ids } : bulkStore.scope}
           locations={locations}
           collectionId={collectionId}
           isPending={isPending}
@@ -4261,6 +4263,7 @@ function LocationPickerDialog({
  */
 function StoreCopiesDialog({
   count,
+  scope,
   locations,
   collectionId,
   isPending,
@@ -4269,6 +4272,9 @@ function StoreCopiesDialog({
   onConfirm,
 }: {
   count: number;
+  /** The copies being stored, as the server reads them — so the figure strip can leave out the
+   *  ones already on the card (#1535). A row's own single copy goes as a bare id list. */
+  scope: BulkScopeClient;
   locations: LocationData[];
   collectionId: string;
   isPending: boolean;
@@ -4301,6 +4307,7 @@ function StoreCopiesDialog({
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
 
   const usage = useLocationRefUsage(collectionId, locationId);
+  const filingRefs = useLotSelectionRefs(collectionId, scope, locationId);
   // The field's own reading — what the box shows, and whether that ref is already in use. Read
   // here too because the action label names it (`Add to A147`) and the submit writes it.
   const { trimmed: trimmedRef, collision } = resolveLocationRefChoice(typedRef, usage.data);
@@ -4357,7 +4364,8 @@ function StoreCopiesDialog({
               typedRef={typedRef}
               onTypedRefChange={setTypedRef}
               disabled={isPending}
-              countLabel={copies}
+              count={count}
+              filingRefs={filingRefs.data}
               usage={usage}
               printCardsHref={(printFrom) =>
                 `/c/${params.collectionSlug}/locations/ref-cards?locationId=${locationId}${
