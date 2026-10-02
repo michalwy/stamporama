@@ -89,6 +89,10 @@ lockfile change.
 body — GitHub acts on it the moment the change lands and closes the issue before anybody has
 verified it. Use `Refs #NNN`. The `Closing reference check` job in CI enforces this over both the
 body and the commit messages; `gh pr view <n> --json closingIssuesReferences` sees the body only.
+**The check re-runs whenever the body or title is edited** (`closing-refs.yml`, #935) — before that
+it ran only on a push, so its green could describe a body that no longer existed. **After editing a
+body, still read `closingIssuesReferences` back**: for the seconds between the edit and the new run
+being queued, the old verdict is the one on the pull request, and auto-merge acts on it.
 
 ## Plans are a working note, not a record
 

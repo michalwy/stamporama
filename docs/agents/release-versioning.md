@@ -52,8 +52,9 @@ and every one of them comes back clean.
    **Green is not the whole answer, and since #798 it is frequently not an answer at all.** When
    `Static checks`, `Unit tests`, `Integration tests` and `Extension checks` all report
    **`skipped`**, `Detect changes` found the whole diff inside its safe list and this run exercised
-   nothing. (`Closing reference check` is skipped on every push to `main` — it runs only on a pull
-   request — so it is never part of this answer either way.) That is the ordinary case here rather
+   nothing. (`Closing reference check` does not run on a push to `main` at all — it lives in its own
+   workflow, `closing-refs.yml`, which pull requests alone trigger (#935) — so it is never part of
+   this answer either way.) That is the ordinary case here rather
    than a curiosity: this project ships a great deal of process prose, so the head of `main` at
    release time is often a documentation commit. **v0.136.0 was tagged from one**, on a green run in
    which nothing ran, and this step was discharged by it.
