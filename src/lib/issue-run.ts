@@ -186,6 +186,21 @@ export function assignInTurn(
 }
 
 /**
+ * How a run starts (#1526): **in turn only when the ticked tiles are as many as the checklist's
+ * stamps** — the one case where the tiles are likely the whole set. Fewer or more is almost always
+ * *several random stamps of it*, where every in-turn answer is wrong and was cleared by hand each
+ * time (#1523), so such a run starts as after *Clear assignments*.
+ *
+ * `stampCount` is the run's own sequence — every stamp the checklist holds, variants included, as
+ * #1225 defines it. Decided **once, on entering the step**: a tile taken out of the run, or a stamp
+ * added to the checklist meanwhile, does not revisit it. A checklist with no stamps yet starts in
+ * turn — there is nothing to clear, and the stamps added to it then reach the tiles in turn (#1220).
+ */
+export function runStart(tileCount: number, stampCount: number): "in-turn" | "unassigned" {
+  return stampCount === 0 || tileCount === stampCount ? "in-turn" : "unassigned";
+}
+
+/**
  * *Clear assignments* (#1523): every tile of the run without a stamp, to be assigned by hand. The
  * in-turn assignment is right for a whole set; for a few random stamps of one, every tile starts on a
  * wrong stamp and nothing shows which ones have been checked. A cleared tile is a correction to
