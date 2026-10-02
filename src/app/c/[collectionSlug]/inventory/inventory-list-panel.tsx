@@ -442,6 +442,11 @@ export function InventoryListPanel({
    *  *Group by location* over a list that is not grouped — and neither can the sort control beside
    *  it grey itself out over a list whose order the collector really can set. */
   const effectiveGroupMode: CopyGroupMode = flatList ? "none" : groupMode;
+  // Off by default (#1537): one group per stamp, whatever condition its copies are in. A collector
+  // who had never touched it reads no stored value, which is exactly that default.
+  const [groupByCondition, setGroupByCondition] = usePersistedFlag(
+    `stamporama:inventory:groupByCondition:${collectionId}`
+  );
   const [groupByFormat, setGroupByFormat] = usePersistedFlag(
     `stamporama:inventory:groupByFormat:${collectionId}`
   );
@@ -449,8 +454,8 @@ export function InventoryListPanel({
     `stamporama:inventory:groupByCertificate:${collectionId}`
   );
   const axes: CopyGroupAxes = useMemo(
-    () => ({ format: groupByFormat, certificate: groupByCertificate }),
-    [groupByFormat, groupByCertificate]
+    () => ({ condition: groupByCondition, format: groupByFormat, certificate: groupByCertificate }),
+    [groupByCondition, groupByFormat, groupByCertificate]
   );
   // Names the offers popup for a copy whose stamp is unnamed (#276) — the internal copy number,
   // padded to the collection's chosen width.
@@ -1614,7 +1619,7 @@ export function InventoryListPanel({
                   settings of the duplicate key, and there is no honest reading of "split by format"
                   over issue groups — inventing one would be inventing product behaviour. Disabled
                   and labelled is what stops that from being "present but meaningless": a collector
-                  who has never grouped duplicates learns from the panel that duplicates has two
+                  who has never grouped duplicates learns from the panel that duplicates has
                   further settings, which is the discoverability the old arrangement could not
                   offer at all. They also keep showing their stored state, so a split left on last
                   week is visibly waiting rather than silently applied.
@@ -1639,36 +1644,44 @@ export function InventoryListPanel({
                     (mode) => locations.length > 0 || (mode !== "location" && mode !== "ref")
                   ).map((mode) => ({ id: mode, label: COPY_GROUP_MODE_LABEL[mode] }))}
                   footer={
-                    (formats.length > 0 || certificateStatuses.length > 0) && (
-                      <>
-                        {/* The heading saying **when** the split switches apply (#868). It is what
-                            keeps a pair of controls that are disabled four times out of five from
-                            reading as decoration: they are not settings of grouping, they are
-                            settings of one grouping, and a reader who has never used that grouping
-                            learns here that it has them. */}
-                        <span style={FILTER_MENU_HEADING_STYLE}>When grouping duplicates</span>
-                        {formats.length > 0 && (
-                          <FilterFooterToggle
-                            label="Split by format"
-                            hint="Treat a pair, block or strip as a different item from a single, instead of grouping them together."
-                            disabledHint="Applies only while the list is grouped by duplicates."
-                            checked={groupByFormat}
-                            onChange={setGroupByFormat}
-                            disabled={!groupDuplicates}
-                          />
-                        )}
-                        {certificateStatuses.length > 0 && (
-                          <FilterFooterToggle
-                            label="Split by certificate"
-                            hint="Treat a certified copy as a different item from an uncertified one, instead of grouping them together."
-                            disabledHint="Applies only while the list is grouped by duplicates."
-                            checked={groupByCertificate}
-                            onChange={setGroupByCertificate}
-                            disabled={!groupDuplicates}
-                          />
-                        )}
-                      </>
-                    )
+                    // Always drawn since #1537: every collection has conditions to split by, so the
+                    // heading always has at least one switch under it.
+                    <>
+                      {/* The heading saying **when** the split switches apply (#868). It is what
+                          keeps controls that are disabled four times out of five from
+                          reading as decoration: they are not settings of grouping, they are
+                          settings of one grouping, and a reader who has never used that grouping
+                          learns here that it has them. */}
+                      <span style={FILTER_MENU_HEADING_STYLE}>When grouping duplicates</span>
+                      <FilterFooterToggle
+                        label="Split by condition"
+                        hint="Treat copies in different conditions as different items, instead of grouping every condition of a stamp together."
+                        disabledHint="Applies only while the list is grouped by duplicates."
+                        checked={groupByCondition}
+                        onChange={setGroupByCondition}
+                        disabled={!groupDuplicates}
+                      />
+                      {formats.length > 0 && (
+                        <FilterFooterToggle
+                          label="Split by format"
+                          hint="Treat a pair, block or strip as a different item from a single, instead of grouping them together."
+                          disabledHint="Applies only while the list is grouped by duplicates."
+                          checked={groupByFormat}
+                          onChange={setGroupByFormat}
+                          disabled={!groupDuplicates}
+                        />
+                      )}
+                      {certificateStatuses.length > 0 && (
+                        <FilterFooterToggle
+                          label="Split by certificate"
+                          hint="Treat a certified copy as a different item from an uncertified one, instead of grouping them together."
+                          disabledHint="Applies only while the list is grouped by duplicates."
+                          checked={groupByCertificate}
+                          onChange={setGroupByCertificate}
+                          disabled={!groupDuplicates}
+                        />
+                      )}
+                    </>
                   }
                 />
               </Tooltip>

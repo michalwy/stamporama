@@ -292,6 +292,7 @@ export function useCopyGroupsInfinite(
     queryFn: async ({ pageParam }) => {
       const params = itemFilterParams(filters);
       if (pageParam) params.set("offset", pageParam as string);
+      if (axes.condition) params.set("groupByCondition", "true");
       if (axes.format) params.set("groupByFormat", "true");
       if (axes.certificate) params.set("groupByCertificate", "true");
       const res = await fetch(

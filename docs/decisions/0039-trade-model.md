@@ -420,7 +420,8 @@ total and neither verdict — the substitution is invisible to every figure on t
 snapshots frozen at `agreed`. A pool matched on stamp and condition alone would let a certified copy
 replace an uncertified one, or a block of four replace a single, and silently rewrite a balance both
 sides had shaken hands on. A copy differing in certificate or format is not an alternative to a line;
-it is a different line. It is `copy-groups.ts`'s key with both optional axes joined, which is the same
+it is a different line. It is `copy-groups.ts`'s key with every optional axis joined (condition became
+one of them in #1537, off by default on the Copies list and always joined here), which is the same
 key catalogue valuation is computed on — not a fifth grouping rule.
 
 **Blocking is an explicit row, and absence is availability.** Everything eligible is offered by

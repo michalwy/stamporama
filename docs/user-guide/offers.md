@@ -224,7 +224,9 @@ chooses between one set each and one set holding all — the same choice **Add s
 For a stock of duplicates there is a faster route still: turn on
 [**Group duplicates**](inventory.md#grouping-duplicates) on the Copies list and tick the **checkbox
 in front of a group row** — one click ticks the whole stack, and **Add as → N sets** makes it one offer
-with one single-copy set per copy, which is the quantity listing platforms like Colnect expect.
+with one single-copy set per copy, which is the quantity listing platforms like Colnect expect. Turn
+on **Split by condition** in the same dropdown first, so that each stack is one condition: Colnect
+takes one quantity offer per stamp and condition.
 
 Going the other way, the same **⋮** menu has **View offers** — a read-only popup of every offer
 that already references that copy, across all platforms and states. The **Stamps** and **Issues**

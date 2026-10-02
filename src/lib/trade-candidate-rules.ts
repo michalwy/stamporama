@@ -29,9 +29,13 @@ import {
   type GroupableCopy,
 } from "./copy-groups";
 
-/** Both optional axes joined. See the header: this is the key #638 values a line on, which is the
+/** Every optional axis joined. See the header: this is the key #638 values a line on, which is the
  *  whole reason a swap inside it is invisible to the balance. */
-export const TRADE_CANDIDATE_AXES: CopyGroupAxes = { format: true, certificate: true };
+export const TRADE_CANDIDATE_AXES: CopyGroupAxes = {
+  condition: true,
+  format: true,
+  certificate: true,
+};
 
 /** What a copy has to carry to be matched — `Item`'s four key columns, and structurally what
  *  `ItemListItem` and a give line's `item` selection already are. */

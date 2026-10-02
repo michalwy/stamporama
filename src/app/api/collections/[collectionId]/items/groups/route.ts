@@ -26,6 +26,7 @@ export async function GET(
     const result = await listItemDuplicateGroups(session.user.id, collectionId, {
       ...readItemFilters(sp),
       axes: {
+        condition: sp.get("groupByCondition") === "true",
         format: sp.get("groupByFormat") === "true",
         certificate: sp.get("groupByCertificate") === "true",
       },

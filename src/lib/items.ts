@@ -2172,10 +2172,10 @@ export async function countItemsByCondition(
 
 // ── Duplicate groups (#372) ──────────────────────────────────────────────────
 
-/** One row of the grouped Copies list: a bag of interchangeable copies (see `copy-groups.ts` for
- * what "interchangeable" means and why condition is never optional). Carries the stamp identity a
- * copy row shows, plus what the group adds — how many, how many are already listed, and where its
- * members disagree. */
+/** One row of the grouped Copies list: a bag of copies of one stamp (see `copy-groups.ts` for which
+ * axes can split it, and why condition became one of them in #1537). Carries the stamp identity a
+ * copy row shows, plus what the group adds — how many, in which conditions, how many are already
+ * listed, and where its members disagree. */
 export interface CopyGroupRow {
   /** Encoded {@link CopyGroupKey} + axes — the React key, and the token the row action expands. */
   key: string;
@@ -2192,12 +2192,14 @@ export interface CopyGroupRow {
   issueId: string | null;
   issueName: string | null;
   issueYear: number | null;
-  /** The open wants recorded for the group's stamp (#532), or null for none. A group is one stamp
-   *  at one condition, so the marker answers for every copy in it at once. */
+  /** The open wants recorded for the group's stamp (#532), or null for none. */
   wants: StampWantSummary | null;
-  conditionId: string;
-  conditionName: string;
-  conditionAbbreviation: string;
+  /** Set only when the Condition axis joins the key (#1537). */
+  conditionId: string | null;
+  /** The conditions the members are in, each with how many — one entry whenever the Condition axis
+   *  joins the key, and as many as there are when it does not. Most copies first, then the
+   *  collection's own condition order, so `MNH ×2 · MH ×1` reads the same on every row. */
+  conditions: CopyGroupCondition[];
   /** Set only when the Format axis joins the key; null both for "single" and for "not grouped on". */
   formatId: string | null;
   formatName: string | null;
@@ -2213,13 +2215,22 @@ export interface CopyGroupRow {
   listedCount: number;
   /** Members disagree on an axis currently set to *any*. Derived, never stored: with the axis
    * joined to the key this cannot occur by construction. */
+  mixedCondition: boolean;
   mixedFormat: boolean;
   mixedCertificate: boolean;
   /** The per-copy catalog value, when every member values identically — which is guaranteed with
-   * both axes joined, since the key is then the key `valuateItemRows` is computed on. Null when
+   * every axis joined, since the key is then the key `valuateItemRows` is computed on. Null when
    * the members disagree; {@link CopyGroupRow.valueVaries} tells that apart from "no members". */
   value: CopyValuation | null;
   valueVaries: boolean;
+}
+
+/** One of the conditions a duplicate group's members are in (#1537). */
+export interface CopyGroupCondition {
+  id: string;
+  name: string;
+  abbreviation: string;
+  count: number;
 }
 
 export interface PaginatedCopyGroupsResult {
@@ -2268,8 +2279,8 @@ function sameValuation(a: CopyValuation, b: CopyValuation): boolean {
  * not in the client because the list is offset-paginated: a client-side grouping would split a
  * group across a page boundary and report two half-counts.
  *
- * Ordered **count descending**, then `stampId` — deterministic under pagination, and the order the
- * feature exists for (biggest stack of duplicates first). Which axes join the key comes from
+ * Ordered **count descending**, then the key's own columns — deterministic under pagination, and
+ * the order the feature exists for (biggest stack of duplicates first). Which axes join the key comes from
  * `axes`; the panel's own condition / format / certificate *filters* still narrow which copies are
  * grouped at all, since grouping and filtering answer different questions.
  *
@@ -2310,13 +2321,13 @@ export async function listItemDuplicateGroups(
   // express — the alternative is four literal call sites of the same query.
   const by = [
     "stampId",
-    "conditionId",
+    ...(axes.condition ? ["conditionId"] : []),
     ...(axes.format ? ["formatId"] : []),
     ...(axes.certificate ? ["certificateStatusId"] : []),
   ];
   const grouped: {
     stampId: string;
-    conditionId: string;
+    conditionId?: string;
     formatId?: string | null;
     certificateStatusId?: string | null;
   }[] =
@@ -2325,9 +2336,10 @@ export async function listItemDuplicateGroups(
       by,
       where,
       // Selected because it is what the ordering reads: biggest stack of duplicates first, then
-      // `stampId` so the order is total and pagination cannot repeat or skip a group.
+      // every key column so the order is total and pagination cannot repeat or skip a group — the
+      // stamp alone is not, once a split puts two groups of one stamp at the same count.
       _count: { id: true },
-      orderBy: [{ _count: { id: "desc" } }, { stampId: "asc" }],
+      orderBy: [{ _count: { id: "desc" } }, ...by.map((field) => ({ [field]: "asc" }))],
       take: pageSize + 1,
       skip: offset,
     });
@@ -2340,7 +2352,7 @@ export async function listItemDuplicateGroups(
 
   const keys: CopyGroupKey[] = page.map((g) => ({
     stampId: g.stampId,
-    conditionId: g.conditionId,
+    conditionId: axes.condition ? (g.conditionId ?? null) : null,
     formatId: axes.format ? (g.formatId ?? null) : null,
     certificateStatusId: axes.certificate ? (g.certificateStatusId ?? null) : null,
   }));
@@ -2392,9 +2404,11 @@ export async function listItemDuplicateGroups(
       where: { id: { in: [...new Set(keys.map((k) => k.stampId))] } },
       select: GROUP_STAMP_SELECT,
     }),
+    // Read from the members rather than the keys: with the Condition axis off a key names no
+    // condition, and the row still says which ones it holds (#1537).
     prisma.stampCondition.findMany({
-      where: { id: { in: [...new Set(keys.map((k) => k.conditionId))] } },
-      select: { id: true, name: true, abbreviation: true },
+      where: { id: { in: [...new Set(members.map((m) => m.conditionId))] } },
+      select: { id: true, name: true, abbreviation: true, sortOrder: true },
     }),
     axes.format
       ? prisma.stampFormat.findMany({
@@ -2420,9 +2434,9 @@ export async function listItemDuplicateGroups(
     const encoded = encodeCopyGroupKey(key, axes);
     const bucket = membersByKey.get(encoded) ?? [];
     const stamp = stampById.get(key.stampId);
-    const condition = conditionById.get(key.conditionId);
-    // A group whose stamp or condition vanished between the two reads has nothing to render.
-    if (!stamp || !condition) continue;
+    const conditionCounts = groupConditions(bucket, conditionById);
+    // A group whose stamp or members vanished between the two reads has nothing to render.
+    if (!stamp || conditionCounts.length === 0) continue;
     const firstIssue = stamp.issueMemberships[0]?.issue ?? null;
     const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
     const format = key.formatId ? formatById.get(key.formatId) : undefined;
@@ -2449,9 +2463,8 @@ export async function listItemDuplicateGroups(
       issueName: firstIssue?.name ?? null,
       issueYear: firstIssue?.year ?? null,
       wants: wantsByStamp.get(key.stampId) ?? null,
-      conditionId: condition.id,
-      conditionName: condition.name,
-      conditionAbbreviation: condition.abbreviation,
+      conditionId: key.conditionId,
+      conditions: conditionCounts,
       formatId: key.formatId,
       formatName: format?.name ?? null,
       formatAbbreviation: format?.abbreviation ?? null,
@@ -2459,6 +2472,7 @@ export async function listItemDuplicateGroups(
       certificateStatusName: certificate?.name ?? null,
       count: bucket.length,
       listedCount: bucket.filter((m) => m.offerSetMemberships.length > 0).length,
+      mixedCondition: mixed.condition,
       mixedFormat: mixed.format,
       mixedCertificate: mixed.certificate,
       value: agreed ? values[0] : null,
@@ -2875,12 +2889,34 @@ export async function listIssueGroupCompleteness(
   return byIssue;
 }
 
+/** The conditions one group's members are in, each with its count — most copies first, then the
+ * collection's own condition order. A condition deleted between the two reads drops out. */
+function groupConditions(
+  members: { conditionId: string }[],
+  conditionById: Map<string, { id: string; name: string; abbreviation: string; sortOrder: number }>
+): CopyGroupCondition[] {
+  const counts = new Map<string, number>();
+  for (const m of members) counts.set(m.conditionId, (counts.get(m.conditionId) ?? 0) + 1);
+  return [...counts]
+    .flatMap(([id, count]) => {
+      const condition = conditionById.get(id);
+      return condition ? [{ condition, count }] : [];
+    })
+    .sort((a, b) => b.count - a.count || a.condition.sortOrder - b.condition.sortOrder)
+    .map(({ condition, count }) => ({
+      id: condition.id,
+      name: condition.name,
+      abbreviation: condition.abbreviation,
+      count,
+    }));
+}
+
 /** The `where` addressing exactly one group's members. Only the axes that joined the key are
  * constrained — an axis set to *any* must not narrow, or the group's own members would be split. */
 function memberWhere(key: CopyGroupKey, axes: CopyGroupAxes): Prisma.ItemWhereInput {
   return {
     stampId: key.stampId,
-    conditionId: key.conditionId,
+    ...(axes.condition ? { conditionId: key.conditionId ?? undefined } : {}),
     ...(axes.format ? { formatId: key.formatId } : {}),
     ...(axes.certificate ? { certificateStatusId: key.certificateStatusId } : {}),
   };

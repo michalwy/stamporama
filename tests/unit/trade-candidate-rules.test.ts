@@ -55,8 +55,8 @@ describe("tradeCandidateKey", () => {
     assert.notEqual(tradeCandidateKey(copy()), tradeCandidateKey(copy({ formatId: "block4" })));
   });
 
-  it("joins both optional axes — the key catalogue valuation is computed on", () => {
-    assert.deepEqual(TRADE_CANDIDATE_AXES, { format: true, certificate: true });
+  it("joins every optional axis — the key catalogue valuation is computed on", () => {
+    assert.deepEqual(TRADE_CANDIDATE_AXES, { condition: true, format: true, certificate: true });
   });
 });
 

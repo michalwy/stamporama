@@ -24,10 +24,10 @@
 // {@link CollisionCopy.listedStampId}: the check and the listing must never disagree about what an
 // offer is. A platform that lists the umbrella itself compares recorded stamps, as before.
 
-import { copyGroupKey, encodeCopyGroupKey, DEFAULT_GROUP_AXES, type GroupableCopy } from "./copy-groups";
+import { copyGroupKey, encodeCopyGroupKey, COLNECT_GROUP_AXES, type GroupableCopy } from "./copy-groups";
 
 /** A copy considered for adding, or one an offer already lists. `stampId`/`conditionId` are all the
- * key reads — `GroupableCopy`'s other two axes are zeroed by {@link DEFAULT_GROUP_AXES}. */
+ * key reads — `GroupableCopy`'s other two axes are zeroed by {@link COLNECT_GROUP_AXES}. */
 export interface CollisionCopy {
   itemId: string;
   stampId: string;
@@ -60,7 +60,7 @@ function keyOf(copy: CollisionCopy, listed: boolean): string {
     formatId: null,
     certificateStatusId: null,
   };
-  return encodeCopyGroupKey(copyGroupKey(groupable, DEFAULT_GROUP_AXES), DEFAULT_GROUP_AXES);
+  return encodeCopyGroupKey(copyGroupKey(groupable, COLNECT_GROUP_AXES), COLNECT_GROUP_AXES);
 }
 
 /**

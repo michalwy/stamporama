@@ -3,10 +3,10 @@
 // built inline in a 2 000-line panel.
 //
 // The control is **one dropdown carrying its own sub-controls** (#868). That shape is what forces
-// the summary below: the two *Split by …* switches live inside the panel, so with the panel shut
+// the summary below: the *Split by …* switches live inside the panel, so with the panel shut
 // there has to be somewhere for them to show, and the trigger is a fixed-width box on a bar already
 // carrying eleven controls. Hence the same rule `MultiSelectFilter` uses on its trigger — name the
-// one, count the many — rather than concatenating both switch labels.
+// one, count the many — rather than concatenating the switch labels.
 
 import type { CopyGroupAxes } from "./copy-groups";
 
@@ -52,14 +52,17 @@ export function asCopyGroupMode(value: string): CopyGroupMode {
 
 /**
  * What the closed dropdown reads. The splits only join the duplicate key, so they are the only
- * thing that can qualify a mode, and they are summarised rather than listed: with both on,
- * `Duplicates + format + certificate` is half again as wide as the box it has to fit in.
+ * thing that can qualify a mode, and they are summarised rather than listed: with two on,
+ * `Duplicates + format + certificate` is half again as wide as the box it has to fit in. Condition
+ * joined them in #1537 and is counted the same way.
  */
 export function describeCopyGrouping(mode: CopyGroupMode, axes: CopyGroupAxes): string {
   if (mode !== "duplicates") return COPY_GROUP_MODE_LABEL[mode];
-  const splits = [axes.format ? "format" : null, axes.certificate ? "certificate" : null].filter(
-    (s): s is string => s !== null
-  );
+  const splits = [
+    axes.condition ? "condition" : null,
+    axes.format ? "format" : null,
+    axes.certificate ? "certificate" : null,
+  ].filter((s): s is string => s !== null);
   if (splits.length === 0) return COPY_GROUP_MODE_LABEL.duplicates;
   if (splits.length === 1) return `Duplicates + ${splits[0]}`;
   return `Duplicates + ${splits.length} splits`;

@@ -69,8 +69,9 @@ const MIXED_CHIP: React.CSSProperties = {
 };
 
 /**
- * One duplicate group on the Copies list (#372): a bag of interchangeable copies, collapsed to a
- * single row. Follows `InventoryItemRow`'s line order — it describes the same stamp — and adds what
+ * One duplicate group on the Copies list (#372): a bag of copies of one stamp, collapsed to a single
+ * row — in one condition while *Split by condition* is on, in every condition held while it is off
+ * (#1537). Follows `InventoryItemRow`'s line order — it describes the same stamp — and adds what
  * only a group has: how many, how many are already listed, and where its members disagree.
  * Expanding renders the members as ordinary copy rows, fetched then and not before: a page of forty
  * groups must not fetch four hundred copies to draw forty collapsed lines.
@@ -188,15 +189,30 @@ export function DuplicateGroupRow({
               and "(unnamed stamp)" repeated down a grouped list is the same non-fact on every
               row. */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <Tooltip content={`${group.count} interchangeable copies in this group`}>
+            <Tooltip content={`${group.count} copies in this group`}>
               <span style={GROUP_COUNT_CHIP}>×{group.count}</span>
             </Tooltip>
-            <ConditionChip
-              collectionId={collectionId}
-              conditionId={group.conditionId}
-              label={group.conditionAbbreviation}
-              tooltip={group.conditionName}
-            />
+            {/* One chip per condition held (#1537). With *Split by condition* on there is exactly
+                one and it reads as it always did; left off, the conditions the stamp is held in
+                are the point of grouping this way, so each carries its own count. */}
+            {group.conditions.length === 1 ? (
+              <ConditionChip
+                collectionId={collectionId}
+                conditionId={group.conditions[0].id}
+                label={group.conditions[0].abbreviation}
+                tooltip={group.conditions[0].name}
+              />
+            ) : (
+              group.conditions.map((c) => (
+                <ConditionChip
+                  key={c.id}
+                  collectionId={collectionId}
+                  conditionId={c.id}
+                  label={`${c.abbreviation} ×${c.count}`}
+                  tooltip={`${c.count} of these copies in ${c.name}`}
+                />
+              ))
+            )}
             {axes.format && (
               <Tooltip content={group.formatName ?? "Single (no format recorded)"}>
                 <span style={CHIP}>{group.formatAbbreviation ?? "single"}</span>
@@ -282,17 +298,22 @@ export function DuplicateGroupRow({
               searchQuery={colnectSearchQueryFor(primaryCN ?? secondaryCNs[0], vendorMap)}
             />
             <SubtypeChip subtype={group.subtype} />
-            {/* A group is one stamp at one condition, so the marker answers for every copy in it at
-                once (#532) — including whether they would satisfy a want. */}
+            {/* A group in one condition answers for every copy in it at once (#532) — including
+                whether they would satisfy a want. A group mixing conditions has no one copy to
+                ask that of, so its marker says only that the stamp is wanted (#1537). */}
             <WantChip
               collectionId={collectionId}
               wants={group.wants}
-              copy={{
-                stampId: group.stampId,
-                conditionId: group.conditionId,
-                certificateStatusId: group.certificateStatusId,
-                formatId: group.formatId,
-              }}
+              copy={
+                group.conditions.length === 1
+                  ? {
+                      stampId: group.stampId,
+                      conditionId: group.conditions[0].id,
+                      certificateStatusId: group.certificateStatusId,
+                      formatId: group.formatId,
+                    }
+                  : undefined
+              }
             />
             {group.unknownVariant && (
               <Tooltip content="These copies link to the base stamp; the specific variant is unknown.">
@@ -314,8 +335,10 @@ export function DuplicateGroupRow({
                 <Tooltip
                   content={
                     group.valueVaries
-                      ? "The copies in this group value differently — split the group by format or certificate to see one figure each."
-                      : "No catalog price recorded for this condition."
+                      ? "The copies in this group value differently — split the group by condition, format or certificate to see one figure each."
+                      : group.conditions.length === 1
+                        ? "No catalog price recorded for this condition."
+                        : "No catalog price recorded for these conditions."
                   }
                 >
                   <span
@@ -334,10 +357,13 @@ export function DuplicateGroupRow({
 
           {/* Line 4: where the group is mixed, and what is already listed. Not the keying — that
               moved up to line 1 (#869) — but statements *about* the bag, which is a different kind
-              of fact and keeps a line of its own. All three are occasional, so the line is drawn
+              of fact and keeps a line of its own. All of them are occasional, so the line is drawn
               **only when one of them has something to say**: a row that is neither mixed nor listed
               anywhere ends at line 3. */}
-          {(group.mixedFormat || group.mixedCertificate || group.listedCount > 0) && (
+          {(group.mixedCondition ||
+            group.mixedFormat ||
+            group.mixedCertificate ||
+            group.listedCount > 0) && (
             <div
               style={{
                 display: "flex",
@@ -347,6 +373,11 @@ export function DuplicateGroupRow({
                 flexWrap: "wrap",
               }}
             >
+              {group.mixedCondition && (
+                <Tooltip content="These copies are not all in the same condition. Turn on Split by condition to group them apart.">
+                  <span style={MIXED_CHIP}>mixed conditions</span>
+                </Tooltip>
+              )}
               {group.mixedFormat && (
                 <Tooltip content="These copies are not all the same format. Turn on Split by format to group them apart.">
                   <span style={MIXED_CHIP}>mixed formats</span>
@@ -412,8 +443,9 @@ export function groupMemberFilters(
     multiStamp: "exclude",
     // The one condition the group was keyed on, through the same list the panel's multi-select uses
     // (#425) — it replaces the panel's own selection rather than intersecting with it, since the
-    // group's members are by definition all in this condition.
-    conditionIds: [group.conditionId],
+    // group's members are by definition all in this condition. Pinned only while *Split by
+    // condition* is on (#1537), like the two axes below.
+    ...(axes.condition && group.conditionId ? { conditionIds: [group.conditionId] } : {}),
     // `"single"` / `"none"` are the sentinels for a null value — an absent filter means "any",
     // which is the opposite of what a key carrying null says. Like the condition, the format the
     // group was keyed on goes through the panel's own multi-select field as a single-entry list

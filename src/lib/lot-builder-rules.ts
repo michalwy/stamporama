@@ -187,9 +187,9 @@ export interface LotPlan {
  * chain — a walk that stops at the first non-variant edge, so a distinct entry (an error, a plate
  * flaw, an overprint) keeps its own pile.
  *
- * Deliberately **not** `copyGroupKey` (#372), which splits on condition: that key exists to answer
- * "what would Colnect take as one quantity offer", and here two conditions of one stamp still read
- * as a repeat in the photograph.
+ * Deliberately **not** `copyGroupKey` (#372): read under `COLNECT_GROUP_AXES` it splits on
+ * condition to answer "what would Colnect take as one quantity offer", and here two conditions of
+ * one stamp still read as a repeat in the photograph — and no reading of it rolls up variants.
  */
 export function duplicateKey(candidate: LotCandidate): string {
   const chain = candidate.variantChain;
