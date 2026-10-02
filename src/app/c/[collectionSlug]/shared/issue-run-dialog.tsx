@@ -48,9 +48,9 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import {
   issueLabel,
-  orderedCatalogLabels,
   pickedStampText,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import { catalogChipLabels } from "@/lib/area-vendor";
 import {
   PhotoThumb,
   THUMB_OBJECT_FIT,
@@ -58,6 +58,7 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
 import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
+import { CatalogNumberChips } from "./catalog-number-chips";
 import { NumericInput } from "./numeric-input";
 import { StampDetailLine, StampTitle } from "./issue-view";
 import { StampFormDialog } from "./stamp-form-dialog";
@@ -246,14 +247,25 @@ export function IssueRunDialog({
   const sequence = checklist?.stampIds ?? [];
   /** Every stamp a tile can be corrected to: the checklist's first, then the rest of its issues'. */
   const choices = runChoices(sequence, membersByIssue);
-  const labelOf = (stampId: string | null): string | null => {
+  /** A stamp's numbers as the chips the stamp rows draw (#1525) — the main catalogue's first and
+   * highlighted — with its name beside them. */
+  const chipsOf = (stampId: string | null) => {
     const node = stampId ? memberById.get(stampId) : undefined;
     if (!node) return null;
     const { vendorMap, primaryVendorId } = vendorsOf(node.stampId);
-    return pickedStampText({
+    return {
       stampId: node.stampId,
-      catalogLabels: orderedCatalogLabels(node.catalogNumbers, vendorMap, primaryVendorId),
+      chips: catalogChipLabels(node.catalogNumbers, vendorMap, primaryVendorId),
       name: node.name,
+    };
+  };
+  const labelOf = (stampId: string | null): string | null => {
+    const named = chipsOf(stampId);
+    if (!named) return null;
+    return pickedStampText({
+      stampId: named.stampId,
+      catalogLabels: named.chips.map((c) => c.label),
+      name: named.name,
       secondary: null,
       unknownVariant: false,
     });
@@ -942,6 +954,7 @@ export function IssueRunDialog({
                 const slot = valueSlots[i];
                 const field = valueFields[i];
                 const label = labelOf(a.stampId) ?? "…";
+                const named = chipsOf(a.stampId);
                 return (
                   <div key={a.tileId} style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                     <button
@@ -999,10 +1012,14 @@ export function IssueRunDialog({
                       </span>
                       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                         {a.stampId ? (
-                          <span style={{ display: "flex", alignItems: "center", gap: "0.375rem", minWidth: 0 }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {label}
-                            </span>
+                          <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem", minWidth: 0 }}>
+                            {/* Inert: the row is the button that takes this tile in hand. */}
+                            {named && <CatalogNumberChips chips={named.chips} inert />}
+                            {(!named || named.name || named.chips.length === 0) && (
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {named ? named.name || "(unnamed stamp)" : label}
+                              </span>
+                            )}
                             {onUmbrella.has(a.tileId) && (
                               <Tooltip content="This stamp has variants of its own. Pick the variant the tile is, or Identify creates an unknown-variant copy.">
                                 <span style={WARNING_FLAG}>umbrella</span>

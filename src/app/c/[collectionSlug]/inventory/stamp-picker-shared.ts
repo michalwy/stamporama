@@ -1,7 +1,7 @@
 import type { StampSearchItem } from "@/lib/stamps";
 import type { StampNodeData } from "@/lib/issues";
 import type { AreaCatalogEntry } from "@/lib/areas";
-import { formatStampCN } from "@/lib/area-vendor";
+import { catalogChipLabels, type CatalogChipLabel } from "@/lib/area-vendor";
 
 // PickedStamp shapes a chosen stamp for the StampSelect summary. Built from both
 // picker modes (autocomplete + popup) and edit-mode prefill (#104).
@@ -16,6 +16,10 @@ export interface PickedStamp {
    *  site must run them through `formatStampCN` with the area's vendor map: without the vendor
    *  abbreviation a list of numbers from three catalogs is unreadable. */
   catalogLabels: string[];
+  /** Whether `catalogLabels[0]` is the area's **main** catalogue's number (#1525) — the chip drawn
+   *  highlighted. Absent where the construction site cannot tell (a search result's labels arrive
+   *  pre-formatted), and the chips are then all drawn alike. */
+  primaryFirst?: boolean;
   /** The stamp's own name, shown beside the chips. May be null. */
   name: string | null;
   /** Muted context line: issue (year) · area. May be null. */
@@ -45,13 +49,26 @@ export function orderedCatalogLabels(
   vendorMap: Map<string, AreaCatalogEntry> | undefined,
   primaryVendorId: string | null
 ): string[] {
-  const ordered = primaryVendorId
-    ? [
-        ...catalogNumbers.filter((cn) => cn.catalogVendorId === primaryVendorId),
-        ...catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId),
-      ]
-    : [...catalogNumbers];
-  return ordered.map((cn) => formatStampCN(cn.number, vendorMap?.get(cn.catalogVendorId)));
+  return catalogChipLabels(catalogNumbers, vendorMap, primaryVendorId).map((c) => c.label);
+}
+
+/** {@link orderedCatalogLabels} with {@link PickedStamp.primaryFirst} beside it — the two fields a
+ *  construction site that knows the main catalogue fills together. */
+export function pickedCatalogLabels(
+  catalogNumbers: readonly { catalogVendorId: string; number: string }[],
+  vendorMap: Map<string, AreaCatalogEntry> | undefined,
+  primaryVendorId: string | null
+): Pick<PickedStamp, "catalogLabels" | "primaryFirst"> {
+  const chips = catalogChipLabels(catalogNumbers, vendorMap, primaryVendorId);
+  return { catalogLabels: chips.map((c) => c.label), primaryFirst: chips[0]?.primary ?? false };
+}
+
+/** A picked stamp's numbers as chip labels (#1525), the main catalogue's marked. */
+export function pickedChipLabels(picked: PickedStamp): CatalogChipLabel[] {
+  return picked.catalogLabels.map((label, i) => ({
+    label,
+    primary: i === 0 && !!picked.primaryFirst,
+  }));
 }
 
 /** Compact label for a stamp node (raw catalog numbers · name · subtype), used by the

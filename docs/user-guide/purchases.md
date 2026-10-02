@@ -932,6 +932,10 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
   images move onto the copy it creates. There is no photo uploader in that step, because the pictures
   are already in hand. A whole-set button is not offered either: a tile is one piece.
 
+  The box at the top of that step names the stamp you picked by its **catalogue numbers as chips** —
+  the main catalogue's highlighted and first, the others after it, as on the Issues screen — so the
+  number you check the piece against is the one that stands out. Click a chip to copy its number.
+
   If the order has more than one open lot, that step also asks **which lot** the copy belongs to —
   the question a card cannot answer, because one card routinely holds pieces from several. Your last
   answer leads, since a card, or a run of them, is usually worked through before you start the next.
@@ -1056,9 +1060,9 @@ or ruling out from here settles it for the whole run.
 
 **Duplicates you meet as you go: *Just identified*.** Beside the piece, under *It could be*, the
 dialog lists the **last ten identifications you have made on this screen**, newest first — each one a
-picture of the piece it was, its catalogue number in full (`Mi·DE-BM 68`, the way the copies list
-writes it), its condition as the coloured chip you know from every other list, and the copy number it
-became. Press one and this tile is identified the same way. Duplicates on a card sit next to each
+picture of the piece it was, its catalogue numbers as the chips the stamp lists draw (the main
+catalogue's highlighted and first, `Mi·DE-BM 68` rather than `68`), its condition as the coloured chip
+you know from every other list, and the copy number it became. Press one and this tile is identified the same way. Duplicates on a card sit next to each
 other, but the runs interleave — two of a stamp, one of another, then back to the first — so the one
 you want is often not the one immediately before.
 
@@ -1104,7 +1108,7 @@ The next step has three columns. On the left is the tile in hand, in the usual v
 a single tile has — zoom, front and back, the ruler, the perforation gauge and the watermark view —
 and *Previous* / *Next* to step along the run. In the middle is **For all N tiles** (condition,
 certificate, format, lot, location with its ref, disposition) and **the run**: every tile in turn with
-the stamp it has taken. On the right is the tile in hand again: **its stamp** — the checklist's
+the stamp it has taken, named by its catalogue-number chips with the main catalogue's highlighted. On the right is the tile in hand again: **its stamp** — the checklist's
 stamps first, then the other stamps of its issue — and **its own details**.
 
 - **When you ticked as many tiles as the checklist has stamps, the tiles take them in turn** — the

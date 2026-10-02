@@ -22,6 +22,7 @@ import {
   unpairTileBackAction,
 } from "@/app/actions/scans";
 import type { CollectionAreaData } from "@/lib/areas";
+import { catalogChipLabels, type CatalogChipLabel } from "@/lib/area-vendor";
 import { formatItemNo } from "@/lib/item-number";
 import type { ItemListItem } from "@/lib/items";
 import type { ScanTileData } from "@/lib/scan-sheets";
@@ -176,6 +177,10 @@ import { TextArea, TextInput } from "./text-input";
 export interface TileStampPick {
   stampId: string;
   label: string;
+  /** The stamp's numbers as chips (#1525), for the condition step's box — present where the row
+   * pressed had the stamp's own numbers to hand, absent where the label is all there is. */
+  chips?: CatalogChipLabel[];
+  name?: string | null;
 }
 
 /**
@@ -1593,6 +1598,11 @@ function CandidateRow({
             onIdentifyAs({
               stampId: candidate.stampId,
               label,
+              // The row's own numbers, once its issue tree has loaded — the same chips the row draws.
+              ...(node && {
+                chips: catalogChipLabels(node.catalogNumbers, vendorMap, primaryVendorId),
+                name: node.name,
+              }),
             })
           }
           disabled={disabled || !canIdentify}

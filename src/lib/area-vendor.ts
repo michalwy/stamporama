@@ -349,6 +349,33 @@ export function catalogLabel(subject: CatalogLabelSubject, maps: AreaVendorMaps)
   return subject.name || "(stamp)";
 }
 
+/** One catalogue number as a chip row draws it (#1525): the prefix-formatted label, and whether it
+ * is the area's **main** catalogue's — the chip drawn highlighted, the way the issues list draws it. */
+export interface CatalogChipLabel {
+  label: string;
+  primary: boolean;
+}
+
+/** A stamp's numbers as chip labels, the main catalogue's first and the rest in their stored order —
+ * the order a picked stamp's labels (`orderedCatalogLabels`) have always had. */
+export function catalogChipLabels(
+  catalogNumbers: readonly { catalogVendorId: string; number: string }[],
+  vendorMap: Map<string, AreaCatalogEntry> | undefined,
+  primaryVendorId: string | null
+): CatalogChipLabel[] {
+  const primary = primaryVendorId
+    ? catalogNumbers.filter((cn) => cn.catalogVendorId === primaryVendorId)
+    : [];
+  const rest = catalogNumbers.filter((cn) => !primary.includes(cn));
+  const chip = (cn: { catalogVendorId: string; number: string }, isPrimary: boolean) => ({
+    label: formatStampCN(cn.number, vendorMap?.get(cn.catalogVendorId)),
+    primary: isPrimary,
+  });
+  // One highlighted chip, as on a stamp row: a second number in the main catalogue is still a
+  // number like the others.
+  return [...primary, ...rest].map((cn, i) => chip(cn, i === 0 && primary.length > 0));
+}
+
 /** {@link catalogLabel} for a copy — the inventory/lot row's own label, so a derived lot label
  * reads like the copies it was derived from. */
 export function copyCatalogLabel(item: ItemListItem, maps: AreaVendorMaps): string {

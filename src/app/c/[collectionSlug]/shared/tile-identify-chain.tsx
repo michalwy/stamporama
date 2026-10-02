@@ -10,8 +10,8 @@ import {
   StampPickerBrowser,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
 import {
-  orderedCatalogLabels,
-  pickedStampText,
+  pickedCatalogLabels,
+  pickedChipLabels,
   type PickedStamp,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import type { ItemStampRow } from "@/app/c/[collectionSlug]/inventory/item-stamps-field";
@@ -23,6 +23,8 @@ import { useAreaVendorMaps, type AreaVendorMaps } from "./use-area-vendor-maps";
 import { TileStampsDialog } from "./tile-stamps-dialog";
 import {
   IntakeConditionDialog,
+  pickedSelection,
+  type CarriedStampLine,
   type IntakeConditionDialogProps,
   type PendingSelection,
 } from "./intake-condition-dialog";
@@ -108,24 +110,43 @@ function pickedOf(draft: PieceStampDraft, maps: AreaVendorMaps): PickedStamp {
   const subject = draft.subject;
   return {
     stampId: draft.stampId,
-    catalogLabels: subject
-      ? orderedCatalogLabels(
+    ...(subject
+      ? pickedCatalogLabels(
           subject.catalogNumbers,
           maps.vendorMapFor(subject.areaId, subject.issueId),
           subject.areaId ? (maps.primaryVendorByArea.get(subject.areaId) ?? null) : null
         )
-      : [],
+      : { catalogLabels: [] }),
     name: subject?.name ?? null,
     secondary: null,
     unknownVariant: false,
   };
 }
 
-/** A stamp known only by the label a step already gave it — a candidate pressed off a shortlist, a
- * repeat's leading stamp — as the editor's summary shape. The label is the whole of what is known,
- * so it stands as the name. */
-function pickedFromLabel(stampId: string, label: string): PickedStamp {
-  return { stampId, catalogLabels: [], name: label, secondary: null, unknownVariant: false };
+/** The stamp a selection names, as the editor's summary shape — a candidate pressed off a
+ * shortlist, a repeat's leading stamp. Its chips when the step that chose it had them (#1525);
+ * otherwise the label is the whole of what is known, so it stands as the name. */
+function pickedFromSelection(
+  selection: Extract<PendingSelection, { kind: "stamp" }>
+): PickedStamp {
+  const chips = selection.chips ?? [];
+  if (chips.length === 0 && !selection.name) {
+    return {
+      stampId: selection.stampId,
+      catalogLabels: [],
+      name: selection.label,
+      secondary: null,
+      unknownVariant: false,
+    };
+  }
+  return {
+    stampId: selection.stampId,
+    catalogLabels: chips.map((c) => c.label),
+    primaryFirst: chips[0]?.primary ?? false,
+    name: selection.name ?? null,
+    secondary: null,
+    unknownVariant: false,
+  };
 }
 
 /** Which dialog of the chain is up. The first three are one piece's — or one stamp's for a run
@@ -301,7 +322,13 @@ export function useTileIdentifyChain(input: {
         // led to — with **no** prefill, unlike a repeat off the history (#757): what has been
         // answered is the stamp and nothing else, and the condition, the format and the ref must
         // arrive at the ordinary remembered defaults rather than at another tile's answers.
-        setTileSelection({ kind: "stamp", stampId: pick.stampId, label: pick.label });
+        setTileSelection({
+          kind: "stamp",
+          stampId: pick.stampId,
+          label: pick.label,
+          chips: pick.chips,
+          name: pick.name,
+        });
         setTileStep("condition");
         return;
       }
@@ -348,7 +375,13 @@ export function useTileIdentifyChain(input: {
     // was is the caller's to know; the chain is handed the answers and nothing else.
     onRepeatIdentification: (answers, pieces) => {
       setTileIntake(pieces);
-      setTileSelection({ kind: "stamp", stampId: answers.stampId, label: answers.label });
+      setTileSelection({
+        kind: "stamp",
+        stampId: answers.stampId,
+        label: answers.label,
+        chips: answers.chips,
+        name: answers.name,
+      });
       setTileRepeat(answers);
       setTileCorrection(null);
       // The stamps on the piece are part of what is repeated (#750): the next cover franked the same
@@ -472,23 +505,27 @@ export function TileIdentifyChainDialogs({
             picked:
               tileLeadPick?.stampId === tileSelection.stampId
                 ? tileLeadPick
-                : pickedFromLabel(tileSelection.stampId, tileSelection.label),
+                : pickedFromSelection(tileSelection),
           },
         ]
       : []);
   /** The summary the condition step draws — only when the list says more than the stamp. */
-  const carriedSummary =
+  const carriedSummary: CarriedStampLine[] | undefined =
     tileStamps && describesMoreThanTheStamp(tileStamps)
       ? tileStamps.map((draft) => {
           const picked = pickedOf(draft, maps);
           const format = formats.find((f) => f.id === draft.formatId);
-          return [
-            pickedStampText(picked),
-            draft.quantity > 1 ? `×${draft.quantity}` : null,
-            format ? (format.abbreviation || format.name) : null,
-          ]
-            .filter(Boolean)
-            .join(" ");
+          return {
+            chips: pickedChipLabels(picked),
+            name: picked.name,
+            detail:
+              [
+                draft.quantity > 1 ? `×${draft.quantity}` : null,
+                format ? (format.abbreviation || format.name) : null,
+              ]
+                .filter(Boolean)
+                .join(" ") || null,
+          };
         })
       : undefined;
 
@@ -526,11 +563,7 @@ export function TileIdentifyChainDialogs({
               : undefined
           }
           onPick={(picked: PickedStamp) => {
-            setTileSelection({
-              kind: "stamp",
-              stampId: picked.stampId,
-              label: pickedStampText(picked),
-            });
+            setTileSelection(pickedSelection(picked));
             setTileLeadPick(picked);
             // With the piece already described as carrying several (#750) — a correction of a cover,
             // or the collector back at the picker after listing them — a pick re-answers **the
@@ -819,11 +852,7 @@ export function TileIdentifyChainDialogs({
             // one re-answers the selection: a new selection is also what clears the condition
             // step's format, and reordering the others must not take the piece's own format away.
             if (rows[0].stampId !== tileSelection.stampId) {
-              setTileSelection({
-                kind: "stamp",
-                stampId: rows[0].stampId,
-                label: pickedStampText(rows[0].picked),
-              });
+              setTileSelection(pickedSelection(rows[0].picked));
               setTileLeadPick(rows[0].picked);
             }
           }}
