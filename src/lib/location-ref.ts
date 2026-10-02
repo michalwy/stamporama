@@ -216,9 +216,7 @@ export function resolveLocationRefChoice(
   const ref = typedRef ?? highest ?? "";
   const trimmed = ref.trim();
   const lower = trimmed.toLocaleLowerCase();
-  const collision = trimmed
-    ? (usage?.refs.find((r) => r.ref.toLocaleLowerCase() === lower)?.count ?? 0)
-    : 0;
+  const collision = countUnderRef(usage?.refs, trimmed);
   const continuingCurrentCard = highest != null && lower === highest.toLocaleLowerCase();
   return {
     ref,
@@ -227,4 +225,72 @@ export function resolveLocationRefChoice(
     continuingCurrentCard,
     printFrom: continuingCurrentCard ? (usage?.suggestion ?? "") : trimmed,
   };
+}
+
+/** How many copies sit under `ref` in a tally — matched ignoring case, the way the collector reads
+ * a card's label. 0 for a blank ref, or one the tally does not name. */
+export function countUnderRef(refs: readonly LocationRefInUse[] | undefined, ref: string): number {
+  const lower = ref.trim().toLocaleLowerCase();
+  if (!lower) return 0;
+  return refs?.find((r) => r.ref.toLocaleLowerCase() === lower)?.count ?? 0;
+}
+
+/** Fold `(ref, count)` rows into one tally per written ref, in walk order. Blank and null refs are
+ * folded away — "nothing is written on these" is one answer, and the database cannot merge the two
+ * into it — and refs that differ only in surrounding whitespace are one card. */
+export function foldLocationRefCounts(
+  rows: Iterable<{ ref: string | null | undefined; count: number }>
+): LocationRefInUse[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const ref = row.ref?.trim();
+    if (!ref) continue;
+    counts.set(ref, (counts.get(ref) ?? 0) + row.count);
+  }
+  return [...counts.entries()]
+    .map(([ref, count]) => ({ ref, count }))
+    .sort((a, b) => compareLocationRef(a.ref, b.ref));
+}
+
+/** The copies being filed that already sit in `locationId`, tallied by the ref they carry there
+ * (#1535) — for a dialog that holds its copies, as the Copies list's bulk edit does. */
+export function tallyLocationRefs(
+  copies: Iterable<{ locationId: string | null; locationRef: string | null }>,
+  locationId: string
+): LocationRefInUse[] {
+  const rows: { ref: string | null; count: number }[] = [];
+  for (const c of copies) if (c.locationId === locationId) rows.push({ ref: c.locationRef, count: 1 });
+  return foldLocationRefCounts(rows);
+}
+
+// ── What filing does to the card (#1535) ─────────────────────────────────────
+//
+// A ref card is filled up to what it can take, so the three numbers the collector packs by are how
+// many copies are on it now, how many are going on, and how many it will hold afterwards — and the
+// third must not be left to mental arithmetic. They count **copies**, the unit filing writes: a
+// cover carrying several stamps is one.
+
+/** A ref card before and after filing. */
+export interface RefFillFigures {
+  /** Copies under the ref in this location today — 0 for a new card. */
+  now: number;
+  /** Copies being filed that are not on the ref yet. */
+  adding: number;
+  /** Distinct copies the ref will hold once filed. */
+  after: number;
+}
+
+/**
+ * The card's figures for filing `count` copies onto a ref that holds `now`, `alreadyOnRef` of those
+ * copies sitting under it already (#1535).
+ *
+ * **A copy already on the card is not counted twice.** Re-storing a batch some of which was packed
+ * in an earlier sitting writes the same ref onto those copies again, which moves nothing — so they
+ * are neither *added* nor a second time in the total. `alreadyOnRef` is clamped to both other
+ * figures, since a stale read cannot make more copies already-there than either side holds.
+ */
+export function refFillFigures(now: number, count: number, alreadyOnRef: number): RefFillFigures {
+  const overlap = Math.max(0, Math.min(alreadyOnRef, now, count));
+  const adding = Math.max(0, count - overlap);
+  return { now, adding, after: now + adding };
 }

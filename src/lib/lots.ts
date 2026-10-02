@@ -37,6 +37,7 @@ import { resolveOpeningValue, type OpeningValue } from "./opening-value";
 import { syncTradePurchasePool, tradeLotCarryOverBlocker } from "./trade-intake";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { roundAmount } from "./decimal-input";
+import { foldLocationRefCounts, type LocationRefInUse } from "./location-ref";
 import { intakeDocumentName, isOpeningBalance, type PurchaseKind } from "./purchase-kind";
 import type { PurchaseExpenseData } from "./purchases";
 
@@ -1814,4 +1815,39 @@ export async function countLotBulkScope(
   await assertCollectionOwner(ownerId, collectionId);
   if (!scope.lotId && !scope.purchaseId) return 0;
   return prisma.item.count({ where: await resolveLotBulkScope(collectionId, scope) });
+}
+
+/**
+ * The copies a {@link LotBulkScope} names that already sit in `locationId`, tallied by the ref they
+ * carry there (#1535) — what lets the Store dialog leave a copy already on the card out of what it
+ * is *adding*, rather than counting it onto the card a second time.
+ *
+ * Read once per location, not per ref, for the reason the location's own ref usage is: the
+ * selection holds as many refs as it has cards, so the whole tally is small and the dialog answers
+ * any typed ref from it without a round trip per keystroke.
+ *
+ * A scope naming only `itemIds` — the single copy a row's own menu stores — is read by id inside
+ * the collection, since it has no lot or order around it; everything else goes through the same
+ * {@link resolveLotBulkScope} the write uses, so the copies counted are the copies written.
+ */
+export async function listLotBulkScopeRefs(
+  ownerId: string,
+  collectionId: string,
+  scope: LotBulkScope,
+  locationId: string
+): Promise<LocationRefInUse[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const where: Prisma.ItemWhereInput | null =
+    scope.lotId || scope.purchaseId
+      ? await resolveLotBulkScope(collectionId, scope)
+      : scope.itemIds?.length
+        ? { collectionId, id: { in: scope.itemIds } }
+        : null;
+  if (!where) return [];
+  const grouped = await prisma.item.groupBy({
+    by: ["locationRef"],
+    where: { AND: [where, { locationId, NOT: { locationRef: null } }] },
+    _count: { id: true },
+  });
+  return foldLocationRefCounts(grouped.map((g) => ({ ref: g.locationRef, count: g._count.id })));
 }

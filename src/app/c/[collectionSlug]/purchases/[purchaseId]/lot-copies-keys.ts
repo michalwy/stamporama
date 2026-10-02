@@ -8,8 +8,9 @@ import type {
 
 /**
  * The order screen's copy reads, by what they are about. The third segment says which: a lot id
- * for one lot's reads, `"purchase"` for the whole order's, `"selection-count"` for the bar. The
- * fourth says what of it — `list`, `summary`, `return`, `completeness`.
+ * for one lot's reads, `"purchase"` for the whole order's, `"selection-count"` for the bar and
+ * `"selection-refs"` for the Store dialog's figure strip (#1535). The fourth says what of it —
+ * `list`, `summary`, `return`, `completeness`.
  */
 export const lotCopiesKeys = {
   all: (collectionId: string) => ["lot-copies", collectionId] as const,
@@ -53,7 +54,7 @@ export interface IntakeWriteScope extends IntakeWriteTouched {
 }
 
 /** The segments a lot's own reads are never keyed under — everything else in that place is a lot. */
-const NOT_A_LOT = new Set(["purchase", "selection-count"]);
+const NOT_A_LOT = new Set(["purchase", "selection-count", "selection-refs"]);
 
 /**
  * Whether a write leaves this query stale (#1409). `touchedLotIds` is what the write touched, or
@@ -65,7 +66,7 @@ const NOT_A_LOT = new Set(["purchase", "selection-count"]);
  * untouched lot's cannot have moved.
  *
  * **The order's own reads always go** — its bar, its chips, its flat list are made of every lot,
- * the touched one included — and so does the selection count.
+ * the touched one included — and so do the selection's count and its tally of refs.
  *
  * **An open card's rows go too, touched or not**, because a row speaks about more than its own
  * copy: the want marker counts the other copies of the stamp, wherever they sit, and the set

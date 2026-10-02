@@ -9,6 +9,10 @@ import {
   parseLocationRef,
   parseRefCardCount,
   resolveLocationRefChoice,
+  countUnderRef,
+  foldLocationRefCounts,
+  refFillFigures,
+  tallyLocationRefs,
   DEFAULT_REF_CARDS,
   MAX_REF_CARDS,
   type LocationRefUsage,
@@ -260,5 +264,78 @@ describe("resolveLocationRefChoice", () => {
     assert.equal(choice.ref, "");
     assert.equal(choice.collision, 0);
     assert.equal(choice.continuingCurrentCard, false);
+  });
+});
+
+// The Store dialog's figure strip (#1535): what the card holds now, what is going on, and the total
+// after — counted in copies, with a copy already on the card neither added nor counted twice.
+describe("refFillFigures", () => {
+  it("adds the whole batch to a card that holds none of it", () => {
+    assert.deepEqual(refFillFigures(40, 10, 0), { now: 40, adding: 10, after: 50 });
+  });
+
+  it("reads a fresh card as now 0", () => {
+    assert.deepEqual(refFillFigures(0, 7, 0), { now: 0, adding: 7, after: 7 });
+  });
+
+  it("leaves copies already on the card out of Adding and counts them once in the total", () => {
+    assert.deepEqual(refFillFigures(40, 10, 3), { now: 40, adding: 7, after: 47 });
+  });
+
+  it("adds nothing when the whole batch is on the card already", () => {
+    assert.deepEqual(refFillFigures(12, 5, 5), { now: 12, adding: 0, after: 12 });
+  });
+
+  it("never lets a stale overlap exceed either side", () => {
+    assert.deepEqual(refFillFigures(2, 5, 9), { now: 2, adding: 3, after: 5 });
+    assert.deepEqual(refFillFigures(0, 5, 4), { now: 0, adding: 5, after: 5 });
+  });
+});
+
+describe("countUnderRef", () => {
+  const refs = [
+    { ref: "A146", count: 20 },
+    { ref: "A147", count: 12 },
+  ];
+
+  it("matches ignoring case and surrounding whitespace", () => {
+    assert.equal(countUnderRef(refs, " a147 "), 12);
+  });
+
+  it("answers 0 for a blank ref, an unknown one, or no tally yet", () => {
+    assert.equal(countUnderRef(refs, ""), 0);
+    assert.equal(countUnderRef(refs, "A148"), 0);
+    assert.equal(countUnderRef(undefined, "A147"), 0);
+  });
+});
+
+describe("foldLocationRefCounts", () => {
+  it("drops blank refs, merges whitespace variants, and returns walk order", () => {
+    assert.deepEqual(
+      foldLocationRefCounts([
+        { ref: "A10", count: 2 },
+        { ref: " A10 ", count: 1 },
+        { ref: "", count: 4 },
+        { ref: null, count: 4 },
+        { ref: "A9", count: 3 },
+      ]),
+      [
+        { ref: "A9", count: 3 },
+        { ref: "A10", count: 3 },
+      ]
+    );
+  });
+});
+
+describe("tallyLocationRefs", () => {
+  it("counts only the copies in the given location, by the ref they carry there", () => {
+    const copies = [
+      { locationId: "box", locationRef: "A147" },
+      { locationId: "box", locationRef: "A147" },
+      { locationId: "box", locationRef: null },
+      { locationId: "album", locationRef: "A147" },
+      { locationId: null, locationRef: null },
+    ];
+    assert.deepEqual(tallyLocationRefs(copies, "box"), [{ ref: "A147", count: 2 }]);
   });
 });
