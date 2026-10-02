@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   assignInTurn,
   changedRunPrices,
+  clearedAssignments,
+  nextWithoutStamp,
   overriddenFields,
   repeatedStamps,
   resolveRunCopyDetails,
@@ -162,6 +164,66 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
 
     it("says nothing is repeated when nothing is, and ignores the tiles with no stamp", () => {
       assert.equal(repeatedStamps(assignInTurn(["t1", "t2", "t3"], ["s1"])).size, 0);
+    });
+  });
+
+  describe("clearing the run and assigning by hand (#1523)", () => {
+    const sequence = ["s1", "s2", "s3", "s4"];
+    const tiles = ["t1", "t2", "t3"];
+
+    it("leaves every tile without a stamp, and nothing can be confirmed", () => {
+      const run = assignInTurn(tiles, sequence, clearedAssignments(tiles));
+      assert.deepEqual(
+        run.map((a) => [a.stampId, a.corrected]),
+        [
+          [null, true],
+          [null, true],
+          [null, true],
+        ]
+      );
+      assert.deepEqual(runBlockers(run), tiles);
+    });
+
+    it("keeps a stamp added to the checklist meanwhile away from a cleared tile", () => {
+      const run = assignInTurn(["t1"], ["s1", "s9"], clearedAssignments(["t1"]));
+      assert.equal(run[0].stampId, null);
+    });
+
+    it("puts a tile back on its turn once its correction is dropped, and the whole run with none", () => {
+      const cleared = clearedAssignments(tiles);
+      cleared.delete("t2");
+      assert.deepEqual(
+        assignInTurn(tiles, sequence, cleared).map((a) => a.stampId),
+        [null, "s2", null]
+      );
+      assert.deepEqual(
+        assignInTurn(tiles, sequence, new Map()).map((a) => a.stampId),
+        ["s1", "s2", "s3"]
+      );
+    });
+
+    it("moves to the next tile without a stamp after a pick, from the start once past the end", () => {
+      const picked = new Map<string, string | null>([...clearedAssignments(["t1", "t2", "t3", "t4"])]);
+      picked.set("t1", "s3");
+      picked.set("t3", "s1");
+      const run = assignInTurn(["t1", "t2", "t3", "t4"], sequence, picked);
+      assert.equal(nextWithoutStamp(run, "t1"), "t2");
+      // Past a tile that already has one, and round to the start after the last.
+      assert.equal(nextWithoutStamp(run, "t2"), "t4");
+      assert.equal(nextWithoutStamp(run, "t4"), "t2");
+    });
+
+    it("stays on the tile in hand when every other tile has a stamp", () => {
+      const run = assignInTurn(tiles, sequence, new Map([["t2", "s4"]]));
+      assert.equal(nextWithoutStamp(run, "t2"), null);
+      // The tile in hand is never its own next, even while it has no stamp.
+      const alone = assignInTurn(["t1"], [], new Map());
+      assert.equal(nextWithoutStamp(alone, "t1"), null);
+    });
+
+    it("moves on after correcting a tile that had a stamp while another still waits", () => {
+      const run = assignInTurn(["t1", "t2", "t3", "t4", "t5"], sequence, new Map([["t2", "s1"]]));
+      assert.equal(nextWithoutStamp(run, "t2"), "t5");
     });
   });
 

@@ -143,11 +143,18 @@ export function runChoices<T extends RunMember>(
 /** One tile of the run, as the dialog draws it and the write is handed it. */
 export interface RunAssignment {
   tileId: string;
-  /** Null while the tile has no stamp — the more-tiles-than-stamps case. */
+  /** Null while the tile has no stamp — the more-tiles-than-stamps case, or a cleared tile (#1523). */
   stampId: string | null;
-  /** Whether the collector chose this stamp, rather than the tile taking its turn. */
+  /** Whether the collector chose this tile's answer — a stamp, or none by clearing — rather than the
+   * tile taking its turn. */
   corrected: boolean;
 }
+
+/**
+ * A tile's answer where the collector gave one: a stamp id, or **null for a tile cleared to be
+ * assigned by hand** (#1523). Absence is the tile taking its turn.
+ */
+export type RunCorrections = ReadonlyMap<string, string | null>;
 
 /**
  * Give each tile of the run its stamp: the first tile the first stamp of the sequence, the second
@@ -169,14 +176,42 @@ export interface RunAssignment {
 export function assignInTurn(
   tileIds: readonly string[],
   sequence: readonly string[],
-  corrections: ReadonlyMap<string, string> = new Map()
+  corrections: RunCorrections = new Map()
 ): RunAssignment[] {
-  return tileIds.map((tileId, i) => {
-    const corrected = corrections.get(tileId);
-    return corrected != null
-      ? { tileId, stampId: corrected, corrected: true }
-      : { tileId, stampId: sequence[i] ?? null, corrected: false };
-  });
+  return tileIds.map((tileId, i) =>
+    corrections.has(tileId)
+      ? { tileId, stampId: corrections.get(tileId) ?? null, corrected: true }
+      : { tileId, stampId: sequence[i] ?? null, corrected: false }
+  );
+}
+
+/**
+ * *Clear assignments* (#1523): every tile of the run without a stamp, to be assigned by hand. The
+ * in-turn assignment is right for a whole set; for a few random stamps of one, every tile starts on a
+ * wrong stamp and nothing shows which ones have been checked. A cleared tile is a correction to
+ * *none*, so *Back to its turn* undoes it for one tile and dropping every correction (*Assign in
+ * turn*) for the whole run — and a stamp added to the checklist meanwhile does not reach it.
+ */
+export function clearedAssignments(tileIds: readonly string[]): Map<string, string | null> {
+  return new Map(tileIds.map((tileId) => [tileId, null]));
+}
+
+/**
+ * Where the tile in hand goes after a stamp is picked for it (#1523): **the next tile with no stamp**,
+ * after it in the run and then from the start, so assigning by hand is one click per tile. Null —
+ * staying on the tile in hand — when every other tile has one. Read over the assignments *after* the
+ * pick, so the picked tile is never the answer.
+ */
+export function nextWithoutStamp(
+  assignments: readonly RunAssignment[],
+  fromTileId: string
+): string | null {
+  const from = assignments.findIndex((a) => a.tileId === fromTileId);
+  for (let step = 1; step <= assignments.length; step++) {
+    const a = assignments[(from + step) % assignments.length];
+    if (a.tileId !== fromTileId && !a.stampId) return a.tileId;
+  }
+  return null;
 }
 
 /** The stamps assigned to more than one tile. Allowed — duplicates are real — and shown, so a slip

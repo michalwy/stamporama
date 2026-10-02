@@ -22,6 +22,8 @@ import { perforationMatches } from "@/lib/perforation";
 import {
   assignInTurn,
   changedRunPrices,
+  clearedAssignments,
+  nextWithoutStamp,
   overriddenFields,
   repeatedStamps,
   resolveRunCopyDetails,
@@ -35,6 +37,7 @@ import {
   type IssueRunIdentification,
   type RunCopyDetails,
   type RunCopyOverrides,
+  type RunCorrections,
   type RunDetailField,
 } from "@/lib/issue-run";
 import {
@@ -265,8 +268,9 @@ export function IssueRunDialog({
   // ── The run ──────────────────────────────────────────────────────────────────────────────────
   /** Tiles taken out of the run — kept in hand so one can be put back. */
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
-  /** A tile's stamp, where the collector chose it rather than the tile taking its turn. */
-  const [corrections, setCorrections] = useState<ReadonlyMap<string, string>>(new Map());
+  /** A tile's stamp, where the collector chose it rather than the tile taking its turn — or none, for a
+   * tile cleared to be assigned by hand (#1523). */
+  const [corrections, setCorrections] = useState<RunCorrections>(new Map());
   /** A tile's own copy details — only the fields it overrides. */
   const [overrides, setOverrides] = useState<ReadonlyMap<string, RunCopyOverrides>>(new Map());
   const inRun = pieces.filter((p) => !removed.has(p.tileId));
@@ -490,13 +494,42 @@ export function IssueRunDialog({
     });
   }
 
-  function correct(tileId: string, stampId: string | null) {
+  /** A stamp picked for the tile in hand: it is assigned, and the next tile still without a stamp
+   * comes into hand, so assigning by hand is one click per tile (#1523). With none left the tile in
+   * hand stays. */
+  function pick(tileId: string, stampId: string) {
+    const next = new Map(corrections).set(tileId, stampId);
+    setCorrections(next);
+    const ahead = nextWithoutStamp(
+      assignInTurn(
+        inRun.map((p) => p.tileId),
+        sequence,
+        next
+      ),
+      tileId
+    );
+    if (ahead) setActiveId(ahead);
+  }
+
+  /** *Back to its turn*: the tile takes its turn again, whether it was corrected or cleared. */
+  function backToTurn(tileId: string) {
     setCorrections((prev) => {
       const next = new Map(prev);
-      if (stampId) next.set(tileId, stampId);
-      else next.delete(tileId);
+      next.delete(tileId);
       return next;
     });
+  }
+
+  /** *Clear assignments* (#1523): every tile of the run without a stamp, the first one in hand. A tile
+   * taken out is cleared too, so one put back waits to be assigned by hand like the rest. */
+  function clearAll() {
+    setCorrections(clearedAssignments(pieces.map((p) => p.tileId)));
+    if (inRun[0]) setActiveId(inRun[0].tileId);
+  }
+
+  /** *Assign in turn*: the whole run back to the in-turn assignment, the counterpart of clearing. */
+  function assignAllInTurn() {
+    setCorrections(new Map());
   }
 
   function takeOut(tileId: string) {
@@ -594,19 +627,28 @@ export function IssueRunDialog({
 
   const activeOwn = active ? (overrides.get(active.tileId) ?? {}) : {};
 
-  /** Whether the run's values note is drawn, which the umbrella count then sits beside. */
+  /** Whether the run's values note is drawn, which the run's counts then sit beside. */
   const valuesNoteShown =
     priceSubjects.length > 0 &&
     !(prices.isLoading || (prices.isFetching && valueKeys.length === 0)) &&
     !prices.isError &&
     valueKeys.length > 0;
-  const umbrellaNote =
-    onUmbrella.size > 0 ? (
-      <span style={{ color: "var(--color-warning)" }}>
-        {" "}
-        {onUmbrella.size} on an umbrella.
-      </span>
+  /** The tiles still without a stamp (#1523) and the tiles on an umbrella (#1247), counted at the top
+   * so a long run need not be scrolled to find them. */
+  const runCounts =
+    (blockers.length > 0 && !membersLoading) || onUmbrella.size > 0 ? (
+      <>
+        {blockers.length > 0 && !membersLoading && (
+          <span style={{ color: "var(--color-error)" }}> {blockers.length} without a stamp.</span>
+        )}
+        {onUmbrella.size > 0 && (
+          <span style={{ color: "var(--color-warning)" }}> {onUmbrella.size} on an umbrella.</span>
+        )}
+      </>
     ) : null;
+  /** Whether a run-wide action has anything to do: a stamp to clear, a tile not on its turn. */
+  const anyAssigned = assignments.some((a) => a.stampId);
+  const anyCorrected = assignments.some((a) => a.corrected);
 
   return (
     <>
@@ -766,16 +808,34 @@ export function IssueRunDialog({
             </section>
 
             <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-              <h3 style={SECTION_HEADING}>
-                The run
-                {runCatalog && (
-                  <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>
-                    {" "}
-                    — values in {runCatalog.catalogLabel} {runCatalog.editionYear} ·{" "}
-                    {runCatalog.currency}
-                  </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                <h3 style={{ ...SECTION_HEADING, flex: 1, minWidth: 0 }}>
+                  The run
+                  {runCatalog && (
+                    <span style={{ fontWeight: 400, color: "var(--color-text-muted)" }}>
+                      {" "}
+                      — values in {runCatalog.catalogLabel} {runCatalog.editionYear} ·{" "}
+                      {runCatalog.currency}
+                    </span>
+                  )}
+                </h3>
+                {/* The in-turn assignment is right for a whole set; for a few random stamps of it,
+                    clearing lets each tile be assigned by hand, one click each (#1523). */}
+                {anyCorrected && (
+                  <Tooltip content="Give every tile its turn again — the checklist's stamps in order, every correction dropped">
+                    <DialogSecondaryButton onClick={assignAllInTurn} disabled={isPending}>
+                      Assign in turn
+                    </DialogSecondaryButton>
+                  </Tooltip>
                 )}
-              </h3>
+                {anyAssigned && (
+                  <Tooltip content="Leave every tile without a stamp and assign each by hand: picking a stamp moves to the next tile without one">
+                    <DialogSecondaryButton onClick={clearAll} disabled={isPending}>
+                      Clear assignments
+                    </DialogSecondaryButton>
+                  </Tooltip>
+                )}
+              </div>
               {/* The values are typed on the rows below (#1229); what the rows cannot say goes here. */}
               {priceSubjects.length > 0 ? (
                 prices.isLoading || (prices.isFetching && valueKeys.length === 0) ? (
@@ -800,15 +860,15 @@ export function IssueRunDialog({
                         {valuesMissing} {valuesMissing === 1 ? "has" : "have"} no value yet.
                       </span>
                     )}
-                    {umbrellaNote}
+                    {runCounts}
                   </p>
                 )
               ) : assignments.some((a) => a.stampId) && withoutCondition.length > 0 ? (
                 <p style={MUTED}>Choose a condition to record the run&rsquo;s catalog values.</p>
               ) : null}
-              {/* Where the values note is not drawn, the umbrella count still is — at the top, so a
-                  long run need not be scrolled to find them (#1247). */}
-              {!valuesNoteShown && umbrellaNote && <p style={MUTED}>{umbrellaNote}</p>}
+              {/* Where the values note is not drawn, the counts still are — at the top, so a long run
+                  need not be scrolled to find them (#1247, #1523). */}
+              {!valuesNoteShown && runCounts && <p style={MUTED}>{runCounts}</p>}
               {!membersLoading && checklist && sequence.length === 0 && (
                 <p style={{ ...MUTED, color: "var(--color-warning)" }}>
                   This checklist has no stamps yet. Add them, and the tiles take them in turn.
@@ -836,7 +896,8 @@ export function IssueRunDialog({
                 const condition = conditions.find((c) => c.id === d.conditionId);
                 const certificate = certificateStatuses.find((c) => c.id === d.certificateStatusId);
                 const notes = [
-                  a.corrected ? "corrected" : null,
+                  // A cleared tile says *No stamp*, which is the whole of it.
+                  a.corrected && a.stampId ? "corrected" : null,
                   own.length > 0 ? `own ${own.map((f) => FIELD_LABEL[f].toLowerCase()).join(", ")}` : null,
                 ]
                   .filter(Boolean)
@@ -1036,7 +1097,7 @@ export function IssueRunDialog({
                     <div>
                       <button
                         type="button"
-                        onClick={() => correct(active.tileId, null)}
+                        onClick={() => backToTurn(active.tileId)}
                         disabled={isPending}
                         style={CREATE_LINK_STYLE}
                       >
@@ -1064,7 +1125,7 @@ export function IssueRunDialog({
                           node={node}
                           depth={depth}
                           chosen={node.stampId === activeAssignment.stampId}
-                          alsoOn={assignments
+                          takenBy={assignments
                             .filter((b) => b.tileId !== active.tileId && b.stampId === node.stampId)
                             .map((b) => `#${turnOf.get(b.tileId)}`)}
                           perforation={perforationMatches(gauge, node.attributes.perforation)}
@@ -1078,7 +1139,7 @@ export function IssueRunDialog({
                           vendorMap={vendorMap}
                           primaryVendorId={primaryVendorId}
                           disabled={isPending}
-                          onChoose={() => correct(active.tileId, node.stampId)}
+                          onChoose={() => pick(active.tileId, node.stampId)}
                         />
                       );
                     };
@@ -1531,7 +1592,7 @@ function StampChoice({
   node,
   depth,
   chosen,
-  alsoOn,
+  takenBy,
   perforation,
   watermark,
   vendorMap,
@@ -1543,8 +1604,9 @@ function StampChoice({
   node: StampNodeData;
   depth: number;
   chosen: boolean;
-  /** The other tiles of the run already on this stamp. */
-  alsoOn: string[];
+  /** The other tiles of the run already on this stamp — still pickable, since two tiles on one stamp
+   * are allowed (#1523). */
+  takenBy: string[];
   perforation: ReturnType<typeof perforationMatches>;
   watermark: ReturnType<typeof perforationMatches>;
   vendorMap: ReturnType<ReturnType<typeof useAreaVendorMaps>["vendorMapFor"]>;
@@ -1577,10 +1639,12 @@ function StampChoice({
           <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>
             <StampTitle node={node} />
             {chosen && <span style={{ color: "var(--color-accent)" }}> — this tile</span>}
-            {alsoOn.length > 0 && (
-              <span style={{ color: "var(--color-text-muted)" }}> — also on {alsoOn.join(", ")}</span>
-            )}
           </span>
+          {takenBy.length > 0 && (
+            <span style={{ ...ROW_CHIP, display: "inline-block", marginTop: "0.2rem", fontSize: "0.6875rem" }}>
+              taken by {takenBy.join(", ")}
+            </span>
+          )}
           <StampDetailLine collectionId={collectionId} node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
           {(perforation !== "unknown" || watermark !== "unknown") && (
             <span style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.2rem" }}>
