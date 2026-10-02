@@ -180,10 +180,7 @@ import {
   StampPickerBrowser,
   type PickedIssue,
 } from "@/app/c/[collectionSlug]/inventory/stamp-picker-browser";
-import {
-  pickedStampText,
-  type PickedStamp,
-} from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import { type PickedStamp } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useJustAdded } from "@/app/c/[collectionSlug]/shared/use-just-added";
 import { scrollIntoView } from "@/app/c/[collectionSlug]/shared/motion";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
@@ -199,6 +196,7 @@ import {
   DispositionChips,
   INPUT_STYLE,
   IntakeConditionDialog,
+  pickedSelection,
   type PendingSelection,
 } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
@@ -1772,7 +1770,7 @@ export function PurchaseDetailPanel({
           collectionId={collectionId}
           areas={areas}
           onPick={(picked: PickedStamp) => {
-            setWsSelection({ kind: "stamp", stampId: picked.stampId, label: pickedStampText(picked) });
+            setWsSelection(pickedSelection(picked));
             setError(undefined);
             setWsStep("condition");
           }}
@@ -3538,7 +3536,7 @@ function LotCard({
           collectionId={collectionId}
           areas={areas}
           onPick={(picked: PickedStamp) => {
-            setPending({ kind: "stamp", stampId: picked.stampId, label: pickedStampText(picked) });
+            setPending(pickedSelection(picked));
             setCopyError(undefined);
             setDialog("intake-condition");
           }}

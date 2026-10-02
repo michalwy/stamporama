@@ -2,11 +2,11 @@
 
 import { THUMB_OBJECT_FIT, ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
-import { orderedCatalogLabels } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { ConditionChip } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { useAreaVendorMaps, type AreaVendorMaps } from "./use-area-vendor-maps";
 import type { CollectionAreaData } from "@/lib/areas";
-import { catalogLabel } from "@/lib/area-vendor";
+import { catalogChipLabels, catalogLabel } from "@/lib/area-vendor";
+import { CatalogNumberChips } from "./catalog-number-chips";
 import { formatItemNo } from "@/lib/item-number";
 import type { IdentifyHistoryAnswers, IdentifyHistoryEntry } from "@/lib/tile-identify-history";
 
@@ -111,21 +111,21 @@ function IdentifyHistoryRow({
     entry.photoId ? `/api/collections/${collectionId}/photos/${entry.photoId}/${variant}` : null;
   const blocked = disabled || !canIdentify;
 
-  /** The number the stamp is reached for by, **prefixed** — `Mi·DE-BM 68`, not `68`. One rule with
-   * the copies list and the catalogue chips, because the collector is matching this row against a
-   * number they read somewhere else in the app. */
+  /** The number the stamp is reached for by, **prefixed** — `Mi·DE-BM 68`, not `68` — for the
+   * picture's hover label. One rule with the copies list, because the collector is matching this
+   * row against a number they read somewhere else in the app. */
   const number = catalogLabel(entry.subject, maps);
-  /** …and the whole of it, for the condition step's summary box, worded exactly as the picker words
-   * a pick — a repeat must not describe its stamp differently from the route through the picker. */
+  /** Every number, as the chips the stamp rows draw (#1525) — the main catalogue's highlighted and
+   * first. The row draws them, and the condition step's box draws the same ones on a press. */
+  const chips = catalogChipLabels(
+    entry.subject.catalogNumbers,
+    maps.vendorMapFor(entry.subject.areaId, entry.subject.issueId),
+    entry.subject.areaId ? (maps.primaryVendorByArea.get(entry.subject.areaId) ?? null) : null
+  );
+  /** …and the whole of it in one line, worded exactly as the picker words a pick — a repeat must
+   * not describe its stamp differently from the route through the picker. */
   const label =
-    [
-      orderedCatalogLabels(
-        entry.subject.catalogNumbers,
-        maps.vendorMapFor(entry.subject.areaId, entry.subject.issueId),
-        entry.subject.areaId ? (maps.primaryVendorByArea.get(entry.subject.areaId) ?? null) : null
-      ).join(", ") || null,
-      entry.subject.name || null,
-    ]
+    [chips.map((c) => c.label).join(", ") || null, entry.subject.name || null]
       .filter(Boolean)
       .join(" · ") || "(unnamed stamp)";
 
@@ -142,7 +142,7 @@ function IdentifyHistoryRow({
     >
       <button
         type="button"
-        onClick={() => onRepeat({ ...entry.answers, label })}
+        onClick={() => onRepeat({ ...entry.answers, label, chips, name: entry.subject.name })}
         disabled={blocked}
         style={{
           width: "100%",
@@ -183,14 +183,21 @@ function IdentifyHistoryRow({
           <span
             style={{
               display: "flex",
+              flexWrap: "wrap",
               alignItems: "center",
               gap: "0.3rem",
               minWidth: 0,
             }}
           >
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {number}
-            </span>
+            {/* Inert: the row is the button, and a press anywhere on it is the repeat. A stamp with
+                no number at all is named by its name, as the copies list names one. */}
+            {chips.length > 0 ? (
+              <CatalogNumberChips chips={chips} inert />
+            ) : (
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {number}
+              </span>
+            )}
             {/* The condition in the colour the collector recognises it by on every list (#728),
                 rather than as a word in a sentence — this row is read at a glance, beside a piece,
                 and the colour is half of how it is read. */}

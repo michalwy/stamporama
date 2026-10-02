@@ -1,4 +1,4 @@
-import type { CatalogLabelSubject } from "./area-vendor";
+import type { CatalogChipLabel, CatalogLabelSubject } from "./area-vendor";
 import type { ScanBatchData, ScanTileData } from "./scan-sheets";
 import { describesMoreThanTheStamp } from "./item-stamp-entries";
 
@@ -29,6 +29,10 @@ export interface IdentifyHistoryAnswers {
   /** The pick as the condition step's summary box words it. Built where the vendor maps are — the
    * label a stamp is named by is prefix-formatted (#377), and this module is the pure half. */
   label: string;
+  /** …and its numbers as the chips that box draws (#1525), the main catalogue's first, with the
+   * stamp's name beside them. Built in the same place as the label, for the same reason. */
+  chips?: CatalogChipLabel[];
+  name?: string | null;
   conditionId: string;
   certificateStatusId: string;
   formatId: string;

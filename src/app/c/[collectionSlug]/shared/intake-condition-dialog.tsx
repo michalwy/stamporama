@@ -38,6 +38,13 @@ import {
   type StampPhotoChoice,
 } from "@/lib/tile-stamp-photo";
 import { NO_AUTOFILL } from "./no-autofill";
+import { CatalogNumberChips } from "./catalog-number-chips";
+import {
+  pickedChipLabels,
+  pickedStampText,
+  type PickedStamp,
+} from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
+import type { CatalogChipLabel } from "@/lib/area-vendor";
 import {
   readLast,
   writeLast,
@@ -101,8 +108,67 @@ const DISPOSITION_FLAGS = [
 export /** A stamp or a whole checklist chosen in the picker (#531), awaiting a condition/certificate
  * before its copies are created. */
 type PendingSelection =
-  | { kind: "stamp"; stampId: string; label: string }
+  | {
+      kind: "stamp";
+      stampId: string;
+      /** The pick in one line — what the box falls back to, and what the photo uploader names. */
+      label: string;
+      /** The pick's numbers as chips (#1525), the main catalogue's highlighted and first, with its
+       * name beside them. Absent on a route that only knows the line, which the box then prints. */
+      chips?: CatalogChipLabel[];
+      name?: string | null;
+    }
   | { kind: "checklist"; checklistId: string; label: string; requiredCount: number };
+
+/** A stamp off the picker as the selection the condition step names it by — its one-line label,
+ * and its numbers as chips (#1525). */
+export function pickedSelection(picked: PickedStamp): PendingSelection {
+  return {
+    kind: "stamp",
+    stampId: picked.stampId,
+    label: pickedStampText(picked),
+    chips: pickedChipLabels(picked),
+    name: picked.name,
+  };
+}
+
+/** One stamp on a piece carrying several (#750), as the summary box lists it — its numbers as chips
+ * (#1525), its name, and what else the line says (the quantity, the component's format). */
+export interface CarriedStampLine {
+  chips: CatalogChipLabel[];
+  name: string | null;
+  detail: string | null;
+}
+
+/** A stamp named the way the summary box names one (#1525): its catalogue-number chips, then its
+ * name — or the name alone, or the placeholder, for a stamp with no number. */
+function StampChipsLine({
+  chips,
+  name,
+  detail,
+}: {
+  chips: CatalogChipLabel[];
+  name: string | null;
+  detail?: string | null;
+}) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "0.3rem",
+        verticalAlign: "middle",
+      }}
+    >
+      <CatalogNumberChips chips={chips} />
+      {(name || chips.length === 0) && (
+        <span style={{ color: "var(--color-text-primary)" }}>{name || "(unnamed stamp)"}</span>
+      )}
+      {detail && <span>{detail}</span>}
+    </span>
+  );
+}
 
 export /** The three disposition flags rendered as instant-toggle chips (#160). Shared by the per-copy
  * inline editor and the intake dialog: `values` holds the current on/off of each flag and
@@ -237,7 +303,7 @@ export interface IntakeConditionDialogProps {
    * absent for a piece that is simply the stamp picked. Drawn in the summary box that names the
    * pick, since they are what the pick now describes.
    */
-  carriedStamps?: string[];
+  carriedStamps?: CarriedStampLine[];
   /** Open the stamp editor over this step (#750). Present only in the scan-tile chain, where the
    * piece is on screen to be read: nowhere else is there a single piece of paper being described. */
   onEditStamps?: () => void;
@@ -515,9 +581,15 @@ function IntakeConditionDialog({
   }
   const count = selection.kind === "checklist" ? selection.requiredCount : 1;
   const summary =
-    selection.kind === "checklist"
-      ? `Whole set: ${selection.label} — ${count} stamp${count === 1 ? "" : "s"}`
-      : selection.label;
+    selection.kind === "checklist" ? (
+      `Whole set: ${selection.label} — ${count} stamp${count === 1 ? "" : "s"}`
+    ) : selection.chips && selection.chips.length > 0 ? (
+      // The numbers are what the piece is checked against, so they are the chips every stamp row
+      // draws (#1525) rather than a line of small text — the main catalogue's leading, highlighted.
+      <StampChipsLine chips={selection.chips} name={selection.name ?? null} />
+    ) : (
+      selection.label
+    );
   const actionLabel = isPending
     ? submitLabel
       ? "Working…"
@@ -576,7 +648,9 @@ function IntakeConditionDialog({
                 </div>
                 <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
                   {carriedStamps.map((line, i) => (
-                    <li key={`${i}-${line}`}>{line}</li>
+                    <li key={i} style={{ marginTop: "0.125rem" }}>
+                      <StampChipsLine chips={line.chips} name={line.name} detail={line.detail} />
+                    </li>
                   ))}
                 </ul>
               </div>

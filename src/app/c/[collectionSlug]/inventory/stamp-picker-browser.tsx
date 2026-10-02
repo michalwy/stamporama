@@ -56,7 +56,7 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
 import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import type { CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { useIssueMembers, useInvalidateInventory } from "./use-inventory-query";
-import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
+import { issueLabel, pickedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
@@ -676,7 +676,7 @@ function IssueBrowser({
       return;
     }
     const vm = vendorMapFor(issue.collectionAreaId, issue.id);
-    const catalogLabels = orderedCatalogLabels(
+    const labels = pickedCatalogLabels(
       node.catalogNumbers,
       vm,
       primaryVendorByArea.get(issue.collectionAreaId) ?? null
@@ -690,7 +690,7 @@ function IssueBrowser({
       .join(" · ");
     onPick({
       stampId: node.stampId,
-      catalogLabels,
+      ...labels,
       name: node.name,
       secondary: context || null,
       unknownVariant,
