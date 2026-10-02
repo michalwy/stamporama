@@ -57,6 +57,14 @@ jobs:
   # call that failed, an empty file list — runs the full suite. Get that backwards and the failure
   # is silent: a detection that always answers "documentation" looks exactly like a very fast CI.
   #
+  # **That includes this job failing outright**, which is why the four gated jobs ask
+  # `!cancelled() && code != 'false'` rather than `code == 'true'` (#983). A job whose `needs:`
+  # failed is skipped unless its `if:` says otherwise, and a skipped required check counts as
+  # satisfied — so under the old condition a crash here, a failed checkout or a broken script,
+  # skipped all four suites and left the pull request mergeable on a green tick that tested
+  # nothing. Now only an explicit `code=false` skips them; a failure, which writes no output, runs
+  # them.
+  #
   # The tag-only jobs (`Build image (…)`, `Publish container image`,
   # `Publish extension (Chrome Web Store)`) are deliberately **not** gated on this job. A tag runs
   # everything anyway, and a second condition on top of theirs is an easy way to make a release
@@ -78,6 +86,19 @@ jobs:
       code: ${{ steps.detect.outputs.code }}
 
     steps:
+      # Only the one file the decision needs. Under `pull_request` this is the merge commit, so a
+      # pull request is judged by its own copy of the script — exactly as it was judged by its own
+      # copy of the workflow when the logic lived inline here.
+      - name: Check out the detection script
+        uses: actions/checkout@v7.0.1
+        with:
+          sparse-checkout: scripts/detect-changes.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # The decision, the safe list and the reasoning behind its membership live in the script,
+      # which `tests/unit/detect-changes.test.ts` runs (#983). `bash` rather than `./`, so a lost
+      # executable bit cannot fail this job.
       - name: Decide whether this change touches the application
         id: detect
         env:
@@ -87,96 +108,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-
-          everything() {
-            echo "$1"
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          }
-
-          # A release builds everything, with no cleverness and no exceptions.
-          case "$GITHUB_REF" in
-            refs/tags/*) everything "Tag build - running the full suite." ;;
-          esac
-
-          # A rename reports the new path as `filename` and the old one as `previous_filename`.
-          # Both are consulted: moving `src/lib/thing.ts` to `docs/thing.md` changes the
-          # application, and only the second field says so.
-          case "$EVENT_NAME" in
-            pull_request)
-              if ! files=$(gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/files" \
-                    --jq '.[] | .filename, (.previous_filename // empty)'); then
-                everything "Could not list the pull request's files - running the full suite."
-              fi
-              ;;
-            push)
-              if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-                everything "No previous commit to compare against - running the full suite."
-              fi
-              if ! files=$(gh api "repos/$REPOSITORY/compare/$BEFORE...$AFTER" \
-                    --jq '.files[]? | .filename, (.previous_filename // empty)'); then
-                everything "Could not compare $BEFORE...$AFTER - running the full suite."
-              fi
-              ;;
-            *)
-              everything "Event $EVENT_NAME carries no diff - running the full suite."
-              ;;
-          esac
-
-          if [ -z "$files" ]; then
-            everything "No changed files reported - running the full suite."
-          fi
-
-          echo "Changed files:"
-          printf '%s\n' "$files" | sed 's/^/  /'
-
-          # **What this list means, and it is not "documentation".** A path belongs here when no
-          # job in this workflow can say anything about a change to it. `*.md`, `docs/*` and
-          # `.claude/*` qualify because nothing builds from them; `renovate.json` qualifies
-          # because it is consumed by Renovate's service on GitHub rather than by anything the
-          # four gated jobs build, typecheck or exercise, so none of them has a finding to report
-          # about a change to it (#970, decided by the user on 2026-09-08). **The membership is
-          # untouched by what follows and is not being reopened** — the conclusion is the same
-          # one, on a premise that had to be corrected.
-          #
-          # **This comment used to ground that on `nothing in this repository reads it at all`,
-          # and since 2026-09-10 that is false.** `tests/unit/renovate-never-alone.test.ts` reads
-          # it, to check that its two never-alone lists correspond (#1116). The stronger sentence
-          # is quoted rather than deleted because it was true when it was written and will go on
-          # arriving in anything copied from it. **It changes nothing here**, and the test itself
-          # is why: being inside this list is exactly what makes `Unit tests` skip on a
-          # `renovate.json`-only pull request, so that test is a backstop rather than a gate and
-          # its own comment says so. A job that cannot run on the change has no finding to report
-          # about it.
-          #
-          # The question is whether the whole diff stays inside the list, not whether part of it
-          # does: one file outside runs everything.
-          #
-          # **A path added here is a path no job in this workflow can report a finding about.**
-          # A pull request whose whole diff is inside the list merges on four skipped checks, so
-          # the only thing standing between it and `main` is a person reading it. `renovate.json`
-          # was added deliberately, with that consequence put to the user (#906) — it covers the
-          # automerge boundary and the never-alone list — so it is a decision, not an oversight;
-          # do not "correct" it back. Anything added here in future carries the same cost.
-          #
-          # The patterns are shell `case` globs, where `*` crosses a `/` — so `docs/*` covers
-          # `docs/agents/albums.md` and `*.md` covers `extension/README.md`. `renovate.json` is a
-          # single filename on purpose: `*.json` would sweep in `package.json` and
-          # `tsconfig.json`, which is the opposite of what was decided.
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
-            case "$file" in
-              *.md|docs/*|.claude/*|renovate.json) continue ;;
-            esac
-            everything "$file is outside the safe list - running the full suite."
-          done <<EOF
-          $files
-          EOF
-
-          echo "code=false" >> "$GITHUB_OUTPUT"
-          echo "Nothing here that a CI job can speak to - the application suite is skipped."
+        run: bash scripts/detect-changes.sh
 
   # Lint, typecheck and build run **concurrently inside this one job** (#881), not one after
   # another. The job keeps its name, so `main`'s ruleset is untouched and nothing had to be
@@ -190,7 +122,7 @@ jobs:
     name: Static checks
     runs-on: ubuntu-latest
     needs: [changes]
-    if: ${{ needs.changes.outputs.code == 'true' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
 
     steps:
       - name: Check out repository
@@ -220,7 +152,7 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     needs: [changes]
-    if: ${{ needs.changes.outputs.code == 'true' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
 
     steps:
       - name: Check out repository
@@ -250,7 +182,7 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     needs: [changes]
-    if: ${{ needs.changes.outputs.code == 'true' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
 
     services:
       postgres:
@@ -317,7 +249,7 @@ jobs:
     name: Extension checks
     runs-on: ubuntu-latest
     needs: [changes]
-    if: ${{ needs.changes.outputs.code == 'true' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
 
     steps:
       - name: Check out repository
