@@ -673,9 +673,9 @@ list, no message, the day claimed all the same.
 
 ## CI
 
-[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) is the record of what CI runs — which jobs exist, what each one is gated on, and why — and everything below is a summary of it. Where the two disagree, the workflow is right.
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) and [`.github/workflows/closing-refs.yml`](../../.github/workflows/closing-refs.yml) are the record of what CI runs — which jobs exist, what each one is gated on, and why — and everything below is a summary of them. Where the two disagree, the workflows are right.
 
-**Not every job runs on every event.** `Detect changes` runs first and on everything, and decides whether the change touches anything the application is built from; the four application suites are gated on its output, so a change staying inside its safe list leaves all four skipped. That safe list is the `case` glob inside that job and is the record of its own membership — the comment above that `case` block says why it is not restated anywhere, and what a path added to it costs. `Closing reference check` is gated on nothing and runs on every pull request. The publishing jobs run on `v*` tags only.
+**Not every job runs on every event.** `Detect changes` runs first and on everything, and decides whether the change touches anything the application is built from; the four application suites are gated on its output, so a change staying inside its safe list leaves all four skipped. That safe list is the `case` glob inside that job and is the record of its own membership — the comment above that `case` block says why it is not restated anywhere, and what a path added to it costs. `Closing reference check` is gated on nothing and lives in its own workflow, `closing-refs.yml`, which runs on every pull request and again whenever its title or body is edited — `ci.yml` does neither on an edit, because an edit there would cancel the suite in progress (#935). The publishing jobs run on `v*` tags only.
 
 The four application suites, each gated on `Detect changes`:
 
