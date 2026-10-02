@@ -686,7 +686,7 @@ The four application suites, each gated on `Detect changes`:
 
 Which of these `main` requires as a status check is deliberately not stated here: [`.github/rulesets/main.json`](../../.github/rulesets/main.json) is that record, and `docs/agents/collaboration.md` carries the reasoning around it.
 
-On a `v*` tag, **Build image** builds `linux/amd64` and `linux/arm64` on their own native runners and pushes each by digest, **Publish container image** merges those digests into one multi-arch manifest tagged on `ghcr.io/michalwy/stamporama`, and **Publish extension (Chrome Web Store)** submits the packaged extension when the `CWS_PUBLISH_ENABLED` repository variable is set. Nothing publishes over a red suite: `Build image` and `Publish extension` each `needs:` all four suites above, and `Publish container image` `needs:` `Build image`.
+On a `v*` tag, **Build image** builds `linux/amd64` and `linux/arm64` on their own native runners and pushes each by digest, **Publish container image** merges those digests into one multi-arch manifest tagged on `ghcr.io/michalwy/stamporama`, and **Publish extension (Chrome Web Store)** submits the packaged extension when the `CWS_PUBLISH_ENABLED` repository variable is set and something it ships has changed since the version the store already holds — reporting `success` either way, so its notice rather than its conclusion says which (`docs/agents/release-versioning.md`). Nothing publishes over a red suite: `Build image` and `Publish extension` each `needs:` all four suites above, and `Publish container image` `needs:` `Build image`.
 
 ## Authentication
 
