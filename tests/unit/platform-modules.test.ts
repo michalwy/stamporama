@@ -4,6 +4,7 @@ import {
   ALLEGRO_PLATFORM_MODULE,
   COLNECT_PLATFORM_MODULE,
   DELCAMPE_PLATFORM_MODULE,
+  FACEBOOK_PLATFORM_MODULE,
   PHILASEARCH_PLATFORM_MODULE,
   captureModuleRules,
   hasListingModule,
@@ -86,7 +87,29 @@ describe("captureModuleRules (#742)", () => {
     // silently Allegro either.
     assert.equal(captureModuleRules(COLNECT_PLATFORM_MODULE), null);
     assert.equal(captureModuleRules(DELCAMPE_PLATFORM_MODULE), null);
+    assert.equal(captureModuleRules(FACEBOOK_PLATFORM_MODULE), null);
     assert.equal(captureModuleRules(null), null);
     assert.equal(captureModuleRules(""), null);
+  });
+});
+
+describe("the Facebook marker (#1543)", () => {
+  it("names the platform and switches nothing on: no listing half, no capture, no close", () => {
+    // A group post is a kit posted by hand (#1544) — the Assistant filling it in is #1546's, and
+    // until then the marker must not inherit any module's rules by existing.
+    assert.equal(hasListingModule(FACEBOOK_PLATFORM_MODULE), false);
+    assert.equal(captureModuleRules(FACEBOOK_PLATFORM_MODULE), null);
+    assert.equal(supportsAssistantClose(FACEBOOK_PLATFORM_MODULE), false);
+    assert.equal(usesPlatformCatalogue(FACEBOOK_PLATFORM_MODULE), false);
+  });
+
+  it("is an id of its own, never one another marketplace already holds", () => {
+    const others = [
+      COLNECT_PLATFORM_MODULE,
+      ALLEGRO_PLATFORM_MODULE,
+      DELCAMPE_PLATFORM_MODULE,
+      PHILASEARCH_PLATFORM_MODULE,
+    ];
+    assert.ok(!others.includes(FACEBOOK_PLATFORM_MODULE));
   });
 });

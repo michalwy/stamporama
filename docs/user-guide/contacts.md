@@ -2,7 +2,7 @@
 
 **Contacts** are the address book of everyone you deal with as a collector — sellers,
 buyers, exchange partners, auction houses, and the platforms you trade through (Allegro,
-eBay, Delcampe). Contacts are scoped to a collection: each collection keeps its own list.
+eBay, Delcampe, Facebook). Contacts are scoped to a collection: each collection keeps its own list.
 
 Open the **Contacts** screen from the **Partners** section of the sidebar — it sits below
 **Selling** and **Intake** rather than inside either, because the same address book serves both.
@@ -15,8 +15,8 @@ A contact can carry any combination of **roles**, or none at all:
 - **Exchange partner** — someone you swap stamps with; the partner a [trade](trades.md) is made with.
 - **Auction house** — e.g. Cherrystone, David Feldman.
 - **Platform** — an online marketplace a purchase, offer, or sale is routed through. Some platforms
-  have settings of their own beyond the contact form: see [Allegro](allegro.md) and
-  [Delcampe](delcampe.md).
+  have settings of their own beyond the contact form: see [Allegro](allegro.md),
+  [Delcampe](delcampe.md) and [Facebook](facebook.md).
 - **Other** — anyone who doesn't fit the above.
 
 Roles are just labels: they show as badges on each row and let you filter the list. A

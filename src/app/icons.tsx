@@ -37,6 +37,7 @@ import {
   ArrowLeftToLine,
   ArrowUp,
   ArrowUpDown,
+  Archive,
   ArrowUpRight,
   ArrowUpToLine,
   Ban,
@@ -207,6 +208,9 @@ const GLYPHS = {
   refresh: RotateCw,
   /** Puts a state back the way it was: reopen a lot, bring a disposed copy back. */
   restore: RotateCcw,
+  /** Puts something out of use without deleting it — a Facebook group no longer posted in (#1543).
+   *  Brought back with `restore`. */
+  archive: Archive,
   /** A picture turned a quarter to the left / right, to stand it the right way up (#1006). The same
    *  two glyphs as `restore` and `refresh`, because a turn *is* the arrow going round — and never on
    *  the same surface as either of them. */

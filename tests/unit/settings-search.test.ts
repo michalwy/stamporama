@@ -38,6 +38,7 @@ const SOURCES: Partial<Record<SettingsEntryKey, readonly string[]>> = {
     "delcampe-profiles-panel.tsx",
     "delcampe-categories-panel.tsx",
   ],
+  facebook: ["facebook-settings-page.tsx"],
   philasearch: ["philasearch-platform-panel.tsx"],
   "auction-reminder": ["auction-reminder-panel.tsx"],
   colnect: [
@@ -100,7 +101,7 @@ describe("settings search (#1470)", () => {
     const keys = searchSettings("platform")!.map((m) => m.entry.key);
     const order = SETTINGS_ENTRIES.map((e) => e.key).filter((k) => keys.includes(k));
     assert.deepEqual(keys, order);
-    assert.deepEqual(keys, ["allegro", "delcampe", "philasearch", "colnect"]);
+    assert.deepEqual(keys, ["allegro", "delcampe", "facebook", "philasearch", "colnect"]);
   });
 
   it("ignores case, accents, spacing and the kind of apostrophe", () => {

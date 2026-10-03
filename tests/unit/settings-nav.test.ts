@@ -37,7 +37,7 @@ describe("settings navigation (#1469)", () => {
         "Collection",
         ["Scanners", "Tags", "Album templates", "Hawid stock", "Corner ornaments", "Ref card templates"],
       ],
-      ["Selling", ["Collage templates", "Carriers", "Allegro", "Delcampe", "Philasearch"]],
+      ["Selling", ["Collage templates", "Carriers", "Allegro", "Delcampe", "Facebook", "Philasearch"]],
       ["Intake", ["Acceptance profiles", "Bid recommendation", "Auction reminder"]],
       ["Partners", ["Colnect"]],
       ["System", ["Assistant & API", "Email"]],
