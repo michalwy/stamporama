@@ -53,6 +53,14 @@ that would be the same news twice. Rows added to a list you are looking at flash
 Things that went **wrong** are not reported this way. A form that could not be saved says so inside
 the form, next to the field that caused it, and stays there until you deal with it.
 
+## Scrolling in dialogs
+
+**While a dialog is open, the page behind it stays where it is.** Scroll a list or a form in a
+dialog to its end and keep going, and nothing else moves — not the page underneath, and not the
+dialog's own body when the list sits inside it. The same holds for a long dropdown or picker on a
+page: it stops at its last row rather than carrying the page along. Close the dialog and the page is
+exactly where you left it.
+
 ## Reduced motion
 
 If your operating system is set to **reduce motion**, Stamporama takes the animation out rather

@@ -11,6 +11,7 @@ import {
 
 import { useEscapeLayer } from "@/app/escape-stack";
 import { Icon } from "@/app/icons";
+import { usePageScrollLock } from "@/app/page-scroll-lock";
 
 // ── The shell's own limits ──────────────────────────────────────────────────
 
@@ -123,6 +124,8 @@ export function DialogShell({
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEscapeLayer(onClose, dismissable);
+  // The page behind never scrolls while a dialog is open (#1577) — here, so no dialog can forget it.
+  usePageScrollLock();
 
   useEffect(() => {
     const el = panelRef.current;

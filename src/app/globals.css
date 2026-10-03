@@ -185,6 +185,27 @@ body {
   background: var(--color-bg-page);
 }
 
+/* Scrolling stays where the collector is scrolling (#1577; `page-scroll-lock.ts` explains the lock).
+   The scrollbar's room is kept even while nothing is scrolled, so locking the page under a dialog
+   never makes it jump sideways or change width. */
+html {
+  scrollbar-gutter: stable;
+}
+
+html[data-page-scroll-locked] {
+  overflow: hidden;
+}
+
+/* A list scrolled to its end stops there: inside a dialog it does not drag the dialog body along,
+   and in a popover or picker it does not move the page. The property only acts on an element that
+   actually scrolls, so it is safe to set on everything inside a dialog. */
+[role="dialog"],
+[role="dialog"] *,
+[role="listbox"],
+[role="menu"] {
+  overscroll-behavior: contain;
+}
+
 /* Password-manager icons on fields that already opted out (#460). `data-lpignore` and its siblings
    (`shared/no-autofill.ts`) stop the *filling*, but LastPass still paints its in-field icon on some
    fields regardless — as a `background-image` on the input, or as an overlay div it injects next to
