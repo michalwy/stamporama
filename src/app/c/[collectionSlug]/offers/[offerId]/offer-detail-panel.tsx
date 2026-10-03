@@ -1338,6 +1338,7 @@ export function OfferDetailPanel({
           that is not a Facebook auction. */}
       {offer.facebook && (
         <OfferFacebookCard
+          collectionId={collectionId}
           collectionSlug={collectionSlug}
           offerId={offerId}
           kit={offer.facebook}

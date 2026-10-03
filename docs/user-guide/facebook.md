@@ -8,7 +8,9 @@ reads, what you say about shipping and payment, and what a new auction starts fr
 The platform and its groups are set up under **Settings → Facebook**; an auction is an
 [offer](offers.md) on the Facebook platform, prepared, posted and followed like any other.
 
-> Recording the current bid and the result of an auction is coming in a next step.
+Nothing reads the bids under a post, so you follow an auction yourself: you type the highest bid
+while it runs, and when it ends you record who won and for how much — which records the sale — or
+that nobody bid.
 
 ## Which platform is Facebook
 
@@ -139,3 +141,42 @@ move up, and a post left with one lot becomes an ordinary single post. Once the 
 stay as they were posted. Deleting a lot's offer works the same way as taking it out.
 
 A lot cannot be moved to another group while it is in a post; take it out first.
+
+## While it runs
+
+Once an auction is up, its **Facebook** card has a **Bidding** part. Type the highest bid you see
+under the post and choose **Record bid**. The card shows it with when you recorded it — *recorded
+3 hours ago* — and so does the offer's row on the **Offers** screen, beside the figure, so a bid you
+typed days ago looks as old as it is. Recording a bid is the same as editing the offer's price in
+place; it changes nothing about the post itself.
+
+## When it ends
+
+Once an auction's closing time has passed, it asks for its result: its row on the **Offers** screen
+carries the **Ended, unresolved** flag, the **Ended auctions** filter lists it, and the card says it
+has closed. Unlike on other platforms, this happens whether or not you recorded a bid — on Facebook a
+missing bid may only mean you did not type one.
+
+**Record result…** asks for:
+
+- the **winner**, by the name their profile shows, and the **profile link** if you have it;
+- the **winning bid**, starting from the last bid you recorded;
+- the day it **sold**, the day it closed unless you change it;
+- the **sale** it goes into.
+
+While you type, the dialog says who the winner is: a contact found by the profile link, or by name, or
+a new buyer it will create. The profile link is kept on the contact (see [Contacts](contacts.md)), so
+the same person is recognised next time even under another name. A contact with the same name but a
+different profile link is somebody else, and the dialog says so — give the new winner a name of their
+own.
+
+Several lots won by one person are usually one parcel, so the dialog lists the winner's **open
+Facebook sales** — not yet sent, in the auction's currency — and you choose to add the lot to one of
+them or to start **a new sale**. Saving records the sale, in the auction's own currency, and opens it;
+the offer becomes **Sold**. An auction holding several sets is still bid on as one lot, so its price is
+split evenly over the sets.
+
+**No bids** ends an auction nobody bid on: the offer is **withdrawn** and its copies are free to go
+into another auction. Listing them again is a new offer.
+
+In a post with several lots, each lot has its own result, recorded on its own offer.

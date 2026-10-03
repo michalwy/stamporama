@@ -1973,6 +1973,9 @@ export interface OfferListItem {
   inActiveBidding: boolean;
   /** When an auction closes (#490); null on a quick buy and where no closing time is known. */
   endsAt: Date | null;
+  /** When an auction's standing bid was last recorded or observed (#449/#351) — the row shows the
+   * bid with its age (#1545), so a figure typed days ago looks as stale as it is. */
+  priceCheckedAt: Date | null;
   /** The order this listing sold on, where a connected platform has reported one and no sale has
    * been recorded for it yet (#499). Null on everything else — including a listing whose sale *is*
    * recorded, which is what clears it. */
@@ -2010,6 +2013,7 @@ const OFFER_SELECT = {
   inActiveBidding: true,
   bidderCount: true,
   endsAt: true,
+  priceCheckedAt: true,
   listingDate: true,
   listingContentChangedAt: true,
   facebookGroupId: true,
@@ -2034,6 +2038,7 @@ type OfferRow = {
   inActiveBidding: boolean;
   bidderCount: number | null;
   endsAt: Date | null;
+  priceCheckedAt: Date | null;
   listingDate: Date | null;
   listingContentChangedAt: Date | null;
   facebookGroupId: string | null;
@@ -2090,6 +2095,7 @@ function toListItem(
     soldCopyCount,
     inActiveBidding: biddingLive(row.inActiveBidding, state),
     endsAt: row.endsAt,
+    priceCheckedAt: row.priceCheckedAt,
     // Read against this row's own instant rather than a clock passed down the page: the rule is a
     // comparison against "now" whichever way it is reached, and the facet count below asks the
     // database the same question with `new Date()` at the same point in the request.
@@ -2101,6 +2107,7 @@ function toListItem(
         price: row.price.toFixed(2),
         inActiveBidding: row.inActiveBidding,
         bidderCount: row.bidderCount,
+        facebook: row.facebookGroupId !== null,
       },
       new Date()
     ),
@@ -2315,6 +2322,9 @@ function endedAuctionWhere(now: Date): Prisma.OfferWhereInput[] {
         { price: { gt: 0 } },
         { inActiveBidding: true },
         { bidderCount: { gt: 0 } },
+        // A Facebook auction asks for its result whatever was typed (#1545): its bids are read by
+        // nobody, so a zero is no evidence that nobody bid.
+        { facebookGroupId: { not: null } },
       ],
     },
   ];

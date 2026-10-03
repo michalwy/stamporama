@@ -337,6 +337,7 @@ describe("auctionNeedsResolution", () => {
     price: "0.00",
     inActiveBidding: false,
     bidderCount: null as number | null,
+    facebook: false,
   };
 
   it("flags an auction that closed with a standing bid", () => {
@@ -355,6 +356,15 @@ describe("auctionNeedsResolution", () => {
     // so there is nothing to resolve, and the opening figure is deliberately not read here.
     assert.equal(auctionNeedsResolution(auction, now), false);
     assert.equal(auctionNeedsResolution({ ...auction, bidderCount: 0 }, now), false);
+  });
+
+  it("asks a closed Facebook auction for its result even with no bid typed (#1545)", () => {
+    // Nobody reads its bids — they are typed by hand — so a zero is no evidence that nobody bid.
+    assert.equal(auctionNeedsResolution({ ...auction, facebook: true }, now), true);
+    // …but only once it has closed, and only while nothing has resolved it.
+    assert.equal(auctionNeedsResolution({ ...auction, facebook: true, endsAt: running }, now), false);
+    assert.equal(auctionNeedsResolution({ ...auction, facebook: true, endsAt: null }, now), false);
+    assert.equal(auctionNeedsResolution({ ...auction, facebook: true, state: "withdrawn" }, now), false);
   });
 
   it("says nothing about an auction still running, or one with no closing time", () => {

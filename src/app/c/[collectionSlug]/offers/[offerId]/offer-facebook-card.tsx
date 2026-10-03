@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { FacebookOfferKit } from "@/lib/facebook-auctions";
 import {
   facebookMoney,
@@ -10,8 +11,13 @@ import {
 } from "@/lib/facebook-post-rules";
 import { OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
-import { DialogPrimaryButton, DialogSecondaryButton } from "@/app/dialog-shell";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { ConfirmDialog, DialogPrimaryButton, DialogSecondaryButton } from "@/app/dialog-shell";
+import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
+import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
+import { FacebookResultDialog } from "./facebook-result-dialog";
 
 // A Facebook auction's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
 // alone, or as a numbered lot of a post holding several — the post's text and photos, each taken in
@@ -21,6 +27,11 @@ import { DialogPrimaryButton, DialogSecondaryButton } from "@/app/dialog-shell";
 // the text and uploads the photos by hand. The text is rendered **here**, in the browser, because the
 // closing time it states is a local time and this is the one place the collector's zone is known —
 // the same reason the closing time is typed in the browser (#490).
+//
+// While the auction is up, the card is also where it is followed (#1545; ADR-0061 §4): nothing reads
+// the comments, so the standing bid is typed here, dated, and once the closing time has passed the card
+// asks for the result — the winner and the winning bid, which records the sale, or *No bids*, which
+// withdraws the offer and frees its copies.
 //
 // Rendered only for an offer naming a group: `OfferDetail.facebook` is null everywhere else.
 
@@ -90,18 +101,25 @@ function formatClosesAt(iso: string | null): string {
 }
 
 export function OfferFacebookCard({
+  collectionId,
   collectionSlug,
   offerId,
   kit,
   onChanged,
 }: {
+  collectionId: string;
   collectionSlug: string;
   offerId: string;
   kit: FacebookOfferKit;
   /** The offer screen re-reads itself after a write; the card holds no copy of its own. */
   onChanged: () => void;
 }) {
+  const router = useRouter();
+  const { invalidateAll: invalidateSales } = useInvalidateSales();
   const [link, setLink] = useState("");
+  const [bid, setBid] = useState("");
+  const [resultOpen, setResultOpen] = useState(false);
+  const [confirmNoBids, setConfirmNoBids] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -126,6 +144,12 @@ export function OfferFacebookCard({
   // What stands between the post and going up: every lot must be Ready, the gate publishing asks.
   const waiting = kit.lots.filter((l) => l.state !== "ready" && l.state !== "active");
 
+  // Up in the group: the auction is running, or has closed and waits for its result.
+  const up = self.state === "active" || self.state === "paused";
+  const now = new Date();
+  const closed = up && self.endsAt !== null && new Date(self.endsAt).getTime() <= now.getTime();
+  const hasBid = self.price !== "0.00";
+
   function run(task: () => Promise<{ status: "success" } | { status: "error"; message: string }>) {
     setError(null);
     startTransition(async () => {
@@ -133,8 +157,24 @@ export function OfferFacebookCard({
       if (result.status === "error") setError(result.message);
       else {
         setLink("");
+        setBid("");
+        setConfirmNoBids(false);
         onChanged();
       }
+    });
+  }
+
+  function recordBid() {
+    run(async () => {
+      const { patchOfferAction } = await import("@/app/actions/offers");
+      return patchOfferAction(offerId, "price", bid);
+    });
+  }
+
+  function recordNoBids() {
+    run(async () => {
+      const { recordFacebookAuctionNoBidsAction } = await import("@/app/actions/facebook");
+      return recordFacebookAuctionNoBidsAction(offerId);
     });
   }
 
@@ -276,12 +316,100 @@ export function OfferFacebookCard({
             </p>
           </>
         )}
-        {error && (
-          <p role="alert" style={{ color: "var(--color-error)", fontSize: "0.8125rem", margin: "0.375rem 0 0" }}>
-            {error}
-          </p>
-        )}
       </div>
+
+      {/* The bidding, typed by hand while it runs, and the result once it has closed (#1545). */}
+      {up && (
+        <div style={{ marginTop: "0.875rem" }}>
+          <p style={SECTION_LABEL}>Bidding</p>
+          {closed && (
+            <p style={{ ...MUTED, margin: "0 0 0.375rem", color: "var(--color-warning)", fontWeight: 600 }}>
+              Closed {formatRelative(self.endsAt!, now)} — record who won, or that nobody bid.
+            </p>
+          )}
+          <p style={{ ...MUTED, margin: "0 0 0.375rem" }}>
+            {hasBid ? (
+              <>
+                Highest bid <strong style={{ color: "var(--color-text-primary)" }}>{facebookMoney(self.price, self.currency)}</strong>
+                {self.priceCheckedAt && (
+                  <>
+                    {" "}
+                    <Tooltip content={`Recorded ${formatInstant(self.priceCheckedAt)}`}>
+                      <span>· recorded {formatRelative(self.priceCheckedAt, now)}</span>
+                    </Tooltip>
+                  </>
+                )}
+              </>
+            ) : (
+              "No bid recorded yet."
+            )}
+          </p>
+          {!closed && (
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <NumericInput
+                kind="amount"
+                placeholder={`Highest bid in ${self.currency}`}
+                value={bid}
+                onChange={(e) => setBid(e.target.value)}
+                disabled={isPending}
+                style={INPUT}
+                aria-label="Highest bid"
+              />
+              <DialogSecondaryButton type="button" disabled={isPending || !bid.trim()} onClick={recordBid}>
+                Record bid
+              </DialogSecondaryButton>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            {closed ? (
+              <DialogPrimaryButton type="button" disabled={isPending} onClick={() => setResultOpen(true)}>
+                Record result…
+              </DialogPrimaryButton>
+            ) : (
+              <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setResultOpen(true)}>
+                Record result…
+              </DialogSecondaryButton>
+            )}
+            <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setConfirmNoBids(true)}>
+              No bids
+            </DialogSecondaryButton>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p role="alert" style={{ color: "var(--color-error)", fontSize: "0.8125rem", margin: "0.375rem 0 0" }}>
+          {error}
+        </p>
+      )}
+
+      {resultOpen && (
+        <FacebookResultDialog
+          offerId={offerId}
+          currency={self.currency}
+          standingBid={self.price}
+          endsAt={self.endsAt}
+          onClose={() => setResultOpen(false)}
+          onRecorded={(saleId) => {
+            setResultOpen(false);
+            invalidateSales(collectionId);
+            onChanged();
+            router.push(`/c/${collectionSlug}/sales/${saleId}`);
+          }}
+        />
+      )}
+      {confirmNoBids && (
+        <ConfirmDialog
+          title="No bids"
+          message="End this auction with nobody having bid? The offer is withdrawn and its copies are free to list again."
+          actionLabel="Withdraw offer"
+          pendingLabel="Withdrawing…"
+          isPending={isPending}
+          error={error ?? undefined}
+          onConfirm={recordNoBids}
+          onClose={() => setConfirmNoBids(false)}
+        />
+      )}
     </section>
   );
 }

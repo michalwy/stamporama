@@ -290,6 +290,9 @@ export interface ResolvableAuction {
   inActiveBidding: boolean;
   /** Bidders the connected platform reported (#481); null where nothing has looked. */
   bidderCount: number | null;
+  /** An auction in a Facebook group (#1545): its bids are typed by hand, so it asks for its result
+   *  whether or not one was recorded. */
+  facebook: boolean;
 }
 
 /**
@@ -312,6 +315,10 @@ export interface ResolvableAuction {
  *  • **It is still open.** A `sold` or `withdrawn` listing has already been resolved — that is what
  *    those states mean — so flagging it would be asking for a decision already taken.
  *
+ * **A Facebook auction drops the second part** (#1545, decided with the collector on 2026-10-03).
+ * Nothing reads its bids — they are comments under a post, typed here by hand — so a zero may only mean
+ * nobody typed one. It asks for its result once it has closed, and *No bids* is one of the answers.
+ *
  * Pure, and `now` is passed in: the offer list, its facet count and the notification centre all read
  * one instant, exactly as the lot list's closing windows do.
  */
@@ -319,6 +326,7 @@ export function auctionNeedsResolution(offer: ResolvableAuction, now: Date): boo
   if (!isAuctionListing(offer.listingType)) return false;
   if ((CLOSED_OFFER_STATES as readonly OfferState[]).includes(offer.state)) return false;
   if (!offer.endsAt || offer.endsAt.getTime() > now.getTime()) return false;
+  if (offer.facebook) return true;
   return hasPrice(offer.price) || offer.inActiveBidding || (offer.bidderCount ?? 0) > 0;
 }
 

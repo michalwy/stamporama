@@ -5,6 +5,7 @@ import { normalizeLanguage } from "./languages";
 import { normalizePhotoSides } from "./offer-photo-config";
 import { normalizeDescriptionFormat } from "./description-format";
 import { isOfferListingType } from "./offer-rules";
+import { normalizeFacebookProfileUrl } from "./facebook-result-rules";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
@@ -55,6 +56,24 @@ export class ContactNameTakenError extends Error {
   }
 }
 
+/** Raised when a field's value is refused by its own rule — the Facebook profile link (#1545) — so
+ * the form can say which and why rather than failing generically. */
+export class ContactFieldError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContactFieldError";
+  }
+}
+
+/** The profile link as stored: normalised, so a winner's lookup is an equality (#1545). Undefined
+ * stays undefined — an update that never showed the field leaves it alone. */
+function profileUrlData(raw: string | null | undefined): string | null | undefined {
+  if (raw === undefined) return undefined;
+  const result = normalizeFacebookProfileUrl(raw);
+  if (!result.ok) throw new ContactFieldError(result.message);
+  return result.value;
+}
+
 /** Raised when a delete is blocked because the contact is still referenced by one or
  * more purchases (as supplier or platform). The `Purchase` FKs are `onDelete: Restrict`
  * (ADR-0008/0009), so the contact must be detached from those purchases first. */
@@ -89,6 +108,9 @@ export interface ContactData extends ContactRoles {
   fullName: string | null;
   email: string | null;
   phone: string | null;
+  /** The person's Facebook profile link, normalised (#1545) — what a Facebook auction's winner is
+   * recognised by. Null on nearly every contact. */
+  facebookProfileUrl: string | null;
   /** The platform's fixed transaction currency (#196), or null when unset. Only meaningful for
    * contacts carrying the `platform` role. */
   platformCurrency: string | null;
@@ -174,6 +196,7 @@ const CONTACT_SELECT = {
   fullName: true,
   email: true,
   phone: true,
+  facebookProfileUrl: true,
   buyer: true,
   seller: true,
   exchangePartner: true,
@@ -290,6 +313,9 @@ export interface ContactCreateInput {
   fullName?: string | null;
   email?: string | null;
   phone?: string | null;
+  /** The Facebook profile link (#1545), as typed — normalised on write, refused when it is not one.
+   * Omitted on an update leaves it as it is. */
+  facebookProfileUrl?: string | null;
   buyer?: boolean;
   seller?: boolean;
   exchangePartner?: boolean;
@@ -516,6 +542,7 @@ export async function createContact(
         fullName: data.fullName ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,
+        facebookProfileUrl: profileUrlData(data.facebookProfileUrl) ?? null,
         buyer: data.buyer ?? false,
         seller: data.seller ?? false,
         exchangePartner: data.exchangePartner ?? false,
@@ -572,6 +599,7 @@ export async function updateContact(
         fullName: data.fullName ?? null,
         email: data.email ?? null,
         phone: data.phone ?? null,
+        facebookProfileUrl: profileUrlData(data.facebookProfileUrl),
         buyer: data.buyer ?? false,
         seller: data.seller ?? false,
         exchangePartner: data.exchangePartner ?? false,

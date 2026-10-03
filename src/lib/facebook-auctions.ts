@@ -275,6 +275,9 @@ export interface FacebookKitLot {
   state: OfferState;
   /** The lot's own link — in a multi-lot post, the link of its photo. */
   url: string | null;
+  /** The standing bid typed while it runs (#1545), `0.00` when none is, and when it was recorded. */
+  price: string;
+  priceCheckedAt: string | null;
 }
 
 /** What the offer's Facebook card draws (ADR-0061 §3): the group, the post and its lots, and where
@@ -318,6 +321,8 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       endsAt: true,
       state: true,
       url: true,
+      price: true,
+      priceCheckedAt: true,
       sets: {
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: {
@@ -347,6 +352,8 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       endsAt: row.endsAt?.toISOString() ?? null,
       state: row.state as OfferState,
       url: row.url,
+      price: row.price.toFixed(2),
+      priceCheckedAt: row.priceCheckedAt?.toISOString() ?? null,
     };
   });
   const base = `/api/collections/${offer.collectionId}`;

@@ -14,6 +14,13 @@ import {
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
 import { createFacebookPost, recordFacebookPostLink, removeFacebookLot } from "@/lib/facebook-posts";
+import {
+  lookupFacebookWinner,
+  recordFacebookAuctionNoBids,
+  recordFacebookAuctionWin,
+  type FacebookWinnerLookup,
+} from "@/lib/facebook-results";
+import type { FacebookWinInput } from "@/lib/facebook-result-rules";
 
 // Settings → Facebook (#1543; ADR-0061): which platform contact is Facebook, and the groups under it.
 //
@@ -155,5 +162,47 @@ export async function recordFacebookPostLinkAction(
     return { status: "success", activated };
   } catch (err) {
     return failure(err, "Failed to record the post's link.");
+  }
+}
+
+// ── The result (#1545; ADR-0061 §4) ───────────────────────────────────────────────────────────────
+
+/** Who the typed winner is and which of their open sales the lot could join — read while the result
+ *  dialog is filled in. */
+export async function lookupFacebookWinnerAction(
+  offerId: string,
+  winnerName: string,
+  profileUrl: string
+): Promise<FacebookWinnerLookup> {
+  const session = await getSession();
+  return lookupFacebookWinner(session.user.id, offerId, { winnerName, profileUrl });
+}
+
+export type FacebookWinState =
+  | { status: "success"; saleId: string }
+  | { status: "error"; message: string };
+
+/** Record the winner and the winning bid, which records the sale. */
+export async function recordFacebookAuctionWinAction(
+  offerId: string,
+  input: FacebookWinInput
+): Promise<FacebookWinState> {
+  const session = await getSession();
+  try {
+    const { saleId } = await recordFacebookAuctionWin(session.user.id, offerId, input);
+    return { status: "success", saleId };
+  } catch (err) {
+    return failure(err, "Failed to record the result.");
+  }
+}
+
+/** Record that nobody bid, which withdraws the auction and frees its copies. */
+export async function recordFacebookAuctionNoBidsAction(offerId: string): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await recordFacebookAuctionNoBids(session.user.id, offerId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to end the auction.");
   }
 }

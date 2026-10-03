@@ -96,11 +96,14 @@ export function ListingTypeChip({ listingType }: { listingType: OfferListingType
  * `error`-tinted like *Needs action* and for the same reason: the stock is committed in a place the
  * app cannot see, and every day it sits there is a day it could also sell somewhere else.
  */
-export function AuctionEndedChip() {
+export function AuctionEndedChip({ facebook = false }: { facebook?: boolean }) {
   return tinted(
     "error",
     "Ended, unresolved",
-    "This auction closed with a bid on it — record the sale, or mark it unsold and relist"
+    // A Facebook auction asks whether or not a bid was typed (#1545), so its hint cannot claim one.
+    facebook
+      ? "This Facebook auction has closed — record who won, or that nobody bid, on its Facebook card"
+      : "This auction closed with a bid on it — record the sale, or mark it unsold and relist"
   );
 }
 
