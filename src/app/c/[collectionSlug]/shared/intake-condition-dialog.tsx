@@ -192,10 +192,13 @@ function DispositionChips({
   values,
   onToggle,
   disabled,
+  tabIndex,
 }: {
   values: { inCollection: boolean; forSale: boolean; forTrade: boolean };
   onToggle: (flag: "inCollection" | "forSale" | "forTrade", value: boolean) => void;
   disabled?: boolean;
+  /** -1 on a run row (#1583), where nothing sits in Tab between two catalogue values (#1223). */
+  tabIndex?: number;
 }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
@@ -207,6 +210,7 @@ function DispositionChips({
             type="button"
             aria-pressed={on}
             disabled={disabled}
+            tabIndex={tabIndex}
             onClick={() => onToggle(d.key, !on)}
             style={{
               ...CHIP,

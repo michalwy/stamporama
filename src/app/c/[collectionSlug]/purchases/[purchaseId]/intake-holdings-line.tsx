@@ -58,6 +58,8 @@ import { COPY_BUCKET_COLOR } from "@/app/c/[collectionSlug]/wants/want-copy-coun
  *
  * Single-stamp intake only — a whole-checklist intake fans out across many stamps and has no one
  * stamp to report on, the reason photos are single-stamp only too (#148). The caller renders none.
+ * A run identified as a checklist's stamps (#1583) is many single stamps rather than one checklist,
+ * so each of its rows draws one, `inRun`.
  */
 export function IntakeHoldingsLine({
   collectionId,
@@ -67,9 +69,13 @@ export function IntakeHoldingsLine({
   certificateStatusId,
   formatId,
   onCompare,
+  inRun = false,
 }: {
   collectionId: string;
   stampId: string;
+  /** On a run row (#1583): no rule above it, since the row's own frame separates it, and the compare
+   * link out of the Tab order, so Tab still goes from one row's value straight to the next (#1223). */
+  inRun?: boolean;
   /** Opens the held copies' pictures beside the piece (#1207). Offered only while something is
    * held, since there is nothing to look at otherwise. */
   onCompare?: () => void;
@@ -96,9 +102,13 @@ export function IntakeHoldingsLine({
   return (
     <div
       style={{
-        marginTop: "0.375rem",
-        paddingTop: "0.375rem",
-        borderTop: "1px solid var(--color-border)",
+        ...(inRun
+          ? {}
+          : {
+              marginTop: "0.375rem",
+              paddingTop: "0.375rem",
+              borderTop: "1px solid var(--color-border)",
+            }),
         display: "flex",
         alignItems: "center",
         gap: "0.375rem",
@@ -180,6 +190,7 @@ export function IntakeHoldingsLine({
             <button
               type="button"
               onClick={onCompare}
+              tabIndex={inRun ? -1 : undefined}
               style={{
                 padding: 0,
                 border: "none",

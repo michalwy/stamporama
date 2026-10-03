@@ -2,6 +2,7 @@
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
 import { Fragment, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   DialogActions,
@@ -58,6 +59,8 @@ import {
   ThumbPreview,
 } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
+import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
+import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
 import { markFaultIds, sameFaults } from "@/lib/tile-marks";
 import type { FaultEntry } from "@/lib/fault-entry";
@@ -733,6 +736,12 @@ export function IssueRunDialog({
 
   const activeOwn = active ? (overrides.get(active.tileId) ?? {}) : {};
 
+  /** The row whose held copies are open beside its tile (#1583) — the single tile's comparison
+   * (#1207), reached from the run's held line. */
+  const [comparingId, setComparingId] = useState<string | null>(null);
+  const comparingIndex = comparingId ? inRun.findIndex((p) => p.tileId === comparingId) : -1;
+  const comparingStampId = comparingIndex >= 0 ? assignments[comparingIndex].stampId : null;
+
   /** Whether the run's values note is drawn, which the run's counts then sit beside. */
   const valuesNoteShown =
     priceSubjects.length > 0 &&
@@ -761,8 +770,9 @@ export function IssueRunDialog({
       <DialogShell
         title={`Identify as the stamps of ${runTitle}`}
         onClose={onClose}
-        // Wider since #1229, so a run row holds its value field on the same line as the rest.
-        maxWidth="min(98vw, 122rem)"
+        // Wider since #1229, so a run row holds its value field on the same line as the rest, and
+        // again since #1583, so its held line and disposition chips fit on the line below it.
+        maxWidth="min(98vw, 128rem)"
         height="92vh"
         // A stamp being created over this dialog owns Escape, as the picker hands it over.
         dismissable={!addingStamp}
@@ -823,7 +833,7 @@ export function IssueRunDialog({
           {/* The answers given once, and the run. */}
           <div
             style={{
-              width: "39rem",
+              width: "48rem",
               flexShrink: 0,
               overflowY: "auto",
               display: "flex",
@@ -1057,168 +1067,228 @@ export function IssueRunDialog({
                 const label = labelOf(a.stampId) ?? "…";
                 const named = chipsOf(a.stampId);
                 return (
-                  <div key={a.tileId} style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveId(a.tileId)}
-                      aria-pressed={isActive}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        alignSelf: "stretch",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        textAlign: "left",
-                        padding: "0.3rem 0.5rem",
-                        borderRadius: "0.375rem",
-                        border: `1px solid ${isActive ? "var(--color-accent)" : "var(--color-border)"}`,
-                        background: isActive ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-                        color: "var(--color-text-primary)",
-                        font: "inherit",
-                        fontSize: "0.8125rem",
-                        cursor: "pointer",
-                      }}
+                  // The row's frame holds both of its lines (#1583): the tile, its stamp and value
+                  // above, and below them what is already held of that stamp beside the tile's
+                  // disposition — the two read together when deciding whether the piece is kept.
+                  <div
+                    key={a.tileId}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      borderRadius: "0.375rem",
+                      border: `1px solid ${isActive ? "var(--color-accent)" : "var(--color-border)"}`,
+                      background: isActive ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+                    }}
+                  >
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: "0.375rem", paddingRight: "0.25rem" }}
                     >
-                      <strong style={{ width: "1.75rem", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                        #{i + 1}
-                      </strong>
-                      <span
-                        // A press on the picture takes this tile in hand but leaves the cursor in the
-                        // value being typed (#1223).
-                        onMouseDown={(e) => e.preventDefault()}
-                        style={{ width: "2.5rem", height: "2.5rem", flexShrink: 0 }}
-                      >
-                        {front && thumb && (
-                          <ThumbPreview
-                            src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
-                            thumbSrc={thumb}
-                            label={`Tile ${piece.position + 1}`}
-                            style={{ width: "100%", height: "100%" }}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={thumb}
-                              alt={`Tile ${piece.position + 1}`}
-                              draggable={false}
-                              style={{
-                                width: "100%",
-                                height: "100%",
-                                objectFit: THUMB_OBJECT_FIT,
-                                display: "block",
-                              }}
-                            />
-                          </ThumbPreview>
-                        )}
-                      </span>
-                      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                        {a.stampId ? (
-                          <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem", minWidth: 0 }}>
-                            {/* Inert: the row is the button that takes this tile in hand. */}
-                            {named && <CatalogNumberChips chips={named.chips} inert />}
-                            {(!named || named.name || named.chips.length === 0) && (
-                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {named ? named.name || "(unnamed stamp)" : label}
-                              </span>
-                            )}
-                            {onUmbrella.has(a.tileId) && (
-                              <Tooltip content="This stamp has variants of its own. Pick the variant the tile is, or Identify creates an unknown-variant copy.">
-                                <span style={WARNING_FLAG}>umbrella</span>
-                              </Tooltip>
-                            )}
-                          </span>
-                        ) : (
-                          <span style={{ color: "var(--color-error)" }}>No stamp</span>
-                        )}
-                        {notes && (
-                          <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
-                            {notes}
-                          </span>
-                        )}
-                        {a.stampId && repeated.has(a.stampId) && (
-                          <span style={{ fontSize: "0.6875rem", color: "var(--color-warning)" }}>
-                            <Icon name="warning" size="xs" /> Same stamp as {sameAs.join(", ")}
-                          </span>
-                        )}
-                      </span>
-                      <span
-                        style={{
-                          flexShrink: 0,
-                          fontSize: "0.75rem",
-                          color: "var(--color-text-muted)",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        tile {piece.position + 1}
-                      </span>
-                      {/* The condition and certificate in the colours the collector knows them by on
-                          every list (#728), so a run of mixed conditions (#1550) reads down the
-                          column at a glance (#1578). A tile on the shared condition draws the same
-                          chip as one with its own; the note above says which is which. */}
-                      <span
-                        style={{
-                          width: "6.5rem",
-                          flexShrink: 0,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.25rem",
-                          fontSize: "0.75rem",
-                          color: "var(--color-warning)",
-                          overflow: "hidden",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {condition ? (
-                          <>
-                            <ConditionChip
-                              collectionId={collectionId}
-                              conditionId={condition.id}
-                              label={condition.abbreviation}
-                            />
-                            {certificate && (
-                              <CertificateStatusChip
-                                collectionId={collectionId}
-                                certificateStatusId={certificate.id}
-                                label={certificate.abbreviation}
-                                tooltip={certificate.name}
-                              />
-                            )}
-                          </>
-                        ) : (
-                          "no condition"
-                        )}
-                      </span>
-                    </button>
-                    <RowValue
-                      entry={slot.key != null && slot.entryIndex === i}
-                      entryTurn={slot.entryIndex != null && slot.entryIndex !== i ? slot.entryIndex + 1 : null}
-                      amount={field?.value.amount ?? null}
-                      currency={runCatalog ? null : (field?.catalog?.currency ?? null)}
-                      label={`#${i + 1} ${label} ${condition?.abbreviation ?? ""}${certificate ? ` ${certificate.abbreviation}` : ""} catalog value`}
-                      disabled={isPending || savingPrices}
-                      inputRef={(el) => {
-                        if (slot.key) priceInputs.current.set(slot.key, el);
-                      }}
-                      onChange={(v) => {
-                        const key = slot.key;
-                        if (key) setTypedPrices((prev) => new Map(prev).set(key, v));
-                      }}
-                      onKeyDown={(e) => {
-                        if (slot.key) tabThroughValues(e, slot.key);
-                      }}
-                    />
-                    <Tooltip content="Take this tile out of the run — nothing is deleted, and it stays ticked on the card">
                       <button
                         type="button"
-                        onClick={() => takeOut(a.tileId)}
-                        disabled={isPending}
-                        tabIndex={-1}
-                        aria-label={`Take #${i + 1} out of the run`}
-                        style={{ ...TAKE_OUT_BUTTON, cursor: isPending ? "not-allowed" : "pointer" }}
+                        onClick={() => setActiveId(a.tileId)}
+                        aria-pressed={isActive}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          alignSelf: "stretch",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          textAlign: "left",
+                          padding: "0.3rem 0.5rem",
+                          borderRadius: "0.375rem",
+                          border: "none",
+                          background: "none",
+                          color: "var(--color-text-primary)",
+                          font: "inherit",
+                          fontSize: "0.8125rem",
+                          cursor: "pointer",
+                        }}
                       >
-                        <Icon name="close" size="sm" />
+                        <strong style={{ width: "1.75rem", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                          #{i + 1}
+                        </strong>
+                        <span
+                          // A press on the picture takes this tile in hand but leaves the cursor in the
+                          // value being typed (#1223).
+                          onMouseDown={(e) => e.preventDefault()}
+                          style={{ width: "2.5rem", height: "2.5rem", flexShrink: 0 }}
+                        >
+                          {front && thumb && (
+                            <ThumbPreview
+                              src={`/api/collections/${collectionId}/photos/${front.photoId}/full`}
+                              thumbSrc={thumb}
+                              label={`Tile ${piece.position + 1}`}
+                              style={{ width: "100%", height: "100%" }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={thumb}
+                                alt={`Tile ${piece.position + 1}`}
+                                draggable={false}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: THUMB_OBJECT_FIT,
+                                  display: "block",
+                                }}
+                              />
+                            </ThumbPreview>
+                          )}
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                          {a.stampId ? (
+                            <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem", minWidth: 0 }}>
+                              {/* Inert: the row is the button that takes this tile in hand. */}
+                              {named && <CatalogNumberChips chips={named.chips} inert />}
+                              {(!named || named.name || named.chips.length === 0) && (
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {named ? named.name || "(unnamed stamp)" : label}
+                                </span>
+                              )}
+                              {onUmbrella.has(a.tileId) && (
+                                <Tooltip content="This stamp has variants of its own. Pick the variant the tile is, or Identify creates an unknown-variant copy.">
+                                  <span style={WARNING_FLAG}>umbrella</span>
+                                </Tooltip>
+                              )}
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--color-error)" }}>No stamp</span>
+                          )}
+                          {notes && (
+                            <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                              {notes}
+                            </span>
+                          )}
+                          {a.stampId && repeated.has(a.stampId) && (
+                            <span style={{ fontSize: "0.6875rem", color: "var(--color-warning)" }}>
+                              <Icon name="warning" size="xs" /> Same stamp as {sameAs.join(", ")}
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            fontSize: "0.75rem",
+                            color: "var(--color-text-muted)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          tile {piece.position + 1}
+                        </span>
+                        {/* The condition and certificate in the colours the collector knows them by on
+                            every list (#728), so a run of mixed conditions (#1550) reads down the
+                            column at a glance (#1578). A tile on the shared condition draws the same
+                            chip as one with its own; the note above says which is which. */}
+                        <span
+                          style={{
+                            width: "6.5rem",
+                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                            fontSize: "0.75rem",
+                            color: "var(--color-warning)",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {condition ? (
+                            <>
+                              <ConditionChip
+                                collectionId={collectionId}
+                                conditionId={condition.id}
+                                label={condition.abbreviation}
+                              />
+                              {certificate && (
+                                <CertificateStatusChip
+                                  collectionId={collectionId}
+                                  certificateStatusId={certificate.id}
+                                  label={certificate.abbreviation}
+                                  tooltip={certificate.name}
+                                />
+                              )}
+                            </>
+                          ) : (
+                            "no condition"
+                          )}
+                        </span>
                       </button>
-                    </Tooltip>
+                      <RowValue
+                        entry={slot.key != null && slot.entryIndex === i}
+                        entryTurn={slot.entryIndex != null && slot.entryIndex !== i ? slot.entryIndex + 1 : null}
+                        amount={field?.value.amount ?? null}
+                        currency={runCatalog ? null : (field?.catalog?.currency ?? null)}
+                        label={`#${i + 1} ${label} ${condition?.abbreviation ?? ""}${certificate ? ` ${certificate.abbreviation}` : ""} catalog value`}
+                        disabled={isPending || savingPrices}
+                        inputRef={(el) => {
+                          if (slot.key) priceInputs.current.set(slot.key, el);
+                        }}
+                        onChange={(v) => {
+                          const key = slot.key;
+                          if (key) setTypedPrices((prev) => new Map(prev).set(key, v));
+                        }}
+                        onKeyDown={(e) => {
+                          if (slot.key) tabThroughValues(e, slot.key);
+                        }}
+                      />
+                      <Tooltip content="Take this tile out of the run — nothing is deleted, and it stays ticked on the card">
+                        <button
+                          type="button"
+                          onClick={() => takeOut(a.tileId)}
+                          disabled={isPending}
+                          tabIndex={-1}
+                          aria-label={`Take #${i + 1} out of the run`}
+                          style={{ ...TAKE_OUT_BUTTON, cursor: isPending ? "not-allowed" : "pointer" }}
+                        >
+                          <Icon name="close" size="sm" />
+                        </button>
+                      </Tooltip>
+                    </div>
+                    {/* What is already held of the row's stamp, worded as the single tile's line
+                        (#562), and the tile's disposition beside it (#1583): keeping or selling the
+                        piece is decided here, on the row. Gone with the stamp. Copies this run creates
+                        are not there until it is confirmed, and two tiles of one stamp each show the
+                        same holdings, under the *Same stamp as* mark above. A chip pressed here makes
+                        the disposition the tile's own, exactly as its own details would. */}
+                    {a.stampId && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          columnGap: "0.75rem",
+                          rowGap: "0.25rem",
+                          // Under the stamp, past the row's number and picture.
+                          padding: "0 0.5rem 0.375rem 5.75rem",
+                        }}
+                      >
+                        <div style={{ flex: "1 1 14rem", minWidth: 0 }}>
+                          <IntakeHoldingsLine
+                            // Per stamp, so a reassigned row reads its new stamp from the start.
+                            key={a.stampId}
+                            collectionId={collectionId}
+                            stampId={a.stampId}
+                            conditions={conditions}
+                            conditionId={d.conditionId}
+                            certificateStatusId={d.certificateStatusId}
+                            formatId={d.formatId}
+                            onCompare={() => setComparingId(a.tileId)}
+                            inRun
+                          />
+                        </div>
+                        <span style={{ marginLeft: "auto" }}>
+                          <DispositionChips
+                            values={d.disposition}
+                            disabled={isPending}
+                            tabIndex={-1}
+                            onToggle={(flag, on) =>
+                              setOwn(a.tileId, "disposition", { ...d.disposition, [flag]: on })
+                            }
+                          />
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1533,6 +1603,26 @@ export function IssueRunDialog({
           onSubmit={createStamp}
         />
       )}
+
+      {/* Portalled to the body: the shell's panel is transformed and would otherwise crop the
+          comparison's fixed overlay to this dialog — the condition step's own reason (#1207). */}
+      {comparingStampId &&
+        createPortal(
+          <HeldCopiesCompareDialog
+            collectionId={collectionId}
+            stampId={comparingStampId}
+            stampLabel={labelOf(comparingStampId) ?? ""}
+            conditions={conditions}
+            certificateStatuses={certificateStatuses}
+            // A run's tiles are not identified yet, so none has a copy of its own to leave out.
+            excludeItemId={null}
+            pieces={[inRun[comparingIndex]]}
+            previews={[]}
+            scanning={scanning}
+            onClose={() => setComparingId(null)}
+          />,
+          document.body
+        )}
     </>
   );
 }
