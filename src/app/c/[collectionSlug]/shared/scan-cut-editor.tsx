@@ -226,6 +226,8 @@ export function ScanCutEditor({
   const fittedRef = useRef(true);
   /** Space is the hand tool, as everywhere else that draws on an image. */
   const [spaceHeld, setSpaceHeld] = useState(false);
+  /** The *Mark…* picker is open: its Escape is its own then, even with a split armed (#1554). */
+  const [markMenuOpen, setMarkMenuOpen] = useState(false);
 
   const sheetSize = useMemo(
     () => ({ width: sheet.width, height: sheet.height }),
@@ -600,7 +602,7 @@ export function ScanCutEditor({
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         deleteSelected();
-      } else if (e.key === "Escape" && mode !== "select") {
+      } else if (e.key === "Escape" && mode !== "select" && !markMenuOpen) {
         // Taken before the dialog's own Escape layer sees it: the first Escape disarms the split,
         // a second one closes the editor. Closing while aiming a cut would lose the whole cut.
         e.preventDefault();
@@ -642,7 +644,7 @@ export function ScanCutEditor({
       window.removeEventListener("keyup", onKeyUp, true);
       window.removeEventListener("blur", onBlur);
     };
-  }, [deleteSelected, fit, markByKey, mode, regions, selected, zoomStep]);
+  }, [deleteSelected, fit, markByKey, markMenuOpen, mode, regions, selected, zoomStep]);
 
   // ── Render ─────────────────────────────────────────────────────────────────────────────────
 
@@ -712,6 +714,7 @@ export function ScanCutEditor({
               hint="Mark the condition and certificate of the selected boxes from the card in hand — or type the abbreviation"
               triggerStyle={scanToolButtonStyle({ disabled: selectedRegions.length === 0 })}
               onPatch={markSelected}
+              onOpenChange={setMarkMenuOpen}
             >
               <Icon name="mark" size="sm" /> Mark…
             </TileMarkPicker>
