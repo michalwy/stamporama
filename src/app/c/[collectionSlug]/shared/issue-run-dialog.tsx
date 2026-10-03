@@ -58,6 +58,10 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
 import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
+import { markFaultIds, sameFaults } from "@/lib/tile-marks";
+import type { FaultEntry } from "@/lib/fault-entry";
+import { FaultEntryField } from "./fault-entry-field";
+import { useCollectionFaults } from "./use-faults";
 import { CatalogNumberChips } from "./catalog-number-chips";
 import { NumericInput } from "./numeric-input";
 import { StampDetailLine, StampTitle } from "./issue-view";
@@ -308,6 +312,16 @@ export function IssueRunDialog({
     }
     return seeded;
   });
+  /**
+   * A tile's faults (#1558) — **only ever the tile's own**: a fault belongs to one piece, so the run
+   * has no shared answer for it. Absent while the tile still holds the faults marked on it, which is
+   * what it opens on; set once the collector changes them.
+   */
+  const [faults, setFaults] = useState<ReadonlyMap<string, FaultEntry[]>>(new Map());
+  const { data: faultDictionary } = useCollectionFaults(collectionId);
+  /** The faults a tile's copy is created with: the collector's, or the ones marked on the tile. */
+  const faultsOf = (piece: IdentifiedPiece): FaultEntry[] =>
+    faults.get(piece.tileId) ?? markFaultIds(piece.mark).map((id) => ({ id, name: "" }));
   const inRun = pieces.filter((p) => !removed.has(p.tileId));
   const assignments = assignInTurn(
     inRun.map((p) => p.tileId),
@@ -645,10 +659,11 @@ export function IssueRunDialog({
     onSubmit({
       checklistId,
       shared,
-      tiles: assignments.map((a) => ({
+      tiles: assignments.map((a, i) => ({
         tileId: a.tileId,
         stampId: a.stampId,
         overrides: overrides.get(a.tileId) ?? null,
+        faults: faultsOf(inRun[i]),
       })),
     });
   }
@@ -979,11 +994,20 @@ export function IssueRunDialog({
                 const own = overriddenFields(ownDetails);
                 // Own details that are still the tile's marks (#1550), said as such: the row reads
                 // where the value came from, as the condition step's labels do.
+                const tileFaults = faultsOf(piece);
+                const markedFaults = markFaultIds(piece.mark);
+                const faultsFromMarks =
+                  markedFaults.length > 0 &&
+                  sameFaults(
+                    tileFaults.map((f) => f.id ?? `new:${f.name}`),
+                    markedFaults
+                  );
                 const fromMarks =
                   (ownDetails?.conditionId !== undefined &&
                     ownDetails.conditionId === piece.mark?.conditionId) ||
                   (ownDetails?.certificateStatusId !== undefined &&
-                    ownDetails.certificateStatusId === piece.mark?.certificateStatusId);
+                    ownDetails.certificateStatusId === piece.mark?.certificateStatusId) ||
+                  faultsFromMarks;
                 const isActive = piece.tileId === active?.tileId;
                 const sameAs = a.stampId
                   ? assignments
@@ -997,6 +1021,9 @@ export function IssueRunDialog({
                   // A cleared tile says *No stamp*, which is the whole of it.
                   a.corrected && a.stampId ? "corrected" : null,
                   own.length > 0 ? `own ${own.map((f) => FIELD_LABEL[f].toLowerCase()).join(", ")}` : null,
+                  tileFaults.length > 0
+                    ? `${tileFaults.length} ${tileFaults.length === 1 ? "fault" : "faults"}`
+                    : null,
                   fromMarks ? "marked on the tile" : null,
                 ]
                   .filter(Boolean)
@@ -1346,6 +1373,52 @@ export function IssueRunDialog({
                       </OwnField>
                     );
                   })}
+                  {/* The tile's faults (#1558) — its own and nothing else, so no *as for all*: a
+                      fault belongs to one piece. Opened on the faults marked on the tile. */}
+                  <div
+                    style={{
+                      padding: "0.375rem 0.5rem",
+                      borderRadius: "0.375rem",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text-secondary)",
+                        marginBottom: "0.375rem",
+                      }}
+                    >
+                      <strong>Faults</strong>
+                      <span style={{ color: "var(--color-text-muted)" }}> — this tile&apos;s only</span>
+                      <SeedOriginNote
+                        origin={
+                          !faults.has(active.tileId) && markFaultIds(active.mark).length > 0
+                            ? "marked"
+                            : null
+                        }
+                      />
+                    </div>
+                    {faultDictionary ? (
+                      <FaultEntryField
+                        key={active.tileId}
+                        collectionId={collectionId}
+                        inputId={`run-faults-${active.tileId}`}
+                        name={null}
+                        initialFaults={faultsOf(active).flatMap((f) => {
+                          if (f.id === null) return [f];
+                          const fault = faultDictionary.find((d) => d.id === f.id);
+                          return fault ? [{ id: fault.id, name: fault.name }] : [];
+                        })}
+                        disabled={isPending}
+                        onChange={(entries) =>
+                          setFaults((prev) => new Map(prev).set(active.tileId, entries))
+                        }
+                      />
+                    ) : (
+                      <p style={MUTED}>Loading…</p>
+                    )}
+                  </div>
                 </section>
               </>
             ) : null}

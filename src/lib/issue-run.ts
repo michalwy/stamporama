@@ -3,6 +3,7 @@ import {
   catalogValueSubjectKey,
   type IntakeCatalogValue,
 } from "./intake-catalog-value";
+import type { FaultEntry } from "./fault-entry";
 
 /**
  * *Identify ticked tiles as the stamps of a checklist, in turn* (#1220, #1225) — the pure half.
@@ -346,6 +347,11 @@ export interface IssueRunTile {
   /** Null is a tile left without a stamp — refused, since no copy is created from one. */
   stampId: string | null;
   overrides?: RunCopyOverrides | null;
+  /**
+   * The copy's faults (#1558) — **always the tile's own**, never a shared answer: a fault belongs to
+   * one piece. The copy dialog's chips, so a typed name becomes a fault; opened on the tile's marks.
+   */
+  faults?: readonly FaultEntry[] | null;
 }
 
 export interface IssueRunIdentification {

@@ -1444,6 +1444,28 @@ describe("identifying scan tiles into copies (#567)", () => {
     );
   });
 
+  it("gives each copy of a run its tile's own faults and nothing shared (#1558)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const { checklistId, stampIds } = await issueWithStamps(["Faulted 1", "Faulted 2"]);
+    const crease = await prisma.fault.create({
+      data: { collectionId, name: `Crease ${Math.random()}`, sortOrder: 50 },
+    });
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId,
+      shared: runShared(),
+      tiles: [
+        { tileId: tileIds[0], stampId: stampIds[0], faults: [{ id: crease.id, name: crease.name }] },
+        { tileId: tileIds[1], stampId: stampIds[1] },
+      ],
+    });
+    const faultIdsOf = async (itemId: string) =>
+      (await prisma.itemFault.findMany({ where: { itemId }, select: { faultId: true } })).map(
+        (f) => f.faultId
+      );
+    assert.deepEqual(await faultIdsOf(outcomes[0].itemId), [crease.id]);
+    assert.deepEqual(await faultIdsOf(outcomes[1].itemId), [], "a tile without faults gets none");
+  });
+
   it("refuses the whole run before creating anything when any tile cannot be worked (#1220)", async () => {
     const { tileIds } = await orderWithTiles();
     const { checklistId, stampIds } = await issueWithStamps(["Only"]);

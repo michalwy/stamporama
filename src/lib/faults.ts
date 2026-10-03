@@ -306,6 +306,33 @@ export async function setItemFaultEntries(
   });
 }
 
+/**
+ * Give copies **just created by identifying scan tiles** their faults (#1558) — each copy its own
+ * chips, since a fault belongs to one piece and tiles identified together can keep their own marked
+ * faults. One transaction, resolving as the copy dialog does: a name the dictionary does not hold
+ * becomes a fault once, and the next copy naming it finds it.
+ *
+ * Ownership is the caller's: the copies were created a moment ago from tiles it has checked, in
+ * `collectionId`. Never a replace — a new copy has no faults to keep or lose.
+ */
+export async function giveNewCopiesFaults(
+  collectionId: string,
+  perCopy: readonly { itemId: string; entries: readonly FaultEntry[] }[]
+): Promise<void> {
+  const wanted = perCopy.filter((c) => c.entries.length > 0);
+  if (wanted.length === 0) return;
+  await prisma.$transaction(async (tx) => {
+    for (const { itemId, entries } of wanted) {
+      const faultIds = await resolveFaultEntries(tx, collectionId, entries);
+      if (faultIds.length === 0) continue;
+      await tx.itemFault.createMany({
+        data: faultIds.map((faultId) => ({ itemId, faultId })),
+        skipDuplicates: true,
+      });
+    }
+  });
+}
+
 /** {@link setItemFaultEntries} for faults that already exist, named by id. */
 export async function setItemFaults(ownerId: string, itemId: string, faultIds: string[]): Promise<void> {
   await setItemFaultEntries(

@@ -24,6 +24,7 @@ import {
   type SheetKind,
 } from "@/lib/scan-sheets";
 import { parseTileOwnAnswers, type MarkPatch } from "@/lib/tile-marks";
+import { faultEntriesFrom, parseFaultEntries } from "@/lib/fault-entry";
 import type { Box } from "@/lib/scan-boxes";
 import {
   addTileCandidate,
@@ -364,8 +365,11 @@ export async function identifyTilesAction(
       // copy dialog's own field and reading (#746): one list, one vocabulary.
       stamps: parseItemStampEntries(formData.get("stamps")),
       stampPhotoTileId: stampPhotoTileId(formData),
-      // The tiles keeping their own marked condition or certificate (#1550), as the step said.
+      // The tiles keeping their own marked condition, certificate or faults (#1550, #1558), as the
+      // step said.
       tileAnswers: parseTileOwnAnswers(formData.get("tileAnswers")),
+      // The copies' faults (#1558) — the copy dialog's own field and reading. Absent is none.
+      faults: parseFaultEntries(formData.get("copyFaults")) ?? [],
     });
     return { status: "success", outcomes: copies };
   } catch (e) {
@@ -395,7 +399,12 @@ export async function identifyTilesAsChecklistStampsAction(
 ): Promise<TilesOutcomeActionState> {
   const session = await getSession();
   try {
-    const outcomes = await identifyTilesAsChecklistStamps(session.user.id, input);
+    const outcomes = await identifyTilesAsChecklistStamps(session.user.id, {
+      ...input,
+      // Each tile's faults (#1558), read as the copy dialog's field is read — a JSON argument is no
+      // more trusted than a form field.
+      tiles: input.tiles.map((t) => ({ ...t, faults: faultEntriesFrom(t.faults) ?? [] })),
+    });
     return { status: "success", outcomes };
   } catch (e) {
     return {

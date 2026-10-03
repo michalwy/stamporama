@@ -19,6 +19,7 @@ import {
   uploadSheet,
 } from "../../src/lib/scan-sheets";
 import { discardTile, identifyTilesAsNewCopies } from "../../src/lib/scan-tiles";
+import { deleteFault } from "../../src/lib/faults";
 import type { Box } from "../../src/lib/scan-boxes";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-tile-marks-"));
@@ -33,7 +34,9 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //   - a box's mark is its tile's: it is written at the commit, and survives a re-cut that carries it;
 //   - a back paired with its front is the same tile — by position at the back commit, or by hand —
 //     and where the two were marked differently the mark given last wins and the replacement is said;
-//   - identifying several tiles as one stamp lets the tiles that keep their marks keep them.
+//   - identifying several tiles as one stamp lets the tiles that keep their marks keep them;
+//   - faults marked on a tile (#1558) are added and removed one at a time, ride a box and a pairing
+//     (both sides' faults kept), reach the identified copies, and go with a fault deleted.
 
 describe("tile marks (#1550)", () => {
   let userId: string;
@@ -45,6 +48,9 @@ describe("tile marks (#1550)", () => {
   let cert: string;
   let foreignCondition: string;
   let stampId: string;
+  let crease: string;
+  let thinGum: string;
+  let foreignFault: string;
 
   const SHEET_W = 800;
   const SHEET_H = 600;
@@ -156,6 +162,15 @@ describe("tile marks (#1550)", () => {
       })
     ).id;
     stampId = (await prisma.stamp.create({ data: { collectionId, name: "Marked stamp" } })).id;
+    crease = (await prisma.fault.create({ data: { collectionId, name: "Crease", sortOrder: 0 } })).id;
+    thinGum = (
+      await prisma.fault.create({ data: { collectionId, name: "Thinned gum", sortOrder: 1 } })
+    ).id;
+    foreignFault = (
+      await prisma.fault.create({
+        data: { collectionId: otherCollectionId, name: "Crease", sortOrder: 0 },
+      })
+    ).id;
   });
 
   after(async () => {
@@ -442,5 +457,151 @@ describe("tile marks (#1550)", () => {
       0,
       "nothing was created"
     );
+  });
+  // ── Faults marked on a tile (#1558) ────────────────────────────────────────────────────────────
+
+  const faultsOf = async (tileId: string) =>
+    (await prisma.scanTileFault.findMany({ where: { tileId }, select: { faultId: true } }))
+      .map((f) => f.faultId)
+      .sort();
+
+  it("marks faults on tiles, adds and removes them one at a time, and clears them with the mark", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+
+    await setTileMarks(userId, [a.id, b.id], { addFaultIds: [crease] });
+    await setTileMarks(userId, [a.id], { addFaultIds: [thinGum], conditionId: mng });
+    assert.deepEqual(await faultsOf(a.id), [crease, thinGum].sort());
+    assert.deepEqual(await faultsOf(b.id), [crease]);
+
+    const listed = (await listScans(userId, { purchaseId })).batches[0].tiles;
+    assert.deepEqual(
+      [...(listed.find((t) => t.id === a.id)!.mark?.faultIds ?? [])].sort(),
+      [crease, thinGum].sort(),
+      "the strip reads the faults with the mark"
+    );
+
+    await setTileMarks(userId, [a.id, b.id], { removeFaultIds: [crease] });
+    assert.deepEqual(await faultsOf(a.id), [thinGum]);
+    assert.deepEqual(await faultsOf(b.id), []);
+    const unmarked = await prisma.scanTile.findUniqueOrThrow({ where: { id: b.id } });
+    assert.equal(unmarked.markedAt, null, "a tile left with nothing marked is unmarked");
+
+    await setTileMarks(userId, [a.id], {
+      conditionId: null,
+      certificateStatusId: null,
+      removeFaultIds: [thinGum],
+    });
+    assert.deepEqual(await faultsOf(a.id), []);
+
+    await assert.rejects(
+      () => setTileMarks(userId, [a.id], { addFaultIds: [foreignFault] }),
+      ScanValidationError
+    );
+    assert.deepEqual(await faultsOf(a.id), [], "nothing was written");
+  });
+
+  it("writes a box's faults onto its tile, and a paired back and front keep the faults of both", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, [
+      { ...BOXES[0], mark: { conditionId: mnh, certificateStatusId: null, faultIds: [crease] } },
+      BOXES[1],
+    ]);
+    const [a] = await tilesOf(purchaseId);
+    assert.deepEqual(await faultsOf(a.id), [crease]);
+
+    // The back shows the thinned gum the front could not: both are the piece's.
+    const back = await upload(purchaseId, "back", front.batchNo);
+    const report = await commitCut(userId, back.id, [
+      { ...BOXES[0], mark: { conditionId: null, certificateStatusId: null, faultIds: [thinGum] } },
+      BOXES[1],
+    ]);
+    assert.deepEqual(report.marksReplaced, [], "faults never replace one another");
+    assert.deepEqual(await faultsOf(a.id), [crease, thinGum].sort());
+    assert.equal((await prisma.scanTile.findUniqueOrThrow({ where: { id: a.id } })).markConditionId, mnh);
+
+    const second = await upload(purchaseId, "front");
+    await assert.rejects(
+      () =>
+        commitCut(userId, second.id, [
+          { ...BOXES[0], mark: { conditionId: null, certificateStatusId: null, faultIds: [foreignFault] } },
+        ]),
+      ScanValidationError
+    );
+  });
+
+  it("gives the copies the step's faults, a tile keeping its own marked ones, and a typed one born once", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+
+    const copies = await identifyTilesAsNewCopies(userId, [a.id, b.id], {
+      stampId,
+      conditionId: mnh,
+      faults: [
+        { id: crease, name: "Crease" },
+        { id: null, name: "Short perforation" },
+      ],
+      tileAnswers: [{ tileId: a.id, faultIds: [thinGum] }],
+    });
+    const faultNames = async (itemId: string) =>
+      (
+        await prisma.itemFault.findMany({
+          where: { itemId },
+          select: { fault: { select: { name: true } } },
+        })
+      )
+        .map((f) => f.fault.name)
+        .sort();
+    assert.deepEqual(await faultNames(copies[0].itemId), ["Thinned gum"], "the tile keeps its own");
+    assert.deepEqual(await faultNames(copies[1].itemId), ["Crease", "Short perforation"]);
+    assert.equal(
+      await prisma.fault.count({ where: { collectionId, name: "Short perforation" } }),
+      1,
+      "a typed fault is born once"
+    );
+    const kept = await prisma.item.findUniqueOrThrow({ where: { id: copies[0].itemId } });
+    assert.equal(kept.conditionId, mnh, "a tile keeping only its faults takes the shared condition");
+
+    // A plain identification gives no faults at all.
+    const c = await newOrder();
+    const f2 = await upload(c, "front");
+    await commitCut(userId, f2.id, [BOXES[0]]);
+    const [only] = await tilesOf(c);
+    const [plain] = await identifyTilesAsNewCopies(userId, [only.id], { stampId, conditionId: mnh });
+    assert.deepEqual(await faultNames(plain.itemId), []);
+  });
+
+  it("refuses a tile's own fault from another collection before creating anything", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+    await assert.rejects(
+      () =>
+        identifyTilesAsNewCopies(userId, [a.id, b.id], {
+          stampId,
+          conditionId: mnh,
+          tileAnswers: [{ tileId: a.id, faultIds: [foreignFault] }],
+        }),
+      ScanValidationError
+    );
+    assert.equal(await prisma.item.count({ where: { scanTiles: { some: { purchaseId } } } }), 0);
+  });
+
+  it("drops a fault's marks when the fault is deleted from the dictionary", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, [BOXES[0]]);
+    const [a] = await tilesOf(purchaseId);
+    const stain = (await prisma.fault.create({ data: { collectionId, name: "Stain", sortOrder: 9 } })).id;
+    await setTileMarks(userId, [a.id], { addFaultIds: [stain, crease] });
+    // Not refused: a mark is owed to nobody, unlike a copy's fault.
+    await deleteFault(userId, stain);
+    assert.deepEqual(await faultsOf(a.id), [crease]);
   });
 });

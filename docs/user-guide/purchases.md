@@ -734,7 +734,7 @@ the corner marks. Click it and pick a condition or a certificate from your colle
 the mark then sits there as the condition's coloured chip, with the certificate beside it, so a card
 can be checked at a glance before you start. Click it again to change it or **Clear the mark**.
 
-Every mark picker — this one, **Mark condition…**, **Mark…** and **Mark all unmarked…** below — closes
+Every mark picker — this one, **Mark…** and **Mark all unmarked…** below — closes
 without marking anything on a click outside it, on **Escape**, or on pressing what opened it again.
 In the cut editor Escape closes only the picker and leaves the editor open.
 
@@ -742,7 +742,7 @@ In the cut editor Escape closes only the picker and leaves the editor open.
   `MNH`, `U`, `CTO` — and the tile is marked; the certificate's abbreviation marks the certificate. Typing
   the abbreviation the tile already carries clears it again. **←** and **→** move to the
   neighbouring tile, so a card can be worked through without the mouse.
-- **Several at once.** Tick the tiles and press **Mark condition…** on the bar above the strip — a
+- **Several at once.** Tick the tiles and press **Mark…** on the bar above the strip — a
   run read off the card as all MNG is one pick.
 - **An unpaired back** can be marked too: the back is often where the condition shows, gum or no
   gum. Its mark becomes the tile's once you drag it onto its front.
@@ -780,6 +780,21 @@ without one*), and nothing it does clears a mark.
   exception you only see on the back one by one, as before, and mark the rest of the card on the
   strip once the backs are paired.
 
+**Faults.** The same pickers also list your [faults](faults.md) — a crease, a thinned gum, a missing
+tooth — below the conditions and certificates, so a fault you see with the card in hand is marked
+there too. Click a fault to mark it; the picker stays open, since a piece can have several, and
+clicking a fault again takes it off. With several tiles or boxes selected, a fault they all carry is
+drawn pressed and comes off all of them; any other goes on every one that lacks it. A tile's marked
+faults show as a small amber chip with their number — point at it for their names. **Clear the mark**
+clears the faults too, and **Clear the faults** clears only them. Faults are picked, never typed: they
+have no abbreviation.
+
+- **Merging boxes** keeps the faults of every box merged, even when their conditions disagree.
+- **Pairing a back with its front** keeps the faults marked on **both** — a crease seen on the front
+  and a thinned gum seen on the back are both the piece's. Only the condition and certificate follow
+  *the mark given last wins*.
+- **Mark all unmarked…** never gives faults: a fault belongs to one piece.
+
 Marks are kept on the tile, so they survive a reload and a break of a week between marking and
 identifying. They can be changed until the tile is identified. A tile that has become a copy or been
 discarded shows no mark any more — the copy's own condition is what counts from then on.
@@ -797,6 +812,21 @@ own answer.
 - **A run identified as the stamps of a checklist**: each marked tile's marks become its own details,
   so its row says *own condition* — *marked on the tile* — exactly as an override does, and tiles
   without marks follow the run's shared value.
+
+**Faults in identification.** Every identification dialog asks for the new copy's **Faults**, the
+same field the copy's own dialog has: pick from your list, or type a new name and press Enter (it is
+added to your list when the copy is created). The field opens with the faults **marked on the tile**,
+labelled so, and an unmarked tile opens with **no faults** — never with the last tile's, since a fault
+belongs to one piece.
+
+- **Several tiles identified as one stamp**: when they are all marked with the same faults, the field
+  opens on them and they go on every copy. Otherwise it opens empty, the tiles marked with faults
+  **keep their own**, and the faults you give apply to the rest — the step says so (*2 tiles keep
+  their marked faults*).
+- **A run**: faults are always a tile's own, under *its own details* — there is no *for all tiles*
+  answer for them. Each tile opens on the faults marked on it, and its row says how many it has.
+- **Identify again** does not ask: it corrects what the copy is, and the copy's faults are changed in
+  its own dialog.
 
 #### Working through the tiles
 

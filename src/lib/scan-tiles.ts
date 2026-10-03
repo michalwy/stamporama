@@ -18,6 +18,8 @@ import {
 import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
 import type { ArrivingCopy } from "./want-rules";
 import type { TileOwnAnswer } from "./tile-marks";
+import type { FaultEntry } from "./fault-entry";
+import { giveNewCopiesFaults } from "./faults";
 import {
   resolveRunCopyDetails,
   type IssueRunIdentification,
@@ -149,8 +151,16 @@ export interface TileIdentification {
    * not all agree. Each names only the halves it keeps; the shared answer applies to the rest. The
    * condition step works these out and says how many keep what, so the write is handed exactly what
    * the step said rather than re-reading the marks behind it. Absent is the ordinary pass.
+   *
+   * A tile's own **faults** (#1558) replace the shared ones below for that tile alone.
    */
   tileAnswers?: readonly TileOwnAnswer[] | null;
+  /**
+   * The faults the step gave the copies (#1558) — the copy dialog's chips, so a name the dictionary
+   * does not hold becomes a fault. Every copy takes them except a tile keeping its own marked faults
+   * (`tileAnswers`). Absent is none: a fault is never carried over from anywhere.
+   */
+  faults?: readonly FaultEntry[] | null;
 }
 
 export async function identifyTileAsNewCopy(
@@ -249,6 +259,14 @@ export async function identifyTilesAsNewCopies(
   if (copies.length !== tiles.length) {
     throw new ScanValidationError("The copies could not be created.");
   }
+  // The faults (#1558): the step's for every copy, or the tile's own where it keeps its marked ones.
+  await giveNewCopiesFaults(
+    tiles[0].collectionId,
+    tiles.map((tile, i) => ({
+      itemId: copies[i].itemId,
+      entries: ownFaultEntries(own.get(tile.id)) ?? input.faults ?? [],
+    }))
+  );
 
   // One tile, one copy, in the order the pieces are laid out on the card — which is the order their
   // internal numbers were allocated in, so the strip and the copy list read the same way round.
@@ -267,10 +285,16 @@ export async function identifyTilesAsNewCopies(
   return copies;
 }
 
+/** A tile's own faults (#1558) as the chips the write gives a copy — undefined where it keeps none,
+ * so the step's shared faults apply. */
+function ownFaultEntries(answer: TileOwnAnswer | undefined): FaultEntry[] | undefined {
+  return answer?.faultIds?.map((id) => ({ id, name: "" }));
+}
+
 /**
- * The tiles keeping their own condition or certificate (#1550), checked before any copy exists: each
- * one of the tiles being identified, named once, and every answer one this collection holds — a
- * refusal on the ninth copy would leave eight tiles identified and the rest not.
+ * The tiles keeping their own condition, certificate or faults (#1550, #1558), checked before any
+ * copy exists: each one of the tiles being identified, named once, and every answer one this
+ * collection holds — a refusal on the ninth copy would leave eight tiles identified and the rest not.
  */
 async function tileOwnAnswers(
   tiles: readonly { id: string; collectionId: string }[],
@@ -291,15 +315,20 @@ async function tileOwnAnswers(
   const certIds = [
     ...new Set(answers.flatMap((a) => (a.certificateStatusId ? [a.certificateStatusId] : []))),
   ];
-  const [conditions, certs] = await Promise.all([
+  const faultIds = [...new Set(answers.flatMap((a) => a.faultIds ?? []))];
+  const [conditions, certs, faults] = await Promise.all([
     prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
     prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
+    prisma.fault.count({ where: { collectionId, id: { in: faultIds } } }),
   ]);
   if (conditions !== conditionIds.length) {
     throw new ScanValidationError("Condition not found in this collection.");
   }
   if (certs !== certIds.length) {
     throw new ScanValidationError("Certificate status not found in this collection.");
+  }
+  if (faults !== faultIds.length) {
+    throw new ScanValidationError("Fault not found in this collection.");
   }
   return own;
 }
@@ -448,6 +477,10 @@ export async function identifyTilesAsChecklistStamps(
       forSale: a.disposition.forSale,
       forTrade: a.disposition.forTrade,
     });
+    // A run's faults are the tile's own and nothing else (#1558): there is no shared answer for them.
+    await giveNewCopiesFaults(collectionId, [
+      { itemId: copy.itemId, entries: input.tiles[i].faults ?? [] },
+    ]);
     // Each copy gets **its own** tile's pictures — #596's rule, unchanged.
     await consumeTile(tile.id, copy.itemId);
     await seedStampImage(ownerId, copy.itemId);

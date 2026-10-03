@@ -39,6 +39,9 @@ the condition. The copy's own page opens the same dialog from its **Edit** butto
   cancelled dialog adds nothing.
 - Take a fault off with the **×** on its chip, or Backspace in the empty field.
 
+Faults can also be given while **identifying a scan tile**, and marked on the tiles before that,
+with the card in hand — see [Marking the condition before identifying](purchases.md#marking-the-condition-before-identifying).
+
 Faults belong to the **copy**, the piece in your hand. Nothing comes from the stamp the copy is
 linked to, and a fault on one copy is never on another.
 

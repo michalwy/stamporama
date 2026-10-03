@@ -43,6 +43,7 @@ import {
   applyMarkPatch,
   fillPatch,
   isEmptyPatch,
+  markFaultIds,
   normalizeMark,
   pairedMark,
   type MarkPatch,
@@ -585,17 +586,29 @@ function boxMark(box: CutBox, now: Date): { mark: TileMark | null; markedAt: Dat
   return { mark, markedAt };
 }
 
-/** The mark columns of a tile, as written. */
-function markColumns({ mark, markedAt }: { mark: TileMark | null; markedAt: Date | null }) {
+/**
+ * The mark columns of a tile, as written — the two halves and the time, and the marked faults
+ * (#1558) as a nested write of their link rows: **created** on a tile being created, **replaced** on
+ * one being updated, so a mark always lands whole.
+ */
+function markColumns(
+  { mark, markedAt }: { mark: TileMark | null; markedAt: Date | null },
+  write: "create" | "update"
+) {
+  const create = markFaultIds(mark).map((faultId) => ({ faultId }));
   return {
     markConditionId: mark?.conditionId ?? null,
     markCertificateStatusId: mark?.certificateStatusId ?? null,
     markedAt: mark ? markedAt : null,
+    markFaults: write === "create" ? { create } : { deleteMany: {}, create },
   };
 }
 
-/** Every condition and certificate a set of marks names, checked against the collection before any
- * of them is written — a mark is a pointer into the collection's own dictionaries. */
+/** What a tile read selects to know its marked faults (#1558). */
+const MARK_FAULTS_SELECT = { select: { faultId: true } } as const;
+
+/** Every condition, certificate and fault a set of marks names, checked against the collection
+ * before any of them is written — a mark is a pointer into the collection's own dictionaries. */
 async function assertMarksInCollection(
   collectionId: string,
   marks: readonly (TileMark | null)[]
@@ -604,19 +617,24 @@ async function assertMarksInCollection(
   const certIds = [
     ...new Set(marks.flatMap((m) => (m?.certificateStatusId ? [m.certificateStatusId] : []))),
   ];
-  const [conditions, certs] = await Promise.all([
+  const faultIds = [...new Set(marks.flatMap((m) => markFaultIds(m)))];
+  const [conditions, certs, faults] = await Promise.all([
     conditionIds.length > 0
       ? prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } })
       : 0,
     certIds.length > 0
       ? prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } })
       : 0,
+    faultIds.length > 0 ? prisma.fault.count({ where: { collectionId, id: { in: faultIds } } }) : 0,
   ]);
   if (conditions !== conditionIds.length) {
     throw new ScanValidationError("Condition not found in this collection.");
   }
   if (certs !== certIds.length) {
     throw new ScanValidationError("Certificate status not found in this collection.");
+  }
+  if (faults !== faultIds.length) {
+    throw new ScanValidationError("Fault not found in this collection.");
   }
 }
 
@@ -723,7 +741,7 @@ async function commitFrontCut(args: {
     crop: crops[i],
     position: i,
     // The box's mark is the tile's (#1550) — given in the editor, or carried through a re-cut.
-    marks: markColumns(boxMark(box, now)),
+    marks: markColumns(boxMark(box, now), "create"),
   }));
 
   const written = await writeCropBytes(collectionId, rows);
@@ -801,6 +819,7 @@ async function commitBackCut(args: {
       markConditionId: true,
       markCertificateStatusId: true,
       markedAt: true,
+      markFaults: MARK_FAULTS_SELECT,
     },
     orderBy: { position: "asc" },
   });
@@ -834,13 +853,7 @@ async function commitBackCut(args: {
     let markedAt = given.markedAt;
     if (target) {
       const paired = pairedMark(
-        {
-          mark: normalizeMark({
-            conditionId: target.markConditionId,
-            certificateStatusId: target.markCertificateStatusId,
-          }),
-          markedAt: target.markedAt,
-        },
+        { mark: tileMark(target), markedAt: target.markedAt },
         { mark: given.mark, markedAt: given.markedAt }
       );
       mark = paired.mark;
@@ -856,7 +869,7 @@ async function commitBackCut(args: {
       box,
       crop: crops[i],
       position: target?.position ?? nextPosition++,
-      marks: markColumns({ mark, markedAt }),
+      marks: markColumns({ mark, markedAt }, target == null ? "create" : "update"),
     };
   });
 
@@ -1183,7 +1196,7 @@ export async function pairTilesManually(
         backTurn: backTile.backTurn,
         // Put here by the collector, so pairing the card's backs again keeps it (#1555).
         backPairedByHand: true,
-        ...markColumns(paired),
+        ...markColumns(paired, "update"),
       },
     });
     // Its photo has moved, so the cascade takes nothing with it.
@@ -1202,10 +1215,12 @@ export interface PairingMarks {
 function tileMark(tile: {
   markConditionId: string | null;
   markCertificateStatusId: string | null;
+  markFaults?: readonly { faultId: string }[];
 }): TileMark | null {
   return normalizeMark({
     conditionId: tile.markConditionId,
     certificateStatusId: tile.markCertificateStatusId,
+    faultIds: (tile.markFaults ?? []).map((f) => f.faultId),
   });
 }
 
@@ -1245,6 +1260,7 @@ export async function setTileMarks(
       markConditionId: true,
       markCertificateStatusId: true,
       markedAt: true,
+      markFaults: MARK_FAULTS_SELECT,
     },
   });
   if (tiles.length !== new Set(tileIds).size) {
@@ -1266,6 +1282,7 @@ export async function setTileMarks(
     normalizeMark({
       conditionId: patch.conditionId ?? null,
       certificateStatusId: patch.certificateStatusId ?? null,
+      faultIds: [...(patch.addFaultIds ?? []), ...(patch.removeFaultIds ?? [])],
     }),
   ]);
 
@@ -1277,7 +1294,7 @@ export async function setTileMarks(
     return [
       prisma.scanTile.update({
         where: { id: t.id },
-        data: markColumns({ mark, markedAt: now }),
+        data: markColumns({ mark, markedAt: now }, "update"),
       }),
     ];
   });
@@ -1482,6 +1499,7 @@ export async function setBackTurnover(
       markConditionId: true,
       markCertificateStatusId: true,
       markedAt: true,
+      markFaults: MARK_FAULTS_SELECT,
       photos: {
         where: { role: "back" },
         select: { id: true, storageBackend: true, storageKey: true, mime: true },
@@ -1641,7 +1659,7 @@ export async function setBackTurnover(
             backH: t.backH,
             backTurn: turnOf(t),
             backPairedByHand: false,
-            ...markColumns(paired),
+            ...markColumns(paired, "update"),
           },
         });
         await tx.scanTile.delete({ where: { id: from } });
@@ -1697,6 +1715,7 @@ async function loadTile(tileId: string) {
       markConditionId: true,
       markCertificateStatusId: true,
       markedAt: true,
+      markFaults: MARK_FAULTS_SELECT,
     },
   });
   if (!tile) throw new ScanAuthError("Tile not found or access denied.");
@@ -2398,6 +2417,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         markConditionId: true,
         markCertificateStatusId: true,
         markedAt: true,
+        markFaults: MARK_FAULTS_SELECT,
         photos: { select: { id: true, role: true } },
         // The shortlist a parked tile carries (#607), with everything the *use the parent instead*
         // correction needs to decide itself and then name the parent: the variant flags
