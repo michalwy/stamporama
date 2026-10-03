@@ -13,7 +13,8 @@
 // #1438 added the five catalogue writes, taking it to fifty-three; #1445 added
 // `set_stamp_colnect_id`, taking it to fifty-four; #1452 added the two translation operations,
 // taking it to fifty-six; #1512 added the eight checklist operations, six of which write, taking it
-// to **sixty-four**. Each one is an entry here
+// to sixty-four; #1540 added the four catalogue-price operations, two of which write, taking it to
+// **sixty-eight**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -33,6 +34,8 @@
 // is entered: is it already here, who sold it, the purchase, its lots, its expenses — then the
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
 // their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then
+// catalogue prices (#1540), in the order a page of them is entered: the editions, what the tree
+// already records, the figures, and the clear that undoes one — then
 // checklists (#1512), in the order a set is put together: the checklists already kept, one's stamps
 // in order, a new one, its name, its stamps added, taken off and put in order, and last deleting
 // one — then stamp sizes (#1415), in the order a size read off a catalogue is put on a series: the presets already
@@ -124,6 +127,12 @@ import {
 } from "./operations/catalog-edits";
 import { setStampColnectIdOperation } from "./operations/colnect-ids";
 import {
+  clearCatalogPricesOperation,
+  getCatalogPricesOperation,
+  listCatalogEditionsOperation,
+  setCatalogPricesOperation,
+} from "./operations/catalog-prices";
+import {
   addChecklistStampsOperation,
   createChecklistOperation,
   deleteChecklistOperation,
@@ -194,6 +203,10 @@ export const OPERATIONS: readonly Operation[] = [
   updateIssueOperation,
   updateStampOperation,
   setStampColnectIdOperation,
+  listCatalogEditionsOperation,
+  getCatalogPricesOperation,
+  setCatalogPricesOperation,
+  clearCatalogPricesOperation,
   listChecklistsOperation,
   listChecklistStampsOperation,
   createChecklistOperation,

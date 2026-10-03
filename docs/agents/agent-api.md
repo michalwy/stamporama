@@ -9,22 +9,22 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations and #1512 checklists; both wrappers exist and the registry carries **sixty-four operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists and #1540 catalogue prices; both wrappers exist and the registry carries **sixty-eight operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1168's bid recommendation, and #1037's catalog-number
-resolver. Eight counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1168's bid recommendation, and #1037's catalog-number
+resolver. Nine counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
 carries thirty operations* (from #1036 until #1390), *the registry carries forty-one operations*
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
-fifty-four operations* (from #1445 until #1452) and *the registry carries fifty-six operations* (from
-#1452 until #1512).
+fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
+#1452 until #1512) and *the registry carries sixty-four operations* (from #1512 until #1540).
 
-**Thirty-four of them write** since #1512 added six; *twenty-eight of them write* was the count from
-#1452 until then, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
+**Thirty-six of them write** since #1540 added two; *thirty-four of them write* was the count from
+#1512 until then, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
@@ -136,6 +136,7 @@ src/lib/agent-api/
   colnect-ids.ts    reading a Colnect item-ID, the answer, the refusal for one held (#1445)
   translations.ts   the text kinds, the `kind.field.id` key, the language check, the answers (#1452)
   checklist-reads.ts  the checklist row, the order they are listed in, the refusals (#1512)
+  catalog-prices.ts  naming an edition, the cell grammar, the grid's figures, the per-cell answer (#1540)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -158,10 +159,11 @@ src/lib/agent-api/
     colnect-ids.ts  set_stamp_colnect_id (#1445)                        ← server-side
     translations.ts find_missing_translations / set_translations (#1452) ← server-side
     checklists.ts   the eight checklist operations (#1512)              ← server-side
+    catalog-prices.ts  the editions, the price read, set and clear (#1540)  ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1563,7 +1565,9 @@ writes under `/issues` and `/stamps` and fails on a delete-, move- or reorder-sh
 take the issue's order as the dialogs' generation gives it (#549).
 
 **#1512 lifted this for checklists, and for exactly its operations** — see *Changing checklists*
-below. Until then the map also held `deleteChecklist` and `reorderChecklistStamps`; both moved to
+below. **#1540 lifted it for one catalogue price at a time** — see *Pricing the catalogue* below — and
+added the three Settings deletes of a catalogue, a book and an edition to the map, since each takes
+every price recorded under it. Until then the map also held `deleteChecklist` and `reorderChecklistStamps`; both moved to
 `CHECKLIST_WRITES`, and `reorderChecklists` — the order of an issue's checklists among themselves,
 which nobody asked for — joined the map instead. `remove_checklist_stamps` is exempted **by name,
 with its reason**, from the catalogue test's name guard, which it would otherwise trip on
@@ -1613,6 +1617,62 @@ in step* (#689). `set_stamp_colnect_id` is exempted **by name, with its reason**
 `tests/integration/agent-api-trades.test.ts`, rather than by narrowing the word list or renaming the
 operation to slip past it: it sends nothing, claims nothing about a list and clears no report, and
 `markColnectApplied` stays out through the import guard.
+
+## Pricing the catalogue
+
+**Four operations, two of which write** (#1540): the editions a price is recorded in, an issue's or a
+stamp tree's prices in one read, and many cells set or cleared in one write — a catalogue page entered
+a whole set at a time, which is most of the typing in a collection.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_catalog_editions` | no | every book and year with its currency, or an area's — the grid's own list (`readAreaEditions`) |
+| `get_catalog_prices` | no | the variant price grid over an issue or a stamp's whole tree, every axis at once |
+| `set_catalog_prices` | yes | many cells in one edition, answered per cell |
+| `clear_catalog_prices` | yes | many cells emptied, as emptying a grid cell does |
+
+**The grid's read and the grid's write, and nothing beside them** (#618). `getVariantPriceGrid` is the
+read and `setVariantCatalogPrice` the write — a null amount clears the cell's row — so the
+validation, the rounding (`formatAmountInput`, the cell's own reading when it is left), the currency
+taken from the edition's book and never from the caller, and the effect on valuation are the grid's.
+Nothing is filled or derived on a write: the grid's *Fill from None* and condition fill are buttons
+for a person, and an assistant that wants those figures sends them as prices.
+
+**A cell is `name=value` pairs, one string per cell** — `"stamp=Mi 309AP; condition=MNH;
+price=12.50"` — because a parameter is a scalar or a string list (#706) and a cell has five axes. The
+edition is the call's, since a page comes from one book; `certificate` and `format` default to `none`
+and `single`, the axes' nulls (ADR-0006 §2, ADR-0020), matched as keywords only when no row of the
+collection answers to the word. An edition is named `"<book> <year>"` or `"<vendor> <year>"` through
+#708's resolver, so two Michel books of one year make `Mi 2024` ambiguous and refused with ids.
+
+**A batch answers per cell and never fails whole over one** — the collector's decision on #1540. A
+cell's stamp is resolved through #1037's resolver as everywhere, but a number that names nothing or
+several stamps refuses **its cell**, unlike `resolveStampRefs`, which refuses the call. Only what is
+the call's — the edition, an empty list, more than 100 cells — refuses the call. Each cell says
+`written`, `cleared`, `unchanged` (the figure was already there, or a clear found nothing) or
+`refused` with a sentence; a written or cleared cell names the figure it `replaced`; a cell naming the
+same cell as an earlier entry is refused rather than written twice. Unchanged cells are not written.
+
+**What a price reads back as is the grid's arithmetic, called rather than restated.** An umbrella
+(`identified: false` on the grid's row) with no price of its own is worth the lowest of its variant
+descendants' figures and is reported `rolledUp`; a price recorded on it outranks that and is reported
+plainly (#616, #627) — and writing one is what unlocking the row does. On a format axis an empty cell
+of an ordinary row may be the single times a resolved multiplier, reported `derived` (ADR-0020 §5),
+because the grid draws it greyed and the rollup may rest on it. Both come from
+`variant-price-cells.ts`, which the grid and the identification step already share so they cannot
+disagree; `catalogPriceCells` walks every axis combination something is recorded in, which is the
+grid's three controls turned through in one pass. The rollup is taken within one edition, as the grid
+takes it, and so may differ from the headline the lists print (#238's newest-with-a-price fallback) —
+the grid's own stated trade.
+
+**Clearing is the one catalogue delete on this surface**, amending #1438's *nothing is deleted*.
+`CATALOG_PRICE_WRITES` in `tests/unit/agent-api-operation-boundary.test.ts` pins the price writes to
+`setVariantCatalogPrice` from `operations/catalog-prices.ts` alone, keeps `quickSetCatalogPrices` out,
+and fails on any operation module saying `catalogPrices` — `updateStampWithCatalog` handed that list
+**deletes every price on the stamp** before writing the new ones. `deleteCatalogVendor`,
+`deleteCatalogName` and `deleteCatalogEdition` joined `CATALOG_BOUNDARY`.
+`tests/integration/agent-api-catalog-prices.test.ts` pins the two writes and that
+`clear_catalog_prices` is the only price- or catalogue-shaped name that removes anything.
 
 ## Changing checklists
 
@@ -1753,8 +1813,10 @@ exist cannot be.
   undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
 - **The agent never deletes, moves or reorders an issue, a stamp or a variant** (#1438). See
-  *Building the catalogue* above. **Checklists are the one exception** (#1512): it deletes one no
+  *Building the catalogue* above. **Checklists are one exception** (#1512): it deletes one no
   album prints and sets the order of its stamps, and nothing else — see *Changing checklists*.
+  **Catalogue prices are the other** (#1540): it clears one cell's price as the grid does, and
+  never deletes a catalogue, a book or an edition — see *Pricing the catalogue*.
 
 Do not add a publish-shaped, send-shaped, auction-writing or copy-touching operation to the
 registry, whatever it is called, nor one that deletes a size preset or deletes, moves or reorders an
@@ -1983,7 +2045,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries fifty-six operations.** It was empty on #706, which shipped none; #708
+**The document carries sixty-eight operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -1997,9 +2059,11 @@ added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, 
 `remove_purchase_expense`; #1415 added `list_size_presets`, `get_stamp_size`, `create_size_preset`,
 `update_size_preset`, `set_stamp_size`, `preview_stamp_size_apply` and `apply_stamp_size`; #1438
 added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` and `update_stamp`;
-#1445 added `set_stamp_colnect_id`; #1452 added `find_missing_translations` and `set_translations`.
+#1445 added `set_stamp_colnect_id`; #1452 added `find_missing_translations` and `set_translations`;
+#1512 added the eight checklist operations; #1540 added `list_catalog_editions`, `get_catalog_prices`,
+`set_catalog_prices` and `clear_catalog_prices`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, and *fifty-four* from #1445 until #1452. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

@@ -204,6 +204,7 @@ export type VocabularyName =
   | "location"
   | "catalog vendor"
   | "catalog"
+  | "catalog edition"
   | "platform"
   | "exchange partner"
   | "size preset"

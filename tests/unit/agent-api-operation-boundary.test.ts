@@ -448,8 +448,15 @@ describe("the agent API's operation modules (#1415)", () => {
  * prints and setting the order of a checklist's stamps (`deleteChecklist`, `reorderChecklistStamps`)
  * left this map for {@link CHECKLIST_WRITES}. The order of an issue's checklists among themselves
  * (`reorderChecklists`) was not asked for and joined it instead.
+ *
+ * **#1540 lifted it for one catalogue price at a time, through the grid's own write** — see
+ * {@link CATALOG_PRICE_WRITES}. A catalogue, a book or an edition is not a price: deleting one takes
+ * every price recorded in it, so the three Settings deletes joined this map.
  */
 const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
+  ["deleteCatalogVendor", { module: "src/lib/catalog.ts", why: "deletes a catalogue, with every book, edition and price in it" }],
+  ["deleteCatalogName", { module: "src/lib/catalog.ts", why: "deletes a catalogue book, with its editions and their prices" }],
+  ["deleteCatalogEdition", { module: "src/lib/catalog.ts", why: "deletes a catalogue edition, with every price recorded in it" }],
   ["deleteIssue", { module: "src/lib/issues.ts", why: "deletes an issue" }],
   ["deleteStamp", { module: "src/lib/stamps.ts", why: "deletes a stamp" }],
   ["deleteStampCatalogNumber", { module: "src/lib/stamps.ts", why: "takes a catalogue number off a stamp" }],
@@ -539,5 +546,61 @@ describe("the agent API's operation modules (#1512)", () => {
     for (const name of CHECKLIST_WRITES) {
       assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of src/lib/checklists.ts any more`);
     }
+  });
+});
+
+/**
+ * **The one catalogue delete the agent may make is clearing a price, and it is the grid's** (#1540).
+ * The collector allowed an assistant to clear a catalogue price as clearing a cell of the variant
+ * price grid does, and nothing else: so the price writes are `setVariantCatalogPrice` — the grid's
+ * one write, a null amount clearing the cell's row — made from `operations/catalog-prices.ts` alone.
+ * The other two paths that write prices are kept out by name: `quickSetCatalogPrices` is the quick
+ * price dialog's, which an agent has no reason to reach past the grid, and `updateStampWithCatalog`
+ * **deletes every price on a stamp** when it is handed `catalogPrices` — the stamp edit dialog's
+ * whole-list rewrite — so no operation module may say that word at all.
+ */
+const CATALOG_PRICE_WRITES = ["setVariantCatalogPrice"] as const;
+
+describe("the agent API's operation modules (#1540)", () => {
+  const priceModule = path.join(AGENT_API, "operations/catalog-prices.ts");
+
+  it("write catalogue prices only through the grid's write, and only in the price module", () => {
+    const fromGrid = importedBindings(priceModule)
+      .filter((binding) => binding.from === "../../variant-prices")
+      .map((binding) => binding.name);
+    assert.deepEqual(fromGrid.filter((name) => /^(set|delete|clear|remove|update|quick)/.test(name)), [...CATALOG_PRICE_WRITES]);
+
+    const elsewhere: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        if (file !== priceModule && (CATALOG_PRICE_WRITES as readonly string[]).includes(name)) {
+          elsewhere.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+        }
+        if (name === "quickSetCatalogPrices") {
+          elsewhere.push(`${path.relative(ROOT, file)} imports \`quickSetCatalogPrices\` — the quick price dialog's write`);
+        }
+      }
+    }
+    assert.deepEqual(elsewhere, [], "catalogue prices are written by operations/catalog-prices.ts through the grid's write alone (#1540)");
+  });
+
+  it("never hand a stamp edit a price list, which would delete every price on the stamp", () => {
+    const sayers = operationModules()
+      .filter((file) => /\bcatalogPrices\b/.test(readFileSync(file, "utf8")))
+      .map((file) => path.relative(ROOT, file));
+    assert.deepEqual(sayers, []);
+    assert.match(
+      readFileSync(path.join(ROOT, "src/lib/stamps.ts"), "utf8"),
+      /tx\.stampCatalogPrice\.deleteMany\(\{ where: \{ stampId \} \}\)/,
+      "the stamp edit no longer rewrites a stamp's prices whole — re-read this guard against stamps.ts"
+    );
+  });
+
+  it("names a real export of src/lib/variant-prices.ts, and the grid's write still clears with a null", () => {
+    const domain = readFileSync(path.join(ROOT, "src/lib/variant-prices.ts"), "utf8");
+    for (const name of CATALOG_PRICE_WRITES) {
+      assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of src/lib/variant-prices.ts any more`);
+    }
+    assert.match(domain, /if \(write\.amount == null\) \{\s*if \(existing\) await prisma\.stampCatalogPrice\.delete/);
   });
 });

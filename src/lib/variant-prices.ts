@@ -292,8 +292,9 @@ function flattenTree(
 
 /** Every edition of every catalog that prices an area, the area's primary catalog first. The books
  * are the area's **effective** ones (#675) — its own, or the nearest ancestor's where it attaches
- * none — so a leaf offers the same editions as the area that declares them. */
-async function readAreaEditions(
+ * none — so a leaf offers the same editions as the area that declares them. Exported for the agent
+ * API's edition list (#1540), so an agent asking for an area's editions is offered the grid's. */
+export async function readAreaEditions(
   collectionId: string,
   areaId: string | null
 ): Promise<VariantPriceEdition[]> {
