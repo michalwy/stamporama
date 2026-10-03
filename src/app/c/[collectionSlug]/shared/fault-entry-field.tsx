@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { FaultSummary } from "@/lib/faults";
 import {
   addFaultEntry,
   findFaultByName,
@@ -115,21 +114,42 @@ export function FaultEntryField({
   inputId,
   initialFaults,
   disabled,
+  name = "copyFaults",
+  onChange,
 }: {
   collectionId: string;
   inputId?: string;
-  /** The faults on the copy now: empty when adding. */
-  initialFaults: FaultSummary[];
+  /** The faults on the copy now: empty when adding — or, identifying a scan tile, the faults marked
+   * on it (#1558). */
+  initialFaults: readonly FaultEntry[];
   disabled: boolean;
+  /** The hidden input's name, or null for a field whose caller reads it through `onChange` — one of
+   * several in a form, as a run's per-tile field is (#1558). */
+  name?: string | null;
+  /** Raised when what a Save would carry changes — never for the faults the field opened on. */
+  onChange?: (entries: FaultEntry[]) => void;
 }) {
   const queryClient = useQueryClient();
   const { data: dictionary = [] } = useCollectionFaults(collectionId);
-  const [entries, setEntries] = useState<FaultEntry[]>(initialFaults);
+  const [entries, setEntries] = useState<FaultEntry[]>(() => [...initialFaults]);
   const [text, setText] = useState("");
 
   // What a Save carries: the chips plus a name still in the text field, so a last fault typed
   // without Enter is not lost to the Save button.
   const submitted = addFaultEntry(entries, text, dictionary);
+
+  // Reported to a caller that reads the field rather than its form, on a change only.
+  const submittedJson = JSON.stringify(submitted);
+  const reported = useRef(submittedJson);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+  useEffect(() => {
+    if (reported.current === submittedJson) return;
+    reported.current = submittedJson;
+    onChangeRef.current?.(JSON.parse(submittedJson) as FaultEntry[]);
+  }, [submittedJson]);
 
   // A fault born by this dialog's save is in the dictionary the filter, the bulk edit and the next
   // dialog read through one cached query — refreshed when the dialog goes away, after its save.
@@ -215,7 +235,7 @@ export function FaultEntryField({
             disabled={disabled}
           />
         </div>
-        <input type="hidden" name="copyFaults" value={JSON.stringify(submitted)} />
+        {name && <input type="hidden" name={name} value={submittedJson} />}
       </div>
       <p style={HINT_STYLE}>Pick from your faults, or type a new one and press Enter.</p>
     </div>

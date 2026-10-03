@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   applyMarkPatch,
+  clearMarkPatch,
+  faultTogglePatch,
   fillPatch,
   keeperAnswers,
   keeperGroups,
@@ -12,6 +14,8 @@ import {
   normalizeMark,
   pairedMark,
   parseTileOwnAnswers,
+  sameMark,
+  seedFaults,
   seedField,
   unmarkedCounts,
   type TileMark,
@@ -260,5 +264,120 @@ describe("keeperAnswers and parseTileOwnAnswers", () => {
     assert.deepEqual(parseTileOwnAnswers("not json"), []);
     assert.deepEqual(parseTileOwnAnswers(null), []);
     assert.deepEqual(parseTileOwnAnswers(JSON.stringify([{ tileId: "t1" }, { conditionId: "x" }])), []);
+  });
+});
+
+// ── Faults (#1558) ──────────────────────────────────────────────────────────────────────────────
+
+const faulted = (
+  conditionId: string | null,
+  faultIds: string[],
+  certificateStatusId: string | null = null
+): TileMark => ({ conditionId, certificateStatusId, faultIds });
+
+describe("faults in a mark (#1558)", () => {
+  it("are a mark on their own, and absent rather than empty on a mark without any", () => {
+    assert.deepEqual(normalizeMark({ faultIds: ["crease"] }), faulted(null, ["crease"]));
+    assert.deepEqual(normalizeMark({ conditionId: "mnh", faultIds: [] }), mark("mnh"));
+    assert.equal(normalizeMark({ faultIds: ["", ""] }), null);
+  });
+  it("are compared as a set", () => {
+    assert.equal(sameMark(faulted("mnh", ["a", "b"]), faulted("mnh", ["b", "a"])), true);
+    assert.equal(sameMark(faulted("mnh", ["a"]), mark("mnh")), false);
+  });
+  it("are added and removed by a patch, leaving the halves and the other faults alone", () => {
+    assert.deepEqual(
+      applyMarkPatch(faulted("mnh", ["a"]), { addFaultIds: ["b"] }),
+      faulted("mnh", ["a", "b"])
+    );
+    assert.deepEqual(applyMarkPatch(faulted("mnh", ["a", "b"]), { removeFaultIds: ["a"] }), faulted("mnh", ["b"]));
+    assert.equal(applyMarkPatch(faulted(null, ["a"]), { removeFaultIds: ["a"] }), null);
+    assert.deepEqual(applyMarkPatch(faulted("mnh", ["a"]), { conditionId: "mh" }), faulted("mh", ["a"]));
+  });
+  it("toggle: on every target lacking it, off when all carry it", () => {
+    assert.deepEqual(faultTogglePatch("a", [faulted(null, ["a"]), null]), { addFaultIds: ["a"] });
+    assert.deepEqual(faultTogglePatch("a", [faulted(null, ["a"]), faulted("mh", ["a", "b"])]), {
+      removeFaultIds: ["a"],
+    });
+  });
+  it("are cleared with the mark", () => {
+    const patch = clearMarkPatch([faulted("mnh", ["a"]), faulted(null, ["b"])]);
+    assert.deepEqual(patch, { conditionId: null, certificateStatusId: null, removeFaultIds: ["a", "b"] });
+    assert.equal(applyMarkPatch(faulted("mnh", ["a"]), patch), null);
+  });
+  it("are never part of a fill", () => {
+    assert.deepEqual(fillPatch(null, { conditionId: "mnh", addFaultIds: ["a"] }), { conditionId: "mnh" });
+  });
+  it("merge as the union, while the halves still need to agree", () => {
+    assert.deepEqual(mergedMark([faulted("mng", ["a"]), faulted("mng", ["b"])]), faulted("mng", ["a", "b"]));
+    assert.deepEqual(mergedMark([faulted("mng", ["a"]), mark("mh")]), faulted(null, ["a"]));
+  });
+  it("pair as the union, the halves going to the mark given last", () => {
+    const paired = pairedMark(
+      { mark: faulted("mnh", ["crease"]), markedAt: at("2026-10-03T10:00:00Z") },
+      { mark: faulted("mng", ["thin-gum"]), markedAt: at("2026-10-03T11:00:00Z") }
+    );
+    assert.deepEqual(paired.mark, faulted("mng", ["crease", "thin-gum"]));
+    assert.deepEqual(paired.replaced, mark("mnh"), "what was replaced is the halves alone");
+    assert.deepEqual(paired.markedAt, at("2026-10-03T11:00:00Z"));
+  });
+  it("pair without a replacement when only faults differ", () => {
+    const paired = pairedMark(
+      { mark: faulted("mnh", ["crease"]), markedAt: at("2026-10-03T10:00:00Z") },
+      { mark: faulted(null, ["thin-gum"]), markedAt: null }
+    );
+    assert.deepEqual(paired.mark, faulted("mnh", ["crease", "thin-gum"]));
+    assert.equal(paired.replaced, null);
+  });
+  it("keep a time when the faults are all there is", () => {
+    const paired = pairedMark(
+      { mark: faulted(null, ["crease"]), markedAt: at("2026-10-03T10:00:00Z") },
+      { mark: null, markedAt: null }
+    );
+    assert.deepEqual(paired.markedAt, at("2026-10-03T10:00:00Z"));
+  });
+});
+
+describe("seedFaults — what the faults field opens on (#1558)", () => {
+  it("opens on the faults every tile is marked with alike", () => {
+    assert.deepEqual(seedFaults([{ tileId: "t1", faultIds: ["a", "b"] }]), {
+      faultIds: ["a", "b"],
+      origin: "marked",
+      keepers: [],
+    });
+    assert.deepEqual(
+      seedFaults([
+        { tileId: "t1", faultIds: ["a", "b"] },
+        { tileId: "t2", faultIds: ["b", "a"] },
+      ]).origin,
+      "marked"
+    );
+  });
+  it("opens empty on an unmarked tile — never on the last used", () => {
+    assert.deepEqual(seedFaults([{ tileId: "t1", faultIds: [] }]), {
+      faultIds: [],
+      origin: null,
+      keepers: [],
+    });
+  });
+  it("opens empty where the tiles differ, the marked ones keeping theirs", () => {
+    assert.deepEqual(
+      seedFaults([
+        { tileId: "t1", faultIds: ["a"] },
+        { tileId: "t2", faultIds: [] },
+      ]),
+      { faultIds: [], origin: null, keepers: [{ tileId: "t1", faultIds: ["a"] }] }
+    );
+  });
+  it("hands the keepers to the write, and the form carries them back", () => {
+    const none = { value: "", origin: null, keepers: [] };
+    const answers = keeperAnswers(none, none, {
+      faultIds: [],
+      origin: null,
+      keepers: [{ tileId: "t1", faultIds: ["a"] }],
+    });
+    assert.deepEqual(answers, [{ tileId: "t1", faultIds: ["a"] }]);
+    assert.deepEqual(parseTileOwnAnswers(JSON.stringify(answers)), answers);
+    assert.deepEqual(parseTileOwnAnswers(JSON.stringify([{ tileId: "t1", faultIds: [1, ""] }])), []);
   });
 });

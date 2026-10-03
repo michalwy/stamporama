@@ -103,6 +103,15 @@ export function parseFaultEntries(raw: FormDataEntryValue | null): FaultEntry[] 
   } catch {
     return undefined;
   }
+  return faultEntriesFrom(parsed);
+}
+
+/**
+ * Fault chips as they arrive in a JSON argument rather than a form field — the run's per-tile faults
+ * (#1558). The same reading as {@link parseFaultEntries}: anything that is not a list is
+ * `undefined`, and an entry with neither an id nor a name is dropped.
+ */
+export function faultEntriesFrom(parsed: unknown): FaultEntry[] | undefined {
   if (!Array.isArray(parsed)) return undefined;
   const out: FaultEntry[] = [];
   for (const row of parsed) {

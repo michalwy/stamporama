@@ -2828,12 +2828,12 @@ function TileSelectionBar({
           collectionId={collectionId}
           targets={marks}
           disabled={busy}
-          ariaLabel="Mark the condition of the ticked tiles"
-          hint={`Mark the condition and certificate of the ${count} ticked ${count === 1 ? "tile" : "tiles"} in view, before identifying them`}
+          ariaLabel="Mark the ticked tiles"
+          hint={`Mark the condition, certificate and faults of the ${count} ticked ${count === 1 ? "tile" : "tiles"} in view, before identifying them`}
           triggerStyle={smallButtonStyle({ disabled: busy })}
           onPatch={onMark}
         >
-          <Icon name="mark" size="sm" /> Mark condition…
+          <Icon name="mark" size="sm" /> Mark…
         </TileMarkPicker>
       )}
       {/* Absent rather than disabled at nothing-in-view: there is no pass to offer over squares
@@ -3056,7 +3056,7 @@ function TileMarkSlot({
         hint={
           mark
             ? "Marked before identifying — click to change it, or type another abbreviation with the tile focused"
-            : "Mark the condition and certificate from the card in hand — or type the abbreviation with the tile focused"
+            : "Mark the condition, certificate and faults from the card in hand — or type the abbreviation with the tile focused"
         }
         triggerStyle={{
           display: "inline-flex",

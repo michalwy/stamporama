@@ -59,9 +59,16 @@ import {
   SEED_ORIGIN_LABEL,
   keeperAnswers,
   keeperGroups,
+  markFaultIds,
+  sameFaults,
+  seedFaults,
   seedField,
+  type FaultSeed,
   type SeedOrigin,
 } from "@/lib/tile-marks";
+import type { FaultEntry } from "@/lib/fault-entry";
+import { FaultEntryField } from "./fault-entry-field";
+import { useCollectionFaults } from "./use-faults";
 
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
@@ -353,6 +360,13 @@ export interface IntakeConditionDialogProps {
    */
   seedFromMarks?: boolean;
   /**
+   * Ask for the new copies' **faults** (#1558) — the scan-tile chain's identification, where the
+   * piece is in hand. Opened on the faults marked on the tiles (with `seedFromMarks`) and otherwise
+   * empty: never the last used, a fault belonging to one piece. Not on a correction, which changes
+   * what the copy is identified as; its faults are the copy's own to edit.
+   */
+  askFaults?: boolean;
+  /**
    * Offer to make the tile's front the **stamp's** photo (#1340) — the scan-tile chain only, where a
    * piece is in hand to be compared with the stamp's current picture. On by default when the stamp
    * has no photo (#149's seed, made visible) and off when it has one; the answer is sent as
@@ -388,6 +402,7 @@ function IntakeConditionDialog({
   priceVariantsInGrid,
   offerStampPhoto,
   seedFromMarks,
+  askFaults,
   onBack,
   onClose,
   onSubmit,
@@ -419,10 +434,13 @@ function IntakeConditionDialog({
         origin: fallbackOrigin,
       },
     };
+    // Faults have no fallback at all (#1558): the marks, or nothing.
+    const noFaults: FaultSeed = { faultIds: [], origin: null, keepers: [] };
     if (!seedFromMarks || !pieces) {
       return {
         condition: { value: fallback.condition.value, origin: null, keepers: [] },
         certificate: { value: fallback.certificate.value, origin: null, keepers: [] },
+        faults: noFaults,
       };
     }
     const known = (id: string | null | undefined, list: readonly { id: string }[]) =>
@@ -439,6 +457,9 @@ function IntakeConditionDialog({
         })),
         fallback.certificate
       ),
+      faults: askFaults
+        ? seedFaults(pieces.map((p) => ({ tileId: p.tileId, faultIds: markFaultIds(p.mark) })))
+        : noFaults,
     };
   });
   const [conditionId, setConditionId] = useState(seeds.condition.value);
@@ -447,6 +468,14 @@ function IntakeConditionDialog({
    * when the value is the collector's own answer and the label goes. */
   const [conditionOrigin, setConditionOrigin] = useState(seeds.condition.origin);
   const [certOrigin, setCertOrigin] = useState(seeds.certificate.origin);
+  const [faultsOrigin, setFaultsOrigin] = useState(seeds.faults.origin);
+  // The dictionary the field names its chips from — the field is drawn once it is here, so the faults
+  // it opens on are named rather than blank.
+  const { data: faultDictionary } = useCollectionFaults(collectionId);
+  const seededFaults: FaultEntry[] = seeds.faults.faultIds.flatMap((id) => {
+    const fault = faultDictionary?.find((f) => f.id === id);
+    return fault ? [{ id: fault.id, name: fault.name }] : [];
+  });
   /** The tiles keeping their own marks, in words — *3 tiles keep their marked MNG*. */
   const keepersSaid = [
     ...keeperGroups(seeds.condition.keepers).map(({ value, count }) => {
@@ -457,6 +486,11 @@ function IntakeConditionDialog({
       const abbr = certificateStatuses.find((c) => c.id === value)?.abbreviation ?? "certificate";
       return `${count} ${count === 1 ? "tile keeps its" : "tiles keep their"} marked ${abbr}`;
     }),
+    ...(seeds.faults.keepers.length > 0
+      ? [
+          `${seeds.faults.keepers.length} ${seeds.faults.keepers.length === 1 ? "tile keeps its" : "tiles keep their"} marked faults`,
+        ]
+      : []),
   ];
   // The physical format of the piece being identified (#573) — a pair, a block, a strip — blank
   // meaning *single*, which is a value and not a missing answer (`StampFormat`, ADR-0020).
@@ -622,7 +656,7 @@ function IntakeConditionDialog({
     if (lotChoice && lotId) fd.set("lotId", lotId);
     // The tiles keeping their own marks (#1550) — exactly what the step said, so the write creates
     // what was read here rather than re-reading the marks behind it.
-    const own = keeperAnswers(seeds.condition, seeds.certificate);
+    const own = keeperAnswers(seeds.condition, seeds.certificate, seeds.faults);
     if (own.length > 0) fd.set("tileAnswers", JSON.stringify(own));
     fd.set("inCollection", String(disposition.inCollection));
     fd.set("forSale", String(disposition.forSale));
@@ -777,8 +811,7 @@ function IntakeConditionDialog({
                 {keepersSaid.length > 0 && (
                   <>
                     {" "}
-                    <strong>{keepersSaid.join(", ")}</strong>; the condition and certificate below
-                    apply to the rest.
+                    <strong>{keepersSaid.join(", ")}</strong>; the answers below apply to the rest.
                   </>
                 )}
               </div>
@@ -942,6 +975,33 @@ function IntakeConditionDialog({
                   : undefined
               }
             />
+          )}
+
+          {/* The copy's faults (#1558), with the piece in hand: after the catalogue value, which
+              belongs directly under the condition it is keyed on. Opened on the faults marked on the
+              tiles, or empty — never the last tile's, since a fault belongs to one piece. */}
+          {askFaults && (
+            <div style={{ marginTop: "0.75rem" }}>
+              <LabelWithError htmlFor="intake-faults">
+                Faults (optional)
+                <SeedOriginNote origin={faultsOrigin} />
+              </LabelWithError>
+              {faultDictionary ? (
+                <FaultEntryField
+                  collectionId={collectionId}
+                  inputId="intake-faults"
+                  initialFaults={seededFaults}
+                  disabled={isPending}
+                  onChange={(entries) => {
+                    if (!sameFaults(entries.map((e) => e.id ?? `new:${e.name}`), seeds.faults.faultIds)) {
+                      setFaultsOrigin(null);
+                    }
+                  }}
+                />
+              ) : (
+                <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+              )}
+            </div>
           )}
 
           {/* Storage location (#56/#121): optional at intake, shared by every created copy.

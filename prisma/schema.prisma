@@ -984,6 +984,8 @@ model Fault {
   collection   Collection         @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   translations FaultTranslation[]
   copies       ItemFault[]
+  /** Tiles marked with this fault before they were identified (#1558). */
+  tileMarks    ScanTileFault[]
 
   @@unique([collectionId, name])
   @@index([collectionId])
@@ -3991,6 +3993,9 @@ model ScanTile {
   /** The shortlist a parked tile carries (#607): what this piece could be, kept so the return
    * sitting does not repeat the narrowing that discovered the picture cannot settle it. */
   candidates ScanTileCandidate[]
+  /** The faults marked on the tile before it is identified (#1558) — the third part of the mark
+   * above, and seeding the identification dialogs the same way. */
+  markFaults ScanTileFault[]
 
   // The "a tile has at least one side" CHECK is declared in the migration SQL — Prisma cannot
   // express check constraints.
@@ -4004,6 +4009,25 @@ model ScanTile {
   @@index([markConditionId])
   @@index([markCertificateStatusId])
   @@map("scan_tile")
+}
+
+// A fault marked on a tile before it is identified (#1558), beside its marked condition and
+// certificate (#1550): the piece is in hand straight after scanning, and that is when a crease or a
+// thinned gum is seen. Like the rest of the mark it only seeds the identification dialogs.
+//
+// Cascade at both ends. A mark is not a statement anybody is owed, unlike a copy's fault, so a fault
+// deleted from the dictionary simply takes its marks with it — the `SetNull` the condition and
+// certificate halves have, for a link row.
+model ScanTileFault {
+  tileId  String
+  faultId String
+
+  tile  ScanTile @relation(fields: [tileId], references: [id], onDelete: Cascade)
+  fault Fault    @relation(fields: [faultId], references: [id], onDelete: Cascade)
+
+  @@id([tileId, faultId])
+  @@index([faultId])
+  @@map("scan_tile_fault")
 }
 
 // What a parked tile **could be** (#607) — the narrowing that discovering "this cannot be

@@ -13,57 +13,146 @@
  *
  * Each half is independent and optional: a tile can be marked with a condition, a certificate, both
  * or neither. "No certificate" is not a mark — it is a tile not marked with one.
+ *
+ * **Faults** (#1558) are the mark's third part: any number of the collection's faults (#1557), seen
+ * with the piece in hand as the condition is. They follow the halves' rules except where a fault is
+ * not an alternative to another fault — a crease and a thinned gum are both true of one piece, where
+ * MNH and MH cannot be — so where two marks meet as **one piece** (a merge, a pairing) the faults are
+ * the union of both rather than one side's. "No faults" is not a mark either.
  */
 
 export interface TileMark {
   conditionId: string | null;
   certificateStatusId: string | null;
+  /** The faults marked (#1558), by id. Absent — never empty — on a mark without any, so a mark of
+   * the two halves alone is the shape it was before faults existed. */
+  faultIds?: readonly string[];
 }
 
-/** A mark as stored: both halves, or null when neither is given — one shape for "unmarked". */
+/** A mark's faults, each once, in the order given — never undefined. */
+export function markFaultIds(mark: Pick<TileMark, "faultIds"> | null | undefined): string[] {
+  return [...new Set((mark?.faultIds ?? []).filter(Boolean))];
+}
+
+/** A mark as stored: the two halves and the faults, or null when none of them is given — one shape
+ * for "unmarked". */
 export function normalizeMark(mark: Partial<TileMark> | null | undefined): TileMark | null {
   const conditionId = mark?.conditionId || null;
   const certificateStatusId = mark?.certificateStatusId || null;
-  return conditionId || certificateStatusId ? { conditionId, certificateStatusId } : null;
+  const faultIds = markFaultIds(mark);
+  if (!conditionId && !certificateStatusId && faultIds.length === 0) return null;
+  return faultIds.length > 0
+    ? { conditionId, certificateStatusId, faultIds }
+    : { conditionId, certificateStatusId };
+}
+
+/** Whether two fault lists name the same faults, in whatever order. */
+export function sameFaults(
+  a: readonly string[] | null | undefined,
+  b: readonly string[] | null | undefined
+): boolean {
+  const x = new Set(a ?? []);
+  const y = new Set(b ?? []);
+  return x.size === y.size && [...x].every((id) => y.has(id));
 }
 
 export function sameMark(a: TileMark | null | undefined, b: TileMark | null | undefined): boolean {
   const x = normalizeMark(a);
   const y = normalizeMark(b);
   if (!x || !y) return x === y;
-  return x.conditionId === y.conditionId && x.certificateStatusId === y.certificateStatusId;
+  return (
+    x.conditionId === y.conditionId &&
+    x.certificateStatusId === y.certificateStatusId &&
+    sameFaults(x.faultIds, y.faultIds)
+  );
+}
+
+/** A mark with its faults set aside — the two halves alone, which is what a merge and a pairing
+ * decide between. */
+function halves(mark: TileMark | null | undefined): TileMark | null {
+  return normalizeMark({
+    conditionId: mark?.conditionId ?? null,
+    certificateStatusId: mark?.certificateStatusId ?? null,
+  });
+}
+
+/** Every fault any of the marks carries, each once, in the order met. */
+function unionFaults(marks: readonly (TileMark | null | undefined)[]): string[] {
+  return [...new Set(marks.flatMap((m) => markFaultIds(m)))];
 }
 
 /**
- * The mark a box keeps when several are merged into one in the cut editor: **only when every half
- * had the same one**. Two halves that disagree are two answers about what may turn out to be two
- * pieces, and picking either would be the app answering for the collector.
+ * The mark a box keeps when several are merged into one in the cut editor: the condition and
+ * certificate **only when every half had the same ones**, and the faults of all of them (#1558).
+ * Two halves that disagree on the condition are two answers about what may turn out to be two
+ * pieces, and picking either would be the app answering for the collector. Faults do not disagree —
+ * a merge says the boxes are one piece, and a crease on one half is a crease on it.
  */
 export function mergedMark(marks: readonly (TileMark | null | undefined)[]): TileMark | null {
   if (marks.length === 0) return null;
-  const first = normalizeMark(marks[0]);
-  return marks.every((m) => sameMark(m, first)) ? first : null;
+  const first = halves(marks[0]);
+  const agreed = marks.every((m) => sameMark(halves(m), first)) ? first : null;
+  return normalizeMark({ ...agreed, faultIds: unionFaults(marks) });
 }
 
-/** A change to one or both halves of a mark: absent leaves a half alone, null clears it. */
+/**
+ * A change to a mark: absent leaves a half alone, null clears it. Faults (#1558) are **added and
+ * removed** by name rather than replaced, so one pick over several tiles with different faults
+ * changes only the fault picked — the bulk edit's rule for a copy's faults (#1557).
+ */
 export interface MarkPatch {
   conditionId?: string | null;
   certificateStatusId?: string | null;
+  addFaultIds?: readonly string[];
+  removeFaultIds?: readonly string[];
 }
 
 export function applyMarkPatch(mark: TileMark | null | undefined, patch: MarkPatch): TileMark | null {
+  const remove = new Set(patch.removeFaultIds ?? []);
   return normalizeMark({
     conditionId: patch.conditionId !== undefined ? patch.conditionId : (mark?.conditionId ?? null),
     certificateStatusId:
       patch.certificateStatusId !== undefined
         ? patch.certificateStatusId
         : (mark?.certificateStatusId ?? null),
+    faultIds: [
+      ...markFaultIds(mark).filter((id) => !remove.has(id)),
+      ...(patch.addFaultIds ?? []).filter((id) => !remove.has(id)),
+    ],
   });
 }
 
 /** Whether a patch says anything at all. */
 export function isEmptyPatch(patch: MarkPatch): boolean {
-  return patch.conditionId === undefined && patch.certificateStatusId === undefined;
+  return (
+    patch.conditionId === undefined &&
+    patch.certificateStatusId === undefined &&
+    (patch.addFaultIds?.length ?? 0) === 0 &&
+    (patch.removeFaultIds?.length ?? 0) === 0
+  );
+}
+
+/**
+ * The change picking one fault makes to the marks it is aimed at (#1558) — a **toggle**, as a typed
+ * abbreviation is ({@link keyPatch}): when every target already carries it, it comes off them all;
+ * otherwise it goes on every one that lacks it.
+ */
+export function faultTogglePatch(
+  faultId: string,
+  targets: readonly (TileMark | null | undefined)[]
+): MarkPatch {
+  const allCarry = targets.length > 0 && targets.every((m) => markFaultIds(m).includes(faultId));
+  return allCarry ? { removeFaultIds: [faultId] } : { addFaultIds: [faultId] };
+}
+
+/** *Clear the mark*: both halves, and every fault any of the targets carries. */
+export function clearMarkPatch(targets: readonly (TileMark | null | undefined)[]): MarkPatch {
+  const faults = unionFaults(targets);
+  return {
+    conditionId: null,
+    certificateStatusId: null,
+    ...(faults.length > 0 ? { removeFaultIds: faults } : {}),
+  };
 }
 
 // ── Marking every unmarked tile at once ────────────────────────────────────────────────────────
@@ -74,6 +163,10 @@ export function isEmptyPatch(patch: MarkPatch): boolean {
  * one pick — and that only works if the pick leaves the exceptions alone. The halves are separate: a
  * condition fills the tiles without a condition, whatever certificate they carry, and the other way
  * round. A fill never clears, so a half the pick sets to null is not part of it.
+ *
+ * **Faults are never part of a fill** (#1558): a fault belongs to one piece, so giving it to every
+ * tile without one would be wrong far more often than right — the reason identification never
+ * carries one over from the last tile either.
  */
 export function fillPatch(mark: TileMark | null | undefined, patch: MarkPatch): MarkPatch {
   const m = normalizeMark(mark);
@@ -121,10 +214,31 @@ export interface PairedMark extends TimedMark {
  * re-marked after the back the same the other way round. A tie goes to the back, the side being
  * paired now.
  *
+ * **Faults are the union of both sides** (#1558, decided with the collector): a crease is seen on
+ * the front and a thinned gum on the back, and both are true of the piece. So "given last wins" and
+ * "replaced" are about the condition and certificate alone.
+ *
  * `markedAt: null` on a side that carries a mark means *given just now* — a box marked in the editor
  * session being committed — and is later than any stored time.
  */
 export function pairedMark(front: TimedMark, back: TimedMark): PairedMark {
+  const decided = pairedHalves(
+    { mark: halves(front.mark), markedAt: front.markedAt },
+    { mark: halves(back.mark), markedAt: back.markedAt }
+  );
+  const faultIds = unionFaults([front.mark, back.mark]);
+  if (faultIds.length === 0) return decided;
+  const mark = normalizeMark({ ...decided.mark, faultIds });
+  // The time of the halves where they decided anything; otherwise of the sides the faults came from.
+  const markedAt = decided.mark
+    ? decided.markedAt
+    : latest(
+        [front, back].filter((s) => markFaultIds(s.mark).length > 0).map((s) => s.markedAt)
+      );
+  return { mark, markedAt, replaced: decided.replaced };
+}
+
+function pairedHalves(front: TimedMark, back: TimedMark): PairedMark {
   const f = normalizeMark(front.mark);
   const b = normalizeMark(back.mark);
   if (!b) return { mark: f, markedAt: f ? front.markedAt : null, replaced: null };
@@ -138,6 +252,14 @@ export function pairedMark(front: TimedMark, back: TimedMark): PairedMark {
   return backWins
     ? { mark: b, markedAt: back.markedAt, replaced: f }
     : { mark: f, markedAt: front.markedAt, replaced: b };
+}
+
+/** The latest of several times, null — *given just now* — beating any of them. */
+function latest(times: readonly (Date | null)[]): Date | null {
+  return times.reduce<Date | null | undefined>(
+    (acc, t) => (acc === undefined ? t : later(acc, t)),
+    undefined
+  ) ?? null;
 }
 
 function later(a: Date | null, b: Date | null): Date | null {
@@ -257,15 +379,58 @@ export function seedField(
   };
 }
 
+/** What the faults field of the identification step opens on (#1558), and which tiles keep their
+ * own marked faults. */
+export interface FaultSeed {
+  faultIds: string[];
+  /** `marked` or nothing — faults have no other source. */
+  origin: "marked" | null;
+  keepers: { tileId: string; faultIds: string[] }[];
+}
+
+/**
+ * {@link seedField} for the faults (#1558) — with one difference that is the point: **there is no
+ * fallback**. A fault belongs to one piece, so the last tile's, or a repeated identification's, would
+ * be carried onto the next piece wrongly far more often than rightly (settled with the collector).
+ *
+ * - **Every tile marked with the same faults** opens on them, labelled *marked on the tile*.
+ * - **Otherwise** the field opens empty, and the tiles marked with faults keep theirs — the faults
+ *   given in the field apply to the rest. A tile with no faults marked is not marked; it has no
+ *   faults to keep.
+ */
+export function seedFaults(
+  pieces: readonly { tileId: string; faultIds: readonly string[] }[]
+): FaultSeed {
+  const marked = pieces.filter((p) => p.faultIds.length > 0);
+  if (
+    pieces.length > 0 &&
+    marked.length === pieces.length &&
+    marked.every((p) => sameFaults(p.faultIds, marked[0].faultIds))
+  ) {
+    return { faultIds: [...marked[0].faultIds], origin: "marked", keepers: [] };
+  }
+  return {
+    faultIds: [],
+    origin: null,
+    keepers: marked.map((p) => ({ tileId: p.tileId, faultIds: [...p.faultIds] })),
+  };
+}
+
 /** One tile's own answers where it keeps its marks — what the identification write is handed, so
  * what the step said is exactly what is created. */
 export interface TileOwnAnswer {
   tileId: string;
   conditionId?: string;
   certificateStatusId?: string;
+  /** The faults the tile keeps (#1558), in place of the step's shared ones. */
+  faultIds?: string[];
 }
 
-export function keeperAnswers(condition: FieldSeed, certificate: FieldSeed): TileOwnAnswer[] {
+export function keeperAnswers(
+  condition: FieldSeed,
+  certificate: FieldSeed,
+  faults?: FaultSeed
+): TileOwnAnswer[] {
   const byTile = new Map<string, TileOwnAnswer>();
   const entry = (tileId: string) => {
     let a = byTile.get(tileId);
@@ -274,6 +439,7 @@ export function keeperAnswers(condition: FieldSeed, certificate: FieldSeed): Til
   };
   for (const k of condition.keepers) entry(k.tileId).conditionId = k.value;
   for (const k of certificate.keepers) entry(k.tileId).certificateStatusId = k.value;
+  for (const k of faults?.keepers ?? []) entry(k.tileId).faultIds = [...k.faultIds];
   return [...byTile.values()];
 }
 
@@ -309,7 +475,13 @@ export function parseTileOwnAnswers(raw: unknown): TileOwnAnswer[] {
     if (typeof r.certificateStatusId === "string" && r.certificateStatusId) {
       answer.certificateStatusId = r.certificateStatusId;
     }
-    if (answer.conditionId || answer.certificateStatusId) out.push(answer);
+    if (Array.isArray(r.faultIds)) {
+      const faultIds = [
+        ...new Set(r.faultIds.filter((id): id is string => typeof id === "string" && id !== "")),
+      ];
+      if (faultIds.length > 0) answer.faultIds = faultIds;
+    }
+    if (answer.conditionId || answer.certificateStatusId || answer.faultIds) out.push(answer);
   }
   return out;
 }
