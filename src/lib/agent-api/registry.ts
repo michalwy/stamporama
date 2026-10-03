@@ -14,7 +14,8 @@
 // `set_stamp_colnect_id`, taking it to fifty-four; #1452 added the two translation operations,
 // taking it to fifty-six; #1512 added the eight checklist operations, six of which write, taking it
 // to sixty-four; #1540 added the four catalogue-price operations, two of which write, taking it to
-// **sixty-eight**. Each one is an entry here
+// sixty-eight; #1539 added the six area operations, five of which write, taking it to
+// **seventy-four**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -152,6 +153,14 @@ import {
   updateSizePresetOperation,
 } from "./operations/sizes";
 import { findMissingTranslationsOperation, setTranslationsOperation } from "./operations/translations";
+import {
+  createAreaOperation,
+  listAreasOperation,
+  moveAreaOperation,
+  moveIssueToAreaOperation,
+  setAreaOrderOperation,
+  updateAreaOperation,
+} from "./operations/areas";
 import { matchPathTemplate, parsePathTemplate, templateSpecificity } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
@@ -207,6 +216,12 @@ export const OPERATIONS: readonly Operation[] = [
   getCatalogPricesOperation,
   setCatalogPricesOperation,
   clearCatalogPricesOperation,
+  listAreasOperation,
+  createAreaOperation,
+  updateAreaOperation,
+  moveAreaOperation,
+  setAreaOrderOperation,
+  moveIssueToAreaOperation,
   listChecklistsOperation,
   listChecklistStampsOperation,
   createChecklistOperation,

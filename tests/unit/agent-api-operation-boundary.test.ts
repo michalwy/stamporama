@@ -452,6 +452,10 @@ describe("the agent API's operation modules (#1415)", () => {
  * **#1540 lifted it for one catalogue price at a time, through the grid's own write** — see
  * {@link CATALOG_PRICE_WRITES}. A catalogue, a book or an edition is not a price: deleting one takes
  * every price recorded in it, so the three Settings deletes joined this map.
+ *
+ * **#1539 lifted it for areas, and for exactly its operations**: moving an issue to another area
+ * (`moveIssueToArea`) left this map for {@link AREA_WRITES}. Deleting an area (`deleteCollectionArea`)
+ * was rejected for the API and joined it instead.
  */
 const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["deleteCatalogVendor", { module: "src/lib/catalog.ts", why: "deletes a catalogue, with every book, edition and price in it" }],
@@ -464,9 +468,9 @@ const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["mergeIssues", { module: "src/lib/issues.ts", why: "folds one issue into another and deletes it" }],
   ["moveStampNode", { module: "src/lib/issues.ts", why: "moves a stamp to another issue" }],
   ["reparentStampNode", { module: "src/lib/issues.ts", why: "moves a stamp under another parent" }],
-  ["moveIssueToArea", { module: "src/lib/issues.ts", why: "moves an issue to another area" }],
   ["reorderIssueMembers", { module: "src/lib/issues.ts", why: "rewrites the collector's order of the stamp tree" }],
   ["reorderChecklists", { module: "src/lib/checklists.ts", why: "rewrites the collector's order of an issue's checklists" }],
+  ["deleteCollectionArea", { module: "src/lib/areas.ts", why: "deletes an area" }],
 ]);
 
 describe("the agent API's operation modules (#1438)", () => {
@@ -602,5 +606,60 @@ describe("the agent API's operation modules (#1540)", () => {
       assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of src/lib/variant-prices.ts any more`);
     }
     assert.match(domain, /if \(write\.amount == null\) \{\s*if \(existing\) await prisma\.stampCatalogPrice\.delete/);
+  });
+});
+
+/**
+ * **The area writes the agent may make, and the one module that may make them** (#1539). The
+ * collector allowed an area to be created and edited — its names, title names, catalogues and
+ * prefixes — moved to another parent, put in order among its siblings, and an issue moved to another
+ * area; deleting an area was rejected, and stays in {@link CATALOG_BOUNDARY} with every other
+ * catalogue delete, move and reorder. Pinned both ways, as {@link CHECKLIST_WRITES} is: the area
+ * module imports exactly these writes, and no other operation module imports any of them.
+ */
+const AREA_WRITES = new Map<string, string>([
+  ["createCollectionArea", "src/lib/areas.ts"],
+  ["updateCollectionArea", "src/lib/areas.ts"],
+  ["syncAreaCatalogBooks", "src/lib/areas.ts"],
+  ["syncAreaVendors", "src/lib/areas.ts"],
+  ["reorderCollectionAreas", "src/lib/areas.ts"],
+  ["moveIssueToArea", "src/lib/issues.ts"],
+]);
+
+describe("the agent API's operation modules (#1539)", () => {
+  it("make area writes only in the area module, and only the ones allowed", () => {
+    const areaModule = path.join(AGENT_API, "operations/areas.ts");
+    const imported = importedBindings(areaModule);
+    const fromAreas = imported
+      .filter((binding) => binding.from === "../../areas")
+      .map((binding) => binding.name)
+      .filter((name) => /^(create|update|sync|reorder|delete|move|set|remove)/.test(name));
+    const fromIssues = imported
+      .filter((binding) => binding.from === "../../issues")
+      .map((binding) => binding.name);
+    assert.deepEqual(
+      [...fromAreas, ...fromIssues].sort(),
+      [...AREA_WRITES.keys()].sort(),
+      "operations/areas.ts imports exactly the area writes #1539 allows"
+    );
+
+    const elsewhere: string[] = [];
+    for (const file of operationModules()) {
+      if (file === areaModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (AREA_WRITES.has(name)) elsewhere.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(elsewhere, [], "area writes belong to operations/areas.ts alone (#1539)");
+  });
+
+  it("names only real exports", () => {
+    for (const [name, module] of AREA_WRITES) {
+      assert.match(
+        readFileSync(path.join(ROOT, module), "utf8"),
+        new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of ${module} any more`
+      );
+    }
   });
 });

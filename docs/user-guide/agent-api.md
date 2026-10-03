@@ -205,10 +205,10 @@ catalogue the area does not keep.
 
 **What it cannot do on the catalogue is delete or move anything.** It never deletes an issue, a
 stamp or a variant, never takes a catalogue number off a stamp, never moves a stamp to another issue
-or under another stamp, never merges two issues or moves one to another area, and never changes the
-order of an issue's stamps. Those stay on the issue's and the stamp's own screens, where everything
-it creates can be seen and corrected. Checklists and clearing a catalogue price are the two
-exceptions, below.
+or under another stamp, never merges two issues, and never changes the order of an issue's stamps.
+Those stay on the issue's and the stamp's own screens, where everything it creates can be seen and
+corrected. Checklists, clearing a catalogue price and areas are the exceptions, below — moving an
+issue to another area among them.
 
 **It can also record a stamp's Colnect item-ID** — the number in the stamp's Colnect address, which
 listing on Colnect, the Colnect links and the Colnect list sync all go by. An assistant reading a
@@ -279,6 +279,39 @@ number it cannot place, is reported and the rest is still done. A checklist prin
 changes just as it would from the screen — the printed card reports the difference, and nothing is
 reprinted. It **cannot change the order of an issue's checklists** among themselves; that stays on
 the issue.
+
+On **areas** — the countries, periods and territories your issues are filed under — it can set up a
+new collecting field from a catalogue's table of contents, and reorganise the tree. It can:
+
+- **read the area tree**, in the order the *Areas* screen shows it, each area with its parent, how
+  many issues and stamps are filed directly under it, the catalogue settings it makes itself, and the
+  ones its issues actually get once everything inherited from the areas above is taken into account.
+  A **read only** token can do this much;
+- **create an area** under another, or at the top level, with everything the *Add area* form has:
+  its name, the title name listings use (the name itself, unless it is told otherwise) and that name
+  in your other languages, a description, whether it is grouping-only, and its catalogues — the
+  catalogues its stamps are numbered in, the prefix for each, which one leads, the catalogue volumes
+  that price it and which of them gives a copy its catalogue value. Whatever it leaves out is
+  inherited from the areas above;
+- **correct an area** the same way — only what it is told to change changes, and renaming keeps the
+  title name in step while the two are the same, as the form does;
+- **move an area** under another parent, or to the top level, with its sub-areas and their issues,
+  as the *Parent area* field on the form does. It goes to the end of its new siblings;
+- **put areas in order** among their siblings, as dragging them on the *Areas* screen does;
+- **move an issue to another area**, as *Move to area* on the *Issues* list does.
+
+The *Areas* screen's rules hold unchanged. An area cannot go under itself or under one of its own
+sub-areas; an area with issues or stamps filed under it cannot become grouping-only; an area that
+holds issues needs a catalogue volume giving its copies their value, set on it or above it; and an
+issue cannot be filed under a grouping-only area. Each is refused, and the assistant is told why.
+
+**A move says what it changed.** Moving an area or an issue changes what its issues inherit — the
+prefix a stamp's number carries, which catalogue leads, which volume values a copy — so the
+assistant is told, for every area whose issues now read differently, what they resolved to before
+and after, and, for an issue, any catalogue its stamps are numbered in that the new area does not
+keep. A prefix you set on an issue itself goes with the issue.
+
+**It cannot delete an area.** That stays on the *Areas* screen.
 
 On **translations**, it can translate your texts into the languages you list or print in — the names of your areas,
 issues, checklists and stamps, and the names and abbreviations of your conditions, certificates,

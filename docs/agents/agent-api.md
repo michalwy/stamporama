@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists and #1540 catalogue prices; both wrappers exist and the registry carries **sixty-eight operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices and #1539 areas; both wrappers exist and the registry carries **seventy-four operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1168's bid recommendation, and #1037's catalog-number
-resolver. Nine counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1168's bid recommendation, and #1037's catalog-number
+resolver. Ten counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,10 +21,11 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512) and *the registry carries sixty-four operations* (from #1512 until #1540).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540) and *the registry carries sixty-eight operations* (from #1540 until #1539).
 
-**Thirty-six of them write** since #1540 added two; *thirty-four of them write* was the count from
-#1512 until then, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
+**Forty-one of them write** since #1539 added five; *thirty-six of them write* was the count from
+#1540 until then, *thirty-four of them write* from
+#1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that is a boundary the collector
 set rather than a fact about what they happen to do (*Following the auctions already tracked*,
@@ -137,6 +138,7 @@ src/lib/agent-api/
   translations.ts   the text kinds, the `kind.field.id` key, the language check, the answers (#1452)
   checklist-reads.ts  the checklist row, the order they are listed in, the refusals (#1512)
   catalog-prices.ts  naming an edition, the cell grammar, the grid's figures, the per-cell answer (#1540)
+  area-reads.ts     the area row, the tree order, the catalogue spelling, the refusals (#1539)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -160,10 +162,11 @@ src/lib/agent-api/
     translations.ts find_missing_translations / set_translations (#1452) ← server-side
     checklists.ts   the eight checklist operations (#1512)              ← server-side
     catalog-prices.ts  the editions, the price read, set and clear (#1540)  ← server-side
+    areas.ts        the six area operations (#1539)                     ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `purchase-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1559,7 +1562,7 @@ manual value.
 **Nothing is deleted, moved or reordered**, and it is held the way the other boundaries are.
 `CATALOG_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts` keeps `deleteIssue`,
 `deleteStamp`, `deleteStampCatalogNumber`, `removeStampFromIssue`, `mergeIssues`, `moveStampNode`,
-`reparentStampNode`, `moveIssueToArea`, `reorderIssueMembers` and `reorderChecklists` out of every
+`reparentStampNode`, `reorderIssueMembers`, `reorderChecklists` and `deleteCollectionArea` out of every
 operation module, and `tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of
 writes under `/issues` and `/stamps` and fails on a delete-, move- or reorder-shaped name. New stamps
 take the issue's order as the dialogs' generation gives it (#549).
@@ -1572,6 +1575,11 @@ every price recorded under it. Until then the map also held `deleteChecklist` an
 which nobody asked for — joined the map instead. `remove_checklist_stamps` is exempted **by name,
 with its reason**, from the catalogue test's name guard, which it would otherwise trip on
 `remove_…stamp`.
+
+**#1539 lifted it for areas, and for exactly its operations** — see *Organising the area tree*
+below. `moveIssueToArea` left the map for `AREA_WRITES`; `deleteCollectionArea`, which was rejected,
+joined it. `move_issue_to_area` is exempted by name, with its reason, from the same name guard and
+from the exact list of `/issues` writes, and `agent-api-areas.test.ts` pins it instead.
 
 **`resolveStampRefs` and `loadStampLabels` moved out of `sizes.ts` into `operations/stamp-refs.ts`**
 so the two modules share one way of naming a stamp and reading its numbers back.
@@ -1740,6 +1748,71 @@ imports and fails if any other operation module imports one; `reorderChecklists`
 `CATALOG_BOUNDARY`. `tests/integration/agent-api-checklists.test.ts` pins the exact list of operations
 under `/checklists`.
 
+## Organising the area tree
+
+**Six operations, five of which write** (#1539): the area tree read, an area created under a parent
+with its names and catalogue configuration, corrected, moved to another parent, put in order among
+its siblings, and an issue moved to another area — setting up a collecting field from a catalogue's
+table of contents, and reorganising the tree. What an area is, and how its configuration resolves
+for the issues under it, did not change.
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_areas` | no | the tree in the Areas screen's order, each area's own and resolved configuration; narrowed by `under` (`GET /areas`) |
+| `create_area` | yes | the *Add area* form: name, title names, description, grouping-only, catalogues, prefixes, books |
+| `update_area` | yes | the edit form, only what is sent; `clear` hands a field back to the parent |
+| `move_area` | yes | the form's parent picker, with what changed for the branch's issues (`POST /areas/{area_id}/move`) |
+| `set_area_order` | yes | the tree's drag within one sibling group (`POST /areas/order`) |
+| `move_issue_to_area` | yes | the Issues list's *Move to area* (`POST /issues/{issue_id}/move`) |
+
+**`list_areas` is new rather than the vocabulary's area rows widened**: `get_collection_vocabulary`
+names areas with `parentId` and `assignable` and is fetched once a session, and the catalogue
+configuration, the counts and the resolution are what #1539 asked for and the vocabulary never
+carries. A row states the configuration twice — `own`, what the area sets, in the spelling the writes
+take, so an agent can read it and send it back changed; and `resolved`, what an issue under it gets
+(`effectiveVendorsForArea`, `effectivePrimaryVendorId`, `resolveEffectivePrimaryCatalogNameId`, the
+forms' own walks). Counts are direct: `issueCount` and `stampCount` filed under the area itself.
+
+**A catalogue's three states are one string each**: `"Mi"` declares the catalogue with its prefix
+inherited, `"Mi: GG"` gives it one here, and `"Mi: -"` states *no prefix here* — the column's null,
+text and `''` (#675). The read writes them the same way.
+
+**Every write is the screen's own.** `createCollectionArea` / `updateCollectionArea`, then
+`syncAreaCatalogBooks` and `syncAreaVendors`, are the two form actions' calls in their order;
+`reorderCollectionAreas` is the drag; `moveIssueToArea` is the Issues list's move. The screen's rules
+are the domain's — an area under itself or a descendant, a grouping-only area holding issues or
+stamps, an assignable area with no valuing book on it or above it (#69, #263), an issue under a
+grouping-only area — and each is read in the operation first so the refusal is written for an agent,
+since the domain throws plain `Error`s. **No rule is the API's own.** The form's three choices are
+kept as the form makes them: the leading catalogue is one of the area's own catalogues, the valuing
+book one of its price books, and attaching a book lists its catalogue (`AreaFormDialog` submits the
+book vendors with the rest); a catalogue or book taken off stops leading or valuing, as the radio
+goes with its row. The title name defaults to the name on a create and follows a rename while the two
+are equal (#210), which is the form's mirroring.
+
+**An edit restates what it does not change**, because `updateCollectionArea` writes every column it
+is handed; the books and vendors are written only when one of their lists is sent or cleared. A move
+is that same edit with only `parentId` changed, so it lands at the end of its new siblings and the
+subtree's sort keys are recomputed (#78, #181) exactly as from the form.
+
+**A move answers with what it changed** (#1539's third decision): `move_area` returns, for every area
+of the moved branch whose `resolved` configuration differs, its `issueCount` and the configuration
+before and after; `move_issue_to_area` returns the issue's own before and after — its issue-level
+prefixes (#377) applied to both, since they travel with it — and `numbersOutsideArea`, the catalogues
+its stamps are numbered in that the new area does not keep. Per area rather than per issue on an area
+move, because a branch can hold hundreds of issues and every issue in one area resolves alike but for
+its own prefixes.
+
+**`set_area_order` is `set_checklist_order`'s shape over the domain's stricter write**:
+`reorderCollectionAreas` demands the exact sibling set, so the operation sends the named areas first
+and the rest after in their order. The areas named must share one parent and are refused otherwise.
+
+**The boundary moved by exactly these operations.** `AREA_WRITES` in
+`tests/unit/agent-api-operation-boundary.test.ts` pins the area writes `operations/areas.ts` imports
+and fails if any other operation module imports one; `deleteCollectionArea` joined `CATALOG_BOUNDARY`
+and `moveIssueToArea` left it. `tests/integration/agent-api-areas.test.ts` pins the operations under
+`/areas` and that none deletes an area.
+
 ## Translating the collection's texts
 
 **Two operations, one of which writes** (#1452): the texts a language is missing, and the
@@ -1813,14 +1886,16 @@ exist cannot be.
   undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
 - **The agent never deletes, moves or reorders an issue, a stamp or a variant** (#1438). See
-  *Building the catalogue* above. **Checklists are one exception** (#1512): it deletes one no
-  album prints and sets the order of its stamps, and nothing else — see *Changing checklists*.
-  **Catalogue prices are the other** (#1540): it clears one cell's price as the grid does, and
-  never deletes a catalogue, a book or an edition — see *Pricing the catalogue*.
+  *Building the catalogue* above. **Checklists, catalogue prices and areas are the exceptions**
+  (#1512, #1540, #1539): it deletes a checklist no album prints and sets the order of its stamps —
+  see *Changing checklists* — clears one cell's price as the grid does and never deletes a catalogue,
+  a book or an edition — see *Pricing the catalogue* — and moves and orders areas and moves an issue
+  to another area — see *Organising the area tree*.
+- **The agent never deletes an area** (#1539).
 
 Do not add a publish-shaped, send-shaped, auction-writing or copy-touching operation to the
-registry, whatever it is called, nor one that deletes a size preset or deletes, moves or reorders an
-issue or a stamp. *Two boundaries* was this
+registry, whatever it is called, nor one that deletes a size preset, deletes an area, or deletes,
+moves or reorders an issue or a stamp beyond moving an issue to another area. *Two boundaries* was this
 section's count until #1036 and *three* until #1390, and both are quoted rather than deleted.
 
 ### The two boundaries are not the same shape
@@ -2045,7 +2120,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries sixty-eight operations.** It was empty on #706, which shipped none; #708
+**The document carries seventy-four operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2061,9 +2136,10 @@ added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, 
 added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` and `update_stamp`;
 #1445 added `set_stamp_colnect_id`; #1452 added `find_missing_translations` and `set_translations`;
 #1512 added the eight checklist operations; #1540 added `list_catalog_editions`, `get_catalog_prices`,
-`set_catalog_prices` and `clear_catalog_prices`.
+`set_catalog_prices` and `clear_catalog_prices`; #1539 added `list_areas`, `create_area`,
+`update_area`, `move_area`, `set_area_order` and `move_issue_to_area`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries
