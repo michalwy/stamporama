@@ -1,6 +1,7 @@
 "use client";
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
+import type { TileMark } from "@/lib/tile-marks";
 import {
   useCallback,
   useEffect,
@@ -263,6 +264,10 @@ export interface IdentifiedPiece {
   tileId: string;
   sides: TileSideView[];
   position: number;
+  /** The condition and certificate marked on the tile before it was identified (#1550) — what the
+   * identification step opens on. Null for an unmarked tile, and for one already identified, whose
+   * mark has nothing left to seed. */
+  mark?: TileMark | null;
 }
 
 /**

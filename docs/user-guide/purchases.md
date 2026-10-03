@@ -704,6 +704,61 @@ throwing the tile away would take the copy's front and back with it. Discarded t
 protection — the card is being drawn again, discards included — so the confirmation tells you how
 many discards and notes are about to go with them.
 
+#### Marking the condition before identifying
+
+A card often mixes conditions — MNH beside MH, U and CTO — and the scan alone frequently cannot tell
+MNH from MNG. You can, with the card in hand, but identifying comes later, stamp by stamp, when the
+card may already be put away. So you can **mark each tile's condition and certificate straight after
+scanning**, while you still hold the card, and the identification picks the marks up.
+
+**On the strip.** Every tile still to be identified has a small chip area above its picture, between
+the corner marks. Click it and pick a condition or a certificate from your collection's own lists;
+the mark then sits there as the condition's coloured chip, with the certificate beside it, so a card
+can be checked at a glance before you start. Click it again to change it or **Clear the mark**.
+
+- **From the keyboard.** With a tile focused — tab to it — type the condition's abbreviation —
+  `MNH`, `U`, `CTO` — and the tile is marked; the certificate's abbreviation marks the certificate. Typing
+  the abbreviation the tile already carries clears it again. **←** and **→** move to the
+  neighbouring tile, so a card can be worked through without the mouse.
+- **Several at once.** Tick the tiles and press **Mark condition…** on the bar above the strip — a
+  run read off the card as all MNG is one pick.
+- **An unpaired back** can be marked too: the back is often where the condition shows, gum or no
+  gum. Its mark becomes the tile's once you drag it onto its front.
+
+**On the card itself, in the cut editor.** The boxes sit at their places on the physical card, so
+this is where a mark is easiest to give: point at the place on the card in your hand and mark the
+box. Select one box or several and press **Mark…** in the toolbar, or simply type the abbreviation —
+the same picker and the same keys as on the strip. The mark shows on the box, and **a box's mark is
+its tile's**: it becomes the tile's mark when you press Cut, and it is on the strip afterwards.
+
+You can mark boxes while you are still correcting the cut. Moving or resizing a box keeps its mark; a
+new box and the two halves of a split have none; a merged box keeps a mark only when the boxes merged
+all had the same one. **Re-cutting** reopens the editor on the previous boxes **with their marks**.
+
+The same works on a card's **back scan**, which is cut in the same editor. A back box paired with its
+front is the same tile, so marking either marks the tile. When the front and the back were marked
+differently — MNH on the front, then MNG on the back once the gum was seen — **the mark given last
+wins**, and the cut report (or a message, when you drag a back on by hand) says which mark it
+replaced.
+
+Marks are kept on the tile, so they survive a reload and a break of a week between marking and
+identifying. They can be changed until the tile is identified. A tile that has become a copy or been
+discarded shows no mark any more — the copy's own condition is what counts from then on.
+
+**What identifying does with them.** A mark only **seeds** the identification — the copy takes what
+you confirm there. Every identification dialog opens with the tile's marked condition and
+certificate, labelled **marked on the tile**; a tile with no marks opens with your last used choices,
+labelled **last used**, as before. Change a field and its label goes, since the value is then your
+own answer.
+
+- **Several tiles identified as one stamp**: when they are all marked alike, the step opens on that
+  mark and your answer applies to all of them. When only some are marked, or their marks differ, the
+  marked tiles **keep their marks** and the condition and certificate you give apply to the rest —
+  the step says so before anything is created (*3 tiles keep their marked MNG*).
+- **A run identified as the stamps of a checklist**: each marked tile's marks become its own details,
+  so its row says *own condition* — *marked on the tile* — exactly as an override does, and tiles
+  without marks follow the run's shared value.
+
 #### Working through the tiles
 
 Click a tile. **The picture is the dialog**: the tile fills it, with the answer beside it. A crop

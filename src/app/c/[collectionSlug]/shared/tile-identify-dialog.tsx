@@ -1,6 +1,7 @@
 "use client";
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
+import { isSelectableTile } from "@/lib/scan-tile-selection";
 import { useCallback, useState, useTransition } from "react";
 import { Icon } from "@/app/icons";
 import {
@@ -379,6 +380,9 @@ export function TileIdentifyDialog({
     tileId: t.tile.id,
     sides: t.sides,
     position: t.tile.position,
+    // The mark seeds the identification (#1550) only while the tile is still to be identified —
+    // identifying a consumed one again opens on what its copy is.
+    mark: isSelectableTile(t.tile) ? t.tile.mark : null,
   }));
 
   /** What these pieces could be (#607) — one shortlist over the run, as a **union** with how many

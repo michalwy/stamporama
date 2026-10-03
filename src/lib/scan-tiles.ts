@@ -17,6 +17,7 @@ import {
 } from "./scan-sheets";
 import { conflictingPhotoRoles, photoRolesPresent } from "./tile-photo-roles";
 import type { ArrivingCopy } from "./want-rules";
+import type { TileOwnAnswer } from "./tile-marks";
 import {
   resolveRunCopyDetails,
   type IssueRunIdentification,
@@ -142,6 +143,14 @@ export interface TileIdentification {
    * the dialog offers the choice on by default there, so null is the collector turning it off.
    */
   stampPhotoTileId?: string | null;
+  /**
+   * Tiles that keep **their own** condition or certificate rather than the shared answer (#1550) —
+   * tiles marked before identification, where several are identified as one stamp and their marks do
+   * not all agree. Each names only the halves it keeps; the shared answer applies to the rest. The
+   * condition step works these out and says how many keep what, so the write is handed exactly what
+   * the step said rather than re-reading the marks behind it. Absent is the ordinary pass.
+   */
+  tileAnswers?: readonly TileOwnAnswer[] | null;
 }
 
 export async function identifyTileAsNewCopy(
@@ -205,10 +214,10 @@ export async function identifyTilesAsNewCopies(
   const tiles = await loadSelectedTiles(ownerId, tileIds);
   const stampPhotoFrom = chosenStampPhoto(tiles, input.stampPhotoTileId, input.formatId);
   const target = { lotId: await resolveTileLot(tiles[0].purchaseId, input.lotId) };
+  const own = await tileOwnAnswers(tiles, input.tileAnswers ?? []);
 
-  const copies = await intakeStamps(ownerId, target, {
+  const shared = {
     stampId: input.stampId,
-    copies: tiles.length,
     conditionId: input.conditionId,
     certificateStatusId: input.certificateStatusId,
     locationId: input.locationId,
@@ -218,7 +227,25 @@ export async function identifyTilesAsNewCopies(
     forSale: input.forSale,
     forTrade: input.forTrade,
     stamps: input.stamps,
-  });
+  };
+  // One `intakeStamps` for the whole pass while every tile takes the same answer — which keeps the
+  // internal numbers one consecutive range. Tiles keeping their own marks (#1550) are created one
+  // copy each instead, still in card order, so the numbers still run the way the card reads.
+  const copies: ArrivingCopy[] =
+    own.size === 0
+      ? await intakeStamps(ownerId, target, { ...shared, copies: tiles.length })
+      : [];
+  if (own.size > 0) {
+    for (const tile of tiles) {
+      const answer = own.get(tile.id);
+      const [copy] = await intakeStamps(ownerId, target, {
+        ...shared,
+        conditionId: answer?.conditionId ?? shared.conditionId,
+        certificateStatusId: answer?.certificateStatusId ?? shared.certificateStatusId,
+      });
+      copies.push(copy);
+    }
+  }
   if (copies.length !== tiles.length) {
     throw new ScanValidationError("The copies could not be created.");
   }
@@ -238,6 +265,43 @@ export async function identifyTilesAsNewCopies(
   // row, now on its copy — becomes the stamp's picture.
   if (stampPhotoFrom) await giveStampTilePhoto(ownerId, stampPhotoFrom);
   return copies;
+}
+
+/**
+ * The tiles keeping their own condition or certificate (#1550), checked before any copy exists: each
+ * one of the tiles being identified, named once, and every answer one this collection holds — a
+ * refusal on the ninth copy would leave eight tiles identified and the rest not.
+ */
+async function tileOwnAnswers(
+  tiles: readonly { id: string; collectionId: string }[],
+  answers: readonly TileOwnAnswer[]
+): Promise<Map<string, TileOwnAnswer>> {
+  const own = new Map<string, TileOwnAnswer>();
+  if (answers.length === 0) return own;
+  const ids = new Set(tiles.map((t) => t.id));
+  for (const a of answers) {
+    if (!ids.has(a.tileId)) {
+      throw new ScanValidationError("A tile's own answer names a tile that is not being identified.");
+    }
+    if (own.has(a.tileId)) throw new ScanValidationError("The same tile was named twice.");
+    own.set(a.tileId, a);
+  }
+  const { collectionId } = tiles[0];
+  const conditionIds = [...new Set(answers.flatMap((a) => (a.conditionId ? [a.conditionId] : [])))];
+  const certIds = [
+    ...new Set(answers.flatMap((a) => (a.certificateStatusId ? [a.certificateStatusId] : []))),
+  ];
+  const [conditions, certs] = await Promise.all([
+    prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
+    prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
+  ]);
+  if (conditions !== conditionIds.length) {
+    throw new ScanValidationError("Condition not found in this collection.");
+  }
+  if (certs !== certIds.length) {
+    throw new ScanValidationError("Certificate status not found in this collection.");
+  }
+  return own;
 }
 
 /**

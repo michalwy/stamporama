@@ -40,6 +40,14 @@ import { scanSheetCutoff } from "./scan-sheet-cleanup-rules";
 import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
 import {
+  applyMarkPatch,
+  isEmptyPatch,
+  normalizeMark,
+  pairedMark,
+  type MarkPatch,
+  type TileMark,
+} from "./tile-marks";
+import {
   asQuarterTurn,
   isQuarterTurn,
   turnBetween,
@@ -510,6 +518,68 @@ export interface CutReport {
   frontWithoutBack: number[];
   /** Backs that found no mutual front and became back-only tiles, to be paired by hand. */
   backOnly: number;
+  /** Tiles whose front and back carried **different** marks (#1550): the mark given last won, and
+   * this names what it replaced, so the pairing says so rather than quietly picking one. Empty on a
+   * front commit. */
+  marksReplaced: { position: number; mark: TileMark; replaced: TileMark }[];
+}
+
+/**
+ * One box of a cut as the editor hands it over: the four numbers, and the **mark** given to it there
+ * (#1550) — a box's mark is its tile's mark, so it is written onto the tile the box becomes.
+ *
+ * `markedAt` is the stored time of a mark that came **with** the box, read off the tile a re-cut
+ * reopened on and left unchanged; a mark given in the editor carries none, and is stamped with the
+ * commit's own time. That is what lets a pairing tell which of two different marks was given last.
+ */
+export interface CutBox extends Box {
+  mark?: TileMark | null;
+  markedAt?: string | null;
+}
+
+/** A box's mark as it is written, with its time — now for one given in this editor session. */
+function boxMark(box: CutBox, now: Date): { mark: TileMark | null; markedAt: Date | null } {
+  const mark = normalizeMark(box.mark);
+  if (!mark) return { mark: null, markedAt: null };
+  const given = box.markedAt ? new Date(box.markedAt) : null;
+  // A time from the future, or one that is not a time, is the editor's own — now.
+  const markedAt = given && !Number.isNaN(given.getTime()) && given <= now ? given : now;
+  return { mark, markedAt };
+}
+
+/** The mark columns of a tile, as written. */
+function markColumns({ mark, markedAt }: { mark: TileMark | null; markedAt: Date | null }) {
+  return {
+    markConditionId: mark?.conditionId ?? null,
+    markCertificateStatusId: mark?.certificateStatusId ?? null,
+    markedAt: mark ? markedAt : null,
+  };
+}
+
+/** Every condition and certificate a set of marks names, checked against the collection before any
+ * of them is written — a mark is a pointer into the collection's own dictionaries. */
+async function assertMarksInCollection(
+  collectionId: string,
+  marks: readonly (TileMark | null)[]
+): Promise<void> {
+  const conditionIds = [...new Set(marks.flatMap((m) => (m?.conditionId ? [m.conditionId] : [])))];
+  const certIds = [
+    ...new Set(marks.flatMap((m) => (m?.certificateStatusId ? [m.certificateStatusId] : []))),
+  ];
+  const [conditions, certs] = await Promise.all([
+    conditionIds.length > 0
+      ? prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } })
+      : 0,
+    certIds.length > 0
+      ? prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } })
+      : 0,
+  ]);
+  if (conditions !== conditionIds.length) {
+    throw new ScanValidationError("Condition not found in this collection.");
+  }
+  if (certs !== certIds.length) {
+    throw new ScanValidationError("Certificate status not found in this collection.");
+  }
 }
 
 /**
@@ -531,7 +601,7 @@ export interface CutReport {
 export async function commitCut(
   ownerId: string,
   sheetId: string,
-  boxes: readonly Box[]
+  boxes: readonly CutBox[]
 ): Promise<CutReport> {
   const owner = await assertSheetOwner(ownerId, sheetId);
 
@@ -563,6 +633,10 @@ export async function commitCut(
     throw new ScanValidationError("Draw at least one box before committing the cut.");
   }
   assertBoxesInSheet(boxes, sheet);
+  await assertMarksInCollection(
+    owner.collectionId,
+    boxes.map((b) => normalizeMark(b.mark))
+  );
 
   // Reading order first, so a box's index means the same thing to the cut, to the pairing and to
   // the position written on the tile.
@@ -582,11 +656,12 @@ async function commitFrontCut(args: {
   owner: ScanOwner;
   sheetId: string;
   batchNo: number;
-  ordered: Box[];
+  ordered: CutBox[];
   crops: Crops;
 }): Promise<CutReport> {
   const { owner, sheetId, batchNo, ordered, crops } = args;
   const { collectionId } = owner;
+  const now = new Date();
 
   const rows = ordered.map((box, i) => ({
     tileId: randomUUID(),
@@ -594,6 +669,8 @@ async function commitFrontCut(args: {
     box,
     crop: crops[i],
     position: i,
+    // The box's mark is the tile's (#1550) — given in the editor, or carried through a re-cut.
+    marks: markColumns(boxMark(box, now)),
   }));
 
   const written = await writeCropBytes(collectionId, rows);
@@ -612,6 +689,7 @@ async function commitFrontCut(args: {
             frontY: r.box.y,
             frontW: r.box.w,
             frontH: r.box.h,
+            ...r.marks,
           },
         });
         await tx.photo.create({ data: photoData(r, collectionId, "front") });
@@ -632,6 +710,7 @@ async function commitFrontCut(args: {
     paired: 0,
     frontWithoutBack: rows.map((r) => r.position),
     backOnly: 0,
+    marksReplaced: [],
   };
 }
 
@@ -640,12 +719,13 @@ async function commitBackCut(args: {
   sheetId: string;
   batchNo: number;
   sheet: { width: number; height: number };
-  ordered: Box[];
+  ordered: CutBox[];
   crops: Crops;
 }): Promise<CutReport> {
   const { owner, sheetId, batchNo, sheet, ordered, crops } = args;
   const { collectionId } = owner;
   const scope = scanOwnerWhere(owner);
+  const now = new Date();
 
   const frontSheet = await prisma.scanSheet.findFirstOrThrow({
     where: { ...scope, batchNo, side: "front" },
@@ -656,7 +736,17 @@ async function commitBackCut(args: {
   // once across re-cuts, and a tile already carrying a back is not looking for one.
   const frontTiles = await prisma.scanTile.findMany({
     where: { ...scope, batchNo, frontSheetId: { not: null }, backSheetId: null },
-    select: { id: true, position: true, frontX: true, frontY: true, frontW: true, frontH: true },
+    select: {
+      id: true,
+      position: true,
+      frontX: true,
+      frontY: true,
+      frontW: true,
+      frontH: true,
+      markConditionId: true,
+      markCertificateStatusId: true,
+      markedAt: true,
+    },
     orderBy: { position: "asc" },
   });
   const frontBoxes: Box[] = frontTiles.map((t) => ({
@@ -677,9 +767,33 @@ async function commitBackCut(args: {
   });
   let nextPosition = (maxPosition._max.position ?? -1) + 1;
 
+  // The marks (#1550). A back box paired with a front **is the same tile**, so the two marks become
+  // one — the mark given last winning where they differ, and the replacement reported. A box marked
+  // in this editor session is later than anything already stored on its front.
+  const marksReplaced: CutReport["marksReplaced"] = [];
   const rows = ordered.map((box, i) => {
     const frontIndex = backIndexToFront.get(i);
     const target = frontIndex != null ? frontTiles[frontIndex] : null;
+    const given = boxMark(box, now);
+    let mark = given.mark;
+    let markedAt = given.markedAt;
+    if (target) {
+      const paired = pairedMark(
+        {
+          mark: normalizeMark({
+            conditionId: target.markConditionId,
+            certificateStatusId: target.markCertificateStatusId,
+          }),
+          markedAt: target.markedAt,
+        },
+        { mark: given.mark, markedAt: given.markedAt }
+      );
+      mark = paired.mark;
+      markedAt = paired.markedAt;
+      if (paired.replaced && paired.mark) {
+        marksReplaced.push({ position: target.position, mark: paired.mark, replaced: paired.replaced });
+      }
+    }
     return {
       tileId: target?.id ?? randomUUID(),
       isNewTile: target == null,
@@ -687,6 +801,7 @@ async function commitBackCut(args: {
       box,
       crop: crops[i],
       position: target?.position ?? nextPosition++,
+      marks: markColumns({ mark, markedAt }),
     };
   });
 
@@ -707,6 +822,7 @@ async function commitBackCut(args: {
               backY: r.box.y,
               backW: r.box.w,
               backH: r.box.h,
+              ...r.marks,
             },
           });
         } else {
@@ -718,6 +834,7 @@ async function commitBackCut(args: {
               backY: r.box.y,
               backW: r.box.w,
               backH: r.box.h,
+              ...r.marks,
             },
           });
         }
@@ -743,6 +860,7 @@ async function commitBackCut(args: {
     paired: pairing.pairs.length,
     frontWithoutBack: pairing.frontUnmatched.map((i) => frontTiles[i].position),
     backOnly: pairing.backUnmatched.length,
+    marksReplaced,
   };
 }
 
@@ -951,7 +1069,7 @@ export async function pairTilesManually(
   ownerId: string,
   backTileId: string,
   frontTileId: string
-): Promise<void> {
+): Promise<PairingMarks> {
   const [backTile, frontTile] = await Promise.all([
     loadTile(backTileId),
     loadTile(frontTileId),
@@ -981,6 +1099,14 @@ export async function pairTilesManually(
     throw new ScanValidationError("That tile has already been dealt with.");
   }
 
+  // The back is the same tile as the front from here on, so its mark — given on the unpaired back
+  // box — becomes the tile's (#1550). Where the front already carries a different one, the mark
+  // given last wins and the other is named, which is what the screen says about the pairing.
+  const paired = pairedMark(
+    { mark: tileMark(frontTile), markedAt: frontTile.markedAt },
+    { mark: tileMark(backTile), markedAt: backTile.markedAt }
+  );
+
   await prisma.$transaction(async (tx) => {
     await tx.photo.updateMany({
       where: { tileId: backTileId, role: "back" },
@@ -997,11 +1123,96 @@ export async function pairTilesManually(
         // The turn is the back picture's (#1006) — its photo is cut turned — so it travels with the
         // photo and the box, exactly as they do.
         backTurn: backTile.backTurn,
+        ...markColumns(paired),
       },
     });
     // Its photo has moved, so the cascade takes nothing with it.
     await tx.scanTile.delete({ where: { id: backTileId } });
   });
+  return { mark: paired.mark, replaced: paired.replaced };
+}
+
+/** What a manual pairing did to the tile's mark (#1550): the mark it now carries, and the one it
+ * replaced when front and back disagreed. */
+export interface PairingMarks {
+  mark: TileMark | null;
+  replaced: TileMark | null;
+}
+
+function tileMark(tile: {
+  markConditionId: string | null;
+  markCertificateStatusId: string | null;
+}): TileMark | null {
+  return normalizeMark({
+    conditionId: tile.markConditionId,
+    certificateStatusId: tile.markCertificateStatusId,
+  });
+}
+
+// ── Marking a tile before it is identified (#1550) ────────────────────────────────────────────
+
+/**
+ * Mark tiles' condition and certificate, or clear them — on the strip for one tile or the ticked
+ * ones, and through the cut editor's boxes once they have been cut.
+ *
+ * **Only a tile still to be identified** — waiting or parked. A mark exists to seed identification,
+ * and once a tile has become a copy or been discarded there is nothing left for it to seed; the
+ * copy's own condition is changed on the copy.
+ *
+ * Every tile is checked before any is written, the selection rule `scan-tiles.ts` follows: a stale
+ * strip in a second tab costs a sentence, not half a card marked.
+ */
+export async function setTileMarks(
+  ownerId: string,
+  tileIds: readonly string[],
+  patch: MarkPatch
+): Promise<void> {
+  if (tileIds.length === 0) throw new ScanValidationError("Pick at least one tile to mark.");
+  if (isEmptyPatch(patch)) return;
+  const tiles = await prisma.scanTile.findMany({
+    where: { id: { in: [...new Set(tileIds)] } },
+    select: {
+      id: true,
+      collectionId: true,
+      purchaseId: true,
+      state: true,
+      markConditionId: true,
+      markCertificateStatusId: true,
+      markedAt: true,
+    },
+  });
+  if (tiles.length !== new Set(tileIds).size) {
+    throw new ScanAuthError("Tile not found or access denied.");
+  }
+  const { collectionId, purchaseId } = tiles[0];
+  if (tiles.some((t) => t.collectionId !== collectionId || t.purchaseId !== purchaseId)) {
+    throw new ScanValidationError("Those tiles are not all on the same card.");
+  }
+  await assertScanCollectionOwner(ownerId, collectionId);
+  if (tiles.some((t) => !isOpenTileState(t.state))) {
+    throw new ScanValidationError(
+      tiles.length === 1
+        ? "That tile has already been dealt with, so there is nothing for a mark to seed."
+        : "Some of those tiles have already been dealt with, so there is nothing for a mark to seed."
+    );
+  }
+  await assertMarksInCollection(collectionId, [
+    normalizeMark({
+      conditionId: patch.conditionId ?? null,
+      certificateStatusId: patch.certificateStatusId ?? null,
+    }),
+  ]);
+
+  const now = new Date();
+  await prisma.$transaction(
+    tiles.map((t) => {
+      const mark = applyMarkPatch(tileMark(t), patch);
+      return prisma.scanTile.update({
+        where: { id: t.id },
+        data: markColumns({ mark, markedAt: now }),
+      });
+    })
+  );
 }
 
 /**
@@ -1110,6 +1321,9 @@ async function loadTile(tileId: string) {
       backW: true,
       backH: true,
       backTurn: true,
+      markConditionId: true,
+      markCertificateStatusId: true,
+      markedAt: true,
     },
   });
   if (!tile) throw new ScanAuthError("Tile not found or access denied.");
@@ -1609,6 +1823,13 @@ export interface ScanTileData {
   frontTurn: QuarterTurn;
   backTurn: QuarterTurn;
   note: string | null;
+  /** The condition and certificate marked on the tile before it is identified (#1550), or null.
+   * Drawn on the strip and on the box in the cut editor, and what the identification dialogs open
+   * on. Read on every tile, though only one still to be identified shows or uses it. */
+  mark: TileMark | null;
+  /** When the mark last changed — carried back into the editor with the box on a re-cut, so a
+   * pairing can still tell which of two marks was given last. */
+  markedAt: string | null;
   /** The copy a `consumed` tile became (#567). Null on every other tile, and also on a consumed
    * one whose copy was deleted afterwards — the tile stays consumed either way, because its images
    * left with the copy.
@@ -1795,6 +2016,9 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         backH: true,
         frontTurn: true,
         backTurn: true,
+        markConditionId: true,
+        markCertificateStatusId: true,
+        markedAt: true,
         photos: { select: { id: true, role: true } },
         // The shortlist a parked tile carries (#607), with everything the *use the parent instead*
         // correction needs to decide itself and then name the parent: the variant flags
@@ -1956,6 +2180,8 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       frontTurn: asQuarterTurn(t.frontTurn),
       backTurn: asQuarterTurn(t.backTurn),
       note: t.note,
+      mark: tileMark(t),
+      markedAt: tileMark(t) && t.markedAt ? t.markedAt.toISOString() : null,
       candidates: t.candidates.map((c) => toTileCandidate(c.stamp)),
       item: t.item
         ? {

@@ -69,6 +69,7 @@ import {
   DispositionChips,
   INPUT_STYLE,
   type IntakeConditionDialogProps,
+  SeedOriginNote,
 } from "./intake-condition-dialog";
 import { MeasuredMark, MeasuredNarrowing } from "./measured-marks";
 import { TileZoomView, type IdentifiedPiece } from "./tile-zoom-view";
@@ -285,8 +286,28 @@ export function IssueRunDialog({
   /** A tile's stamp, where the collector chose it rather than the tile taking its turn — or none, for a
    * tile cleared to be assigned by hand (#1523). */
   const [corrections, setCorrections] = useState<RunCorrections>(new Map());
-  /** A tile's own copy details — only the fields it overrides. */
-  const [overrides, setOverrides] = useState<ReadonlyMap<string, RunCopyOverrides>>(new Map());
+  /**
+   * A tile's own copy details — only the fields it overrides.
+   *
+   * **A tile's marks start here** (#1550): the condition and certificate marked before identifying
+   * become that tile's own details, so its row says *own condition* as an override does, and a tile
+   * without marks follows the run's shared value. They are ordinary overrides from then on — changed
+   * or taken back on the row like any other.
+   */
+  const [overrides, setOverrides] = useState<ReadonlyMap<string, RunCopyOverrides>>(() => {
+    const seeded = new Map<string, RunCopyOverrides>();
+    for (const p of pieces) {
+      const own: RunCopyOverrides = {};
+      const conditionId = p.mark?.conditionId;
+      const certificateStatusId = p.mark?.certificateStatusId;
+      if (conditionId && conditions.some((c) => c.id === conditionId)) own.conditionId = conditionId;
+      if (certificateStatusId && certificateStatuses.some((c) => c.id === certificateStatusId)) {
+        own.certificateStatusId = certificateStatusId;
+      }
+      if (Object.keys(own).length > 0) seeded.set(p.tileId, own);
+    }
+    return seeded;
+  });
   const inRun = pieces.filter((p) => !removed.has(p.tileId));
   const assignments = assignInTurn(
     inRun.map((p) => p.tileId),
@@ -335,14 +356,28 @@ export function IssueRunDialog({
   const anyPerforation = members.some((m) => m.attributes.perforation);
 
   // ── The shared details, remembered the way the condition step remembers them ────────────────
-  const [conditionId, setConditionId] = useState(() => {
+  const [conditionId, setSharedConditionId] = useState(() => {
     const last = readLast(LS_LAST_CONDITION, collectionId);
     return conditions.some((c) => c.id === last) ? last : "";
   });
-  const [certificateStatusId, setCertificateStatusId] = useState(() => {
+  const [certificateStatusId, setSharedCertificateStatusId] = useState(() => {
     const last = readLast(LS_LAST_CERT, collectionId);
     return certificateStatuses.some((c) => c.id === last) ? last : "";
   });
+  /** Whether each shared field still holds the remembered value it opened on (#1550) — said beside
+   * it as *last used*, as the condition step says it, until the collector changes it. */
+  const [sharedFromLast, setSharedFromLast] = useState({
+    condition: conditionId !== "",
+    certificate: certificateStatusId !== "",
+  });
+  const setConditionId = (value: string) => {
+    setSharedConditionId(value);
+    setSharedFromLast((s) => ({ ...s, condition: false }));
+  };
+  const setCertificateStatusId = (value: string) => {
+    setSharedCertificateStatusId(value);
+    setSharedFromLast((s) => ({ ...s, certificate: false }));
+  };
   // Never remembered (#573): a sticky format would mark every later single as a block.
   const [formatId, setFormatId] = useState("");
   const [location, setLocation] = useState(() => {
@@ -793,7 +828,10 @@ export function IssueRunDialog({
               )}
               <div style={{ display: "flex", gap: "0.625rem" }}>
                 <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="run-condition">Condition</LabelWithError>
+                  <LabelWithError htmlFor="run-condition">
+                    Condition
+                    <SeedOriginNote origin={sharedFromLast.condition ? "last-used" : null} />
+                  </LabelWithError>
                   <ConditionSelect
                     id="run-condition"
                     conditions={conditions}
@@ -803,7 +841,10 @@ export function IssueRunDialog({
                   />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <LabelWithError htmlFor="run-cert">Certificate</LabelWithError>
+                  <LabelWithError htmlFor="run-cert">
+                    Certificate
+                    <SeedOriginNote origin={sharedFromLast.certificate ? "last-used" : null} />
+                  </LabelWithError>
                   <CertificateSelect
                     id="run-cert"
                     certificateStatuses={certificateStatuses}
@@ -934,7 +975,15 @@ export function IssueRunDialog({
                 const thumb = front
                   ? `/api/collections/${collectionId}/photos/${front.photoId}/thumb`
                   : null;
-                const own = overriddenFields(overrides.get(a.tileId));
+                const ownDetails = overrides.get(a.tileId);
+                const own = overriddenFields(ownDetails);
+                // Own details that are still the tile's marks (#1550), said as such: the row reads
+                // where the value came from, as the condition step's labels do.
+                const fromMarks =
+                  (ownDetails?.conditionId !== undefined &&
+                    ownDetails.conditionId === piece.mark?.conditionId) ||
+                  (ownDetails?.certificateStatusId !== undefined &&
+                    ownDetails.certificateStatusId === piece.mark?.certificateStatusId);
                 const isActive = piece.tileId === active?.tileId;
                 const sameAs = a.stampId
                   ? assignments
@@ -948,6 +997,7 @@ export function IssueRunDialog({
                   // A cleared tile says *No stamp*, which is the whole of it.
                   a.corrected && a.stampId ? "corrected" : null,
                   own.length > 0 ? `own ${own.map((f) => FIELD_LABEL[f].toLowerCase()).join(", ")}` : null,
+                  fromMarks ? "marked on the tile" : null,
                 ]
                   .filter(Boolean)
                   .join(" · ");

@@ -55,6 +55,13 @@ import {
   LS_LAST_SCAN_LOT,
 } from "./add-copy-defaults";
 import { TextInput } from "./text-input";
+import {
+  SEED_ORIGIN_LABEL,
+  keeperAnswers,
+  keeperGroups,
+  seedField,
+  type SeedOrigin,
+} from "@/lib/tile-marks";
 
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
@@ -211,6 +218,24 @@ function DispositionChips({
   );
 }
 
+/** Where a seeded field's value came from (#1550), beside its label: *marked on the tile* or *last
+ * used* — the collector must be able to tell the two apart. Nothing once the field has been changed. */
+export function SeedOriginNote({ origin }: { origin: SeedOrigin | null }) {
+  if (!origin) return null;
+  return (
+    <span
+      style={{
+        marginLeft: "0.375rem",
+        fontSize: "0.75rem",
+        fontWeight: 400,
+        color: origin === "marked" ? "var(--color-accent)" : "var(--color-text-muted)",
+      }}
+    >
+      {SEED_ORIGIN_LABEL[origin]}
+    </span>
+  );
+}
+
 export interface IntakeConditionDialogProps {
   selection: PendingSelection;
   collectionId: string;
@@ -320,6 +345,14 @@ export interface IntakeConditionDialogProps {
    */
   priceVariantsInGrid?: boolean;
   /**
+   * Seed the condition and certificate from the **marks** the pieces carry (#1550) — the scan-tile
+   * chain, except a correction, which opens on what the copy is. Each seeded field then says where
+   * its value came from (*marked on the tile*, *last used*), and where several tiles are identified
+   * as one stamp and their marks do not all agree, the marked ones keep their marks and the step
+   * says how many.
+   */
+  seedFromMarks?: boolean;
+  /**
    * Offer to make the tile's front the **stamp's** photo (#1340) — the scan-tile chain only, where a
    * piece is in hand to be compared with the stamp's current picture. On by default when the stamp
    * has no photo (#149's seed, made visible) and off when it has one; the answer is sent as
@@ -354,6 +387,7 @@ function IntakeConditionDialog({
   correctedCopyId,
   priceVariantsInGrid,
   offerStampPhoto,
+  seedFromMarks,
   onBack,
   onClose,
   onSubmit,
@@ -366,14 +400,64 @@ function IntakeConditionDialog({
   // tile with no certificate is an answer, and reading an empty one as "nothing to say" would let
   // the remembered default put a certificate on a copy the collector asked to be the same as one
   // without.
-  const [conditionId, setConditionId] = useState(() => {
-    const last = prefill ? prefill.conditionId : readLast(LS_LAST_CONDITION, collectionId);
-    return conditions.some((c) => c.id === last) ? last : "";
+  //
+  // Ahead of both, on the scan-tile chain, the tiles' own **marks** (#1550): given with the card in
+  // hand, they are the better answer than another tile's or the last one. `seedField` is the rule —
+  // every tile marked alike opens on the mark; otherwise the field opens as before and the marked
+  // tiles keep theirs. Decided once, as the step opens: a mark only seeds the dialog.
+  const [seeds] = useState(() => {
+    const fallbackOrigin: SeedOrigin = prefill ? "repeated" : "last-used";
+    const lastCondition = prefill ? prefill.conditionId : readLast(LS_LAST_CONDITION, collectionId);
+    const lastCert = prefill ? prefill.certificateStatusId : readLast(LS_LAST_CERT, collectionId);
+    const fallback = {
+      condition: {
+        value: conditions.some((c) => c.id === lastCondition) ? lastCondition : "",
+        origin: fallbackOrigin,
+      },
+      certificate: {
+        value: certificateStatuses.some((c) => c.id === lastCert) ? lastCert : "",
+        origin: fallbackOrigin,
+      },
+    };
+    if (!seedFromMarks || !pieces) {
+      return {
+        condition: { value: fallback.condition.value, origin: null, keepers: [] },
+        certificate: { value: fallback.certificate.value, origin: null, keepers: [] },
+      };
+    }
+    const known = (id: string | null | undefined, list: readonly { id: string }[]) =>
+      id && list.some((x) => x.id === id) ? id : null;
+    return {
+      condition: seedField(
+        pieces.map((p) => ({ tileId: p.tileId, marked: known(p.mark?.conditionId, conditions) })),
+        fallback.condition
+      ),
+      certificate: seedField(
+        pieces.map((p) => ({
+          tileId: p.tileId,
+          marked: known(p.mark?.certificateStatusId, certificateStatuses),
+        })),
+        fallback.certificate
+      ),
+    };
   });
-  const [certId, setCertId] = useState(() => {
-    const last = prefill ? prefill.certificateStatusId : readLast(LS_LAST_CERT, collectionId);
-    return certificateStatuses.some((c) => c.id === last) ? last : "";
-  });
+  const [conditionId, setConditionId] = useState(seeds.condition.value);
+  const [certId, setCertId] = useState(seeds.certificate.value);
+  /** Where each seeded value came from, said beside its field (#1550) — until the field is changed,
+   * when the value is the collector's own answer and the label goes. */
+  const [conditionOrigin, setConditionOrigin] = useState(seeds.condition.origin);
+  const [certOrigin, setCertOrigin] = useState(seeds.certificate.origin);
+  /** The tiles keeping their own marks, in words — *3 tiles keep their marked MNG*. */
+  const keepersSaid = [
+    ...keeperGroups(seeds.condition.keepers).map(({ value, count }) => {
+      const abbr = conditions.find((c) => c.id === value)?.abbreviation ?? "condition";
+      return `${count} ${count === 1 ? "tile keeps its" : "tiles keep their"} marked ${abbr}`;
+    }),
+    ...keeperGroups(seeds.certificate.keepers).map(({ value, count }) => {
+      const abbr = certificateStatuses.find((c) => c.id === value)?.abbreviation ?? "certificate";
+      return `${count} ${count === 1 ? "tile keeps its" : "tiles keep their"} marked ${abbr}`;
+    }),
+  ];
   // The physical format of the piece being identified (#573) — a pair, a block, a strip — blank
   // meaning *single*, which is a value and not a missing answer (`StampFormat`, ADR-0020).
   //
@@ -536,6 +620,10 @@ function IntakeConditionDialog({
     }
     const fd = new FormData(e.currentTarget);
     if (lotChoice && lotId) fd.set("lotId", lotId);
+    // The tiles keeping their own marks (#1550) — exactly what the step said, so the write creates
+    // what was read here rather than re-reading the marks behind it.
+    const own = keeperAnswers(seeds.condition, seeds.certificate);
+    if (own.length > 0) fd.set("tileAnswers", JSON.stringify(own));
     fd.set("inCollection", String(disposition.inCollection));
     fd.set("forSale", String(disposition.forSale));
     fd.set("forTrade", String(disposition.forTrade));
@@ -684,6 +772,15 @@ function IntakeConditionDialog({
               <div style={{ marginTop: "0.25rem", color: "var(--color-text-primary)" }}>
                 <strong>{copyCount} copies</strong> will be created — one per tile, each keeping its
                 own pictures.
+                {/* The tiles marked before identifying keep their marks (#1550); the answers below
+                    apply to the rest. Said before anything is created, as the count is. */}
+                {keepersSaid.length > 0 && (
+                  <>
+                    {" "}
+                    <strong>{keepersSaid.join(", ")}</strong>; the condition and certificate below
+                    apply to the rest.
+                  </>
+                )}
               </div>
             )}
             {/* What the collection already holds of this stamp, and what it is still after (#562)
@@ -741,12 +838,18 @@ function IntakeConditionDialog({
 
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="intake-condition">Condition</LabelWithError>
+              <LabelWithError htmlFor="intake-condition">
+                Condition
+                <SeedOriginNote origin={conditionOrigin} />
+              </LabelWithError>
               <select
                 id="intake-condition"
                 name="conditionId"
                 value={conditionId}
-                onChange={(e) => setConditionId(e.target.value)}
+                onChange={(e) => {
+                  setConditionId(e.target.value);
+                  setConditionOrigin(null);
+                }}
                 disabled={isPending}
                 style={INPUT_STYLE}
               >
@@ -759,12 +862,18 @@ function IntakeConditionDialog({
               </select>
             </div>
             <div style={{ flex: 1 }}>
-              <LabelWithError htmlFor="intake-cert">Certificate</LabelWithError>
+              <LabelWithError htmlFor="intake-cert">
+                Certificate
+                <SeedOriginNote origin={certOrigin} />
+              </LabelWithError>
               <select
                 id="intake-cert"
                 name="certificateStatusId"
                 value={certId}
-                onChange={(e) => setCertId(e.target.value)}
+                onChange={(e) => {
+                  setCertId(e.target.value);
+                  setCertOrigin(null);
+                }}
                 disabled={isPending}
                 style={INPUT_STYLE}
               >

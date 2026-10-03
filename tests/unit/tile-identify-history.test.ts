@@ -59,6 +59,8 @@ function tile(id: string, overrides: Partial<ScanTileData> = {}): ScanTileData {
     frontTurn: 0,
     backTurn: 0,
     note: null,
+    mark: null,
+    markedAt: null,
     item: item(),
     candidates: [],
     outsideDescription: false,
