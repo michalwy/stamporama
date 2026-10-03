@@ -199,6 +199,43 @@ describe("tile marks (#1550)", () => {
     assert.equal((await listScans(userId, { purchaseId })).batches[0].tiles[0].mark, null);
   });
 
+  it("marks all unmarked tiles half by half, leaving the marked ones and their times alone (#1556)", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+
+    // The exception is marked first: a with MNG, b with a certificate only.
+    await setTileMarks(userId, [a.id], { conditionId: mng });
+    await setTileMarks(userId, [b.id], { certificateStatusId: cert });
+    const before = await tilesOf(purchaseId);
+
+    await setTileMarks(userId, [a.id, b.id], { conditionId: mnh }, { onlyUnmarked: true });
+    let [ma, mb] = await tilesOf(purchaseId);
+    assert.equal(ma.markConditionId, mng, "a tile with a condition keeps it");
+    assert.equal(ma.markedAt?.getTime(), before[0].markedAt?.getTime(), "and the time it was given");
+    assert.equal(mb.markConditionId, mnh, "a tile without a condition takes it, whatever its certificate");
+    assert.equal(mb.markCertificateStatusId, cert);
+
+    await setTileMarks(userId, [a.id, b.id], { certificateStatusId: cert }, { onlyUnmarked: true });
+    [ma, mb] = await tilesOf(purchaseId);
+    assert.equal(ma.markCertificateStatusId, cert, "the certificate fills the tile without one");
+    assert.equal(ma.markConditionId, mng);
+
+    // A fill never clears.
+    await setTileMarks(userId, [a.id, b.id], { conditionId: null }, { onlyUnmarked: true });
+    [ma, mb] = await tilesOf(purchaseId);
+    assert.equal(ma.markConditionId, mng);
+    assert.equal(mb.markConditionId, mnh);
+
+    // Still only over open tiles.
+    await discardTile(userId, b.id, "junk");
+    await assert.rejects(
+      () => setTileMarks(userId, [a.id, b.id], { conditionId: mnh }, { onlyUnmarked: true }),
+      ScanValidationError
+    );
+  });
+
   it("refuses a tile already dealt with, another collection's condition, and someone else's tile", async () => {
     const purchaseId = await newOrder();
     const front = await upload(purchaseId, "front");

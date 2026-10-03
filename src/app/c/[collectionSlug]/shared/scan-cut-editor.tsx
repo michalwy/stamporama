@@ -34,15 +34,19 @@ import { useSheetRegion } from "./use-sheet-region";
 import type { CutBox } from "@/lib/scan-sheets";
 import {
   applyMarkPatch,
+  fillPatch,
+  isEmptyPatch,
   keyPatch,
   mergedMark,
   normalizeMark,
+  unmarkedCounts,
   type MarkPatch,
   type TileMark,
 } from "@/lib/tile-marks";
 import {
   TileMarkChips,
   TileMarkPicker,
+  unmarkedHint,
   useMarkDictionaries,
   useMarkTypeahead,
 } from "./tile-mark-picker";
@@ -104,6 +108,12 @@ import {
  * the commit, and a re-cut reopens on the tiles' boxes with their marks. A box can be marked while
  * the cut is still being corrected; a moved or resized box keeps its mark, a new or split one has
  * none, and a merged one keeps a mark only when every half had the same one (`tile-marks.ts`).
+ *
+ * **Mark all unmarked** (#1556) gives a condition to every box without one, or a certificate to
+ * every box without one, so the exceptions are marked first and the rest of the card in one pick.
+ * **The front scan only**: a back box's mark meets its front's at the commit and the one given last
+ * wins, and this editor cannot know which front each back box will pair with — so filling every back
+ * box would undo the exceptions marked on the fronts. Those are marked on the strip once paired.
  */
 
 export interface ScanCutEditorSheet {
@@ -445,6 +455,18 @@ export function ScanCutEditor({
     },
     [selected]
   );
+  /** Mark all unmarked (#1556): each half only where a box has none. A box the pick leaves alone
+   * keeps its mark's time; one it reaches is marked now. */
+  const markAllUnmarked = useCallback((patch: MarkPatch) => {
+    setRegions((rs) =>
+      rs.map((r) => {
+        const own = fillPatch(r.mark, patch);
+        if (isEmptyPatch(own)) return r;
+        return { ...r, mark: applyMarkPatch(r.mark, own), markedAt: null };
+      })
+    );
+  }, []);
+  const unmarked = unmarkedCounts(regions.map((r) => r.mark));
   const { keys: markKeyList } = useMarkDictionaries(collectionId);
   const markByKey = useMarkTypeahead(markKeyList, (key) =>
     markSelected(keyPatch(key, selectedRegions.map((r) => r.mark)))
@@ -694,6 +716,24 @@ export function ScanCutEditor({
               <Icon name="mark" size="sm" /> Mark…
             </TileMarkPicker>
           }
+          markAllPicker={
+            sheet.side === "front" && (
+              <TileMarkPicker
+                collectionId={collectionId}
+                targets={regions.map((r) => r.mark)}
+                fill={{ ...unmarked, noun: ["box", "boxes"] }}
+                disabled={unmarked.condition === 0 && unmarked.certificate === 0}
+                ariaLabel="Mark all unmarked boxes"
+                hint={unmarkedHint(unmarked, regions.length, ["box", "boxes"])}
+                triggerStyle={scanToolButtonStyle({
+                  disabled: unmarked.condition === 0 && unmarked.certificate === 0,
+                })}
+                onPatch={markAllUnmarked}
+              >
+                <Icon name="mark" size="sm" /> Mark all unmarked…
+              </TileMarkPicker>
+            )
+          }
           onClear={() => replaceSelection([], [])}
           zoom={view.scale}
           fitted={fitted}
@@ -893,6 +933,7 @@ function Toolbar({
   onDelete,
   onMerge,
   markPicker,
+  markAllPicker,
   onClear,
   zoom,
   fitted,
@@ -911,6 +952,8 @@ function Toolbar({
   onMerge: () => void;
   /** The mark picker over the selected boxes (#1550), built by the editor that holds them. */
   markPicker: React.ReactNode;
+  /** *Mark all unmarked* (#1556) — the front scan only, so nothing on a back. */
+  markAllPicker: React.ReactNode;
   onClear: () => void;
   zoom: number;
   fitted: boolean;
@@ -1005,6 +1048,7 @@ function Toolbar({
         onClick={() => onMode(mode === "split-h" ? "select" : "split-h")}
       />
       {markPicker}
+      {markAllPicker}
       <ScanToolButton
         icon="delete"
         label="Delete"

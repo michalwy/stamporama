@@ -76,11 +76,12 @@ import {
 } from "./upload-sheet-chunks";
 import { TextInput } from "./text-input";
 import { useToast } from "@/app/toast-provider";
-import { keyPatch, type MarkPatch, type TileMark } from "@/lib/tile-marks";
+import { keyPatch, unmarkedCounts, type MarkPatch, type TileMark } from "@/lib/tile-marks";
 import {
   TileMarkChips,
   TileMarkPicker,
   markText,
+  unmarkedHint,
   useMarkDictionaries,
   useMarkTypeahead,
 } from "./tile-mark-picker";
@@ -445,17 +446,18 @@ export function ScansCard({
   const { toast } = useToast();
   /**
    * Mark tiles' condition and certificate before they are identified (#1550), or clear them — one
-   * tile from its chip area or the keyboard, the ticked ones from the bar.
+   * tile from its chip area or the keyboard, the ticked ones from the bar, or every tile of a card
+   * without that half from the batch's header (`onlyUnmarked`, #1556).
    *
    * Only the strip is re-read: a mark moves no copy and no figure the order shows, so the order
    * itself is not asked to refresh for one — on a card worked through key by key that would be forty
    * re-reads of a header that did not change.
    */
-  const markTiles = (tileIds: string[], patch: MarkPatch) => {
+  const markTiles = (tileIds: string[], patch: MarkPatch, onlyUnmarked = false) => {
     if (tileIds.length === 0) return;
     setError(null);
     startTransition(async () => {
-      const result = await markTilesAction(tileIds, patch);
+      const result = await markTilesAction(tileIds, patch, { onlyUnmarked });
       if (result.status === "error") setError(result.message);
       else void invalidateScans(collectionId);
     });
@@ -1616,8 +1618,9 @@ function BatchSection({
    * this only reports the press. */
   onSetKind: (kind: SheetKind) => void;
   onPair: (backTileId: string, frontTileId: string) => void;
-  /** Mark tiles' condition and certificate before they are identified (#1550). */
-  onMark: (tileIds: string[], patch: MarkPatch) => void;
+  /** Mark tiles' condition and certificate before they are identified (#1550) — with
+   * `onlyUnmarked`, only the halves each tile has none of (#1556). */
+  onMark: (tileIds: string[], patch: MarkPatch, onlyUnmarked?: boolean) => void;
   /** A key on a focused tile — its abbreviation marks it. */
   onTileKey: (tile: ScanTileData, e: React.KeyboardEvent<HTMLElement>) => void;
 }) {
@@ -1651,6 +1654,13 @@ function BatchSection({
   // select — a count taken off the whole batch would name pieces the chip is hiding, and the box
   // beside it would then act on a different set than the number it is standing next to.
   const selectableCount = shown.filter(isSelectableTile).length;
+  // What *Mark all unmarked* reaches (#1556): the card's tiles **in view** still to be identified,
+  // as every action on the strip is over what is on screen. **Never an unpaired back**: its mark
+  // meets its front's when it is dragged on, the one given last wins, and a fill given after the
+  // exceptions would undo them.
+  const fillable = frontTiles.filter(isSelectableTile);
+  const unmarked = unmarkedCounts(fillable.map((t) => t.mark));
+  const nothingUnmarked = unmarked.condition === 0 && unmarked.certificate === 0;
   // The retention sweep has taken this batch's scans (#578). The tiles are all still here — what is
   // gone is the ability to draw the cut again, so Re-cut stops being offered rather than being
   // offered and refused. The server refuses it too; this is only the part that keeps a collector
@@ -1758,6 +1768,29 @@ function BatchSection({
         {/* The buttons belong to the batch's contents, so they fold away with them: a finished
             batch is one line, and Re-cut / Delete on a line that shows nothing would be a
             destructive click over a card the collector cannot currently see. */}
+        {/* **Mark all unmarked** (#1556) — a card is mostly one condition, so the exceptions are
+            marked first and the rest of it here, in one pick. Greyed out rather than hidden once
+            every tile in view is marked, with that in the hint, so the control does not seem to
+            have gone missing at exactly the moment its work is done. */}
+        {open && fillable.length > 0 && !reachesFinishedBatches(filter) && (
+          <TileMarkPicker
+            collectionId={collectionId}
+            targets={fillable.map((t) => t.mark)}
+            fill={{ ...unmarked, noun: ["tile", "tiles"] }}
+            disabled={busy || nothingUnmarked}
+            ariaLabel={`Mark all unmarked tiles in batch ${batch.batchNo}`}
+            hint={
+              unmarkedHint(unmarked, fillable.length, ["tile", "tiles"]) +
+              (shown.length < batch.tiles.length
+                ? " — the tiles the chip is hiding are not reached"
+                : "")
+            }
+            triggerStyle={smallButtonStyle({ disabled: busy || nothingUnmarked })}
+            onPatch={(patch) => onMark(fillable.map((t) => t.id), patch, true)}
+          >
+            <Icon name="mark" size="sm" /> Mark all unmarked…
+          </TileMarkPicker>
+        )}
         {open && batch.front && !batch.front.cut && (
           <SmallButton
             onClick={() => onReview(editorSheet(batch.front!), null)}

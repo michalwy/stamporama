@@ -741,6 +741,23 @@ differently — MNH on the front, then MNG on the back once the gum was seen —
 wins**, and the cut report (or a message, when you drag a back on by hand) says which mark it
 replaced.
 
+**Marking the whole card at once.** A card is often mostly one condition. Mark the exceptions first,
+then press **Mark all unmarked…** and pick the condition the rest of the card is in: **only the tiles
+without a condition are marked**, and the ones you marked already keep their mark. A certificate
+works the same way and separately — picking one marks every tile without a certificate, whatever
+condition it carries. The picker says how many tiles each pick will mark before you choose (*27 tiles
+without one*), and nothing it does clears a mark.
+
+- **On the strip** it is on each card's header line, and it reaches the card's tiles **in view** that
+  are still to be identified — a tile the chip above the strip is hiding is not marked, and neither is
+  a tile already identified or discarded.
+- **In the cut editor** it is in the toolbar beside **Mark…** and reaches every box of the card.
+- **Not on backs.** The back scan's editor and the unpaired backs on the strip do not offer it: a back
+  is paired with its front only when the cut is made or the back is dragged on, and there the mark
+  given last wins — so filling every back would undo the exceptions marked on the fronts. Mark an
+  exception you only see on the back one by one, as before, and mark the rest of the card on the
+  strip once the backs are paired.
+
 Marks are kept on the tile, so they survive a reload and a break of a week between marking and
 identifying. They can be changed until the tile is identified. A tile that has become a copy or been
 discarded shows no mark any more — the copy's own condition is what counts from then on.

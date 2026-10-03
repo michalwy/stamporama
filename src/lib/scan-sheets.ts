@@ -41,6 +41,7 @@ import { resolveScanSheetTtlMs } from "./scan-sheet-retention";
 import { toTileCandidate, type TileCandidate } from "./tile-candidates";
 import {
   applyMarkPatch,
+  fillPatch,
   isEmptyPatch,
   normalizeMark,
   pairedMark,
@@ -1161,11 +1162,17 @@ function tileMark(tile: {
  *
  * Every tile is checked before any is written, the selection rule `scan-tiles.ts` follows: a stale
  * strip in a second tab costs a sentence, not half a card marked.
+ *
+ * **`onlyUnmarked`** is *Mark all unmarked* (#1556): each half is given only to the tiles without
+ * one (`fillPatch`), and a tile the pick leaves unchanged keeps its `markedAt`. It is decided here
+ * against the stored marks rather than trusted from the strip, so an exception marked in a second tab
+ * a moment ago survives a fill sent from a strip that had not seen it yet.
  */
 export async function setTileMarks(
   ownerId: string,
   tileIds: readonly string[],
-  patch: MarkPatch
+  patch: MarkPatch,
+  { onlyUnmarked = false }: { onlyUnmarked?: boolean } = {}
 ): Promise<void> {
   if (tileIds.length === 0) throw new ScanValidationError("Pick at least one tile to mark.");
   if (isEmptyPatch(patch)) return;
@@ -1204,15 +1211,18 @@ export async function setTileMarks(
   ]);
 
   const now = new Date();
-  await prisma.$transaction(
-    tiles.map((t) => {
-      const mark = applyMarkPatch(tileMark(t), patch);
-      return prisma.scanTile.update({
+  const writes = tiles.flatMap((t) => {
+    const own = onlyUnmarked ? fillPatch(tileMark(t), patch) : patch;
+    if (isEmptyPatch(own)) return [];
+    const mark = applyMarkPatch(tileMark(t), own);
+    return [
+      prisma.scanTile.update({
         where: { id: t.id },
         data: markColumns({ mark, markedAt: now }),
-      });
-    })
-  );
+      }),
+    ];
+  });
+  await prisma.$transaction(writes);
 }
 
 /**

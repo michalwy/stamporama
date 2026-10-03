@@ -70,6 +70,24 @@ export function markText(
     .join(" · ");
 }
 
+/**
+ * What *Mark all unmarked* (#1556) will reach, as its hint — *Mark 27 unmarked boxes with a
+ * condition, or 40 with a certificate, in one pick*. Said before the pick, as every bulk action on
+ * these screens says how many it is about to touch.
+ */
+export function unmarkedHint(
+  counts: { condition: number; certificate: number },
+  total: number,
+  [one, many]: [string, string]
+): string {
+  if (total === 0) return `No ${many} to mark`;
+  if (counts.condition === 0 && counts.certificate === 0) {
+    return `Every ${one} has a condition and a certificate marked`;
+  }
+  const noun = (n: number) => (n === 1 ? one : many);
+  return `Mark ${counts.condition} unmarked ${noun(counts.condition)} with a condition, or ${counts.certificate} with a certificate, in one pick — ${many} already marked keep their mark`;
+}
+
 /** The chip shape squeezed to the strip's 5.5 rem squares and the editor's boxes. */
 const SMALL_CHIP: React.CSSProperties = {
   fontSize: "0.625rem",
@@ -187,6 +205,10 @@ const TYPEAHEAD_PAUSE_MS = 700;
  * The trigger is the caller's: on the strip it is the tile's chip area, in the editor and on the
  * ticked-tiles bar a toolbar button. `targets` are the marks being changed, so the picker can say
  * what they already are.
+ *
+ * **`fill`** turns it into *Mark all unmarked* (#1556): each heading says how many tiles a pick there
+ * reaches — the ones without that half — a half no tile lacks cannot be picked, nothing is drawn
+ * pressed, and nothing is cleared, since a fill only ever gives a mark where there was none.
  */
 export function TileMarkPicker({
   collectionId,
@@ -198,6 +220,7 @@ export function TileMarkPicker({
   children,
   onPatch,
   onOpenChange,
+  fill,
 }: {
   collectionId: string;
   targets: readonly (TileMark | null | undefined)[];
@@ -209,6 +232,8 @@ export function TileMarkPicker({
   onPatch: (patch: MarkPatch) => void;
   /** Raised as the menu opens and closes — a dialog holding one sets its own Escape aside meanwhile. */
   onOpenChange?: (open: boolean) => void;
+  /** *Mark all unmarked* (#1556): how many of the targets lack each half. */
+  fill?: { condition: number; certificate: number; noun: [string, string] };
 }) {
   const { conditions, certificateStatuses } = useMarkDictionaries(collectionId);
   const { open, setOpen, pos, triggerRef, menuRef } = useFilterPopover<HTMLButtonElement>({
@@ -216,9 +241,14 @@ export function TileMarkPicker({
     onOpenChange,
   });
   const all = (field: keyof TileMark, id: string) =>
-    targets.length > 0 && targets.every((m) => (m?.[field] ?? null) === id);
-  const anyCondition = targets.some((m) => m?.conditionId);
-  const anyCertificate = targets.some((m) => m?.certificateStatusId);
+    !fill && targets.length > 0 && targets.every((m) => (m?.[field] ?? null) === id);
+  const anyCondition = !fill && targets.some((m) => m?.conditionId);
+  const anyCertificate = !fill && targets.some((m) => m?.certificateStatusId);
+  /** A heading, with the count a fill pick reaches — *Condition · 27 tiles without one*. */
+  const heading = (label: string, count: number | undefined) =>
+    fill && count !== undefined
+      ? `${label} · ${count === 0 ? `every ${fill.noun[0]} has one` : `${count} ${count === 1 ? fill.noun[0] : fill.noun[1]} without one`}`
+      : label;
   const pick = (patch: MarkPatch) => {
     setOpen(false);
     onPatch(patch);
@@ -253,7 +283,7 @@ export function TileMarkPicker({
             onClick={(e) => e.stopPropagation()}
             style={{ ...filterMenuStyle(pos, FILTER_MENU_Z_INDEX + 200), maxWidth: "18rem" }}
           >
-            <div style={FILTER_MENU_HEADING_STYLE}>Condition</div>
+            <div style={FILTER_MENU_HEADING_STYLE}>{heading("Condition", fill?.condition)}</div>
             <ChipRow>
               {conditions.map((c) => (
                 <MarkOption
@@ -262,13 +292,16 @@ export function TileMarkPicker({
                   label={c.abbreviation}
                   title={c.name}
                   pressed={all("conditionId", c.id)}
+                  disabled={fill?.condition === 0}
                   onPick={() => pick({ conditionId: c.id })}
                 />
               ))}
             </ChipRow>
             {certificateStatuses.length > 0 && (
               <>
-                <div style={FILTER_MENU_HEADING_STYLE}>Certificate</div>
+                <div style={FILTER_MENU_HEADING_STYLE}>
+                  {heading("Certificate", fill?.certificate)}
+                </div>
                 <ChipRow>
                   {certificateStatuses.map((c) => (
                     <MarkOption
@@ -277,6 +310,7 @@ export function TileMarkPicker({
                       label={c.abbreviation}
                       title={c.name}
                       pressed={all("certificateStatusId", c.id)}
+                      disabled={fill?.certificate === 0}
                       onPick={() => pick({ certificateStatusId: c.id })}
                     />
                   ))}
@@ -324,12 +358,14 @@ function MarkOption({
   label,
   title,
   pressed,
+  disabled,
   onPick,
 }: {
   color: string | null;
   label: string;
   title: string;
   pressed: boolean;
+  disabled?: boolean;
   onPick: () => void;
 }) {
   const tokens = tagColorTokens(color);
@@ -339,10 +375,12 @@ function MarkOption({
         type="button"
         role="menuitemradio"
         aria-checked={pressed}
+        disabled={disabled}
         onClick={onPick}
         style={{
           ...ROW_CHIP,
-          cursor: "pointer",
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.5 : 1,
           color: tokens.color,
           borderColor: pressed ? tokens.color : tokens.border,
           background: tokens.background,
