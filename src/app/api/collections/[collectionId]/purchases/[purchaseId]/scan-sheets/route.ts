@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listScans } from "@/lib/scan-sheets";
+import { interruptStalledScanUploads } from "@/lib/scan-uploads";
 
 /**
  * An order's card scans.
@@ -30,6 +31,9 @@ export async function GET(
 
   const { purchaseId } = await params;
   try {
+    // A batch whose page closed without saying so (#1568) is reported from the read that opens the
+    // purchase, not hours later from the sweep.
+    await interruptStalledScanUploads(session.user.id, purchaseId);
     return NextResponse.json(await listScans(session.user.id, { purchaseId }));
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

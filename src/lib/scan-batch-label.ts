@@ -47,6 +47,32 @@ export function batchLabelFromFileName(fileName: string): string | null {
   return isBatchLabelTooLong(label) ? null : label;
 }
 
+/**
+ * The names for several cards added in one go (#1568), in the order the files were chosen.
+ *
+ * Left blank, each card takes its own file's name, as one card does (#603). A name typed beside the
+ * button is **numbered** across the files — *Klaser Polska 1*, *Klaser Polska 2* — rather than
+ * handed to every card alike, which is how a carton ends up as ten cards nobody can tell apart, or
+ * ignored, which would be the screen discarding what the collector typed. One file keeps the typed
+ * name exactly as it was typed.
+ *
+ * The number always fits: the typed part is shortened to leave it room, because a name refused at
+ * this point would fail an upload the collector cannot see happening, and the field's own
+ * `maxLength` already allowed the full length.
+ */
+export function batchLabelsForFiles(
+  typed: string | null | undefined,
+  fileNames: readonly string[]
+): (string | null)[] {
+  const name = normalizeBatchLabel(typed);
+  if (name == null) return fileNames.map(batchLabelFromFileName);
+  if (fileNames.length === 1) return [name];
+  return fileNames.map((_, i) => {
+    const suffix = ` ${i + 1}`;
+    return `${name.slice(0, MAX_BATCH_LABEL_LENGTH - suffix.length).trimEnd()}${suffix}`;
+  });
+}
+
 /** Whether a typed name is short enough to store. Asked by the write; the input's `maxLength`
  * makes it unreachable from the screen, which is why this is a refusal rather than a truncation —
  * silently shortening a name the collector chose is worse than saying it is too long. */

@@ -23,6 +23,7 @@ import {
   asScanUploadStatus,
   canDiscardScanUpload,
   canRetryScanUpload,
+  SCAN_UPLOAD_STALL_MS,
   SWEEPABLE_SCAN_UPLOAD_STATUSES,
   type ScanUploadStatus,
 } from "./scan-upload-status-rules";
@@ -295,6 +296,14 @@ export async function receiveScanChunk(
   const upload = await loadUpload(ownerId, uploadId);
   const chunks = chunkCount(upload.totalBytes, upload.chunkBytes);
 
+  // Stopped because the page sending it was taken for closed (#1568): its parts are gone, so there
+  // is nothing to add this one to, and acknowledging it would have the client send the same piece
+  // for ever.
+  if (upload.status === "interrupted") {
+    throw new ScanValidationError(
+      "This upload was stopped because the page sending it seemed to have closed. Choose the file again."
+    );
+  }
   // A part arriving after the scan was finalized is a retry of one already held (the count is
   // complete) — acknowledged like any other, and never written over files the worker may be reading.
   if (upload.status !== "uploading") {
@@ -553,6 +562,81 @@ export async function abortScanUpload(ownerId: string, uploadId: string): Promis
 async function discardUpload(uploadId: string): Promise<void> {
   await rm(uploadDir(uploadId), { recursive: true, force: true });
   await prisma.scanUpload.deleteMany({ where: { id: uploadId } });
+}
+
+// ── A page closed mid-batch (#1568) ───────────────────────────────────────────────────────────
+
+/**
+ * Stop the uploads a page was still sending when it closed (#1568) — the files waiting their turn and
+ * the one half-sent.
+ *
+ * Several scans are chosen at once and sent one after another by the page, so a closed tab leaves
+ * files the server has only been told about. **Nothing half-sent is kept**: a part-sent scan cannot
+ * be finished without the file, which only the collector's disk still has, so its parts go now rather
+ * than at the sweep. **The row stays, as `interrupted`**, because it is the report — the next time the
+ * purchase is opened it says which files were never sent, until the collector dismisses it.
+ *
+ * The page says so itself as it closes; {@link interruptStalledScanUploads} is for a page that could
+ * not. Only uploads still `uploading` are touched — a file whose last piece made it is in the queue
+ * and safe — and only the owner's.
+ */
+export async function interruptScanUploads(ownerId: string, uploadIds: readonly string[]): Promise<number> {
+  if (uploadIds.length === 0) return 0;
+  const rows = await prisma.scanUpload.findMany({
+    where: { id: { in: [...uploadIds] }, status: "uploading", collection: { ownerId } },
+    select: { id: true },
+  });
+  return interrupt(rows.map((r) => r.id));
+}
+
+/**
+ * An order's uploads that have shown no sign of life for {@link SCAN_UPLOAD_STALL_MS} — the page
+ * sending them closed without being able to say so (#1568). Run as the order's scans are read, so
+ * the report is there when the purchase is next opened rather than whenever the hourly sweep comes
+ * round. A page still sending keeps its waiting files alive ({@link keepScanUploadsAlive}) and bumps
+ * the one being sent with every piece, so nothing it holds is mistaken for abandoned.
+ */
+export async function interruptStalledScanUploads(
+  ownerId: string,
+  purchaseId: string,
+  now: number = Date.now()
+): Promise<number> {
+  const rows = await prisma.scanUpload.findMany({
+    where: {
+      purchaseId,
+      status: "uploading",
+      updatedAt: { lt: new Date(now - SCAN_UPLOAD_STALL_MS) },
+      collection: { ownerId },
+    },
+    select: { id: true },
+  });
+  return interrupt(rows.map((r) => r.id));
+}
+
+/**
+ * Say that the page sending these uploads is still open (#1568). A file waiting behind a 200 MB card
+ * sends nothing for a long time, and without this it would look exactly like one whose page closed.
+ */
+export async function keepScanUploadsAlive(ownerId: string, uploadIds: readonly string[]): Promise<void> {
+  if (uploadIds.length === 0) return;
+  await prisma.scanUpload.updateMany({
+    where: { id: { in: [...uploadIds] }, status: "uploading", collection: { ownerId } },
+    data: { updatedAt: new Date() },
+  });
+}
+
+/** Mark the rows first, so a piece arriving now is refused rather than written, then remove what
+ * they had received. */
+async function interrupt(uploadIds: string[]): Promise<number> {
+  if (uploadIds.length === 0) return 0;
+  const { count } = await prisma.scanUpload.updateMany({
+    where: { id: { in: uploadIds }, status: "uploading" },
+    data: { status: "interrupted", error: null, receivedChunks: 0, receivedBytes: 0 },
+  });
+  for (const id of uploadIds) {
+    await rm(uploadDir(id), { recursive: true, force: true });
+  }
+  return count;
 }
 
 // ── The sweep ─────────────────────────────────────────────────────────────────────────────────
