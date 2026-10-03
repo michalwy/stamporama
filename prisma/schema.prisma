@@ -54,6 +54,11 @@ model Collection {
   // in the transaction that creates the collection, and the migration backfilled every existing
   // one. It is chosen in Settings; the measuring tool's switch holds for the sitting only.
   defaultScanningProfileId String? @unique
+  // How the last back scan added in this collection was made (#1555) — `in_place`,
+  // `card_left_right` or `card_top_bottom`, the vocabulary of `ScanSheet.turnover`. Offered as the
+  // choice for the next back: a collector who has moved to turning whole cards over turns every
+  // card that way. Written whenever a back is added or its choice is changed.
+  lastBackTurnover String @default("in_place")
   // How long this collection's closed offers keep their generated listing images (#577), holding
   // **exactly** what `STAMPORAMA_CLOSED_OFFER_PHOTO_TTL_DAYS` holds — `off`/`never` for keep for
   // ever, `0` to purge at the next sweep, otherwise days — so one parser reads both and the two
@@ -3875,6 +3880,13 @@ model ScanSheet {
    * default. Null on a sheet uploaded before profiles existed, which measures with the default —
    * exactly what it measured with before, when the default was a bare dpi. */
   scanningProfileId String?
+  /** How a **back** sheet's backs were made (#1555) — `in_place` (each stamp turned over where it
+   * lies, so a back sits where its front did), `card_left_right` or `card_top_bottom` (the whole
+   * card turned over, so the positions are mirrored across one of its axes). Asked when the back is
+   * added and changeable afterwards, which pairs the backs again. Meaningless on a front sheet,
+   * which keeps the default. Unconstrained here for the reason `side` is; `back-turnover.ts` is the
+   * vocabulary. */
+  turnover       String   @default("in_place")
   createdAt      DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -3947,6 +3959,10 @@ model ScanTile {
    * lies the other way round on its back. */
   frontTurn    Int      @default(0)
   backTurn     Int      @default(0)
+  /** Whether the back was put on this tile **by hand** (#1555) — dragged onto it, rather than
+   * paired by position when the back was cut. Changing how a card's backs were made pairs its backs
+   * again, and a pair the collector made is kept through that. False on a tile with no back. */
+  backPairedByHand Boolean @default(false)
   /** The tile's condition and certificate, **marked before it is identified** (#1550) — on the strip
    * or on the box in the cut editor, with the card still in hand, because the scan alone often
    * cannot tell MNH from MNG. Either half may be absent. A mark only seeds the identification
@@ -4057,6 +4073,9 @@ model ScanUpload {
    * staging, and an abandoned one must not stop a profile being deleted — the sheet then takes the
    * default. */
   scanningProfileId String?
+  /** How a back's backs were made (#1555), chosen beside the button and carried to the sheet at
+   * finalize. Null on a front, and on a back sent without one, which takes the collection's last. */
+  turnover       String?
   mime           String
   /** The size the client declared, checked against `MAX_UPLOAD_BYTES` before a byte is sent — a
    * scan too large is refused at the open rather than after 200 MB have crossed the wire. */

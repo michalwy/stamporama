@@ -18,6 +18,7 @@ import {
   type UploadedSheet,
 } from "./scan-sheets";
 import { chunkCount, chunkRange, resolveUploadChunkBytes } from "./upload-chunk-rules";
+import { isBackTurnover } from "./back-turnover";
 
 /**
  * A card scan uploaded in **parts** (#590).
@@ -133,6 +134,8 @@ export async function openScanUpload(
     label?: string | null;
     /** The profile chosen beside the file (#1443), carried to the sheet at finalize. */
     scanningProfileId?: string | null;
+    /** How a back's backs were made (#1555), carried to the sheet at finalize. */
+    turnover?: string | null;
     totalBytes: number;
   }
 ): Promise<OpenedScanUpload> {
@@ -163,6 +166,7 @@ export async function openScanUpload(
       batchNo: input.batchNo ?? null,
       label: input.label ?? null,
       scanningProfileId: await chosenProfile(owner.collectionId, input.scanningProfileId),
+      turnover: chosenTurnover(input.side, input.turnover),
       mime: input.mime,
       totalBytes: input.totalBytes,
       chunkBytes,
@@ -193,6 +197,14 @@ async function chosenProfile(
   return chosen;
 }
 
+/** The way a back was made, checked at the open for the reason the profile is: refusing an unknown
+ * one costs nothing here and 200 MB at finalize. Dropped on a front, which has no backs. */
+function chosenTurnover(side: SheetSide, chosen: string | null | undefined): string | null {
+  if (side !== "back" || !chosen) return null;
+  if (!isBackTurnover(chosen)) throw new ScanValidationError("Unknown way the backs were made.");
+  return chosen;
+}
+
 // ── Receiving a chunk ─────────────────────────────────────────────────────────────────────────
 
 interface UploadRow {
@@ -203,6 +215,7 @@ interface UploadRow {
   batchNo: number | null;
   label: string | null;
   scanningProfileId: string | null;
+  turnover: string | null;
   mime: string;
   totalBytes: number;
   chunkBytes: number;
@@ -221,6 +234,7 @@ async function loadUpload(ownerId: string, uploadId: string): Promise<UploadRow>
       batchNo: true,
       label: true,
       scanningProfileId: true,
+      turnover: true,
       mime: true,
       totalBytes: true,
       chunkBytes: true,
@@ -353,6 +367,7 @@ export async function finalizeScanUpload(
         batchNo: upload.batchNo ?? undefined,
         label: upload.label,
         scanningProfileId: upload.scanningProfileId,
+        turnover: upload.turnover,
       }
     );
   } finally {

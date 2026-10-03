@@ -43,6 +43,7 @@ export async function POST(
     batchNo?: unknown;
     label?: unknown;
     scanningProfileId?: unknown;
+    turnover?: unknown;
     totalBytes?: unknown;
   };
 
@@ -71,6 +72,8 @@ export async function POST(
   // What the card was scanned with (#1443). Absent takes the collection's default.
   const scanningProfileId =
     typeof input.scanningProfileId === "string" && input.scanningProfileId ? input.scanningProfileId : null;
+  // How a back's backs were made (#1555). Absent takes the way the collection made its last one.
+  const turnover = typeof input.turnover === "string" && input.turnover ? input.turnover : null;
 
   try {
     const opened = await openScanUpload(session.user.id, { purchaseId }, {
@@ -79,6 +82,7 @@ export async function POST(
       batchNo,
       label,
       scanningProfileId,
+      turnover,
       totalBytes: input.totalBytes,
     });
     return NextResponse.json(opened, { status: 201 });

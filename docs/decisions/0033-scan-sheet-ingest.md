@@ -136,6 +136,12 @@ silence.
 applying it to a card turned stamp by stamp would break exactly the correspondence the routine
 guarantees.
 
+*Amended by #1555:* turning stamps one by one is slow, and a card in a transparent sleeve can be
+turned over **whole**. So the back scan now says how it was made — in place, the whole card left to
+right, or top to bottom — and the two whole-card answers mirror the positions across the card's
+vertical or horizontal axis, measured against the extent of each side's own boxes rather than the
+scan's edges. *No mirroring* remains the rule for the first answer, which is the default.
+
 Centres are compared in **fractional sheet coordinates**, so a back scanned at a different size still
 lines up. Mutuality is the only guard — there is deliberately no distance cap, which would be one
 more constant to be wrong about.
