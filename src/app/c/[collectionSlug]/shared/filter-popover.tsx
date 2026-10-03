@@ -44,6 +44,12 @@ export function useFilterPopover<T extends HTMLElement>({
   onOpenChange?: (open: boolean) => void;
 } = {}) {
   const [open, setOpen] = useState(false);
+  // A menu whose control goes disabled under it closes, rather than staying drawn with every way
+  // out switched off (#1554): the listeners below stand down while disabled and the trigger takes
+  // no press, so an open menu was left with nothing but a pick to close it. The cut editor's *Mark…*
+  // is how it happened — a click on the empty card clears the selection the picker is enabled by.
+  // Set during render, React's pattern for state following a prop, so it never paints still open.
+  if (open && disabled) setOpen(false);
   const [pos, setPos] = useState<FilterPopoverPosition | null>(null);
   const triggerRef = useRef<T>(null);
   const menuRef = useRef<HTMLDivElement>(null);

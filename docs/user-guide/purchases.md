@@ -716,6 +716,10 @@ the corner marks. Click it and pick a condition or a certificate from your colle
 the mark then sits there as the condition's coloured chip, with the certificate beside it, so a card
 can be checked at a glance before you start. Click it again to change it or **Clear the mark**.
 
+The picker closes without marking anything on a click outside it, on **Escape**, or on pressing
+what opened it again — in the cut editor too, where Escape closes only the picker and leaves the
+editor open.
+
 - **From the keyboard.** With a tile focused — tab to it — type the condition's abbreviation —
   `MNH`, `U`, `CTO` — and the tile is marked; the certificate's abbreviation marks the certificate. Typing
   the abbreviation the tile already carries clears it again. **←** and **→** move to the
