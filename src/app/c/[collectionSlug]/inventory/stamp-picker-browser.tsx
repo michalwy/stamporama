@@ -61,6 +61,7 @@ import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
  * area, a new stamp / variant (parent set) in an issue, or a whole lettered run of variants
@@ -231,6 +232,7 @@ export function StampPickerBrowser({
   });
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const { invalidatePickerData } = useInvalidateInventory();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const router = useRouter();
@@ -379,7 +381,9 @@ export function StampPickerBrowser({
 
   function handleCreateStamp(issueId: string, fd: FormData) {
     startTransition(async () => {
-      const result = await addStampToIssueAction(collectionId, issueId, fd);
+      const result = await askUmbrella((answer) =>
+        addStampToIssueAction(collectionId, issueId, withUmbrellaAnswer(fd, answer))
+      );
       if (result.status === "success" && result.stampId) {
         // #182: creating a stamp inline just adds it to the picker — refresh so it appears
         // in its issue's (already-expanded) tree, then close the create dialog. It is not
@@ -399,7 +403,9 @@ export function StampPickerBrowser({
 
   function handleCreateVariantRange(issueId: string, parentStampId: string, fd: FormData) {
     startTransition(async () => {
-      const result = await addVariantRangeAction(collectionId, issueId, parentStampId, fd);
+      const result = await askUmbrella((answer) =>
+        addVariantRangeAction(collectionId, issueId, parentStampId, withUmbrellaAnswer(fd, answer))
+      );
       if (result.status === "success") {
         // Same as the single create above (#182): the run joins the issue's tree and the collector
         // picks from it themselves — a range is added *so that* the right variant can be chosen,

@@ -44,6 +44,7 @@ import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/us
 import { Icon } from "@/app/icons";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { StampVariantsCard } from "./stamp-variants-card";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 // The stamp detail screen (#518). Everything the flat list row hints at, at full size — and the
 // two relationships a row cannot draw at all: the variant tree around it (#54) and the copies
@@ -101,6 +102,7 @@ export function StampDetailPanel({
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const areaVendors = [...vendorMap.values()];
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   function closeDialog() {
@@ -342,7 +344,9 @@ export function StampDetailPanel({
           onSubmit={(fd) =>
             startTransition(async () => {
               const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-              const result = await updateStampWithCatalogAction(stamp.id, fd);
+              const result = await askUmbrella((answer) =>
+                updateStampWithCatalogAction(stamp.id, withUmbrellaAnswer(fd, answer))
+              );
               if (result.status === "success") onSaved();
               else if (result.status === "error") setError(result.message);
             })

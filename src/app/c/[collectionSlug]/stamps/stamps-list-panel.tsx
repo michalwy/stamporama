@@ -42,6 +42,7 @@ import { useToast } from "@/app/toast-provider";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 type DialogState =
   | { kind: "none" }
@@ -85,6 +86,7 @@ export function StampsListPanel({
   );
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
 
@@ -468,7 +470,9 @@ export function StampsListPanel({
             startTransition(async () => {
               const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
               const stamp = dialog.stamp;
-              const result = await updateStampWithCatalogAction(stamp.id, fd);
+              const result = await askUmbrella((answer) =>
+                updateStampWithCatalogAction(stamp.id, withUmbrellaAnswer(fd, answer))
+              );
               if (result.status === "success") {
                 handleSuccess();
                 toast({

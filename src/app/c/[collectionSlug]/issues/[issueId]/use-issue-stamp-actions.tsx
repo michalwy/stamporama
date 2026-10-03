@@ -11,6 +11,7 @@ import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import type { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { inventoryKeys } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 // The issue's stamp tree, managed from the issue's own screen (#1381).
 //
@@ -74,6 +75,7 @@ export function useIssueStampActions({
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
 
   function open(next: Dialog) {
     setError(undefined);
@@ -133,7 +135,9 @@ export function useIssueStampActions({
         onSubmit={(issueId, fd) =>
           startTransition(async () => {
             const { addStampToIssueAction } = await import("@/app/actions/issues");
-            const result = await addStampToIssueAction(collectionId, issueId, fd);
+            const result = await askUmbrella((answer) =>
+              addStampToIssueAction(collectionId, issueId, withUmbrellaAnswer(fd, answer))
+            );
             if (result.status === "success") onSaved();
             else if (result.status === "error") setError(result.message);
           })
@@ -161,7 +165,9 @@ export function useIssueStampActions({
         onSubmit={(fd) =>
           startTransition(async () => {
             const { addVariantRangeAction } = await import("@/app/actions/issues");
-            const result = await addVariantRangeAction(collectionId, issue.id, parent.stampId, fd);
+            const result = await askUmbrella((answer) =>
+              addVariantRangeAction(collectionId, issue.id, parent.stampId, withUmbrellaAnswer(fd, answer))
+            );
             if (result.status === "success") onSaved();
             else if (result.status === "error") setError(result.message);
           })
@@ -189,7 +195,9 @@ export function useIssueStampActions({
         onSubmit={(input) =>
           startTransition(async () => {
             const { addVariantTreeAction } = await import("@/app/actions/issues");
-            const result = await addVariantTreeAction(collectionId, issue.id, parent.stampId, input);
+            const result = await askUmbrella((answer) =>
+              addVariantTreeAction(collectionId, issue.id, parent.stampId, { ...input, umbrellaPrices: answer })
+            );
             if (result.status === "success") onSaved();
             else if (result.status === "error") setError(result.message);
           })
@@ -226,7 +234,9 @@ export function useIssueStampActions({
         onSubmit={(fd) =>
           startTransition(async () => {
             const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-            const result = await updateStampWithCatalogAction(stamp.stampId, fd);
+            const result = await askUmbrella((answer) =>
+              updateStampWithCatalogAction(stamp.stampId, withUmbrellaAnswer(fd, answer))
+            );
             if (result.status === "success") onSaved();
             else if (result.status === "error") setError(result.message);
           })

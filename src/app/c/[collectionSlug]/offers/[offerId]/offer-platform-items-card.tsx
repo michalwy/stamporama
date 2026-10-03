@@ -30,6 +30,7 @@ import { usesPlatformCatalogue } from "@/lib/platform-modules";
 import { listingItemGaps } from "@/lib/offer-item-gaps";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 // The offer's stamps and what **Colnect** knows each of them as (#423), each with the two pages a
 // seller actually opens while pricing a listing: what the stamp *is* (its catalog page, #290) and
@@ -433,6 +434,7 @@ export function OfferPlatformItemsCard({
   const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
   const [stampError, setStampError] = useState<string | undefined>();
   const [isSavingStamp, startSavingStamp] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
@@ -1316,9 +1318,12 @@ export function OfferPlatformItemsCard({
             setStampError(undefined);
             startSavingStamp(async () => {
               const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-              const r = await updateStampWithCatalogAction(stampId, fd);
+              const r = await askUmbrella((answer) =>
+                updateStampWithCatalogAction(stampId, withUmbrellaAnswer(fd, answer))
+              );
               if (r.status === "error") setStampError(r.message);
-              else {
+              // A cancelled question (#1573) answers `idle`: nothing saved, the dialog stays open.
+              else if (r.status === "success") {
                 setEditStampItem(null);
                 // The numbers, the name and the links a row is built from all come off this stamp.
                 void invalidateAll(collectionId);

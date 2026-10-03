@@ -328,6 +328,36 @@ describe("the catalogue writes (#1438)", () => {
       assert.match(err.error.message, /Mi·PL 301a is already/);
       assert.equal(await stampCount(), before);
     });
+
+    it("keeps a priced base stamp's own prices when it gains its first variants, and says so (#1573)", async () => {
+      type WithOwnPrices = Created & {
+        ownPricesKept: { priceCount: number; editions: string[]; note: string } | null;
+      };
+      const added = await ok<Created>(token, "POST", `/issues/${issue.issueId}/stamps`, { catalog_numbers: ["Mi: 310"] });
+      const base = added.createdStamps[0].stampId;
+      const conditionId = (
+        await prisma.stampCondition.create({ data: { collectionId, name: "Mint", abbreviation: "**", sortOrder: 0 } })
+      ).id;
+      const catalogNameId = (
+        await prisma.catalogName.create({ data: { vendorId: michelId, name: "Michel Polen", currency: "EUR" } })
+      ).id;
+      const editionId = (await prisma.catalogEdition.create({ data: { catalogNameId, year: 2024 } })).id;
+      await prisma.stampCatalogPrice.create({
+        data: { stampId: base, catalogEditionId: editionId, conditionId, price: "12.00", currency: "EUR" },
+      });
+
+      const first = await ok<WithOwnPrices>(token, "POST", `/stamps/${base}/variants`, { numbers: "a-b" });
+      assert.equal(first.createdStamps.length, 2);
+      assert.equal(first.ownPricesKept?.priceCount, 1);
+      assert.deepEqual(first.ownPricesKept?.editions, ["Michel Polen 2024"]);
+      assert.match(first.ownPricesKept?.note ?? "", /clear_catalog_prices/);
+      // Nothing is changed: the price stays as the umbrella's recorded one.
+      assert.equal(await prisma.stampCatalogPrice.count({ where: { stampId: base } }), 1);
+
+      // Already an umbrella, so a further run reports nothing.
+      const more = await ok<WithOwnPrices>(token, "POST", `/stamps/${base}/variants`, { numbers: "c" });
+      assert.equal(more.ownPricesKept, null);
+    });
   });
 
   describe("editing", () => {

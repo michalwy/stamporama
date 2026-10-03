@@ -54,6 +54,13 @@ import { enforceCandidateCatalogDuplicates } from "@/lib/duplicate-catalog";
 import { resolveVariantTree, type ExistingVariant } from "@/lib/variant-tree";
 import { setIssueTagEntries, setStampTagEntries } from "@/lib/tags";
 import { parseTagEntries } from "@/lib/tag-entry";
+import { UmbrellaPricesUnanswered } from "@/lib/umbrella-prices";
+import {
+  UMBRELLA_PRICES_FIELD,
+  umbrellaPricesPolicyFrom,
+  type UmbrellaPricesAnswer,
+  type UmbrellaPricesQuestionState,
+} from "@/lib/umbrella-prices-question";
 
 export async function getChecklistPriceDetailsAction(
   collectionId: string,
@@ -119,7 +126,17 @@ export async function applyIssueRangeSuggestionAction(
 export type IssueActionState =
   | { status: "idle" }
   | { status: "success"; issueId?: string; stampId?: string }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string }
+  // A write that would make a priced stamp an umbrella, handed back unperformed until the collector
+  // says whether it keeps its own prices (#1573); the screen asks and submits again with the answer.
+  | UmbrellaPricesQuestionState;
+
+/** The question a refused write carries back to the screen, or null for any other failure. */
+function umbrellaPricesQuestion(e: unknown): UmbrellaPricesQuestionState | null {
+  return e instanceof UmbrellaPricesUnanswered
+    ? { status: "umbrella-prices", umbrellas: e.umbrellas }
+    : null;
+}
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -499,6 +516,7 @@ export async function addStampToIssueAction(
       catalogNumbers,
       catalogPrices: catalogPrices.length > 0 ? catalogPrices : undefined,
       translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),
+      umbrellaPrices: umbrellaPricesPolicyFrom(formData.get(UMBRELLA_PRICES_FIELD)),
     });
     // Direct photo upload in add mode (#137): apply the dialog's staged change-set to the
     // freshly created stamp, mirroring how `createItemAction` attaches copy photos on add.
@@ -528,8 +546,10 @@ export async function addStampToIssueAction(
       }
     }
     return { status: "success", stampId };
-  } catch {
-    return { status: "error", message: "Failed to add stamp. Please try again." };
+  } catch (e) {
+    return (
+      umbrellaPricesQuestion(e) ?? { status: "error", message: "Failed to add stamp. Please try again." }
+    );
   }
 }
 
@@ -630,9 +650,18 @@ export async function reparentStampNodeAction(
   const session = await getSession();
   const parentStampId = ((formData.get("parentStampId") as string | null) ?? "").trim() || null;
   try {
-    await reparentStampNode(session.user.id, collectionId, issueId, stampId, parentStampId);
+    await reparentStampNode(
+      session.user.id,
+      collectionId,
+      issueId,
+      stampId,
+      parentStampId,
+      umbrellaPricesPolicyFrom(formData.get(UMBRELLA_PRICES_FIELD))
+    );
     return { status: "success" };
   } catch (e) {
+    const question = umbrellaPricesQuestion(e);
+    if (question) return question;
     // The refusals here name the thing the collector picked — a stamp under its own variant, a
     // parent from another issue — so they are worth saying rather than flattening into "try again".
     return {
@@ -730,9 +759,12 @@ export async function addVariantRangeAction(
       catalogVendorId,
       numbers: parsed.numbers,
       subtypeId,
+      umbrellaPrices: umbrellaPricesPolicyFrom(formData.get(UMBRELLA_PRICES_FIELD)),
     });
     return { status: "success", issueId };
   } catch (e) {
+    const question = umbrellaPricesQuestion(e);
+    if (question) return question;
     // The refusals name what the collector picked — a base stamp filed on another issue, a subtype
     // from another collection — so they are worth saying rather than flattening into "try again".
     return {
@@ -769,7 +801,13 @@ export async function addVariantTreeAction(
   collectionId: string,
   issueId: string,
   stampId: string,
-  input: { catalogVendorId: string; text: string; kinds: Record<string, string> }
+  input: {
+    catalogVendorId: string;
+    text: string;
+    kinds: Record<string, string>;
+    /** The collector's answer to #1573's question, once asked. */
+    umbrellaPrices?: UmbrellaPricesAnswer;
+  }
 ): Promise<IssueActionState> {
   const session = await getSession();
   if (!input.catalogVendorId) return { status: "error", message: "Select a catalog." };
@@ -792,9 +830,14 @@ export async function addVariantTreeAction(
     );
     if (blockMessage) return { status: "error", message: blockMessage };
 
-    await addVariantTreeToStamp(session.user.id, collectionId, issueId, stampId, input);
+    await addVariantTreeToStamp(session.user.id, collectionId, issueId, stampId, {
+      ...input,
+      umbrellaPrices: umbrellaPricesPolicyFrom(input.umbrellaPrices),
+    });
     return { status: "success", issueId };
   } catch (e) {
+    const question = umbrellaPricesQuestion(e);
+    if (question) return question;
     // The refusals name the line or the choice that caused them, so they are worth saying.
     return {
       status: "error",

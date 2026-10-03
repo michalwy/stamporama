@@ -201,6 +201,7 @@ import {
   type PendingSelection,
 } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 /** When to release the arrival mark on a deep-linked lot card (#876). A **floor** under the 2s
  * `.arrival-flash` animation in `globals.css`, not a duration of its own: the animation starts a
@@ -2002,6 +2003,7 @@ function useCopyEditing(ctx: {
   // per-area vendor maps the copy rows use so numbers format identically.
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
+  const askUmbrella = useUmbrellaPricesQuestion();
   const [editStampItem, setEditStampItem] = useState<ItemListItem | null>(null);
   const [editCopyItem, setEditCopyItem] = useState<ItemListItem | null>(null);
   const [identifyItem, setIdentifyItem] = useState<ItemListItem | null>(null);
@@ -2177,7 +2179,9 @@ function useCopyEditing(ctx: {
             run(
               async () => {
                 const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-                const r = await updateStampWithCatalogAction(stampId, fd);
+                const r = await askUmbrella((answer) =>
+                  updateStampWithCatalogAction(stampId, withUmbrellaAnswer(fd, answer))
+                );
                 if (r.status === "error") setCopyError(r.message);
                 return { ...r, refresh: { stampIds: [stampId] } };
               },

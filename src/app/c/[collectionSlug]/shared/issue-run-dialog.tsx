@@ -87,6 +87,7 @@ import {
   LS_LAST_SCAN_LOT,
 } from "./add-copy-defaults";
 import { TextInput } from "./text-input";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 /**
  * A ticked run of scan tiles identified **as the stamps of a checklist, in turn** (#1220, #1225).
@@ -672,11 +673,14 @@ export function IssueRunDialog({
   const [addingStamp, setAddingStamp] = useState(false);
   const [stampError, setStampError] = useState<string | undefined>();
   const [creatingStamp, startCreatingStamp] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const { invalidatePickerData } = useInvalidateInventory();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   function createStamp(issueId: string, fd: FormData) {
     startCreatingStamp(async () => {
-      const result = await addStampToIssueAction(collectionId, issueId, fd);
+      const result = await askUmbrella((answer) =>
+        addStampToIssueAction(collectionId, issueId, withUmbrellaAnswer(fd, answer))
+      );
       if (result.status === "success") {
         // The checklist and the members re-read, and a tile still waiting for its turn takes the new
         // stamp.

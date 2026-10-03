@@ -7,6 +7,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { QueryProvider } from "@/app/query-provider";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { CollectionSidebar } from "./collection-sidebar";
+import { UmbrellaPricesQuestionProvider } from "./shared/umbrella-prices-question";
 
 interface CollectionLayoutProps {
   children: React.ReactNode;
@@ -55,22 +56,25 @@ export default async function CollectionLayout({
     // centre (#367) is a query too, and one client is also one cache — a screen and the badge above
     // it read the same collection.
     <QueryProvider>
-      <div
-        style={{
-          display: "flex",
-          minHeight: "100vh",
-          background: "var(--color-bg-page)",
-        }}
-      >
-        <CollectionSidebar
-          collectionSlug={collectionSlug}
-          collectionId={collection.id}
-          collectionName={collection.name}
-          appVersion={getAppVersionLabel()}
-          appReleaseDate={getAppReleaseDate()}
-        />
-        <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
-      </div>
+      {/* #1573's question, asked from whichever screen gives a priced stamp its first variant. */}
+      <UmbrellaPricesQuestionProvider>
+        <div
+          style={{
+            display: "flex",
+            minHeight: "100vh",
+            background: "var(--color-bg-page)",
+          }}
+        >
+          <CollectionSidebar
+            collectionSlug={collectionSlug}
+            collectionId={collection.id}
+            collectionName={collection.name}
+            appVersion={getAppVersionLabel()}
+            appReleaseDate={getAppReleaseDate()}
+          />
+          <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+        </div>
+      </UmbrellaPricesQuestionProvider>
     </QueryProvider>
   );
 }

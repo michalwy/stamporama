@@ -40,6 +40,7 @@ import {
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon, type IconName } from "@/app/icons";
 import { faultReducedTotalHint } from "@/lib/fault-reduction";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 
 // The offer sets view adds two keys to the shared copy sort list: "Set order" — the offer's own
@@ -1036,6 +1037,7 @@ export function OfferSetsView({
   const { data: conditions = [] } = useCollectionConditions(collectionId);
   const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const [copyError, setCopyError] = useState<string | undefined>();
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
@@ -1457,9 +1459,12 @@ export function OfferSetsView({
             setCopyError(undefined);
             startTransition(async () => {
               const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-              const r = await updateStampWithCatalogAction(stampId, fd);
+              const r = await askUmbrella((answer) =>
+                updateStampWithCatalogAction(stampId, withUmbrellaAnswer(fd, answer))
+              );
               if (r.status === "error") setCopyError(r.message);
-              else {
+              // A cancelled question (#1573) answers `idle`: nothing saved, the dialog stays open.
+              else if (r.status === "success") {
                 setEditStampItem(null);
                 invalidateAll(collectionId); // the rows, and the listing text built off them
                 void invalidateInventory(collectionId);
