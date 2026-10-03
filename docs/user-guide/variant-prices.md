@@ -6,7 +6,8 @@ answer is only as good as the prices behind it: a tree with three of eight varia
 answers a question about three variants while looking like an answer about the stamp.
 
 The **variant price grid** is where those prices are filled in — a whole tree in one pass,
-laid out the way a printed catalogue lays it out.
+laid out the way a printed catalogue lays it out. An [AI assistant](agent-api.md) with a
+read-and-write token can fill and clear the same cells for you, from a catalogue page in front of it.
 
 ## The grid
 

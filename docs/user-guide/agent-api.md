@@ -108,7 +108,7 @@ catalogues: a number written as Fischer's is never quietly answered with the Mic
 number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
 everywhere else in the app. A **read only** token can do all of this.
 
-**A read-and-write token can change things, and there are six places where that is now true.**
+**A read-and-write token can change things, and there are eight places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
 for it, and write or re-generate its title and description — all of it inside Stamporama, on a
@@ -207,7 +207,8 @@ catalogue the area does not keep.
 stamp or a variant, never takes a catalogue number off a stamp, never moves a stamp to another issue
 or under another stamp, never merges two issues or moves one to another area, and never changes the
 order of an issue's stamps. Those stay on the issue's and the stamp's own screens, where everything
-it creates can be seen and corrected. Checklists are the one exception, below.
+it creates can be seen and corrected. Checklists and clearing a catalogue price are the two
+exceptions, below.
 
 **It can also record a stamp's Colnect item-ID** — the number in the stamp's Colnect address, which
 listing on Colnect, the Colnect links and the Colnect list sync all go by. An assistant reading a
@@ -224,6 +225,34 @@ does it, so the listing and the links use it straight away. Two things hold:
 On a stamp with variants the item-ID is about that stamp itself. Listing a copy you have not
 identified down to the variant under its cheapest variant is worked out when you list it, and is
 never written onto the parent stamp.
+
+On **catalogue prices** — the figures per edition, condition, certificate and format that most of
+your typing goes into — it can enter a catalogue page for you, a whole set at a time. It does
+exactly what the [variant price grid](variant-prices.md) does, cell by cell. It can:
+
+- **list your catalogue editions** — each book and year, with the currency its prices are in — or
+  just the editions an area's grid offers. A **read only** token can do this;
+- **read the prices of an issue or of a stamp's whole tree**, every edition, condition, certificate
+  and format at once or narrowed to some of them. A stamp with variants shows the lowest of its
+  variants' prices, marked as worked out rather than recorded, just as the grid's locked row shows
+  it with `≈`; a price you recorded on it shows as recorded. A figure the grid shows greyed on a
+  format tab — the single's price times the format's multiplier — is marked the same way. A **read
+  only** token can do this too;
+- **record prices** in one edition, many cells in one go: a stamp, a condition, the price, and a
+  certificate and a format where the price is not for a plain single. They are stored as if you had
+  typed them into the grid — rounded to cents, in the edition's currency — and valuation uses them
+  straight away. A price on a stamp with variants is that stamp's own, as unlocking the grid's row
+  and typing one is;
+- **clear prices**, as emptying a grid cell does. The cell then records nothing, which is not the
+  same as a price of nought.
+
+**Each cell is answered on its own**: written, unchanged because that figure was already there,
+cleared, or refused with the reason — a stamp number it cannot place, a condition you do not have, an
+amount that is not one. One wrong cell never stops the rest of the page, and a changed or cleared
+price names the figure it replaced. **It works nothing out on its own**: it does not apply a format's
+multiplier or a certificate's percentage when it writes, as the grid's fill buttons do — a figure it
+wants recorded, it sends as a price. Clearing a price is the only thing it removes from the
+catalogue: it never deletes a catalogue, a book or an edition.
 
 On **checklists** — the sets of stamps you count as one complete unit — it can build and tidy them
 for you: *a checklist of the watermark Y stamps of this issue*, *a checklist of all Grosik
