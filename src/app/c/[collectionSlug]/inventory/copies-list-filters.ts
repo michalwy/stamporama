@@ -26,6 +26,7 @@ export const REMEMBERED_FILTER_KEYS = [
   // remembered set of ids read back under the other reading would be a list nobody asked for.
   "tagIds",
   "tagMode",
+  "faultIds",
   "conditionIds",
   "formatIds",
   "subtypeIds",

@@ -347,6 +347,8 @@ export function InventoryListPanel({
   const tagIds = useCsvValue(readFilterParam("tagIds"));
   const rawTagMode = readFilterParam("tagMode");
   const tagMode = isTagFilterMode(rawTagMode) ? rawTagMode : DEFAULT_TAG_FILTER_MODE;
+  // The copy's faults (#1557) — any of the ticked ones, `none` the copies with no fault.
+  const faultIds = useCsvValue(readFilterParam("faultIds"));
   const locationId = readFilterParam("locationId") ?? "";
   // Whether a picked location brings the boxes filed under it (#385). Server-side, unlike the
   // area axis — the location subtree is resolved in `resolveLocationScope`.
@@ -523,6 +525,7 @@ export function InventoryListPanel({
       // reading was last left in the control.
       tagIds: tagIds.length > 0 ? tagIds : undefined,
       tagMode: tagIds.length > 0 ? tagMode : undefined,
+      faultIds: faultIds.length > 0 ? faultIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
       year: year || undefined,
@@ -540,7 +543,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -556,6 +559,7 @@ export function InventoryListPanel({
       subtypeIds: subtypeIds.length > 0 ? subtypeIds : undefined,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
       tagMode: tagIds.length > 0 ? tagMode : undefined,
+      faultIds: faultIds.length > 0 ? faultIds : undefined,
       locationId: locationId || undefined,
       locationExact: locationId && !includeSubLocations ? true : undefined,
       inCollection: activeDispositions.has("inCollection") || undefined,
@@ -570,7 +574,7 @@ export function InventoryListPanel({
       includeDisposed: includeDisposed || undefined,
       multiStamp,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1141,6 +1145,7 @@ export function InventoryListPanel({
     formatIds.length > 0 ||
     subtypeIds.length > 0 ||
     tagIds.length > 0 ||
+    faultIds.length > 0 ||
     !!locationId ||
     noPhotos ||
     missingCatalogValue ||
@@ -1590,6 +1595,7 @@ export function InventoryListPanel({
                 multiStamp={multiStamp}
                 tagIds={tagIds}
                 tagMode={tagMode}
+                faultIds={faultIds}
                 locationId={locationId}
                 includeSubLocations={includeSubLocations}
                 setIncludeSubLocations={setIncludeSubLocations}

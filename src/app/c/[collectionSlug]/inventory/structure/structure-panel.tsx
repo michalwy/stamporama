@@ -268,6 +268,7 @@ export function StructurePanel({
       deliveryStates: csv(read("deliveryStates")),
       tagIds: csv(read("tagIds")),
       tagMode: isTagFilterMode(rawTagMode) ? rawTagMode : DEFAULT_TAG_FILTER_MODE,
+      faultIds: csv(read("faultIds")),
       locationId: read("locationId") ?? "",
       multiStamp: asMultiStampFilter(read("multiStamp")),
       activeDispositions: new Set(
@@ -467,6 +468,7 @@ export function StructurePanel({
               multiStamp={values.multiStamp}
               tagIds={values.tagIds}
               tagMode={values.tagMode}
+              faultIds={values.faultIds}
               locationId={values.locationId}
               includeSubLocations={includeSubLocations}
               setIncludeSubLocations={setIncludeSubLocations}

@@ -25,6 +25,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { LocationData } from "@/lib/locations";
 import { DEFAULT_ITEM_NO_PAD } from "@/lib/item-number";
 import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
+import { appendFaultFilterParams, type FaultFilterOpts } from "@/lib/fault-filter";
 import type { MultiStampFilter, MultiStampGroupRow } from "@/lib/multi-stamp";
 
 interface InventoryItemsPage {
@@ -51,7 +52,7 @@ interface IssueGroupsPage {
   multiStampGroup: MultiStampGroupRow | null;
 }
 
-export interface InventoryItemFilters extends TagFilterOpts {
+export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
   /** The conditions in scope (#425) — an OR, absent meaning every condition. A list because the
    * filter is a multi-select; a duplicate group addressing its members passes the single condition
    * it grouped on through the same field. */
@@ -124,7 +125,7 @@ export interface InventoryItemFilters extends TagFilterOpts {
 }
 
 /** Filters that affect the year facet counts (everything except year itself). */
-export interface InventoryYearFacetFilters extends TagFilterOpts {
+export interface InventoryYearFacetFilters extends TagFilterOpts, FaultFilterOpts {
   conditionIds?: string[];
   certificateStatusIds?: string[];
   formatIds?: string[];
@@ -232,6 +233,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.includeDisposed) params.set("includeDisposed", "true");
   if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
   appendTagFilterParams(params, filters);
+  appendFaultFilterParams(params, filters);
   return params;
 }
 
@@ -430,6 +432,7 @@ export function useHoldingsValuation(
       includeGone: filters.includeGone,
       tagIds: filters.tagIds,
       tagMode: filters.tagMode,
+      faultIds: filters.faultIds,
       multiStamp: filters.multiStamp,
     }] as const,
     queryFn: async () => {
@@ -465,6 +468,7 @@ export function useHoldingsValuation(
       if (filters.includeGone) params.set("includeGone", "true");
       if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
       appendTagFilterParams(params, filters);
+      appendFaultFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/items/valuation-summary?${params.toString()}`
       );
@@ -517,6 +521,7 @@ export function useItemYears(
       if (filters.includeDisposed) params.set("includeDisposed", "true");
       if (filters.multiStamp) params.set("multiStamp", filters.multiStamp);
       appendTagFilterParams(params, filters);
+      appendFaultFilterParams(params, filters);
       const res = await fetch(
         `/api/collections/${collectionId}/items/years?${params.toString()}`
       );

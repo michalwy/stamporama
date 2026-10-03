@@ -53,6 +53,7 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
   catalogs: [],
   conditions: [],
   certificates: [],
+  faults: [],
   formats: [],
   subtypes: [],
   attributes: [],

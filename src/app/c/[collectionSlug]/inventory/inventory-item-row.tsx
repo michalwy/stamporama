@@ -37,6 +37,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
+import { FaultChips } from "@/app/c/[collectionSlug]/shared/fault-chip";
 import {
   CertificateStatusChip,
   ConditionChip,
@@ -915,7 +916,7 @@ export function InventoryItemRow({
           </span>
         </div>
 
-        {/* Line 4: condition, disposition, certificate, location */}
+        {/* Line 4: condition, certificate, format, faults, location, disposition */}
         <div
           style={{
             display: "flex",
@@ -948,6 +949,9 @@ export function InventoryItemRow({
               <span style={CHIP}>{item.formatAbbreviation}</span>
             </Tooltip>
           )}
+          {/* What is wrong with the piece (#1557), with the three axes that describe it rather than
+              among the labels at the end: a fault qualifies the condition. */}
+          <FaultChips faults={item.faults} />
           {onSetLocation ? (
             <Tooltip
               content={

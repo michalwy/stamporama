@@ -596,6 +596,11 @@ function parseBulkChanges(formData: FormData): LotBulkChanges {
   if (addTagIds.length > 0) changes.addTagIds = addTagIds;
   const removeTagIds = idList(formData, "removeTagIds");
   if (removeTagIds.length > 0) changes.removeTagIds = removeTagIds;
+  // The faults the pass puts on and takes off (#1557), the tags' shape: a copy carries any number.
+  const addFaultIds = idList(formData, "addFaultIds");
+  if (addFaultIds.length > 0) changes.addFaultIds = addFaultIds;
+  const removeFaultIds = idList(formData, "removeFaultIds");
+  if (removeFaultIds.length > 0) changes.removeFaultIds = removeFaultIds;
   return changes;
 }
 

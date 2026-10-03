@@ -37,6 +37,7 @@ import { CertificateStatusesPanel } from "./certificate-statuses-panel";
 import { FormatsPanel } from "./formats-panel";
 import { FormatFactorsPanel } from "./format-factors-panel";
 import { SubtypesPanel } from "./subtypes-panel";
+import { FaultsPanel } from "./faults-panel";
 import { AttributeDictionaryPanel } from "./attributes-panel";
 import { StampSizePresetsPanel } from "./stamp-size-presets-panel";
 import { TagsPanel } from "./tags-panel";
@@ -69,6 +70,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { FormatFactorData } from "@/lib/format-factors";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampSubtypeData } from "@/lib/subtypes";
+import type { FaultData } from "@/lib/faults";
 import type { StampAttributeLists } from "@/lib/stamp-attributes";
 import type { StampSizePresetData } from "@/lib/stamp-size-presets";
 import type { TagData } from "@/lib/tags";
@@ -102,6 +104,8 @@ interface SettingsScreenProps {
   initialFormatFactors: FormatFactorData[];
   initialCertificateStatuses: CertificateStatusData[];
   initialSubtypes: StampSubtypeData[];
+  /** The fault dictionary (#1557), with translations and how many copies carry each. */
+  initialFaults: FaultData[];
   /** The four stamp-attribute dictionaries (#72) — colour, watermark, paper, printing method. */
   initialAttributes: StampAttributeLists;
   /** The collection's stamp size presets (#804) — the seventh and eighth attribute's dictionary,
@@ -198,6 +202,7 @@ const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "catalogs",
   "conditions",
   "certificates",
+  "faults",
   "formats",
   "subtypes",
   "attributes",
@@ -715,6 +720,7 @@ function SettingsEntryBody({
   initialFormatFactors,
   initialCertificateStatuses,
   initialSubtypes,
+  initialFaults,
   initialAttributes,
   initialStampSizePresets,
   initialTags,
@@ -812,6 +818,15 @@ function SettingsEntryBody({
         <FormatsPanel
           collectionId={collectionId}
           initialFormats={initialFormats}
+          titleLanguages={titleLanguages}
+          defaultLanguage={defaultLanguage}
+        />
+      );
+    case "faults":
+      return (
+        <FaultsPanel
+          collectionId={collectionId}
+          initialFaults={initialFaults}
           titleLanguages={titleLanguages}
           defaultLanguage={defaultLanguage}
         />

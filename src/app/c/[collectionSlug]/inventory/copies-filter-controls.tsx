@@ -16,12 +16,14 @@ import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-
 import { FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { FilterSlot } from "@/app/c/[collectionSlug]/shared/filter-popover";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
+import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults";
+import { NO_FAULTS } from "@/lib/fault-filter";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { DISPOSITION_FILTERS } from "./copies-list-filters";
 
 /**
  * The Copies list's filter controls — delivery state, disposition, condition, certificate, format,
- * subtype, the several-stamp pieces, tags, storage location and the spare switches — drawn by the
+ * subtype, the several-stamp pieces, tags, faults, storage location and the spare switches — drawn by the
  * Copies list and by the collection structure screen (#1401).
  *
  * One component for the two because *the same filter bar* is the structure screen's rule: a
@@ -93,6 +95,9 @@ export const FILTER_WIDTH = {
    *  rather than for its `All tags` default, which is much the shorter of the three. A single tag's
    *  own name is the collector's text and ellipsises. */
   tags: "10.5rem",
+  /** Sized for `All faults` and `3 faults`; one fault's own name (*Short perforation*) is the
+   *  collector's text and ellipsises. */
+  faults: "9.5rem",
   /** Sized for `Only several-stamp pieces`, the longest of its three options — a native `<select>`
    *  takes its widest option's width anyway (#868), so this pins what it would have been. */
   multiStamp: "12.5rem",
@@ -120,6 +125,8 @@ export interface CopiesFilterControlsProps {
   multiStamp: MultiStampFilter | undefined;
   tagIds: string[];
   tagMode: TagFilterMode;
+  /** The ticked faults (#1557), `none` among them for the copies with no fault. */
+  faultIds: string[];
   /** A location id, {@link NO_LOCATION} for the copies filed nowhere, or `""` for every location. */
   locationId: string;
   includeSubLocations: boolean;
@@ -146,12 +153,14 @@ export function CopiesFilterControls({
   multiStamp,
   tagIds,
   tagMode,
+  faultIds,
   locationId,
   includeSubLocations,
   setIncludeSubLocations,
   spareFilters,
   updateParams,
 }: CopiesFilterControlsProps) {
+  const { data: faults = [] } = useCollectionFaults(collectionId);
   return (
     <>
       {/* Delivery state filter (#272): the axis the row chip shows, so "what is still in
@@ -338,6 +347,27 @@ export function CopiesFilterControls({
           })
         }
       />
+
+      {/* The copy's faults (#1557): copies carrying **any** of the ticked ones, and *No faults*
+          as a value of its own, ORed beside them as *No certificate* is on that axis. Drawn
+          while a filter is still set even if the dictionary has since emptied, so it can be
+          cleared. */}
+      {(faults.length > 0 || faultIds.length > 0) && (
+        <FilterSlot width={FILTER_WIDTH.faults}>
+          <MultiSelectFilter
+            fullWidth
+            options={[
+              { id: NO_FAULTS, label: "No faults" },
+              ...faults.map((f) => ({ id: f.id, label: f.name })),
+            ]}
+            selected={faultIds}
+            onChange={(ids) => updateParams({ faultIds: ids.join(",") })}
+            allLabel="All faults"
+            itemNoun="faults"
+            ariaLabel="Filter by fault"
+          />
+        </FilterSlot>
+      )}
 
       {locations.length > 0 && (
         <FilterSlot width={FILTER_WIDTH.location}>
