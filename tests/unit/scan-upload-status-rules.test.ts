@@ -6,12 +6,22 @@ import {
   canDiscardScanUpload,
   canRetryScanUpload,
   isScanUploadPending,
+  scanUploadStatusText,
   isScanUploadShown,
   newlyPreparedSheets,
   queueAhead,
 } from "../../src/lib/scan-upload-status-rules";
 
 describe("scan upload status rules (#1567)", () => {
+  it("keeps the report of an interrupted upload until it is dismissed (#1568)", () => {
+    assert.ok(!SWEEPABLE_SCAN_UPLOAD_STATUSES.includes("interrupted"));
+    assert.equal(isScanUploadShown("interrupted"), true);
+    assert.equal(isScanUploadPending("interrupted"), false);
+    assert.equal(canDiscardScanUpload("interrupted"), true);
+    assert.equal(canRetryScanUpload("interrupted"), false);
+    assert.match(scanUploadStatusText("interrupted"), /not uploaded/i);
+  });
+
   it("never lets the sweep take a scan whose bytes are all in and not yet a card", () => {
     assert.ok(!SWEEPABLE_SCAN_UPLOAD_STATUSES.includes("queued"));
     assert.ok(!SWEEPABLE_SCAN_UPLOAD_STATUSES.includes("preparing"));

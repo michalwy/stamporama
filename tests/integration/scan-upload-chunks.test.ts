@@ -14,6 +14,9 @@ import {
   failScanUpload,
   finalizeScanUpload,
   gcStaleScanUploads,
+  interruptScanUploads,
+  interruptStalledScanUploads,
+  keepScanUploadsAlive,
   openScanUpload,
   prepareScanUpload,
   receiveScanChunk,
@@ -22,6 +25,7 @@ import {
   uploadChunkBytes,
 } from "../../src/lib/scan-uploads";
 import { getActionItems } from "../../src/lib/action-items";
+import { SCAN_UPLOAD_STALL_MS } from "../../src/lib/scan-upload-status-rules";
 import { getStorage, sheetVariantKey } from "../../src/lib/storage";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-scan-chunks-"));
@@ -518,6 +522,112 @@ describe("chunked card scan upload (#590)", () => {
     assert.equal(await stagingExists(failed.id), false);
 
     await abortScanUpload(userId, queued.id);
+  });
+
+  it("stops what a closed page had not sent, keeps nothing half-sent, and reports it (#1568)", async () => {
+    const order = await newOrder();
+    const bytes = await card();
+    const open = (label: string) =>
+      openScanUpload(userId, { purchaseId: order }, {
+        mime: "image/png",
+        side: "front",
+        label,
+        totalBytes: bytes.byteLength,
+      });
+    // A batch of three as the page leaves it: the first sent and queued, the second half-sent, the
+    // third still waiting its turn.
+    const sent = await open("Klaser 1");
+    for (let i = 0; i < sent.chunks; i++) {
+      const start = i * sent.chunkBytes;
+      await receiveScanChunk(userId, sent.id, i, bytes.subarray(start, start + sent.chunkBytes));
+    }
+    await finalizeScanUpload(userId, sent.id);
+    const half = await open("Klaser 2");
+    await receiveScanChunk(userId, half.id, 0, bytes.subarray(0, half.chunkBytes));
+    const waiting = await open("Klaser 3");
+    assert.equal(await stagingExists(half.id), true);
+
+    // Somebody else's page cannot stop them.
+    assert.equal(await interruptScanUploads("someone-else", [half.id, waiting.id]), 0);
+
+    assert.equal(await interruptScanUploads(userId, [sent.id, half.id, waiting.id]), 2);
+    const rows = await prisma.scanUpload.findMany({
+      where: { id: { in: [sent.id, half.id, waiting.id] } },
+      select: { id: true, status: true, receivedBytes: true },
+    });
+    const status = new Map(rows.map((r) => [r.id, r.status]));
+    // The one whose bytes were all in is safe in the queue.
+    assert.equal(status.get(sent.id), "queued");
+    assert.equal(status.get(half.id), "interrupted");
+    assert.equal(status.get(waiting.id), "interrupted");
+    assert.equal(rows.find((r) => r.id === half.id)?.receivedBytes, 0);
+    assert.equal(await stagingExists(half.id), false);
+    assert.equal(await stagingExists(sent.id), true);
+
+    // A piece arriving late is refused rather than acknowledged for ever.
+    await assert.rejects(
+      receiveScanChunk(userId, half.id, 1, bytes.subarray(half.chunkBytes, 2 * half.chunkBytes)),
+      ScanValidationError
+    );
+    // Finalizing one says where it is rather than queueing a scan with no bytes.
+    assert.equal((await finalizeScanUpload(userId, waiting.id)).status, "interrupted");
+
+    // The purchase reports both, by name, until they are dismissed — the sweep leaves the report.
+    const reported = (await listScans(userId, { purchaseId: order })).uploads.filter(
+      (u) => u.status === "interrupted"
+    );
+    assert.deepEqual(reported.map((u) => u.label).sort(), ["Klaser 2", "Klaser 3"]);
+    await prisma.scanUpload.updateMany({
+      where: { id: { in: [half.id, waiting.id] } },
+      data: { updatedAt: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+    });
+    await gcStaleScanUploads();
+    assert.equal(await prisma.scanUpload.count({ where: { id: { in: [half.id, waiting.id] } } }), 2);
+
+    await abortScanUpload(userId, half.id);
+    await abortScanUpload(userId, waiting.id);
+    await abortScanUpload(userId, sent.id);
+    assert.equal(await prisma.scanUpload.count({ where: { purchaseId: order } }), 0);
+  });
+
+  it("takes silence for a closed page, and spares the files a live page keeps alive (#1568)", async () => {
+    const order = await newOrder();
+    const bytes = await card();
+    const open = () =>
+      openScanUpload(userId, { purchaseId: order }, {
+        mime: "image/png",
+        side: "front",
+        totalBytes: bytes.byteLength,
+      });
+    const silent = await open();
+    const kept = await open();
+    const recent = await open();
+    const past = new Date(Date.now() - SCAN_UPLOAD_STALL_MS - 60_000);
+    await prisma.scanUpload.updateMany({
+      where: { id: { in: [silent.id, kept.id] } },
+      data: { updatedAt: past },
+    });
+    // The live page says the second is still waiting its turn.
+    await keepScanUploadsAlive(userId, [kept.id]);
+    // Another owner's keepalive does nothing for the first.
+    await keepScanUploadsAlive("someone-else", [silent.id]);
+
+    // Nobody else's read can stop them either.
+    assert.equal(await interruptStalledScanUploads("someone-else", order), 0);
+    assert.equal(await interruptStalledScanUploads(userId, order), 1);
+    const status = new Map(
+      (
+        await prisma.scanUpload.findMany({
+          where: { purchaseId: order },
+          select: { id: true, status: true },
+        })
+      ).map((r) => [r.id, r.status])
+    );
+    assert.equal(status.get(silent.id), "interrupted");
+    assert.equal(status.get(kept.id), "uploading");
+    assert.equal(status.get(recent.id), "uploading");
+
+    for (const id of [silent.id, kept.id, recent.id]) await abortScanUpload(userId, id);
   });
 
   /** Is anything of this upload still on the volume? One directory holds the parts and, briefly,

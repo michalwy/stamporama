@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   MAX_BATCH_LABEL_LENGTH,
   batchLabelFromFileName,
+  batchLabelsForFiles,
   isBatchLabelTooLong,
   normalizeBatchLabel,
 } from "../../src/lib/scan-batch-label";
@@ -56,5 +57,33 @@ describe("scan batch label from the file name (#603)", () => {
     // long file name must not be what fails an upload — so the card is simply left unnamed.
     assert.equal(batchLabelFromFileName(`${"x".repeat(MAX_BATCH_LABEL_LENGTH)}.jpg`), "x".repeat(MAX_BATCH_LABEL_LENGTH));
     assert.equal(batchLabelFromFileName(`${"x".repeat(MAX_BATCH_LABEL_LENGTH + 1)}.jpg`), null);
+  });
+});
+
+describe("scan batch labels for several files at once (#1568)", () => {
+  it("gives each card its own file's name when nothing was typed", () => {
+    assert.deepEqual(batchLabelsForFiles("  ", ["Klaser 1.jpg", "Klaser 2.png", ".jpg"]), [
+      "Klaser 1",
+      "Klaser 2",
+      null,
+    ]);
+    assert.deepEqual(batchLabelsForFiles(null, ["a.jpg"]), ["a"]);
+  });
+
+  it("keeps a typed name as typed for one file and numbers it across several", () => {
+    assert.deepEqual(batchLabelsForFiles(" Klaser Polska ", ["x.jpg"]), ["Klaser Polska"]);
+    assert.deepEqual(batchLabelsForFiles("Klaser Polska", ["x.jpg", "y.jpg", "z.jpg"]), [
+      "Klaser Polska 1",
+      "Klaser Polska 2",
+      "Klaser Polska 3",
+    ]);
+  });
+
+  it("shortens the typed part so the number always fits", () => {
+    const typed = "x".repeat(MAX_BATCH_LABEL_LENGTH);
+    const labels = batchLabelsForFiles(typed, Array.from({ length: 12 }, (_, i) => `${i}.jpg`));
+    for (const label of labels) assert.ok(!isBatchLabelTooLong(label));
+    assert.equal(labels[0], `${"x".repeat(MAX_BATCH_LABEL_LENGTH - 2)} 1`);
+    assert.equal(labels[11], `${"x".repeat(MAX_BATCH_LABEL_LENGTH - 3)} 12`);
   });
 });

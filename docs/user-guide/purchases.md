@@ -433,7 +433,9 @@ Instead of photographing each stamp as you identify it, you can **scan a whole s
 at once** and cut the scan into per-stamp **tiles**. Each stamp is then handled physically once
 — laid out and scanned — and everything after that happens on screen.
 
-Open an order and use **Add card scan** in its **Card scans** section, above the lots.
+Open an order and use **Add card scans** in its **Card scans** section, above the lots. You can
+choose **several files at once**, or drop them onto the section — see
+[Adding several scans at once](#adding-several-scans-at-once).
 
 For stamps you **already own** — a shelf being catalogued, a gift, an inheritance — scan them on an
 [opening balance](#opening-balances), which has the same section.
@@ -517,9 +519,10 @@ Two things to know:
 A 1200 dpi card is a large file — 100 to 200 MB is ordinary — so adding one goes in **two stages
 that mean different things**:
 
-- **Uploading the scan…**, with a bar and a percentage under the button. That is real: it counts the
-  pieces of the file the app has actually taken, not what your browser has handed to the network.
-  Stay on the page for this part — leaving it stops the upload.
+- **Uploading…**, with a bar and a percentage on the file's own card in the **Card scans** section.
+  That is real: it counts the pieces of the file the app has actually taken, not what your browser
+  has handed to the network. You can move around the app while it uploads; **keep the browser tab
+  open** — closing or reloading it stops the upload, and the browser asks first.
 - **Preparing the scan…**, on the scan's own card in the **Card scans** section. The bytes are all
   in; what is happening now is the app opening a very large image and making the working copy the
   cut editor draws. On a big card that can take a few minutes, so it happens **in the background**:
@@ -532,7 +535,10 @@ it — until its turn comes. The app may be a little slower while a large scan i
 
 When a scan is ready:
 
-- if you are still on the order's page, the **cut editor opens on it**, as it always has;
+- if you are still on the order's page, the **cut editor opens on it**, as it always has — and when
+  several scans become ready while you are cutting one, committing that cut **opens the next**, so a
+  batch is cut card after card while the rest are still uploading. Closing the editor without
+  committing stops that: the cards ready by then wait for you;
 - if you are not, the card waits for you as a batch with **Review the front cut** (or **Review the
   back cut**), and the [notification bell](action-items.md) lists it under **Card scans ready to
   cut**.
@@ -545,18 +551,42 @@ is, and until then the notification bell lists it under **Card scan could not be
 The scan is sent in pieces, which is what makes a card this size possible at all — most self-hosted
 setups sit behind something that refuses a single upload that large, or gives up on one request that
 takes minutes. It also means a hiccup costs you a piece and not the whole card: a dropped request is
-retried on its own. If the connection gives up entirely you are told, and nothing half-sent is left
-behind.
+retried on its own. If the connection gives up entirely, the file's card says **Upload failed** with
+the reason: **Try again** carries on from the last piece the app took, and **Discard** gives up on it.
 
-Cancel by leaving the page while it is still uploading; a scan that never finished arriving is
-cleaned up on its own.
+#### Adding several scans at once
+
+A sitting at the scanner makes many cards. Choose **all of their files at once** in **Add card
+scans** — or drag them from your desktop onto the **Card scans** section — and leave them to it:
+
+- **Each file becomes a card of its own**, a front, numbered in the order you chose them.
+- They **upload one after another**, and each is prepared as soon as it has arrived, so the first can
+  be cut while the next is still uploading.
+- Each file has its own card in the section, saying where it is: **Waiting to upload**,
+  **Uploading…** with its percentage, then **Waiting its turn to be prepared**, **Preparing the
+  scan…**, and finally the batch itself, ready to cut. With the section folded shut, one line under
+  its heading says how many are still uploading.
+- A file the app does not take — not a JPEG, PNG or WebP, or over 200 MB — says **Not accepted** with
+  the reason, and the others go ahead. **Dismiss** clears it.
+- A file that fails can be tried again on its own, without touching the others.
+
+You can **move around the app** while a batch runs. **Closing or reloading the tab stops it**; the
+browser asks first while something is still to upload. The files it had not finished are not kept —
+not even the half-sent one — and the next time you open the order, each says **Not uploaded — the
+page was closed before it was sent**, so you know which to choose again. **Dismiss** clears the
+note.
+
+Back scans are still added one at a time, from the batch's own **Add back scan**, since the app has
+to know which card each back belongs to.
 
 #### Naming a card
 
-Beside **Add card scan** there is an optional **name**: type one and it rides with the card you are
+Beside **Add card scans** there is an optional **name**: type one and it rides with the card you are
 adding. Leave it blank and the card takes **the name of the file you upload**, without its extension
 — *Klaser Polska 1.jpg* becomes *Klaser Polska 1* — since that is usually the naming you already did
 at the scanner. (A file name too long to fit leaves the card unnamed rather than failing the upload.)
+Several files at once each take their own file's name the same way; a name you typed is **numbered**
+across them instead — *Klaser Polska 1*, *Klaser Polska 2*, … in the order you chose them.
 
 With more than one [scanning profile](collections.md#scanning-profiles), a choice of profile sits
 beside the name too, set to the collection's default: the scans you add — fronts and backs — are

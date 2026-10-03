@@ -3,13 +3,21 @@
  * shared by the server (what may be swept, discarded, retried) and the Card scans section (what a
  * card says, and when the cut editor opens on its own).
  *
- * `uploading` → `queued` → `preparing` → `done` | `failed`. Preparing — joining the parts, decoding
+ * `uploading` → `queued` → `preparing` → `done` | `failed`, and `uploading` → `interrupted` when the
+ * page sending it was closed before its last piece arrived (#1568). Preparing — joining the parts, decoding
  * a ~140 Mpx card and writing the `view` — used to run inside the request that finished the upload,
  * and a large card outlived the proxy in front of the app (Cloudflare's 524 at about 100 s). It runs
  * in the background now, one scan at a time, and the page reads this state instead of waiting.
  */
 
-export const SCAN_UPLOAD_STATUSES = ["uploading", "queued", "preparing", "done", "failed"] as const;
+export const SCAN_UPLOAD_STATUSES = [
+  "uploading",
+  "queued",
+  "preparing",
+  "done",
+  "failed",
+  "interrupted",
+] as const;
 export type ScanUploadStatus = (typeof SCAN_UPLOAD_STATUSES)[number];
 
 export function isScanUploadStatus(value: string): value is ScanUploadStatus {
@@ -29,6 +37,10 @@ export function asScanUploadStatus(value: string): ScanUploadStatus {
  * however long the queue or a server's downtime keeps it there — a restart resumes it rather than
  * the sweep deleting it. A failed one is staging again (nobody retried it, so it goes the way an
  * unfinished upload does), and a done one is only the note that let an open page find its sheet.
+ *
+ * **Nor an interrupted one** (#1568): it holds no bytes — its parts went when it was stopped — and it
+ * is the report that tells the collector which files the closed page never sent. It stays until they
+ * have read it and dismissed it, however long it is before the purchase is next opened.
  */
 export const SWEEPABLE_SCAN_UPLOAD_STATUSES: readonly ScanUploadStatus[] = [
   "uploading",
@@ -39,7 +51,9 @@ export const SWEEPABLE_SCAN_UPLOAD_STATUSES: readonly ScanUploadStatus[] = [
 /** Whether the collector may throw this upload away. Not while it is being prepared — the worker
  * holds its files — and not once done, when the card itself is what is deleted. */
 export function canDiscardScanUpload(status: ScanUploadStatus): boolean {
-  return status === "uploading" || status === "queued" || status === "failed";
+  return (
+    status === "uploading" || status === "queued" || status === "failed" || status === "interrupted"
+  );
 }
 
 /** Only a failed preparation is retried; its parts are kept for exactly this. */
@@ -52,10 +66,13 @@ export function isScanUploadPending(status: ScanUploadStatus): boolean {
   return status === "queued" || status === "preparing";
 }
 
-/** What the section draws a card for while there is no batch yet. `uploading` is the browser's own
- * bar, and `done` is the batch itself. */
+/** What the section draws a card for while there is no batch yet. `uploading` is drawn from the
+ * sending page's own queue (#1568), which alone knows how far it has got, and `done` is the batch
+ * itself. */
 export function isScanUploadShown(status: ScanUploadStatus): boolean {
-  return status === "queued" || status === "preparing" || status === "failed";
+  return (
+    status === "queued" || status === "preparing" || status === "failed" || status === "interrupted"
+  );
 }
 
 /** What a card being prepared says it is doing. */
@@ -71,8 +88,23 @@ export function scanUploadStatusText(status: ScanUploadStatus): string {
       return "Ready to cut";
     case "uploading":
       return "Uploading the scan…";
+    case "interrupted":
+      return "Not uploaded — the page was closed before it was sent";
   }
 }
+
+/**
+ * How long an upload may sit without a sign of life before it is taken for one whose page was closed
+ * (#1568). A page sending a batch says it is alive every {@link SCAN_UPLOAD_KEEPALIVE_MS} for the
+ * files still waiting their turn — which, behind a 200 MB card, can be a long wait — and a file being
+ * sent bumps its row with every piece. A closed page usually says so itself as it goes; this is the
+ * answer for one that could not (a crash, a machine put to sleep), measured generously against the
+ * once-a-minute a browser allows a tab in the background.
+ */
+export const SCAN_UPLOAD_STALL_MS = 5 * 60_000;
+
+/** How often a page with files still to send says it is still there (#1568). */
+export const SCAN_UPLOAD_KEEPALIVE_MS = 60_000;
 
 /** One upload as the section sees it. */
 export interface ScanUploadState {

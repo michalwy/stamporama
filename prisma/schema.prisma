@@ -4130,7 +4130,8 @@ model ScanUpload {
    * take longer than the TTL to send. */
   updatedAt      DateTime @updatedAt
   /** Where the scan is once its bytes are in (#1567): uploading → queued → preparing → done |
-   * failed. Preparing — assembling the parts, the ~140 Mpx decode and the `view` — runs in the
+   * failed — or uploading → interrupted when the page sending it closed first (#1568), a report
+   * with no bytes kept until the collector dismisses it. Preparing — assembling the parts, the ~140 Mpx decode and the `view` — runs in the
    * background, one scan at a time, because a large card outlived the proxy's timeout when it ran
    * inside the request that finished the upload. The row is the queue and the state the page reads.
    * Unconstrained in the DB, like `Offer.state`. */
