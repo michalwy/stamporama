@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useEscapeLayer } from "@/app/escape-stack";
 import { Icon } from "@/app/icons";
+import { usePageScrollLock } from "@/app/page-scroll-lock";
 
 // **Looking at a picture**, wherever the picture comes from: the hover preview (#632) and the
 // full-size lightbox (#112, #137), with no idea of a collection between them.
@@ -167,6 +168,7 @@ export function PhotoLightbox({
   // The lightbox is a layer like any dialog: opened last, it is topmost, so the shared stack gives
   // it Escape and leaves the dialog it was opened from alone (#361).
   useEscapeLayer(onClose);
+  usePageScrollLock(current != null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
