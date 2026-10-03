@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   DialogShell,
   DialogBody,
@@ -27,6 +28,11 @@ import {
 } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { useLastOfferDefaults } from "./use-last-offer-defaults";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import type { FacebookGroupChoice } from "@/lib/facebook-auctions";
+import {
+  facebookDefaultEndsAt,
+  facebookDefaultStartingPrice,
+} from "@/lib/facebook-post-rules";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -69,7 +75,12 @@ export interface OfferFormDialogProps {
     | "listingType"
     | "startingPrice"
     | "endsAt"
-  >;
+  > & {
+    /** A Facebook auction's group, increment and post (#1544). Absent reads as none. */
+    facebookGroupId?: string | null;
+    bidIncrement?: string | null;
+    facebookPostId?: string | null;
+  };
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
    * show a misleading editable picker, its `defaultListingType` (#449) pre-selects how the listing
@@ -161,6 +172,56 @@ export function OfferFormDialog({
     ? formatListingDate(offer!.listingDate)
     : lastDefaults?.listingDate || todayIso();
   const priceControlled = priceValue !== undefined;
+  const [platformId, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
+
+  // ── Facebook (#1544; ADR-0061) ──────────────────────────────────────────────────────────────
+  // Whether the picked platform is Facebook, and its groups, asked of the server whenever the
+  // platform changes: a Facebook offer is an auction in a group, which the collector names here, and
+  // a new one starts from that group's defaults — the starting price, the increment, when it closes
+  // and the currency. Read when the group is picked and owned by the offer from then on, the
+  // platform defaults' rule (#362): an edit never re-seeds anything.
+  const { data: facebookChoices } = useQuery({
+    queryKey: ["facebook-group-choices", collectionId, platformId, offer?.facebookGroupId ?? null],
+    queryFn: async () => {
+      const { facebookGroupChoicesAction } = await import("@/app/actions/facebook");
+      return facebookGroupChoicesAction(collectionId, platformId, offer?.facebookGroupId ?? null);
+    },
+    enabled: !!platformId,
+    staleTime: 30_000,
+  });
+  const isFacebook = !!platformId && facebookChoices?.isFacebook === true;
+  const facebookGroups: FacebookGroupChoice[] = facebookChoices?.groups ?? [];
+  const [facebookGroupId, setFacebookGroupId] = useState(offer?.facebookGroupId ?? "");
+  const facebookGroup = isFacebook ? facebookGroups.find((g) => g.id === facebookGroupId) : undefined;
+  // A lot of a multi-lot post shares the post's group, so its group is not changed here.
+  const inFacebookPost = !!offer?.facebookPostId;
+  const [bidIncrement, setBidIncrement] = useState(offer?.bidIncrement ?? "");
+  const [bidIncrementTouched, setBidIncrementTouched] = useState(false);
+  // The group's opening figure on a new auction: its amount, or its share of the copies' catalogue
+  // value where the caller suggests one (#230) — already in this offer's currency, since the parent
+  // converts it as the currency changes.
+  const facebookStartingSeed =
+    !isEdit && facebookGroup
+      ? facebookDefaultStartingPrice(
+          facebookGroup.startingPriceMode,
+          facebookGroup.startingPriceValue,
+          priceControlled ? (priceValue ?? null) : null
+        )
+      : null;
+
+  function chooseFacebookGroup(id: string) {
+    setFacebookGroupId(id);
+    if (isEdit) return;
+    const group = facebookGroups.find((g) => g.id === id);
+    if (!bidIncrementTouched) setBidIncrement(group?.bidIncrement ?? "");
+    if (!endsAtTouched) {
+      setEndsAt(
+        toLocalInputValue(
+          group ? facebookDefaultEndsAt(new Date(), group.auctionDays, group.closingTime) : null
+        )
+      );
+    }
+  }
   // The live price: an offer's own when editing, else whatever the parent suggests (a lot's price, a
   // catalog value) or nothing. It has no platform-level fallback of its own — that default is now an
   // auction's **starting** price (#449), seeded below.
@@ -173,7 +234,8 @@ export function OfferFormDialog({
     normalizeListingType(isEdit ? offer!.listingType : initialPlatform?.defaultListingType)
   );
   const [listingTypeTouched, setListingTypeTouched] = useState(false);
-  const isAuction = isAuctionListing(listingType);
+  // A Facebook offer is an auction in a group (ADR-0061), so there the question is not asked.
+  const isAuction = isFacebook || isAuctionListing(listingType);
   // An auction's opening figure, seeded from the platform's own default (#362): re-seeded on a
   // platform change and left alone the moment the collector types one.
   const [startingPrice, setStartingPrice] = useState(
@@ -189,6 +251,7 @@ export function OfferFormDialog({
   // When the auction closes (#490), held as the field's local-time value and converted to an instant
   // on submit. Never seeded from the last offer: a closing time belongs to one listing.
   const [endsAt, setEndsAt] = useState(toLocalInputValue(offer?.endsAt));
+  const [endsAtTouched, setEndsAtTouched] = useState(false);
   // Where a parent's suggested figure lands (#449). It is what one would ask for the goods, which on
   // an auction is what one would open at — so it fills the starting price there and leaves the
   // current one blank, rather than recording a bid nobody placed.
@@ -198,20 +261,29 @@ export function OfferFormDialog({
   // opens at the same price outranks a suggestion describing the goods (a lot's price, the copies'
   // catalog value) — the reverse of the quick-buy order, which #362 leaves untouched. A figure the
   // collector has typed themselves counts the same way: nothing may replace it with a suggestion.
-  const platformOpensAuction = !isEdit && (!!platformStartingPrice || startingPriceTyped);
+  //
+  // On Facebook the opening figure is the **group's** (#1544), standing in for the platform's.
+  const openingDefault = isFacebook ? facebookStartingSeed : platformStartingPrice;
+  const platformOpensAuction = !isEdit && (!!openingDefault || startingPriceTyped);
+  const shownStartingPrice =
+    !isEdit && isFacebook && !startingPriceTyped ? (facebookStartingSeed ?? "") : startingPrice;
   const suggestionFillsStartingPrice = priceControlled && isAuction && !platformOpensAuction;
-  const [platformId, setPlatformId] = useState(offer?.platformId ?? initialPlatform?.id ?? "");
   // The currency the picked platform is locked to (#196). Editing keeps the offer's own snapshot;
   // creating derives it from the platform — a known currency locks the field, an unset one (or a
   // brand-new platform) shows an inline picker whose value becomes the platform's currency.
   const [platformCurrency, setPlatformCurrency] = useState<string | null | undefined>(
     isEdit ? undefined : (initialPlatform?.platformCurrency ?? undefined)
   );
+  // A group with a currency of its own puts its auctions in it (#1544, settled 2026-10-03); its
+  // choice already falls back to the platform's, so a group naming none reads as the platform.
+  const groupCurrency = !isEdit && facebookGroup?.currency ? facebookGroup.currency : null;
   const lockedCurrency = isEdit
     ? offer!.currency
-    : typeof platformCurrency === "string" && platformCurrency
-      ? platformCurrency
-      : null;
+    : groupCurrency
+      ? groupCurrency
+      : typeof platformCurrency === "string" && platformCurrency
+        ? platformCurrency
+        : null;
   // The unlocked picker's chosen value (which becomes the platform's currency). Tracked in state so
   // the effective currency can be reported up for price conversion (#200).
   const [pickedCurrency, setPickedCurrency] = useState(initialCurrency ?? baseCurrency);
@@ -288,6 +360,8 @@ export function OfferFormDialog({
               disabled={isPending}
               onSelectionChange={(id, _name, platform) => {
                 setPlatformId(id);
+                // A group belongs to its platform (#1544): another platform's is never carried over.
+                if (id !== platformId) setFacebookGroupId("");
                 // A picked platform carries its currency (null when unset); a typed name is an
                 // unknown/new platform, so its currency is prompted below. Ignored in edit mode.
                 if (!isEdit) setPlatformCurrency(id ? platform?.platformCurrency : undefined);
@@ -307,6 +381,57 @@ export function OfferFormDialog({
             />
           </div>
 
+          {/* The Facebook group the auction is in, and its bid increment (#1544; ADR-0061) — asked
+              only on the Facebook platform, where the group is required. Picking one on a new offer
+              fills in the group's defaults below; each stays editable. */}
+          {isFacebook && (
+            <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
+              <div style={{ flex: 2 }}>
+                <LabelWithError htmlFor="offer-facebook-group">Group</LabelWithError>
+                {inFacebookPost && <input type="hidden" name="facebookGroupId" value={facebookGroupId} />}
+                <select
+                  id="offer-facebook-group"
+                  name={inFacebookPost ? undefined : "facebookGroupId"}
+                  value={facebookGroupId}
+                  onChange={(e) => chooseFacebookGroup(e.target.value)}
+                  disabled={isPending || inFacebookPost}
+                  required
+                  style={{ ...INPUT_STYLE, cursor: inFacebookPost ? "not-allowed" : "pointer" }}
+                >
+                  <option value="">
+                    {facebookGroups.length === 0 ? "No groups yet — add one in Settings → Facebook" : "Choose a group…"}
+                  </option>
+                  {facebookGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.archived ? `${g.name} (archived)` : g.name}
+                    </option>
+                  ))}
+                </select>
+                {inFacebookPost && (
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    A lot shares its post&apos;s group.
+                  </p>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="offer-bid-increment">Bid increment</LabelWithError>
+                <NumericInput
+                  kind="amount"
+                  id="offer-bid-increment"
+                  name="bidIncrement"
+                  placeholder="0.00"
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                  value={bidIncrement}
+                  onChange={(e) => {
+                    setBidIncrement(e.target.value);
+                    setBidIncrementTouched(true);
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* How the listing is sold (#449), beside the currency it is priced in: both say how to
               read the figures below rather than being figures themselves. A quick buy states one
               price; an auction's price is where the bidding stands, and the opening figure gets its
@@ -315,6 +440,15 @@ export function OfferFormDialog({
           <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-listing-type">Listing type</LabelWithError>
+              {isFacebook ? (
+                // An auction in a group is the only way Facebook sells here (ADR-0061).
+                <>
+                  <input type="hidden" name="listingType" value="auction" />
+                  <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
+                    {OFFER_LISTING_TYPE_LABEL.auction} · in a group
+                  </div>
+                </>
+              ) : (
               <select
                 id="offer-listing-type"
                 name="listingType"
@@ -332,6 +466,7 @@ export function OfferFormDialog({
                   </option>
                 ))}
               </select>
+              )}
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-currency">Currency</LabelWithError>
@@ -341,7 +476,7 @@ export function OfferFormDialog({
                 <>
                   <input type="hidden" name="currency" value={lockedCurrency} />
                   <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
-                    {lockedCurrency} · from platform
+                    {lockedCurrency} · {isEdit ? "from offer" : groupCurrency ? "from group" : "from platform"}
                   </div>
                 </>
               ) : (
@@ -417,7 +552,7 @@ export function OfferFormDialog({
                     {...(suggestionFillsStartingPrice
                       ? { value: priceValue, onChange: (e) => onPriceValueChange?.(e.target.value) }
                       : {
-                          value: startingPrice,
+                          value: shownStartingPrice,
                           onChange: (e) => {
                             setStartingPrice(e.target.value);
                             setStartingPriceTyped(true);
@@ -495,7 +630,10 @@ export function OfferFormDialog({
                 id="offer-ends-at"
                 type="datetime-local"
                 value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
+                onChange={(e) => {
+                  setEndsAt(e.target.value);
+                  setEndsAtTouched(true);
+                }}
                 disabled={isPending}
                 style={INPUT_STYLE}
               />

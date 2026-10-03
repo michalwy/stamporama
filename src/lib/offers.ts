@@ -81,6 +81,7 @@ import {
   type ListingMode,
 } from "./listing-preconditions";
 import {
+  FACEBOOK_PLATFORM_MODULE,
   hasListingModule,
   usesPlatformCatalogue,
   usesPlatformConditions,
@@ -147,6 +148,15 @@ import {
   readOfferCommitments,
 } from "./trade-reservations";
 import { describeCommittedCopies, type CommittedCopy } from "./trade-reservation-rules";
+import {
+  detachFacebookLot,
+  facebookAuctionRefusal,
+  getFacebookOfferKit,
+  offerItemIds,
+  resolveFacebookOffer,
+  type FacebookOfferKit,
+  type FacebookOfferResolution,
+} from "./facebook-auctions";
 import type { PlanDrift } from "./offer-generator-rules";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
@@ -186,7 +196,11 @@ export type OfferBlockReason =
   /** Going live, or adding to a live listing (#639), with a copy promised in an agreed trade. Its
    *  own reason rather than a second wording of `not-eligible`: what is wrong is not the copy but a
    *  commitment made elsewhere, and the fix is on the trade's screen. */
-  | "trade-committed";
+  | "trade-committed"
+  /** A Facebook auction (#1544; ADR-0061) missing its group, or naming one it may not. */
+  | "facebook-group"
+  /** A copy put into a second Facebook auction while one it is in is up (ADR-0061 §5). */
+  | "facebook-auction";
 
 /** Raised when an offer action is refused by a domain guard. `message` is user-facing; the
  * server action maps it to an `{ status: "error" }` response. */
@@ -222,6 +236,9 @@ interface OfferRef {
   /** The stored price as a 2-dp string, so a write that leaves it where it was is not dated as a
    * fresh observation (#449). */
   price: string;
+  /** The Facebook group this auction is in (#1544), or null on every offer not on Facebook — which
+   * is what decides whether a copy added to it is asked about the other Facebook auctions. */
+  facebookGroupId: string | null;
 }
 
 async function assertOfferOwner(ownerId: string, offerId: string): Promise<OfferRef> {
@@ -233,6 +250,7 @@ async function assertOfferOwner(ownerId: string, offerId: string): Promise<Offer
       state: true,
       listingType: true,
       price: true,
+      facebookGroupId: true,
       collection: { select: { ownerId: true } },
     },
   });
@@ -245,6 +263,7 @@ async function assertOfferOwner(ownerId: string, offerId: string): Promise<Offer
     state: (isOfferState(offer.state) ? offer.state : "active") as OfferState,
     listingType: normalizeListingType(offer.listingType),
     price: offer.price.toFixed(2),
+    facebookGroupId: offer.facebookGroupId,
   };
 }
 
@@ -252,6 +271,8 @@ interface OfferSetRef {
   offerId: string;
   collectionId: string;
   offerState: OfferState;
+  /** As on {@link OfferRef}: whether the offer is a Facebook auction (#1544). */
+  facebookGroupId: string | null;
 }
 
 async function assertOfferSetOwner(ownerId: string, setId: string): Promise<OfferSetRef> {
@@ -259,7 +280,14 @@ async function assertOfferSetOwner(ownerId: string, setId: string): Promise<Offe
     where: { id: setId },
     select: {
       offerId: true,
-      offer: { select: { collectionId: true, state: true, collection: { select: { ownerId: true } } } },
+      offer: {
+        select: {
+          collectionId: true,
+          state: true,
+          facebookGroupId: true,
+          collection: { select: { ownerId: true } },
+        },
+      },
     },
   });
   if (!set || set.offer.collection.ownerId !== ownerId) {
@@ -269,6 +297,7 @@ async function assertOfferSetOwner(ownerId: string, setId: string): Promise<Offe
     offerId: set.offerId,
     collectionId: set.offer.collectionId,
     offerState: (isOfferState(set.offer.state) ? set.offer.state : "active") as OfferState,
+    facebookGroupId: set.offer.facebookGroupId,
   };
 }
 
@@ -1958,6 +1987,12 @@ export interface OfferListItem {
    * pushed back to the marketplace. The instant is when it started diverging, so the row can say how
    * long the live listing has been wrong; null is a listing this record believes is in step. */
   listingOutOfDate: Date | null;
+  /** A Facebook auction's group, increment and post (#1544), all null off Facebook. On the row for
+   * the header form opened from it — the `startingPrice` reason above — and for *Post together*,
+   * which asks which ticked offers are auctions in one group. */
+  facebookGroupId: string | null;
+  bidIncrement: string | null;
+  facebookPostId: string | null;
   createdAt: Date;
 }
 
@@ -1977,6 +2012,9 @@ const OFFER_SELECT = {
   endsAt: true,
   listingDate: true,
   listingContentChangedAt: true,
+  facebookGroupId: true,
+  bidIncrement: true,
+  facebookPostId: true,
   createdAt: true,
   platform: { select: { name: true } },
   sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
@@ -1998,6 +2036,9 @@ type OfferRow = {
   endsAt: Date | null;
   listingDate: Date | null;
   listingContentChangedAt: Date | null;
+  facebookGroupId: string | null;
+  bidIncrement: Decimal | null;
+  facebookPostId: string | null;
   createdAt: Date;
   platform: { name: string };
   sets: OfferSetRow[];
@@ -2070,6 +2111,9 @@ function toListItem(
     // flagged simply stops reporting it — what a closed listing said is history, and it is one rule
     // in one place instead of a clean-up on every terminal transition.
     listingOutOfDate: isListedState(state) ? row.listingContentChangedAt : null,
+    facebookGroupId: row.facebookGroupId,
+    bidIncrement: row.bidIncrement?.toFixed(2) ?? null,
+    facebookPostId: row.facebookPostId,
     createdAt: row.createdAt,
   };
 }
@@ -3852,6 +3896,14 @@ export interface OfferDetail {
    * shared "platform listing config": the two marketplaces agree on nothing but the idea of a named
    * profile, and one shape covering both could only be the union of two unrelated forms. */
   delcampeListing: DelcampeOfferListingConfig | null;
+  /** The Facebook group this auction is in (#1544), or null on every offer not on Facebook — what
+   * the edit form's group picker starts on. */
+  facebookGroupId: string | null;
+  /** A Facebook auction's bid increment, 2-dp, or null. */
+  bidIncrement: string | null;
+  /** The Facebook card (#1544; ADR-0061 §3): the group, the post and its lots, and the kit drawn from
+   * them. Null on every offer that is not a Facebook auction. */
+  facebook: FacebookOfferKit | null;
   createdAt: Date;
 }
 
@@ -3971,6 +4023,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       price: true,
       startingPrice: true,
       endsAt: true,
+      facebookGroupId: true,
+      bidIncrement: true,
       priceCheckedAt: true,
       bidderCount: true,
       biddingNoticeAt: true,
@@ -4302,6 +4356,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     price: offer.price.toFixed(2),
     startingPrice: offer.startingPrice?.toFixed(2) ?? null,
     endsAt: offer.endsAt,
+    facebookGroupId: offer.facebookGroupId,
+    bidIncrement: offer.bidIncrement?.toFixed(2) ?? null,
     priceCheckedAt: offer.priceCheckedAt,
     bidderCount: offer.bidderCount,
     biddingNoticeAt: offer.biddingNoticeAt,
@@ -4412,6 +4468,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     allegroListing: await getAllegroOfferListingConfig(ownerId, offerId),
     // Gated the same way, on the platform's own marker, so only a Delcampe offer pays for it.
     delcampeListing: await getDelcampeOfferListingConfig(ownerId, offerId),
+    // A Facebook auction's card (#1544), read only for an offer naming a group.
+    facebook: offer.facebookGroupId ? await getFacebookOfferKit(offerId) : null,
     createdAt: offer.createdAt,
   };
 }
@@ -4823,6 +4881,11 @@ export interface OfferInput {
    * when the offer lists something. Ignored by {@link updateOffer} — an existing offer's lifecycle is
    * driven by its dedicated controls, not the header form. */
   state: OfferState;
+  /** The Facebook group the auction is in (#1544; ADR-0061) — required on the Facebook platform and
+   * ignored on every other. */
+  facebookGroupId?: string | null;
+  /** A Facebook auction's bid increment (#1544), or null/absent for the group's default on create. */
+  bidIncrement?: string | null;
 }
 
 /**
@@ -4923,6 +4986,39 @@ export async function createOffer(
   return offerId;
 }
 
+/** The Facebook half of an offer (#1544), or the refusal it resolved to. */
+function facebookOrRefuse(
+  resolution: FacebookOfferResolution
+): Extract<FacebookOfferResolution, { ok: true }> {
+  if (!resolution.ok) throw new OfferActionBlockedError("facebook-group", resolution.message);
+  return resolution;
+}
+
+/** How a Facebook auction is priced (#1544; ADR-0061 §6): always an auction, opening at the group's
+ *  amount where the form states none — the platform's own `defaultStartingPrice` rule (#362), with the
+ *  group's figure in its place. Anything else is the platform's ordinary resolution. */
+function facebookPricingDefaults(
+  platform: { defaultListingType: string | null; defaultStartingPrice: string | null },
+  facebook: Extract<FacebookOfferResolution, { ok: true }>
+): { defaultListingType: string | null; defaultStartingPrice: string | null } {
+  if (!facebook.facebookGroupId) return platform;
+  return { defaultListingType: "auction", defaultStartingPrice: facebook.defaultStartingPrice };
+}
+
+/** A copy is in one active Facebook auction at a time (ADR-0061 §5), so a Facebook offer refuses a
+ *  copy another Facebook auction that is up already holds — by name, the whole add, #639's shape:
+ *  that auction may have ended without being closed here, and dropping the copy quietly would hide
+ *  it. `offer.id` is null while the offer is still being created. */
+async function assertNotInAnotherFacebookAuction(
+  collectionId: string,
+  offer: { id: string | null; facebookGroupId: string | null },
+  itemIds: readonly string[]
+): Promise<void> {
+  if (!offer.facebookGroupId) return;
+  const refusal = await facebookAuctionRefusal(collectionId, offer.id, itemIds);
+  if (refusal) throw new OfferActionBlockedError("facebook-auction", refusal);
+}
+
 /** Everything {@link createOffer} decides and renders before it writes — split out so a caller making
  *  many offers in **one** transaction (#1287) creates each exactly as `createOffer` does. */
 interface PreparedOfferCreation {
@@ -4935,6 +5031,7 @@ interface PreparedOfferCreation {
   texts: GeneratedListingTexts;
   photoConfig: Awaited<ReturnType<typeof seedPhotoConfig>>;
   colnectSaleId: string | null;
+  facebook: Extract<FacebookOfferResolution, { ok: true }>;
 }
 
 async function prepareOfferCreation(
@@ -4951,7 +5048,20 @@ async function prepareOfferCreation(
 ): Promise<PreparedOfferCreation> {
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await assertPlatform(collectionId, input.platformId);
-  const currency = await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency);
+  // On Facebook the auction is in a group, which it must name and whose defaults it starts from
+  // (#1544; ADR-0061 §6). A group with a currency of its own puts the auction in that currency —
+  // settled with the collector on 2026-10-03 — and leaves the platform's lock (#196) untouched.
+  const facebook = facebookOrRefuse(
+    await resolveFacebookOffer(
+      collectionId,
+      { id: input.platformId, platformModule: platform.platformModule },
+      input,
+      { create: true }
+    )
+  );
+  const currency =
+    facebook.currency ??
+    (await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency));
 
   // Everything about how this listing is priced (#449): its format, the auction's opening figure and
   // the live price that follows from it — each falling back to the platform's own defaults (#362).
@@ -4959,7 +5069,11 @@ async function prepareOfferCreation(
   // copies' catalog value (#230) both reach the form as a filled-in figure, so anything submitted
   // here already outranks them. Resolved before the live-status checks, so creating an auction
   // straight as `ready` on a house one always opens at the same figure is not rejected as unpriced.
-  const pricing = resolveOfferPricing(input, input.price, platform);
+  const pricing = resolveOfferPricing(
+    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
+    input.price,
+    facebookPricingDefaults(platform, facebook)
+  );
   const price = pricing.price;
 
   const targetState = input.state;
@@ -4991,6 +5105,9 @@ async function prepareOfferCreation(
     const refusal = await offerCommitmentRefusal(collectionId, seedIds);
     if (refusal) throw new OfferActionBlockedError("trade-committed", refusal);
   }
+  // A Facebook auction refuses copies another one that is up already holds (ADR-0061 §5), at any
+  // state: putting them in is what the rule forbids, not only going live with them.
+  await assertNotInAnotherFacebookAuction(collectionId, { id: null, facebookGroupId: facebook.facebookGroupId }, seedIds);
   // A prepared or live listing needs an asking price (#336) — creating one straight as `ready` /
   // `active` skips the transition, so the same rule applies here.
   //
@@ -5039,7 +5156,18 @@ async function prepareOfferCreation(
   // created for a listing that is already up. Resolved before the transaction so a code another
   // offer holds refuses the creation by name rather than as a constraint violation.
   const colnectSaleId = await resolveColnectSaleId(collectionId, null, input.url);
-  return { collectionId, input, platform, currency, pricing, seedComposition, texts, photoConfig, colnectSaleId };
+  return {
+    collectionId,
+    input,
+    platform,
+    currency,
+    pricing,
+    seedComposition,
+    texts,
+    photoConfig,
+    colnectSaleId,
+    facebook,
+  };
 }
 
 /** The offer row and its seed, inside the caller's transaction. */
@@ -5047,8 +5175,18 @@ async function writeOfferCreation(
   tx: DbTransaction,
   prepared: PreparedOfferCreation
 ): Promise<string> {
-  const { collectionId, input, platform, currency, pricing, seedComposition, texts, photoConfig, colnectSaleId } =
-    prepared;
+  const {
+    collectionId,
+    input,
+    platform,
+    currency,
+    pricing,
+    seedComposition,
+    texts,
+    photoConfig,
+    colnectSaleId,
+    facebook,
+  } = prepared;
   const offer = await tx.offer.create({
     data: {
       collectionId,
@@ -5071,6 +5209,9 @@ async function writeOfferCreation(
       // a fixed-price listing has no ending of its own, so a date here would be about a format
       // this listing is not in.
       endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
+      // The group a Facebook auction is in and its increment (#1544), null everywhere else.
+      facebookGroupId: facebook.facebookGroupId,
+      bidIncrement: facebook.bidIncrement,
       currency,
       listingDate: input.listingDate,
       // Set the target state directly (creation states the real-world status; the step-through
@@ -5142,7 +5283,19 @@ export async function duplicateOffer(
 ): Promise<DuplicateOfferResult> {
   const ref = await assertOfferOwner(ownerId, sourceOfferId);
   const platform = await assertPlatform(ref.collectionId, input.platformId);
-  const currency = await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency);
+  // The clone is a new auction where it lands (#1544): on Facebook it names its own group, from its
+  // own form, and starts from that group's defaults exactly as a fresh offer does.
+  const facebook = facebookOrRefuse(
+    await resolveFacebookOffer(
+      ref.collectionId,
+      { id: input.platformId, platformModule: platform.platformModule },
+      input,
+      { create: true }
+    )
+  );
+  const currency =
+    facebook.currency ??
+    (await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency));
 
   // Source composition + which of its copies have sold elsewhere (dropped from the clone).
   const sets = (
@@ -5187,7 +5340,11 @@ export async function duplicateOffer(
   // Same pricing rules as a fresh creation (#336, #449): the clone is priced — and its format
   // chosen — for its own platform, so a blank price cannot start it prepared or live either, and an
   // auction still needs its opening figure.
-  const pricing = resolveOfferPricing(input, input.price, platform);
+  const pricing = resolveOfferPricing(
+    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
+    input.price,
+    facebookPricingDefaults(platform, facebook)
+  );
   const missing = missingPriceField(
     pricing.listingType,
     targetState,
@@ -5200,6 +5357,11 @@ export async function duplicateOffer(
       `An offer can't start ${targetState} with no ${missing} — set a price first.`
     );
   }
+  await assertNotInAnotherFacebookAuction(
+    ref.collectionId,
+    { id: null, facebookGroupId: facebook.facebookGroupId },
+    cloneSets.flatMap((s) => s.itemIds)
+  ); // ADR-0061 §5
 
   // Generate the clone's listing texts from the *new* platform's configured templates over its kept
   // sets (#209/#210, #266, #267) — the clone is a listing on another platform, so it gets that
@@ -5243,6 +5405,8 @@ export async function duplicateOffer(
         // carried over from the source.
         ...pricing,
         endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
+        facebookGroupId: facebook.facebookGroupId, // #1544, as in `createOffer`
+        bidIncrement: facebook.bidIncrement,
         currency,
         listingDate: input.listingDate,
         state: targetState,
@@ -5285,12 +5449,37 @@ export async function updateOffer(
   if (isTerminalState(ref.state)) {
     throw new OfferActionBlockedError("terminal", `A ${ref.state} offer is read-only and cannot be edited.`);
   }
-  await assertPlatform(ref.collectionId, input.platformId);
+  const platform = await assertPlatform(ref.collectionId, input.platformId);
+  // The Facebook half (#1544): the group stays editable — an archived one may be kept, not chosen —
+  // and none of its defaults are read again. A lot of a multi-lot post shares its post's group, so
+  // it moves to another only by leaving the post first.
+  const facebook = facebookOrRefuse(
+    await resolveFacebookOffer(
+      ref.collectionId,
+      { id: input.platformId, platformModule: platform.platformModule },
+      input,
+      { create: false, currentGroupId: ref.facebookGroupId }
+    )
+  );
+  const current = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { facebookPostId: true, facebookLotNo: true },
+  });
+  const postId = current?.facebookPostId ?? null;
+  if (postId && facebook.facebookGroupId && facebook.facebookGroupId !== ref.facebookGroupId) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      `This auction is lot ${current?.facebookLotNo} of a post — take it out of the post before moving it to another group.`
+    );
+  }
   // The same resolution creation uses (#449), minus the platform default: switching platforms on an
   // existing offer must not re-describe a listing that already exists. An auction with no current
   // figure falls back to its opening one here too, so an edit can *give* a live auction its price by
-  // stating what it started at.
-  const pricing = resolveOfferPricing(input, input.price);
+  // stating what it started at. A Facebook offer is always an auction (ADR-0061).
+  const pricing = resolveOfferPricing(
+    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
+    input.price
+  );
   // The invariants the transition guard enforces (#336, #449): a ready or active offer always has a
   // price — and, being an auction, a starting price — so an edit cannot clear either back out from
   // under one.
@@ -5320,12 +5509,26 @@ export async function updateOffer(
     : null;
   // The listing's own id follows its address (#696), exactly as it does on the in-place edit.
   const colnectSaleId = await resolveColnectSaleId(ref.collectionId, offerId, input.url);
-  await prisma.offer.update({
+  const endsAt = isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null;
+  await prisma.$transaction(async (tx) => {
+    // Moved off Facebook: a lot leaves its post, which renumbers or dissolves it (ADR-0061 §2).
+    if (postId && !facebook.facebookGroupId) await detachFacebookLot(tx, offerId);
+    // The lots of one post close together (ADR-0061 §2), so a closing time written on one is the
+    // post's — written to every lot, which is where everything reading an auction's end looks.
+    if (postId && facebook.facebookGroupId) {
+      await tx.offer.updateMany({
+        where: { facebookPostId: postId, id: { not: offerId } },
+        data: { endsAt },
+      });
+    }
+    await tx.offer.update({
     where: { id: offerId },
     data: {
       platformId: input.platformId,
       url: input.url,
       colnectSaleId,
+      facebookGroupId: facebook.facebookGroupId,
+      bidIncrement: facebook.bidIncrement,
       listingType: pricing.listingType,
       price: pricing.price,
       startingPrice: pricing.startingPrice,
@@ -5337,11 +5540,12 @@ export async function updateOffer(
           ? { priceCheckedAt: pricing.priceCheckedAt }
           : {}
         : { priceCheckedAt: null }),
-      endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
+      endsAt,
       // Listing date is editable on the header form (#257); the status is not — an existing offer's
       // lifecycle is driven by its dedicated controls, so `input.state` is ignored here.
       listingDate: input.listingDate,
     },
+    });
   });
 
   // The header form writes no texts, so the only question is the price — and on an auction, only the
@@ -5419,7 +5623,19 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
     );
   }
   if (patch.platformId !== undefined) {
-    await assertPlatform(ref.collectionId, patch.platformId);
+    const target = await assertPlatform(ref.collectionId, patch.platformId);
+    // A Facebook auction names its group, which only the offer form asks for (#1544): moving an
+    // offer onto Facebook, or off it, in place would leave it without one or with one it no longer
+    // means.
+    if (
+      patch.platformId !== ref.platformId &&
+      (ref.facebookGroupId !== null || target.platformModule === FACEBOOK_PLATFORM_MODULE)
+    ) {
+      throw new OfferActionBlockedError(
+        "facebook-group",
+        "Move an offer to or from Facebook on the Edit offer form, where its group is chosen."
+      );
+    }
   }
   // Writing a *new* price onto an auction dates it (#449): the in-place edit is the bid refresh, and
   // `priceCheckedAt` is the whole answer to what an undated figure is worth (#351). Retyping the same
@@ -5754,6 +5970,14 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     if (committed.length > 0) {
       throw new OfferActionBlockedError("trade-committed", describeCommittedCopies(committed));
     }
+    // …and, on a Facebook auction, whether another one that is up holds any of its copies
+    // (ADR-0061 §5). Composition already refuses them; this is the other door — two drafts of the
+    // same stamps, the first of which went up after the second was assembled.
+    await assertNotInAnotherFacebookAuction(
+      ref.collectionId,
+      { id: offerId, facebookGroupId: ref.facebookGroupId },
+      await offerItemIds(offerId)
+    );
   }
   // The same two targets also need an asking price (#336): an offer with no price is not prepared,
   // and publishing one is never intentional. On an auction the figure that has to exist is the
@@ -5898,7 +6122,12 @@ export async function deleteOffer(ownerId: string, offerId: string): Promise<voi
   // Generated listing images (#311) hang off the offer. The cascade drops their rows but never the
   // files, so their bytes go first, while the rows can still be read.
   await deleteOfferPhotoBytes(offerId);
-  await prisma.offer.delete({ where: { id: offerId } });
+  // A lot of a multi-lot post leaves it first, so the lots after it move up and a post left with one
+  // lot is dissolved (#1544) — the key alone would leave a gap in the numbering.
+  await prisma.$transaction(async (tx) => {
+    await detachFacebookLot(tx, offerId);
+    await tx.offer.delete({ where: { id: offerId } });
+  });
 }
 
 /** Verify copies are addable to a set: they belong to the collection, have not already sold, and —
@@ -5999,6 +6228,7 @@ export async function addOfferSet(
     throw new OfferActionBlockedError("empty", "Add at least one available copy to the set.");
   }
   await assertNotCommittedElsewhere(ref.collectionId, ref.state, addable); // #639
+  await assertNotInAnotherFacebookAuction(ref.collectionId, { id: offerId, facebookGroupId: ref.facebookGroupId }, addable); // ADR-0061 §5
   // Set/lot title (#210): an explicit title wins; otherwise pre-fill from the platform's configured
   // template over this set's copies. Null (no template) leaves the label derived from the copies.
   const explicit = title?.trim() || null;
@@ -6048,6 +6278,7 @@ export async function addOfferSetsPerCopy(
     throw new OfferActionBlockedError("empty", "Add at least one available copy.");
   }
   await assertNotCommittedElsewhere(ref.collectionId, ref.state, addable); // #639
+  await assertNotInAnotherFacebookAuction(ref.collectionId, { id: offerId, facebookGroupId: ref.facebookGroupId }, addable); // ADR-0061 §5
   // Pre-fill each single-copy set's title from the platform's configured template (#210), computed
   // per copy so each stands alone. Null (no template) leaves each label derived from its copy.
   const { titleTemplate, titleLanguage } = await assertPlatform(ref.collectionId, ref.platformId);
@@ -6103,6 +6334,7 @@ export async function addItemsToOfferSet(
     );
   }
   await assertNotCommittedElsewhere(ref.collectionId, ref.offerState, addable); // #639
+  await assertNotInAnotherFacebookAuction(ref.collectionId, { id: ref.offerId, facebookGroupId: ref.facebookGroupId }, addable); // ADR-0061 §5
   // Where the copies land (#306): a derived set stays derived (they slot into their catalog
   // positions), a hand-corrected one appends them at the end, in the order they were picked.
   const existing = await prisma.offerSetItem.findMany({
@@ -6211,6 +6443,7 @@ export async function writeGeneratedOffers(
       throw new GenerationChangedError({ kind: "offer", offerId: addition.offerId });
     }
     await assertNotCommittedElsewhere(collectionId, ref.state, addition.sets.flat()); // #639
+    await assertNotInAnotherFacebookAuction(collectionId, { id: addition.offerId, facebookGroupId: ref.facebookGroupId }, addition.sets.flat()); // ADR-0061 §5
     const titles: (string | null)[] = [];
     for (const set of addition.sets) {
       titles.push(await generateConfiguredTitle(ownerId, collectionId, set, platform.titleTemplate, platform.titleLanguage));
@@ -6329,6 +6562,7 @@ export async function addSetToOfferInTransaction(
   const lost = input.itemIds.find((itemId) => !addable.has(itemId));
   if (lost) throw new GenerationChangedError({ kind: "copy", itemId: lost });
   await assertNotCommittedElsewhere(collectionId, ref.state, input.itemIds); // #639
+  await assertNotInAnotherFacebookAuction(collectionId, { id: input.offerId, facebookGroupId: ref.facebookGroupId }, input.itemIds); // ADR-0061 §5
   const platform = await assertPlatform(collectionId, input.platformId);
   const title = await generateConfiguredTitle(ownerId, collectionId, input.itemIds, platform.titleTemplate, platform.titleLanguage);
 

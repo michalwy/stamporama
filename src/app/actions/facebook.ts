@@ -12,6 +12,8 @@ import {
   setFacebookGroupArchived,
   updateFacebookGroup,
 } from "@/lib/facebook-groups";
+import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
+import { createFacebookPost, recordFacebookPostLink, removeFacebookLot } from "@/lib/facebook-posts";
 
 // Settings → Facebook (#1543; ADR-0061): which platform contact is Facebook, and the groups under it.
 //
@@ -93,5 +95,65 @@ export async function deleteFacebookGroupAction(groupId: string): Promise<Facebo
     return { status: "success" };
   } catch (err) {
     return failure(err, "The group could not be deleted.");
+  }
+}
+
+// ── Auctions in a group (#1544; ADR-0061 §2, §3) ────────────────────────────────────────────────
+
+/** Whether `platformId` is Facebook and which groups a new auction there may name — what the offer
+ *  form asks when a platform is picked. `includeGroupId` keeps an edited offer's own archived group. */
+export async function facebookGroupChoicesAction(
+  collectionId: string,
+  platformId: string,
+  includeGroupId: string | null
+): Promise<FacebookPlatformChoices> {
+  const session = await getSession();
+  return listFacebookGroupChoices(session.user.id, collectionId, platformId, includeGroupId);
+}
+
+export type FacebookPostActionState =
+  | { status: "success"; postId: string }
+  | { status: "error"; message: string };
+
+/** Put the ticked Facebook auctions into one post, as lots in the order given. */
+export async function createFacebookPostAction(
+  collectionId: string,
+  offerIds: string[]
+): Promise<FacebookPostActionState> {
+  const session = await getSession();
+  try {
+    const { postId } = await createFacebookPost(session.user.id, collectionId, offerIds);
+    return { status: "success", postId };
+  } catch (err) {
+    return failure(err, "Failed to put the offers into one post.");
+  }
+}
+
+/** Take a lot out of its post, before the post is up. */
+export async function removeFacebookLotAction(offerId: string): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await removeFacebookLot(session.user.id, offerId);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to take the lot out of its post.");
+  }
+}
+
+export type FacebookPostLinkState =
+  | { status: "success"; activated: number }
+  | { status: "error"; message: string };
+
+/** Record a multi-lot post's link, which activates its lots. */
+export async function recordFacebookPostLinkAction(
+  postId: string,
+  url: string
+): Promise<FacebookPostLinkState> {
+  const session = await getSession();
+  try {
+    const { activated } = await recordFacebookPostLink(session.user.id, postId, url);
+    return { status: "success", activated };
+  } catch (err) {
+    return failure(err, "Failed to record the post's link.");
   }
 }
