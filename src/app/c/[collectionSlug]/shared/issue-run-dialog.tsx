@@ -22,6 +22,7 @@ import type { LocationData } from "@/lib/locations";
 import { perforationMatches } from "@/lib/perforation";
 import {
   assignInTurn,
+  branchFolded,
   changedRunPrices,
   clearedAssignments,
   nextWithoutStamp,
@@ -35,6 +36,7 @@ import {
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
+  unfoldedRows,
   withoutAssigned,
   RUN_DETAIL_FIELDS,
   type IssueRunIdentification,
@@ -42,6 +44,7 @@ import {
   type RunCopyOverrides,
   type RunCorrections,
   type RunDetailField,
+  type RunRow,
 } from "@/lib/issue-run";
 import {
   useCollectionFormats,
@@ -364,6 +367,9 @@ export function IssueRunDialog({
   );
   const unassigned = withoutAssigned(choices, assignments, active?.tileId ?? "");
   const listed = hideAssigned ? unassigned.choices : choices;
+  /** The branches folded in the stamp list (#1584), each with the stamp the tile in hand had when it
+   * was folded — so the branch holding the current stamp opens when another tile comes into hand. */
+  const [folds, setFolds] = useState<ReadonlyMap<string, string | null>>(() => new Map());
 
   /** How the run starts (#1526), decided once, as the checklist is first read: in turn when the ticked
    * tiles are as many as its stamps, otherwise as after *Clear assignments*, the first tile in hand.
@@ -771,8 +777,9 @@ export function IssueRunDialog({
         title={`Identify as the stamps of ${runTitle}`}
         onClose={onClose}
         // Wider since #1229, so a run row holds its value field on the same line as the rest, and
-        // again since #1583, so its held line and disposition chips fit on the line below it.
-        maxWidth="min(98vw, 128rem)"
+        // again since #1583, so its held line and disposition chips fit on the line below it, and
+        // since #1584, so a variant nested in the stamp list keeps its chips and price on one line.
+        maxWidth="min(98vw, 136rem)"
         height="92vh"
         // A stamp being created over this dialog owns Escape, as the picker hands it over.
         dismissable={!addingStamp}
@@ -1326,7 +1333,7 @@ export function IssueRunDialog({
           {/* The tile in hand: its stamp, and what it holds of its own. */}
           <div
             style={{
-              width: "25rem",
+              width: "33rem",
               flexShrink: 0,
               overflowY: "auto",
               display: "flex",
@@ -1371,7 +1378,12 @@ export function IssueRunDialog({
                     Hide assigned ({unassigned.hidden})
                   </label>
                   {(() => {
-                    const choice = (node: StampNodeData, depth: number) => {
+                    const current = activeAssignment.stampId;
+                    const choice = (
+                      { node, depth, offChecklist }: RunRow<StampNodeData>,
+                      hasBranch: boolean,
+                      folded: boolean
+                    ) => {
                       const { vendorMap, primaryVendorId } = vendorsOf(node.stampId);
                       return (
                         <StampChoice
@@ -1379,7 +1391,22 @@ export function IssueRunDialog({
                           collectionId={collectionId}
                           node={node}
                           depth={depth}
-                          chosen={node.stampId === activeAssignment.stampId}
+                          offChecklist={offChecklist}
+                          fold={
+                            hasBranch
+                              ? {
+                                  folded,
+                                  onToggle: () =>
+                                    setFolds((prev) => {
+                                      const next = new Map(prev);
+                                      if (folded) next.delete(node.stampId);
+                                      else next.set(node.stampId, current);
+                                      return next;
+                                    }),
+                                }
+                              : null
+                          }
+                          chosen={node.stampId === current}
                           takenBy={assignments
                             .filter((b) => b.tileId !== active.tileId && b.stampId === node.stampId)
                             .map((b) => `#${turnOf.get(b.tileId)}`)}
@@ -1400,7 +1427,12 @@ export function IssueRunDialog({
                     };
                     // The checklist's stamps first, then every other stamp of the issues it covers
                     // (#1225): a tile that is not on the checklist still has somewhere to go. A part
-                    // that *Hide assigned* (#1579) leaves empty keeps its heading and says so.
+                    // that *Hide assigned* (#1579) leaves empty keeps its heading and says so. Each
+                    // part is a tree, its branches folding (#1584).
+                    const tree = (rows: RunRow<StampNodeData>[]) =>
+                      unfoldedRows(rows, (id, branch) => branchFolded(folds, id, branch, current)).map(
+                        ({ row, hasBranch, folded }) => choice(row, hasBranch, folded)
+                      );
                     const allAssigned = <p style={{ ...MUTED, fontStyle: "italic" }}>all assigned</p>;
                     return (
                       <>
@@ -1408,7 +1440,7 @@ export function IssueRunDialog({
                         {choices.onChecklist.length > 0 &&
                           listed.onChecklist.length === 0 &&
                           allAssigned}
-                        {listed.onChecklist.map((node) => choice(node, 0))}
+                        {tree(listed.onChecklist)}
                         {choices.others.map((group, i) => {
                           if (group.nodes.length === 0) return null;
                           const shown = listed.others[i].nodes;
@@ -1420,7 +1452,7 @@ export function IssueRunDialog({
                                 {owner ? issueLabel(owner.name, owner.year) : "the issue"}
                               </p>
                               {shown.length === 0 && allAssigned}
-                              {shown.map(({ node, depth }) => choice(node, depth))}
+                              {tree(shown)}
                             </Fragment>
                           );
                         })}
@@ -1912,12 +1944,15 @@ function LocationFields({
   );
 }
 
-/** One stamp a tile can be given — drawn as the picker draws it, with what was read off the piece
- * marked on it (#740). A press gives the tile in hand this stamp. */
+/** One stamp a tile can be given — drawn as the picker draws it, indented, folding and marked as an
+ * umbrella the way the issues list's tree is (#1584), with what was read off the piece marked on it
+ * (#740). A press gives the tile in hand this stamp; the caret only folds. */
 function StampChoice({
   collectionId,
   node,
   depth,
+  offChecklist,
+  fold,
   chosen,
   takenBy,
   perforation,
@@ -1930,6 +1965,10 @@ function StampChoice({
   collectionId: string;
   node: StampNodeData;
   depth: number;
+  /** In *On the checklist* only as a variant of a stamp that is (#1584). */
+  offChecklist: boolean;
+  /** The row's caret, when something is drawn under it. */
+  fold: { folded: boolean; onToggle: () => void } | null;
   chosen: boolean;
   /** The other tiles of the run already on this stamp — still pickable, since two tiles on one stamp
    * are allowed (#1523). */
@@ -1941,50 +1980,86 @@ function StampChoice({
   disabled: boolean;
   onChoose: () => void;
 }) {
+  // The caret sits beside the row's button rather than in it, so folding never picks the stamp.
   return (
-    <button
-      type="button"
-      onClick={onChoose}
-      disabled={disabled}
-      aria-pressed={chosen}
-      style={{
-        marginLeft: `${depth * 1.25}rem`,
-        textAlign: "left",
-        padding: "0.35rem 0.5rem",
-        borderRadius: "0.375rem",
-        border: `1px solid ${chosen ? "var(--color-accent)" : "var(--color-border)"}`,
-        background: chosen ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
-        color: "var(--color-text-primary)",
-        font: "inherit",
-        fontSize: "0.8125rem",
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
+    <div
+      style={{ display: "flex", alignItems: "center", gap: "0.25rem", marginLeft: `${depth * 1.25}rem` }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-        <PhotoThumb collectionId={collectionId} photos={node.photos} reserveWhenEmpty />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <StampTitle node={node} />
-            {chosen && <span style={{ color: "var(--color-accent)" }}> — this tile</span>}
-          </span>
-          {takenBy.length > 0 && (
-            <span style={{ ...ROW_CHIP, display: "inline-block", marginTop: "0.2rem", fontSize: "0.6875rem" }}>
-              taken by {takenBy.join(", ")}
-            </span>
-          )}
-          <StampDetailLine collectionId={collectionId} node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
-          {(perforation !== "unknown" || watermark !== "unknown") && (
-            <span style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.2rem" }}>
-              {perforation !== "unknown" && node.attributes.perforation && (
-                <MeasuredMark match={perforation} label={node.attributes.perforation} what="perforation" />
+      {fold ? (
+        <button
+          type="button"
+          onClick={fold.onToggle}
+          aria-label={fold.folded ? "Expand" : "Collapse"}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--color-text-muted)",
+            padding: "0.125rem",
+            flexShrink: 0,
+            lineHeight: 1,
+            width: "0.875rem",
+            textAlign: "center",
+          }}
+        >
+          <Icon name={fold.folded ? "expand" : "collapse"} size="sm" />
+        </button>
+      ) : (
+        <span style={{ width: "0.875rem", flexShrink: 0 }} />
+      )}
+      <button
+        type="button"
+        onClick={onChoose}
+        disabled={disabled}
+        aria-pressed={chosen}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          textAlign: "left",
+          padding: "0.35rem 0.5rem",
+          borderRadius: "0.375rem",
+          border: `1px solid ${chosen ? "var(--color-accent)" : "var(--color-border)"}`,
+          background: chosen ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+          color: "var(--color-text-primary)",
+          font: "inherit",
+          fontSize: "0.8125rem",
+          cursor: disabled ? "not-allowed" : "pointer",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+          <PhotoThumb collectionId={collectionId} photos={node.photos} reserveWhenEmpty />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <StampTitle node={node} />
+              {node.isUmbrella && (
+                <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
               )}
-              {watermark !== "unknown" && node.attributes.watermark && (
-                <MeasuredMark match={watermark} label={node.attributes.watermark} what="watermark" />
-              )}
+              {chosen && <span style={{ color: "var(--color-accent)" }}> — this tile</span>}
             </span>
-          )}
+            {(offChecklist || takenBy.length > 0) && (
+              <span style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.2rem" }}>
+                {offChecklist && (
+                  <span style={{ ...ROW_CHIP, fontSize: "0.6875rem" }}>not on the checklist</span>
+                )}
+                {takenBy.length > 0 && (
+                  <span style={{ ...ROW_CHIP, fontSize: "0.6875rem" }}>taken by {takenBy.join(", ")}</span>
+                )}
+              </span>
+            )}
+            <StampDetailLine collectionId={collectionId} node={node} vendorMap={vendorMap} primaryVendorId={primaryVendorId} />
+            {(perforation !== "unknown" || watermark !== "unknown") && (
+              <span style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.2rem" }}>
+                {perforation !== "unknown" && node.attributes.perforation && (
+                  <MeasuredMark match={perforation} label={node.attributes.perforation} what="perforation" />
+                )}
+                {watermark !== "unknown" && node.attributes.watermark && (
+                  <MeasuredMark match={watermark} label={node.attributes.watermark} what="watermark" />
+                )}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
