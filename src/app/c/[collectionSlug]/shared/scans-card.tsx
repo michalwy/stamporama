@@ -15,9 +15,15 @@ import {
   pairTilesAction,
   proposeCutAction,
   recutBatchAction,
+  setBackTurnoverAction,
   setBatchKindAction,
   setBatchLabelAction,
 } from "@/app/actions/scans";
+import {
+  BACK_TURNOVERS,
+  BACK_TURNOVER_LABEL,
+  type BackTurnover,
+} from "@/lib/back-turnover";
 import { formatItemNo } from "@/lib/item-number";
 import { batchDeletion, batchDeletionRefusal } from "@/lib/scan-batch-deletion";
 import {
@@ -26,6 +32,7 @@ import {
   normalizeBatchLabel,
 } from "@/lib/scan-batch-label";
 import type {
+  BackTurnoverReport,
   CutBox,
   CutReport,
   ScanBatchData,
@@ -359,6 +366,9 @@ export function ScansCard({
 
   const batches = data?.batches ?? [];
   const fromAuction = data?.fromAuction ?? false;
+  /** How the collection's last back was made (#1555) — what every *Add back scan* offers until the
+   * collector picks another for that card. */
+  const lastBackTurnover: BackTurnover = data?.backTurnover ?? "in_place";
   // The screen's last identifications (#757), for the tile dialog's history panel. Derived from the
   // batches rather than remembered as each one happens: the copy a tile became **is** the record,
   // so this comes back with the strip after a reload and cannot drift from what the tiles say.
@@ -553,7 +563,12 @@ export function ScansCard({
    * the chunks the server has acknowledged — so the wait says how far it has got instead of
    * nothing.
    */
-  const upload = async (file: File, side: "front" | "back", batchNo?: number) => {
+  const upload = async (
+    file: File,
+    side: "front" | "back",
+    batchNo?: number,
+    turnover?: BackTurnover
+  ) => {
     setError(null);
     setUploading(true);
     setProgress({ phase: "uploading", fraction: 0 });
@@ -580,6 +595,8 @@ export function ScansCard({
         // The profile beside the button (#1443), for a back as for a front: a back scanned on
         // another scanner is the rare case, and the select is where it is said.
         scanningProfileId: newProfileId,
+        // How the backs were made (#1555), chosen beside the batch's own button.
+        turnover: side === "back" ? (turnover ?? null) : null,
         onProgress: setProgress,
       });
       if (side === "front") setNewLabel("");
@@ -635,6 +652,24 @@ export function ScansCard({
           message: `Tile ${position != null ? position + 1 : ""} is marked ${markText(mark, marking.conditions, marking.certificateStatuses)}, given last — it replaced ${markText(replaced, marking.conditions, marking.certificateStatuses)}`,
         });
       }
+    });
+  };
+
+  /**
+   * Say how a batch's backs were made, after the back was added (#1555). On a back already cut the
+   * server pairs the backs again — keeping the pairs made by hand — and the toast says what moved,
+   * since the strip redrawing is otherwise the only sign anything did.
+   */
+  const changeTurnover = (batchNo: number, to: BackTurnover) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await setBackTurnoverAction(ownerRef, batchNo, to);
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      refresh();
+      if (result.report.cut) toast({ tone: "info", message: turnoverReportText(result.report) });
     });
   };
 
@@ -1070,7 +1105,9 @@ export function ScansCard({
           busy={uploading || pending || detecting}
           detecting={detecting}
           onReview={(sheet, frontTileCount) => void openProposed(sheet, frontTileCount)}
-          onUploadBack={(f) => void upload(f, "back", batch.batchNo)}
+          lastBackTurnover={lastBackTurnover}
+          onUploadBack={(f, turnover) => void upload(f, "back", batch.batchNo, turnover)}
+          onSetTurnover={(to) => changeTurnover(batch.batchNo, to)}
           onRecut={(reopen) => setConfirm({ kind: "recut", batchNo: batch.batchNo, reopen })}
           onDelete={() => setConfirm({ kind: "delete", batchNo: batch.batchNo })}
           onRename={(label) => rename(batch.batchNo, label)}
@@ -1568,7 +1605,9 @@ function BatchSection({
   busy,
   detecting,
   onReview,
+  lastBackTurnover,
   onUploadBack,
+  onSetTurnover,
   onRecut,
   onDelete,
   onRename,
@@ -1607,7 +1646,13 @@ function BatchSection({
    * nothing has been cut from — a re-cut reopens on the previous boxes through `onRecut` instead,
    * because the cut that is being corrected beats a fresh proposal of it. */
   onReview: (sheet: ScanCutEditorSheet, frontTileCount: number | null) => void;
-  onUploadBack: (file: File) => void;
+  /** How the collection's last back was made (#1555) — what *Add back scan* offers here until the
+   * collector picks another. */
+  lastBackTurnover: BackTurnover;
+  /** Add the back scan, made the way chosen beside the button. */
+  onUploadBack: (file: File, turnover: BackTurnover) => void;
+  /** Say how this batch's backs were made, once the back is here (#1555). */
+  onSetTurnover: (turnover: BackTurnover) => void;
   /** Handed the editor target to reopen once the tiles are gone — the previous cut, read off the
    * tiles while they still exist. Null when there is no front scan to reopen on. */
   onRecut: (reopen: EditorTarget | null) => void;
@@ -1625,6 +1670,11 @@ function BatchSection({
   onTileKey: (tile: ScanTileData, e: React.KeyboardEvent<HTMLElement>) => void;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
+  /** The way the back about to be added was made (#1555), or null for the collection's last — held
+   * as a choice over the default rather than a copy of it, so a back added on another card moves
+   * what this one offers until the collector picks here. */
+  const [chosenTurnover, setChosenTurnover] = useState<BackTurnover | null>(null);
+  const newBackTurnover = chosenTurnover ?? lastBackTurnover;
   const open = pinnedOpen || expanded;
   /** Whether the name is being typed. Off by default: the name is read far more often than it is
    * written, and a text box standing where a name should be reads as a form rather than as a card
@@ -1799,13 +1849,33 @@ function BatchSection({
             {detecting ? "Finding the stamps…" : "Review the front cut"}
           </SmallButton>
         )}
+        {/* How the backs were made (#1555), asked beside the button that adds them and kept on the
+            batch afterwards, where changing it pairs the backs again. */}
+        {open && batch.front?.cut && !batch.back && (
+          <BackTurnoverSelect
+            value={newBackTurnover}
+            busy={busy}
+            label={`How the backs of batch ${batch.batchNo} are scanned`}
+            onChange={setChosenTurnover}
+          />
+        )}
+        {open && batch.back && (
+          <BackTurnoverSelect
+            value={batch.back.turnover}
+            busy={busy}
+            label={`How the backs of batch ${batch.batchNo} were scanned`}
+            onChange={(to) => {
+              if (to !== batch.back?.turnover) onSetTurnover(to);
+            }}
+          />
+        )}
         {open && batch.front?.cut && !batch.back && (
           <UploadButton
             label="Add back scan"
             small
             busy={busy}
             busyLabel={detecting ? "Finding the stamps…" : undefined}
-            onFile={onUploadBack}
+            onFile={(file) => onUploadBack(file, newBackTurnover)}
           />
         )}
         {open && batch.back && !batch.back.cut && (
@@ -2160,6 +2230,56 @@ const PRESSABLE_CHIP: React.CSSProperties = {
   alignItems: "center",
   gap: "0.25rem",
 };
+
+/**
+ * How a card's backs were made (#1555) — each stamp turned over in place, or the whole card turned
+ * over left to right or top to bottom, which mirrors where each back sits and decides how the backs
+ * are paired. A select of three, since none of them is the other of any one.
+ */
+function BackTurnoverSelect({
+  value,
+  busy,
+  label,
+  onChange,
+}: {
+  value: BackTurnover;
+  busy: boolean;
+  label: string;
+  onChange: (turnover: BackTurnover) => void;
+}) {
+  return (
+    <Tooltip content="How the backs were scanned. Turning the whole card over mirrors where each back lies, and the backs are paired with their fronts accordingly. Changing it after the backs are cut pairs them again; pairs made by hand are kept.">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as BackTurnover)}
+        aria-label={label}
+        disabled={busy}
+        style={{ ...LABEL_INPUT_STYLE, width: "auto" }}
+      >
+        {BACK_TURNOVERS.map((t) => (
+          <option key={t} value={t}>
+            {BACK_TURNOVER_LABEL[t]}
+          </option>
+        ))}
+      </select>
+    </Tooltip>
+  );
+}
+
+/** What pairing a card's backs again did, in one sentence (#1555). */
+function turnoverReportText(report: BackTurnoverReport): string {
+  if (report.pairingMode === "manual") {
+    return "The two sides hold different numbers of stamps, so the backs are on the strip to be paired by hand.";
+  }
+  const parts = [`${report.paired} paired by position`];
+  if (report.backOnly > 0) parts.push(`${report.backOnly} left to pair by hand`);
+  if (report.kept > 0) parts.push(`${report.kept} kept as ${report.kept === 1 ? "it was" : "they were"}`);
+  const marks =
+    report.marksReplaced.length > 0
+      ? ` — ${report.marksReplaced.length} ${report.marksReplaced.length === 1 ? "mark" : "marks"} replaced by the one given last`
+      : "";
+  return `Backs paired again: ${parts.join(", ")}${marks}.`;
+}
 
 const LABEL_INPUT_STYLE: React.CSSProperties = {
   width: "12rem",

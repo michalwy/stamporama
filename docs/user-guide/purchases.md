@@ -649,12 +649,30 @@ image arrives; the card stays on screen throughout.
 
 #### Backs
 
-To capture backs, **turn each stamp over in place** — do not lift the group or rearrange it — and
-scan the card again. Then use **Add back scan** on the batch and cut it the same way.
+Scan the card again with the stamps turned over, then use **Add back scan** on the batch and cut it
+the same way. Beside the button, say **how the backs were made**:
 
-Backs are matched to fronts **by position**, not by order: each back goes to the front sitting in
-the same spot, and the match has to agree both ways. Nothing is mirrored, because turning each
-stamp in place is what keeps the positions lined up in the first place.
+- **Each stamp turned over in place** — every stamp turned where it lies, the card not lifted. Each
+  back sits where its front did.
+- **Whole card turned left to right** — the card (in a transparent sleeve, say) turned over like a
+  page. The back of the top-left stamp is now top right.
+- **Whole card turned top to bottom** — the card flipped over its top edge. The back of the top-left
+  stamp is now bottom left, and every back lies upside down.
+
+The choice offered is the one you made last in this collection, so if you always turn whole cards
+over you set it once.
+
+Backs are matched to fronts **by position**, not by order: each back goes to the front in the same
+spot — or, for a whole card, in the mirrored spot — and the match has to agree both ways. The mirror
+is taken about the **card**, not the edges of the scan, so a card laid off-centre on the glass, or
+moved a little between the two scans, still pairs. Backs from a card turned **top to bottom** are
+turned a half-turn so they stand the right way up beside their fronts; the scan itself is left as it
+is.
+
+The choice stays on the batch once the back is added. **Changing it pairs the backs again** under the
+new answer — a back you put on a tile **by hand** is kept where you put it, and so is any back on a
+tile already identified or discarded. A message says how many backs were paired, how many were left
+to pair by hand, and how many were kept.
 
 **This only happens when the two sides hold the same number of boxes.** If they do not — *Front 12,
 back 9* — nothing is paired automatically and every back lands in the **unpaired backs** strip below

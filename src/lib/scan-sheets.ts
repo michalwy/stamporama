@@ -49,6 +49,7 @@ import {
   type TileMark,
 } from "./tile-marks";
 import {
+  QUARTER_TURNS,
   asQuarterTurn,
   isQuarterTurn,
   turnBetween,
@@ -56,11 +57,17 @@ import {
   type QuarterTurn,
 } from "./tile-turn";
 import { VARIANT_FLAG_SELECT } from "./variant-classification";
+import {
+  asBackTurnover,
+  isBackTurnover,
+  turnoverBackTurn,
+  type BackTurnover,
+} from "./back-turnover";
 
 /**
  * Scan sheet ingest (#566, ADR-0033): a stockbook card is scanned whole, the scan is retained, its
  * regions are cut into **tiles**, and a second scan of the same card — each stamp turned over in
- * place — pairs backs onto fronts by position.
+ * place, or the whole card turned over (#1555) — pairs backs onto fronts by position.
  *
  * Boxes reach `commitCut` either drawn by hand or proposed by `proposeCut` (#574), and nothing
  * below asks which — the proposal hands the same shapes to the same functions.
@@ -241,6 +248,9 @@ export async function uploadSheet(
     /** What the card was scanned with (#1443). Absent or null takes the collection's default, so a
      * collector with one scanner is asked nothing new; a profile of another collection is refused. */
     scanningProfileId?: string | null;
+    /** How a back's backs were made (#1555). Absent or null on a back takes the way the collection
+     * made its last one; ignored on a front. */
+    turnover?: string | null;
   }
 ): Promise<UploadedSheet> {
   const owner = await assertScanOwner(ownerId, ref);
@@ -281,6 +291,8 @@ export async function uploadSheet(
     );
   }
   if (input.side === "back") await assertBatchHasFront(owner, batchNo);
+  const turnover =
+    input.side === "back" ? await chosenTurnover(collectionId, input.turnover) : "in_place";
 
   // The batch's name belongs to the batch, so a sheet joining one takes the name already there and
   // a sheet replacing one keeps it: naming a card and then re-scanning its front must not quietly
@@ -347,6 +359,7 @@ export async function uploadSheet(
           label,
           kind,
           scanningProfileId,
+          turnover,
           storageBackend: storage.backend,
           storageKey: prefix,
           mime,
@@ -357,6 +370,13 @@ export async function uploadSheet(
           sizeBytes: prepared.sizeBytes,
         },
       });
+      // The way this back was made is the way the next one is offered (#1555).
+      if (input.side === "back") {
+        await tx.collection.update({
+          where: { id: collectionId },
+          data: { lastBackTurnover: turnover },
+        });
+      }
     });
   } catch (err) {
     await deleteSheetVariants(storage.backend, prefix, mime);
@@ -383,6 +403,23 @@ export async function uploadSheet(
  * is a policy question and answering it must not be the thing that pulls 200 MB into memory. */
 async function sourceSize(source: SheetSource): Promise<number> {
   return Buffer.isBuffer(source) ? source.byteLength : (await stat(source.path)).size;
+}
+
+/** The way a back was made: the one given, or the collection's last when none was. A value this
+ * module did not write is refused rather than stored, since it decides how a whole card pairs. */
+async function chosenTurnover(
+  collectionId: string,
+  given: string | null | undefined
+): Promise<BackTurnover> {
+  if (given != null && given !== "") {
+    if (!isBackTurnover(given)) throw new ScanValidationError("Unknown way the backs were made.");
+    return given;
+  }
+  const row = await prisma.collection.findUniqueOrThrow({
+    where: { id: collectionId },
+    select: { lastBackTurnover: true },
+  });
+  return asBackTurnover(row.lastBackTurnover);
 }
 
 function requireBatchNo(input: { side: SheetSide; batchNo?: number }): number {
@@ -592,8 +629,9 @@ async function assertMarksInCollection(
  * On a **front** sheet each box becomes a tile, in reading order.
  *
  * On a **back** sheet the boxes are paired to the batch's front tiles **by position** — each stamp
- * having been turned over in place, so a back sits where its front sat. Mutual-nearest, no
- * mirroring, nothing forced (`scan-boxes.ts` carries the reasoning), and **only when the two sides
+ * having been turned over in place, so a back sits where its front sat, or the whole card turned
+ * over, so it sits mirrored about the card (#1555; the sheet's `turnover` says which). Mutual-
+ * nearest, nothing forced (`scan-boxes.ts` carries the reasoning), and **only when the two sides
  * hold the same number of boxes** (#647): a back sheet covering a subset pairs by hand instead,
  * because mutual-nearest goes on matching across the gaps and lands the backs one square off. A
  * back that finds no front — or every back, on a mismatch — becomes a **back-only tile**, which is
@@ -617,6 +655,7 @@ export async function commitCut(
       width: true,
       height: true,
       purgedAt: true,
+      turnover: true,
     },
   });
   assertSheetNotPurged(sheet);
@@ -643,12 +682,25 @@ export async function commitCut(
   // the position written on the tile.
   const ordered = readingOrder(boxes).map((i) => boxes[i]);
 
+  // A back from a card turned over top to bottom lies upside down (#1555), so its crops are cut
+  // turned — the tile's turn, as a collector turning each one by hand would have set it.
+  const turnover = asBackTurnover(sheet.turnover);
+  const turn = sheet.side === "back" ? turnoverBackTurn(turnover) : 0;
   const original = await readSheetOriginal(sheet.storageBackend, sheet.storageKey, sheet.mime);
-  const crops = await cutSheet(original, ordered);
+  const crops = await cutSheet(original, ordered, turn);
 
   return sheet.side === "front"
     ? commitFrontCut({ owner, sheetId, batchNo: sheet.batchNo, ordered, crops })
-    : commitBackCut({ owner, sheetId, batchNo: sheet.batchNo, sheet, ordered, crops });
+    : commitBackCut({
+        owner,
+        sheetId,
+        batchNo: sheet.batchNo,
+        sheet,
+        turnover,
+        turn,
+        ordered,
+        crops,
+      });
 }
 
 type Crops = Awaited<ReturnType<typeof cutSheet>>;
@@ -720,10 +772,12 @@ async function commitBackCut(args: {
   sheetId: string;
   batchNo: number;
   sheet: { width: number; height: number };
+  turnover: BackTurnover;
+  turn: QuarterTurn;
   ordered: CutBox[];
   crops: Crops;
 }): Promise<CutReport> {
-  const { owner, sheetId, batchNo, sheet, ordered, crops } = args;
+  const { owner, sheetId, batchNo, sheet, turnover, turn, ordered, crops } = args;
   const { collectionId } = owner;
   const scope = scanOwnerWhere(owner);
   const now = new Date();
@@ -757,7 +811,7 @@ async function commitBackCut(args: {
     h: t.frontH ?? 0,
   }));
 
-  const pairing = pairByPosition(frontBoxes, frontSheet, ordered, sheet);
+  const pairing = pairByPosition(frontBoxes, frontSheet, ordered, sheet, turnover);
   const backIndexToFront = new Map(pairing.pairs.map((p) => [p.backIndex, p.frontIndex]));
 
   // Back-only tiles are appended after everything already in the batch, so an existing tile's
@@ -823,6 +877,7 @@ async function commitBackCut(args: {
               backY: r.box.y,
               backW: r.box.w,
               backH: r.box.h,
+              backTurn: turn,
               ...r.marks,
             },
           });
@@ -835,6 +890,8 @@ async function commitBackCut(args: {
               backY: r.box.y,
               backW: r.box.w,
               backH: r.box.h,
+              backTurn: turn,
+              backPairedByHand: false,
               ...r.marks,
             },
           });
@@ -1124,6 +1181,8 @@ export async function pairTilesManually(
         // The turn is the back picture's (#1006) — its photo is cut turned — so it travels with the
         // photo and the box, exactly as they do.
         backTurn: backTile.backTurn,
+        // Put here by the collector, so pairing the card's backs again keeps it (#1555).
+        backPairedByHand: true,
         ...markColumns(paired),
       },
     });
@@ -1302,6 +1361,7 @@ export async function unpairTileBack(ownerId: string, tileId: string): Promise<v
         backW: null,
         backH: null,
         backTurn: 0,
+        backPairedByHand: false,
       },
     });
   });
@@ -1313,6 +1373,309 @@ export async function unpairTileBack(ownerId: string, tileId: string): Promise<v
     where: { ...scope, batchNo: tile.batchNo, batchDoneAt: { not: null } },
     data: { batchDoneAt: null },
   });
+}
+
+// ── How a card's backs were made (#1555) ───────────────────────────────────────────────────────
+
+/** What changing the way a card's backs were made did, for the collector to read. */
+export interface BackTurnoverReport {
+  /** Whether the back had been cut. Before the cut the choice is only stored, and the cut reads it. */
+  cut: boolean;
+  /** Which path the backs that moved took — the cut's own rule (#647) over the backs that could. */
+  pairingMode: PairingMode;
+  /** Backs now paired by position. */
+  paired: number;
+  /** Backs left on the strip to be paired by hand. */
+  backOnly: number;
+  /** Pairs left exactly where they were: put there by hand, or on a tile already identified or
+   * discarded, whose pictures are no longer the strip's to move. */
+  kept: number;
+  /** Tiles whose two marks differed when a back-only tile was paired onto them (#1550). */
+  marksReplaced: { position: number; mark: TileMark; replaced: TileMark }[];
+}
+
+/**
+ * Say how a card's backs were made (#1555), and pair them again if they have already been cut.
+ *
+ * Before the back is cut this is only the stored answer, which the cut reads. After it, the backs
+ * the cut paired by position are paired again under the new answer — the cut's own rule, mutual-
+ * nearest and only on equal counts, over the backs that can move and the fronts that can take one:
+ *
+ * - **A pair made by hand is kept** (`backPairedByHand`): the collector put it there, and the answer
+ *   being changed is about the card, not about that decision.
+ * - **A tile no longer being worked keeps what it has.** A consumed tile's pictures are the copy's
+ *   (#567), and a discarded one is put back in the queue first — the rule `unpairTileBack` follows.
+ * - **A back that finds no front stands on the strip as a back-only tile**, as at the cut; one
+ *   already there that now finds its front is paired onto it, its mark meeting the front's (#1550).
+ *
+ * **The turn moves with the answer.** A card turned top to bottom lies upside down against one turned
+ * left to right, so going to or from it turns every back of the card a half-turn — hand pairs and
+ * discarded tiles included, since how the card was turned is true of them too — by cutting each
+ * again from the retained scan, as {@link turnTileSide} does. A consumed tile is left alone: its
+ * pictures went to the copy. Everything — pictures, pairs and the answer — lands in one transaction,
+ * so a failure leaves the card as it was and asking again starts from the same place.
+ */
+export async function setBackTurnover(
+  ownerId: string,
+  ref: ScanOwnerRef,
+  batchNo: number,
+  value: string
+): Promise<BackTurnoverReport> {
+  if (!isBackTurnover(value)) throw new ScanValidationError("Unknown way the backs were made.");
+  const turnover: BackTurnover = value;
+  const owner = await assertScanOwner(ownerId, ref);
+  const { collectionId } = owner;
+  const scope = scanOwnerWhere(owner);
+
+  const [backSheet, frontSheet] = await Promise.all([
+    prisma.scanSheet.findFirst({
+      where: { ...scope, batchNo, side: "back" },
+      select: {
+        id: true,
+        width: true,
+        height: true,
+        turnover: true,
+        purgedAt: true,
+        storageBackend: true,
+        storageKey: true,
+        mime: true,
+      },
+    }),
+    prisma.scanSheet.findFirst({
+      where: { ...scope, batchNo, side: "front" },
+      select: { width: true, height: true },
+    }),
+  ]);
+  if (!backSheet || !frontSheet) throw new ScanValidationError("This batch has no back scan.");
+
+  const remember = [
+    prisma.scanSheet.update({ where: { id: backSheet.id }, data: { turnover } }),
+    prisma.collection.update({ where: { id: collectionId }, data: { lastBackTurnover: turnover } }),
+  ];
+  const nothing: BackTurnoverReport = {
+    cut: false,
+    pairingMode: "positional",
+    paired: 0,
+    backOnly: 0,
+    kept: 0,
+    marksReplaced: [],
+  };
+
+  const tiles = await prisma.scanTile.findMany({
+    where: { ...scope, batchNo },
+    select: {
+      id: true,
+      position: true,
+      state: true,
+      frontSheetId: true,
+      frontX: true,
+      frontY: true,
+      frontW: true,
+      frontH: true,
+      backSheetId: true,
+      backX: true,
+      backY: true,
+      backW: true,
+      backH: true,
+      backTurn: true,
+      backPairedByHand: true,
+      markConditionId: true,
+      markCertificateStatusId: true,
+      markedAt: true,
+      photos: {
+        where: { role: "back" },
+        select: { id: true, storageBackend: true, storageKey: true, mime: true },
+      },
+    },
+    orderBy: { position: "asc" },
+  });
+  const backs = tiles.filter((t) => t.backSheetId === backSheet.id);
+  if (backs.length === 0) {
+    await prisma.$transaction(remember);
+    return nothing;
+  }
+  assertSheetNotPurged(backSheet);
+  const previous = asBackTurnover(backSheet.turnover);
+  if (previous === turnover) {
+    await prisma.$transaction(remember);
+    return { ...nothing, cut: true, kept: backs.filter((t) => t.frontSheetId != null).length };
+  }
+
+  // ── The turn: every back the strip still holds, cut again a half-turn round when it changes.
+  const delta = turnBetween(turnoverBackTurn(previous), turnoverBackTurn(turnover));
+  const turned = new Map<string, { turn: QuarterTurn; photoId: string; crop: Crops[number] }>();
+  const replacedPhotos: { id: string; storageBackend: string; storageKey: string; mime: string }[] = [];
+  if (delta !== 0) {
+    const turnable = backs.filter((t) => t.state !== "consumed" && t.photos.length > 0);
+    const original = await readSheetOriginal(
+      backSheet.storageBackend,
+      backSheet.storageKey,
+      backSheet.mime
+    );
+    for (const turn of QUARTER_TURNS) {
+      const group = turnable.filter(
+        (t) => ((asQuarterTurn(t.backTurn) + delta) % 360) === turn
+      );
+      const crops = await cutSheet(
+        original,
+        group.map((t) => boxOrNull(t.backX, t.backY, t.backW, t.backH)!),
+        turn
+      );
+      group.forEach((t, i) => {
+        turned.set(t.id, { turn, photoId: randomUUID(), crop: crops[i] });
+        replacedPhotos.push(t.photos[0]);
+      });
+    }
+  }
+
+  // ── The pairing: the backs that can move, onto the fronts that can take one.
+  const movable = backs.filter(
+    (t) => isOpenTileState(t.state) && (t.frontSheetId == null || !t.backPairedByHand)
+  );
+  const movableIds = new Set(movable.map((t) => t.id));
+  const fronts = tiles.filter(
+    (t) =>
+      t.frontSheetId != null &&
+      isOpenTileState(t.state) &&
+      (t.backSheetId == null || movableIds.has(t.id))
+  );
+  const pairing = pairByPosition(
+    fronts.map((t) => boxOrNull(t.frontX, t.frontY, t.frontW, t.frontH)!),
+    frontSheet,
+    movable.map((t) => boxOrNull(t.backX, t.backY, t.backW, t.backH)!),
+    backSheet,
+    turnover
+  );
+  const targetOf = new Map(
+    pairing.pairs.map((p) => [movable[p.backIndex].id, fronts[p.frontIndex]])
+  );
+  // A back is known by the tile it is on now; it stays put when its target is that same tile.
+  const staying = movable.filter((t) => t.frontSheetId != null && targetOf.get(t.id)?.id === t.id);
+  const relocating = movable.filter((t) => !staying.includes(t));
+  const frontRelocating = relocating.filter((t) => t.frontSheetId != null);
+
+  const maxPosition = tiles.reduce((m, t) => Math.max(m, t.position), -1);
+  let nextPosition = maxPosition + 1;
+  const marksReplaced: BackTurnoverReport["marksReplaced"] = [];
+
+  const written = await writeCropBytes(
+    collectionId,
+    [...turned.values()].map((t) => ({ photoId: t.photoId, crop: t.crop }))
+  );
+  try {
+    await prisma.$transaction(async (tx) => {
+      // The pictures first, each on the tile it is on now; the moves below carry them by owner.
+      for (const [tileId, t] of turned) {
+        const tile = backs.find((b) => b.id === tileId)!;
+        await tx.photo.delete({ where: { id: tile.photos[0].id } });
+        await tx.photo.create({
+          data: photoData({ tileId, photoId: t.photoId, crop: t.crop }, collectionId, "back"),
+        });
+        await tx.scanTile.update({ where: { id: tileId }, data: { backTurn: t.turn } });
+      }
+      const turnOf = (t: (typeof backs)[number]) => turned.get(t.id)?.turn ?? asQuarterTurn(t.backTurn);
+
+      // Every back leaving a front tile stands up as a back-only tile first — the shape of
+      // `unpairTileBack` — so two backs trading places never meet on one tile. Its mark stays with
+      // the front, as there.
+      const holderOf = new Map<string, string>();
+      for (const t of frontRelocating) {
+        const willPair = targetOf.has(t.id);
+        const holder = await tx.scanTile.create({
+          data: {
+            collectionId,
+            purchaseId: owner.purchaseId,
+            batchNo,
+            // A holder that is about to be paired away is never seen; one that stays on the strip
+            // takes the next place after everything already there, as an unmatched back does.
+            position: willPair ? -1 : nextPosition++,
+            backSheetId: backSheet.id,
+            backX: t.backX,
+            backY: t.backY,
+            backW: t.backW,
+            backH: t.backH,
+            backTurn: turnOf(t),
+          },
+          select: { id: true },
+        });
+        await tx.photo.updateMany({ where: { tileId: t.id, role: "back" }, data: { tileId: holder.id } });
+        await tx.scanTile.update({
+          where: { id: t.id },
+          data: {
+            backSheetId: null,
+            backX: null,
+            backY: null,
+            backW: null,
+            backH: null,
+            backTurn: 0,
+            backPairedByHand: false,
+          },
+        });
+        holderOf.set(t.id, holder.id);
+      }
+
+      // Then each back with a front to go to is paired onto it, as `pairTilesManually` does — by
+      // position this time, so not by hand.
+      for (const t of relocating) {
+        const target = targetOf.get(t.id);
+        if (!target) continue;
+        const from = holderOf.get(t.id) ?? t.id;
+        // A back that was on the strip carries its own mark (#1550); one taken off a front left its
+        // mark there, and the front it lands on keeps its own.
+        const backMark = t.frontSheetId == null ? tileMark(t) : null;
+        const paired = pairedMark(
+          { mark: tileMark(target), markedAt: target.markedAt },
+          { mark: backMark, markedAt: t.frontSheetId == null ? t.markedAt : null }
+        );
+        if (paired.replaced && paired.mark) {
+          marksReplaced.push({ position: target.position, mark: paired.mark, replaced: paired.replaced });
+        }
+        await tx.photo.updateMany({ where: { tileId: from, role: "back" }, data: { tileId: target.id } });
+        await tx.scanTile.update({
+          where: { id: target.id },
+          data: {
+            backSheetId: backSheet.id,
+            backX: t.backX,
+            backY: t.backY,
+            backW: t.backW,
+            backH: t.backH,
+            backTurn: turnOf(t),
+            backPairedByHand: false,
+            ...markColumns(paired),
+          },
+        });
+        await tx.scanTile.delete({ where: { id: from } });
+      }
+
+      await tx.scanSheet.update({ where: { id: backSheet.id }, data: { turnover } });
+      await tx.collection.update({
+        where: { id: collectionId },
+        data: { lastBackTurnover: turnover },
+      });
+      // A back waiting on the strip means the card is not finished with — `unpairTileBack`'s rule.
+      if (pairing.backUnmatched.length > 0) {
+        await tx.scanSheet.updateMany({
+          where: { ...scope, batchNo, batchDoneAt: { not: null } },
+          data: { batchDoneAt: null },
+        });
+      }
+    });
+  } catch (err) {
+    await rollbackBytes(written);
+    throw err;
+  }
+  await Promise.all(
+    replacedPhotos.map((p) => deletePhotoVariants(p.storageBackend, p.storageKey, p.mime))
+  );
+
+  return {
+    cut: true,
+    pairingMode: pairing.mode,
+    paired: pairing.pairs.length,
+    backOnly: pairing.backUnmatched.length,
+    kept: backs.filter((t) => t.frontSheetId != null && !movableIds.has(t.id)).length,
+    marksReplaced,
+  };
 }
 
 async function loadTile(tileId: string) {
@@ -1818,6 +2181,8 @@ export interface ScanSheetData {
   /** What the card was scanned with (#1443), or null for a sheet uploaded before profiles existed —
    * which the viewer measures with the collection's default, as it did then. */
   scanningProfileId: string | null;
+  /** How a back sheet's backs were made (#1555); `in_place` on a front, which has none. */
+  turnover: BackTurnover;
 }
 
 export interface ScanTileData {
@@ -1961,6 +2326,9 @@ export interface ScansData {
    * "assign this tile to a copy the order already holds" the ordinary path rather than the
    * exception: settlement created identified copies that need photographs, not identification. */
   fromAuction: boolean;
+  /** How the collection's last back was made (#1555) — what *Add back scan* offers next. Read with
+   * the batches, so the choice offered moves the moment a back is added with another one. */
+  backTurnover: BackTurnover;
 }
 
 /**
@@ -2004,6 +2372,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         batchDoneAt: true,
         purgedAt: true,
         scanningProfileId: true,
+        turnover: true,
         _count: { select: { frontTiles: true, backTiles: true } },
       },
       orderBy: { batchNo: "desc" },
@@ -2165,6 +2534,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       cut: (s.side === "back" ? s._count.backTiles : s._count.frontTiles) > 0,
       purged: s.purgedAt != null,
       scanningProfileId: s.scanningProfileId,
+      turnover: asBackTurnover(s.turnover),
     };
     const batch = batchOf(s.batchNo);
     if (data.side === "front") batch.front = data;
@@ -2243,6 +2613,14 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
   return {
     batches: [...batches.values()].sort((a, b) => b.batchNo - a.batchNo),
     fromAuction: auctionSale != null,
+    backTurnover: asBackTurnover(
+      (
+        await prisma.collection.findUniqueOrThrow({
+          where: { id: owner.collectionId },
+          select: { lastBackTurnover: true },
+        })
+      ).lastBackTurnover
+    ),
   };
 }
 

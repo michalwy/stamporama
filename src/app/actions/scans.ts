@@ -12,12 +12,14 @@ import {
   proposeCut,
   recutBatch,
   setBatchKind,
+  setBackTurnover,
   setBatchLabel,
   setTileMarks,
   turnTileSide,
   unpairTileBack,
   type CutBox,
   type CutReport,
+  type BackTurnoverReport,
   type PairingMarks,
   type SheetKind,
 } from "@/lib/scan-sheets";
@@ -113,6 +115,35 @@ export async function setBatchKindAction(
       status: "error",
       message:
         e instanceof Error ? e.message : "Failed to change the kind of card. Please try again.",
+    };
+  }
+}
+
+/**
+ * Say how a batch's backs were made (#1555) — each stamp turned over in place, or the whole card
+ * turned left to right or top to bottom. On a back already cut this pairs the backs again, keeping
+ * the pairs made by hand, and answers with what it did.
+ */
+export type BackTurnoverActionState =
+  | { status: "success"; report: BackTurnoverReport }
+  | { status: "error"; message: string };
+
+export async function setBackTurnoverAction(
+  owner: ScanOwnerRef,
+  batchNo: number,
+  turnover: string
+): Promise<BackTurnoverActionState> {
+  const session = await getSession();
+  try {
+    return {
+      status: "success",
+      report: await setBackTurnover(session.user.id, owner, batchNo, turnover),
+    };
+  } catch (e) {
+    return {
+      status: "error",
+      message:
+        e instanceof Error ? e.message : "Failed to pair the backs again. Please try again.",
     };
   }
 }

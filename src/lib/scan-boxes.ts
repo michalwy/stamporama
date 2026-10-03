@@ -218,13 +218,25 @@ export interface PairingResult {
 }
 
 /**
+ * How the backs were made, as far as pairing is concerned (#1555): turned over where they lie, or the
+ * whole card turned over about its vertical or its horizontal axis. The same three answers as
+ * `BackTurnover`, restated here so this module stays free of imports.
+ */
+export type PairingMirror = "in_place" | "card_left_right" | "card_top_bottom";
+
+/**
  * Pair a back sheet's boxes to a front sheet's **by position**, not by index.
  *
- * The routine this is built around turns each stamp over **in place** and scans the card again, so
- * a front region and its back occupy the same spot. That is what makes position the right key —
- * and it is also why there is **no mirroring**. Mirroring is correct when a whole group is turned
- * over at once, and applying it to a card turned stamp by stamp would break the correspondence the
- * routine already guarantees.
+ * Each stamp turned over **in place** and the card scanned again puts a front region and its back
+ * on the same spot. That is what makes position the right key, and in that case there is **no
+ * mirroring** — mirroring would break the correspondence turning in place guarantees.
+ *
+ * A **whole card** turned over (#1555) mirrors the positions instead: across the card's vertical
+ * axis when it was turned left to right, across its horizontal axis when it was turned top to
+ * bottom. The mirror is taken **about the card, not the scan's edges** — each side's centres are
+ * measured against the extent of that side's own boxes — because a card is rarely laid in the middle
+ * of the glass and is moved between the two scans; mirroring about the scan would carry every
+ * off-centre millimetre over to the other side twice.
  *
  * Index matching is what this deliberately is not: an ordering can differ between two scans over
  * one stamp nudged while turning, or one region drawn differently, and tile *n* to tile *n* would
@@ -247,14 +259,16 @@ export interface PairingResult {
  * the fast path costs a drag per stamp while being wrongly admitted to it costs a mis-paired card
  * nobody notices.
  *
- * Centres are compared in **fractional sheet coordinates**, so a back scanned at a slightly
- * different size or crop than its front still lines up.
+ * Turned in place, centres are compared in **fractional sheet coordinates**, so a back scanned at a
+ * slightly different size or crop than its front still lines up. Turned whole, they are compared in
+ * fractions of the card's extent, for the same reason and the one above.
  */
 export function pairByPosition(
   front: readonly Box[],
   frontSheet: SheetSize,
   back: readonly Box[],
-  backSheet: SheetSize
+  backSheet: SheetSize,
+  mirror: PairingMirror = "in_place"
 ): PairingResult {
   if (front.length !== back.length) {
     return {
@@ -265,8 +279,16 @@ export function pairByPosition(
     };
   }
 
-  const frontPts = front.map((b) => fractionalCenter(b, frontSheet));
-  const backPts = back.map((b) => fractionalCenter(b, backSheet));
+  const frontPts =
+    mirror === "in_place"
+      ? front.map((b) => fractionalCenter(b, frontSheet))
+      : extentCenters(front);
+  const backPts =
+    mirror === "in_place"
+      ? back.map((b) => fractionalCenter(b, backSheet))
+      : extentCenters(back).map((p) =>
+          mirror === "card_left_right" ? { x: 1 - p.x, y: p.y } : { x: p.x, y: 1 - p.y }
+        );
 
   const nearestBackOf = frontPts.map((p) => nearestIndex(p, backPts));
   const nearestFrontOf = backPts.map((p) => nearestIndex(p, frontPts));
@@ -296,6 +318,24 @@ function fractionalCenter(b: Box, sheet: SheetSize): { x: number; y: number } {
     x: sheet.width > 0 ? c.x / sheet.width : 0,
     y: sheet.height > 0 ? c.y / sheet.height : 0,
   };
+}
+
+/**
+ * Each box's centre as a fraction of the extent the boxes cover together — the card, as far as the
+ * scan shows it. The extent of the **boxes**, not of their centres: a single column of stamps has
+ * centres a few pixels apart across, and stretching those few pixels to the whole unit would turn
+ * noise into distance. An axis with no extent (one box) puts every centre in the middle.
+ */
+function extentCenters(boxes: readonly Box[]): { x: number; y: number }[] {
+  const extent = mergeBoxes(boxes);
+  if (!extent) return [];
+  return boxes.map((b) => {
+    const c = boxCenter(b);
+    return {
+      x: extent.w > 0 ? (c.x - extent.x) / extent.w : 0.5,
+      y: extent.h > 0 ? (c.y - extent.y) / extent.h : 0.5,
+    };
+  });
 }
 
 /** Index of the nearest point, or null when there are none. Squared distance — the ordering is the

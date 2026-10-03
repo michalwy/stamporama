@@ -218,6 +218,73 @@ describe("pairByPosition", () => {
     ]);
   });
 
+  // A whole card turned over (#1555). A 3 × 2 card, laid off-centre on the glass — its stamps span
+  // x 100–580 of a 1000-wide scan and y 100–330 of a 400-high one — so a mirror about the scan's
+  // edges would put every back well away from where it is.
+  const grid = [
+    box(100, 100, 80, 100), // 0 top-left
+    box(300, 100, 80, 100), // 1 top-middle
+    box(500, 100, 80, 100), // 2 top-right
+    box(100, 230, 80, 100), // 3 bottom-left
+    box(300, 230, 80, 100), // 4 bottom-middle
+    box(500, 230, 80, 100), // 5 bottom-right
+  ];
+  /** The grid's backs after the card was turned over, then moved by `dx, dy` on the glass: each
+   * box mirrored about the card's own extent, in the same array order as the fronts so a back's
+   * index names the stamp it belongs to. */
+  const turned = (axis: "left_right" | "top_bottom", dx: number, dy: number) =>
+    grid.map((b) =>
+      axis === "left_right"
+        ? box(100 + 580 - (b.x + b.w) + dx, b.y + dy, b.w, b.h)
+        : box(b.x + dx, 100 + 330 - (b.y + b.h) + dy, b.w, b.h)
+    );
+  const ownPairs = grid.map((_, i) => ({ frontIndex: i, backIndex: i }));
+
+  it("pairs a card turned left to right across its vertical axis, shifted between the scans", () => {
+    const back = turned("left_right", 140, -30);
+    const result = pairByPosition(grid, sheet(1000, 400), back, sheet(1000, 400), "card_left_right");
+    assert.equal(result.mode, "positional");
+    assert.deepEqual(result.pairs, ownPairs);
+  });
+
+  it("pairs a card turned top to bottom across its horizontal axis, shifted between the scans", () => {
+    const back = turned("top_bottom", -60, 25);
+    const result = pairByPosition(grid, sheet(1000, 400), back, sheet(1000, 400), "card_top_bottom");
+    assert.equal(result.mode, "positional");
+    assert.deepEqual(result.pairs, ownPairs);
+  });
+
+  it("pairs a turned card's backs to the wrong fronts when told they were turned in place", () => {
+    // The failure #1555 was raised for: the back of the top-left stamp sits top-right, and
+    // position alone pairs it there.
+    const back = turned("left_right", 0, 0);
+    const result = pairByPosition(grid, sheet(1000, 400), back, sheet(1000, 400));
+    assert.notDeepEqual(result.pairs, ownPairs);
+    assert.deepEqual(result.pairs.find((p) => p.frontIndex === 0), { frontIndex: 0, backIndex: 2 });
+  });
+
+  it("does not stretch a single column's few pixels of drift across the card", () => {
+    // One column, turned left to right: the centres across are a few pixels apart, and measured
+    // against their own spread they would land at opposite edges. Measured against the boxes'
+    // extent they stay in the middle and the rows decide.
+    const column = [box(100, 50, 80, 100), box(103, 170, 80, 100), box(98, 290, 80, 100)];
+    const back = [box(402, 52, 80, 100), box(404, 171, 80, 100), box(399, 289, 80, 100)];
+    const result = pairByPosition(column, sheet(1000, 400), back, sheet(1000, 400), "card_left_right");
+    assert.deepEqual(result.pairs, [
+      { frontIndex: 0, backIndex: 0 },
+      { frontIndex: 1, backIndex: 1 },
+      { frontIndex: 2, backIndex: 2 },
+    ]);
+  });
+
+  it("still pairs nothing on a turned card when the counts differ", () => {
+    const back = turned("top_bottom", 0, 0).slice(0, 5);
+    const result = pairByPosition(grid, sheet(1000, 400), back, sheet(1000, 400), "card_top_bottom");
+    assert.equal(result.mode, "manual");
+    assert.deepEqual(result.pairs, []);
+    assert.deepEqual(result.backUnmatched, [0, 1, 2, 3, 4]);
+  });
+
   it("handles an empty side", () => {
     const none = pairByPosition(front, sheet(1000, 400), [], sheet(1000, 400));
     assert.deepEqual(none.pairs, []);
