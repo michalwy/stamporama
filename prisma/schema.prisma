@@ -3896,6 +3896,8 @@ model ScanSheet {
   scanningProfile ScanningProfile? @relation(fields: [scanningProfileId], references: [id], onDelete: NoAction)
   frontTiles ScanTile[] @relation("ScanTileFrontSheet")
   backTiles  ScanTile[] @relation("ScanTileBackSheet")
+  /** The background preparation that made this sheet (#1567), while its row is kept. */
+  upload     ScanUpload?
 
   // A purchase's batches are unique by side here; the **purchase-less** ones cannot be, Postgres
   // treating nulls as distinct, so the migration adds a partial unique index on
@@ -4082,6 +4084,10 @@ model ScanTileCandidate {
 // whose it is or when it last moved, and a sweep trusting a listing would be one race away from
 // deleting an upload mid-flight. It is staging in the same sense a `PhotoUpload` is, and is swept
 // on the same TTL by the same pass.
+//
+// Since #1567 it is also the **queue** the scan is prepared from: finalize marks it `queued` and an
+// in-process worker prepares one scan at a time (ADR-0018), because preparing a large card inside
+// the finalize request outlived the proxy's timeout. A queued or preparing row is never swept.
 model ScanUpload {
   id             String   @id @default(cuid())
   /** The collection every chunk request is checked against, carried directly (#725). */
@@ -4118,14 +4124,28 @@ model ScanUpload {
    * life rather than from when it was opened — a 200 MB card over a slow line can legitimately
    * take longer than the TTL to send. */
   updatedAt      DateTime @updatedAt
+  /** Where the scan is once its bytes are in (#1567): uploading → queued → preparing → done |
+   * failed. Preparing — assembling the parts, the ~140 Mpx decode and the `view` — runs in the
+   * background, one scan at a time, because a large card outlived the proxy's timeout when it ran
+   * inside the request that finished the upload. The row is the queue and the state the page reads.
+   * Unconstrained in the DB, like `Offer.state`. */
+  status         String   @default("uploading")
+  /** Why a preparation failed, in words for the card. Null unless `failed`. */
+  error          String?
+  /** When the scan joined the queue — the queue's order. A retry takes a new place at the back. */
+  queuedAt       DateTime?
+  /** The sheet a finished preparation made: how a page still open finds the card to cut. */
+  sheetId        String?  @unique
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   purchase   Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   scanningProfile ScanningProfile? @relation(fields: [scanningProfileId], references: [id], onDelete: SetNull)
+  sheet      ScanSheet? @relation(fields: [sheetId], references: [id], onDelete: Cascade)
 
   @@index([collectionId])
   @@index([purchaseId])
   @@index([updatedAt])
+  @@index([status, queuedAt])
   @@map("scan_upload")
 }
 

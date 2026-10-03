@@ -1,7 +1,8 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
+import { asScanUploadStatus, queueAhead, type ScanUploadCard } from "./scan-upload-status-rules";
 import { resolveScanProfileId, ScanningProfileError } from "./scanning-profiles";
 import {
   getActiveStorage,
@@ -252,7 +253,11 @@ export async function uploadSheet(
     /** How a back's backs were made (#1555). Absent or null on a back takes the way the collection
      * made its last one; ignored on a front. */
     turnover?: string | null;
-  }
+  },
+  /** Run inside the transaction that creates the sheet (#1567). The background preparation marks
+   * its queue row done here, so a restart between the two writes can never prepare the same scan
+   * into a second batch: either both happened or neither did. */
+  within?: (tx: DbTransaction, sheetId: string) => Promise<void>
 ): Promise<UploadedSheet> {
   const owner = await assertScanOwner(ownerId, ref);
   const { collectionId } = owner;
@@ -378,6 +383,7 @@ export async function uploadSheet(
           data: { lastBackTurnover: turnover },
         });
       }
+      if (within) await within(tx, id);
     });
   } catch (err) {
     await deleteSheetVariants(storage.backend, prefix, mime);
@@ -2341,6 +2347,10 @@ export interface ScanBatchData {
 
 export interface ScansData {
   batches: ScanBatchData[];
+  /** Scans whose bytes are in and that are not a card yet (#1567) — waiting their turn, being
+   * prepared, failed — and the ones finished since, which is how a page that watched one being
+   * prepared knows which card to open the cut editor on. Oldest first, the queue's own order. */
+  uploads: ScanUploadCard[];
   /** Whether this purchase was settled from a won auction sale (ADR-0021) — which is what makes
    * "assign this tile to a copy the order already holds" the ordinary path rather than the
    * exception: settlement created identified copies that need photographs, not identification. */
@@ -2348,6 +2358,43 @@ export interface ScansData {
   /** How the collection's last back was made (#1555) — what *Add back scan* offers next. Read with
    * the batches, so the choice offered moves the moment a back is added with another one. */
   backTurnover: BackTurnover;
+}
+
+/** An order's scans on their way to being cards, with each waiting one's place in the instance's
+ * queue. Read with the batches so the card being prepared and the card it becomes can never be
+ * drawn from two different moments. */
+async function listScanUploadCards(purchaseId: string): Promise<ScanUploadCard[]> {
+  const [rows, queue] = await Promise.all([
+    prisma.scanUpload.findMany({
+      where: { purchaseId, status: { not: "uploading" } },
+      select: {
+        id: true,
+        status: true,
+        side: true,
+        batchNo: true,
+        label: true,
+        error: true,
+        sheetId: true,
+        queuedAt: true,
+      },
+      orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+    }),
+    prisma.scanUpload.findMany({
+      where: { status: { in: ["queued", "preparing"] } },
+      select: { id: true, status: true, queuedAt: true },
+    }),
+  ]);
+  const ahead = queueAhead(queue.map((q) => ({ ...q, status: asScanUploadStatus(q.status) })));
+  return rows.map((row) => ({
+    id: row.id,
+    status: asScanUploadStatus(row.status),
+    side: row.side === "back" ? "back" : "front",
+    batchNo: row.batchNo,
+    label: row.label,
+    error: row.error,
+    sheetId: row.sheetId,
+    ahead: ahead.get(row.id) ?? null,
+  }));
 }
 
 /**
@@ -2632,6 +2679,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
 
   return {
     batches: [...batches.values()].sort((a, b) => b.batchNo - a.batchNo),
+    uploads: await listScanUploadCards(purchaseId),
     fromAuction: auctionSale != null,
     backTurnover: asBackTurnover(
       (

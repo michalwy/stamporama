@@ -78,9 +78,18 @@ import { useInvalidateScans, useScans } from "./use-scans-query";
 import { IndeterminateBar, ProgressBar } from "@/app/progress-bar";
 import {
   SheetUploadError,
+  discardSheetUpload,
+  retrySheetPreparation,
   uploadSheetInChunks,
   type SheetUploadProgress,
 } from "./upload-sheet-chunks";
+import {
+  isScanUploadPending,
+  isScanUploadShown,
+  newlyPreparedSheets,
+  scanUploadStatusText,
+  type ScanUploadCard,
+} from "@/lib/scan-upload-status-rules";
 import { TextInput } from "./text-input";
 import { useToast } from "@/app/toast-provider";
 import { keyPatch, unmarkedCounts, type MarkPatch, type TileMark } from "@/lib/tile-marks";
@@ -325,12 +334,14 @@ export function ScansCard({
    * every render, so a second list here could name a tile that has since been worked through. */
   const [selectionOpen, setSelectionOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  /** How far the scan being sent has got (#590), or null while none is. Two phases and not one
-   * number: *uploading* is the chunks the server has acknowledged, and *preparing* is the assembly
-   * and the ~140 Mpx decode that follow the last one — seconds of server work with nothing crossing
-   * the wire, which a bar parked at 100% would report as a hang at exactly the moment the upload
-   * had succeeded. */
+  /** How far the scan being sent has got (#590) — the chunks the server has acknowledged — or null
+   * while none is. It ends when the bytes are in: preparing the scan runs in the background (#1567)
+   * and is shown on the scan's own card below, so the button is free for the next scan at once. */
   const [progress, setProgress] = useState<SheetUploadProgress | null>(null);
+  /** The scans this page has seen waiting or being prepared (#1567) — the ones whose cut editor
+   * opens on its own when they are ready. A ref, not state: it changes nothing on screen, and a
+   * scan that was ready before the page was opened is deliberately not in it. */
+  const watchedUploads = useRef<Set<string>>(new Set());
   /** The name to give the **next** card added (#587). Held here rather than remembered anywhere:
    * a name belongs to one card, and the last one typed is the wrong default for the next. */
   const [newLabel, setNewLabel] = useState("");
@@ -365,6 +376,8 @@ export function ScansCard({
   const [pending, startTransition] = useTransition();
 
   const batches = data?.batches ?? [];
+  /** Scans on their way to being cards (#1567): waiting their turn, being prepared, or failed. */
+  const uploadCards = (data?.uploads ?? []).filter((u) => isScanUploadShown(u.status));
   const fromAuction = data?.fromAuction ?? false;
   /** How the collection's last back was made (#1555) — what every *Add back scan* offers until the
    * collector picks another for that card. */
@@ -555,13 +568,19 @@ export function ScansCard({
   };
 
   /**
-   * Send a scan and open the editor on it — the two halves of "add a card" are one act to the
-   * collector, and a sheet uploaded with no cut drawn is exactly what a re-cut starts from anyway.
+   * Send a scan. The editor opens on it when it is ready — the two halves of "add a card" are one
+   * act to the collector, and a sheet uploaded with no cut drawn is exactly what a re-cut starts
+   * from anyway.
    *
    * The scan goes up **in chunks** (#590): a 1200 dpi card is 100–200 MB and no ordinary proxy
    * passes a body that size. What that buys here, beyond the upload working at all, is a measure —
    * the chunks the server has acknowledged — so the wait says how far it has got instead of
    * nothing.
+   *
+   * **And it is prepared in the background** (#1567). Once the bytes are in, this is done: the scan
+   * waits its turn on the server and is shown as a card being prepared, the button is free for the
+   * next scan, and the collector may go anywhere in the app. Preparing it inside the request that
+   * finished the upload outlived the proxy's timeout on a large card.
    */
   const upload = async (
     file: File,
@@ -571,9 +590,9 @@ export function ScansCard({
   ) => {
     setError(null);
     setUploading(true);
-    setProgress({ phase: "uploading", fraction: 0 });
+    setProgress({ fraction: 0 });
     try {
-      const body = await uploadSheetInChunks({
+      const queued = await uploadSheetInChunks({
         collectionId,
         purchaseId,
         file,
@@ -600,14 +619,11 @@ export function ScansCard({
         onProgress: setProgress,
       });
       if (side === "front") setNewLabel("");
+      // Watched from now, so the editor opens on it when it is ready; and the section is opened,
+      // because the card being prepared is drawn inside it.
+      watchedUploads.current.add(queued.id);
+      if (!open) setOpen(true);
       refresh();
-      await openProposed(
-        { ...body, side },
-        side === "back"
-          ? (batches.find((b) => b.batchNo === body.batchNo)?.tiles.filter((t) => t.frontBox)
-              .length ?? null)
-          : null
-      );
     } catch (err) {
       setError(
         err instanceof SheetUploadError ? err.message : "Failed to upload the scan."
@@ -615,6 +631,64 @@ export function ScansCard({
     } finally {
       setUploading(false);
       setProgress(null);
+    }
+  };
+
+  /**
+   * Open the cut editor on a scan this page watched being prepared, once it is a card (#1567) — what
+   * used to happen straight after the upload. Only when nothing else is open over the section: an
+   * editor thrown over a tile dialog the collector is in the middle of would be the app taking the
+   * screen away from them, and a scan that is not opened here waits as a card with *Review the front
+   * cut*. Every scan seen waiting is watched, so a reload or a visit elsewhere and back still opens
+   * it when it is ready; one that was ready before the page was opened is not.
+   */
+  const uploads = data?.uploads;
+  useEffect(() => {
+    if (!uploads) return;
+    for (const u of uploads) {
+      if (isScanUploadPending(u.status)) watchedUploads.current.add(u.id);
+    }
+    const ready = newlyPreparedSheets(watchedUploads.current, uploads);
+    for (const u of uploads) {
+      if (u.status === "done" || u.status === "failed") watchedUploads.current.delete(u.id);
+    }
+    if (ready.length === 0) return;
+    if (editor || tileId || selectionOpen || confirm || detecting) return;
+    for (const sheetId of ready) {
+      const batch = batches.find((b) => b.front?.id === sheetId || b.back?.id === sheetId);
+      const sheet = batch?.front?.id === sheetId ? batch.front : batch?.back;
+      if (!batch || !sheet || sheet.cut) continue;
+      void openProposed(
+        editorSheetOf(batch, sheet),
+        sheet.side === "back" ? batch.tiles.filter((t) => t.frontBox).length : null
+      );
+      return;
+    }
+    // `batches` and the dialogs are read as they are when the scans change, which is the only
+    // moment a scan can become ready; re-running on each of them would reopen nothing new.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploads]);
+
+  /** Try a failed preparation again, from the parts already on the server (#1567). */
+  const retryPreparation = async (card: ScanUploadCard) => {
+    setError(null);
+    try {
+      await retrySheetPreparation(collectionId, card.id);
+      watchedUploads.current.add(card.id);
+      refresh();
+    } catch (err) {
+      setError(err instanceof SheetUploadError ? err.message : "Failed to try the scan again.");
+    }
+  };
+
+  /** Throw away a scan that could not be prepared. */
+  const discardPreparation = async (card: ScanUploadCard) => {
+    setError(null);
+    try {
+      await discardSheetUpload(collectionId, card.id);
+      refresh();
+    } catch (err) {
+      setError(err instanceof SheetUploadError ? err.message : "Failed to discard the scan.");
     }
   };
 
@@ -924,13 +998,7 @@ export function ScansCard({
         <UploadButton
           label="Add card scan"
           busy={uploading}
-          busyLabel={
-            detecting
-              ? "Finding the stamps…"
-              : progress?.phase === "preparing"
-                ? "Preparing…"
-                : undefined
-          }
+          busyLabel={detecting ? "Finding the stamps…" : undefined}
           onFile={(f) => void upload(f, "front")}
         />
       </header>
@@ -991,7 +1059,19 @@ export function ScansCard({
       )}
 
       {isLoading && <Muted>Loading scans…</Muted>}
-      {!isLoading && batches.length === 0 && (
+      {/* Scans on their way to being cards (#1567), above the batches they will become — newest
+          batches lead the list, and a scan being prepared is the newest of all. */}
+      {uploadCards.map((card) => (
+        <PreparingScanCard
+          key={card.id}
+          card={card}
+          busy={pending}
+          onRetry={() => void retryPreparation(card)}
+          onDiscard={() => void discardPreparation(card)}
+        />
+      ))}
+
+      {!isLoading && batches.length === 0 && uploadCards.length === 0 && (
         <Muted>
           No scans yet. Lay the stamps out on a black stockbook card, leaving about one perforation
           tooth of gap between them, and scan the whole card. Turn each stamp over in place and scan
@@ -3233,31 +3313,98 @@ function CutReportBanner({
  * percentage line above it, because a card is one file and the strip's aggregate bar is what that
  * already looks like. Nothing new is invented for it.
  *
- * **The two phases are told apart, and only one of them is a number.** *Uploading* is the chunks the
- * server has acknowledged — a real measure, and the one that exists only because the upload is in
- * parts. *Preparing* is what follows the last chunk: the parts are assembled and `prepareSheet`
- * decodes a ~140 Mpx image and derives the `view`, which is seconds with nothing crossing the wire.
- * There is no honest fraction for it, so the bar stops claiming one and the label says what is
- * happening — a determinate bar sitting at 100% would read as a hang at precisely the moment the
- * upload had in fact succeeded.
+ * **Only the upload is measured here.** It is the chunks the server has acknowledged — a real
+ * measure, and the one that exists only because the upload is in parts. What follows the last chunk,
+ * preparing the scan, runs in the background since #1567 and is shown on the scan's own card in the
+ * section, where it says whether it is waiting its turn or being prepared now.
  */
 function SheetUploadProgressBar({ progress }: { progress: SheetUploadProgress }) {
-  const uploading = progress.phase === "uploading";
   return (
-    <div style={{ marginBottom: "0.75rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           fontSize: "0.75rem",
           color: "var(--color-text-secondary)",
-          marginBottom: "0.25rem",
         }}
       >
-        <span>{uploading ? "Uploading the scan…" : "Preparing the scan…"}</span>
-        {uploading && <span>{Math.round(progress.fraction * 100)}%</span>}
+        <span>Uploading the scan…</span>
+        <span>{Math.round(progress.fraction * 100)}%</span>
       </div>
-      {uploading ? <ProgressBar fraction={progress.fraction} /> : <IndeterminateBar />}
+      <ProgressBar fraction={progress.fraction} />
+    </div>
+  );
+}
+
+/**
+ * A scan whose bytes are in and that is not a card yet (#1567).
+ *
+ * It says which of three things is true: it is **waiting its turn** (the instance prepares one scan
+ * at a time, every collection's in one queue, so it says how many are ahead), it is **being
+ * prepared now**, or it **could not be prepared** — with the reason, a retry that prepares it again
+ * from what is already on the server, and a way to throw it away. Drawn as a batch is, because it is
+ * the batch-to-be: when it is ready it is replaced by the card itself.
+ */
+function PreparingScanCard({
+  card,
+  busy,
+  onRetry,
+  onDiscard,
+}: {
+  card: ScanUploadCard;
+  busy: boolean;
+  onRetry: () => void;
+  onDiscard: () => void;
+}) {
+  const failed = card.status === "failed";
+  const title =
+    card.side === "back" && card.batchNo != null
+      ? `Back of batch ${card.batchNo}`
+      : card.label
+        ? `New card · ${card.label}`
+        : "New card";
+  return (
+    <div
+      style={{
+        border: `1px solid ${failed ? "var(--color-error-border)" : "var(--color-border)"}`,
+        borderRadius: "0.5rem",
+        padding: "0.75rem",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.5rem",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+        <strong style={{ fontSize: "0.8125rem" }}>{title}</strong>
+        <span
+          style={{
+            fontSize: "0.8125rem",
+            color: failed ? "var(--color-error)" : "var(--color-text-muted)",
+          }}
+        >
+          {scanUploadStatusText(card.status)}
+          {card.status === "queued" &&
+            card.ahead != null &&
+            card.ahead > 0 &&
+            ` · ${card.ahead} ${card.ahead === 1 ? "scan" : "scans"} ahead`}
+        </span>
+        <span style={{ flex: 1 }} />
+        {failed && (
+          <>
+            <SmallButton onClick={onRetry} disabled={busy}>
+              Try again
+            </SmallButton>
+            <SmallButton onClick={onDiscard} disabled={busy} danger>
+              <Icon name="delete" size="sm" /> Discard
+            </SmallButton>
+          </>
+        )}
+      </div>
+      {failed && card.error && (
+        <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{card.error}</span>
+      )}
+      {card.status === "preparing" && <IndeterminateBar />}
     </div>
   );
 }

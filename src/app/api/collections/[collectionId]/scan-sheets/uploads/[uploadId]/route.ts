@@ -50,9 +50,10 @@ export async function PUT(
   }
 }
 
-/** Give up on an upload — a review the collector cancelled, a scan they picked by mistake. The
- * hourly sweep would collect it anyway; this is what stops the parts sitting on the volume for
- * hours after everyone involved already knows they are unwanted. */
+/** Give up on an upload — a review the collector cancelled, a scan they picked by mistake, or one
+ * that could not be prepared (#1567). The hourly sweep would collect it anyway; this is what stops
+ * the parts sitting on the volume for hours after everyone involved already knows they are
+ * unwanted. Refused with `409` while the scan is being prepared or is already a card. */
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ uploadId: string }> }
@@ -69,6 +70,9 @@ export async function DELETE(
   } catch (err) {
     if (err instanceof ScanAuthError) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (err instanceof ScanValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     return NextResponse.json({ error: "Failed to abandon the upload." }, { status: 500 });
   }

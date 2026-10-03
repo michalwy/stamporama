@@ -111,6 +111,17 @@ say — that still had not gone through after an hour of retries. The row names 
 the mail provider's reason. A message that got through on a later attempt never appears here.
 Opening **Settings → Email**, where every undelivered message is listed, clears it.
 
+**Card scan could not be prepared** — amber. A card scan whose bytes all arrived but which the app
+could not turn into a card — the row says why. It waits for you on the order's **Card scans**
+section, where **Try again** prepares it once more from what was already uploaded and **Discard**
+throws it away. Left alone, it is cleaned up after a while like any upload that never finished
+([how scans are prepared](purchases.md#while-the-scan-is-uploading)).
+
+**Card scans ready to cut** — blue. A card scan that has been prepared and that nothing has been cut
+from yet — the batch that offers **Review the front cut** (or the back). Since a scan is prepared in
+the background, this is how you hear it is ready when you have gone elsewhere in the app. Newest
+first; the row names the batch and the order, and goes once the cut is saved.
+
 The three red groups, and *Changed since listed*, are the same **needs action** flag the offers list
 shows, split by *why* it fired, because each asks for something different: a sold copy has to come
 out of the listing, a copy under the hammer is waiting on someone else's clock, one sold on a

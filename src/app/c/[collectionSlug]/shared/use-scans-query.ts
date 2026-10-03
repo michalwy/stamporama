@@ -2,6 +2,11 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ScansData } from "@/lib/scan-sheets";
+import { isScanUploadPending } from "@/lib/scan-upload-status-rules";
+
+/** How often the section asks again while a scan of the order is waiting or being prepared (#1567).
+ * Each ask answers at once; the scan's preparation itself never sits inside a request. */
+const PREPARING_POLL_MS = 2_000;
 
 // Scan batches (#566, re-parented to the purchase by #586). Loaded only while the Card scans section
 // is open: a carton is fifty cards and a card of forty tiles is forty thumbnails.
@@ -26,6 +31,12 @@ export function useScans(collectionId: string, purchaseId: string, enabled = tru
       return res.json();
     },
     enabled,
+    // Asked again only while something is on its way to being a card, so a page left open over a
+    // finished order costs nothing.
+    refetchInterval: (query) =>
+      query.state.data?.uploads?.some((u) => isScanUploadPending(u.status))
+        ? PREPARING_POLL_MS
+        : false,
   });
 }
 
