@@ -13,11 +13,16 @@ import {
   recutBatch,
   setBatchKind,
   setBatchLabel,
+  setTileMarks,
   turnTileSide,
   unpairTileBack,
+  type CutBox,
   type CutReport,
+  type PairingMarks,
   type SheetKind,
 } from "@/lib/scan-sheets";
+import { parseTileOwnAnswers, type MarkPatch } from "@/lib/tile-marks";
+import type { Box } from "@/lib/scan-boxes";
 import {
   addTileCandidate,
   assignTileToCopy,
@@ -30,7 +35,6 @@ import {
   removeTileCandidate,
   returnTilesToQueue,
 } from "@/lib/scan-tiles";
-import type { Box } from "@/lib/scan-boxes";
 import type { IssueRunIdentification } from "@/lib/issue-run";
 import { parseItemStampEntries } from "@/lib/item-stamp-entries";
 import type { ScanOwnerRef } from "@/lib/scan-sheets";
@@ -65,7 +69,7 @@ export type CommitCutActionState =
  * whole review free to be wrong. */
 export async function commitCutAction(
   sheetId: string,
-  boxes: Box[]
+  boxes: CutBox[]
 ): Promise<CommitCutActionState> {
   const session = await getSession();
   try {
@@ -159,15 +163,21 @@ export async function pickBoxAction(
   }
 }
 
+/** A manual pairing answers with what it did to the tile's mark (#1550), so the screen can say which
+ * mark it replaced when front and back disagreed. */
+export type PairTilesActionState =
+  | { status: "success"; marks: PairingMarks }
+  | { status: "error"; message: string };
+
 /** Drop a back-only tile's image onto a front tile — the sparse-case pairing, done by dragging. */
 export async function pairTilesAction(
   backTileId: string,
   frontTileId: string
-): Promise<ScanActionState> {
+): Promise<PairTilesActionState> {
   const session = await getSession();
   try {
-    await pairTilesManually(session.user.id, backTileId, frontTileId);
-    return { status: "success" };
+    const marks = await pairTilesManually(session.user.id, backTileId, frontTileId);
+    return { status: "success", marks };
   } catch (e) {
     return {
       status: "error",
@@ -192,6 +202,26 @@ export async function unpairTileBackAction(tileId: string): Promise<ScanActionSt
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to unpair the back. Please try again.",
+    };
+  }
+}
+
+/**
+ * Mark tiles' condition and certificate before they are identified, or clear them (#1550) — one tile
+ * or the ticked ones, from the strip or from the boxes of the cut editor.
+ */
+export async function markTilesAction(
+  tileIds: string[],
+  patch: MarkPatch
+): Promise<ScanActionState> {
+  const session = await getSession();
+  try {
+    await setTileMarks(session.user.id, tileIds, patch);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to mark the tiles. Please try again.",
     };
   }
 }
@@ -299,6 +329,8 @@ export async function identifyTilesAction(
       // copy dialog's own field and reading (#746): one list, one vocabulary.
       stamps: parseItemStampEntries(formData.get("stamps")),
       stampPhotoTileId: stampPhotoTileId(formData),
+      // The tiles keeping their own marked condition or certificate (#1550), as the step said.
+      tileAnswers: parseTileOwnAnswers(formData.get("tileAnswers")),
     });
     return { status: "success", outcomes: copies };
   } catch (e) {

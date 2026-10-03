@@ -121,6 +121,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   SquareDashedMousePointer,
+  Highlighter,
   SquarePlus,
   SquareSplitHorizontal,
   Stamp,
@@ -370,6 +371,9 @@ const GLYPHS = {
    * box is the whole act: the click is what the collector knows, the rectangle is what the app
    * measures. */
   pick: SquareDashedMousePointer,
+  /** Mark a tile's condition and certificate before it is identified (#1550) — read off the piece
+   * in hand and noted on its picture, as a highlighter notes a line. */
+  mark: Highlighter,
   /** Cut one box into a left and a right — two touching stamps taken for one, side by side. */
   splitColumns: Columns2,
   /** …and into a top and a bottom. */

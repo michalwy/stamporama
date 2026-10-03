@@ -220,6 +220,8 @@ model StampCondition {
   tradeLines        TradeLine[]
   /** Sections that read this grade where their imported rows state none (#645). */
   tradeSectionDefaults TradeSection[] @relation("TradeSectionDefaultCondition")
+  /** Tiles marked with this condition before they were identified (#1550). */
+  scanTileMarks        ScanTile[]
 
   @@index([collectionId])
   @@map("stamp_condition")
@@ -370,6 +372,8 @@ model CertificateStatus {
   wantAcceptance WantCertificateStatus[]
   profileAcceptance AcceptanceProfileCertificateStatus[]
   tradeLines    TradeLine[]
+  /** Tiles marked with this certificate before they were identified (#1550). */
+  scanTileMarks ScanTile[]
 
   @@index([collectionId])
   @@map("certificate_status")
@@ -3871,6 +3875,15 @@ model ScanTile {
    * lies the other way round on its back. */
   frontTurn    Int      @default(0)
   backTurn     Int      @default(0)
+  /** The tile's condition and certificate, **marked before it is identified** (#1550) — on the strip
+   * or on the box in the cut editor, with the card still in hand, because the scan alone often
+   * cannot tell MNH from MNG. Either half may be absent. A mark only seeds the identification
+   * dialogs: the copy takes what the dialog confirms, and once the tile is identified its mark has no
+   * further effect. `markedAt` is when it last changed, which decides between a front's and a back's
+   * different marks when they are paired — the mark given last wins (`tile-marks.ts`). */
+  markConditionId         String?
+  markCertificateStatusId String?
+  markedAt                DateTime?
   /** Why a tile was discarded (#567) — junk, damaged beyond interest, unidentifiable. For a
    * stockbook bought sight-unseen this is the only record of what was actually inside. */
   note         String?
@@ -3882,6 +3895,9 @@ model ScanTile {
   /** `Restrict`: a sheet cannot be deleted out from under the tiles cut from it. */
   frontSheet ScanSheet? @relation("ScanTileFrontSheet", fields: [frontSheetId], references: [id], onDelete: Restrict)
   backSheet  ScanSheet? @relation("ScanTileBackSheet", fields: [backSheetId], references: [id], onDelete: Restrict)
+  /** `SetNull`: a dictionary entry deleted takes the mark with it and nothing else (#1550). */
+  markCondition         StampCondition?    @relation(fields: [markConditionId], references: [id], onDelete: SetNull)
+  markCertificateStatus CertificateStatus? @relation(fields: [markCertificateStatusId], references: [id], onDelete: SetNull)
   /** The tile's front/back crops, as `Photo` rows under the fourth owner. */
   photos     Photo[]
   /** The shortlist a parked tile carries (#607): what this piece could be, kept so the return
@@ -3897,6 +3913,8 @@ model ScanTile {
   @@index([purchaseId, batchNo])
   @@index([purchaseId, state])
   @@index([itemId])
+  @@index([markConditionId])
+  @@index([markCertificateStatusId])
   @@map("scan_tile")
 }
 

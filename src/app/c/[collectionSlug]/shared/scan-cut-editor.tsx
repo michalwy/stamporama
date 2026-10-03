@@ -28,8 +28,24 @@ import {
   type Viewport,
   type ViewportSize,
 } from "@/lib/scan-viewport";
-import { ScanToolButton } from "./scan-tool-button";
+import { Icon } from "@/app/icons";
+import { ScanToolButton, scanToolButtonStyle } from "./scan-tool-button";
 import { useSheetRegion } from "./use-sheet-region";
+import type { CutBox } from "@/lib/scan-sheets";
+import {
+  applyMarkPatch,
+  keyPatch,
+  mergedMark,
+  normalizeMark,
+  type MarkPatch,
+  type TileMark,
+} from "@/lib/tile-marks";
+import {
+  TileMarkChips,
+  TileMarkPicker,
+  useMarkDictionaries,
+  useMarkTypeahead,
+} from "./tile-mark-picker";
 
 /**
  * The cut review editor (#566, ADR-0033), zoomable since #579.
@@ -79,6 +95,15 @@ import { useSheetRegion } from "./use-sheet-region";
  * The transform is a view transform and nothing more: every box is whole sheet pixels at every
  * zoom. The arithmetic lives in `scan-viewport.ts`, whose one conversion back towards the sheet is
  * fractional by design and always passes through `normalizeBox`, which rounds.
+ *
+ * ## Marking a box, since #1550
+ *
+ * The boxes sit at their places on the physical card, so this is where a condition is most easily
+ * given: point at the place on the card in hand, and mark it — with the picker, or by typing the
+ * abbreviation with the box selected. **A box's mark is its tile's**: it is written onto the tile at
+ * the commit, and a re-cut reopens on the tiles' boxes with their marks. A box can be marked while
+ * the cut is still being corrected; a moved or resized box keeps its mark, a new or split one has
+ * none, and a merged one keeps a mark only when every half had the same one (`tile-marks.ts`).
  */
 
 export interface ScanCutEditorSheet {
@@ -96,15 +121,15 @@ interface Props {
   collectionId: string;
   sheet: ScanCutEditorSheet;
   /** The boxes to open on: a proposal from detection (#574), or a previous cut's boxes when
-   * re-cutting. Empty is still an ordinary case — a scan detection could not read, or a card it
-   * found nothing on, opens on an empty canvas and is drawn by hand. */
-  initialBoxes: Box[];
+   * re-cutting — with their tiles' marks (#1550). Empty is still an ordinary case — a scan detection
+   * could not read, or a card it found nothing on, opens on an empty canvas and is drawn by hand. */
+  initialBoxes: CutBox[];
   /** How many front tiles the batch already holds, shown while cutting a back so the two counts
    * can be compared *before* committing rather than only in the report afterwards. */
   frontTileCount: number | null;
   committing: boolean;
   error: string | null;
-  onCommit: (boxes: Box[]) => void;
+  onCommit: (boxes: CutBox[]) => void;
   onClose: () => void;
 }
 
@@ -130,10 +155,26 @@ type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 interface Region {
   id: string;
   box: Box;
+  /** The box's mark (#1550), which becomes its tile's. */
+  mark: TileMark | null;
+  /** When that mark was given, for one carried in from a tile on a re-cut and left unchanged; null
+   * for one given here, which the commit stamps with its own time. */
+  markedAt: string | null;
 }
 
 let nextRegionId = 0;
-const newRegion = (box: Box): Region => ({ id: `r${nextRegionId++}`, box });
+const newRegion = (box: Box, mark: TileMark | null = null, markedAt: string | null = null): Region => ({
+  id: `r${nextRegionId++}`,
+  box,
+  mark,
+  markedAt: mark ? markedAt : null,
+});
+const regionOf = (box: CutBox): Region =>
+  newRegion(
+    { x: box.x, y: box.y, w: box.w, h: box.h },
+    normalizeMark(box.mark),
+    box.markedAt ?? null
+  );
 
 export function ScanCutEditor({
   collectionId,
@@ -145,7 +186,7 @@ export function ScanCutEditor({
   onCommit,
   onClose,
 }: Props) {
-  const [regions, setRegions] = useState<Region[]>(() => initialBoxes.map(newRegion));
+  const [regions, setRegions] = useState<Region[]>(() => initialBoxes.map(regionOf));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<Mode>("select");
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -314,7 +355,11 @@ export function ScanCutEditor({
     if (selectedRegions.length < 2) return;
     const merged = mergeBoxes(selectedRegions.map((r) => r.box));
     if (!merged) return;
-    const replacement = newRegion(merged);
+    // A mark survives only when every half had the same one (#1550) — and keeps its time only when
+    // every half carried the same stored time, so a mark agreed on here counts as given now.
+    const mark = mergedMark(selectedRegions.map((r) => r.mark));
+    const times = new Set(selectedRegions.map((r) => r.markedAt));
+    const replacement = newRegion(merged, mark, times.size === 1 ? selectedRegions[0].markedAt : null);
     replaceSelection(
       [...regions.filter((r) => !selected.has(r.id)), replacement],
       [replacement.id]
@@ -328,7 +373,8 @@ export function ScanCutEditor({
       // A cut that would leave a sliver is simply refused; the guide stays up so the collector can
       // aim again, rather than producing a box they then have to notice and delete.
       if (!halves) return;
-      const created = halves.map(newRegion);
+      // A split box has no mark (#1550): which half the mark was about is the question being answered.
+      const created = halves.map((half) => newRegion(half));
       replaceSelection(
         [...regions.filter((r) => r.id !== soleSelected.id), ...created],
         created.map((r) => r.id)
@@ -381,6 +427,27 @@ export function ScanCutEditor({
       }
     },
     [picking, regions, sheet.id]
+  );
+
+  // ── Marking (#1550) ────────────────────────────────────────────────────────────────────────
+
+  /** Mark the selected boxes — a mark given here is given now, so it drops any stored time. */
+  const markSelected = useCallback(
+    (patch: MarkPatch) => {
+      if (selected.size === 0) return;
+      setRegions((rs) =>
+        rs.map((r) => {
+          if (!selected.has(r.id)) return r;
+          const mark = applyMarkPatch(r.mark, patch);
+          return { ...r, mark, markedAt: null };
+        })
+      );
+    },
+    [selected]
+  );
+  const { keys: markKeyList } = useMarkDictionaries(collectionId);
+  const markByKey = useMarkTypeahead(markKeyList, (key) =>
+    markSelected(keyPatch(key, selectedRegions.map((r) => r.mark)))
   );
 
   // ── Pointer ────────────────────────────────────────────────────────────────────────────────
@@ -535,6 +602,9 @@ export function ScanCutEditor({
         // Held, not toggled: the hand tool is a modifier on the drag that follows it.
         e.preventDefault();
         setSpaceHeld(true);
+      } else if (selected.size > 0 && markByKey(e)) {
+        // The abbreviation typed with boxes selected marks them (#1550), as on the strip.
+        e.preventDefault();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -550,7 +620,7 @@ export function ScanCutEditor({
       window.removeEventListener("keyup", onKeyUp, true);
       window.removeEventListener("blur", onBlur);
     };
-  }, [deleteSelected, fit, mode, regions, zoomStep]);
+  }, [deleteSelected, fit, markByKey, mode, regions, selected, zoomStep]);
 
   // ── Render ─────────────────────────────────────────────────────────────────────────────────
 
@@ -611,6 +681,19 @@ export function ScanCutEditor({
           }}
           onDelete={deleteSelected}
           onMerge={mergeSelected}
+          markPicker={
+            <TileMarkPicker
+              collectionId={collectionId}
+              targets={selectedRegions.map((r) => r.mark)}
+              disabled={selectedRegions.length === 0}
+              ariaLabel="Mark the selected boxes"
+              hint="Mark the condition and certificate of the selected boxes from the card in hand — or type the abbreviation"
+              triggerStyle={scanToolButtonStyle({ disabled: selectedRegions.length === 0 })}
+              onPatch={markSelected}
+            >
+              <Icon name="mark" size="sm" /> Mark…
+            </TileMarkPicker>
+          }
           onClear={() => replaceSelection([], [])}
           zoom={view.scale}
           fitted={fitted}
@@ -717,6 +800,7 @@ export function ScanCutEditor({
             {regions.map((r) => (
               <RegionRect
                 key={r.id}
+                collectionId={collectionId}
                 region={r}
                 position={order.get(r.id) ?? 0}
                 selected={selected.has(r.id)}
@@ -765,8 +849,8 @@ export function ScanCutEditor({
           ) : (
             <>
               Drag on the card to draw · click a box to select · shift-click to add · Delete removes
-              · wheel or <kbd>+</kbd>/<kbd>−</kbd> zooms, <kbd>0</kbd> fits · hold space or the
-              middle button to pan
+              · type an abbreviation to mark the selected boxes · wheel or <kbd>+</kbd>/<kbd>−</kbd>{" "}
+              zooms, <kbd>0</kbd> fits · hold space or the middle button to pan
             </>
           )}
         </span>
@@ -788,10 +872,14 @@ export function ScanCutEditor({
 }
 
 /** Boxes in reading order — the order the tiles are created in, and the order the numbers on
- * screen have been promising all along. */
-function orderedBoxes(regions: readonly Region[]): Box[] {
+ * screen have been promising all along — each with its mark (#1550). */
+function orderedBoxes(regions: readonly Region[]): CutBox[] {
   const boxes = regions.map((r) => r.box);
-  return readingOrder(boxes).map((i) => boxes[i]);
+  return readingOrder(boxes).map((i) => ({
+    ...boxes[i],
+    mark: regions[i].mark,
+    markedAt: regions[i].markedAt,
+  }));
 }
 
 // ── Pieces ───────────────────────────────────────────────────────────────────────────────────
@@ -804,6 +892,7 @@ function Toolbar({
   onMode,
   onDelete,
   onMerge,
+  markPicker,
   onClear,
   zoom,
   fitted,
@@ -820,6 +909,8 @@ function Toolbar({
   onMode: (m: Mode) => void;
   onDelete: () => void;
   onMerge: () => void;
+  /** The mark picker over the selected boxes (#1550), built by the editor that holds them. */
+  markPicker: React.ReactNode;
   onClear: () => void;
   zoom: number;
   fitted: boolean;
@@ -913,6 +1004,7 @@ function Toolbar({
         active={mode === "split-h"}
         onClick={() => onMode(mode === "split-h" ? "select" : "split-h")}
       />
+      {markPicker}
       <ScanToolButton
         icon="delete"
         label="Delete"
@@ -934,6 +1026,7 @@ function Toolbar({
 const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
 function RegionRect({
+  collectionId,
   region,
   position,
   selected,
@@ -941,6 +1034,7 @@ function RegionRect({
   interactive,
   onHandlePointerDown,
 }: {
+  collectionId: string;
   region: Region;
   position: number;
   selected: boolean;
@@ -979,6 +1073,13 @@ function RegionRect({
       >
         {position}
       </span>
+      {/* The box's mark (#1550), in the corner opposite its number — the place on the card is the
+          point of marking here, so the mark is drawn where the piece is. */}
+      {region.mark && (
+        <span style={{ position: "absolute", top: 0, right: 0, display: "inline-flex" }}>
+          <TileMarkChips collectionId={collectionId} mark={region.mark} small />
+        </span>
+      )}
       {selected &&
         interactive &&
         HANDLES.map((h) => (

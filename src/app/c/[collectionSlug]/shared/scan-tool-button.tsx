@@ -53,30 +53,44 @@ export function ScanToolButton({
         onClick={onClick}
         onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
         disabled={disabled}
-        style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.375rem",
-        padding: "0.3125rem 0.625rem",
-        borderRadius: "0.375rem",
-        fontSize: "0.8125rem",
-        border: `1px solid ${tint ?? "var(--color-border-strong)"}`,
-        // Tinted: filled with the colour when it is the one in use, and carrying a wash of it while
-        // it is not — so which channel is on reads at a glance, and the three that are not still
-        // say what they would be.
-        background: active
-          ? (tint ?? "var(--color-action-primary)")
-          : tint
-            ? `color-mix(in srgb, ${tint} 14%, var(--color-bg-elevated))`
-            : "var(--color-bg-elevated)",
-        color: active ? "#fff" : tint ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-      }}
+        style={scanToolButtonStyle({ active, disabled, tint })}
       >
         {icon && <Icon name={icon} size="sm" />}
         {label}
       </button>
     </Tooltip>
   );
+}
+
+/** {@link ScanToolButton}'s look, for a control in the same toolbar that has to be its own button —
+ * the cut editor's mark picker (#1550), whose trigger opens a menu rather than acting. */
+export function scanToolButtonStyle({
+  active,
+  disabled,
+  tint,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  tint?: string;
+}): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.375rem",
+    padding: "0.3125rem 0.625rem",
+    borderRadius: "0.375rem",
+    fontSize: "0.8125rem",
+    border: `1px solid ${tint ?? "var(--color-border-strong)"}`,
+    // Tinted: filled with the colour when it is the one in use, and carrying a wash of it while
+    // it is not — so which channel is on reads at a glance, and the three that are not still
+    // say what they would be.
+    background: active
+      ? (tint ?? "var(--color-action-primary)")
+      : tint
+        ? `color-mix(in srgb, ${tint} 14%, var(--color-bg-elevated))`
+        : "var(--color-bg-elevated)",
+    color: active ? "#fff" : tint ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.5 : 1,
+  };
 }

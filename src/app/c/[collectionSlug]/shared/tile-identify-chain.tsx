@@ -641,6 +641,10 @@ export function TileIdentifyChainDialogs({
           // A better picture of the stamp than the one it has is found here, with the piece in hand
           // (#1340) — on a correction too, which is the same dialog and the same moment.
           offerStampPhoto
+          // The tiles' marks (#1550) — given with the card in hand before identifying — seed the
+          // condition and certificate, each labelled with where it came from. Not on a correction,
+          // which opens on what the copy already is.
+          seedFromMarks={!tileCorrection}
           // The one question #586 left to identification. Only the order's **open** lots, since a
           // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
           // refusal.

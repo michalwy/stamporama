@@ -11,6 +11,7 @@ import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dia
 import {
   commitCutAction,
   deleteBatchesAction,
+  markTilesAction,
   pairTilesAction,
   proposeCutAction,
   recutBatchAction,
@@ -19,13 +20,13 @@ import {
 } from "@/app/actions/scans";
 import { formatItemNo } from "@/lib/item-number";
 import { batchDeletion, batchDeletionRefusal } from "@/lib/scan-batch-deletion";
-import type { Box } from "@/lib/scan-boxes";
 import {
   MAX_BATCH_LABEL_LENGTH,
   batchLabelFromFileName,
   normalizeBatchLabel,
 } from "@/lib/scan-batch-label";
 import type {
+  CutBox,
   CutReport,
   ScanBatchData,
   ScanSheetData,
@@ -74,6 +75,15 @@ import {
   type SheetUploadProgress,
 } from "./upload-sheet-chunks";
 import { TextInput } from "./text-input";
+import { useToast } from "@/app/toast-provider";
+import { keyPatch, type MarkPatch, type TileMark } from "@/lib/tile-marks";
+import {
+  TileMarkChips,
+  TileMarkPicker,
+  markText,
+  useMarkDictionaries,
+  useMarkTypeahead,
+} from "./tile-mark-picker";
 
 /**
  * An order's card scans (#566, ADR-0033) and the tiles cut from them (#567).
@@ -180,10 +190,11 @@ interface Props {
   scanning: ScanningSetup;
 }
 
-/** The editor's subject: a sheet, the boxes to open on, and the batch it belongs to. */
+/** The editor's subject: a sheet, the boxes to open on, and the batch it belongs to. The boxes
+ * carry their tiles' marks on a re-cut (#1550), so a box kept through it keeps its mark. */
 interface EditorTarget {
   sheet: ScanCutEditorSheet;
-  initialBoxes: Box[];
+  initialBoxes: CutBox[];
   frontTileCount: number | null;
 }
 
@@ -431,6 +442,49 @@ export function ScansCard({
     onChanged();
   };
 
+  const { toast } = useToast();
+  /**
+   * Mark tiles' condition and certificate before they are identified (#1550), or clear them — one
+   * tile from its chip area or the keyboard, the ticked ones from the bar.
+   *
+   * Only the strip is re-read: a mark moves no copy and no figure the order shows, so the order
+   * itself is not asked to refresh for one — on a card worked through key by key that would be forty
+   * re-reads of a header that did not change.
+   */
+  const markTiles = (tileIds: string[], patch: MarkPatch) => {
+    if (tileIds.length === 0) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await markTilesAction(tileIds, patch);
+      if (result.status === "error") setError(result.message);
+      else void invalidateScans(collectionId);
+    });
+  };
+  const marking = useMarkDictionaries(collectionId);
+  /** The tile the next typed abbreviation is aimed at — the one focused when the key came. */
+  const keyTarget = useRef<string | null>(null);
+  const markByKey = useMarkTypeahead(marking.keys, (key) => {
+    const id = keyTarget.current;
+    const tile = id ? allTiles.find((t) => t.id === id) : null;
+    if (tile) markTiles([tile.id], keyPatch(key, [tile.mark]));
+  });
+  /** A key on a focused tile: its abbreviation marks it (#1550), ← and → step along the strip. */
+  const onTileKey = (tile: ScanTileData, e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      const squares = [...document.querySelectorAll<HTMLElement>("[data-tile-square]")];
+      const at = squares.indexOf(e.currentTarget);
+      const next = squares[at + (e.key === "ArrowRight" ? 1 : -1)];
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+      return;
+    }
+    if (!isSelectableTile(tile)) return;
+    keyTarget.current = tile.id;
+    if (markByKey(e)) e.preventDefault();
+  };
+
   /**
    * Hand the ticked tiles to the order panel as **pieces** (#596), the same handover one tile makes
    * (#592) with a list where there was one.
@@ -545,7 +599,7 @@ export function ScansCard({
     }
   };
 
-  const commit = (boxes: Box[]) => {
+  const commit = (boxes: CutBox[]) => {
     if (!editor) return;
     setError(null);
     startTransition(async () => {
@@ -564,8 +618,21 @@ export function ScansCard({
     setError(null);
     startTransition(async () => {
       const result = await pairTilesAction(backTileId, frontTileId);
-      if (result.status === "error") setError(result.message);
-      else refresh();
+      if (result.status === "error") {
+        setError(result.message);
+        return;
+      }
+      refresh();
+      // A back paired with its front is one tile, so the two marks became one (#1550). Where they
+      // differed the mark given last won, and the pairing says which it replaced.
+      const { mark, replaced } = result.marks;
+      if (mark && replaced) {
+        const position = allTiles.find((t) => t.id === frontTileId)?.position;
+        toast({
+          tone: "info",
+          message: `Tile ${position != null ? position + 1 : ""} is marked ${markText(mark, marking.conditions, marking.certificateStatuses)}, given last — it replaced ${markText(replaced, marking.conditions, marking.certificateStatuses)}`,
+        });
+      }
     });
   };
 
@@ -839,7 +906,13 @@ export function ScansCard({
       {!open ? null : (
         <>
       {error && <Banner tone="error">{error}</Banner>}
-      {report && <CutReportBanner report={report} onDismiss={() => setReport(null)} />}
+      {report && (
+        <CutReportBanner
+          collectionId={collectionId}
+          report={report}
+          onDismiss={() => setReport(null)}
+        />
+      )}
 
       {/* A stamp the auction description never listed (#567). The counterpart of a line marked
           *not delivered*: between them they say exactly how the parcel differed from what was bid
@@ -945,8 +1018,11 @@ export function ScansCard({
           same question one list over). */}
       {tickedTiles.length > 0 && !reachesFinishedBatches(filter) && (
         <TileSelectionBar
+          collectionId={collectionId}
           count={selectedTiles.length}
           tickedCount={tickedTiles.length}
+          marks={selectedTiles.map((t) => t.mark)}
+          onMark={(patch) => markTiles(selectedTiles.map((t) => t.id), patch)}
           busy={uploading || pending || detecting}
           onOpen={() => setSelectionOpen(true)}
           onClear={() => setSelected(new Set())}
@@ -998,6 +1074,8 @@ export function ScansCard({
           onRename={(label) => rename(batch.batchNo, label)}
           onSetKind={(kind) => changeKind(batch, kind)}
           onPair={pair}
+          onMark={markTiles}
+          onTileKey={onTileKey}
         />
       ))}
 
@@ -1494,6 +1572,8 @@ function BatchSection({
   onRename,
   onSetKind,
   onPair,
+  onMark,
+  onTileKey,
 }: {
   batch: ScanBatchData;
   collectionId: string;
@@ -1536,6 +1616,10 @@ function BatchSection({
    * this only reports the press. */
   onSetKind: (kind: SheetKind) => void;
   onPair: (backTileId: string, frontTileId: string) => void;
+  /** Mark tiles' condition and certificate before they are identified (#1550). */
+  onMark: (tileIds: string[], patch: MarkPatch) => void;
+  /** A key on a focused tile — its abbreviation marks it. */
+  onTileKey: (tile: ScanTileData, e: React.KeyboardEvent<HTMLElement>) => void;
 }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const open = pinnedOpen || expanded;
@@ -1714,9 +1798,14 @@ function BatchSection({
                       // destroys every tile on it, discarded ones included, so reopening on the
                       // boxes the chip happens to be showing would silently drop the rest and
                       // leave them to be drawn by hand.
-                      initialBoxes: frontTilesHeld
-                        .map((t) => t.frontBox)
-                        .filter((b): b is Box => b != null),
+                      // …with their marks (#1550): a box kept through the re-cut keeps its tile's
+                      // mark, and the time it was given, so a later pairing can still tell which
+                      // of two marks came last.
+                      initialBoxes: frontTilesHeld.flatMap((t) =>
+                        t.frontBox
+                          ? [{ ...t.frontBox, mark: t.mark, markedAt: t.markedAt }]
+                          : []
+                      ),
                       frontTileCount: null,
                     }
                   : null
@@ -1774,6 +1863,9 @@ function BatchSection({
                 setDragging(null);
                 onPair(backTileId, tile.id);
               }}
+              onMark={(patch) => onMark([tile.id], patch)}
+              onKey={(e) => onTileKey(tile, e)}
+              busy={busy}
             />
           ))}
         </div>
@@ -1803,6 +1895,8 @@ function BatchSection({
                 collectionId={collectionId}
                 onDragStart={() => setDragging(tile.id)}
                 onDragEnd={() => setDragging(null)}
+                onMark={(patch) => onMark([tile.id], patch)}
+                busy={busy}
               />
             ))}
           </div>
@@ -2097,6 +2191,9 @@ function TileCell({
   onToggleSelected,
   onOpen,
   onDropBack,
+  onMark,
+  onKey,
+  busy,
 }: {
   tile: ScanTileData;
   collectionId: string;
@@ -2116,6 +2213,11 @@ function TileCell({
   onToggleSelected: () => void;
   onOpen: () => void;
   onDropBack: (backTileId: string) => void;
+  /** Mark this tile's condition and certificate (#1550). */
+  onMark: (patch: MarkPatch) => void;
+  /** A key pressed with the square focused — its abbreviation marks it. */
+  onKey: (e: React.KeyboardEvent<HTMLElement>) => void;
+  busy: boolean;
 }) {
   const [over, setOver] = useState(false);
   /** Reached an end: became a copy, or deliberately became nothing. A **parked** tile is not one of
@@ -2290,7 +2392,9 @@ function TileCell({
       >
         <button
           type="button"
+          data-tile-square
           onClick={onOpen}
+          onKeyDown={onKey}
           onDragOver={(e) => {
             if (!droppable) return;
             e.preventDefault();
@@ -2313,6 +2417,20 @@ function TileCell({
           it would be an offer the write refuses — and the strip's right end is free precisely
           because its left end is where a settled tile says which end it reached (#582). Both marks
           sit in the chrome band above the picture (#628), never over the stamp itself. */}
+      {/* **The tile's mark** (#1550) — its condition and certificate, given before it is identified
+          — in the chrome band between the state badge and the tick, so a card can be checked at a
+          glance before identifying and the stamp itself is never covered (#628). The chip area is
+          the picker's trigger. Only on a tile still to be identified: once it has reached an end,
+          the mark has nothing left to seed and the copy says what it is. */}
+      {selectable && (
+        <TileMarkSlot
+          collectionId={collectionId}
+          mark={tile.mark}
+          disabled={busy}
+          onMark={onMark}
+          style={{ position: "absolute", top: "0.15rem", left: "1.25rem", right: "1.4rem" }}
+        />
+      )}
       {selectable && (
         <TickBox
           state={selected ? "on" : "off"}
@@ -2462,17 +2580,25 @@ function ordinalSuffix(n: number): string {
 }
 
 function TileSelectionBar({
+  collectionId,
   count,
   tickedCount,
+  marks,
+  onMark,
   busy,
   onOpen,
   onClear,
   stickyTop,
 }: {
+  collectionId: string;
   /** Ticked **and on screen** — what the button acts on. */
   count: number;
   /** Ticked in the whole card, chip or no chip. Equal to `count` while nothing is hidden. */
   tickedCount: number;
+  /** The marks of the tiles in view (#1550), so the picker can say what they already are. */
+  marks: (TileMark | null)[];
+  /** Mark the ticked tiles in view — the same rule as the button beside it: never a hidden one. */
+  onMark: (patch: MarkPatch) => void;
   busy: boolean;
   onOpen: () => void;
   onClear: () => void;
@@ -2542,6 +2668,21 @@ function TileSelectionBar({
           Clear
         </SmallButton>
       </Tooltip>
+      {/* Marking the ticked tiles at once (#1550) — a run read off the card as all MNG is one pick
+          rather than one per square. Over the tiles in view only, as the pass beside it is. */}
+      {count > 0 && (
+        <TileMarkPicker
+          collectionId={collectionId}
+          targets={marks}
+          disabled={busy}
+          ariaLabel="Mark the condition of the ticked tiles"
+          hint={`Mark the condition and certificate of the ${count} ticked ${count === 1 ? "tile" : "tiles"} in view, before identifying them`}
+          triggerStyle={smallButtonStyle({ disabled: busy })}
+          onPatch={onMark}
+        >
+          <Icon name="mark" size="sm" /> Mark condition…
+        </TileMarkPicker>
+      )}
       {/* Absent rather than disabled at nothing-in-view: there is no pass to offer over squares
           the chip is hiding, and a dead button beside a live *Clear* reads as a fault. */}
       {count > 0 && (
@@ -2680,11 +2821,17 @@ function BackOnlyTile({
   collectionId,
   onDragStart,
   onDragEnd,
+  onMark,
+  busy,
 }: {
   tile: ScanTileData;
   collectionId: string;
   onDragStart: () => void;
   onDragEnd: () => void;
+  /** An unpaired back can be marked too (#1550): the back is often where the condition shows, and
+   * the mark becomes its tile's once it is paired. */
+  onMark: (patch: MarkPatch) => void;
+  busy: boolean;
 }) {
   return (
     <div
@@ -2706,12 +2853,82 @@ function BackOnlyTile({
         padding: "0.25rem",
       }}
     >
+      {isSelectableTile(tile) && (
+        <TileMarkSlot
+          collectionId={collectionId}
+          mark={tile.mark}
+          disabled={busy}
+          onMark={onMark}
+          style={{ marginBottom: "0.2rem" }}
+        />
+      )}
       <TileImage
         photoId={tile.backPhotoId}
         collectionId={collectionId}
         alt="Unpaired back"
       />
     </div>
+  );
+}
+
+/**
+ * A tile's mark on the strip, and the picker behind it (#1550). Marked, it is the dictionary's own
+ * chips; unmarked, a faint glyph that says the chip area is there to be pressed — on a strip of forty
+ * squares anything louder would be forty things to read past.
+ */
+function TileMarkSlot({
+  collectionId,
+  mark,
+  disabled,
+  onMark,
+  style,
+}: {
+  collectionId: string;
+  mark: TileMark | null;
+  disabled: boolean;
+  onMark: (patch: MarkPatch) => void;
+  style?: React.CSSProperties;
+}) {
+  return (
+    // The band around the chip stays the tile's own: only the chip area is a control, so a press
+    // beside it still opens the tile as it always did.
+    <span
+      style={{ display: "flex", justifyContent: "center", minWidth: 0, pointerEvents: "none", ...style }}
+    >
+      <TileMarkPicker
+        collectionId={collectionId}
+        targets={[mark]}
+        disabled={disabled}
+        ariaLabel={mark ? "Change this tile's marked condition" : "Mark this tile's condition"}
+        hint={
+          mark
+            ? "Marked before identifying — click to change it, or type another abbreviation with the tile focused"
+            : "Mark the condition and certificate from the card in hand — or type the abbreviation with the tile focused"
+        }
+        triggerStyle={{
+          display: "inline-flex",
+          alignItems: "center",
+          maxWidth: "100%",
+          height: "1.05rem",
+          padding: mark ? 0 : "0 0.2rem",
+          border: "none",
+          borderRadius: "0.25rem",
+          background: "transparent",
+          color: "var(--color-text-muted)",
+          opacity: mark ? 1 : 0.55,
+          cursor: disabled ? "default" : "pointer",
+          overflow: "hidden",
+          pointerEvents: "auto",
+        }}
+        onPatch={onMark}
+      >
+        {mark ? (
+          <TileMarkChips collectionId={collectionId} mark={mark} small />
+        ) : (
+          <Icon name="mark" size="xs" />
+        )}
+      </TileMarkPicker>
+    </span>
   );
 }
 
@@ -2776,12 +2993,15 @@ function TileImage({
 // ── Small pieces ─────────────────────────────────────────────────────────────────────────────
 
 function CutReportBanner({
+  collectionId,
   report,
   onDismiss,
 }: {
+  collectionId: string;
   report: CutReport;
   onDismiss: () => void;
 }) {
+  const { conditions, certificateStatuses } = useMarkDictionaries(collectionId);
   // A count mismatch is a signal, not a failure: it means a stamp fell out, two were drawn as one,
   // backs were scanned for only some of the stamps, or the wrong file was uploaded. Which fronts
   // found no back is named, because that is what turns the number into something to look at.
@@ -2830,6 +3050,15 @@ function CutReportBanner({
               )}
             </>
           )}
+          {/* A front and its back marked differently (#1550): they are one tile, so the mark given
+              last won — said here rather than settled silently. */}
+          {report.marksReplaced.map((r) => (
+            <span key={r.position} style={{ display: "block", marginTop: "0.25rem" }}>
+              Tile {r.position + 1} is marked{" "}
+              <strong>{markText(r.mark, conditions, certificateStatuses)}</strong>, the mark given
+              last — it replaced {markText(r.replaced, conditions, certificateStatuses)}.
+            </span>
+          ))}
         </span>
         <button
           type="button"
@@ -2940,25 +3169,40 @@ function SmallButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.375rem",
-        padding: large ? "0.375rem 0.75rem" : "0.25rem 0.5rem",
-        borderRadius: "0.375rem",
-        fontSize: "0.8125rem",
-        // Transparent rather than no border, so a primary sits at the same height as its neighbours.
-        border: primary ? "1px solid transparent" : "1px solid var(--color-border-strong)",
-        background: primary ? "var(--color-action-primary)" : "var(--color-bg-elevated)",
-        color: primary ? "#fff" : danger ? "var(--color-error)" : "var(--color-text-secondary)",
-        fontWeight: primary ? 600 : undefined,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-      }}
+      style={smallButtonStyle({ disabled, danger, primary, large })}
     >
       {children}
     </button>
   );
+}
+
+/** {@link SmallButton}'s look, for a trigger that has to be its own button — the mark picker's. */
+function smallButtonStyle({
+  disabled,
+  danger,
+  primary,
+  large,
+}: {
+  disabled?: boolean;
+  danger?: boolean;
+  primary?: boolean;
+  large?: boolean;
+}): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.375rem",
+    padding: large ? "0.375rem 0.75rem" : "0.25rem 0.5rem",
+    borderRadius: "0.375rem",
+    fontSize: "0.8125rem",
+    // Transparent rather than no border, so a primary sits at the same height as its neighbours.
+    border: primary ? "1px solid transparent" : "1px solid var(--color-border-strong)",
+    background: primary ? "var(--color-action-primary)" : "var(--color-bg-elevated)",
+    color: primary ? "#fff" : danger ? "var(--color-error)" : "var(--color-text-secondary)",
+    fontWeight: primary ? 600 : undefined,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.5 : 1,
+  };
 }
 
 function Banner({
