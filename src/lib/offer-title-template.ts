@@ -27,6 +27,11 @@
 // might actually be. Both arrive as resolved strings on the copy, so the engine still knows nothing
 // about the rollup that derived them.
 //
+// A listing text names a copy's **faults** (#1559) — `{faults}`, and `{#faultyCopy}…{/faultyCopy}`,
+// which repeats once per copy that has any and skips the rest, so an offer of several copies says
+// which piece is thinned and leaves the sound ones alone. Like the variant caveat they are listing-only:
+// a title is left as it was.
+//
 // Those texts also carry the one token that is **not** about the copies at all: `{offerUrl}` (#415),
 // the offer's own screen on this instance, which reaches the engine through a
 // `ListingTemplateContext` rather than through `TitleTemplateCopy`. Everything here stays pure — the
@@ -155,6 +160,12 @@ export interface TitleTemplateCopy {
    * catalogue at all, a tree that cannot be resolved — which renders the token empty and takes its
    * glue separator with it. */
   listedAs: string | null;
+  /** The copy's faults (#1557) — `Thin`, `Crease` — in the dictionary's own order, each named in the
+   * language the copy was resolved in (#1559). A fact about **this piece**, not about its stamp, so two
+   * copies of one stamp may differ; that is why `{#faultyCopy}` exists. Absent or empty on a copy with
+   * none, which is most of them, and on anything that is not an owned copy — an album box, a sample
+   * normalised in the browser. */
+  faults?: readonly string[];
   /** Which of the translatable fields above rendered **untranslated** text for the language the copy
    * was resolved in (#298), and which entity row each one came from (#299). Absent / empty when
    * nothing fell back, which is also the case for a copy resolved without a language. */
@@ -201,6 +212,9 @@ const FALLBACK_FIELD_BY_TOKEN: Readonly<Record<string, string>> = {
   watermark: "watermark",
   paper: "paper",
   printing: "printing",
+  // A copy's faults (#1559). Several entities behind one token: each untranslated fault reports its
+  // own row under this one field.
+  faults: "faults",
 };
 
 /** A token usable in a template, with the label + example the config UI shows as a legend. */
@@ -309,6 +323,9 @@ export function templateUsesListedAs(template: string | null | undefined): boole
 export const AVAILABLE_LISTING_TOKENS: readonly TitleToken[] = [
   ...AVAILABLE_TITLE_TOKENS,
   { token: "{offerUrl}", label: "Offer link", example: EXAMPLE_OFFER_URL },
+  // A listing token rather than one of `{#faultyCopy}`'s own (#1559): inside `{#copy}` it names that
+  // copy's faults just as well, and a line whose `{faults}` came out empty is dropped like any other.
+  { token: "{faults}", label: "Faults", example: "Thin, Crease" },
 ];
 
 /** What the album's three container tokens stand for in a **preview** (#766). A template is written
@@ -429,6 +446,11 @@ const LISTING_BLOCK_VOCABULARY = {
   copy: {
     label: "Repeats once per copy — of the enclosing set, or of the whole offer",
     example: "{#copy}{catalog} {name} — {conditionAbbr}{/copy}",
+    tokens: [],
+  },
+  faultyCopy: {
+    label: "Repeats once per copy that has faults — copies without any are skipped",
+    example: "{#faultyCopy}Faults of {catalog}: {faults}{/faultyCopy}",
     tokens: [],
   },
   conditionLegend: {
@@ -953,6 +975,12 @@ function resolveTokenValue(
       return listingText ? distinct(copies.map((c) => c.listedAs)).join(" / ") : "";
     case "variants":
       return listingText ? distinct(copies.map((c) => c.variants)).join(" / ") : "";
+    // A copy's faults (#1559), listing-only for the variant tokens' reason: the title is left as it
+    // was. Joined by a comma rather than `/` because they are a list of what is wrong with a piece,
+    // not alternatives; across several copies the distinct faults of all of them, which is why a
+    // description that must say *which* piece wraps it in `{#faultyCopy}`.
+    case "faults":
+      return listingText ? distinct(copies.flatMap((c) => c.faults ?? [])).join(", ") : "";
     case "name":
       return distinct(copies.map((c) => c.name)).join(" / ");
     case "catalog":
@@ -1173,7 +1201,8 @@ interface TemplateScope {
 /** What a block iterates: the offer's sets, the copies in scope, or — for a legend of
  * abbreviations (#318) — the distinct conditions / certificate statuses those copies use. The legend
  * blocks are named `…Legend` rather than after the dictionary itself so `{#conditionLegend}` cannot
- * be misread as the `{condition}` token it is normally wrapped around.
+ * be misread as the `{condition}` token it is normally wrapped around — and `faultyCopy` (#1559),
+ * which is `copy` narrowed to the copies that have a fault, is not `{#faults}` for the same reason.
  *
  * `unknownVariant` (#619) is the one that iterates nothing: it renders **once or not at all**, which
  * is what makes it the engine's only conditional. It is named after the state the rest of the app
@@ -1335,9 +1364,22 @@ function unknownVariantScopes(scope: TemplateScope): TemplateScope[] {
   ];
 }
 
+/** One scope per copy of `copies`, each narrowed to that copy alone — what `{#copy}` iterates, and
+ * `{#faultyCopy}` (#1559) over the copies that have a fault. */
+function copyScopes(scope: TemplateScope, copies: readonly TitleTemplateCopy[]): TemplateScope[] {
+  return copies.map((c) => ({
+    sets: [{ title: scope.setTitle, copies: [c] }],
+    copies: [c],
+    setTitle: scope.setTitle,
+    context: scope.context,
+    listingText: scope.listingText,
+  }));
+}
+
 /** Render parsed nodes against `scope`. A `{#set}` block re-renders its body once per set in scope,
  * with tokens narrowed to that set's copies; a `{#copy}` block once per copy in scope — nested in a
- * set block that means that set's copies, at the top level every copy of the offer. The legend blocks
+ * set block that means that set's copies, at the top level every copy of the offer — and
+ * `{#faultyCopy}` (#1559) the same over only the copies that have a fault. The legend blocks
  * `{#conditionLegend}` / `{#certificateLegend}` (#318) / `{#formatLegend}` (#345) repeat once per
  * distinct dictionary entry the copies use, narrowed to the copies using it; `{#unknownVariant}`
  * (#619) renders once, narrowed to the copies whose variant was never identified, or not at all. */
@@ -1361,13 +1403,9 @@ function renderNodes(nodes: readonly TemplateNode[], scope: TemplateScope): stri
           ? unknownVariantScopes(scope)
           : node.over in LEGEND_FIELDS
           ? legendScopes(scope, node.over as LegendOver)
-          : scope.copies.map((c) => ({
-              sets: [{ title: scope.setTitle, copies: [c] }],
-              copies: [c],
-              setTitle: scope.setTitle,
-              context: scope.context,
-              listingText: scope.listingText,
-            }));
+          : node.over === "faultyCopy"
+            ? copyScopes(scope, scope.copies.filter((c) => (c.faults?.length ?? 0) > 0))
+            : copyScopes(scope, scope.copies);
     for (const iteration of iterations) {
       const body = renderNodes(node.body, iteration);
       if (!isBlankRender(body)) out += body;
@@ -1535,14 +1573,23 @@ export function renderListingTemplateSegments(
 export function templateFallbackTokens(
   template: string | null | undefined,
   sets: readonly TemplateSet[],
-  fallbackTemplate: string | null = null
+  fallbackTemplate: string | null = null,
+  /** A multi-line listing text, whose listing-only tokens resolve — `{faults}` (#1559) is one that
+   *  can fall back. */
+  listingText = false
 ): string[] {
   const tpl = template?.trim() || fallbackTemplate?.trim() || "";
   if (!tpl) return [];
-  const scope = rootScope(sets);
+  const scope = rootScope(sets, NO_CONTEXT, listingText);
   const out: string[] = [];
   for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
-    const { value, spec, fellBack } = resolvePlaceholder(m[1], scope.copies, scope.setTitle);
+    const { value, spec, fellBack } = resolvePlaceholder(
+      m[1],
+      scope.copies,
+      scope.setTitle,
+      scope.context,
+      scope.listingText
+    );
     if (!value || !spec || !fellBack) continue;
     const token = `{${spec.split(":")[0].trim()}}`;
     const canonical = AVAILABLE_LISTING_TOKENS.find((t) => t.token.toLowerCase() === token.toLowerCase());
@@ -1565,7 +1612,7 @@ export function listingFallbackTokens(
   template: string | null | undefined,
   sets: readonly TemplateSet[]
 ): string[] {
-  return templateFallbackTokens(template, sets);
+  return templateFallbackTokens(template, sets, null, true);
 }
 
 /**
@@ -1593,15 +1640,23 @@ export function templateFallbacks(
   fallbackTemplate: string | null = null,
   /** The container facts in scope — an album heading's checklist, whose name can fall back too
    *  (#1308). */
-  context: ListingTemplateContext = NO_CONTEXT
+  context: ListingTemplateContext = NO_CONTEXT,
+  /** As {@link templateFallbackTokens}: a listing text, where `{faults}` (#1559) resolves. */
+  listingText = false
 ): TitleFallback[] {
   const tpl = template?.trim() || fallbackTemplate?.trim() || "";
   if (!tpl) return [];
-  const scope = rootScope(sets);
+  const scope = rootScope(sets, context, listingText);
   const out: TitleFallback[] = [];
   const seen = new Set<string>();
   for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
-    const { fallbacks } = resolvePlaceholder(m[1], scope.copies, scope.setTitle, context);
+    const { fallbacks } = resolvePlaceholder(
+      m[1],
+      scope.copies,
+      scope.setTitle,
+      context,
+      scope.listingText
+    );
     for (const f of fallbacks) {
       const key = titleFallbackKey(f);
       if (seen.has(key)) continue;
@@ -1625,7 +1680,7 @@ export function listingFallbacks(
   template: string | null | undefined,
   sets: readonly TemplateSet[]
 ): TitleFallback[] {
-  return templateFallbacks(template, sets);
+  return templateFallbacks(template, sets, null, NO_CONTEXT, true);
 }
 
 // ── Preview scope (#1350) ────────────────────────────────────────────────────

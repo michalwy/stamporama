@@ -68,7 +68,10 @@ const TEMPLATE_FIELDS: readonly {
     // A description is written in paragraphs, often with a repeating block — give it real room.
     rows: 12,
     tokens: AVAILABLE_LISTING_TOKENS,
-    placeholder: "{catalog} {name}\n{condition}\n\n{#set}- {setTitle|catalog} {name}\n{/set}",
+    // The faults line shows where a copy's faults go (#1559) — there is no default description to
+    // carry it, so the example in the empty field is where a collector meets it.
+    placeholder:
+      "{catalog} {name}\n{condition}\n\n{#set}- {setTitle|catalog} {name}\n{/set}\n{#faultyCopy}Faults of {catalog}: {faults}\n{/faultyCopy}",
     description:
       "The listing's long description. Line breaks are kept, and a line whose tokens all come out empty is dropped. Blank generates none.",
     emptyPreview: "Empty — offers on this platform get no generated description.",

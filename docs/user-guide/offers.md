@@ -374,6 +374,19 @@ Each field carries its own three controls:
   there is no template either way — so a lot worded with its own template regenerates even on a
   platform that configures none.
 
+### Faults in the description
+
+A copy's [faults](faults.md) reach the description through the platform's template: `{faults}` names
+them and `{#faultyCopy}…{/faultyCopy}` lists them copy by copy, skipping the sound ones (see
+[Telling a buyer about faults](contacts.md#telling-a-buyer-about-faults)). They are written in the
+platform's language, each from the fault's own translation, and a fault with no translation into it
+is written in your own language and listed as a missing translation, which you can fill in place.
+The title never names them.
+
+Faults are read when the text is generated — when the offer is created and whenever its composition
+changes. Change a copy's faults afterwards and press **↻ Regenerate** on the description to bring it
+up to date.
+
 ### How long the text may be
 
 Some platforms cap these texts hard — Colnect, for instance, takes 100 characters for the description

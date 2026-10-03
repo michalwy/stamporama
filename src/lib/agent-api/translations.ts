@@ -61,6 +61,7 @@ export const TRANSLATION_KINDS = [
   "watermark",
   "paper",
   "printing",
+  "fault",
 ] as const;
 
 export type TranslationKind = (typeof TRANSLATION_KINDS)[number];
@@ -78,6 +79,7 @@ const ENTITY_BY_KIND: Readonly<Record<TranslationKind, TranslatableEntity>> = {
   watermark: "watermark",
   paper: "paper",
   printing: "printing",
+  fault: "fault",
 };
 
 const KIND_BY_ENTITY = Object.fromEntries(

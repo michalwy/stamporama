@@ -42,6 +42,8 @@ const GAP_LABELS: Readonly<Record<string, string>> = {
   "watermark:name": "Watermark",
   "paper:name": "Paper",
   "printing:name": "Printing method",
+  // A copy's fault, printed by an offer's description (#1559).
+  "fault:name": "Fault",
 };
 
 /** A stable identity for one gap — the entity row + field it would be written on. The rule lives in

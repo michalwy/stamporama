@@ -441,6 +441,7 @@ describe("listing token legend", () => {
       [
         "{#set}{/set}",
         "{#copy}{/copy}",
+        "{#faultyCopy}{/faultyCopy}",
         "{#conditionLegend}{/conditionLegend}",
         "{#certificateLegend}{/certificateLegend}",
         "{#formatLegend}{/formatLegend}",
@@ -481,6 +482,7 @@ describe("block reference matches the engine (#1268)", () => {
           unknownVariant: true,
           listedAs: "Mi 12a",
           variants: "Mi 12a-c",
+          faults: ["Thin"],
         }),
       ],
     },
@@ -512,6 +514,88 @@ describe("block reference matches the engine (#1268)", () => {
 
   it("keeps a block-shaped tag the reference does not list literal", () => {
     assert.equal(renderListingTemplate("{#stamp}{name}{/stamp}", pieces), "{#stamp}Mercury{/stamp}");
+  });
+});
+
+// A copy's faults in a listing text (#1559): `{faults}` names them, and `{#faultyCopy}` repeats once
+// per copy that has any, so an offer of several pieces says which one is thinned.
+describe("{faults} and {#faultyCopy} (#1559)", () => {
+  const thinned = copy({ name: "Mercury", catalogNumbers: [cn("Mi", "12")], faults: ["Thin", "Crease"] });
+  const sound = copy({ name: "Venus", catalogNumbers: [cn("Mi", "13")] });
+  const stained = copy({ name: "Mars", catalogNumbers: [cn("Mi", "14")], faults: ["Stain"] });
+
+  it("names a copy's faults, comma-joined, in the order given", () => {
+    assert.equal(
+      renderListingTemplate("Faults: {faults}", [{ title: null, copies: [thinned] }]),
+      "Faults: Thin, Crease"
+    );
+  });
+
+  it("says nothing about faults for a copy without any — the line goes", () => {
+    assert.equal(
+      renderListingTemplate("{name}\nFaults: {faults}", [{ title: null, copies: [sound] }]),
+      "Venus"
+    );
+  });
+
+  it("repeats {#faultyCopy} once per copy with faults, naming each piece's own", () => {
+    assert.equal(
+      renderListingTemplate("{#faultyCopy}{catalog:Mi:}: {faults}\n{/faultyCopy}", [
+        { title: null, copies: [thinned, sound, stained] },
+      ]),
+      "12: Thin, Crease\n14: Stain"
+    );
+  });
+
+  it("keeps to the enclosing set inside {#set}", () => {
+    const sets: TemplateSet[] = [
+      { title: "Lot A", copies: [thinned, sound] },
+      { title: "Lot B", copies: [sound] },
+    ];
+    assert.equal(
+      renderListingTemplate("{#set}{setTitle}\n{#faultyCopy}- {name}: {faults}\n{/faultyCopy}{/set}", sets),
+      "Lot A\n- Mercury: Thin, Crease\nLot B"
+    );
+  });
+
+  it("renders nothing for an offer whose copies are all sound", () => {
+    assert.equal(
+      renderListingTemplate("{name}\n{#faultyCopy}Faults: {faults}{/faultyCopy}", [
+        { title: null, copies: [sound] },
+      ]),
+      "Venus"
+    );
+  });
+
+  it("lists the distinct faults of every copy outside a block", () => {
+    assert.equal(
+      renderListingTemplate("{faults}", [{ title: null, copies: [thinned, stained, thinned] }]),
+      "Thin, Crease, Stain"
+    );
+  });
+
+  it("leaves a title alone", () => {
+    assert.equal(renderTitleTemplate("{name} {faults}", [thinned]), "Mercury");
+  });
+
+  it("reports each untranslated fault, and marks the run that printed it", () => {
+    const crease: TitleFallback = {
+      field: "faults",
+      entityType: "fault",
+      entityId: "fault-2",
+      entityField: "name",
+      defaultValue: "Crease",
+    };
+    const fallen = copy({ name: "Mercury", faults: ["Ścienienie", "Crease"], fallbacks: [crease] });
+    const sets: TemplateSet[] = [{ title: null, copies: [fallen] }];
+    const template = "{#faultyCopy}{name}: {faults}{/faultyCopy}";
+    assert.deepEqual(listingFallbacks(template, sets), [crease]);
+    assert.deepEqual(listingFallbackTokens(template, sets), ["{faults}"]);
+    assert.ok(
+      renderListingTemplateSegments(template, sets).some(
+        (s) => s.fellBack && s.field === "faults" && s.text === "Ścienienie, Crease"
+      )
+    );
   });
 });
 
