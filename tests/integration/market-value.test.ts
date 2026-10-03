@@ -559,6 +559,37 @@ describe("market valuation (#456)", () => {
       await prisma.item.deleteMany({ where: { id: { in: copies.map((c) => c.id) } } });
     }
   });
+
+  // #1560: a median is what copies *like* this one fetch; a faulty copy is lowered by its own
+  // percentage before it is added, and the total says so.
+  it("lowers a faulty copy's median by its own fault reduction in the total", async () => {
+    const saleId = await sale();
+    await lot({ saleId, finalPrice: "60.00", endsAt: daysAgo(20), lines: [{ stampId: plainStampId }] });
+
+    const copies = await Promise.all([
+      createItem(userId, collectionId, {
+        stampId: plainStampId,
+        conditionId,
+        deliveryState: "delivered",
+        faultReductionPercent: 25,
+      }),
+      createItem(userId, collectionId, { stampId: plainStampId, conditionId, deliveryState: "delivered" }),
+    ]);
+
+    try {
+      const total = await getHoldingsValuation(userId, collectionId, {});
+      assert.equal(total.market.totalBaseAmount, "105.00");
+      assert.equal(total.market.valuedCount, 2);
+      assert.equal(total.market.faultReducedCount, 1);
+      assert.equal(total.market.faultReductionBaseAmount, "15.00");
+      // The stamp's own read is untouched: the reduction is the copy's, not the stamp's.
+      const [value] = await getStampMarketValue(userId, collectionId, plainStampId);
+      assert.equal(value.median, "60.00");
+    } finally {
+      await prisma.item.deleteMany({ where: { id: { in: copies.map((c) => c.id) } } });
+    }
+  });
+
   // ── The Valuation dialog's two reads (#457) ───────────────────────────────
 
   it("answers for a stamp whose collection the caller did not name", async () => {

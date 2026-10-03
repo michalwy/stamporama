@@ -7,7 +7,8 @@ import { LISTABLE_DELIVERY_STATES } from "./delivery-state";
 import { loadVariantChains } from "./checklist-variant-rollup";
 import { getCollectionBaseCurrency } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
-import { CARRIER_VALUATION_SELECT, carrierValuationOf } from "./item-valuation";
+import { COPY_VALUATION_SELECT, copyValuationOf } from "./item-valuation";
+import type { CopyValuation } from "./valuation";
 import {
   buildItemFilterWhere,
   valuateItemRows,
@@ -75,7 +76,7 @@ const POOL_ROW_SELECT = {
   conditionId: true,
   certificateStatusId: true,
   formatId: true,
-  ...CARRIER_VALUATION_SELECT,
+  ...COPY_VALUATION_SELECT,
   stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
 } as const;
 
@@ -162,6 +163,13 @@ interface LotPool {
  * belong to with their memberships, and one valuation over the whole set (#378 values a whole offer
  * once; a pool is the same argument at a larger size).
  */
+/** What a copy's faults took off its base figure (#1560), or 0 when nothing was or it had no rate. */
+function faultReductionOf(valuation: CopyValuation | undefined): number {
+  const reduction = valuation?.faultReduction;
+  if (!reduction || reduction.fullBaseAmount === null || valuation?.baseAmount == null) return 0;
+  return reduction.fullBaseAmount - valuation.baseAmount;
+}
+
 async function readLotPool(
   collectionId: string,
   criteria: LotBuilderCriteria
@@ -181,7 +189,7 @@ async function readLotPool(
     certificateStatusId: row.certificateStatusId,
     formatId: row.formatId,
     unknownVariant: isUnknownVariantStamp(row.stamp),
-    carrier: carrierValuationOf(row),
+    ...copyValuationOf(row),
   }));
   const valuations = await valuateItemRows(collectionId, valuationRows);
 
@@ -194,6 +202,7 @@ async function readLotPool(
     // Null **is not zero** (#378): an unpriced copy passes the ceiling, counts as a piece, and is
     // named rather than valued at nothing.
     catalogValue: valuations.get(row.id)?.baseAmount ?? null,
+    faultReduction: faultReductionOf(valuations.get(row.id)),
   }));
 
   return { candidates, checklists: await loadPoolChecklists(collectionId, candidates) };
@@ -265,6 +274,9 @@ export interface LotPoolSummary {
   /** The pool's catalog-value sum in the collection's base currency, unpriced copies contributing
    *  nothing. */
   catalogValue: number;
+  /** Pool copies counted lowered for their faults (#1560), and what that took off {@link catalogValue}. */
+  faultReducedCopies: number;
+  faultReduction: number;
   baseCurrency: string;
   /** Copies carrying **no** catalog value — named as a count rather than folded into the sum as
    *  zero (#378), so the gap is visible before the offer exists. */
@@ -282,14 +294,22 @@ function summarize(pool: LotPool, criteria: LotBuilderCriteria, baseCurrency: st
   const piles = new Set(candidates.map(duplicateKey));
   let catalogValue = 0;
   let unpricedCopies = 0;
+  let faultReducedCopies = 0;
+  let faultReduction = 0;
   for (const candidate of candidates) {
     if (candidate.catalogValue === null) unpricedCopies += 1;
     else catalogValue += candidate.catalogValue;
+    if (candidate.faultReduction) {
+      faultReducedCopies += 1;
+      faultReduction += candidate.faultReduction;
+    }
   }
   return {
     copies: candidates.length,
     stamps: piles.size,
     catalogValue,
+    faultReducedCopies,
+    faultReduction,
     baseCurrency,
     unpricedCopies,
     completeChecklists: checklistCoverage(candidates, checklists).filter((c) => c.complete).length,

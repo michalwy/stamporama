@@ -25,7 +25,7 @@
 //  - **A copy's own figure is shown only where it differs from its lot's.** The pool is split by the
 //    very catalogue value this compares against, so every copy of a lot shares its lot's figure by
 //    construction; one only drifts from it when its catalogue value has changed since the lot was
-//    closed.
+//    closed — a price edited, or a fault reduction (#1560) set or changed on the copy.
 //
 // No catalogue value at all is **no figure**, never `0%` or `∞` (#1184).
 

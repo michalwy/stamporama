@@ -3727,6 +3727,10 @@ export interface OfferSetsTotals {
   catalogAverage: string | null;
   /** Sets carrying a catalogue value — the catalogue average's divisor. */
   catalogValuedSets: number;
+  /** Copies whose catalogue value was lowered for their faults (#1560), and what that took off
+   *  {@link catalogTotal} in base currency, 2-dp. */
+  catalogFaultReducedCount: number;
+  catalogFaultReduction: string;
   costTotal: string | null;
   costAverage: string | null;
   /** Sets carrying a cost basis — the cost average's divisor. */
@@ -3826,6 +3830,11 @@ export interface OfferDetail {
   suggestedPrice: string | null;
   /** Sets with no computable catalog value (excluded from the average). */
   suggestedUnpricedSets: number;
+  /** Copies whose value the suggestion was lowered for, for their faults (#1560), and the suggestion
+   *  without those reductions in the offer's currency — the figure its hint names. Zero and null when
+   *  nothing was lowered. */
+  suggestedFaultReducedCount: number;
+  suggestedFullPrice: string | null;
   /** The platform's configured opening figure for an auction (#362, narrowed in #449/#553), in the
    * platform's own currency; null where none is set or the platform lists quick buys. It seeded this
    * offer's starting price at creation and is **not** re-applied anywhere — the offer's screen
@@ -4245,18 +4254,27 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // which is exactly what `pricedCount` says.
   let sumSetCV = 0;
   let valuedSets = 0;
+  // What the copies' fault reductions took off (#1560), so the suggestion can name its full figure.
+  let sumSetReduction = 0;
+  let faultReducedCount = 0;
   for (const s of sets) {
     if (s.holdings.pricedCount === 0) continue;
     sumSetCV += Number(s.holdings.totalBaseAmount);
+    sumSetReduction += Number(s.holdings.faultReductionBaseAmount);
+    faultReducedCount += s.holdings.faultReducedCount;
     valuedSets++;
   }
   let suggestedPrice: string | null = null;
+  let suggestedFullPrice: string | null = null;
   if (valuedSets > 0) {
     const avgBase = sumSetCV / valuedSets;
     // Same rate the per-set figures used — an offer already in base converts 1:1, and a missing rate
     // leaves no suggestion rather than one in the wrong currency.
     const rate = offer.currency === baseCurrency ? 1 : baseToOffer;
     suggestedPrice = rate === null ? null : (avgBase * rate).toFixed(2);
+    if (rate !== null && faultReducedCount > 0) {
+      suggestedFullPrice = (((sumSetCV + sumSetReduction) / valuedSets) * rate).toFixed(2);
+    }
   }
 
   // The same two figures over the whole listing (#378): summed, and averaged over the sets that
@@ -4281,6 +4299,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     catalogTotal: money(catalogTotalNum),
     catalogAverage: money(catalogAverageNum),
     catalogValuedSets: valuedSets,
+    catalogFaultReducedCount: faultReducedCount,
+    catalogFaultReduction: sumSetReduction.toFixed(2),
     costTotal: money(costTotalNum),
     costAverage: money(costAverageNum),
     costKnownSets: costedSets,
@@ -4380,6 +4400,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     platformSale,
     suggestedPrice,
     suggestedUnpricedSets: offer.sets.length - valuedSets,
+    suggestedFaultReducedCount: faultReducedCount,
+    suggestedFullPrice,
     platformDefaultStartingPrice: offer.platform.defaultStartingPrice?.toFixed(2) ?? null,
     platformMinimumPrice: offer.platform.minimumPrice?.toFixed(2) ?? null,
     sets,

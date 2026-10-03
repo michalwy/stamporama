@@ -14,6 +14,7 @@ import {
 } from "./items";
 import { applyItemTagChanges, hasItemTagChanges } from "./tags";
 import { applyItemFaultChanges, hasItemFaultChanges } from "./faults";
+import { isFaultReduction } from "./valuation";
 import {
   createLeadingEntriesTx,
   setItemStampsTx,
@@ -1301,6 +1302,9 @@ export interface LotBulkChanges {
    *  through `applyItemFaultChanges` in `faults.ts` inside the same transaction. */
   addFaultIds?: string[];
   removeFaultIds?: string[];
+  /** The value reduction for faults written on every targeted copy (#1560): a whole percentage from
+   *  1 to 100, or present-but-`null` to clear it — a value on this axis, like the certificate's. */
+  faultReductionPercent?: number | null;
 }
 
 /** The three identity axes a bulk change can re-state (#723), as a group: they are validated
@@ -1366,7 +1370,8 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
     !changes.markSorted &&
     !hasVariantChange(changes) &&
     !hasItemTagChanges(changes) &&
-    !hasItemFaultChanges(changes)
+    !hasItemFaultChanges(changes) &&
+    changes.faultReductionPercent === undefined
   );
 }
 
@@ -1428,6 +1433,15 @@ async function applyLotBulkChanges(
             : {}),
           ...(changes.formatId !== undefined ? { formatId: changes.formatId } : {}),
         },
+      });
+    }
+    if (changes.faultReductionPercent !== undefined) {
+      if (changes.faultReductionPercent !== null && !isFaultReduction(changes.faultReductionPercent)) {
+        throw new Error("The value reduction must be a whole percentage from 1 to 100.");
+      }
+      await tx.item.updateMany({
+        where: baseWhere,
+        data: { faultReductionPercent: changes.faultReductionPercent },
       });
     }
     if (hasItemTagChanges(changes) || hasItemFaultChanges(changes)) {

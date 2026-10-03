@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { getItemStamps, type ItemStampSummary } from "./items";
 import {
-  CARRIER_VALUATION_SELECT,
+  COPY_VALUATION_SELECT,
   carrierValuationOf,
   valuateItemRows,
   type ValuationRow,
@@ -68,7 +68,7 @@ export async function getCarrierValuation(
       certificateStatusId: true,
       formatId: true,
       condition: { select: { name: true } },
-      ...CARRIER_VALUATION_SELECT,
+      ...COPY_VALUATION_SELECT,
     },
   });
   const carrier = carrierValuationOf(item);
@@ -83,6 +83,9 @@ export async function getCarrierValuation(
     formatId: item.formatId,
     unknownVariant: false,
     carrier,
+    // The piece's faults lower the recorded figure in every total (#1560); valued the same here, so
+    // the dialog can say what the piece counts at beside what was recorded.
+    faultReductionPercent: item.faultReductionPercent,
   };
   // Keyed by entry id, which no copy id can equal — one batched valuation for the piece and its
   // stamps together.

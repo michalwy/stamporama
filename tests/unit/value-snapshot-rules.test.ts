@@ -43,6 +43,8 @@ describe("holdingsSnapshotFields", () => {
     unconvertibleCount: 1,
     uncertainCount: 1,
     uncertainBaseAmount: "10.00",
+    faultReducedCount: 0,
+    faultReductionBaseAmount: "0.00",
     cost: { baseCurrency: "PLN", totalCostBasis: "80.00", knownCount: 5, pendingCount: 1, noneCount: 1, noOpeningValueCount: 0 },
     // #1324: never in the acquisition cost or its counts, but its copies are still held.
     openingValue: { baseCurrency: "PLN", totalCostBasis: "500.00", knownCount: 2, pendingCount: 0, noneCount: 1, noOpeningValueCount: 1 },
@@ -50,7 +52,7 @@ describe("holdingsSnapshotFields", () => {
       cost: { baseCurrency: "PLN", totalCostBasis: "999.00", knownCount: 3, pendingCount: 0, noneCount: 0, noOpeningValueCount: 0 },
       count: 3,
     },
-    market: { baseCurrency: "PLN", totalBaseAmount: "60.00", valuedCount: 3, noEvidenceCount: 4 },
+    market: { baseCurrency: "PLN", totalBaseAmount: "60.00", valuedCount: 3, noEvidenceCount: 4, faultReducedCount: 0, faultReductionBaseAmount: "0.00" },
   };
 
   it("keeps every sum beside the counts that say what it left out", () => {

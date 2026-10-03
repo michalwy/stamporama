@@ -8,8 +8,17 @@ import {
 } from "./pricing";
 import type { RawCatalogPrice } from "./catalog-price";
 import { makeFormatFactorLookup } from "./format-pricing";
-import type { CarrierValuationInput } from "./carrier-value";
-import { valuateCopy, valuateExplicitValue, type CopyValuation } from "./valuation";
+import {
+  CARRIER_VALUATION_SELECT,
+  carrierValuationOf,
+  type CarrierValuationInput,
+} from "./carrier-value";
+import {
+  applyFaultReduction,
+  valuateCopy,
+  valuateExplicitValue,
+  type CopyValuation,
+} from "./valuation";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 
 // Split out of `items.ts` so that **market** valuation can reuse it without the two modules
@@ -47,6 +56,13 @@ export interface ValuationRow {
    * carrier's own component) passes `null`. Build it from a copy with {@link carrierValuationOf}.
    */
   carrier: CarrierValuationInput | null;
+  /**
+   * The percentage this **copy's** faults take off its value (#1560), or null for none — and null for
+   * every row that is not a copy. Required for `carrier`'s reason: a copy reader that forgot it would
+   * quietly value a faulty piece at the full figure. Build both from a copy with
+   * {@link copyValuationOf}.
+   */
+  faultReductionPercent: number | null;
 }
 
 // Pure, and so living in `carrier-value.ts` where the unit suite can reach them; re-exported so every
@@ -56,6 +72,24 @@ export {
   carrierValuationOf,
   type CarrierValuationInput,
 } from "./carrier-value";
+
+/** The columns {@link copyValuationOf} reads — spread into a copy's `select`: what a carrier is
+ *  valued at (#747) and what the copy's faults take off (#1560). */
+export const COPY_VALUATION_SELECT = {
+  ...CARRIER_VALUATION_SELECT,
+  faultReductionPercent: true,
+} as const;
+
+/** The two copy-only fields of a {@link ValuationRow}, read off a copy selected with
+ *  {@link COPY_VALUATION_SELECT}. Spread into the row, so a copy reader states both in one place. */
+export function copyValuationOf(
+  row: Parameters<typeof carrierValuationOf>[0] & { faultReductionPercent: number | null }
+): Pick<ValuationRow, "carrier" | "faultReductionPercent"> {
+  return {
+    carrier: carrierValuationOf(row),
+    faultReductionPercent: row.faultReductionPercent,
+  };
+}
 
 const VALUATION_PRICE_SELECT = {
   price: true,
@@ -176,48 +210,50 @@ export async function valuateItemRows(
 
   const result = new Map<string, CopyValuation>();
   for (const r of rows) {
+    // A copy's faults lower whichever figure it has — recorded or catalogue — by the same rule
+    // (#1560), applied here and nowhere else so that no reader can value a faulty piece at full.
+    result.set(r.id, applyFaultReduction(valuateRow(r), r.faultReductionPercent));
+  }
+  return result;
+
+  function valuateRow(r: ValuationRow): CopyValuation {
     if (r.carrier !== null) {
-      result.set(r.id, valuateExplicitValue(r.carrier.explicitValue, baseCurrency, rates));
-      continue;
+      return valuateExplicitValue(r.carrier.explicitValue, baseCurrency, rates);
     }
     const descendants = r.unknownVariant
       ? [...(descendantsByStamp.get(r.stampId) ?? new Set<string>())].filter(
           (id) => isVariantByStamp.get(id) ?? false
         )
       : null;
-    result.set(
-      r.id,
-      valuateCopy({
-        conditionId: r.conditionId,
-        certificateStatusId: r.certificateStatusId,
-        formatId: r.formatId,
-        // Resolved against the copy's *own* stamp — a variant child's price, when the rollup uses
-        // one, is scaled by the same rule, since it shares the umbrella's issue and area.
-        formatFactor: factorLookup(
-          r.formatId,
-          areaByStamp.get(r.stampId) ?? null,
-          issueByStamp.get(r.stampId) ?? null,
-          r.conditionId
-        ),
-        unknownVariant: r.unknownVariant,
-        primaryCatalogNameId: primaryCatalogByStamp.get(r.stampId) ?? null,
-        ownPrices: pricesByStamp.get(r.stampId) ?? [],
-        // Tagged with the variant each array belongs to (#616), so the rollup's answer names the
-        // stamp it took its figure from.
-        variantPrices: descendants
-          ? descendants.map((id) => ({
-              stampId: id,
-              prices: pricesByStamp.get(id) ?? [],
-              // A leaf of the variant tree is fully identified; a node with variants of its own is
-              // still an umbrella, whose value is the lowest of its children rather than a price of
-              // its own (#617).
-              identified: !umbrellaStampIds.has(id),
-            }))
-          : undefined,
-        baseCurrency,
-        rates,
-      })
-    );
+    return valuateCopy({
+      conditionId: r.conditionId,
+      certificateStatusId: r.certificateStatusId,
+      formatId: r.formatId,
+      // Resolved against the copy's *own* stamp — a variant child's price, when the rollup uses
+      // one, is scaled by the same rule, since it shares the umbrella's issue and area.
+      formatFactor: factorLookup(
+        r.formatId,
+        areaByStamp.get(r.stampId) ?? null,
+        issueByStamp.get(r.stampId) ?? null,
+        r.conditionId
+      ),
+      unknownVariant: r.unknownVariant,
+      primaryCatalogNameId: primaryCatalogByStamp.get(r.stampId) ?? null,
+      ownPrices: pricesByStamp.get(r.stampId) ?? [],
+      // Tagged with the variant each array belongs to (#616), so the rollup's answer names the
+      // stamp it took its figure from.
+      variantPrices: descendants
+        ? descendants.map((id) => ({
+            stampId: id,
+            prices: pricesByStamp.get(id) ?? [],
+            // A leaf of the variant tree is fully identified; a node with variants of its own is
+            // still an umbrella, whose value is the lowest of its children rather than a price of
+            // its own (#617).
+            identified: !umbrellaStampIds.has(id),
+          }))
+        : undefined,
+      baseCurrency,
+      rates,
+    });
   }
-  return result;
 }

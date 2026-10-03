@@ -59,6 +59,13 @@ A platform's description template can name a copy's faults, so a buyer is told w
 the piece without you typing it into each listing — in the platform's language, from each fault's
 **Translations**. See [Telling a buyer about faults](contacts.md#telling-a-buyer-about-faults).
 
+## What faults take off the value
+
+A fault itself carries no figure. How much a copy's faults take off its value is a percentage you
+type on the copy, in the **Value reduction** field beside **Faults** — see
+[Lowering a copy's value for its faults](inventory.md#lowering-a-copys-value-for-its-faults). The
+copy's own page shows it under **Value reduction**.
+
 ## Finding copies by fault
 
 The Copies list's **Faults** filter shows the copies carrying **any** of the faults you tick.
@@ -71,3 +78,6 @@ See [Filters and sorting](inventory.md#filters-and-sorting).
 [Bulk editing](inventory.md#bulk-editing-the-selection) has a **Faults** section with two halves:
 **Add** puts the faults you name on every picked copy, and **Remove** takes them off. Every fault you
 do not name stays exactly as it is on each copy.
+
+Its **Value reduction** section sets one percentage on every picked copy (**Set to…**), takes it off
+them (**Clear**), or leaves each copy's own (**Leave as is**).

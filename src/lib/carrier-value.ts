@@ -86,6 +86,9 @@ export function carrierComponentRows(
     formatId: entry.formatId,
     unknownVariant: entry.unknownVariant,
     carrier: null,
+    // The suggestion is the full worth of the stamps: the piece's faults lower the figure recorded
+    // from it (#1560), so lowering the components too would take them off twice.
+    faultReductionPercent: null,
   }));
 }
 

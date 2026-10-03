@@ -122,6 +122,77 @@ export interface CopyValuation {
    * collector typed would be the app putting words in a catalogue's mouth.
    */
   explicit: boolean;
+  /**
+   * Set when the figure above has been **lowered for the copy's faults** (#1560): the percentage
+   * typed on the copy, and the figure as it stood before. Null for every unreduced valuation — no
+   * percentage, a row that is not a copy, or an unpriced copy, which has nothing to lower.
+   *
+   * Carried rather than re-derived so that every surface printing a reduced figure can say so and
+   * name the full one (*45.00, −40 % for faults*), and so a total can count what it took off.
+   */
+  faultReduction: FaultReduction | null;
+}
+
+/** How a copy's figure was lowered for its faults (#1560) — see {@link CopyValuation.faultReduction}. */
+export interface FaultReduction {
+  /** Whole percent, 1–100. */
+  percent: number;
+  /** The full figure in its own currency, 2-dp string. */
+  fullAmount: string;
+  /** The full figure in base currency, or null when it had no rate. */
+  fullBaseAmount: number | null;
+  /** The full base figure as a 2-dp string, or null. */
+  fullBaseAmountDisplay: string | null;
+}
+
+/**
+ * Lower an amount by a copy's fault reduction (#1560). Pure; the one place the arithmetic lives, so
+ * a catalogue figure, a recorded one and a market median are reduced by the same rule. `null` (and
+ * anything outside 1–100, which the column's CHECK refuses) leaves the amount alone.
+ */
+export function reduceForFaults(amount: number, percent: number | null): number {
+  if (!isFaultReduction(percent)) return amount;
+  return (amount * (100 - percent)) / 100;
+}
+
+/** True for a percentage that lowers anything: a whole number from 1 to 100. */
+export function isFaultReduction(percent: number | null | undefined): percent is number {
+  return (
+    typeof percent === "number" && Number.isInteger(percent) && percent >= 1 && percent <= 100
+  );
+}
+
+/**
+ * Apply a copy's fault reduction to its valuation (#1560). Pure.
+ *
+ * The figure is lowered in its own currency and in base, and the full one is kept beside it in
+ * {@link CopyValuation.faultReduction}. Everything else — which catalogue, which edition, which
+ * variant, whether it is uncertain or recorded — describes the full figure and is left as it is: the
+ * reduction is a statement about this piece, not about where its price was read. An unpriced
+ * valuation has nothing to lower and comes back unchanged.
+ */
+export function applyFaultReduction(
+  valuation: CopyValuation,
+  percent: number | null
+): CopyValuation {
+  if (!isFaultReduction(percent) || valuation.unpriced || valuation.amount === null) {
+    return valuation;
+  }
+  const amount = reduceForFaults(Number(valuation.amount), percent);
+  const baseAmount =
+    valuation.baseAmount === null ? null : reduceForFaults(valuation.baseAmount, percent);
+  return {
+    ...valuation,
+    amount: amount.toFixed(2),
+    baseAmount,
+    baseAmountDisplay: baseAmount === null ? null : baseAmount.toFixed(2),
+    faultReduction: {
+      percent,
+      fullAmount: valuation.amount,
+      fullBaseAmount: valuation.baseAmount,
+      fullBaseAmountDisplay: valuation.baseAmountDisplay,
+    },
+  };
 }
 
 /** An amount and the currency it was stated in — a multi-stamp copy's recorded value (#747). */
@@ -161,6 +232,7 @@ export function valuateExplicitValue(
     sourceStampId: null,
     unpricedVariantIds: [],
     explicit: true,
+    faultReduction: null,
   };
 }
 
@@ -235,6 +307,7 @@ function toValuation(
       sourceStampId: null,
       unpricedVariantIds,
       explicit: false,
+      faultReduction: null,
     };
   }
   const baseAmount = baseValueOf(picked.amount, picked.currency, baseCurrency, rates);
@@ -250,6 +323,7 @@ function toValuation(
     sourceStampId,
     unpricedVariantIds,
     explicit: false,
+    faultReduction: null,
   };
 }
 
@@ -267,6 +341,11 @@ export interface HoldingsTotal {
   uncertainCount: number;
   /** Portion of the total contributed by uncertain copies, 2-dp string. */
   uncertainBaseAmount: string;
+  /** Priced copies whose figure was lowered for their faults (#1560). */
+  faultReducedCount: number;
+  /** What those reductions took off the total, 2-dp string — the total plus this is what the same
+   *  copies are worth before it, which is the figure a reduced total names in its hint. */
+  faultReductionBaseAmount: string;
 }
 
 /** What the **market** paid for the same held copies (#458; ADR-0022 §8), each valued at the median
@@ -289,6 +368,17 @@ export interface MarketHoldingsTotal {
   /** Copies whose key had no datapoints. They contribute **nothing** — no catalogue-derived
    * substitute is used, since a key with no results has no market value at all (ADR-0022 §6). */
   noEvidenceCount: number;
+  /** Valued copies whose median was lowered for their faults (#1560). */
+  faultReducedCount: number;
+  /** What those reductions took off the total, 2-dp string. */
+  faultReductionBaseAmount: string;
+}
+
+/** One held copy's market reading (#458): the median at its own key, or null with no evidence, and
+ *  the percentage its faults take off it (#1560). */
+export interface MarketHoldingInput {
+  median: number | null;
+  faultReductionPercent: number | null;
 }
 
 /** The holdings summary bar's full figure (#134): the catalog {@link HoldingsTotal} plus
@@ -342,6 +432,8 @@ export function aggregateHoldings(
   let unpricedCount = 0;
   let unconvertibleCount = 0;
   let uncertainCount = 0;
+  let faultReducedCount = 0;
+  let faultReductionTotal = 0;
   for (const v of valuations) {
     if (v.unpriced) {
       unpricedCount++;
@@ -353,6 +445,10 @@ export function aggregateHoldings(
     }
     pricedCount++;
     total += v.baseAmount;
+    if (v.faultReduction && v.faultReduction.fullBaseAmount !== null) {
+      faultReducedCount++;
+      faultReductionTotal += v.faultReduction.fullBaseAmount - v.baseAmount;
+    }
     if (v.uncertain) {
       uncertainCount++;
       uncertainTotal += v.baseAmount;
@@ -366,6 +462,8 @@ export function aggregateHoldings(
     unconvertibleCount,
     uncertainCount,
     uncertainBaseAmount: uncertainTotal.toFixed(2),
+    faultReducedCount,
+    faultReductionBaseAmount: faultReductionTotal.toFixed(2),
   };
 }
 
@@ -376,29 +474,41 @@ export function aggregateHoldings(
  * currency, or `null` where the key has no datapoints. A `null` is counted, never valued — it is
  * the difference between "worth nothing" and "nothing recorded", and only the second is true here.
  *
+ * A median is a figure for copies *like* this one; a copy with faults is lowered by its own
+ * percentage before it is added (#1560), by the rule its catalogue value is ({@link reduceForFaults}).
+ *
  * There is no conversion to do: a market median is aggregated in the base currency to begin with
  * (ADR-0022 §2 converts at the rate frozen on the lot), so there is no `unconvertible` third state
  * the way catalogue valuation has one.
  */
 export function aggregateMarketHoldings(
-  medians: (number | null)[],
+  copies: MarketHoldingInput[],
   baseCurrency: string
 ): MarketHoldingsTotal {
   let total = 0;
   let valuedCount = 0;
   let noEvidenceCount = 0;
-  for (const median of medians) {
+  let faultReducedCount = 0;
+  let faultReductionTotal = 0;
+  for (const { median, faultReductionPercent } of copies) {
     if (median === null) {
       noEvidenceCount++;
       continue;
     }
     valuedCount++;
-    total += median;
+    const reduced = reduceForFaults(median, faultReductionPercent);
+    total += reduced;
+    if (isFaultReduction(faultReductionPercent)) {
+      faultReducedCount++;
+      faultReductionTotal += median - reduced;
+    }
   }
   return {
     baseCurrency,
     totalBaseAmount: total.toFixed(2),
     valuedCount,
     noEvidenceCount,
+    faultReducedCount,
+    faultReductionBaseAmount: faultReductionTotal.toFixed(2),
   };
 }

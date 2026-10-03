@@ -39,6 +39,7 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { Icon, type IconName } from "@/app/icons";
+import { faultReducedTotalHint } from "@/lib/fault-reduction";
 
 
 // The offer sets view adds two keys to the shared copy sort list: "Set order" — the offer's own
@@ -489,6 +490,14 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
       ? [`${holdings.unconvertibleCount} not convertible to ${holdings.baseCurrency}`]
       : []),
   ];
+  // Copies lowered for their faults (#1560): said on the label, with the unreduced figure.
+  const reducedHint = faultReducedTotalHint(
+    holdings.faultReducedCount,
+    holdings.totalBaseAmount,
+    holdings.faultReductionBaseAmount,
+    holdings.baseCurrency
+  );
+  if (reducedHint) valueNotes.push(reducedHint);
   const costNotes = [
     `${cost.knownCount} costed`,
     ...(cost.pendingCount > 0 ? [`${cost.pendingCount} pending`] : []),
@@ -512,7 +521,11 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
       onClick={(e) => e.stopPropagation()}
     >
       <Tooltip content={`Catalog value of this set — ${valueNotes.join(" · ")}`}>
-        <span style={FIGURE_LABEL}>cat</span>
+        <span
+          style={reducedHint ? { ...FIGURE_LABEL, color: "var(--color-warning)" } : FIGURE_LABEL}
+        >
+          cat
+        </span>
       </Tooltip>
       <MoneyPair
         baseAmount={holdings.pricedCount === 0 ? null : holdings.totalBaseAmount}
@@ -573,7 +586,17 @@ function SetsTotalsBar({ totals, baseCurrency }: { totals: OfferSetsTotals; base
       total: totals.catalogTotal,
       average: totals.catalogAverage,
       counted: totals.catalogValuedSets,
-      hint: "Catalog value of every set in this listing",
+      hint:
+        "Catalog value of every set in this listing" +
+        // Copies lowered for their faults (#1560), with the total without the reductions.
+        (totals.catalogTotal !== null && totals.catalogFaultReducedCount > 0
+          ? ` — ${faultReducedTotalHint(
+              totals.catalogFaultReducedCount,
+              totals.catalogTotal,
+              totals.catalogFaultReduction,
+              baseCurrency
+            )}`
+          : ""),
       convertedTotal: converted?.catalogTotal ?? null,
       convertedAverage: converted?.catalogAverage ?? null,
     },

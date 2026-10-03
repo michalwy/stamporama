@@ -31,6 +31,8 @@ import { PhotoEditor, type PhotoEditorValue } from "./photo-editor";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import { FaultEntryField } from "@/app/c/[collectionSlug]/shared/fault-entry-field";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import {
   readAddCopyDefaults,
@@ -79,6 +81,10 @@ const ROW: React.CSSProperties = {
 
 /** A uniform group heading for a field cell — a `<label>` when it targets a control, so all
  * rows share the same small-caps header regardless of field type. */
+/** The value reduction's hover (#1560): the field is one word, and what it does is a sentence. */
+const FAULT_REDUCTION_HINT =
+  "How much this copy's faults take off its value, in percent. Every value of the copy — catalog and market, and every total built from them — is lowered by it. Leave empty for none.";
+
 function GroupLabel({
   htmlFor,
   children,
@@ -503,15 +509,37 @@ export function InventoryItemFormDialog({
             </div>
 
             {/* What is wrong with this piece (#1557), right under the condition it qualifies — chosen
-                from the collection's fault list, saved with the rest of the copy. */}
-            <div>
-              <GroupLabel htmlFor="copy-faults">Faults</GroupLabel>
-              <FaultEntryField
-                collectionId={collectionId}
-                inputId="copy-faults"
-                initialFaults={item?.faults ?? []}
-                disabled={isPending}
-              />
+                from the collection's fault list, saved with the rest of the copy — and beside it how
+                much that takes off the copy's value (#1560), typed here rather than per fault. */}
+            <div style={{ ...ROW, gridTemplateColumns: "1fr 8.5rem" }}>
+              <div>
+                <GroupLabel htmlFor="copy-faults">Faults</GroupLabel>
+                <FaultEntryField
+                  collectionId={collectionId}
+                  inputId="copy-faults"
+                  initialFaults={item?.faults ?? []}
+                  disabled={isPending}
+                />
+              </div>
+              <div>
+                <Tooltip content={FAULT_REDUCTION_HINT}>
+                  <GroupLabel htmlFor="copy-fault-reduction">Value reduction</GroupLabel>
+                </Tooltip>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <NumericInput
+                    kind="number"
+                    inputMode="numeric"
+                    id="copy-fault-reduction"
+                    name="faultReductionPercent"
+                    placeholder="None"
+                    defaultValue={item?.faultReductionPercent ?? ""}
+                    disabled={isPending}
+                    {...NO_AUTOFILL}
+                    style={{ ...INPUT_STYLE, textAlign: "right" }}
+                  />
+                  <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                </div>
+              </div>
             </div>
 
             {/* Row 3: delivery · disposition — a wide select (its labels are long) beside the

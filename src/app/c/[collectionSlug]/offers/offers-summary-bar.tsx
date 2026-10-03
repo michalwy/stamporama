@@ -4,6 +4,7 @@ import type { OffersSummary } from "@/lib/offers";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { FaultReducedNote } from "@/app/c/[collectionSlug]/shared/fault-reduction-mark";
 
 // Summary bar for the offer list (#317), over the currently filtered offers. It leads with the one
 // figure the toolbar cannot already give: the **asking value** — what the filtered offers would
@@ -340,6 +341,12 @@ export function OffersSummaryBar({
             <span style={NOTE_STYLE}>
               {holdings.pricedCount} priced
               {valuationNotes.length > 0 ? ` · ${valuationNotes.join(" · ")}` : ""}
+              <FaultReducedNote
+                reducedCount={holdings.faultReducedCount}
+                totalBaseAmount={holdings.totalBaseAmount}
+                reductionBaseAmount={holdings.faultReductionBaseAmount}
+                baseCurrency={holdings.baseCurrency}
+              />
             </span>
           </div>
           <div style={ROW_STYLE}>

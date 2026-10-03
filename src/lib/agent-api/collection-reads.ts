@@ -520,6 +520,10 @@ export interface AgentCopyValue {
    *  collector **recorded** on the piece (#747), not a catalogue's. Absent on every catalogue figure,
    *  and on a carrier with nothing recorded, which is `unpriced`. */
   readonly recorded?: boolean;
+  /** The percentage the copy's faults take off it (#1560). Present only when the figures above are
+   *  already lowered by it; `fullAmount` is the figure before, in `currency`. */
+  readonly faultReductionPercent?: number;
+  readonly fullAmount?: string;
 }
 
 export interface CopyValueRow {
@@ -530,6 +534,8 @@ export interface CopyValueRow {
   readonly uncertain: boolean;
   /** Optional because a trade's frozen figure is shaped like this too and records no such flag. */
   readonly explicit?: boolean;
+  /** Optional for the same reason: a frozen trade figure records no reduction of its own. */
+  readonly faultReduction?: { readonly percent: number; readonly fullAmount: string } | null;
 }
 
 export function copyValue(row: CopyValueRow): AgentCopyValue {
@@ -540,6 +546,8 @@ export function copyValue(row: CopyValueRow): AgentCopyValue {
     unpriced: row.unpriced || undefined,
     uncertain: row.uncertain || undefined,
     recorded: row.explicit || undefined,
+    faultReductionPercent: row.faultReduction?.percent,
+    fullAmount: row.faultReduction?.fullAmount,
   });
 }
 
@@ -759,6 +767,9 @@ export interface AgentCatalogueTotal {
   readonly uncertainCount: number;
   /** The share of {@link total} contributed by the uncertain copies. */
   readonly uncertainTotal: string;
+  /** Priced copies lowered for their faults (#1560), and what that took off {@link total}. */
+  readonly faultReducedCount: number;
+  readonly faultReductionTotal: string;
 }
 
 /**
@@ -774,6 +785,9 @@ export interface AgentMarketTotal {
   readonly total: string;
   readonly valuedCount: number;
   readonly noEvidenceCount: number;
+  /** Valued copies lowered for their faults (#1560), and what that took off {@link total}. */
+  readonly faultReducedCount: number;
+  readonly faultReductionTotal: string;
 }
 
 /** What the collector actually paid. The three counts partition the copies in scope: a `pending`
@@ -824,10 +838,14 @@ export interface HoldingsSummaryRow {
   readonly unconvertibleCount: number;
   readonly uncertainCount: number;
   readonly uncertainBaseAmount: string;
+  readonly faultReducedCount: number;
+  readonly faultReductionBaseAmount: string;
   readonly market: {
     readonly totalBaseAmount: string;
     readonly valuedCount: number;
     readonly noEvidenceCount: number;
+    readonly faultReducedCount: number;
+    readonly faultReductionBaseAmount: string;
   };
   readonly cost: {
     readonly totalCostBasis: string;
@@ -866,11 +884,15 @@ export function valuationSummary(row: HoldingsSummaryRow): AgentValuationSummary
       unconvertibleCount: row.unconvertibleCount,
       uncertainCount: row.uncertainCount,
       uncertainTotal: row.uncertainBaseAmount,
+      faultReducedCount: row.faultReducedCount,
+      faultReductionTotal: row.faultReductionBaseAmount,
     },
     market: {
       total: row.market.totalBaseAmount,
       valuedCount: row.market.valuedCount,
       noEvidenceCount: row.market.noEvidenceCount,
+      faultReducedCount: row.market.faultReducedCount,
+      faultReductionTotal: row.market.faultReductionBaseAmount,
     },
     cost: costTotal(row.cost),
     openingValue: costTotal(row.openingValue),

@@ -6,6 +6,7 @@ import type { LotBuilderCriteria } from "@/lib/lot-builder-criteria";
 import type { LotAxisReport } from "@/lib/lot-builder-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FIGURE_FRAME, SkeletonBlock } from "./lot-builder-chrome";
+import { faultReducedTotalHint } from "@/lib/fault-reduction";
 
 // The lot builder's figures — **one** readout, and one line per question (#760).
 //
@@ -123,6 +124,34 @@ function pieces(axis: LotAxisReport): string {
   return axis.shortBy === 1 || axis.overBy === 1 ? "piece" : "pieces";
 }
 
+/** The value row's hover when copies were lowered for their faults (#1560): how many, and each sum
+ *  without the reductions. Undefined when none was, so the row keeps no hint. */
+function reducedValueHint(
+  summary: LotPoolSummary,
+  plan: LotProposal["plan"] | undefined,
+  currency: string
+): string | undefined {
+  const parts = [
+    summary.faultReducedCopies > 0
+      ? `Pool: ${faultReducedTotalHint(
+          summary.faultReducedCopies,
+          summary.catalogValue.toFixed(2),
+          summary.faultReduction.toFixed(2),
+          currency
+        )}`
+      : null,
+    plan && plan.faultReducedItemIds.length > 0
+      ? `Lot: ${faultReducedTotalHint(
+          plan.faultReducedItemIds.length,
+          plan.catalogValue.value.toFixed(2),
+          plan.faultReduction.toFixed(2),
+          currency
+        )}`
+      : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length > 0 ? `${parts.join(". ")}.` : undefined;
+}
+
 /** The questions, in the order a collector reads them: the four both sides answer first — they are
  *  the comparison the bar exists for — then what only one side can. */
 function buildRows(
@@ -149,6 +178,8 @@ function buildRows(
     {
       key: "value",
       label: `Catalogue value · ${currency}`,
+      // Copies counted lowered for their faults (#1560), on either side, with the unreduced sums.
+      hint: reducedValueHint(summary, plan, currency),
       pool: summary.catalogValue.toFixed(2),
       poolAlarm: criteria.valueMin !== null && summary.catalogValue < criteria.valueMin,
       lot: plan ? plan.catalogValue.value.toFixed(2) : null,

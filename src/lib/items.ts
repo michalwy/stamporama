@@ -15,12 +15,13 @@ import { getCollectionBaseCurrency } from "./pricing";
 import {
   aggregateHoldings,
   aggregateMarketHoldings,
+  isFaultReduction,
   type CopyValuation,
   type HoldingsSummary,
 } from "./valuation";
 import {
-  CARRIER_VALUATION_SELECT,
-  carrierValuationOf,
+  COPY_VALUATION_SELECT,
+  copyValuationOf,
   valuateItemRows,
   type ValuationRow,
 } from "./item-valuation";
@@ -507,6 +508,9 @@ export interface ItemCreateInput {
   /** Platforms this copy is never to be listed on (#506) — a copy can be added already knowing it
    * is not for one of them, so the add form asks the same question the edit form does. */
   excludedPlatformIds?: string[];
+  /** How much this copy's faults take off its value (#1560): a whole percentage, 1–100, or null for
+   *  none. Absent leaves it alone. Allowed on a copy with no listed faults. */
+  faultReductionPercent?: number | null;
 }
 
 // The delivery axis values a copy may carry live in `./delivery-state` (ADR-0009 §5). Both
@@ -552,6 +556,9 @@ export interface ItemUpdateInput {
   excludedPlatformIds?: string[];
   /** Optional reason recorded on the ItemVariantHistory row when `stampId` changes. */
   variantChangeNote?: string | null;
+  /** How much this copy's faults take off its value (#1560): a whole percentage, 1–100, or null for
+   *  none. Absent leaves it alone. Allowed on a copy with no listed faults. */
+  faultReductionPercent?: number | null;
   /**
    * The stamps this copy carries, in the collector's order (#746) — **the whole list**, the leading
    * one included, or absent to leave the entries alone. Every other caller of this function has no
@@ -588,6 +595,15 @@ async function resolvePlatformIds(
   return rows.map((r) => r.id);
 }
 
+/** A fault reduction (#1560) is a whole percentage from 1 to 100, or null for none — refused here
+ *  with a sentence rather than by the column's CHECK as a failed save. Absent is not checked. */
+function assertFaultReduction(percent: number | null | undefined): void {
+  if (percent === undefined || percent === null) return;
+  if (!isFaultReduction(percent)) {
+    throw new Error("The value reduction must be a whole percentage from 1 to 100.");
+  }
+}
+
 export async function createItem(
   ownerId: string,
   collectionId: string,
@@ -605,6 +621,7 @@ export async function createItem(
   if (data.lotId) {
     await assertLotOpenInCollection(collectionId, data.lotId);
   }
+  assertFaultReduction(data.faultReductionPercent);
   const deliveryState = isDeliveryState(data.deliveryState) ? data.deliveryState : "delivered";
   const excludedPlatformIds = data.excludedPlatformIds
     ? await resolvePlatformIds(collectionId, data.excludedPlatformIds)
@@ -634,6 +651,7 @@ export async function createItem(
         locationRef: data.locationId ? (data.locationRef ?? null) : null,
         lotId: data.lotId ?? null,
         deliveryState,
+        faultReductionPercent: data.faultReductionPercent ?? null,
       },
       select: ITEM_SELECT,
     });
@@ -723,6 +741,7 @@ export async function updateItem(
   if (data.locationId) {
     await assertLocationAssignable(collectionId, data.locationId);
   }
+  assertFaultReduction(data.faultReductionPercent);
   if (data.stamps) {
     // Read-only checks, and so before the transaction: a stamp from another collection or a
     // duplicated `(stamp, format)` has to reach the collector as a sentence rather than as a
@@ -756,6 +775,9 @@ export async function updateItem(
       ? { deliveryState: fields.deliveryState }
       : {}),
     ...(fields.notes !== undefined ? { notes: fields.notes } : {}),
+    ...(fields.faultReductionPercent !== undefined
+      ? { faultReductionPercent: fields.faultReductionPercent }
+      : {}),
     ...(fields.locationId !== undefined ? { locationId: fields.locationId } : {}),
     // A ref only makes sense with a location; clear it whenever the location is
     // cleared, and only persist a ref update when a location is present.
@@ -1453,7 +1475,7 @@ async function resolveValuationNarrowedIds(
       conditionId: true,
       certificateStatusId: true,
       formatId: true,
-      ...CARRIER_VALUATION_SELECT,
+      ...COPY_VALUATION_SELECT,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
@@ -1465,7 +1487,7 @@ async function resolveValuationNarrowedIds(
     formatId: row.formatId,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
-    carrier: carrierValuationOf(row),
+    ...copyValuationOf(row),
   }));
   const valuations = await valuateItemRows(collectionId, valuationRows);
   return rows.filter((row) => keep(valuations.get(row.id)!)).map((row) => row.id);
@@ -1666,6 +1688,10 @@ export interface ItemListItem {
   /** What is wrong with this piece (#1557), in the fault dictionary's own order. Empty is the
    * normal case. The copy's own, like its tags. */
   faults: FaultSummary[];
+  /** How much this copy's faults take off its value (#1560) — a whole percentage, or null for none.
+   *  Already applied to {@link value}; carried for the copy dialog that edits it and for the market
+   *  total, which lowers a key's median by it. */
+  faultReductionPercent: number | null;
   /** Attached photos (#112), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
@@ -1797,8 +1823,9 @@ const ITEM_LIST_SELECT = {
   // Whether the piece is a carrier, and what it carries (#748). Read for every row because a select
   // cannot be conditional on the row it selects; an ordinary copy has exactly one entry, so the cost
   // is one narrow row each, and the mapping below drops it again.
-  // …and the value a carrier is priced at instead of the catalogue (#747), `stampCount` included.
-  ...CARRIER_VALUATION_SELECT,
+  // …and the value a carrier is priced at instead of the catalogue (#747), `stampCount` included,
+  // and what the copy's faults take off its value (#1560).
+  ...COPY_VALUATION_SELECT,
   stamps: {
     orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: {
@@ -1857,7 +1884,7 @@ function valuationInputFromRow(row: ItemListRow): ValuationRow {
     formatId: row.format?.id ?? null,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
-    carrier: carrierValuationOf(row),
+    ...copyValuationOf(row),
   };
 }
 
@@ -1945,6 +1972,7 @@ function toItemListItem(
     createdAt: row.createdAt,
     tags: orderTagSummaries(row.tags),
     faults: orderFaultSummaries(row.faults),
+    faultReductionPercent: row.faultReductionPercent,
     photos: row.photos
       .map((p) => ({
         id: p.id,
@@ -2234,8 +2262,9 @@ export interface CopyGroupRow {
   mixedCondition: boolean;
   mixedFormat: boolean;
   mixedCertificate: boolean;
-  /** The per-copy catalog value, when every member values identically — which is guaranteed with
-   * every axis joined, since the key is then the key `valuateItemRows` is computed on. Null when
+  /** The per-copy catalog value, when every member values identically — which every axis joined
+   * guarantees for the catalogue, the key then being the key `valuateItemRows` is computed on,
+   * unless members carry different fault reductions (#1560), which are the copy's own. Null when
    * the members disagree; {@link CopyGroupRow.valueVaries} tells that apart from "no members". */
   value: CopyValuation | null;
   valueVaries: boolean;
@@ -2286,7 +2315,10 @@ function sameValuation(a: CopyValuation, b: CopyValuation): boolean {
     a.uncertain === b.uncertain &&
     a.amount === b.amount &&
     a.currency === b.currency &&
-    a.baseAmountDisplay === b.baseAmountDisplay
+    a.baseAmountDisplay === b.baseAmountDisplay &&
+    // The group's shared figure carries its fault reduction (#1560), so the members must agree on it
+    // too, or the row would mark — or fail to mark — a figure some of them do not have.
+    (a.faultReduction?.percent ?? null) === (b.faultReduction?.percent ?? null)
   );
 }
 
@@ -2384,7 +2416,7 @@ export async function listItemDuplicateGroups(
       conditionId: true,
       formatId: true,
       certificateStatusId: true,
-      ...CARRIER_VALUATION_SELECT,
+      ...COPY_VALUATION_SELECT,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
       offerSetMemberships: {
         where: { offerSet: { offer: { state: { notIn: [...CLOSED_OFFER_STATES] } } } },
@@ -2403,7 +2435,7 @@ export async function listItemDuplicateGroups(
       certificateStatusId: m.certificateStatusId,
       formatId: m.formatId,
       unknownVariant: isUnknownVariantStamp(m.stamp),
-      carrier: carrierValuationOf(m),
+      ...copyValuationOf(m),
     }))
   );
 
@@ -3320,7 +3352,10 @@ function summarizeHoldings(
       count: gone.length,
     },
     market: aggregateMarketHoldings(
-      held.map((i) => marketMedians.get(marketKeyOf(i)) ?? null),
+      held.map((i) => ({
+        median: marketMedians.get(marketKeyOf(i)) ?? null,
+        faultReductionPercent: i.faultReductionPercent,
+      })),
       baseCurrency
     ),
   };
@@ -3799,7 +3834,7 @@ export async function valuateItemsByIds(
       conditionId: true,
       certificateStatusId: true,
       formatId: true,
-      ...CARRIER_VALUATION_SELECT,
+      ...COPY_VALUATION_SELECT,
       stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
     },
   });
@@ -3811,7 +3846,7 @@ export async function valuateItemsByIds(
     formatId: row.formatId,
     unknownVariant:
       isUnknownVariantStamp(row.stamp),
-    carrier: carrierValuationOf(row),
+    ...copyValuationOf(row),
   }));
   return valuateItemRows(collectionId, valuationRows);
 }
@@ -3862,7 +3897,7 @@ const HOLDINGS_ROW_SELECT = {
   disposedAt: true,
   deliveryState: true,
   // A carrier contributes the value recorded on it, or counts as unpriced (#747).
-  ...CARRIER_VALUATION_SELECT,
+  ...COPY_VALUATION_SELECT,
   stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
 } as const;
 
@@ -3895,7 +3930,7 @@ async function makeHoldingsSummarizer(
     certificateStatusId: row.certificateStatusId,
     formatId: row.formatId,
     unknownVariant: isUnknownVariantStamp(row.stamp),
-    carrier: carrierValuationOf(row),
+    ...copyValuationOf(row),
   }));
 
   // Actual purchase cost-basis over the same copy set (#134). Snapshots are frozen in
@@ -3940,7 +3975,10 @@ async function makeHoldingsSummarizer(
         held
           .map((id) => rowById.get(id))
           .filter((row) => row !== undefined)
-          .map((row) => marketMedians.get(marketKeyOf(row)) ?? null),
+          .map((row) => ({
+            median: marketMedians.get(marketKeyOf(row)) ?? null,
+            faultReductionPercent: row.faultReductionPercent,
+          })),
         baseCurrency
       ),
     };

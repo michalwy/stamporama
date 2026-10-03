@@ -604,8 +604,8 @@ describe("collection structure values (#1402)", () => {
     assert.equal(view.baseCurrency, "PLN");
     assert.deepEqual(figures(view.totalValues), figures(structureValuesOf(holdings)));
     assert.deepEqual(figures(view.totalValues), {
-      catalogue: { amount: "144.50", unpriced: 1, unconvertible: 0 },
-      market: { amount: "50.00", noEvidence: 4 },
+      catalogue: { amount: "144.50", unpriced: 1, unconvertible: 0, faultReduced: 0, faultReduction: "0.00" },
+      market: { amount: "50.00", noEvidence: 4, faultReduced: 0, faultReduction: "0.00" },
       cost: { amount: "37.00", pending: 1, none: 1 },
       opening: { amount: "5.00", copies: 1, pending: 0, none: 0 },
     });

@@ -20,6 +20,7 @@ import {
   useOverviewValue,
 } from "./use-overview-query";
 import { ValueHistoryChart } from "./value-history-chart";
+import { FaultReducedNote } from "@/app/c/[collectionSlug]/shared/fault-reduction-mark";
 
 /**
  * The Overview screen (#649–#651, #653; decided in #397): a financial and progress picture of the
@@ -320,6 +321,19 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
               <div style={LINE_STYLE}>
                 Market {holdings.market.totalBaseAmount} {ccy} over{" "}
                 {holdings.market.valuedCount} of {heldCount} copies
+              </div>
+            )}
+            {/* Copies lowered for their faults (#1560): both figures above count them reduced, and
+                the hover names the holdings value without the reductions. */}
+            {holdings.faultReducedCount > 0 && (
+              <div style={LINE_STYLE}>
+                <FaultReducedNote
+                  separator={false}
+                  reducedCount={holdings.faultReducedCount}
+                  totalBaseAmount={holdings.totalBaseAmount}
+                  reductionBaseAmount={holdings.faultReductionBaseAmount}
+                  baseCurrency={ccy}
+                />
               </div>
             )}
             <ValueCaveats

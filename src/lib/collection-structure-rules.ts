@@ -506,8 +506,16 @@ export function showsEmptySegments(dimension: StructureDimension): boolean {
  * arrived damaged, #396) is in none of the three and counted apart as `notHeld`.
  */
 export interface StructureValues {
-  catalogue: { amount: string; unpriced: number; unconvertible: number };
-  market: { amount: string; noEvidence: number };
+  /** `faultReduced` copies were counted lowered for their faults (#1560), which took
+   *  `faultReduction` off the amount — not a gap, since they are in it, but said beside it. */
+  catalogue: {
+    amount: string;
+    unpriced: number;
+    unconvertible: number;
+    faultReduced: number;
+    faultReduction: string;
+  };
+  market: { amount: string; noEvidence: number; faultReduced: number; faultReduction: string };
   cost: { amount: string; pending: number; none: number };
   /** The copies from opening balances: their value, and the ones without one. `copies` is 0 where the
    *  segment holds none, and the screen then says nothing about it. */
@@ -523,8 +531,15 @@ export function structureValuesOf(summary: HoldingsSummary): StructureValues {
       amount: summary.totalBaseAmount,
       unpriced: summary.unpricedCount,
       unconvertible: summary.unconvertibleCount,
+      faultReduced: summary.faultReducedCount,
+      faultReduction: summary.faultReductionBaseAmount,
     },
-    market: { amount: summary.market.totalBaseAmount, noEvidence: summary.market.noEvidenceCount },
+    market: {
+      amount: summary.market.totalBaseAmount,
+      noEvidence: summary.market.noEvidenceCount,
+      faultReduced: summary.market.faultReducedCount,
+      faultReduction: summary.market.faultReductionBaseAmount,
+    },
     cost: {
       amount: summary.cost.totalCostBasis,
       pending: summary.cost.pendingCount,

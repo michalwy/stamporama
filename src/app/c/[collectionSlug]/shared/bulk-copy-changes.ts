@@ -41,6 +41,9 @@ export interface BulkCopyChanges {
   /** Faults put on and taken off every picked copy (#1557) — the tags' two lists, for their reason. */
   addFaultIds?: string[];
   removeFaultIds?: string[];
+  /** The value reduction written on every picked copy for its faults (#1560): a whole percentage,
+   *  or present-but-`null` to clear it. Absent leaves each copy's own. */
+  faultReductionPercent?: number | null;
 }
 
 /** Serialize {@link BulkCopyChanges} onto a form, for both the id-list and scoped bulk actions.
@@ -68,4 +71,8 @@ export function appendBulkChanges(fd: FormData, changes: BulkCopyChanges): void 
   if (changes.removeTagIds?.length) fd.set("removeTagIds", changes.removeTagIds.join(","));
   if (changes.addFaultIds?.length) fd.set("addFaultIds", changes.addFaultIds.join(","));
   if (changes.removeFaultIds?.length) fd.set("removeFaultIds", changes.removeFaultIds.join(","));
+  // Present-but-empty is the clear, the location's rule.
+  if (changes.faultReductionPercent !== undefined) {
+    fd.set("faultReductionPercent", changes.faultReductionPercent?.toString() ?? "");
+  }
 }

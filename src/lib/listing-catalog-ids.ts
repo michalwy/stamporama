@@ -189,6 +189,7 @@ export async function resolveListingCatalogItemIds(
     formatId: c.formatId,
     unknownVariant: true,
     carrier: null,
+    faultReductionPercent: null,
   }));
   // `rows` is empty when every open copy was chosen by hand, and `valuateItemRows` answers an empty
   // batch without reading anything — so a fully overridden offer pays for no valuation at all.

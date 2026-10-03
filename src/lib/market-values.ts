@@ -204,6 +204,7 @@ export async function readStampMarketValues(
         formatId: line.formatId,
         unknownVariant: isUnknownVariantStamp(line.stamp),
         carrier: null,
+        faultReductionPercent: null,
       }))
     )
   );

@@ -48,6 +48,7 @@ import {
   useStructureAreaFacets,
   useStructureYearFacets,
 } from "./use-structure-query";
+import { faultReducedTotalHint } from "@/lib/fault-reduction";
 
 /**
  * The collection structure screen (#1401; ADR-0056): the copies the Copies list would show, counted
@@ -685,9 +686,27 @@ function Values({ values }: { values: StructureValues }) {
     <span style={VALUES_STYLE}>
       {figures.map(([figure, amount]) => {
         const gaps = structureValueGaps(values, figure);
+        // Copies counted lowered for their faults (#1560) are in the figure, so they are not a gap;
+        // they get a mark of their own in the fault tone, with the unreduced figure on hover.
+        const reduced =
+          figure === "catalogue" || figure === "market"
+            ? faultReducedTotalHint(
+                values[figure].faultReduced,
+                amount,
+                values[figure].faultReduction,
+                null
+              )
+            : null;
         return (
           <span key={figure}>
             {FIGURE_LABEL[figure]} {amount}
+            {reduced && (
+              <Tooltip content={`${reduced}.`} align="end">
+                <span style={{ ...GAP_MARK, color: "var(--color-warning)" }}>
+                  −{values[figure as "catalogue" | "market"].faultReduced}
+                </span>
+              </Tooltip>
+            )}
             {gaps.count > 0 && (
               <Tooltip content={`Leaves out ${gaps.reasons.join(", ")}.`} align="end">
                 <span style={GAP_MARK}>+{gaps.count}</span>

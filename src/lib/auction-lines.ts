@@ -257,6 +257,7 @@ export async function valuateAuctionLotLines(
         formatId: row.formatId,
         unknownVariant: isUnknownVariantStamp(row.stamp),
         carrier: null,
+        faultReductionPercent: null,
       }))
     ),
     baseToSaleRates(
@@ -448,6 +449,7 @@ export async function valuateLineSpecs(
         formatId: spec.formatId,
         unknownVariant: isUnknownVariantStamp(stampById.get(spec.stampId)!),
         carrier: null,
+        faultReductionPercent: null,
       }))
     ),
     baseToSaleRates(collectionId, baseCurrency, [currency]),

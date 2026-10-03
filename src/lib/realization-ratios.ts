@@ -190,6 +190,7 @@ export async function loadRealizationRatios(
         formatId: line.formatId,
         unknownVariant: isUnknownVariantStamp(line.stamp),
         carrier: null,
+        faultReductionPercent: null,
       }))
     )
   );
