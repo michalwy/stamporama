@@ -320,11 +320,18 @@ export function DialogFooter({ children, error }: { children: ReactNode; error?:
  * - a **transparent** border rather than none. The secondary and destructive variants draw a 1px
  *   border; without a placeholder here the primary would be 2px shorter whenever the content
  *   exceeds `minHeight`.
+ *
+ * And a **label never wraps** (#1553). A footer is a flex row, and a flex item shrinks to its
+ * longest word: beside a long hint line the cut editor's *Cut 33 tiles* broke into *Cut 33* /
+ * *tiles* and stood taller than *Cancel*. `nowrap` with `flexShrink: 0` leaves the shrinking to
+ * whatever text sits beside the buttons, which wraps onto more lines instead.
  */
 const baseBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
+  flexShrink: 0,
+  whiteSpace: "nowrap",
   minHeight: "2.25rem",
   padding: "0.375rem 1rem",
   borderRadius: "0.375rem",
