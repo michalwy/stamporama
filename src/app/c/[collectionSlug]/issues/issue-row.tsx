@@ -82,7 +82,11 @@ import {
   ChecklistChips,
   type ChecklistChipData,
 } from "@/app/c/[collectionSlug]/shared/checklist-chip";
-import { ChecklistBranch, type ChecklistBranchContext } from "./checklist-branch";
+import {
+  ChecklistBranch,
+  ChecklistBranchMenu,
+  type ChecklistBranchContext,
+} from "./checklist-branch";
 import type { ChecklistDisplayMode } from "./checklist-display-switcher";
 
 // ── Stamp tree ──────────────────────────────────────────────────────────────
@@ -1304,7 +1308,11 @@ export function IssueRow({
                         onToggle={() =>
                           setBranchToggles((prev) => ({ ...prev, [key]: !branchOpen(key) }))
                         }
-                        context={branchContext}
+                        actions={
+                          checklist && (
+                            <ChecklistBranchMenu checklist={checklist} context={branchContext} />
+                          )
+                        }
                       >
                         {branch.tree.length === 0 ? (
                           <div
