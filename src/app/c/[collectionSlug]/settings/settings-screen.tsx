@@ -46,6 +46,7 @@ import { ColnectSettingsBody, ColnectSummary } from "./colnect-settings-page";
 import { AllegroSettingsBody, AllegroSummary } from "./allegro-settings-page";
 import { DelcampeSettingsBody, DelcampeSummary } from "./delcampe-settings-page";
 import { PhilasearchPlatformPanel } from "./philasearch-platform-panel";
+import { FacebookSettingsBody } from "./facebook-settings-page";
 import { CollageTemplatesPanel } from "./collage-templates-panel";
 import { RefCardTemplatesPanel } from "./ref-card-templates-panel";
 import { CarriersPanel } from "./carriers-panel";
@@ -82,6 +83,7 @@ import type { AllegroListingProfileList } from "@/lib/allegro-listing-profile";
 import type { AllegroLearnedCategoryList } from "@/lib/allegro-category";
 import type { DelcampeListingProfileList } from "@/lib/delcampe-listing-profile";
 import type { DelcampeLearnedCategoryList } from "@/lib/delcampe-categories";
+import type { FacebookGroupList } from "@/lib/facebook-groups";
 
 interface SettingsScreenProps {
   collectionId: string;
@@ -143,6 +145,9 @@ interface SettingsScreenProps {
   delcampePlatformId: string | null;
   delcampeListingProfiles: DelcampeListingProfileList;
   delcampeLearnedCategories: DelcampeLearnedCategoryList;
+  /** Which platform is Facebook (#1543), and the groups under it. */
+  facebookPlatformId: string | null;
+  facebookGroups: FacebookGroupList;
   /** Which platform is Philasearch (#742) — the setting a lot captured from its pages rides on. */
   philasearchPlatformId: string | null;
   /** Every platform contact, for that picker. */
@@ -212,6 +217,7 @@ const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
   "philasearch",
   "allegro",
   "delcampe",
+  "facebook",
   "colnect",
   "bids",
 ]);
@@ -728,6 +734,8 @@ function SettingsEntryBody({
   delcampePlatformId,
   delcampeListingProfiles,
   delcampeLearnedCategories,
+  facebookPlatformId,
+  facebookGroups,
   philasearchPlatformId,
   platformContacts,
   initialAssistantTokens,
@@ -902,6 +910,15 @@ function SettingsEntryBody({
           platformId={delcampePlatformId}
           profiles={delcampeListingProfiles}
           categories={delcampeLearnedCategories}
+        />
+      );
+    case "facebook":
+      return (
+        <FacebookSettingsBody
+          collectionId={collectionId}
+          platforms={platformContacts}
+          platformId={facebookPlatformId}
+          groups={facebookGroups}
         />
       );
     case "philasearch":

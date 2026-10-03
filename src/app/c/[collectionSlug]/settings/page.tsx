@@ -32,6 +32,8 @@ import { getDelcampePlatform } from "@/lib/delcampe";
 import { listDelcampeListingProfiles } from "@/lib/delcampe-listing-profile";
 import { listDelcampeLearnedCategories } from "@/lib/delcampe-categories";
 import { getPhilasearchPlatform } from "@/lib/philasearch";
+import { getFacebookPlatform } from "@/lib/facebook";
+import { listFacebookGroups } from "@/lib/facebook-groups";
 import { getCollageTemplates } from "@/lib/collage-templates";
 import { getRefCardTemplates } from "@/lib/ref-card-templates";
 import { getCarriers } from "@/lib/carriers";
@@ -102,6 +104,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     delcampePlatform,
     delcampeListingProfiles,
     delcampeLearnedCategories,
+    facebookPlatform,
+    facebookGroups,
     philasearchPlatform,
     platformContacts,
     assistantTokens,
@@ -138,6 +142,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getDelcampePlatform(session.user.id, collection.id),
     listDelcampeListingProfiles(session.user.id, collection.id),
     listDelcampeLearnedCategories(session.user.id, collection.id),
+    getFacebookPlatform(session.user.id, collection.id),
+    listFacebookGroups(session.user.id, collection.id),
     getPhilasearchPlatform(session.user.id, collection.id),
     listPlatformContacts(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
@@ -204,6 +210,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           delcampePlatformId={delcampePlatform?.id ?? null}
           delcampeListingProfiles={delcampeListingProfiles}
           delcampeLearnedCategories={delcampeLearnedCategories}
+          facebookPlatformId={facebookPlatform?.id ?? null}
+          facebookGroups={facebookGroups}
           philasearchPlatformId={philasearchPlatform?.id ?? null}
           platformContacts={platformContacts}
           initialAssistantTokens={assistantTokens}

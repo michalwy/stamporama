@@ -67,6 +67,7 @@ and ADR references.
 | Colnect list sync: mappings, snapshots, the discrepancy report | [`colnect-list-sync.md`](docs/agents/colnect-list-sync.md) |
 | Allegro: API access, sync worklist, profiles, publishing | [`allegro.md`](docs/agents/allegro.md) |
 | Delcampe: platform marker, profiles, Easy Uploader | [`delcampe.md`](docs/agents/delcampe.md) |
+| Facebook: platform marker, groups, group auctions | [`facebook.md`](docs/agents/facebook.md) |
 | Offers, listing texts, listing kit, offer pricing and screens | [`offers.md`](docs/agents/offers.md) |
 | Auction sales and lots, bid anchors, bid recommendations | [`auctions.md`](docs/agents/auctions.md) |
 | Market value, catalogue value, the Valuation dialog | [`valuation.md`](docs/agents/valuation.md) |

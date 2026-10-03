@@ -55,6 +55,7 @@ export type SettingsEntryKey =
   | "shipping"
   | "allegro"
   | "delcampe"
+  | "facebook"
   | "philasearch"
   | "acceptance"
   | "bids"
@@ -229,6 +230,12 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     label: "Delcampe",
     hint: "Which platform is Delcampe, and what the rows of an upload file carry.",
     parts: DELCAMPE_SETTINGS_PARTS,
+  },
+  {
+    key: "facebook",
+    group: "selling",
+    label: "Facebook",
+    hint: "Which platform is Facebook, and the groups you auction in with each group's own customs.",
   },
   {
     key: "philasearch",

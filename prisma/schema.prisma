@@ -181,6 +181,7 @@ model Collection {
   delcampeListingProfiles DelcampeListingProfile[]
   delcampeListings  DelcampeListing[]
   delcampeImportState DelcampeImportState?
+  facebookGroups  FacebookGroup[]
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
   valueSnapshots  CollectionValueSnapshot[]
@@ -2688,6 +2689,72 @@ model DelcampeCategory {
   @@map("delcampe_category")
 }
 
+// A Facebook group the collector auctions in (#1543; ADR-0061).
+//
+// Facebook is **one platform** — one `Contact`, named as Facebook on its own Settings page through the
+// same `platformModule` marker Delcampe and Allegro use — and the groups sit under it. A group is not a
+// platform of its own: that was rejected when the track was designed, because sales reports want
+// Facebook as a whole first and per group second, and the platform's currency, templates and photo
+// limits are one answer for every group.
+//
+// What a group holds is its **customs**: how a post there reads (the template), the standing note on
+// shipping, payment and terms every post carries, and the figures a new auction there starts from.
+// Every one of them is a default read when an offer is created (#1544) and then owned by the offer —
+// the rule every platform setting here follows — so changing a group never re-prices an auction
+// already running.
+//
+// A group is **archived, never deleted, once it has offers**: an offer names its group, and a sale
+// report per group needs that group to still exist. One with no offers can be deleted outright.
+model FacebookGroup {
+  id           String @id @default(cuid())
+  collectionId String
+  platformId   String
+  // What the collector calls it — unique per platform, the list being read by name.
+  name         String
+  // The group's address on Facebook. Any http(s) address is taken: Facebook writes the same group
+  // several ways (`/groups/<id>`, `/groups/<slug>`, `m.` and `www.`), and the link is for opening
+  // the group, never for parsing.
+  url          String
+  // When the collector stopped using it. Archived groups are kept and listed apart, and offered to no
+  // new auction; clearing the column brings a group back.
+  archivedAt   DateTime?
+
+  // ── How a post here reads ─────────────────────────────────────────────────────────────────────
+  // The text a post is prepared from (#1544), with `{token}` placeholders — the vocabulary is
+  // `facebook-group-rules.ts`'s. Empty is allowed and means the post carries no template text yet.
+  postTemplate String @default("")
+  // Shipping, payment and terms, appended to every post in this group as written.
+  standingNote String @default("")
+
+  // ── What a new auction starts from ─────────────────────────────────────────────────────────────
+  // The starting price, stated one of two ways: `amount` (a figure in the group's currency) or
+  // `catalogPercent` (a percentage of the copies' catalogue value). Null mode is "no default", and
+  // the value is meaningless — and cleared — without one.
+  startingPriceMode  String?
+  startingPriceValue Decimal? @db.Decimal(10, 2)
+  // The default step a bid must beat the last one by, in the group's currency.
+  bidIncrement       Decimal? @db.Decimal(10, 2)
+  // How many days an auction here runs, and the time of day it closes (`HH:MM`, 24-hour, the
+  // collector's own clock). Both nullable — no default is the ordinary state of a new group.
+  auctionDays        Int?
+  closingTime        String?
+  // The currency figures in this group are stated in, or null for the platform's own
+  // (`Contact.platformCurrency`, #196) — which is what nearly every group wants.
+  currency           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  platform   Contact    @relation("PlatformFacebookGroup", fields: [platformId], references: [id], onDelete: Cascade)
+  offers     Offer[]    @relation("OfferFacebookGroup")
+
+  @@unique([platformId, name])
+  @@index([collectionId])
+  @@index([platformId])
+  @@map("facebook_group")
+}
+
 // What was listed for a kind of stamp — the **key → category** register (#488; ADR-0026, generalised
 // across platforms by #609; ADR-0035).
 //
@@ -4392,6 +4459,11 @@ model Offer {
   // concrete one: a heavier lot needs the other shipping model, and a shipping model on Delcampe
   // travels in a profile rather than on its own (ADR-0034 §1). Also `SetNull`, for the same reason.
   delcampeListingProfileId String?
+  // The Facebook group this offer is auctioned in (#1543; ADR-0061), or null on every platform that
+  // is not Facebook. `Restrict`, unlike the profiles above: a group is where a sale happened, not a
+  // preference about one, so a group with offers is archived and never deleted — the reports per
+  // group need it to still be there.
+  facebookGroupId String?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside
@@ -4497,6 +4569,7 @@ model Offer {
   platform   Contact    @relation("OfferPlatform", fields: [platformId], references: [id], onDelete: Restrict)
   allegroListingProfile AllegroListingProfile? @relation("OfferAllegroListingProfile", fields: [allegroListingProfileId], references: [id], onDelete: SetNull)
   delcampeListingProfile DelcampeListingProfile? @relation("OfferDelcampeListingProfile", fields: [delcampeListingProfileId], references: [id], onDelete: SetNull)
+  facebookGroup FacebookGroup? @relation("OfferFacebookGroup", fields: [facebookGroupId], references: [id], onDelete: Restrict)
   sets       OfferSet[]
   saleLines  SaleLine[]
   /** Listing images owned by this offer (#311): the generated collages, and the files uploaded
@@ -4525,6 +4598,7 @@ model Offer {
   @@index([platformId])
   @@index([allegroListingProfileId])
   @@index([delcampeListingProfileId])
+  @@index([facebookGroupId])
   // One listing is one offer's (#611), which is what makes the reconciliation's refusal to guess
   // enforceable rather than merely intended.
   @@unique([collectionId, delcampeItemId])
@@ -5871,6 +5945,8 @@ model Contact {
   // The same pair for Delcampe (#608; ADR-0034).
   delcampeListingProfiles DelcampeListingProfile[] @relation("PlatformDelcampeListingProfile")
   defaultDelcampeListingProfile DelcampeListingProfile? @relation("PlatformDefaultDelcampeListingProfile", fields: [defaultDelcampeListingProfileId], references: [id], onDelete: SetNull)
+  // The groups this platform auctions in, when it is Facebook (#1543; ADR-0061). They go with it.
+  facebookGroups FacebookGroup[] @relation("PlatformFacebookGroup")
   // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
   // via the `Sale.buyerId` FK (`onDelete: Restrict`).
   salesBuyer        Sale[]     @relation("SaleBuyer")

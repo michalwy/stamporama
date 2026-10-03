@@ -44,6 +44,16 @@ export const ALLEGRO_PLATFORM_MODULE = "allegro";
 export const DELCAMPE_PLATFORM_MODULE = "delcampe";
 
 /**
+ * The same, for Facebook (#1543; ADR-0061).
+ *
+ * A marker for **which `Contact` is Facebook**, and nothing more, Delcampe's shape: Facebook has no
+ * listing half here (a group post is prepared as a kit and posted by hand, #1544) and no capture, so
+ * it is absent from both rule tables below. What the marker is read for is the platform the
+ * collection's groups hang off — the one fact the groups cannot work out for themselves.
+ */
+export const FACEBOOK_PLATFORM_MODULE = "facebook";
+
+/**
  * The same, for Philasearch (#742).
  *
  * Like Allegro's before its listing half, a marker for **capture alone**: it names the platform an
