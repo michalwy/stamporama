@@ -8,6 +8,7 @@ import {
   createContact,
   updateContact,
   deleteContact,
+  ContactFieldError,
   ContactNameTakenError,
   ContactInUseError,
   getCollectionTranslationContext,
@@ -92,6 +93,8 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     fullName: str(formData, "fullName") || null,
     email: str(formData, "email") || null,
     phone: str(formData, "phone") || null,
+    // The Facebook profile link (#1545), normalised — or refused — by the domain on write.
+    facebookProfileUrl: str(formData, "facebookProfileUrl") || null,
     buyer: bool(formData, "buyer"),
     seller: bool(formData, "seller"),
     exchangePartner: bool(formData, "exchangePartner"),
@@ -193,7 +196,7 @@ export async function createContactAction(
     );
     return { status: "success", contact };
   } catch (err) {
-    if (err instanceof ContactNameTakenError || err instanceof PhotoLimitsError) {
+    if (err instanceof ContactNameTakenError || err instanceof ContactFieldError || err instanceof PhotoLimitsError) {
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to add contact. Please try again." };
@@ -216,7 +219,7 @@ export async function updateContactAction(
     );
     return { status: "success", contact };
   } catch (err) {
-    if (err instanceof ContactNameTakenError || err instanceof PhotoLimitsError) {
+    if (err instanceof ContactNameTakenError || err instanceof ContactFieldError || err instanceof PhotoLimitsError) {
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to save contact. Please try again." };

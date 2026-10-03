@@ -357,6 +357,20 @@ export function ContactFormDialog({
                 </div>
               </div>
 
+              {/* What a Facebook auction's winner is recognised by (#1545): names repeat there. */}
+              <div style={FIELD_GAP}>
+                <LabelWithError htmlFor="contact-facebook-profile">Facebook profile</LabelWithError>
+                <TextInput
+                  id="contact-facebook-profile"
+                  name="facebookProfileUrl"
+                  type="url"
+                  defaultValue={contact?.facebookProfileUrl ?? ""}
+                  placeholder="https://www.facebook.com/…"
+                  disabled={isPending}
+                  style={INPUT_STYLE}
+                />
+              </div>
+
               <div style={FIELD_GAP}>
                 <LabelWithError>Roles</LabelWithError>
                 <div

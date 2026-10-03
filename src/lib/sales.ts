@@ -515,14 +515,21 @@ async function assertSaleOwner(ownerId: string, saleId: string): Promise<SaleRef
 export async function createSale(
   ownerId: string,
   collectionId: string,
-  input: SaleHeaderInput
+  input: SaleHeaderInput,
+  opts: { offerCurrency?: string } = {}
 ): Promise<string> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
   const { platformCurrency } = await assertPlatform(collectionId, input.platformId);
   await assertBuyer(collectionId, input.buyerId);
   // Currency is inherited from the platform (#196): locked to the platform's, or set from the
   // form's fallback on the first offer/sale. Snapshotted onto the sale for history + FX freeze.
-  const currency = await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency);
+  //
+  // `offerCurrency` is the one exception: a sale recorded **for one offer** whose currency is its
+  // own (#1545 — an auction in a Facebook group with a currency of its own, settled 2026-10-03) is in
+  // that offer's currency, and the platform's lock is neither read nor written, exactly as the offer
+  // itself was created.
+  const currency =
+    opts.offerCurrency ?? (await resolvePlatformCurrency(input.platformId, platformCurrency, input.currency));
 
   const fxRateToBase = await freezeFxRate(collectionId, currency, baseCurrency);
   // How it is being sent, when the form asked (#468). Recorded at creation because the buyer picks

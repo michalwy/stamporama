@@ -79,12 +79,42 @@ read together.
   are the offer's own ZIP for a single post and `GET …/facebook-posts/[postId]/photos/zip` for a
   multi-lot one — every lot's upload set, flat, prefixed `lot-NN-`.
 
+- **The running bid is the offer's own price, typed** (#1545; ADR-0061 §4, decided with the
+  collector on 2026-10-03). No bidder is recorded — amount only. The card's **Record bid** is
+  `patchOfferAction(…, "price")`, so `priceCheckedAt` dates it by #449's existing rule and nothing
+  raises drift (#542 keeps an auction's current price outside it). The offers list carries
+  `priceCheckedAt` and draws the age beside a running auction's figure, in every platform's row.
+
+- **A closed Facebook auction asks for its result with or without a bid** — `auctionNeedsResolution`
+  takes `facebook` and skips the *somebody bid* part for it, and `endedAuctionWhere` adds
+  `facebookGroupId: { not: null }` to the bid `OR`: nobody reads Facebook bids, so a zero is no
+  evidence. The integration test fails with that clause removed (checked when written).
+
+- **The result is `facebook-results.ts`** (imports `offers.ts` and `sales.ts`; nothing imports it but
+  the actions). A win: the winner contact is found by `facebookProfileUrl` first, then by name
+  (case-insensitive, any role); a name match carrying a **different** link is refused as somebody
+  else, since `Contact.name` is unique and cannot be taken twice. A found contact gets the buyer role
+  and, where it has none, the link; otherwise a buyer is created with both. The winning bid is written
+  to the offer (`patchOffer`), then every unsold set goes into the chosen sale at the price split in
+  cents (`splitAuctionPrice`, odd cents first) — the winner's open Facebook sale (`ordered | paid |
+  packed`, same platform, buyer and currency, re-checked on save) or a new one, which `createSale`
+  makes in the **offer's** currency through `offerCurrency`, so a group's own currency survives and
+  the platform lock is untouched. A new sale whose lines fail is deleted again. *No bids* is
+  `setOfferState(…, "withdrawn")`. Both refuse anything not `active | paused`.
+
+- **The profile link is stored normalised** (`normalizeFacebookProfileUrl`, pure in
+  `facebook-result-rules.ts`): `https://www.facebook.com/<path>`, lower case, no trailing slash, no
+  query except `profile.php`'s `id`, the phone and desktop hosts folded together — so the lookup is an
+  equality. `contacts.ts` normalises on every write and refuses a non-Facebook address with
+  `ContactFieldError`; an update that omits the field leaves it alone.
+
 - **Where it is seen.** Settings → Facebook (`facebook-settings-page.tsx`): the platform choice in the
   header (`MarketplacePlatformSelect`, *Facebook platform*), then list beside detail (#1471) with no
   tabs and no summary strip — the groups are the one thing configured. Archive/Restore is the detail
   pane's header action; Delete is disabled with its reason while offers name the group. The user guide
   is `docs/user-guide/facebook.md`.
   An auction is the offer form (group + increment, shown only on the Facebook platform, the group
-  locked on a lot of a post), the **Facebook** card on the offer's screen (`offer-facebook-card.tsx`),
+  locked on a lot of a post), the **Facebook** card on the offer's screen (`offer-facebook-card.tsx`,
+  with a **Bidding** part while it is up and the result dialog, `facebook-result-dialog.tsx`),
   and **Post together** in the offers list's selection bar, offered while every ticked offer in view
   is a Facebook auction and numbering the lots in tick order.

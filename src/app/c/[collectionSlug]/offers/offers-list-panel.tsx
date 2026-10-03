@@ -641,7 +641,7 @@ export function OffersListPanel({
               Beside "Needs action" because it is the same kind of thing — an overlay across states,
               and stock committed where the app cannot see it — and it alarms on the same terms:
               every one of these is a buyer waiting on a decision only the collector can make. */}
-          <Tooltip content="Auctions that closed with a bid on them and have not been resolved — record the sale, or mark them unsold and relist">
+          <Tooltip content="Auctions that closed with a bid on them — on Facebook, every closed auction — and have not been resolved">
             <FilterChip
               label="Ended auctions"
               count={counts?.endedAuction}

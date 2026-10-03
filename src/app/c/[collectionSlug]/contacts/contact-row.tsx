@@ -85,14 +85,24 @@ export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowP
           <RowActionsMenu actions={menuActions} ariaLabel="Contact actions" />
         </div>
 
-        {/* Line 2: full name · email · phone (only when present). The full name leads because it
+        {/* Line 2: full name · email · phone · Facebook profile (only when present). The full name leads because it
             says *who* the row is — a buyer filed under their marketplace login (#463) is otherwise
             a handle with no person attached. */}
-        {(c.fullName || c.email || c.phone) && (
+        {(c.fullName || c.email || c.phone || c.facebookProfileUrl) && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.3rem" }}>
             {c.fullName && <span style={META_INLINE}>{c.fullName}</span>}
             {c.email && <span style={META_INLINE}>{c.email}</span>}
             {c.phone && <span style={META_INLINE}>{c.phone}</span>}
+            {c.facebookProfileUrl && (
+              <a
+                href={c.facebookProfileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...META_INLINE, color: "var(--color-accent)", textDecoration: "none" }}
+              >
+                Facebook ↗
+              </a>
+            )}
           </div>
         )}
       </div>

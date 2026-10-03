@@ -55,6 +55,20 @@ ends, which creates the sale as every other platform's result does.
 **Rejected, with the collector:** recording the result only, and the Assistant reading the bids out
 of the comments.
 
+**Settled with the collector on 2026-10-03, building it (#1545):**
+
+- The running bid is the **amount only**, no bidder — the offer's own price, dated as every typed bid
+  is, and shown on the offer lists with its age.
+- **Every Facebook auction past its closing time asks for its result**, bid recorded or not: nothing
+  reads its bids, so a zero is no evidence that nobody bid.
+- The winner is a **contact found by their profile link first, then by name**, created as a buyer
+  when neither finds one. The link is **optional** and kept on the contact
+  (`Contact.facebookProfileUrl`), filled in on a contact that has none.
+- The lot goes into a **sale the collector chooses**: one of the winner's open Facebook sales in the
+  auction's currency — several lots won by one person are one parcel — or a new one, which is in the
+  auction's own currency.
+- **No bids withdraws the offer**, freeing its copies; listing again is a new offer.
+
 ### 5. A copy is in one active Facebook auction at a time
 
 Listing the same copies in several groups at once is a later, separate decision (#1547): what the

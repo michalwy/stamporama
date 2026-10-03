@@ -34,6 +34,7 @@ import {
   ListingTypeChip,
 } from "./offer-badges";
 import { Icon, type IconName } from "@/app/icons";
+import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -123,6 +124,12 @@ export function OfferRow({
   // filter context on with the offer it opens.
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}${listContextQuery}`;
   const terminal = isTerminalState(offer.state);
+  // When a running auction's standing bid was recorded (#1545) — shown beside it as an age, and in
+  // full on hover. A closed listing's figure is final, so its age says nothing.
+  const bidCheckedAt =
+    isAuctionListing(offer.listingType) && offer.priceCheckedAt && !terminal && offer.price !== "0.00"
+      ? new Date(offer.priceCheckedAt).toISOString()
+      : null;
 
   // One-click advance through the linear part of the lifecycle (#255). Only shown where the next
   // move is unambiguous and permitted — a target that would list something needs ≥1 set, else the
@@ -320,7 +327,7 @@ export function OfferRow({
           {offer.inActiveBidding && <InActiveBiddingChip />}
           {/* …and whether that bidding is over with nobody having settled it (#490): the auction's
               moment has passed, somebody bid, and only the collector can say what became of it. */}
-          {offer.needsResolution && <AuctionEndedChip />}
+          {offer.needsResolution && <AuctionEndedChip facebook={offer.facebookGroupId !== null} />}
           {/* …and the end of that road: the marketplace has taken an order for this listing and no
               sale is recorded here yet (#499). It sits after the auction chips because it is what
               they turn into, and because it is the one that is no longer a question. */}
@@ -356,7 +363,11 @@ export function OfferRow({
               </a>
             </Tooltip>
           )}
-          <Tooltip content={priceLabel(offer.listingType)} align="end" style={{ marginLeft: "auto" }}>
+          <Tooltip
+            content={bidCheckedAt ? `${priceLabel(offer.listingType)}, recorded ${formatInstant(bidCheckedAt)}` : priceLabel(offer.listingType)}
+            align="end"
+            style={{ marginLeft: "auto" }}
+          >
             <span
               style={{
                 fontSize: "0.875rem",
@@ -377,6 +388,13 @@ export function OfferRow({
                   {offer.priceBase && (
                     <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
                       ≈ {offer.priceBase} {offer.baseCurrency}
+                    </span>
+                  )}
+                  {/* A standing bid with its age (#1545): on a platform whose bids are typed by
+                      hand, a figure recorded days ago has to look it. */}
+                  {bidCheckedAt && (
+                    <span style={{ marginLeft: "0.375rem", fontWeight: 500, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                      · {formatRelative(bidCheckedAt, new Date())}
                     </span>
                   )}
                 </>

@@ -5812,6 +5812,11 @@ model Contact {
   fullName         String?
   email            String?
   phone            String?
+  // The person's Facebook profile link (#1545; ADR-0061 §4). A Facebook group auction is won by a
+  // profile, and names repeat there, so the link is what recognises a repeat buyer: the result dialog
+  // looks a winner up by it first and by name second, and fills it in on a contact that has none.
+  // Optional, and stored normalised (`normalizeFacebookProfileUrl`) so the comparison is an equality.
+  facebookProfileUrl String?
   // Roles are independent, combinable boolean flags (a contact can be several at
   // once), mirroring the disposition flags on `Item` (ADR-0007 §4, ADR-0008).
   buyer            Boolean  @default(false)
@@ -6023,6 +6028,7 @@ model Contact {
   // `name` is unique per collection (see migration).
   @@unique([collectionId, name])
   @@index([collectionId])
+  @@index([collectionId, facebookProfileUrl])
   @@index([defaultCollageTemplateId])
   @@index([defaultAuctionPlatformId])
   @@index([defaultAllegroListingProfileId])
