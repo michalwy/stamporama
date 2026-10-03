@@ -17,6 +17,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import type { BulkCopyChanges } from "@/app/c/[collectionSlug]/shared/bulk-copy-changes";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
+import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults";
 import {
   LocationRefField,
   useLocationRefUsage,
@@ -194,6 +195,10 @@ export function BulkEditCopiesDialog({
   // A tag menu is a popover with an Escape listener of its own and is not an escape layer (#361),
   // so one Escape would otherwise close the menu *and* this dialog under it.
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
+  // The two fault lists (#1557), the tags' shape for the tags' reason: a copy carries any number.
+  const { data: faults } = useCollectionFaults(collectionId);
+  const [addFaultIds, setAddFaultIds] = useState<string[]>([]);
+  const [removeFaultIds, setRemoveFaultIds] = useState<string[]>([]);
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   // Only asked for while a location is actually being chosen: *Leave as is* and *Clear* write no
   // ref at all, so there is nothing to suggest and nothing to collide with.
@@ -263,9 +268,14 @@ export function BulkEditCopiesDialog({
   ].filter((axis) => axis.available);
   const changedIdentity = identityAxes.filter((axis) => axis.choice !== KEEP);
   const changesTags = addTagIds.length > 0 || removeTagIds.length > 0;
+  const changesFaults = addFaultIds.length > 0 || removeFaultIds.length > 0;
   const canApply =
     !isPending &&
-    (locationAnswered || changedFlags.length > 0 || changedIdentity.length > 0 || changesTags);
+    (locationAnswered ||
+      changedFlags.length > 0 ||
+      changedIdentity.length > 0 ||
+      changesTags ||
+      changesFaults);
 
   return (
     <DialogShell
@@ -302,6 +312,8 @@ export function BulkEditCopiesDialog({
           // Sent only when non-empty: an empty list is not a value on this axis, it is silence.
           if (addTagIds.length > 0) changes.addTagIds = addTagIds;
           if (removeTagIds.length > 0) changes.removeTagIds = removeTagIds;
+          if (addFaultIds.length > 0) changes.addFaultIds = addFaultIds;
+          if (removeFaultIds.length > 0) changes.removeFaultIds = removeFaultIds;
           onSubmit(changes);
         }}
       >
@@ -484,6 +496,61 @@ export function BulkEditCopiesDialog({
                   Applied to every selected copy, whatever it reads now — this is the correction of a
                   batch that was recorded wrong, not a filter. Catalog values are looked up per
                   condition, so a re-graded copy is valued against its new grade from here on.
+                </p>
+              </div>
+            )}
+
+            {/* The copies' faults (#1557), worded and laid out as the tags below: what to put on and
+                what to take off, and every fault not named stays. Hidden while the dictionary is
+                empty — it is seeded, so an empty one is a list the collector emptied on purpose. */}
+            {(faults?.length ?? 0) > 0 && (
+              <div>
+                <LabelWithError>Faults</LabelWithError>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <TagRow
+                    label="Add"
+                    options={(faults ?? [])
+                      .filter((f) => !removeFaultIds.includes(f.id))
+                      .map((f) => ({ id: f.id, label: f.name }))}
+                    selected={addFaultIds}
+                    onChange={setAddFaultIds}
+                    allLabel="No faults to add"
+                    disabled={isPending}
+                    onOpenChange={setTagMenuOpen}
+                    note={
+                      addFaultIds.length === 0
+                        ? null
+                        : describeAlready(
+                            copies.filter((c) =>
+                              addFaultIds.every((id) => c.faults.some((f) => f.id === id))
+                            ).length,
+                            count
+                          )
+                    }
+                  />
+                  <TagRow
+                    label="Remove"
+                    options={(faults ?? [])
+                      .filter((f) => !addFaultIds.includes(f.id))
+                      .map((f) => ({ id: f.id, label: f.name }))}
+                    selected={removeFaultIds}
+                    onChange={setRemoveFaultIds}
+                    allLabel="No faults to remove"
+                    disabled={isPending}
+                    onOpenChange={setTagMenuOpen}
+                    note={
+                      removeFaultIds.length === 0
+                        ? null
+                        : `on ${
+                            copies.filter((c) =>
+                              removeFaultIds.some((id) => c.faults.some((f) => f.id === id))
+                            ).length
+                          } of ${count}`
+                    }
+                  />
+                </div>
+                <p style={HINT_STYLE}>
+                  Only the faults named here change. Every other fault each copy carries stays.
                 </p>
               </div>
             )}

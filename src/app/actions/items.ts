@@ -31,6 +31,8 @@ import type { ArrivingCopy } from "@/lib/want-rules";
 import { applyPhotoChangeSet, parsePhotoChangeSet } from "@/lib/photos";
 import { setItemTagEntries } from "@/lib/tags";
 import { parseTagEntries } from "@/lib/tag-entry";
+import { setItemFaultEntries } from "@/lib/faults";
+import { parseFaultEntries } from "@/lib/fault-entry";
 
 export type ItemActionState =
   | { status: "idle" }
@@ -185,6 +187,7 @@ export async function createItemAction(
       await applyPhotoChangeSet(session.user.id, item.id, changeSet);
     }
     await applyTypedTags(session.user.id, item.id, formData, "add");
+    await applyChosenFaults(session.user.id, item.id, formData, "add");
     // A copy added by hand defaults to `delivered` and is in the collector's hands, so the review
     // belongs here; one entered as ordered or in transit waits for the state that says it arrived.
     return { status: "success", copy: isDelivered(item.deliveryState) ? toArriving(item) : undefined };
@@ -208,6 +211,22 @@ async function applyTypedTags(
   const entries = parseTagEntries(formData.get("copyTags"));
   if (!entries || (mode === "add" && entries.length === 0)) return;
   await setItemTagEntries(ownerId, itemId, entries);
+}
+
+/**
+ * The faults chosen in the copy dialog (#1557), resolved and written after the copy itself —
+ * {@link applyTypedTags}'s rules: when adding, an empty set writes nothing; when editing, a submitted
+ * set replaces the copy's faults and an absent field leaves them alone.
+ */
+async function applyChosenFaults(
+  ownerId: string,
+  itemId: string,
+  formData: FormData,
+  mode: "add" | "edit"
+): Promise<void> {
+  const entries = parseFaultEntries(formData.get("copyFaults"));
+  if (!entries || (mode === "add" && entries.length === 0)) return;
+  await setItemFaultEntries(ownerId, itemId, entries);
 }
 
 /** A copy in the shape the want review reads it. */
@@ -246,6 +265,7 @@ export async function createItemForOfferAction(
       await applyPhotoChangeSet(session.user.id, created.id, changeSet);
     }
     await applyTypedTags(session.user.id, created.id, formData, "add");
+    await applyChosenFaults(session.user.id, created.id, formData, "add");
     const item = await getItemListItem(session.user.id, created.id);
     return { status: "success", item };
   } catch {
@@ -275,6 +295,7 @@ export async function updateItemAction(
       await applyPhotoChangeSet(session.user.id, itemId, changeSet);
     }
     await applyTypedTags(session.user.id, itemId, formData, "edit");
+    await applyChosenFaults(session.user.id, itemId, formData, "edit");
     // Turning a copy to `delivered` is the moment it reaches the collector's hands, whichever route
     // it took to get here — bought at auction, settled into a purchase, sorted out of a box. That
     // is the arrival the want review belongs to, and this is the edit that performs it.

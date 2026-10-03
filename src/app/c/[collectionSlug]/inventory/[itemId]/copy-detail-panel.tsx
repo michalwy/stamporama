@@ -46,6 +46,7 @@ import {
   ConditionChip,
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
+import { FaultChips } from "@/app/c/[collectionSlug]/shared/fault-chip";
 import { Icon } from "@/app/icons";
 
 // The copy detail screen (#517). Read-only by design: every field here is edited through the copy
@@ -284,6 +285,15 @@ export function CopyDetailPanel({
                     />
                     {item.conditionName}
                   </span>
+                </Field>
+                {/* What is wrong with the piece (#1557), beside the condition it qualifies — the
+                    chips the Copies row draws, from the same source. Edited in the copy dialog. */}
+                <Field label="Faults">
+                  {item.faults.length > 0 ? (
+                    <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                      <FaultChips faults={item.faults} size="medium" />
+                    </span>
+                  ) : null}
                 </Field>
                 <Field label="Certificate">
                   {item.certificateStatusName ? (

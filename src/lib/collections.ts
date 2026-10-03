@@ -27,6 +27,7 @@ async function recomputeCollectionSortKeys(collectionId: string): Promise<void> 
 import { seedDefaultConditions } from "./conditions";
 import { seedDefaultFormats } from "./stamp-formats";
 import { seedDefaultSubtypes } from "./subtypes";
+import { seedDefaultFaults } from "./faults";
 
 export async function generateUniqueSlug(
   ownerId: string,
@@ -72,6 +73,7 @@ export async function createCollection(
       await seedDefaultConditions(created.id, tx as never);
       await seedDefaultFormats(created.id, tx as never);
       await seedDefaultSubtypes(created.id, tx as never);
+      await seedDefaultFaults(created.id, tx as never);
       await createFirstScanningProfile(tx as never, created.id);
       if (options?.seedDemo) {
         await seedDemoData(created.id, tx as never);

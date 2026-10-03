@@ -1,6 +1,7 @@
 import type { ItemListFiltersPaginated } from "@/lib/items";
 import { isDeliveryState } from "@/lib/delivery-state";
 import { tagFilterFromParams } from "@/lib/tag-filter";
+import { faultFilterFromParams } from "@/lib/fault-filter";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { readSearchParam } from "@/lib/text-input";
 import { readYearFilter } from "@/lib/list-area-year-filter";
@@ -51,6 +52,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     // parser the panel and the other two lists' routes use, so *any* and *all* cannot come to mean
     // different things on different screens.
     ...tagFilterFromParams(sp),
+    // The copy's faults (#1557): any of the ticked ones, `none` for the copies with no fault.
+    ...faultFilterFromParams(sp),
     conditionIds: readConditionIds(sp),
     certificateStatusIds: readCsvParam(sp, "certificateStatusIds"),
     formatIds: readCsvParam(sp, "formatIds"),

@@ -26,6 +26,8 @@ describe("settings navigation (#1469)", () => {
           "Catalogs",
           "Conditions",
           "Certificate statuses",
+          // The copy's faults (#1557), beside the other two dictionaries a copy is described with.
+          "Faults",
           "Formats",
           "Subtypes",
           "Attributes",

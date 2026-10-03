@@ -40,6 +40,7 @@ export type SettingsEntryKey =
   | "catalogs"
   | "conditions"
   | "certificates"
+  | "faults"
   | "formats"
   | "subtypes"
   | "attributes"
@@ -126,6 +127,12 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     group: "catalog",
     label: "Certificate statuses",
     hint: "Whether and how a copy has been certified — the second axis of a catalogue price.",
+  },
+  {
+    key: "faults",
+    group: "catalog",
+    label: "Faults",
+    hint: "What can be wrong with a copy beyond its condition — a thin, a crease, a missing tooth.",
   },
   {
     key: "formats",

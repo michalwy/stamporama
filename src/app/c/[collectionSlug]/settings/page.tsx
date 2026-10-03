@@ -11,6 +11,7 @@ import { getStampFormats } from "@/lib/stamp-formats";
 import { getCollectionFormatFactors } from "@/lib/format-factors";
 import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampSubtypes } from "@/lib/subtypes";
+import { getFaults } from "@/lib/faults";
 import { getStampAttributeLists } from "@/lib/stamp-attributes";
 import { getStampSizePresets } from "@/lib/stamp-size-presets";
 import { listScanningProfiles } from "@/lib/scanning-profiles";
@@ -84,6 +85,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     formatFactors,
     certificateStatuses,
     subtypes,
+    faults,
     attributes,
     stampSizePresets,
     scanningProfiles,
@@ -122,6 +124,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     getCollectionFormatFactors(session.user.id, collection.id),
     getCertificateStatuses(session.user.id, collection.id),
     getStampSubtypes(session.user.id, collection.id),
+    getFaults(session.user.id, collection.id),
     getStampAttributeLists(session.user.id, collection.id),
     getStampSizePresets(session.user.id, collection.id),
     listScanningProfiles(session.user.id, collection.id),
@@ -191,6 +194,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           initialFormatFactors={formatFactors}
           initialCertificateStatuses={certificateStatuses}
           initialSubtypes={subtypes}
+          initialFaults={faults}
           initialAttributes={attributes}
           initialStampSizePresets={stampSizePresets}
           initialTags={tags}

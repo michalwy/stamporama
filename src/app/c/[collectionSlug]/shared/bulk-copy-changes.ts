@@ -38,6 +38,9 @@ export interface BulkCopyChanges {
    * everywhere else. Empty or absent writes nothing. */
   addTagIds?: string[];
   removeTagIds?: string[];
+  /** Faults put on and taken off every picked copy (#1557) — the tags' two lists, for their reason. */
+  addFaultIds?: string[];
+  removeFaultIds?: string[];
 }
 
 /** Serialize {@link BulkCopyChanges} onto a form, for both the id-list and scoped bulk actions.
@@ -63,4 +66,6 @@ export function appendBulkChanges(fd: FormData, changes: BulkCopyChanges): void 
   // value for a present-but-empty field to mean.
   if (changes.addTagIds?.length) fd.set("addTagIds", changes.addTagIds.join(","));
   if (changes.removeTagIds?.length) fd.set("removeTagIds", changes.removeTagIds.join(","));
+  if (changes.addFaultIds?.length) fd.set("addFaultIds", changes.addFaultIds.join(","));
+  if (changes.removeFaultIds?.length) fd.set("removeFaultIds", changes.removeFaultIds.join(","));
 }

@@ -208,6 +208,9 @@ right, from *which copies* to *how they are shown*.
   of the panel, shows the copies carrying no tag at all; ticked beside some tags, it shows those
   copies as well. The filter appears only
   once your collection defines tags, and it is remembered between visits like the ones beside it.
+- **Faults** — show only copies carrying **any** of the [faults](faults.md) you tick. **No faults**,
+  at the top of the panel, shows the copies with no fault at all; ticked beside some faults, it shows
+  those copies as well. Remembered between visits like the ones beside it.
 - **Location** — show only copies stored in a chosen [location](locations.md). Selecting a
   location includes copies in every location nested inside it, so filtering by a cabinet
   shows the copies in all of its stockbooks at once. A **+ sub-locations / this location only**
@@ -632,6 +635,8 @@ beside **Add copy**. Both are gone; what you had on that screen is now on an ope
      question you opened the picker to answer.
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
+   Under them, pick the copy's **faults** — a thin, a crease, a missing tooth — if it has any. See
+   [Faults](faults.md).
 4. Set the **disposition** flags. New copies default to *In collection* until you've added
    one — after that, see the note below.
 5. Optionally file the copy into a **storage location** and add an in-location **ref**
@@ -1296,7 +1301,10 @@ whether you are about to change anything.
 
 The certificate and format rows appear only once your collection defines some.
 
-**Tags** is the fourth section, and it is the one worded as two verbs rather than as a value:
+**Faults**, the fourth section, works the same way as the tags below it: **Add** puts the [faults](faults.md) you name on
+every picked copy, **Remove** takes them off, and every fault you do not name stays where it is.
+
+**Tags** is the last section, worded as two verbs rather than as a value:
 
 - **Add** puts the tags you name on every picked copy. A copy already carrying one is left as it is.
 - **Remove** takes the tags you name off every picked copy. A copy not carrying one is left as it

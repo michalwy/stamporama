@@ -13,6 +13,7 @@ import {
   type LotCopyFilter,
 } from "./items";
 import { applyItemTagChanges, hasItemTagChanges } from "./tags";
+import { applyItemFaultChanges, hasItemFaultChanges } from "./faults";
 import {
   createLeadingEntriesTx,
   setItemStampsTx,
@@ -1296,6 +1297,10 @@ export interface LotBulkChanges {
    */
   addTagIds?: string[];
   removeTagIds?: string[];
+  /** Faults put on and taken off every targeted copy (#1557) — the tags' two lists exactly, written
+   *  through `applyItemFaultChanges` in `faults.ts` inside the same transaction. */
+  addFaultIds?: string[];
+  removeFaultIds?: string[];
 }
 
 /** The three identity axes a bulk change can re-state (#723), as a group: they are validated
@@ -1360,7 +1365,8 @@ function isNoopBulk(changes: LotBulkChanges): boolean {
     !hasDisposition &&
     !changes.markSorted &&
     !hasVariantChange(changes) &&
-    !hasItemTagChanges(changes)
+    !hasItemTagChanges(changes) &&
+    !hasItemFaultChanges(changes)
   );
 }
 
@@ -1424,18 +1430,16 @@ async function applyLotBulkChanges(
         },
       });
     }
-    if (hasItemTagChanges(changes)) {
-      // The one change here that cannot be an `updateMany`: a tag is a row in a join table, so the
-      // targeted copies have to be named. Resolved **inside** the transaction and only when the
-      // pass actually carries tags, so the scoped write (#172) pays for the extra read exactly
-      // when it is asked for tags and never otherwise.
-      const targeted = await tx.item.findMany({ where: baseWhere, select: { id: true } });
-      await applyItemTagChanges(
-        tx,
-        collectionId,
-        targeted.map((r) => r.id),
-        changes
-      );
+    if (hasItemTagChanges(changes) || hasItemFaultChanges(changes)) {
+      // The changes here that cannot be an `updateMany`: a tag or a fault is a row in a join table,
+      // so the targeted copies have to be named. Resolved **inside** the transaction and only when
+      // the pass actually carries tags or faults, so the scoped write (#172) pays for the extra read
+      // exactly when it is asked for them and never otherwise.
+      const targeted = (
+        await tx.item.findMany({ where: baseWhere, select: { id: true } })
+      ).map((r) => r.id);
+      await applyItemTagChanges(tx, collectionId, targeted, changes);
+      await applyItemFaultChanges(tx, collectionId, targeted, changes);
     }
     if (changes.deliveryState) {
       const inCollection = inCollectionForDelivery(changes.deliveryState);

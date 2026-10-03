@@ -147,6 +147,7 @@ model Collection {
   hawidStrips     HawidStrip[]
   stampSizePresets StampSizePreset[]
   tags            Tag[]
+  faults          Fault[]
   albumTemplates  AlbumTemplate[]
   albumOrnaments  AlbumOrnament[]
   albumPictures   AlbumPicture[]
@@ -951,6 +952,74 @@ model ItemTag {
   @@id([itemId, tagId])
   @@index([tagId])
   @@map("item_tag")
+}
+
+// A fault a copy can carry (#1557): a thin, a thinned gum, a missing tooth, a crease, a hinge
+// remnant. A **dictionary the collector defines** and a copy picks from, so *crease* on forty copies
+// is one row that a filter can find, not forty spellings.
+//
+// Shaped like the catalogue dictionaries rather than like `Tag`, and each difference is the point:
+// **ordered by hand** (`sortOrder`), because a short list of faults reads best in the order the
+// collector checks a stamp in; **translated** (`FaultTranslation`), because a fault is printed in
+// an offer's description in the platform's language (#1559); and **seeded** with the common faults
+// (`DEFAULT_FAULTS` in `src/lib/faults.ts`), which the collector can rename, reorder or remove.
+//
+// No colour and no percentage. A fault's effect on value is a percentage typed **on the copy**
+// (#1560), never a figure stored here — settled with the collector on 2026-10-03.
+//
+// Names are unique per collection, as a tag's are: a fault is typed into the copy dialog and matched
+// by name, so two rows spelled the same would be two filters nobody could tell apart.
+model Fault {
+  id           String   @id @default(cuid())
+  collectionId String
+  name         String
+  sortOrder    Int
+  createdAt    DateTime @default(now())
+
+  collection   Collection         @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  translations FaultTranslation[]
+  copies       ItemFault[]
+
+  @@unique([collectionId, name])
+  @@index([collectionId])
+  @@map("fault")
+}
+
+// Per-language `name` for a fault (#1557), what an offer's description prints in the platform's
+// language (#1559). The row's own `name` is the collection's default language; a row here overrides
+// it for one language, and a missing one falls back to it.
+model FaultTranslation {
+  faultId  String
+  language String
+  name     String?
+
+  fault Fault @relation(fields: [faultId], references: [id], onDelete: Cascade)
+
+  @@id([faultId, language])
+  @@map("fault_translation")
+}
+
+// A fault on a copy (#1557). Any number per copy; the copy's own, inherited from nothing.
+//
+// **Cascade at both ends in the database, and a fault in use is still never deleted.** The rule —
+// a fault some copy carries cannot be removed from the dictionary — is enforced by `deleteFault`
+// (`src/lib/faults.ts`), which refuses and names the count. As a RESTRICT constraint it would also
+// fire while a whole collection is being deleted: the cascade into `fault` is queued before the one
+// into `item_fault` that deleting the copies only queues later, which is the collision measured in
+// `20260911120000_multi_stamp_copies` for `item_stamp`. So the constraint stays out of the way and
+// the cascade from the fault side is only ever reached by a deletion taking the collection anyway.
+model ItemFault {
+  itemId  String
+  faultId String
+
+  item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fault Fault @relation(fields: [faultId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, faultId])
+  // *Which copies carry this fault* — the direction the fault filter and the delete refusal's count
+  // both read it in.
+  @@index([faultId])
+  @@map("item_fault")
 }
 
 // A collection-level **render preset** for album pages (#766) — everything about how an album
@@ -3349,6 +3418,9 @@ model Item {
   /** The collector's own labels on this copy (#1181). See {@link ItemTag}: nothing is inherited
    *  from the stamp this copy is linked to, or from that stamp's issue. */
   tags ItemTag[]
+  /** What is wrong with this piece (#1557) — a thinned gum, a missing tooth, a crease. See
+   *  {@link ItemFault}. */
+  faults ItemFault[]
 
   @@unique([collectionId, itemNo])
   @@index([collectionId])

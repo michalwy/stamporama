@@ -30,6 +30,7 @@ import { defaultTreeSelectButtonClassName } from "@/app/tree-select";
 import { PhotoEditor, type PhotoEditorValue } from "./photo-editor";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
+import { FaultEntryField } from "@/app/c/[collectionSlug]/shared/fault-entry-field";
 import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 import {
   readAddCopyDefaults,
@@ -499,6 +500,18 @@ export function InventoryItemFormDialog({
                   ))}
                 </select>
               </div>
+            </div>
+
+            {/* What is wrong with this piece (#1557), right under the condition it qualifies — chosen
+                from the collection's fault list, saved with the rest of the copy. */}
+            <div>
+              <GroupLabel htmlFor="copy-faults">Faults</GroupLabel>
+              <FaultEntryField
+                collectionId={collectionId}
+                inputId="copy-faults"
+                initialFaults={item?.faults ?? []}
+                disabled={isPending}
+              />
             </div>
 
             {/* Row 3: delivery · disposition — a wide select (its labels are long) beside the

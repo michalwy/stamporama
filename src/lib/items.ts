@@ -71,6 +71,8 @@ import {
 } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
+import { orderFaultSummaries, FAULT_SUMMARY_SELECT, type FaultSummary } from "./faults";
+import { faultFilterWhere } from "./fault-filter";
 import { NO_AREA } from "./list-area-year-filter";
 import type { StructureCopy } from "./collection-structure-rules";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
@@ -1161,6 +1163,10 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  hand and was never a statement about the catalogue entry. */
   tagIds?: string[];
   tagMode?: TagFilterMode;
+  /** Restrict to copies carrying **any** of these faults (#1557), the copy's own. The literal
+   *  `"none"` (`NO_FAULTS`) is a tickable value matching the copies with no fault at all, ORed with
+   *  the real ones. Empty or omitted is no filter. See `fault-filter.ts`. */
+  faultIds?: string[];
   /** The multi-stamp copies (#748; ADR-0044 §7): `only` the carriers, or everything `exclude` them.
    *  Absent is both — the list's default, since a carrier stays an ordinary copy for everything the
    *  list does. Narrows through the very fragments the counts spread (`multi-stamp.ts`). */
@@ -1350,6 +1356,10 @@ function buildItemWhere(
   // itself an `AND`, and because the search's `OR` is already here.
   const tags = tagFilterWhere(filters);
   if (tags) and.push(tags);
+  // The copy's faults (#1557), in the AND list for the tags' reason: *no faults* beside real ones is
+  // an `OR` of its own.
+  const faults = faultFilterWhere(filters);
+  if (faults) and.push(faults);
   if (filters.attachableToLotId) {
     // Two branches rather than one `lotId: { not: … }`: a copy on no lot must pass, and an
     // inequality is not a reliable way to say that about a nullable column.
@@ -1653,6 +1663,9 @@ export interface ItemListItem {
    * order. Empty is the normal case. **Nothing is inherited**: a tag on this copy's stamp — or on
    * any of the stamps a multi-stamp copy carries (ADR-0044) — is not reported here. */
   tags: TagSummary[];
+  /** What is wrong with this piece (#1557), in the fault dictionary's own order. Empty is the
+   * normal case. The copy's own, like its tags. */
+  faults: FaultSummary[];
   /** Attached photos (#112), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
@@ -1776,6 +1789,8 @@ const ITEM_LIST_SELECT = {
   // handful of rows, so they ride on the row rather than through a batch loader, exactly as the
   // stamp and issue reads carry theirs.
   tags: TAG_SUMMARY_SELECT,
+  // Its faults (#1557), riding on the row for the tags' reason.
+  faults: FAULT_SUMMARY_SELECT,
   condition: { select: { id: true, name: true, abbreviation: true } },
   certificateStatus: { select: { id: true, name: true } },
   format: { select: { id: true, name: true, abbreviation: true } },
@@ -1929,6 +1944,7 @@ function toItemListItem(
     locationRef: row.locationRef,
     createdAt: row.createdAt,
     tags: orderTagSummaries(row.tags),
+    faults: orderFaultSummaries(row.faults),
     photos: row.photos
       .map((p) => ({
         id: p.id,
