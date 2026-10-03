@@ -441,7 +441,11 @@ describe("the catalogue writes (#1438)", () => {
     });
 
     it("publishes exactly these catalogue writes, and nothing that deletes, moves or reorders an issue or a stamp", () => {
-      const catalogue = OPERATIONS.filter((op) => /^\/(issues|stamps)(\/|$)/.test(op.path) && op.writes).map((op) => op.name);
+      // **`move_issue_to_area` is #1539's, not #1438's**: the collector allowed an issue to be moved to
+      // another area, and `agent-api-areas.test.ts` pins it with the area operations.
+      const catalogue = OPERATIONS.filter(
+        (op) => /^\/(issues|stamps)(\/|$)/.test(op.path) && op.writes && op.name !== "move_issue_to_area"
+      ).map((op) => op.name);
       assert.deepEqual(catalogue.sort(), [...CATALOG_OPERATIONS].sort());
       for (const name of CATALOG_OPERATIONS) {
         assert.equal(OPERATIONS.find((op) => op.name === name)?.writes, true, name);
@@ -449,7 +453,9 @@ describe("the catalogue writes (#1438)", () => {
       // **A named exception, with its reason, rather than a narrower pattern** (#1512): the
       // collector allowed a checklist's stamps to be taken off it, and the stamps themselves stay in
       // the catalogue. `agent-api-checklists.test.ts` pins the checklist operations exactly.
-      const exempt = new Set(["remove_checklist_stamps"]);
+      // `move_issue_to_area` is exempted the same way (#1539): the collector allowed an issue to be
+      // moved between areas, and nothing else about an issue or a stamp to be moved.
+      const exempt = new Set(["remove_checklist_stamps", "move_issue_to_area"]);
       const destructive = OPERATIONS.filter(
         (op) =>
           !exempt.has(op.name) &&
