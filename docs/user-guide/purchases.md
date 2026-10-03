@@ -1339,6 +1339,18 @@ stamps first, then the other stamps of its issue — and **its own details**.
   down the column at a glance. A tile following the shared condition draws the same chip as one with
   its own, and the chip changes the moment either value does; a row with no condition yet says
   *no condition*.
+- **Every row with a stamp shows what you already hold of it**, on a second line, worded as the
+  single tile's line is — *You hold 2: 1 in collection (MNH) · 1 for sale (MH)*, with copies on their
+  way or being sorted in clauses of their own, and *You hold none of this yet* when there is none.
+  *Compare with it…* opens the same comparison as for a single tile, with that row's tile on the
+  left. The line follows the row's stamp: a correction reads the new stamp at once, and a row cleared
+  to *No stamp* has no line. Copies this run is about to create are not counted until you confirm it,
+  so two tiles of one stamp each show the same holdings, under the *Same stamp as* mark.
+- **The tile's disposition is on the same line**, as the chips *In collection*, *For sale* and *For
+  trade* — so you decide keep or sell right where you see what you hold. A row starts on the shared
+  disposition from *For all N tiles*; pressing a chip makes it the tile's own, exactly as ticking it
+  under *its own details* does, and the row then says *own disposition*. Tab passes over the chips,
+  so it still goes from one catalogue value to the next.
 - **Where a stamp states a perforation or a watermark, what you read off the piece marks it**, exactly
   as it does on a shortlist: gauge a run in the viewer, or say which watermark you see, and the
   stamps it fits are marked.
