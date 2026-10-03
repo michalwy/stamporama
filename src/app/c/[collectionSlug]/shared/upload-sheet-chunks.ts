@@ -1,4 +1,4 @@
-import type { UploadedSheet } from "@/lib/scan-sheets";
+import type { ScanUploadProgress } from "@/lib/scan-uploads";
 import { scansApiBase } from "./use-scans-query";
 
 /**
@@ -19,18 +19,15 @@ import { scansApiBase } from "./use-scans-query";
  * worth retrying are retried — a network drop or a server error; a refusal (an unsupported format, a
  * batch that no longer exists) is an answer, and asking again three times only delays it.
  *
- * **Two phases, and the second is honestly unmeasured.** After the last chunk the server assembles
- * the parts and runs `prepareSheet` — a ~140 Mpx decode and the `view` derivative — which is seconds
- * with nothing moving. Reporting that as a fraction would mean inventing one; `preparing` says what
- * is happening instead.
+ * **It ends when the bytes are in** (#1567). Preparing the scan — joining the parts, a ~140 Mpx
+ * decode and the `view` derivative — runs in the background on the server: finalizing only puts the
+ * scan in a queue and answers at once, and the Card scans section shows the card being prepared from
+ * the order's scans. It used to be done inside the finalize request, and a large card outlived the
+ * proxy in front of the app (Cloudflare's 524 at about 100 s).
  */
 
-export type SheetUploadPhase = "uploading" | "preparing";
-
 export interface SheetUploadProgress {
-  phase: SheetUploadPhase;
-  /** Chunks acknowledged over chunks expected, while uploading. Meaningless in `preparing`, which
-   * is why that phase is a different word rather than a fraction that stops moving. */
+  /** Chunks acknowledged over chunks expected. */
   fraction: number;
 }
 
@@ -56,7 +53,7 @@ export async function uploadSheetInChunks(input: {
   /** How a back's backs were made (#1555); null takes the collection's last. */
   turnover?: string | null;
   onProgress: (progress: SheetUploadProgress) => void;
-}): Promise<UploadedSheet> {
+}): Promise<ScanUploadProgress> {
   const openUrl = `${scansApiBase(input.collectionId, input.purchaseId)}/uploads`;
   // The parts, the finalize and the abort are addressed by the **upload**, which knows its own
   // owner, so the order is not in their path. Only the open has to say who the card is for.
@@ -88,34 +85,61 @@ export async function uploadSheetInChunks(input: {
     chunks: number;
   };
 
-  input.onProgress({ phase: "uploading", fraction: 0 });
+  input.onProgress({ fraction: 0 });
 
   try {
     for (let index = 0; index < chunks; index++) {
       const start = index * chunkBytes;
       const slice = input.file.slice(start, Math.min(start + chunkBytes, input.file.size));
       const ack = await putChunk(`${base}/${id}?index=${index}`, slice);
-      input.onProgress({
-        phase: "uploading",
-        fraction: chunks > 0 ? ack.received / chunks : 1,
-      });
+      input.onProgress({ fraction: chunks > 0 ? ack.received / chunks : 1 });
     }
-
-    // The bytes are in; the wait from here is server work. Said as a different phase rather than a
-    // bar sitting at 100%, which reads as a hang at exactly the moment the upload has succeeded.
-    input.onProgress({ phase: "preparing", fraction: 1 });
-
-    const finalRes = await fetch(`${base}/${id}/finalize`, { method: "POST" });
-    const body = await finalRes.json();
-    if (!finalRes.ok) {
-      throw new SheetUploadError(body.error ?? "Failed to upload the scan.");
-    }
-    return body as UploadedSheet;
   } catch (err) {
     // Nothing is left behind on a path the collector is already being told about. The hourly sweep
     // would collect the parts anyway; this is what keeps 200 MB off the volume in the meantime.
     void fetch(`${base}/${id}`, { method: "DELETE" }).catch(() => {});
     throw err;
+  }
+
+  // The bytes are in, so the scan is safe from here: it joins the queue and is prepared in the
+  // background, and nothing is discarded if this request's answer is lost — finalizing again is
+  // answered with where the scan already is.
+  let finalRes: Response | null = null;
+  for (let attempt = 0; attempt < CHUNK_ATTEMPTS && finalRes == null; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+    finalRes = await fetch(`${base}/${id}/finalize`, { method: "POST" }).catch(() => null);
+    if (finalRes && finalRes.status >= 500) finalRes = null;
+  }
+  if (!finalRes) {
+    throw new SheetUploadError("The connection dropped while finishing the upload.");
+  }
+  const body = await finalRes.json().catch(() => ({}));
+  if (!finalRes.ok) {
+    void fetch(`${base}/${id}`, { method: "DELETE" }).catch(() => {});
+    throw new SheetUploadError(body.error ?? "Failed to upload the scan.");
+  }
+  return body as ScanUploadProgress;
+}
+
+/** Ask for a failed preparation to be tried again (#1567), from the parts already on the server. */
+export async function retrySheetPreparation(collectionId: string, uploadId: string): Promise<void> {
+  const res = await fetch(`/api/collections/${collectionId}/scan-sheets/uploads/${uploadId}/retry`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new SheetUploadError(body.error ?? "Failed to try the scan again.");
+  }
+}
+
+/** Throw away a scan that could not be prepared (#1567). */
+export async function discardSheetUpload(collectionId: string, uploadId: string): Promise<void> {
+  const res = await fetch(`/api/collections/${collectionId}/scan-sheets/uploads/${uploadId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new SheetUploadError(body.error ?? "Failed to discard the scan.");
   }
 }
 

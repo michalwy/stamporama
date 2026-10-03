@@ -1,21 +1,27 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
-import { rm, stat } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { prisma } from "../../src/lib/db";
 import { MAX_UPLOAD_BYTES } from "../../src/lib/photos/process";
-import { ScanValidationError } from "../../src/lib/scan-sheets";
+import { listScans, ScanValidationError, type UploadedSheet } from "../../src/lib/scan-sheets";
 import {
   abortScanUpload,
+  claimNextScanUpload,
+  failScanUpload,
   finalizeScanUpload,
   gcStaleScanUploads,
   openScanUpload,
+  prepareScanUpload,
   receiveScanChunk,
+  requeueStalledScanUploads,
+  retryScanUpload,
   uploadChunkBytes,
 } from "../../src/lib/scan-uploads";
+import { getActionItems } from "../../src/lib/action-items";
 import { getStorage, sheetVariantKey } from "../../src/lib/storage";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-scan-chunks-"));
@@ -37,6 +43,11 @@ process.env.STAMPORAMA_UPLOAD_CHUNK_KB = "64";
  *     is refused with how far the server got;
  *   - a scan over `MAX_UPLOAD_BYTES` is refused at the **open**, before a byte is sent;
  *   - an **abandoned upload leaves nothing behind**, whether it is given up on or swept.
+ *
+ * And since #1567, that **preparing the scan runs in the background**: finalizing only queues it and
+ * answers at once, the worker's half prepares queued scans in order, a failure keeps the parts and
+ * says why, a retry prepares them again without the scan being sent again, a restart resumes, and
+ * the sweep never takes a scan whose bytes are all in.
  */
 describe("chunked card scan upload (#590)", () => {
   let userId: string;
@@ -113,7 +124,41 @@ describe("chunked card scan upload (#590)", () => {
       .toBuffer();
   }
 
-  /** Send a whole file the way the client does. */
+  /** Send every part of a file, without finalizing. */
+  async function sendParts(bytes: Buffer, opts: { side?: "front" | "back"; batchNo?: number } = {}) {
+    const opened = await openScanUpload(userId, { purchaseId }, {
+      mime: "image/png",
+      side: opts.side ?? "front",
+      batchNo: opts.batchNo,
+      totalBytes: bytes.byteLength,
+    });
+    for (let i = 0; i < opened.chunks; i++) {
+      const start = i * opened.chunkBytes;
+      await receiveScanChunk(
+        userId,
+        opened.id,
+        i,
+        bytes.subarray(start, Math.min(start + opened.chunkBytes, bytes.byteLength))
+      );
+    }
+    return opened;
+  }
+
+  /** What the worker does with the next scan in the queue — asserted to be the one expected, so a
+   * test can never prepare a scan another test left waiting. Failures are recorded as the worker
+   * records them, and rethrown. */
+  async function prepareNext(expected: string): Promise<UploadedSheet> {
+    const claimed = await claimNextScanUpload();
+    assert.equal(claimed, expected, "the queue hands out the scan that has waited longest");
+    try {
+      return await prepareScanUpload(expected);
+    } catch (err) {
+      await failScanUpload(expected, err);
+      throw err;
+    }
+  }
+
+  /** Send a whole file the way the client does, then let the worker prepare it. */
   async function sendAll(
     bytes: Buffer,
     opts: { side?: "front" | "back"; batchNo?: number; label?: string | null } = {}
@@ -134,7 +179,9 @@ describe("chunked card scan upload (#590)", () => {
         bytes.subarray(start, Math.min(start + opened.chunkBytes, bytes.byteLength))
       );
     }
-    return { opened, sheet: await finalizeScanUpload(userId, opened.id) };
+    const queued = await finalizeScanUpload(userId, opened.id);
+    assert.equal(queued.status, "queued");
+    return { opened, sheet: await prepareNext(opened.id) };
   }
 
   it("assembles the parts into exactly the file that was sent", async () => {
@@ -162,12 +209,138 @@ describe("chunked card scan upload (#590)", () => {
     assert.ok(Buffer.concat(stored).equals(bytes), "the retained original is the uploaded bytes");
   });
 
-  it("leaves no staging behind once the scan is stored", async () => {
+  it("leaves no parts behind once the scan is stored, and notes the sheet it became", async () => {
     const bytes = await card();
-    const { opened } = await sendAll(bytes);
+    const { opened, sheet } = await sendAll(bytes);
 
-    assert.equal(await prisma.scanUpload.count({ where: { id: opened.id } }), 0);
+    // The row stays, small, so a page still open can find the card to cut; the bytes go.
+    const row = await prisma.scanUpload.findUniqueOrThrow({ where: { id: opened.id } });
+    assert.equal(row.status, "done");
+    assert.equal(row.sheetId, sheet.id);
     assert.equal(await stagingExists(opened.id), false);
+  });
+
+  it("finalizing queues the scan and answers without preparing it (#1567)", async () => {
+    const bytes = await card();
+    const opened = await sendParts(bytes);
+    const sheetsBefore = await prisma.scanSheet.count({ where: { purchaseId } });
+
+    const queued = await finalizeScanUpload(userId, opened.id);
+    assert.equal(queued.status, "queued");
+    assert.equal(queued.sheetId, null);
+    // Nothing was prepared inside the request: no sheet, and the parts are still all there.
+    assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), sheetsBefore);
+    assert.equal(await stagingExists(opened.id), true);
+
+    // Finalizing again — the retry of a request whose answer was lost — says where the scan is.
+    const again = await finalizeScanUpload(userId, opened.id);
+    assert.equal(again.status, "queued");
+    // A chunk re-sent after the finalize is acknowledged and changes nothing.
+    const ack = await receiveScanChunk(userId, opened.id, 0, bytes.subarray(0, opened.chunkBytes));
+    assert.equal(ack.received, opened.chunks);
+
+    // The section reads it as waiting its turn, first in line.
+    const before = await listScans(userId, { purchaseId });
+    const waiting = before.uploads.find((u) => u.id === opened.id);
+    assert.equal(waiting?.status, "queued");
+    assert.equal(waiting?.ahead, 0);
+
+    const sheet = await prepareNext(opened.id);
+    const after = await listScans(userId, { purchaseId });
+    const done = after.uploads.find((u) => u.id === opened.id);
+    assert.equal(done?.status, "done");
+    assert.equal(done?.sheetId, sheet.id);
+    assert.ok(after.batches.some((b) => b.front?.id === sheet.id && !b.front.cut));
+  });
+
+  it("prepares queued scans in the order they became ready, the next waiting its turn", async () => {
+    const bytes = await card();
+    const first = await sendParts(bytes);
+    const second = await sendParts(bytes);
+    await finalizeScanUpload(userId, first.id);
+    await finalizeScanUpload(userId, second.id);
+
+    const queue = await listScans(userId, { purchaseId });
+    assert.equal(queue.uploads.find((u) => u.id === first.id)?.ahead, 0);
+    assert.equal(queue.uploads.find((u) => u.id === second.id)?.ahead, 1);
+
+    const a = await prepareNext(first.id);
+    const b = await prepareNext(second.id);
+    assert.ok(b.batchNo > a.batchNo, "each scan became its own card, in turn");
+  });
+
+  it("keeps a failed scan's parts, says why, and prepares it again on a retry", async () => {
+    const bytes = await card();
+    const opened = await sendParts(bytes);
+    await finalizeScanUpload(userId, opened.id);
+
+    // Spoil the first part on disk: the scan can no longer be read as an image.
+    const part = path.join(DATA_DIR, "scan-uploads", opened.id, "part-000000");
+    const good = await readFile(part);
+    await writeFile(part, Buffer.alloc(good.byteLength));
+
+    await assert.rejects(() => prepareNext(opened.id));
+    const failed = await prisma.scanUpload.findUniqueOrThrow({ where: { id: opened.id } });
+    assert.equal(failed.status, "failed");
+    assert.ok(failed.error && failed.error.length > 0, "the card is told why");
+    assert.equal(await stagingExists(opened.id), true, "the parts are kept for a retry");
+
+    // The notification centre reports it while it waits on the collector.
+    const items = await getActionItems(userId, collectionId);
+    assert.ok(
+      items.groups
+        .find((g) => g.id === "scan-preparation-failed")
+        ?.items.some((i) => i.key === opened.id)
+    );
+
+    // Put the part right — standing in for whatever went wrong having passed — and retry: nothing
+    // is sent again, and the scan becomes a card.
+    await writeFile(part, good);
+    const retried = await retryScanUpload(userId, opened.id);
+    assert.equal(retried.status, "queued");
+    const sheet = await prepareNext(opened.id);
+    assert.equal(sheet.width, CARD_W);
+
+    // Only a failed scan can be retried.
+    await assert.rejects(() => retryScanUpload(userId, opened.id), ScanValidationError);
+  });
+
+  it("resumes a preparation a restart interrupted, and never makes two cards of it", async () => {
+    const bytes = await card();
+    const opened = await sendParts(bytes);
+    await finalizeScanUpload(userId, opened.id);
+    assert.equal(await claimNextScanUpload(), opened.id);
+    // The process stops here, mid-preparation. Being prepared, it cannot be discarded.
+    await assert.rejects(() => abortScanUpload(userId, opened.id), ScanValidationError);
+
+    assert.ok((await requeueStalledScanUploads()) >= 1);
+    const sheetsBefore = await prisma.scanSheet.count({ where: { purchaseId } });
+    await prepareNext(opened.id);
+    assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), sheetsBefore + 1);
+  });
+
+  it("makes no card of a scan discarded while it was being prepared", async () => {
+    const bytes = await card();
+    const opened = await sendParts(bytes);
+    await finalizeScanUpload(userId, opened.id);
+    assert.equal(await claimNextScanUpload(), opened.id);
+    const sheetsBefore = await prisma.scanSheet.count({ where: { purchaseId } });
+
+    // The row goes from under the worker; the parts stay so the preparation gets as far as the
+    // write that marks it done, which is in the sheet's own transaction.
+    await prisma.scanUpload.delete({ where: { id: opened.id } });
+    await assert.rejects(() => prepareScanUpload(opened.id));
+    assert.equal(await prisma.scanSheet.count({ where: { purchaseId } }), sheetsBefore);
+    await rm(path.join(DATA_DIR, "scan-uploads", opened.id), { recursive: true, force: true });
+  });
+
+  it("reports a prepared card as ready to cut until it is cut", async () => {
+    const bytes = await card();
+    const { sheet } = await sendAll(bytes);
+    const items = await getActionItems(userId, collectionId);
+    const group = items.groups.find((g) => g.id === "scan-to-cut");
+    assert.ok(group?.items.some((i) => i.key === sheet.id), "the newest uncut card leads the group");
+    assert.equal(group?.severity, "info");
   });
 
   it("keeps the parts on local disk and out of the storage backend", async () => {
@@ -223,7 +396,8 @@ describe("chunked card scan upload (#590)", () => {
     for (let i = 1; i < opened.chunks; i++) {
       await receiveScanChunk(userId, opened.id, i, chunkAt(i));
     }
-    const sheet = await finalizeScanUpload(userId, opened.id);
+    await finalizeScanUpload(userId, opened.id);
+    const sheet = await prepareNext(opened.id);
     assert.equal(sheet.width, CARD_W);
   });
 
@@ -315,6 +489,35 @@ describe("chunked card scan upload (#590)", () => {
     assert.equal(await stagingExists(live.id), true);
 
     await abortScanUpload(userId, live.id);
+  });
+
+  it("never sweeps a scan whose bytes are all in, however long it waits (#1567)", async () => {
+    const bytes = await card();
+    const queued = await sendParts(bytes);
+    await finalizeScanUpload(userId, queued.id);
+    const failed = await sendParts(bytes);
+    await finalizeScanUpload(userId, failed.id);
+    // Leave the first waiting and make the second a failure nobody retried, then age both well
+    // past the TTL — as a long queue, or a server down for a weekend, would.
+    await prisma.scanUpload.update({
+      where: { id: failed.id },
+      data: { status: "failed", error: "test" },
+    });
+    const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    await prisma.scanUpload.updateMany({
+      where: { id: { in: [queued.id, failed.id] } },
+      data: { updatedAt: old },
+    });
+
+    await gcStaleScanUploads();
+    // Waiting in the queue: safe, parts and all.
+    assert.equal(await prisma.scanUpload.count({ where: { id: queued.id } }), 1);
+    assert.equal(await stagingExists(queued.id), true);
+    // Failed and left alone: staging again, and gone the way an unfinished upload goes.
+    assert.equal(await prisma.scanUpload.count({ where: { id: failed.id } }), 0);
+    assert.equal(await stagingExists(failed.id), false);
+
+    await abortScanUpload(userId, queued.id);
   });
 
   /** Is anything of this upload still on the volume? One directory holds the parts and, briefly,

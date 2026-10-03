@@ -514,22 +514,42 @@ Two things to know:
 
 #### While the scan is uploading
 
-A 1200 dpi card is a large file — 100 to 200 MB is ordinary — so the upload says how it is going,
-and it does so in **two stages that mean different things**:
+A 1200 dpi card is a large file — 100 to 200 MB is ordinary — so adding one goes in **two stages
+that mean different things**:
 
-- **Uploading the scan…**, with a bar and a percentage. That is real: it counts the pieces of the
-  file the app has actually taken, not what your browser has handed to the network.
-- **Preparing the scan…**, with no percentage. The bytes are all in; what is happening now is the
-  app opening a very large image and making the working copy the cut editor draws. It takes a few
-  seconds and there is nothing to measure, so it says so rather than showing a number that would
-  sit still. **Seeing this means the upload has succeeded.**
+- **Uploading the scan…**, with a bar and a percentage under the button. That is real: it counts the
+  pieces of the file the app has actually taken, not what your browser has handed to the network.
+  Stay on the page for this part — leaving it stops the upload.
+- **Preparing the scan…**, on the scan's own card in the **Card scans** section. The bytes are all
+  in; what is happening now is the app opening a very large image and making the working copy the
+  cut editor draws. On a big card that can take a few minutes, so it happens **in the background**:
+  from the moment this card appears **the scan is safe**, and you can go anywhere in the app, reload
+  the page, or add the next card straight away.
+
+The app prepares **one scan at a time**, in the order they finished uploading, so a card added while
+another is being prepared says **Waiting its turn to be prepared** — with how many scans are ahead of
+it — until its turn comes. The app may be a little slower while a large scan is being prepared.
+
+When a scan is ready:
+
+- if you are still on the order's page, the **cut editor opens on it**, as it always has;
+- if you are not, the card waits for you as a batch with **Review the front cut** (or **Review the
+  back cut**), and the [notification bell](action-items.md) lists it under **Card scans ready to
+  cut**.
+
+If a scan **could not be prepared**, its card says so in red, with the reason. **Try again** prepares
+it once more from what was already uploaded — nothing is sent again — and **Discard** throws it away.
+A scan you leave like that is cleaned up after a while, the same way an upload that never finished
+is, and until then the notification bell lists it under **Card scan could not be prepared**.
 
 The scan is sent in pieces, which is what makes a card this size possible at all — most self-hosted
-setups sit behind something that refuses a single upload that large. It also means a hiccup costs
-you a piece and not the whole card: a dropped request is retried on its own. If the connection
-gives up entirely you are told, and nothing half-sent is left behind.
+setups sit behind something that refuses a single upload that large, or gives up on one request that
+takes minutes. It also means a hiccup costs you a piece and not the whole card: a dropped request is
+retried on its own. If the connection gives up entirely you are told, and nothing half-sent is left
+behind.
 
-Cancel by leaving the page; a scan that never finished arriving is cleaned up on its own.
+Cancel by leaving the page while it is still uploading; a scan that never finished arriving is
+cleaned up on its own.
 
 #### Naming a card
 

@@ -19,6 +19,13 @@ import {
 } from "./scan-sheets";
 import { chunkCount, chunkRange, resolveUploadChunkBytes } from "./upload-chunk-rules";
 import { isBackTurnover } from "./back-turnover";
+import {
+  asScanUploadStatus,
+  canDiscardScanUpload,
+  canRetryScanUpload,
+  SWEEPABLE_SCAN_UPLOAD_STATUSES,
+  type ScanUploadStatus,
+} from "./scan-upload-status-rules";
 
 /**
  * A card scan uploaded in **parts** (#590).
@@ -60,9 +67,14 @@ import { isBackTurnover } from "./back-turnover";
  * machinery for every thumbnail would be paying the whole cost for none of the benefit. The
  * asymmetry is a decision, not an unfinished refactor.
  *
- * Nothing downstream knows any of this happened. `finalize` hands {@link uploadSheet} the same scan
- * the single-request route used to hand it, and `prepareSheet`, the retained original, the `view`
- * derivative, the cut and the tiles are untouched.
+ * Nothing downstream knows any of this happened. The preparation hands {@link uploadSheet} the same
+ * scan the single-request route used to hand it, and `prepareSheet`, the retained original, the
+ * `view` derivative, the cut and the tiles are untouched.
+ *
+ * **Preparing runs in the background** (#1567). Finalizing only puts the scan in a queue and answers
+ * at once; the in-process worker prepares one scan at a time, and the row's `status` is what the
+ * Card scans section reads. Preparing a large card inside the finalize request outlived the proxy's
+ * timeout (Cloudflare's 524), however long it happened to take on a given day.
  */
 
 /** What the client needs to send the file: how large a piece may be, and how many there will be. */
@@ -221,27 +233,34 @@ interface UploadRow {
   chunkBytes: number;
   receivedChunks: number;
   receivedBytes: number;
+  status: string;
+  error: string | null;
+  sheetId: string | null;
 }
+
+const UPLOAD_SELECT = {
+  id: true,
+  collectionId: true,
+  purchaseId: true,
+  side: true,
+  batchNo: true,
+  label: true,
+  scanningProfileId: true,
+  turnover: true,
+  mime: true,
+  totalBytes: true,
+  chunkBytes: true,
+  receivedChunks: true,
+  receivedBytes: true,
+  status: true,
+  error: true,
+  sheetId: true,
+} as const;
 
 async function loadUpload(ownerId: string, uploadId: string): Promise<UploadRow> {
   const upload = await prisma.scanUpload.findUnique({
     where: { id: uploadId },
-    select: {
-      id: true,
-      collectionId: true,
-      purchaseId: true,
-      side: true,
-      batchNo: true,
-      label: true,
-      scanningProfileId: true,
-      turnover: true,
-      mime: true,
-      totalBytes: true,
-      chunkBytes: true,
-      receivedChunks: true,
-      receivedBytes: true,
-      collection: { select: { ownerId: true } },
-    },
+    select: { ...UPLOAD_SELECT, collection: { select: { ownerId: true } } },
   });
   if (!upload || upload.collection.ownerId !== ownerId) {
     throw new ScanAuthError("Upload not found or access denied.");
@@ -276,6 +295,11 @@ export async function receiveScanChunk(
   const upload = await loadUpload(ownerId, uploadId);
   const chunks = chunkCount(upload.totalBytes, upload.chunkBytes);
 
+  // A part arriving after the scan was finalized is a retry of one already held (the count is
+  // complete) — acknowledged like any other, and never written over files the worker may be reading.
+  if (upload.status !== "uploading") {
+    return { received: upload.receivedChunks, chunks };
+  }
   if (!Number.isInteger(index) || index < 0 || index >= chunks) {
     throw new ScanValidationError("Chunk index is outside this upload.");
   }
@@ -299,7 +323,7 @@ export async function receiveScanChunk(
   // Guarded on the count it was read at, so two deliveries of the same chunk racing each other
   // write the same file twice (harmless — one path, one part) but advance the count once.
   const { count } = await prisma.scanUpload.updateMany({
-    where: { id: upload.id, receivedChunks: index },
+    where: { id: upload.id, receivedChunks: index, status: "uploading" },
     data: {
       receivedChunks: index + 1,
       receivedBytes: upload.receivedBytes + bytes.byteLength,
@@ -312,79 +336,217 @@ export async function receiveScanChunk(
   return { received: index + 1, chunks };
 }
 
-// ── Finalizing ────────────────────────────────────────────────────────────────────────────────
+// ── Finalizing: into the queue ───────────────────────────────────────────────────────────────
+
+/** What finalize, a retry and the section's reads say about an upload. */
+export interface ScanUploadProgress {
+  id: string;
+  status: ScanUploadStatus;
+  error: string | null;
+  sheetId: string | null;
+}
 
 /**
- * Join the parts and run the ordinary sheet upload over the result.
+ * The last chunk is in: put the scan in the queue and answer at once (#1567).
  *
- * This is the whole seam: below this line nothing knows the bytes arrived in pieces, because
- * {@link uploadSheet} is handed the same scan the single-request route used to hand it — as a
- * **path** rather than a buffer, which is what keeps a 200 MB card from ever being resident whole.
- * The parts are copied through streams into one file for the same reason: concatenating them in
- * memory would double the peak the single-request path had, so chunking would have bought a proxy
- * fix and paid for it in RAM.
+ * Preparing the scan — joining the parts, the ~140 Mpx decode, the `view` — used to happen right
+ * here, inside the request the browser was waiting on. A large card outlived the proxy in front of
+ * the app (Cloudflare gives up after about 100 s with a 524), and the collector was left with a scan
+ * whose bytes had all arrived and no card to cut. However long it takes on a given day, the work
+ * cannot be promised to fit a request's time limit, so it is not done in one: the row is marked
+ * `queued` and the in-process worker (`scan-upload-worker.ts`) prepares it in turn.
  *
- * The parts and the row go **whatever happens** — a finished upload has nothing left to stage, and a
- * refused one (a corrupt file, an unsupported format) has nothing worth keeping either, since a
- * retry means sending the file again. Abandoned uploads leaving nothing behind is a promise this
- * path keeps directly and the sweep only backstops.
+ * **From here the scan is safe.** The parts stay on disk until the preparation succeeds, the sweep
+ * never takes a queued or preparing row, and a restart puts one left mid-preparation back in the
+ * queue. Finalizing twice — a retry of a request whose answer was lost — is answered with where the
+ * scan already is rather than refused.
  */
 export async function finalizeScanUpload(
   ownerId: string,
   uploadId: string
-): Promise<UploadedSheet> {
+): Promise<ScanUploadProgress> {
   const upload = await loadUpload(ownerId, uploadId);
-  const chunks = chunkCount(upload.totalBytes, upload.chunkBytes);
+  const status = asScanUploadStatus(upload.status);
+  if (status !== "uploading") return progressOf(upload);
 
+  const chunks = chunkCount(upload.totalBytes, upload.chunkBytes);
   if (upload.receivedChunks !== chunks || upload.receivedBytes !== upload.totalBytes) {
     throw new ScanValidationError(
       `The scan is incomplete (${upload.receivedChunks} of ${chunks} parts received).`
     );
   }
 
-  try {
-    const scan = assembledPath(upload.id);
-    // **One** pipeline over a generator that reads the parts in turn, rather than one pipeline per
-    // part into a shared destination kept open with `end: false`. That shape worked and leaked
-    // listeners: every `pipeline` call attaches `error`/`close`/`finish`/`end` handlers to the
-    // destination and only detaches them when the destination itself finishes — which, being held
-    // open on purpose, it does not until the last part. A card of 228 chunks was 228 sets of them,
-    // and node started warning about the emitter at ten. This way the destination is handed to one
-    // pipeline, which also puts the whole copy under a single error path and a single cleanup.
-    await pipeline(async function* () {
-      for (let i = 0; i < chunks; i++) {
-        yield* createReadStream(partPath(upload.id, i));
-      }
-    }, createWriteStream(scan));
+  await prisma.scanUpload.updateMany({
+    where: { id: upload.id, status: "uploading" },
+    data: { status: "queued", queuedAt: new Date(), error: null },
+  });
+  return progressOf(await loadUpload(ownerId, uploadId));
+}
 
-    return await uploadSheet(
-      ownerId,
-      { purchaseId: upload.purchaseId },
-      {
-        source: { path: scan },
-        mime: upload.mime,
-        side: upload.side as SheetSide,
-        batchNo: upload.batchNo ?? undefined,
-        label: upload.label,
-        scanningProfileId: upload.scanningProfileId,
-        turnover: upload.turnover,
-      }
-    );
-  } finally {
-    await discardUpload(upload.id);
+/**
+ * Put a failed preparation back in the queue (#1567) — without the scan being sent again, which is
+ * what keeping the parts after a failure is for. It takes a new place at the back: the queue is in
+ * the order scans became ready to prepare, and a retry is that moment again.
+ */
+export async function retryScanUpload(
+  ownerId: string,
+  uploadId: string
+): Promise<ScanUploadProgress> {
+  const upload = await loadUpload(ownerId, uploadId);
+  if (!canRetryScanUpload(asScanUploadStatus(upload.status))) {
+    throw new ScanValidationError("Only a scan that could not be prepared can be tried again.");
+  }
+  await prisma.scanUpload.updateMany({
+    where: { id: upload.id, status: "failed" },
+    data: { status: "queued", queuedAt: new Date(), error: null },
+  });
+  return progressOf(await loadUpload(ownerId, uploadId));
+}
+
+function progressOf(upload: Pick<UploadRow, "id" | "status" | "error" | "sheetId">): ScanUploadProgress {
+  return {
+    id: upload.id,
+    status: asScanUploadStatus(upload.status),
+    error: upload.error,
+    sheetId: upload.sheetId,
+  };
+}
+
+// ── The worker's half ─────────────────────────────────────────────────────────────────────────
+
+/** Take the scan that has waited longest and mark it being prepared, or null when none is waiting.
+ * Conditional on the status it was read at, so two passes can never claim the same scan. */
+export async function claimNextScanUpload(): Promise<string | null> {
+  for (;;) {
+    const next = await prisma.scanUpload.findFirst({
+      where: { status: "queued" },
+      orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!next) return null;
+    const { count } = await prisma.scanUpload.updateMany({
+      where: { id: next.id, status: "queued" },
+      data: { status: "preparing" },
+    });
+    if (count === 1) return next.id;
   }
 }
 
+/** A scan left `preparing` by a process that stopped goes back to the front of the queue — its
+ * place is unchanged, since `queuedAt` is. Safe because a preparation is all-or-nothing: the sheet
+ * and the row's `done` are one transaction, so a scan interrupted before it was never half made. */
+export async function requeueStalledScanUploads(): Promise<number> {
+  const { count } = await prisma.scanUpload.updateMany({
+    where: { status: "preparing" },
+    data: { status: "queued" },
+  });
+  return count;
+}
+
+/**
+ * Prepare one claimed scan: join its parts and run the ordinary sheet upload over the result.
+ *
+ * Below this line nothing knows the bytes arrived in pieces, or late: {@link uploadSheet} is handed
+ * the same scan the request used to hand it — as a **path** rather than a buffer, which is what
+ * keeps a 200 MB card from ever being resident whole. The parts are copied through streams into one
+ * file for the same reason: concatenating them in memory would double the peak.
+ *
+ * The row is marked `done` **inside the transaction that creates the sheet**, so a restart can never
+ * prepare one scan into two batches. On success the parts go and the row stays, small, until the
+ * sweep — it is how the page still open finds the card to cut. On failure the parts are **kept**:
+ * a retry prepares them again without the scan being sent again. The failure itself is recorded by
+ * {@link failScanUpload}, which the worker calls with whatever this throws.
+ */
+export async function prepareScanUpload(uploadId: string): Promise<UploadedSheet> {
+  const upload = await prisma.scanUpload.findUniqueOrThrow({
+    where: { id: uploadId },
+    select: { ...UPLOAD_SELECT, collection: { select: { ownerId: true } } },
+  });
+  const chunks = chunkCount(upload.totalBytes, upload.chunkBytes);
+
+  const scan = assembledPath(upload.id);
+  // **One** pipeline over a generator that reads the parts in turn, rather than one pipeline per
+  // part into a shared destination kept open with `end: false`. That shape worked and leaked
+  // listeners: every `pipeline` call attaches `error`/`close`/`finish`/`end` handlers to the
+  // destination and only detaches them when the destination itself finishes — which, being held
+  // open on purpose, it does not until the last part. A card of 228 chunks was 228 sets of them,
+  // and node started warning about the emitter at ten. This way the destination is handed to one
+  // pipeline, which also puts the whole copy under a single error path and a single cleanup.
+  //
+  // Written afresh on every attempt, so a retry or a resumed preparation never trusts a file an
+  // interrupted one left half-written.
+  await pipeline(async function* () {
+    for (let i = 0; i < chunks; i++) {
+      yield* createReadStream(partPath(upload.id, i));
+    }
+  }, createWriteStream(scan));
+
+  const sheet = await uploadSheet(
+    upload.collection.ownerId,
+    { purchaseId: upload.purchaseId },
+    {
+      source: { path: scan },
+      mime: upload.mime,
+      side: upload.side as SheetSide,
+      batchNo: upload.batchNo ?? undefined,
+      label: upload.label,
+      scanningProfileId: upload.scanningProfileId,
+      turnover: upload.turnover,
+    },
+    async (tx, sheetId) => {
+      // `update`, not `updateMany`: a scan discarded while it was being prepared has no row, and
+      // this throwing is what rolls the sheet back rather than leaving a card nobody asked for.
+      await tx.scanUpload.update({
+        where: { id: upload.id, status: "preparing" },
+        data: { status: "done", sheetId, error: null },
+      });
+    }
+  );
+
+  await rm(uploadDir(upload.id), { recursive: true, force: true });
+  return sheet;
+}
+
+/**
+ * Record why a preparation failed, in words the card can show. A refusal the app made on purpose (a
+ * file that is not an image, a batch deleted while its back waited) is already a sentence; anything
+ * else is said as what went wrong, since the collector of a self-hosted app is usually also the
+ * person who can do something about a full disk.
+ */
+export async function failScanUpload(uploadId: string, err: unknown): Promise<void> {
+  const reason =
+    err instanceof ScanValidationError
+      ? err.message
+      : `Something went wrong while preparing the scan${
+          err instanceof Error && err.message ? `: ${err.message}` : "."
+        }`;
+  await prisma.scanUpload.updateMany({
+    where: { id: uploadId, status: "preparing" },
+    data: { status: "failed", error: reason.slice(0, 500) },
+  });
+}
+
+// ── Giving up ─────────────────────────────────────────────────────────────────────────────────
+
 /** Give up on an upload the collector abandoned — a cancelled dialog, a closed tab that got the
- * chance to say so. The sweep would take it anyway; this is what stops 200 MB of parts sitting on
- * the volume for hours after the collector already knows they are not wanted. */
+ * chance to say so, or a scan that could not be prepared and is not worth trying again. The sweep
+ * would take it anyway; this is what stops 200 MB of parts sitting on the volume for hours after the
+ * collector already knows they are not wanted. Refused while the scan is being prepared, when the
+ * worker holds its files, and once it is a card, which is deleted as a batch. */
 export async function abortScanUpload(ownerId: string, uploadId: string): Promise<void> {
   const upload = await loadUpload(ownerId, uploadId);
+  if (!canDiscardScanUpload(asScanUploadStatus(upload.status))) {
+    throw new ScanValidationError(
+      upload.status === "preparing"
+        ? "This scan is being prepared and cannot be discarded until it is done."
+        : "This scan is already a card — delete the batch instead."
+    );
+  }
   await discardUpload(upload.id);
 }
 
 /** Delete an upload's files and its row. The whole directory goes in one call — the parts, and the
- * assembled scan if finalize got that far — which is the one thing a local staging area makes
+ * assembled scan if a preparation got that far — which is the one thing a local staging area makes
  * simpler than a bucket: there is a real directory to remove, so nothing has to enumerate what is
  * inside it. `force` makes an already-absent directory a no-op rather than an error, so a partly
  * cleaned-up upload can never leave its row behind. */
@@ -412,6 +574,11 @@ async function discardUpload(uploadId: string): Promise<void> {
  * a whole, and a sweep that trusted a listing would be one `mkdir` race away from deleting an upload
  * mid-flight.
  *
+ * **Never a scan in the queue or being prepared** (#1567): once its last piece has arrived the scan
+ * is safe, however long a queue or a server's downtime keeps it waiting. A failed preparation nobody
+ * retried goes the way an unfinished upload does, its age measured from the failure; a done row has
+ * no bytes left and is only the note that let an open page find its card.
+ *
  * Idempotent, like the sweep it runs with. Returns what it freed.
  */
 export async function gcStaleScanUploads(
@@ -419,16 +586,21 @@ export async function gcStaleScanUploads(
 ): Promise<{ uploads: number; bytes: number }> {
   const cutoff = new Date(now - uploadTtlMs());
   const stale = await prisma.scanUpload.findMany({
-    where: { updatedAt: { lt: cutoff } },
-    select: { id: true, receivedBytes: true },
+    where: {
+      updatedAt: { lt: cutoff },
+      status: { in: [...SWEEPABLE_SCAN_UPLOAD_STATUSES] },
+    },
+    select: { id: true, receivedBytes: true, status: true },
   });
   if (stale.length === 0) return { uploads: 0, bytes: 0 };
 
   for (const upload of stale) {
     await discardUpload(upload.id);
   }
+  // A done row's parts went when its sheet was made, so it frees a row and no bytes.
+  const holding = stale.filter((u) => u.status !== "done");
   return {
-    uploads: stale.length,
-    bytes: stale.reduce((sum, u) => sum + u.receivedBytes, 0),
+    uploads: holding.length,
+    bytes: holding.reduce((sum, u) => sum + u.receivedBytes, 0),
   };
 }

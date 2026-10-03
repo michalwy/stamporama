@@ -48,6 +48,10 @@
 //     hour has come in their own zone, queues the day's email of watched lots ending that day. Once
 //     a day per collection by a claim on the collection row, so a restart after the hour sends a
 //     missed reminder and never a second one. Does nothing on an instance with no provider.
+//   - the card scan preparation worker (#1567) — prepares uploaded card scans one at a time, in the
+//     order their last piece arrived, and requeues one a previous process left mid-preparation.
+//     Preparing a large card used to happen inside the request that finished the upload and
+//     outlived the proxy's timeout.
 
 import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
@@ -62,6 +66,7 @@ import { purgeFinishedScanSheets } from "@/lib/scan-sheets";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { describeMailConfig, readMailConfig } from "@/lib/mail/config";
 import { startMailWorker } from "@/lib/mail/worker";
+import { startScanUploadWorker } from "@/lib/scan-upload-worker";
 import { logStorageStartup, sweepStorageCache } from "@/lib/storage";
 import { pollAllAllegroEvents, syncAllAllegroCollections } from "@/lib/allegro-sync";
 import {
@@ -333,5 +338,10 @@ export async function start(): Promise<void> {
   // Mail to the collector (#1372): sends what features queue and brings failures back round.
   await startMailWorker().catch((err) => {
     console.error("[mail] worker failed to start", err);
+  });
+
+  // Card scan preparation (#1567): finalizing an upload only queues the scan, and this prepares it.
+  await startScanUploadWorker().catch((err) => {
+    console.error("[scan-uploads] worker failed to start", err);
   });
 }

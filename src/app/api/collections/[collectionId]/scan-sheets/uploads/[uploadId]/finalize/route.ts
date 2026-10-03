@@ -3,18 +3,19 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { ScanAuthError, ScanValidationError } from "@/lib/scan-sheets";
 import { finalizeScanUpload } from "@/lib/scan-uploads";
+import { kickScanUploadWorker } from "@/lib/scan-upload-worker";
 
 /**
- * Assemble a chunked upload and store the scan (#590).
+ * The last chunk is in: put the scan in the queue to be prepared (#590, #1567).
  *
- * This is where the bytes stop moving and the work starts: the parts are joined into one local file
- * and it goes through `uploadSheet` → `prepareSheet` exactly as a single-request upload did — a
- * ~140 Mpx decode and the `view` derivative, which is seconds of server work with nothing crossing
- * the wire. Hence the client's second phase: a bar that reached 100% and then sat there would read
- * as a hang at precisely the moment the upload had in fact succeeded.
+ * **Answers at once.** Preparing the scan — joining the parts, a ~140 Mpx decode and the `view`
+ * derivative — used to happen inside this request, and a large card outlived the proxy in front of
+ * the app: Cloudflare gives up after about 100 s with a 524, and the collector was left with a scan
+ * whose bytes had all arrived and no card to cut. Now the scan joins a queue the in-process worker
+ * prepares one at a time, and the Card scans section reads how it is going from the order's scans.
  *
- * Answers the same `UploadedSheet` the single-request route answered, so everything downstream —
- * the review editor, detection, the cut — meets what it always met.
+ * `202`, with where the scan now is. Finalizing an upload already queued — the retry of a request
+ * whose answer was lost — answers the same way rather than refusing.
  */
 export async function POST(
   _request: NextRequest,
@@ -27,8 +28,9 @@ export async function POST(
 
   const { uploadId } = await params;
   try {
-    const sheet = await finalizeScanUpload(session.user.id, uploadId);
-    return NextResponse.json(sheet, { status: 201 });
+    const progress = await finalizeScanUpload(session.user.id, uploadId);
+    kickScanUploadWorker();
+    return NextResponse.json(progress, { status: 202 });
   } catch (err) {
     if (err instanceof ScanAuthError) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -36,6 +38,6 @@ export async function POST(
     if (err instanceof ScanValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Failed to process scan." }, { status: 500 });
+    return NextResponse.json({ error: "Failed to finish the upload." }, { status: 500 });
   }
 }
