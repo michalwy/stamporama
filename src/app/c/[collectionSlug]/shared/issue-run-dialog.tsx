@@ -34,6 +34,7 @@ import {
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
+  withoutAssigned,
   RUN_DETAIL_FIELDS,
   type IssueRunIdentification,
   type RunCopyDetails,
@@ -88,6 +89,7 @@ import {
   LS_LAST_SCAN_LOT,
 } from "./add-copy-defaults";
 import { TextInput } from "./text-input";
+import { usePersistedFlag } from "./use-persisted-flag";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 /**
@@ -160,6 +162,15 @@ const MUTED: React.CSSProperties = {
   margin: 0,
   fontSize: "0.75rem",
   color: "var(--color-text-muted)",
+};
+
+/** *Hide assigned* (#1579), above the tile in hand's stamp list. */
+const SWITCH_STYLE: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-secondary)",
 };
 
 /** A run row's warning flag (#1247) — the row chip in the warning hue, as the trade line's *unknown
@@ -342,6 +353,14 @@ export function IssueRunDialog({
   const active = inRun.find((p) => p.tileId === activeId) ?? inRun[0] ?? null;
   const activeIndex = active ? inRun.indexOf(active) : -1;
   const activeAssignment = active ? assignments[activeIndex] : null;
+  /** *Hide assigned* (#1579): the tile in hand's list without the stamps other tiles have taken, so a
+   * long checklist assigned by hand shows what is still left. Off by default, remembered per
+   * collection for the next run. */
+  const [hideAssigned, setHideAssigned] = usePersistedFlag(
+    `stamporama:intake:runHideAssigned:${collectionId}`
+  );
+  const unassigned = withoutAssigned(choices, assignments, active?.tileId ?? "");
+  const listed = hideAssigned ? unassigned.choices : choices;
 
   /** How the run starts (#1526), decided once, as the checklist is first read: in turn when the ticked
    * tiles are as many as its stamps, otherwise as after *Clear assignments*, the first tile in hand.
@@ -1273,6 +1292,14 @@ export function IssueRunDialog({
                     />
                   )}
                   {membersLoading && <p style={MUTED}>Loading the checklist&rsquo;s stamps…</p>}
+                  <label style={SWITCH_STYLE}>
+                    <input
+                      type="checkbox"
+                      checked={hideAssigned}
+                      onChange={(e) => setHideAssigned(e.target.checked)}
+                    />
+                    Hide assigned ({unassigned.hidden})
+                  </label>
                   {(() => {
                     const choice = (node: StampNodeData, depth: number) => {
                       const { vendorMap, primaryVendorId } = vendorsOf(node.stampId);
@@ -1302,25 +1329,31 @@ export function IssueRunDialog({
                       );
                     };
                     // The checklist's stamps first, then every other stamp of the issues it covers
-                    // (#1225): a tile that is not on the checklist still has somewhere to go.
+                    // (#1225): a tile that is not on the checklist still has somewhere to go. A part
+                    // that *Hide assigned* (#1579) leaves empty keeps its heading and says so.
+                    const allAssigned = <p style={{ ...MUTED, fontStyle: "italic" }}>all assigned</p>;
                     return (
                       <>
                         {choices.onChecklist.length > 0 && <p style={MUTED}>On the checklist</p>}
-                        {choices.onChecklist.map((node) => choice(node, 0))}
-                        {choices.others
-                          .filter((group) => group.nodes.length > 0)
-                          .map((group) => {
-                            const owner = coveredIssues.find((i) => i.id === group.issueId);
-                            return (
-                              <Fragment key={group.issueId}>
-                                <p style={{ ...MUTED, marginTop: "0.5rem" }}>
-                                  Other stamps of{" "}
-                                  {owner ? issueLabel(owner.name, owner.year) : "the issue"}
-                                </p>
-                                {group.nodes.map(({ node, depth }) => choice(node, depth))}
-                              </Fragment>
-                            );
-                          })}
+                        {choices.onChecklist.length > 0 &&
+                          listed.onChecklist.length === 0 &&
+                          allAssigned}
+                        {listed.onChecklist.map((node) => choice(node, 0))}
+                        {choices.others.map((group, i) => {
+                          if (group.nodes.length === 0) return null;
+                          const shown = listed.others[i].nodes;
+                          const owner = coveredIssues.find((o) => o.id === group.issueId);
+                          return (
+                            <Fragment key={group.issueId}>
+                              <p style={{ ...MUTED, marginTop: "0.5rem" }}>
+                                Other stamps of{" "}
+                                {owner ? issueLabel(owner.name, owner.year) : "the issue"}
+                              </p>
+                              {shown.length === 0 && allAssigned}
+                              {shown.map(({ node, depth }) => choice(node, depth))}
+                            </Fragment>
+                          );
+                        })}
                       </>
                     );
                   })()}

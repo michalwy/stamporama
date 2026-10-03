@@ -122,21 +122,63 @@ export function runChoices<T extends RunMember>(
   const others = issues.map((issue) => {
     const rest = treeOrder(issue.members).filter((m) => !offered.has(m.stampId));
     for (const m of rest) offered.add(m.stampId);
-    const shown = new Map(rest.map((m) => [m.stampId, m]));
-    const nodes = rest.map((node) => {
-      let depth = 0;
-      let parentId = node.parentId;
-      const seen = new Set<string>();
-      while (parentId && shown.has(parentId) && !seen.has(parentId)) {
-        seen.add(parentId);
-        depth += 1;
-        parentId = shown.get(parentId)?.parentId ?? null;
-      }
-      return { node, depth };
-    });
-    return { issueId: issue.issueId, nodes };
+    return { issueId: issue.issueId, nodes: withDepth(rest) };
   });
   return { onChecklist, others };
+}
+
+/** Each node with its depth among the nodes drawn beside it — only an ancestor that is itself drawn
+ * indents a row. */
+function withDepth<T extends RunMember>(drawn: readonly T[]): { node: T; depth: number }[] {
+  const shown = new Map(drawn.map((m) => [m.stampId, m]));
+  return drawn.map((node) => {
+    let depth = 0;
+    let parentId = node.parentId;
+    const seen = new Set<string>();
+    while (parentId && shown.has(parentId) && !seen.has(parentId)) {
+      seen.add(parentId);
+      depth += 1;
+      parentId = shown.get(parentId)?.parentId ?? null;
+    }
+    return { node, depth };
+  });
+}
+
+/**
+ * *Hide assigned* (#1579): the choices without the stamps **other tiles of the run** have taken, so a
+ * long checklist assigned by hand shows only what is still left. The marks on taken stamps (#1523)
+ * say the same thing while the switch is off, and duplicates stay possible that way.
+ *
+ * **The tile in hand's own stamp always stays**, even when another tile has it too — its current
+ * answer is never hidden from it. Both parts of the list are filtered, and a group keeps its place
+ * when it is left empty, so the dialog can say *all assigned* rather than drop the heading. A row
+ * whose parent is hidden is re-indented against what is still drawn.
+ *
+ * `hidden` counts the stamps taken out — the *N* of *Hide assigned (N)* — and is the same whether or
+ * not the switch is on, so the count can be read before turning it on.
+ */
+export function withoutAssigned<T extends RunMember>(
+  choices: RunChoices<T>,
+  assignments: readonly RunAssignment[],
+  tileId: string
+): { choices: RunChoices<T>; hidden: number } {
+  const own = assignments.find((a) => a.tileId === tileId)?.stampId ?? null;
+  const taken = new Set<string>();
+  for (const a of assignments) {
+    if (a.tileId !== tileId && a.stampId && a.stampId !== own) taken.add(a.stampId);
+  }
+  let hidden = 0;
+  const keep = (node: T) => {
+    if (!taken.has(node.stampId)) return true;
+    hidden += 1;
+    return false;
+  };
+  const onChecklist = choices.onChecklist.filter(keep);
+  const others = choices.others.map((group) => ({
+    issueId: group.issueId,
+    nodes: withDepth(group.nodes.map((n) => n.node).filter(keep)),
+  }));
+  return { choices: { onChecklist, others }, hidden };
 }
 
 // ── Assigning ────────────────────────────────────────────────────────────────────────────────────
