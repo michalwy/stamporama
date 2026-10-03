@@ -1329,6 +1329,11 @@ stamps first, then the other stamps of its issue — and **its own details**.
 - **Copy details are set once and overridden per tile.** Tick a field under *its own details* and that
   tile keeps its own value — its row says *own condition*, for instance — and changing the shared
   value afterwards does not touch it. Untick it to follow the run again.
+- **Every row shows its tile's condition as the coloured chip** it has on every list, and its
+  certificate as a second chip when it has one — so a run of tiles marked in mixed conditions reads
+  down the column at a glance. A tile following the shared condition draws the same chip as one with
+  its own, and the chip changes the moment either value does; a row with no condition yet says
+  *no condition*.
 - **Where a stamp states a perforation or a watermark, what you read off the piece marks it**, exactly
   as it does on a shortlist: gauge a run in the viewer, or say which watermark you see, and the
   stamps it fits are marked.
