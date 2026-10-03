@@ -208,15 +208,19 @@ export async function unpairTileBackAction(tileId: string): Promise<ScanActionSt
 
 /**
  * Mark tiles' condition and certificate before they are identified, or clear them (#1550) — one tile
- * or the ticked ones, from the strip or from the boxes of the cut editor.
+ * or the ticked ones, from the strip or from the boxes of the cut editor. With `onlyUnmarked`, every
+ * tile handed over is given only the halves it has none of (#1556).
  */
 export async function markTilesAction(
   tileIds: string[],
-  patch: MarkPatch
+  patch: MarkPatch,
+  options: { onlyUnmarked?: boolean } = {}
 ): Promise<ScanActionState> {
   const session = await getSession();
   try {
-    await setTileMarks(session.user.id, tileIds, patch);
+    await setTileMarks(session.user.id, tileIds, patch, {
+      onlyUnmarked: options.onlyUnmarked === true,
+    });
     return { status: "success" };
   } catch (e) {
     return {

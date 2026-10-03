@@ -66,6 +66,37 @@ export function isEmptyPatch(patch: MarkPatch): boolean {
   return patch.conditionId === undefined && patch.certificateStatusId === undefined;
 }
 
+// ── Marking every unmarked tile at once ────────────────────────────────────────────────────────
+
+/**
+ * The part of a *Mark all unmarked* pick (#1556) that reaches one mark: **each half only where the
+ * mark has none**. A card is mostly one condition, so the exceptions are marked first and the rest in
+ * one pick — and that only works if the pick leaves the exceptions alone. The halves are separate: a
+ * condition fills the tiles without a condition, whatever certificate they carry, and the other way
+ * round. A fill never clears, so a half the pick sets to null is not part of it.
+ */
+export function fillPatch(mark: TileMark | null | undefined, patch: MarkPatch): MarkPatch {
+  const m = normalizeMark(mark);
+  const out: MarkPatch = {};
+  if (patch.conditionId && !m?.conditionId) out.conditionId = patch.conditionId;
+  if (patch.certificateStatusId && !m?.certificateStatusId) {
+    out.certificateStatusId = patch.certificateStatusId;
+  }
+  return out;
+}
+
+/** How many of the marks a fill would reach, half by half — what *Mark all unmarked* says it will
+ * do before it does it. */
+export function unmarkedCounts(marks: readonly (TileMark | null | undefined)[]): {
+  condition: number;
+  certificate: number;
+} {
+  return {
+    condition: marks.filter((m) => !m?.conditionId).length,
+    certificate: marks.filter((m) => !m?.certificateStatusId).length,
+  };
+}
+
 // ── Pairing a back with its front ───────────────────────────────────────────────────────────────
 
 export interface TimedMark {

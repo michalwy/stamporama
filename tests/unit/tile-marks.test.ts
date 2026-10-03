@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   applyMarkPatch,
+  fillPatch,
   keeperAnswers,
   keeperGroups,
   keyPatch,
@@ -12,6 +13,7 @@ import {
   pairedMark,
   parseTileOwnAnswers,
   seedField,
+  unmarkedCounts,
   type TileMark,
 } from "../../src/lib/tile-marks";
 
@@ -58,6 +60,34 @@ describe("applyMarkPatch", () => {
   it("clears a half with null, and the whole mark when nothing is left", () => {
     assert.deepEqual(applyMarkPatch(mark("mnh", "cert"), { certificateStatusId: null }), mark("mnh"));
     assert.equal(applyMarkPatch(mark("mnh"), { conditionId: null }), null);
+  });
+});
+
+describe("fillPatch — marking all unmarked fills only the empty halves", () => {
+  it("gives a condition only to a mark without one, whatever its certificate", () => {
+    assert.deepEqual(fillPatch(null, { conditionId: "mh" }), { conditionId: "mh" });
+    assert.deepEqual(fillPatch(mark(null, "cert"), { conditionId: "mh" }), { conditionId: "mh" });
+    assert.deepEqual(fillPatch(mark("mng"), { conditionId: "mh" }), {});
+  });
+  it("gives a certificate only to a mark without one", () => {
+    assert.deepEqual(fillPatch(mark("mng"), { certificateStatusId: "cert" }), {
+      certificateStatusId: "cert",
+    });
+    assert.deepEqual(fillPatch(mark("mng", "other"), { certificateStatusId: "cert" }), {});
+  });
+  it("never clears", () => {
+    assert.deepEqual(fillPatch(mark("mng", "cert"), { conditionId: null, certificateStatusId: null }), {});
+    assert.deepEqual(fillPatch(null, { conditionId: null }), {});
+  });
+});
+
+describe("unmarkedCounts", () => {
+  it("counts each half apart", () => {
+    assert.deepEqual(unmarkedCounts([null, mark("mng"), mark(null, "cert"), mark("mh", "cert")]), {
+      condition: 2,
+      certificate: 2,
+    });
+    assert.deepEqual(unmarkedCounts([]), { condition: 0, certificate: 0 });
   });
 });
 
