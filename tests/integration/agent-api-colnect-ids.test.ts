@@ -62,6 +62,9 @@ describe("set_stamp_colnect_id (#1445)", () => {
   /** Two stamps both catalogued `Mi 400`, so the number names neither. */
   let dupA: string, dupB: string;
 
+  // Read back rather than stated: the database hands out a stamp's number (#1574, ADR-0062).
+  const stampNoOf = async (stampId: string) =>
+    (await prisma.stamp.findUniqueOrThrow({ where: { id: stampId }, select: { stampNo: true } })).stampNo;
   const colnectIdOf = async (stampId: string) =>
     (await prisma.stamp.findUniqueOrThrow({ where: { id: stampId }, select: { colnectId: true } })).colnectId;
 
@@ -129,7 +132,7 @@ describe("set_stamp_colnect_id (#1445)", () => {
 
   it("sets an ID by catalogue number, and everything that reads the stamp's ID sees it at once", async () => {
     const answer = await set(token, { stamp: "Mi 301", colnect_id: "1133075" });
-    assert.deepEqual(answer, { status: "written", stampId: s301, catalogNumbers: ["Mi 301"], colnectId: "1133075" });
+    assert.deepEqual(answer, { status: "written", stampId: s301, stampNo: await stampNoOf(s301), catalogNumbers: ["Mi 301"], colnectId: "1133075" });
     assert.equal(await colnectIdOf(s301), "1133075");
 
     // The listing kit, the Colnect links and the list sync all read `Stamp.colnectId`, and so does
@@ -143,7 +146,7 @@ describe("set_stamp_colnect_id (#1445)", () => {
     await set(token, { stamp: s302, colnect_id: "https://colnect.com/en/stamps/stamp/555-Germania" });
     assert.equal(await colnectIdOf(s302), "555");
     const again = await set(token, { stamp: s302, colnect_id: "555" });
-    assert.deepEqual(again, { status: "unchanged", stampId: s302, catalogNumbers: ["Mi 302"], colnectId: "555" });
+    assert.deepEqual(again, { status: "unchanged", stampId: s302, stampNo: await stampNoOf(s302), catalogNumbers: ["Mi 302"], colnectId: "555" });
   });
 
   it("changes and clears an ID, naming the one it replaced each time", async () => {
@@ -154,11 +157,11 @@ describe("set_stamp_colnect_id (#1445)", () => {
     assert.equal(changed.replaced, "100");
 
     const cleared = await set(token, { stamp: s301, clear: true });
-    assert.deepEqual(cleared, { status: "cleared", stampId: s301, catalogNumbers: ["Mi 301"], replaced: "200" });
+    assert.deepEqual(cleared, { status: "cleared", stampId: s301, stampNo: await stampNoOf(s301), catalogNumbers: ["Mi 301"], replaced: "200" });
     assert.equal(await colnectIdOf(s301), null);
 
     const nothing = await set(token, { stamp: s301, clear: true });
-    assert.deepEqual(nothing, { status: "unchanged", stampId: s301, catalogNumbers: ["Mi 301"] });
+    assert.deepEqual(nothing, { status: "unchanged", stampId: s301, stampNo: await stampNoOf(s301), catalogNumbers: ["Mi 301"] });
   });
 
   it("refuses an ID another stamp holds, naming that stamp, and writes nothing", async () => {

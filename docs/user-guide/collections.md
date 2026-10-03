@@ -158,6 +158,15 @@ Each issue also carries its own **number** (`#12`), shown at the start of its ch
 collection's own sequential number for the issue — never reused — and typing `iss 12` in the
 sidebar's **Jump to…** box goes straight to it ([Quick jump](quick-jump.md)).
 
+So does **every stamp**, variants included: its number (`#901`) is shown in grey before its catalog
+numbers — on its row in the Issues tree, on the Stamps list, in the stamp pickers and on the
+[stamp page](detail-pages.md#the-stamp-page). Unlike a catalog number it is the same whichever
+catalog you read and never repeats between areas, so it is the one way to name a stamp that cannot
+be mistaken. A new stamp takes the next number when it is created, a deleted stamp's number is never
+given to another, and the number never changes. Typing `st 901` in **Jump to…** opens the stamp's
+page. The stamps you already had were numbered once, area by area in catalog order, so the numbers
+read in a sensible order from the start.
+
 On the **Issues** list, the toolbar's search box matches the issue's own number (`12` or `#12`), the issue name, the name of any stamp in it, and catalog numbers — both the issue's own range numbers and its stamps'. Catalog numbers may be typed the way they are printed, with the catalog abbreviation and country prefix and in any spacing: `Mi PL 200`, `MiPL200`, `PL200`, and `200` all find the same issue, and `Fi BL31` finds a Fischer block. Leading a search with a catalog abbreviation narrows the catalog-number part of the match to that catalog. This is the same reading of a catalog number as the dedicated **catalog number** filter next to it, which searches catalog numbers only.
 
 When an issue is on the list **because of a stamp inside it** — the search or the catalog-number filter did not match the issue's own name, year, number or declared range — expanding that issue shows **only the stamps that matched**, and the stamps they hang under. Everything else in the tree is hidden, not greyed out: an issue with forty variants would otherwise bury the three you were looking for. The **Browse…** stamp picker narrows its trees the same way, on the same rule ([Adding a copy](inventory.md)). The variants that survive open by themselves, so a match never sits behind a collapsed arrow. Ancestors are kept because a variant is read through them — `309AP` on its own is a number nobody can place — so a matching variant always arrives with its `309` above it.

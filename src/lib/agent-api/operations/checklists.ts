@@ -29,7 +29,7 @@ import { optionalBoolean, optionalString, requiredString, stringList } from "../
 import { resolveCatalogStrings } from "./catalog";
 import { CLEAR_NAMES_PARAMETER, NAMES_PARAMETER, translationWrites } from "./catalog-edits";
 import { collectionPath, loadCollectionHeader, type CollectionHeader } from "./reads-shared";
-import { loadStampLabels, resolveStampRefs } from "./stamp-refs";
+import { loadStampLabels, resolveStampRefs, stampNoOf } from "./stamp-refs";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
 
 // Checklists through the agent API (#1512): list and read them, create one on an issue or spanning
@@ -251,6 +251,7 @@ export async function listChecklistStampsFromParams(
     const stamp: AgentChecklistStamp = {
       position: window.offset + i + 1,
       stampId: row.stampId,
+      stampNo: stampNoOf(labels, row.stampId),
       catalogNumbers: label?.catalogNumbers ?? [],
       ...(label?.name ? { name: label.name } : {}),
     };
@@ -272,7 +273,7 @@ export const listChecklistStampsOperation: Operation = {
   result: {
     kind: "list",
     description:
-      "`checklist`, the checklist as `list_checklists` states it, and its stamps: `position` (1 is first), `stampId`, `catalogNumbers` and `name`.",
+      "`checklist`, the checklist as `list_checklists` states it, and its stamps: `position` (1 is first), `stampId`, `stampNo` (its short number), `catalogNumbers` and `name`.",
   },
   handler: async (context, params) => listChecklistStampsFromParams(context, params),
 };
@@ -388,11 +389,15 @@ async function checklistStampIds(checklistId: string): Promise<string[]> {
 
 async function namedStamps(context: OperationContext, stampIds: readonly string[]): Promise<AgentNamedStamp[]> {
   const labels = await loadStampLabels(context, stampIds);
-  return stampIds.map((stampId) => ({ stampId, catalogNumbers: labels.get(stampId)?.catalogNumbers ?? [] }));
+  return stampIds.map((stampId) => ({
+    stampId,
+    stampNo: stampNoOf(labels, stampId),
+    catalogNumbers: labels.get(stampId)?.catalogNumbers ?? [],
+  }));
 }
 
 const STAMPS_PARAMETER_TAIL =
-  "each a stamp id or a catalogue number naming only one stamp, such as `Mi 123a` — `resolve_catalog_numbers` shows what a number reaches.";
+  "each a stamp id, a stamp's short number (`st 123`), or a catalogue number naming only one stamp, such as `Mi 123a` — `resolve_catalog_numbers` shows what a number reaches.";
 
 export async function addChecklistStampsFromParams(
   context: OperationContext,

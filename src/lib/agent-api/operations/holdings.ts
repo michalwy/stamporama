@@ -13,6 +13,7 @@ import type { AgentConditionCount, AgentHolding, AgentValuationSummary } from ".
 import type { ListResponse } from "../list";
 import type { CollectionVocabulary } from "../vocabulary";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
+import { stampIdFromRef } from "./stamp-refs";
 
 // What the collection holds, and what it is worth (#710).
 //
@@ -61,7 +62,7 @@ const SCOPE_PARAMETERS: readonly ParameterSpec[] = [
     in: "query",
     type: "string",
     required: false,
-    description: "Restrict to copies of this one catalogue entry exactly. Variants are not rolled in — a variant's copies are its own.",
+    description: "Restrict to copies of this one catalogue entry exactly. Variants are not rolled in — a variant's copies are its own. A stamp may also be named by its short number, `st 123`.",
   },
   {
     name: "area",
@@ -127,7 +128,8 @@ async function resolveScope(
   params: ParsedParams
 ): Promise<HoldingScope> {
   const issueId = optionalString(params, "issue_id");
-  const stampId = optionalString(params, "stamp_id");
+  const stampIdRef = optionalString(params, "stamp_id");
+  const stampId = stampIdRef === null ? null : await stampIdFromRef(context, stampIdRef, "stamp_id");
   const area = optionalString(params, "area");
   const year = optionalInteger(params, "year");
   const location = optionalString(params, "location");

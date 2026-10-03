@@ -16,6 +16,7 @@ export interface AgentColnectIdWrite {
   /** `written` set or changed the ID, `cleared` took it off, `unchanged` found it already so. */
   readonly status: "written" | "cleared" | "unchanged";
   readonly stampId: string;
+  readonly stampNo: number;
   readonly catalogNumbers: string[];
   /** The ID the stamp carries now; absent once cleared. */
   readonly colnectId?: string;

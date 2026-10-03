@@ -12,6 +12,7 @@ import {
   PRICE_CONVERTED,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
@@ -267,12 +268,7 @@ export function StampRow({
         </div>
 
         {/* Line 3: catalog numbers + main-catalog price */}
-        {(primaryCN ||
-          secondaryCNs.length > 0 ||
-          stamp.colnectId ||
-          stamp.copies.total > 0 ||
-          stamp.tags.length > 0 ||
-          stamp.mainCatalogPrice) && (
+        {/* Never empty: every stamp has a number (#1574), drawn first as on the Issues list. */}
         <div
           style={{
             display: "flex",
@@ -282,6 +278,7 @@ export function StampRow({
             flexWrap: "wrap",
           }}
         >
+          <EntityNoChip entity="stamp" no={stamp.stampNo} prefix="st" />
           {primaryCN && (
             <CatalogNumberChip
               number={primaryCN.number}
@@ -358,7 +355,6 @@ export function StampRow({
             </span>
           )}
         </div>
-        )}
 
         {/* What the catalogue says this stamp is (#737) — under the chips, because it is what tells
             two rows carrying consecutive numbers apart once the numbers themselves have been read. */}

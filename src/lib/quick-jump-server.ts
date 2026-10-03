@@ -18,7 +18,7 @@ import { quickJumpLabel, type QuickJumpTarget } from "./quick-jump";
 //   • offer → `/o/<slug>/<no>`, the short redirect that already exists (#416). Deliberately not the
 //     canonical URL: this is the same address a marketplace note carries, so a jump and a followed
 //     link are the same journey.
-//   • purchase, sale, trade → their own detail screens.
+//   • purchase, sale, trade, stamp → their own detail screens.
 //   • auction lot → its **sale's** screen with the lot scrolled to and flashed once, which is
 //     exactly what clicking the lot on the watchlist does (#374; the flash replaced a persistent
 //     mark in #850). A lot is read in the company of its parcel.
@@ -102,6 +102,15 @@ export async function resolveQuickJump(
       });
       if (!trade) return null;
       return { href: `${base}/trades/${trade.id}` };
+    }
+
+    case "stamp": {
+      const stamp = await prisma.stamp.findUnique({
+        where: { collectionId_stampNo: { collectionId, stampNo: no } },
+        select: { id: true },
+      });
+      if (!stamp) return null;
+      return { href: `${base}/stamps/${stamp.id}` };
     }
 
     case "auctionLot": {

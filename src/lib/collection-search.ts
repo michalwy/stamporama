@@ -92,6 +92,8 @@ export interface CollectionSearchWants {
 /** One stamp, with what the collection holds of it. */
 export interface CollectionSearchStamp {
   stampId: string;
+  /** The stamp's short number (#1574). */
+  stampNo: number;
   name: string | null;
   issuedYear: number | null;
   areaName: string | null;
@@ -254,17 +256,21 @@ export async function searchCollection(
           where: { id: { in: stampIds } },
           select: {
             id: true,
+            stampNo: true,
             catalogNumbers: { select: { catalogVendorId: true, number: true } },
           },
         })
       : Promise.resolve([]),
   ]);
   const numbersByStamp = new Map(stampNumbers.map((s) => [s.id, s.catalogNumbers]));
+  const stampNoByStamp = new Map(stampNumbers.map((s) => [s.id, s.stampNo]));
 
   return {
     query: text,
     stamps: stampHits.map((s) => ({
       stampId: s.stampId,
+      // Read in the same query as the numbers, so it is there for every hit.
+      stampNo: stampNoByStamp.get(s.stampId)!,
       name: s.name,
       issuedYear: s.issuedYear,
       areaName: s.areaName,

@@ -141,6 +141,9 @@ export async function getIssueAreaId(issueId: string): Promise<string | null> {
 
 export interface StampNodeData {
   stampId: string;
+  /** The stamp's short number (#1574) — drawn before its catalogue numbers, taken by `st` in the
+   *  quick-jump box. */
+  stampNo: number;
   parentId: string | null;
   name: string | null;
   issuedDay: number | null;
@@ -237,6 +240,7 @@ const MEMBER_SELECT = {
       // them to the issue being rendered — a static select cannot name the issue it will be run
       // for, and a stamp sits on a handful of checklists at most.
       checklistEntries: { select: { checklistId: true } },
+      stampNo: true,
       parentId: true,
       name: true,
       issuedDay: true,
@@ -304,6 +308,7 @@ function toStampNode(
     stampId: string;
     stamp: {
       checklistEntries: { checklistId: string }[];
+      stampNo: number;
       parentId: string | null;
       name: string | null;
       issuedDay: number | null;
@@ -365,6 +370,7 @@ function toStampNode(
       : false;
   return {
     stampId: m.stampId,
+    stampNo: m.stamp.stampNo,
     parentId: m.stamp.parentId,
     name: m.stamp.name,
     issuedDay: m.stamp.issuedDay,

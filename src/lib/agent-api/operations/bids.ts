@@ -8,6 +8,7 @@ import { resolveOptionalVocabularyValue, resolveVocabularyValue } from "../vocab
 import { readCollectionVocabulary } from "./vocabulary";
 import type { AgentBidRecommendation } from "../bid-reads";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
+import { stampIdsFromRefs } from "./stamp-refs";
 
 // **What a lot is worth bidding, for a lot this collection does not hold** (#1168) — the fourth
 // agent workflow, and the first that is a query about something no record here describes.
@@ -86,7 +87,7 @@ const PARAMETERS: readonly ParameterSpec[] = [
     type: "string[]",
     required: true,
     description:
-      "The stamps the lot is described as holding, resolved to this collection's own ids with `search_collection` — which searches catalogue numbers, so the auctioneer's `Mi 1-12` is what you search for. One id for a single-stamp lot; the whole run for a set. Send the stamps at one grade per call.",
+      "The stamps the lot is described as holding, resolved to this collection's own ids with `search_collection` — which searches catalogue numbers, so the auctioneer's `Mi 1-12` is what you search for. One id for a single-stamp lot; the whole run for a set. Send the stamps at one grade per call. A stamp may also be named by its short number, `st 123`.",
   },
   {
     name: "condition",
@@ -167,7 +168,7 @@ export async function readBidRecommendation(
 
   // Duplicates collapse: a lot holding the same stamp twice at the same grade is one line of
   // quantity two, which is what `quantity` is for. Two identical lines would double the figure.
-  const stampIds = [...new Set(stringList(params, "stamp_ids"))];
+  const stampIds = [...new Set(await stampIdsFromRefs(context, stringList(params, "stamp_ids"), "stamp_ids"))];
   if (stampIds.length === 0) {
     throw invalidRequest(
       '"stamp_ids" is empty. Resolve the stamps the lot is described as holding with `search_collection` and send their ids.'

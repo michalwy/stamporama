@@ -2,8 +2,8 @@
 // number — `o 200`, `iss12`, `lot 3` — and goes straight there.
 //
 // It exists because every major entity now carries a small per-collection number (#268 for copies,
-// #416 for offers, #432 for the rest), and a number is only worth allocating if there is somewhere
-// to type it. The alternative — a general search that guesses what `200` means — cannot be right
+// #416 for offers, #432 for the rest, #1574 for stamps), and a number is only worth allocating if
+// there is somewhere to type it. The alternative — a general search that guesses what `200` means — cannot be right
 // often enough: `200` is a perfectly good catalog number, price and year as well as a copy.
 // Stating the type is one keystroke and removes the guess entirely.
 //
@@ -19,7 +19,8 @@ export type QuickJumpEntity =
   | "sale"
   | "issue"
   | "auctionLot"
-  | "trade";
+  | "trade"
+  | "stamp";
 
 export interface QuickJumpPrefix {
   /** What the collector types. Lower-case; input is lower-cased before matching. */
@@ -46,6 +47,9 @@ export const QUICK_JUMP_PREFIXES: readonly QuickJumpPrefix[] = [
   { prefix: "iss", entity: "issue", label: "issue" },
   { prefix: "lot", entity: "auctionLot", label: "auction lot" },
   { prefix: "t", entity: "trade", label: "trade" },
+  // A stamp, variants included (#1574). `st` rather than a single letter: `s` is the sale, and the
+  // longest-prefix rule is what keeps `st12` from being read as `s` + `t12`.
+  { prefix: "st", entity: "stamp", label: "stamp" },
 ];
 
 export interface QuickJumpTarget {
@@ -105,6 +109,15 @@ export function parseQuickJump(input: string): QuickJumpTarget | null {
     return { entity, no };
   }
   return null;
+}
+
+/** A stamp named by its short number — `st 123`, `st123`, `ST #123` — or null when `input` is not
+ * one (#1574). The quick-jump box's own reading, so the agent API takes exactly what the box takes
+ * and what a stamp row shows; a bare `123` is not one, for the box's reason: it is as likely a
+ * catalogue number. */
+export function parseStampNoRef(input: string): number | null {
+  const target = parseQuickJump(input);
+  return target?.entity === "stamp" ? target.no : null;
 }
 
 /** How an entity is named back to the collector when a jump finds nothing. */

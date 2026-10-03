@@ -24,6 +24,7 @@ import {
   PRICE_CONVERTED,
 } from "./chip-styles";
 import { CatalogNumberChip } from "./catalog-number-chip";
+import { EntityNoChip } from "./entity-no-chip";
 import { StalePriceIcon } from "./stale-price-icon";
 import { ColnectChip, colnectSearchQueryFor } from "./colnect-chip";
 import { SubtypeChip } from "./subtype-chip";
@@ -335,8 +336,9 @@ export function StampTitle({ node }: { node: StampNodeData }) {
   );
 }
 
-/** Stamp detail line: catalog-number chips (muted when the stamp is on no checklist of the issue,
- * #531) and the main catalog price. Renders nothing when there's neither. */
+/** Stamp detail line: the stamp's short number (#1574), its catalog-number chips (muted when the
+ * stamp is on no checklist of the issue, #531) and the main catalog price. Never empty — every stamp
+ * has a number, which is drawn first, where an issue row draws the issue's. */
 export function StampDetailLine({
   collectionId,
   node,
@@ -364,23 +366,6 @@ export function StampDetailLine({
   const secondaryCNs = node.catalogNumbers.filter((cn) => cn.catalogVendorId !== primaryVendorId);
   const notRequired = node.checklistIds.length === 0;
 
-  // Mirrors `SubtypeChip`'s own rule, so a stamp whose only detail is a non-default subtype still
-  // gets a line to show it on.
-  const showsSubtype = !!node.subtype && !node.subtype.isDefault;
-
-  if (
-    !primaryCN &&
-    secondaryCNs.length === 0 &&
-    !node.colnectId &&
-    !showsSubtype &&
-    node.copies.total === 0 &&
-    node.variantCopies.total === 0 &&
-    node.tags.length === 0 &&
-    !node.mainCatalogPrice &&
-    !onSetPrice
-  )
-    return null;
-
   return (
     <div
       style={{
@@ -391,6 +376,7 @@ export function StampDetailLine({
         flexWrap: "wrap",
       }}
     >
+      <EntityNoChip entity="stamp" no={node.stampNo} prefix="st" />
       {primaryCN && (
         <CatalogNumberChip
           number={primaryCN.number}

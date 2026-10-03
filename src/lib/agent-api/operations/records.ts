@@ -12,6 +12,7 @@ import { requiredString } from "../params";
 import { collectionPath, loadCatalogLabelling, loadCollectionHeader, loadLocationPaths } from "./reads-shared";
 import type { AgentCopyDetail, AgentIssueDetail, AgentStampDetail } from "../collection-reads";
 import type { Operation, OperationContext, ParsedParams } from "../types";
+import { stampIdFromRef } from "./stamp-refs";
 
 // One thing in full — a stamp, an issue, a copy (#710).
 //
@@ -65,7 +66,7 @@ export async function readStamp(
   context: OperationContext,
   params: ParsedParams
 ): Promise<AgentStampDetail> {
-  const stampId = requiredString(params, "stamp_id");
+  const stampId = await stampIdFromRef(context, requiredString(params, "stamp_id"), "stamp_id");
   const header = await loadCollectionHeader(context);
   await assertStampInCollection(stampId, context.collectionId);
 
@@ -184,7 +185,7 @@ export const getStampOperation: Operation = {
       in: "path",
       type: "string",
       required: true,
-      description: "The stamp's id, as `search_collection` or `get_copy` reports it.",
+      description: "The stamp's id, as `search_collection` or `get_copy` reports it. A stamp may also be named by its short number, `st 123`.",
     },
   ],
   result: {

@@ -412,6 +412,8 @@ export interface StampIssueMembership {
 
 export interface StampListItem {
   id: string;
+  /** The stamp's short number (#1574), taken by `st` in the quick-jump box. */
+  stampNo: number;
   collectionId: string;
   parentId: string | null;
   subtypeId: string | null;
@@ -470,6 +472,7 @@ export interface PaginatedStampsResult {
 
 const STAMP_LIST_SELECT = {
   id: true,
+  stampNo: true,
   collectionId: true,
   parentId: true,
   subtypeId: true,
@@ -519,6 +522,7 @@ const STAMP_LIST_SELECT = {
 function toStampListItem(
   stamp: {
     id: string;
+    stampNo: number;
     collectionId: string;
     parentId: string | null;
     subtypeId: string | null;
@@ -577,6 +581,7 @@ function toStampListItem(
     : false;
   return {
     id: stamp.id,
+    stampNo: stamp.stampNo,
     collectionId: stamp.collectionId,
     parentId: stamp.parentId,
     subtypeId: stamp.subtypeId,

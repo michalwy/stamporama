@@ -109,7 +109,8 @@ Offers. Only Details is always there; the rest appear when the copy has them.
 *Left column:* Details, Attributes, Issues, Photos, Copies' photos, Catalog prices, Variants.
 *Right column:* Wants, Copies, Offers. Only Details is always there.
 
-- **Identity** — catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
+- **Identity** — the stamp's own [number](collections.md#filtering-the-issues-stamps-and-copies-lists)
+  (`#901`, the one `st 901` jumps to), catalog numbers, name, subtype, the Colnect link (or a Colnect search when no
   item-ID is recorded), the copies-held badge — carrying a *(+N)* for the copies held of this
   stamp's variants when there are any, and opening its disposition breakdown on click — and the
   headline catalog price. At the end of the line, **Edit** opens the stamp form — the same one the
