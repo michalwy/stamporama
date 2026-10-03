@@ -63,6 +63,7 @@ import type { FaultEntry } from "@/lib/fault-entry";
 import { FaultEntryField } from "./fault-entry-field";
 import { useCollectionFaults } from "./use-faults";
 import { CatalogNumberChips } from "./catalog-number-chips";
+import { CertificateStatusChip, ConditionChip } from "./dictionary-chip";
 import { NumericInput } from "./numeric-input";
 import { StampDetailLine, StampTitle } from "./issue-view";
 import { StampFormDialog } from "./stamp-form-dialog";
@@ -1131,20 +1132,42 @@ export function IssueRunDialog({
                       >
                         tile {piece.position + 1}
                       </span>
+                      {/* The condition and certificate in the colours the collector knows them by on
+                          every list (#728), so a run of mixed conditions (#1550) reads down the
+                          column at a glance (#1578). A tile on the shared condition draws the same
+                          chip as one with its own; the note above says which is which. */}
                       <span
                         style={{
-                          width: "4.5rem",
+                          width: "6.5rem",
                           flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.25rem",
                           fontSize: "0.75rem",
-                          color: condition ? "var(--color-text-secondary)" : "var(--color-warning)",
+                          color: "var(--color-warning)",
                           overflow: "hidden",
-                          textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {condition
-                          ? [condition.abbreviation, certificate?.abbreviation].filter(Boolean).join(" · ")
-                          : "no condition"}
+                        {condition ? (
+                          <>
+                            <ConditionChip
+                              collectionId={collectionId}
+                              conditionId={condition.id}
+                              label={condition.abbreviation}
+                            />
+                            {certificate && (
+                              <CertificateStatusChip
+                                collectionId={collectionId}
+                                certificateStatusId={certificate.id}
+                                label={certificate.abbreviation}
+                                tooltip={certificate.name}
+                              />
+                            )}
+                          </>
+                        ) : (
+                          "no condition"
+                        )}
                       </span>
                     </button>
                     <RowValue
