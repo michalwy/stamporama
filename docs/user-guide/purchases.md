@@ -1267,8 +1267,10 @@ The browse popup opens to pick the **checklist**:
 
 - **An issue with one checklist** has an **Its stamps, in turn** button, and that checklist is used
   without asking.
-- **An issue with several checklists** has one button per checklist — **Imperforate, in turn**,
-  **Perforated, in turn** — and you press the one the card holds.
+- **An issue with several checklists** offers one button per checklist and you press the one the
+  card holds. With the **Checklists** control on **Tree** (the default), expand the issue: each
+  checklist is a branch with its own **Its stamps, in turn** on its heading. On **Flat**, the
+  buttons sit on the issue row — **Imperforate, in turn**, **Perforated, in turn**.
 - **A checklist that spans issues** is offered on the row of every issue it covers.
 - **An issue with no checklist yet** has a **New checklist…** button instead, which opens that issue's
   checklist editor: make the checklist, tick its stamps, and close the editor — the row then offers it.
@@ -1765,14 +1767,16 @@ the parcel, often long after the money changed hands. Click the lot's **＋ Add 
 app: navigate areas and issues, and either
 
 - pick a **single stamp** (creating the issue/stamp first if needed), or
-- add a **whole set** with the button on the issue row — one per
-  [checklist](collections.md#checklists) the issue carries, named after it, creating a copy for
-  every stamp on that checklist. An issue with a single checklist keeps the familiar
-  **+ Whole issue** label.
+- add a **whole set**, creating a copy for every stamp on one
+  [checklist](collections.md#checklists). An issue with a single checklist has a
+  **+ Whole issue** button on its row. One with several shows them, once expanded, as
+  [branches](collections.md#checklists-as-branches) — each with a **+ Whole checklist** button on
+  its heading — or, with the **Checklists** control on **Flat**, as one button per checklist on the
+  issue row, named after it.
 
-Expanding an issue whose stamps you want to pick one by one gives you the same **Checklist**
-filter the issues list has, so a series collected two ways can be narrowed to the set you are
-actually buying. The stamp rows read exactly as they do on the Stamps and Issues lists, the
+Expanding an issue whose stamps you want to pick one by one groups them by checklist as the issues
+list does — or, on **Flat**, gives you the same **Checklist** filter — so a series collected two
+ways can be narrowed to the set you are actually buying. The stamp rows read exactly as they do on the Stamps and Issues lists, the
 **copies-held badge** and the **want marker** included, so you can see what you already have
 before you even pick.
 

@@ -722,7 +722,7 @@ always says how many wants it will create before it writes anything. See
 
 ### Which checklists a stamp is on
 
-On the **Issues** list, when an issue carries **more than one** checklist, every stamp row of its expanded tree names the checklists that stamp is on, as small rounded chips right after its title — one per checklist, none for a stamp on none of them. Each checklist has **its own colour**, taken from its place in the issue's order of checklists, so it is the same colour every time you open the issue; the **Checklist** filter chips and the branch headings below wear the same colours. A long name is shortened on the chip; hover it for the whole name. An issue with a single checklist shows no such chips — they would say the same thing on every row.
+On the **Issues** list, when an issue carries **more than one** checklist, every stamp row of its expanded tree names the checklists that stamp is on, as small rounded chips right after its title — one per checklist, none for a stamp on none of them. Each checklist has **its own colour**, taken from its place in the issue's order of checklists, so it is the same colour every time you open the issue; the **Checklist** filter chips and the branch headings below wear the same colours. A long name is shortened on the chip; hover it for the whole name. An issue with a single checklist shows no such chips — they would say the same thing on every row. The **stamp picker** — the browser you reach from identifying a tile, a purchase order's intake or a lot's composition — names them on its stamp rows the same way.
 
 ### Checklists as branches
 
@@ -743,6 +743,8 @@ A checklist's branch has its own **⋮** menu with the issue's actions that make
 
 What belongs to the issue as a whole — moving or merging it, recomputing its declared range, its format multipliers, editing or deleting it, opening its page — stays on the issue's own row. While **Reorder** is on, the tree is shown whole, without branches.
 
+The **stamp picker** groups an expanded issue's stamps the same way, with the same **Checklists** control beside its filter box — one choice for both, so switching it in either place switches it in the other. Its branches carry no **⋮** menu, the picker being for choosing a stamp; where the picker offers a checklist as a whole — **Its stamps, in turn** while identifying a run of tiles, **+ Whole checklist** while adding a set to a lot — that button sits on the checklist's branch heading.
+
 ### Showing one checklist at a time
 
 When an issue carries **more than one** checklist, expanding its row in **Flat** mode puts a **Checklist** filter above the stamp tree — and the same control sits in the header of the **Stamps** card on the issue's detail page. On the Issues list each chip wears its checklist's colour. Every checklist the issue carries is there **by name, as its own chip**, so you can see what you are choosing between before you choose: click one and the tree narrows to the stamps on it, click a second and it shows the stamps on either.
@@ -751,7 +753,7 @@ A stamp that is not on the picked checklists disappears, with one exception: a *
 
 Click the picked chips off again to get the whole tree back; nothing picked means *no filter*, not *nothing*, which is why there is no **All** chip to hunt for. The choice is not remembered — it is a way of looking at one issue for a moment, not a setting.
 
-The same filter sits in the **stamp picker** — the browser you reach from a purchase order's intake or an auction lot's composition — above each expanded issue's tree. When it empties the tree, the row says so rather than looking like an empty issue.
+The same filter sits in the **stamp picker** — the browser you reach from a purchase order's intake or an auction lot's composition — above each expanded issue's tree in **Flat** mode. When it empties the tree, the row says so rather than looking like an empty issue.
 
 An issue with a single checklist gets no filter: there is nothing to choose between. The one exception is the issue's detail page after you click that checklist on its **Checklists** card — the filter then appears with it picked, so the way back to the whole tree stays in sight.
 

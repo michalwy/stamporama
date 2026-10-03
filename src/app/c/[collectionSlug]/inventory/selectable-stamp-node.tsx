@@ -10,6 +10,10 @@ import {
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { CREATE_LINK_STYLE } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import {
+  ChecklistChips,
+  type ChecklistChipData,
+} from "@/app/c/[collectionSlug]/shared/checklist-chip";
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
 
@@ -34,6 +38,7 @@ export function SelectableStampNode({
   contextIds,
   marked,
   onCompare,
+  checklistChips,
 }: {
   treeNode: StampTreeNodeData;
   depth: number;
@@ -73,6 +78,9 @@ export function SelectableStampNode({
   /** Open the reference comparison on this stamp (#1005) — offered only where a piece is being
    *  identified, since there is nothing to compare a reference *with* anywhere else. */
   onCompare?: (node: StampNodeData) => void;
+  /** The issue's checklists in its order, coloured, when it has more than one (#1519, #1585) — the
+   *  row names the ones its stamp is on, as the Issues list's row does. */
+  checklistChips?: ChecklistChipData[] | null;
 }) {
   const { node, children } = treeNode;
   const hasChildren = children.length > 0;
@@ -168,17 +176,34 @@ export function SelectableStampNode({
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {/* The title and, right after it, the checklists this stamp is on (#1519, #1585),
+                    the Issues list's row layout. */}
                 <span
                   style={{
                     flex: 1,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    minWidth: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
                   }}
                 >
-                  <StampTitle node={node} />
-                  {isUnknownVariant && (
-                    <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
+                  <span
+                    style={{
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <StampTitle node={node} />
+                    {isUnknownVariant && (
+                      <span style={{ color: "var(--color-text-muted)" }}> — unknown variant</span>
+                    )}
+                  </span>
+                  {checklistChips && (
+                    <ChecklistChips
+                      checklists={checklistChips.filter((c) => node.checklistIds.includes(c.id))}
+                    />
                   )}
                 </span>
 
@@ -291,6 +316,7 @@ export function SelectableStampNode({
             contextIds={contextIds}
             marked={marked}
             onCompare={onCompare}
+            checklistChips={checklistChips}
           />
         ))}
     </>

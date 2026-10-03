@@ -17,6 +17,9 @@ import type {
   StampNodeData,
 } from "@/lib/issues";
 import type { SpanningChecklistSummary } from "@/lib/checklists";
+import { checklistColorMap } from "@/lib/checklist-colors";
+import { checklistBranches, countOffChecklist } from "@/lib/checklist-branches";
+import { getIssueChecklistHeadlinesAction } from "@/app/actions/checklists";
 import {
   createIssueAction,
   addStampToIssueAction,
@@ -41,10 +44,12 @@ import {
   IssueTitle,
   IssueCatalogChips,
   ChecklistsBadge,
+  type StampTreeNodeData,
   type VendorMap,
 } from "@/app/c/[collectionSlug]/shared/issue-view";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
+  issueKeys,
   useIssuesInfinite,
   useIssueYears,
   useIssueAreaFacets,
@@ -52,6 +57,13 @@ import {
   type IssueYearFacetFilters,
   type IssueAreaFacetFilters,
 } from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import { ChecklistBranch } from "@/app/c/[collectionSlug]/issues/checklist-branch";
+import {
+  ChecklistDisplaySwitcher,
+  useChecklistDisplayMode,
+  type ChecklistDisplayMode,
+} from "@/app/c/[collectionSlug]/issues/checklist-display-switcher";
+import type { ChecklistChipData } from "@/app/c/[collectionSlug]/shared/checklist-chip";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import type { CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
@@ -666,6 +678,10 @@ function IssueBrowser({
   // prefix override (#377), so the picker's chips and its search keys read like the list's.
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
+  // Tree or Flat for an issue with several checklists (#1585): the Issues list's own remembered
+  // choice (#1520), so it is made once and read the same on both.
+  const [checklistDisplay, setChecklistDisplay] = useChecklistDisplayMode(collectionId);
+
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) {
     // Browsing for a checklist (#1225): the stamp pressed picks one only where that says which — the
     // row's only checklist, or the only one of the row's that holds this stamp. Otherwise the press
@@ -710,6 +726,7 @@ function IssueBrowser({
           padding: "0.75rem 1rem",
           borderBottom: "1px solid var(--color-border)",
           display: "flex",
+          alignItems: "center",
           gap: "0.5rem",
         }}
       >
@@ -722,6 +739,7 @@ function IssueBrowser({
           // Focus + select the remembered filter text on open, so typing overwrites it (#183).
           data-autofocus-select
         />
+        <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
         <button
           type="button"
           onClick={() => onNewIssue(selectedAreaId)}
@@ -752,6 +770,7 @@ function IssueBrowser({
               defaultExpanded={issue.id === justCreatedIssueId}
               justAdded={issue.id === justCreatedIssueId}
               search={search}
+              checklistDisplay={checklistDisplay}
               onPick={handlePick}
               marked={marked}
               onCompare={onCompare}
@@ -809,6 +828,80 @@ const RUN_BUTTON_STYLE: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+/** No checklist narrowing — one array, so the tree's memo holds across renders. */
+const NO_CHECKLIST_IDS: string[] = [];
+
+/** A lot's whole-checklist button (#121; #531). */
+const LOT_BUTTON_STYLE: React.CSSProperties = {
+  flexShrink: 0,
+  padding: "0.25rem 0.5rem",
+  background: "transparent",
+  color: "var(--color-text-secondary)",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.75rem",
+  fontWeight: 500,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+/** Take a checklist for a run of tiles (#1225) — on the issue row, or on the checklist's branch. */
+function RunChecklistButton({
+  checklist,
+  tileCount,
+  label,
+  onPick,
+}: {
+  checklist: RunChecklistOption;
+  tileCount: number;
+  label: string;
+  onPick: () => void;
+}) {
+  return (
+    <Tooltip
+      content={`Give the ${tileCount} ticked tiles the stamps of “${checklist.name}” (${checklist.stampCount}), in its own order${checklist.spans ? " — it spans issues" : ""}`}
+      align="end"
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onPick();
+        }}
+        style={RUN_BUTTON_STYLE}
+      >
+        {label}
+      </button>
+    </Tooltip>
+  );
+}
+
+/** Add a whole checklist to the lot (#121; #531) — on the issue row, or on the checklist's branch. */
+function LotChecklistButton({
+  checklist,
+  label,
+  onPick,
+}: {
+  checklist: IssueChecklistSummary;
+  label: string;
+  onPick: () => void;
+}) {
+  return (
+    <Tooltip content={`Add every stamp on “${checklist.name}” to the lot`} align="end">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onPick();
+        }}
+        style={LOT_BUTTON_STYLE}
+      >
+        {label}
+      </button>
+    </Tooltip>
+  );
+}
+
 function PickIssueRow({
   collectionId,
   issue,
@@ -820,6 +913,7 @@ function PickIssueRow({
   defaultExpanded,
   justAdded,
   search,
+  checklistDisplay,
   onPick,
   onPickIssue,
   issueRun,
@@ -842,6 +936,8 @@ function PickIssueRow({
   /** The search the page was fetched with, empty when there is none. The row decides for itself
    *  whether its own header explains the hit and, when it does not, which of its stamps did (#186). */
   search: string;
+  /** How an issue with several checklists shows its stamps (#1585): branches, or one run. */
+  checklistDisplay: ChecklistDisplayMode;
   onPick: (node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) => void;
   /** When set, an "Add whole issue" button appears on the row header (lot intake, #121). */
   /** Called with the checklist whose button was pressed (#531). */
@@ -882,15 +978,116 @@ function PickIssueRow({
   // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
   // filter clears, the row falls back to the user's own toggle.
   const isExpanded = userExpanded || matchedStampIds !== null;
+  // Several checklists are drawn as branches in tree mode, as on the Issues list (#1520, #1585), and
+  // the chip filter has nothing to do beside them, the branches already separating the checklists.
+  const multiChecklist = issue.checklists.length > 1;
+  const asBranches = checklistDisplay === "tree" && multiChecklist;
   // Narrowing the tree by checklist (#531), as on the issues list and the issue detail page.
   // Local to the row and not remembered: a picker is opened to answer one question.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
+  const effectiveChecklistIds = asBranches ? NO_CHECKLIST_IDS : treeChecklistIds;
+  const fullTree = useMemo(() => buildStampTree(members), [members]);
   // Both narrowings in one walk, the Issues list' own call (#631): the stamps the search did not
   // match are **hidden**, not faded, and the ancestors they hang under come back in `contextIds`
   // to be dimmed.
   const { tree, contextIds } = useMemo(
-    () => filterStampTreeBy(buildStampTree(members), treeChecklistIds, matchedStampIds),
-    [members, treeChecklistIds, matchedStampIds]
+    () => filterStampTreeBy(fullTree, effectiveChecklistIds, matchedStampIds),
+    [fullTree, effectiveChecklistIds, matchedStampIds]
+  );
+  const branches = useMemo(
+    () => (asBranches ? checklistBranches(fullTree, issue.checklists, matchedStampIds) : null),
+    [asBranches, fullTree, issue.checklists, matchedStampIds]
+  );
+
+  // Each checklist's colour by its place in the issue's order (#1519): the row chips, the filter
+  // chips and the branch headings read it from here, as on the Issues list.
+  const checklistColors = useMemo(() => checklistColorMap(issue.checklists), [issue.checklists]);
+  const checklistChips = useMemo<ChecklistChipData[] | null>(
+    () =>
+      multiChecklist
+        ? issue.checklists.map((c) => ({ id: c.id, name: c.name, tokens: checklistColors.get(c.id)! }))
+        : null,
+    [multiChecklist, issue.checklists, checklistColors]
+  );
+
+  // Which branches are open: collapsed by default, open while the search narrowed the tree (#631's
+  // reason — a match behind a collapsed arrow is a match nobody sees). The collector's own toggle
+  // wins either way, and lasts while the issue stays open.
+  const [branchToggles, setBranchToggles] = useState<Record<string, boolean>>({});
+  const branchOpen = (key: string) => branchToggles[key] ?? !!matchedStampIds;
+  const toggleIssue = () => {
+    if (isExpanded) setBranchToggles({});
+    setUserExpanded(!isExpanded);
+  };
+
+  // The branch headings' completeness, the Issues list's own read under its own key, so the two
+  // share it and whatever refreshes this issue refreshes it.
+  const { data: checklistHeadlines } = useQuery({
+    queryKey: [...issueKeys.members(collectionId, issue.id).slice(0, 4), "checklist-headlines"],
+    queryFn: () => getIssueChecklistHeadlinesAction(collectionId, issue.id),
+    enabled: isExpanded && asBranches,
+  });
+
+  // A checklist's own presses move to its branch where there is one (#1585); a run's checklist
+  // spanning issues has no branch here, so it stays on the row.
+  const headerRunChecklists = issueRun
+    ? asBranches
+      ? issueRun.checklists.filter((c) => c.spans)
+      : issueRun.checklists
+    : [];
+  const headerLotChecklists = onPickIssue && !asBranches ? issue.checklists : [];
+
+  const renderNodes = (
+    nodes: StampTreeNodeData[],
+    depth: number,
+    nodeContextIds: Set<string>,
+    lastIsLast: boolean
+  ) =>
+    nodes.map((treeNode, i) => (
+      <SelectableStampNode
+        key={treeNode.node.stampId}
+        treeNode={treeNode}
+        depth={depth}
+        contextIds={nodeContextIds}
+        collectionId={issue.collectionId}
+        vendorMap={vendorMap}
+        primaryVendorId={primaryVendorId}
+        isLast={lastIsLast && i === nodes.length - 1}
+        onPick={(node, unknownVariant) => onPick(node, unknownVariant, issue)}
+        // The create dialog prefills from the parent's own numbers and year (#386/#360),
+        // so it takes the node rather than its id — the row holds the tree it came from.
+        onNewVariant={(parentStampId) => {
+          const parent = members.find((m) => m.stampId === parentStampId);
+          if (parent) onNewVariant(parent);
+        }}
+        // The range dialog numbers the run off the base stamp's own number in the area's
+        // primary catalogue, so it takes the node for the same reason.
+        onNewVariantRange={(parentStampId) => {
+          const parent = members.find((m) => m.stampId === parentStampId);
+          if (parent) onNewVariantRange(parent);
+        }}
+        marked={marked}
+        onCompare={
+          onCompare
+            ? (node) => onCompare({ stampId: node.stampId, issueId: issue.id })
+            : undefined
+        }
+        narrowed={!!matchedStampIds}
+        checklistChips={checklistChips}
+      />
+    ));
+
+  const emptyNote = (text: string) => (
+    <div
+      style={{
+        padding: "0.875rem 0 0.875rem 0.5rem",
+        fontSize: "0.875rem",
+        color: "var(--color-text-muted)",
+        fontStyle: "italic",
+      }}
+    >
+      {text}
+    </div>
   );
 
   return (
@@ -899,7 +1096,7 @@ function PickIssueRow({
         className={justAdded ? "just-added-flash" : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => setUserExpanded(!isExpanded)}
+        onClick={toggleIssue}
         style={{
           padding: "0.875rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
@@ -915,7 +1112,7 @@ function PickIssueRow({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            setUserExpanded(!isExpanded);
+            toggleIssue();
           }}
           aria-label={isExpanded ? "Collapse" : "Expand"}
           style={{
@@ -973,7 +1170,8 @@ function PickIssueRow({
 
           {/* The press this picker is open for when a run of tiles is being identified (#1220):
               the checklist it is built on (#1225). On every row, a new issue included — one with no
-              checklist yet offers the editor to make one, since there is nothing else to build on. */}
+              checklist yet offers the editor to make one, since there is nothing else to build on.
+              An issue drawn as branches carries its own checklists' presses on the branches (#1585). */}
           {issueRun &&
             (issueRun.checklists.length === 0 ? (
               <Tooltip
@@ -992,64 +1190,35 @@ function PickIssueRow({
                 </button>
               </Tooltip>
             ) : (
-              issueRun.checklists.map((checklist) => (
-                <Tooltip
+              headerRunChecklists.map((checklist) => (
+                <RunChecklistButton
                   key={checklist.id}
-                  content={`Give the ${issueRun.tileCount} ticked tiles the stamps of “${checklist.name}” (${checklist.stampCount}), in its own order${checklist.spans ? " — it spans issues" : ""}`}
-                  align="end"
-                >
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      issueRun.onPick(checklist.id);
-                    }}
-                    style={RUN_BUTTON_STYLE}
-                  >
-                    {issueRun.checklists.length === 1
+                  checklist={checklist}
+                  tileCount={issueRun.tileCount}
+                  label={
+                    issueRun.checklists.length === 1
                       ? "Its stamps, in turn"
-                      : `${checklist.name}, in turn`}
-                  </button>
-                </Tooltip>
+                      : `${checklist.name}, in turn`
+                  }
+                  onPick={() => issueRun.onPick(checklist.id)}
+                />
               ))
             ))}
 
           {/* One button per checklist (#531). With one it reads as it always did; with several
               each names its own set, which is better than a chooser the collector has to open to
-              answer a question the row can already ask. */}
+              answer a question the row can already ask. On the branches instead where there are
+              branches (#1585). */}
           {onPickIssue &&
-            issue.checklists
+            headerLotChecklists
               .filter((c) => c.stampCount > 0)
               .map((checklist) => (
-                <Tooltip
+                <LotChecklistButton
                   key={checklist.id}
-                  content={`Add every stamp on “${checklist.name}” to the lot`}
-                  align="end"
-                >
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPickIssue(checklist);
-                    }}
-                    style={{
-                      flexShrink: 0,
-                      padding: "0.25rem 0.5rem",
-                      background: "transparent",
-                      color: "var(--color-text-secondary)",
-                      border: "1px solid var(--color-border-strong)",
-                      borderRadius: "0.375rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    +{" "}
-                    {issue.checklists.length === 1 ? "Whole issue" : checklist.name} (
-                    {checklist.stampCount})
-                  </button>
-                </Tooltip>
+                  checklist={checklist}
+                  label={`+ ${issue.checklists.length === 1 ? "Whole issue" : checklist.name} (${checklist.stampCount})`}
+                  onPick={() => onPickIssue(checklist)}
+                />
               ))}
         </div>
 
@@ -1089,8 +1258,9 @@ function PickIssueRow({
             borderLeft: "2px solid var(--color-border)",
           }}
         >
-          {/* Narrowing by checklist — only where there is a choice to make. */}
-          {issue.checklists.length > 1 && (
+          {/* Narrowing by checklist — only where there is a choice to make, and not beside
+              branches, which already separate the checklists. */}
+          {multiChecklist && !asBranches && (
             <div
               style={{
                 display: "flex",
@@ -1107,62 +1277,84 @@ function PickIssueRow({
                 checklists={issue.checklists}
                 selected={treeChecklistIds}
                 onChange={setTreeChecklistIds}
+                colors={checklistColors}
               />
             </div>
           )}
-          {tree.length === 0 ? (
-            <div
-              style={{
-                padding: "0.875rem 0 0.875rem 0.5rem",
-                fontSize: "0.875rem",
-                color: "var(--color-text-muted)",
-                fontStyle: "italic",
-              }}
-            >
-              {/* Said explicitly rather than shown as an empty row: with a text search also on
-                  (which is what forces a row open, #186), an unexplained blank reads as "this
-                  issue has nothing", when in fact the checklist filter is what emptied it — or
-                  the stamps are simply still on their way, the tree being read per row (#604). */}
-              {membersLoading
-                ? "Loading stamps…"
-                : treeChecklistIds.length > 0 && members.length > 0
-                  ? "No stamp on the checklists you picked."
-                  : "No stamps in this issue yet."}
-            </div>
-          ) : (
-            tree.map((treeNode, i) => (
-              <SelectableStampNode
-                key={treeNode.node.stampId}
-                treeNode={treeNode}
-                depth={0}
-                contextIds={contextIds}
-                collectionId={issue.collectionId}
-                vendorMap={vendorMap}
-                primaryVendorId={primaryVendorId}
-                isLast={i === tree.length - 1}
-                onPick={(node, unknownVariant) => onPick(node, unknownVariant, issue)}
-                // The create dialog prefills from the parent's own numbers and year (#386/#360),
-                // so it takes the node rather than its id — the row holds the tree it came from.
-                onNewVariant={(parentStampId) => {
-                  const parent = members.find((m) => m.stampId === parentStampId);
-                  if (parent) onNewVariant(parent);
-                }}
-                // The range dialog numbers the run off the base stamp's own number in the area's
-                // primary catalogue, so it takes the node for the same reason.
-                onNewVariantRange={(parentStampId) => {
-                  const parent = members.find((m) => m.stampId === parentStampId);
-                  if (parent) onNewVariantRange(parent);
-                }}
-                marked={marked}
-                onCompare={
-                  onCompare
-                    ? (node) => onCompare({ stampId: node.stampId, issueId: issue.id })
-                    : undefined
-                }
-                narrowed={!!matchedStampIds}
-              />
-            ))
-          )}
+          {members.length === 0
+            ? emptyNote(membersLoading ? "Loading stamps…" : "No stamps in this issue yet.")
+            : branches
+              ? branches
+                  // A branch the search emptied says nothing; the rest are what matched.
+                  .filter((b) => !matchedStampIds || b.tree.length > 0)
+                  .map((branch) => {
+                    const key = branch.checklistId ?? "none";
+                    const checklist = branch.checklistId
+                      ? (issue.checklists.find((c) => c.id === branch.checklistId) ?? null)
+                      : null;
+                    const runChecklist =
+                      checklist && issueRun?.checklists.find((c) => c.id === checklist.id && !c.spans);
+                    return (
+                      <ChecklistBranch
+                        key={key}
+                        checklist={checklist}
+                        stampCount={checklist ? checklist.stampCount : countOffChecklist(fullTree)}
+                        tokens={checklist ? checklistColors.get(checklist.id) : undefined}
+                        headline={checklist ? checklistHeadlines?.[checklist.id] : undefined}
+                        open={branchOpen(key)}
+                        onToggle={() =>
+                          setBranchToggles((prev) => ({ ...prev, [key]: !branchOpen(key) }))
+                        }
+                        // The picker's own checklist presses, not the Issues list's `⋮`: the
+                        // picker is for choosing (#1585).
+                        actions={
+                          checklist && (
+                            <>
+                              {issueRun && runChecklist && (
+                                <RunChecklistButton
+                                  checklist={runChecklist}
+                                  tileCount={issueRun.tileCount}
+                                  label="Its stamps, in turn"
+                                  onPick={() => issueRun.onPick(checklist.id)}
+                                />
+                              )}
+                              {onPickIssue && checklist.stampCount > 0 && (
+                                <LotChecklistButton
+                                  checklist={checklist}
+                                  label={`+ Whole checklist (${checklist.stampCount})`}
+                                  onPick={() => onPickIssue(checklist)}
+                                />
+                              )}
+                            </>
+                          )
+                        }
+                      >
+                        {branch.tree.length === 0 ? (
+                          <div
+                            style={{
+                              padding: "0.5rem 0 0.5rem 2.25rem",
+                              fontSize: "0.8125rem",
+                              color: "var(--color-text-muted)",
+                              fontStyle: "italic",
+                              borderBottom: "1px solid var(--color-border)",
+                            }}
+                          >
+                            No stamps on this checklist yet.
+                          </div>
+                        ) : (
+                          // One level in, under the heading; every row keeps its rule, since the
+                          // next branch's heading follows the last of them.
+                          renderNodes(branch.tree, 1, branch.contextIds, false)
+                        )}
+                      </ChecklistBranch>
+                    );
+                  })
+              : tree.length === 0
+                ? // Said explicitly rather than shown as an empty row: with a text search also on
+                  // (which is what forces a row open, #186), an unexplained blank reads as "this
+                  // issue has nothing", when in fact the checklist filter is what emptied it.
+                  emptyNote("No stamp on the checklists you picked.")
+                : renderNodes(tree, 0, contextIds, true)}
           <div style={{ padding: "0.625rem 1rem 0.75rem 0.5rem" }}>
             <button type="button" onClick={onNewStamp} style={CREATE_LINK_STYLE}>
               + New stamp

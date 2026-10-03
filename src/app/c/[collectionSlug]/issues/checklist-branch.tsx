@@ -29,7 +29,11 @@ import { useInvalidateIssues } from "./use-issues-query";
 // One checklist of an expanded issue as a branch of the Issues list's tree (#1520): a heading that
 // names it in its colour (#1519) with its stamp count and how complete it is, and under it — once
 // opened — the stamps it lists. The stamps on none of the issue's checklists get a branch of the
-// same shape, without the menu: there is no checklist for its actions to act on.
+// same shape, without the actions: there is no checklist for them to act on.
+//
+// The stamp picker draws an issue's checklists with the same branch (#1585). What sits at the end of
+// the heading is the caller's: the list's `⋮` (`ChecklistBranchMenu`), or the picker's own checklist
+// presses — the picker is for choosing, so the list's menu is not brought over.
 
 const HEADING: React.CSSProperties = {
   display: "flex",
@@ -72,7 +76,7 @@ export function ChecklistBranch({
   headline,
   open,
   onToggle,
-  context,
+  actions,
   children,
 }: {
   /** The checklist, or null for the branch of stamps on none. */
@@ -84,7 +88,8 @@ export function ChecklistBranch({
   headline: ChecklistHeadline | undefined;
   open: boolean;
   onToggle: () => void;
-  context: ChecklistBranchContext;
+  /** What the heading ends on — the list's `⋮`, or the picker's checklist presses. */
+  actions?: React.ReactNode;
   /** The branch's stamps, drawn only while it is open. */
   children: React.ReactNode;
 }) {
@@ -163,7 +168,7 @@ export function ChecklistBranch({
           </Tooltip>
         )}
 
-        {checklist && <ChecklistBranchMenu checklist={checklist} context={context} />}
+        {actions}
       </div>
       {open && children}
     </>
@@ -176,7 +181,7 @@ export function ChecklistBranch({
  * as a whole: moving or merging it, recomputing its declared range, its format multipliers, its own
  * edit and delete, and opening its page.
  */
-function ChecklistBranchMenu({
+export function ChecklistBranchMenu({
   checklist,
   context,
 }: {
