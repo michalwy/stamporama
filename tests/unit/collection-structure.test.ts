@@ -234,8 +234,8 @@ describe("the values beside each count (#1402)", () => {
   function whose(members: StructureCopy[]): StructureValues {
     const ids = members.map((m) => m.id).sort().join(",");
     return {
-      catalogue: { amount: ids, unpriced: 0, unconvertible: 0 },
-      market: { amount: ids, noEvidence: 0 },
+      catalogue: { amount: ids, unpriced: 0, unconvertible: 0, faultReduced: 0, faultReduction: "0.00" },
+      market: { amount: ids, noEvidence: 0, faultReduced: 0, faultReduction: "0.00" },
       cost: { amount: ids, pending: 0, none: 0 },
       opening: { amount: "0.00", copies: 0, pending: 0, none: 0 },
       notHeld: 0,
@@ -289,6 +289,8 @@ describe("the values beside each count (#1402)", () => {
     unconvertibleCount: 1,
     uncertainCount: 0,
     uncertainBaseAmount: "0.00",
+    faultReducedCount: 3,
+    faultReductionBaseAmount: "12.00",
     cost: {
       baseCurrency: "PLN",
       totalCostBasis: "40.00",
@@ -316,13 +318,14 @@ describe("the values beside each count (#1402)", () => {
       },
       count: 1,
     },
-    market: { baseCurrency: "PLN", totalBaseAmount: "80.00", valuedCount: 4, noEvidenceCount: 4 },
+    market: { baseCurrency: "PLN", totalBaseAmount: "80.00", valuedCount: 4, noEvidenceCount: 4, faultReducedCount: 1, faultReductionBaseAmount: "5.00" },
   };
 
   it("states the Overview's figures, opening value apart from cost", () => {
     assert.deepEqual(structureValuesOf(summary), {
-      catalogue: { amount: "120.00", unpriced: 2, unconvertible: 1 },
-      market: { amount: "80.00", noEvidence: 4 },
+      // #1560: the copies lowered for their faults ride beside the figure they are counted in.
+      catalogue: { amount: "120.00", unpriced: 2, unconvertible: 1, faultReduced: 3, faultReduction: "12.00" },
+      market: { amount: "80.00", noEvidence: 4, faultReduced: 1, faultReduction: "5.00" },
       cost: { amount: "40.00", pending: 1, none: 2 },
       opening: { amount: "15.00", copies: 2, pending: 0, none: 1 },
       notHeld: 1,

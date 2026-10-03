@@ -6,6 +6,7 @@ import { DialogPrimaryButton, DialogSecondaryButton } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CarrierValuationRead, CarrierComponentRead } from "@/lib/carrier-values";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
+import { faultReductionNote } from "@/lib/fault-reduction";
 import { inventoryKeys } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { purchaseKeys } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 import { offerKeys } from "@/app/c/[collectionSlug]/offers/use-offers-query";
@@ -227,20 +228,29 @@ function RecordedFigure({ data }: { data: CarrierValuationRead }) {
     );
   }
   const converted = value.currency !== data.baseCurrency;
+  // What was recorded is the full figure; a fault reduction (#1560) lowers what the piece counts at,
+  // and is said beside it rather than printed over the figure the collector typed.
+  const reduction = value.faultReduction;
+  const recordedBase = reduction ? reduction.fullBaseAmountDisplay : value.baseAmountDisplay;
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}>
       <span style={{ ...numStyle, fontSize: "1.125rem", fontWeight: 600 }}>
-        {value.amount} {value.currency}
+        {reduction ? reduction.fullAmount : value.amount} {value.currency}
       </span>
       {converted &&
-        (value.baseAmountDisplay ? (
+        (recordedBase ? (
           <span style={{ ...numStyle, color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
-            ≈ {value.baseAmountDisplay} {data.baseCurrency}
+            ≈ {recordedBase} {data.baseCurrency}
           </span>
         ) : (
           <Warn content={`No ${value.currency} → ${data.baseCurrency} rate, so totals cannot count it.`} />
         ))}
       <span style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>recorded by you</span>
+      {reduction && (
+        <span style={{ ...numStyle, color: "var(--color-text-muted)", fontSize: "0.8125rem" }}>
+          · counted at {value.amount} {value.currency}, {faultReductionNote(reduction.percent)}
+        </span>
+      )}
     </div>
   );
 }

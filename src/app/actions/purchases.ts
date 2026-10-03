@@ -43,6 +43,7 @@ import {
 import type { ArrivingCopy } from "@/lib/want-rules";
 import { parsePhotoChangeSet } from "@/lib/photos";
 import { normalizeDecimalInput, roundAmount } from "@/lib/decimal-input";
+import { parseFaultReductionInput } from "@/lib/fault-reduction";
 
 export type PurchaseActionState =
   | { status: "idle" }
@@ -601,6 +602,13 @@ function parseBulkChanges(formData: FormData): LotBulkChanges {
   if (addFaultIds.length > 0) changes.addFaultIds = addFaultIds;
   const removeFaultIds = idList(formData, "removeFaultIds");
   if (removeFaultIds.length > 0) changes.removeFaultIds = removeFaultIds;
+  // The value reduction for faults (#1560): present-but-empty clears it, the location's rule. A
+  // value that does not parse is refused with its own sentence rather than written as a clear.
+  if (formData.has("faultReductionPercent")) {
+    const reduction = parseFaultReductionInput(str(formData, "faultReductionPercent"));
+    if (!reduction.ok) throw new Error(reduction.message);
+    changes.faultReductionPercent = reduction.value;
+  }
   return changes;
 }
 

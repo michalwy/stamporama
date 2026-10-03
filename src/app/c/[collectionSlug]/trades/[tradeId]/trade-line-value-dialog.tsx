@@ -7,6 +7,7 @@ import { setTradeLineValueAction } from "@/app/actions/trades";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { TradeCatalogVendor } from "../trade-form-dialog";
+import { faultReductionNote } from "@/lib/fault-reduction";
 
 // **What this one line is worth** (#638; ADR-0039 §7) — the two escape hatches, and nothing else.
 //
@@ -65,6 +66,7 @@ function CurrentFigure({
   uncertain,
   manual,
   absentNote,
+  faultReductionPercent = null,
 }: {
   label: string;
   value: number | null;
@@ -76,6 +78,8 @@ function CurrentFigure({
   uncertain: boolean;
   manual: boolean;
   absentNote: string;
+  /** The copy's fault reduction (#1560), already applied to the figure — said under it. */
+  faultReductionPercent?: number | null;
 }) {
   const source = manual
     ? "your own figure, not a catalogue's"
@@ -103,6 +107,11 @@ function CurrentFigure({
         )}
       </div>
       {source && <div style={{ ...HINT, margin: "0.2rem 0 0" }}>{source}</div>}
+      {faultReductionPercent !== null && (
+        <div style={{ ...HINT, margin: "0.2rem 0 0", color: "var(--color-warning)" }}>
+          {faultReductionNote(faultReductionPercent)}
+        </div>
+      )}
     </div>
   );
 }
@@ -186,6 +195,7 @@ export function TradeLineValueDialog({
                 amountCurrency={line.ownCurrency}
                 uncertain={line.ownUncertain}
                 manual={line.ownManual}
+                faultReductionPercent={line.ownFaultReductionPercent}
                 absentNote="No catalogue price at this stamp's condition, certificate and format."
               />
               {agreedVendorName && (

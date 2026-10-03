@@ -33,6 +33,7 @@ import { setItemTagEntries } from "@/lib/tags";
 import { parseTagEntries } from "@/lib/tag-entry";
 import { setItemFaultEntries } from "@/lib/faults";
 import { parseFaultEntries } from "@/lib/fault-entry";
+import { parseFaultReductionInput } from "@/lib/fault-reduction";
 
 export type ItemActionState =
   | { status: "idle" }
@@ -79,6 +80,9 @@ interface ItemFields {
    * Always present (an empty list clears the set) — the form is one of the surfaces that owns the
    * whole answer, unlike the row and bulk toggles which change one platform. */
   excludedPlatformIds: string[];
+  /** The copy's value reduction for its faults (#1560), when the form carried the field; absent
+   *  leaves it alone, blank or 0 clears it. */
+  faultReductionPercent?: number | null;
 }
 
 interface ParsedItemFields {
@@ -116,6 +120,12 @@ function parseItemFields(formData: FormData): ParsedItemFields {
       .map((s) => s.trim())
       .filter(Boolean),
   };
+
+  if (formData.has("faultReductionPercent")) {
+    const reduction = parseFaultReductionInput(str(formData, "faultReductionPercent"));
+    if (!reduction.ok) return { data, error: reduction.message };
+    data.faultReductionPercent = reduction.value;
+  }
 
   if (!stampId) return { data, error: "A stamp must be selected." };
   if (!conditionId) return { data, error: "A condition must be selected." };

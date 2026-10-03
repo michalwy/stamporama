@@ -232,6 +232,7 @@ async function estimateStamps(
         formatId: axes.formatId,
         unknownVariant: unknownVariant.get(stamp.id) ?? false,
         carrier: null,
+        faultReductionPercent: null,
       }))
     )
   );

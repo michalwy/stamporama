@@ -3379,6 +3379,11 @@ model Item {
   // Read only while `stampCount` > 1; an ordinary copy is valued from the catalogue as before.
   explicitValue         Decimal? @db.Decimal(10, 2)
   explicitValueCurrency String?
+  // How much this copy's faults take off its value (#1560): a whole percentage, 1–100 (CHECK
+  // `item_fault_reduction_percent_range`), null for none. Typed on the copy rather than stored per
+  // fault, and allowed without listed faults. Lowers every value of the copy — catalogue or recorded
+  // value and market value — through `applyFaultReduction`; the stamp's catalogue prices are untouched.
+  faultReductionPercent Int?
   notes               String?
   // Physical storage: at most one assignable `Location` per copy, plus an optional
   // free-text identifier within that location (e.g. a page/pocket ref like `A234`),

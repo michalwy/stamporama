@@ -144,6 +144,22 @@ const PRICE_LINE_SEPARATOR: React.CSSProperties = { fontSize: "0.75rem", color: 
 /** A figure the price is weighed against, on the price line (#1295): a short label, so three numbers
  * in a row are not told apart by position alone, and the figure as a link that applies it. A figure
  * that already *is* the stated price is drawn plain, since clicking it would change nothing. */
+/** The suggested price's hover: what it is, and — when some copies were lowered for their faults
+ *  (#1560) — how many, and the suggestion without the reductions. */
+function suggestedAbout(offer: {
+  currency: string;
+  suggestedFaultReducedCount: number;
+  suggestedFullPrice: string | null;
+}): string {
+  const about = "Average catalog value per set, in this offer's currency";
+  if (offer.suggestedFaultReducedCount === 0 || !offer.suggestedFullPrice) return about;
+  const copies =
+    offer.suggestedFaultReducedCount === 1
+      ? "1 copy"
+      : `${offer.suggestedFaultReducedCount} copies`;
+  return `${about} — ${copies} lowered for faults; ${offer.suggestedFullPrice} ${offer.currency} without the reductions`;
+}
+
 function PriceFigureLink({
   label,
   figure,
@@ -1024,7 +1040,7 @@ export function OfferDetailPanel({
                   <PriceFigureLink
                     label="suggested"
                     figure={offer.suggestedPrice}
-                    about="Average catalog value per set, in this offer's currency"
+                    about={suggestedAbout(offer)}
                     target={askingPriceNoun}
                     applied={askingPrice === offer.suggestedPrice}
                     disabled={isPending}

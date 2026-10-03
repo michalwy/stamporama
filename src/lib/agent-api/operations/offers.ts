@@ -4,6 +4,7 @@ import { areaSubtreeIds } from "../../areas";
 import { countItems, listItemsPaginated } from "../../items";
 import { marketKeyOf } from "../../market-value";
 import { readMarketMedians } from "../../market-values";
+import { reduceForFaults } from "../../valuation";
 import {
   OfferActionBlockedError,
   countOffers,
@@ -275,7 +276,7 @@ export async function readUnlistedCopies(
         unlistedCopy(copy, {
           catalogNumbers: labelling.labelFor(copy.areaId, copy.issueId, copy.catalogNumbers),
           location: locations.pathFor(copy.locationId),
-          marketValue:
+          marketValue: marketValueOf(
             medians.get(
               marketKeyOf({
                 stampId: copy.stampId,
@@ -283,7 +284,9 @@ export async function readUnlistedCopies(
                 certificateStatusId: copy.certificateStatusId,
                 formatId: copy.formatId,
               })
-            )?.toFixed(2) ?? null,
+            ),
+            copy.faultReductionPercent
+          ),
         })
       ),
       total,
@@ -291,6 +294,12 @@ export async function readUnlistedCopies(
     ),
     baseCurrency: header.baseCurrency,
   };
+}
+
+/** A copy's market value: its key's median, lowered by the copy's own fault reduction (#1560) — the
+ *  rule the holdings total applies, so the two cannot disagree about one copy. */
+function marketValueOf(median: number | undefined, faultReductionPercent: number | null) {
+  return median === undefined ? null : reduceForFaults(median, faultReductionPercent).toFixed(2);
 }
 
 export const findUnlistedCopiesOperation: Operation = {

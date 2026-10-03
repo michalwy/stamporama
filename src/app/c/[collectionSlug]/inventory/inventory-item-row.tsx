@@ -31,6 +31,8 @@ import {
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { FaultReductionMark } from "@/app/c/[collectionSlug]/shared/fault-reduction-mark";
+import { faultReductionHint } from "@/lib/fault-reduction";
 import {
   ColnectChip,
   colnectSearchQueryFor,
@@ -322,7 +324,7 @@ export function CopyValue({
   const primaryText = moneyPrimaryText(money);
   const secondaryText = moneySecondaryText(money);
   const noRate = v.currency !== baseCurrency && v.baseAmountDisplay == null;
-  const title = v.explicit
+  const valueTitle = v.explicit
     ? noRate
       ? `Value recorded on this piece (no ${baseCurrency} rate available)`
       : "Value recorded on this piece — it carries several stamps, so no catalog prices it"
@@ -331,6 +333,16 @@ export function CopyValue({
       : noRate
         ? `Catalog value (no ${baseCurrency} rate available)`
         : "Catalog value";
+  // Lowered for the copy's faults (#1560): the hover names the full figure, in the currency the
+  // figure itself is printed in.
+  const reduction = v.faultReduction;
+  const title = reduction
+    ? `${valueTitle} — full ${faultReductionHint(
+        reduction.fullBaseAmountDisplay ?? reduction.fullAmount,
+        reduction.fullBaseAmountDisplay ? baseCurrency : v.currency,
+        reduction.percent
+      )}`
+    : valueTitle;
   const inner = (
     <span
       style={{
@@ -340,6 +352,7 @@ export function CopyValue({
         fontVariantNumeric: "tabular-nums",
       }}
     >
+      {reduction && <FaultReductionMark percent={reduction.percent} />}
       {v.uncertain && <span style={{ ...PRICE_MAIN, color: "var(--color-text-muted)" }}>~</span>}
       {secondaryText && <span style={PRICE_CONVERTED}>{secondaryText}</span>}
       <span

@@ -4,8 +4,11 @@ import type { Decimal } from "@prisma/client/runtime/client";
 import type { RawCatalogPrice } from "../../src/lib/catalog-price";
 import {
   valuateCopy,
+  valuateExplicitValue,
   aggregateHoldings,
   aggregateMarketHoldings,
+  applyFaultReduction,
+  reduceForFaults,
   type CopyValuation,
 } from "../../src/lib/valuation";
 
@@ -343,6 +346,7 @@ describe("aggregateHoldings", () => {
     sourceStampId: null,
     unpricedVariantIds: [],
     explicit: false,
+    faultReduction: null,
   });
   const uncertain = (baseAmount: number): CopyValuation => ({
     ...certain(baseAmount),
@@ -368,6 +372,18 @@ describe("aggregateHoldings", () => {
     assert.equal(total.baseCurrency, "EUR");
   });
 
+  // #1560: the total is of the lowered figures, and says how many copies were lowered and by how much.
+  it("sums lowered figures and counts the fault reductions", () => {
+    const total = aggregateHoldings(
+      [applyFaultReduction(certain(50), 40), certain(20), applyFaultReduction(certain(null, true), 50)],
+      "EUR"
+    );
+    assert.equal(total.totalBaseAmount, "50.00");
+    assert.equal(total.faultReducedCount, 1);
+    assert.equal(total.faultReductionBaseAmount, "20.00");
+    assert.equal(total.unpricedCount, 1);
+  });
+
   it("returns zeros for an empty holdings set", () => {
     const total = aggregateHoldings([], "USD");
     assert.equal(total.totalBaseAmount, "0.00");
@@ -380,8 +396,13 @@ describe("aggregateHoldings", () => {
 // The market total over the same held copies (#458; ADR-0022 §8). The one thing it must never do
 // is let a partial total read as a complete one, which is what the coverage counts are for.
 describe("aggregateMarketHoldings", () => {
+  const held = (median: number | null, faultReductionPercent: number | null = null) => ({
+    median,
+    faultReductionPercent,
+  });
+
   it("sums the medians and counts what had no evidence", () => {
-    const total = aggregateMarketHoldings([40, null, 12.5, null, null], "EUR");
+    const total = aggregateMarketHoldings([held(40), held(null), held(12.5), held(null), held(null)], "EUR");
     assert.equal(total.totalBaseAmount, "52.50");
     assert.equal(total.valuedCount, 2);
     assert.equal(total.noEvidenceCount, 3);
@@ -389,7 +410,7 @@ describe("aggregateMarketHoldings", () => {
   });
 
   it("counts a copy with no evidence rather than valuing it at zero", () => {
-    const total = aggregateMarketHoldings([null, null], "EUR");
+    const total = aggregateMarketHoldings([held(null), held(null)], "EUR");
     assert.equal(total.totalBaseAmount, "0.00");
     assert.equal(total.valuedCount, 0);
     // The distinction the whole figure rests on: nothing recorded is not "worth nothing", and a
@@ -398,7 +419,7 @@ describe("aggregateMarketHoldings", () => {
   });
 
   it("reports full coverage when every copy's key had results", () => {
-    const total = aggregateMarketHoldings([10, 20, 30], "PLN");
+    const total = aggregateMarketHoldings([held(10), held(20), held(30)], "PLN");
     assert.equal(total.totalBaseAmount, "60.00");
     assert.equal(total.valuedCount, 3);
     assert.equal(total.noEvidenceCount, 0);
@@ -413,9 +434,27 @@ describe("aggregateMarketHoldings", () => {
     assert.equal(total.baseCurrency, "USD");
   });
 
+  // #1560: a median is a figure for copies *like* this one; a faulty copy is lowered by its own
+  // percentage before it is added, and the total says how many were and by how much.
+  it("lowers each copy's median by its own fault reduction, and counts what it took off", () => {
+    const total = aggregateMarketHoldings([held(40, 25), held(20), held(null, 50), held(10, 100)], "EUR");
+    assert.equal(total.totalBaseAmount, "50.00");
+    assert.equal(total.valuedCount, 3);
+    assert.equal(total.noEvidenceCount, 1);
+    // A copy with no evidence has nothing to lower, so it is not counted as reduced.
+    assert.equal(total.faultReducedCount, 2);
+    assert.equal(total.faultReductionBaseAmount, "20.00");
+  });
+
+  it("reports no reduction when no copy carries one", () => {
+    const total = aggregateMarketHoldings([held(40), held(20)], "EUR");
+    assert.equal(total.faultReducedCount, 0);
+    assert.equal(total.faultReductionBaseAmount, "0.00");
+  });
+
   it("carries a zero median as evidence, not as an absence", () => {
     // A lot really can close at nothing, and that result is as much a datapoint as any other.
-    const total = aggregateMarketHoldings([0, 15], "EUR");
+    const total = aggregateMarketHoldings([held(0), held(15)], "EUR");
     assert.equal(total.totalBaseAmount, "15.00");
     assert.equal(total.valuedCount, 2);
     assert.equal(total.noEvidenceCount, 0);
@@ -507,5 +546,96 @@ describe("valuateCopy — physical format (#343)", () => {
     assert.equal(v.uncertain, true);
     // The scaled figure still names the variant it was scaled from.
     assert.equal(v.sourceStampId, "v-b");
+  });
+});
+
+// A copy's value lowered by a percentage typed on it, for its faults (#1560). Applied once, inside
+// `valuateItemRows`, to whichever figure the copy has; these are the arithmetic's own rules.
+describe("applyFaultReduction", () => {
+  const priced = valuateCopy({
+    conditionId: MNH,
+    certificateStatusId: null,
+    unknownVariant: false,
+    primaryCatalogNameId: MICHEL,
+    ownPrices: [
+      {
+        price: D(50),
+        currency: "USD",
+        conditionId: MNH,
+        certificateStatusId: null,
+        formatId: null,
+        catalogEdition: { year: 2024, catalogNameId: MICHEL },
+      },
+    ],
+    baseCurrency: "EUR",
+    rates: new Map([["USD", 0.9]]),
+  });
+
+  it("lowers the figure in its own currency and in base, and keeps the full one beside it", () => {
+    const v = applyFaultReduction(priced, 40);
+    assert.equal(v.amount, "30.00");
+    assert.equal(v.currency, "USD");
+    assert.equal(v.baseAmountDisplay, "27.00");
+    assert.ok(Math.abs(v.baseAmount! - 27) < 1e-9);
+    assert.deepEqual(v.faultReduction, {
+      percent: 40,
+      fullAmount: "50.00",
+      fullBaseAmount: priced.baseAmount,
+      fullBaseAmountDisplay: "45.00",
+    });
+    // Where the figure was read is a fact about the full figure, and stays.
+    assert.equal(v.catalogNameId, priced.catalogNameId);
+    assert.equal(v.editionYear, 2024);
+    assert.equal(v.unpriced, false);
+  });
+
+  it("values a copy with no reduction exactly as before", () => {
+    assert.deepEqual(applyFaultReduction(priced, null), priced);
+    assert.equal(priced.faultReduction, null);
+  });
+
+  it("leaves an unpriced copy unpriced, with nothing to lower", () => {
+    const unpriced = valuateCopy({
+      conditionId: USED,
+      certificateStatusId: null,
+      unknownVariant: false,
+      primaryCatalogNameId: MICHEL,
+      ownPrices: [],
+      baseCurrency: "EUR",
+      rates: new Map(),
+    });
+    const v = applyFaultReduction(unpriced, 40);
+    assert.equal(v.unpriced, true);
+    assert.equal(v.faultReduction, null);
+  });
+
+  it("lowers a multi-stamp copy's recorded value by the same rule (decided with the user)", () => {
+    const recorded = valuateExplicitValue({ amount: "80.00", currency: "EUR" }, "EUR", new Map());
+    const v = applyFaultReduction(recorded, 25);
+    assert.equal(v.amount, "60.00");
+    assert.equal(v.explicit, true);
+    assert.equal(v.faultReduction?.fullAmount, "80.00");
+  });
+
+  it("lowers to zero at 100 % — worth nothing is still a figure, not unpriced", () => {
+    const v = applyFaultReduction(priced, 100);
+    assert.equal(v.amount, "0.00");
+    assert.equal(v.baseAmountDisplay, "0.00");
+    assert.equal(v.unpriced, false);
+  });
+
+  it("keeps a figure with no base rate unconvertible", () => {
+    const noRate = { ...priced, baseAmount: null, baseAmountDisplay: null };
+    const v = applyFaultReduction(noRate, 40);
+    assert.equal(v.amount, "30.00");
+    assert.equal(v.baseAmount, null);
+    assert.equal(v.faultReduction?.fullBaseAmount, null);
+  });
+
+  it("ignores a percentage outside 1–100, which the column refuses", () => {
+    for (const bad of [0, -10, 101, 12.5]) {
+      assert.deepEqual(applyFaultReduction(priced, bad), priced, String(bad));
+      assert.equal(reduceForFaults(10, bad), 10);
+    }
   });
 });

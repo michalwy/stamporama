@@ -205,7 +205,8 @@ export function AddToOfferDialog({
   // collection base currency. Blank when a copy is unpriced, when its value can't be expressed in
   // the base currency (no rate), or when the copies **disagree** — an offer carries one asking
   // price, so a suggestion only exists where the copies share one figure (which a duplicate group
-  // does by construction). Then no suggestion is shown and the field starts empty.
+  // does by construction, unless its members carry different fault reductions, #1560). Then no
+  // suggestion is shown and the field starts empty.
   const catalogBase = useMemo(() => {
     const first = items[0]?.value;
     if (!first || first.unpriced || first.baseAmountDisplay == null) return "";

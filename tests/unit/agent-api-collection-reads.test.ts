@@ -538,7 +538,15 @@ const SUMMARY: HoldingsSummaryRow = {
   unconvertibleCount: 1,
   uncertainCount: 4,
   uncertainBaseAmount: "300.00",
-  market: { totalBaseAmount: "210.00", valuedCount: 5, noEvidenceCount: 38 },
+  faultReducedCount: 2,
+  faultReductionBaseAmount: "45.00",
+  market: {
+    totalBaseAmount: "210.00",
+    valuedCount: 5,
+    noEvidenceCount: 38,
+    faultReducedCount: 1,
+    faultReductionBaseAmount: "12.00",
+  },
   cost: { totalCostBasis: "640.00", knownCount: 20, pendingCount: 8, noneCount: 15 },
   openingValue: { totalCostBasis: "75.00", knownCount: 6, pendingCount: 0, noneCount: 2 },
   writeOff: {
@@ -571,6 +579,14 @@ describe("the valuation summary", () => {
     assert.equal(row.cost.total, "640.00");
     assert.equal(row.writeOff.cost.total, "30.00");
     assert.equal(row.writeOff.copies, 3);
+  });
+
+  // #1560: a total some of whose copies were lowered for faults says how many, and by how much.
+  it("states the fault reductions beside each total they lowered", () => {
+    assert.equal(row.catalogue.faultReducedCount, 2);
+    assert.equal(row.catalogue.faultReductionTotal, "45.00");
+    assert.equal(row.market.faultReducedCount, 1);
+    assert.equal(row.market.faultReductionTotal, "12.00");
   });
 
   // #1324: what opening balances were stated to be worth is never what was paid.

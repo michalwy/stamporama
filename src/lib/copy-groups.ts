@@ -5,7 +5,8 @@
 // the three other axes a copy carries — **condition**, physical **format** (ADR-0020) and
 // **certificate** — are *configurable*: off means the field does not split the group (any value),
 // on means it joins the key. With all three on the key is exactly the key catalogue valuation is
-// computed on (`valuateItemRows`), so every group then has one unambiguous per-copy figure.
+// computed on (`valuateItemRows`), so every group then has one unambiguous catalogue figure per copy
+// — lowered, where a member has one, by that copy's own fault reduction (#1560), which no key carries.
 //
 // Condition was fixed until #1537. #372 keyed every group on `stamp × condition` because Colnect
 // refuses more than one offer for the same stamp in the same condition, so a group mixing

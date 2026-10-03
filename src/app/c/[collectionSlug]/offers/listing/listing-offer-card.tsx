@@ -443,11 +443,24 @@ function PostingKit({
       <Field label="Price" copyValue={offer.price}>
         <p style={{ ...BODY, fontVariantNumeric: "tabular-nums" }}>
           {offer.price} {offer.currency}
-          {offer.suggestedPrice && (
-            <span style={{ marginLeft: "0.5rem", color: "var(--color-text-muted)" }}>
-              suggested {offer.suggestedPrice} {offer.currency}
-            </span>
-          )}
+          {offer.suggestedPrice &&
+            (offer.suggestedFullPrice ? (
+              // Lowered for some copies' faults (#1560): said in the warning tone, with the
+              // suggestion without the reductions in the hover.
+              <Tooltip
+                content={`${offer.suggestedFaultReducedCount} ${
+                  offer.suggestedFaultReducedCount === 1 ? "copy" : "copies"
+                } lowered for faults — ${offer.suggestedFullPrice} ${offer.currency} without the reductions`}
+              >
+                <span style={{ marginLeft: "0.5rem", color: "var(--color-warning)" }}>
+                  suggested {offer.suggestedPrice} {offer.currency}
+                </span>
+              </Tooltip>
+            ) : (
+              <span style={{ marginLeft: "0.5rem", color: "var(--color-text-muted)" }}>
+                suggested {offer.suggestedPrice} {offer.currency}
+              </span>
+            ))}
         </p>
       </Field>
 

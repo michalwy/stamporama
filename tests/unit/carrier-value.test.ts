@@ -89,6 +89,7 @@ describe("carrierComponentRows — the key each component is priced on", () => {
       formatId: BLK4,
       unknownVariant: false,
       carrier: null,
+      faultReductionPercent: null,
     });
   });
 });

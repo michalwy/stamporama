@@ -18,6 +18,8 @@ import type { BulkCopyChanges } from "@/app/c/[collectionSlug]/shared/bulk-copy-
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
 import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults";
+import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { parseFaultReductionInput } from "@/lib/fault-reduction";
 import {
   LocationRefField,
   useLocationRefUsage,
@@ -63,6 +65,15 @@ const LOCATION_MODES: { value: LocationMode; label: string }[] = [
 ];
 
 type DispositionFlag = "inCollection" | "forSale" | "forTrade";
+
+/** The value reduction for faults (#1560): left alone, set to one percentage on every picked copy,
+ *  or cleared. The location's three answers, for its reason. */
+type ReductionMode = "keep" | "set" | "clear";
+const REDUCTION_MODES: { value: ReductionMode; label: string }[] = [
+  { value: "keep", label: "Leave as is" },
+  { value: "set", label: "Set to…" },
+  { value: "clear", label: "Clear" },
+];
 
 /**
  * The disposition change: **each flag answered on its own**, and *leave as is* is one of its
@@ -199,6 +210,8 @@ export function BulkEditCopiesDialog({
   const { data: faults } = useCollectionFaults(collectionId);
   const [addFaultIds, setAddFaultIds] = useState<string[]>([]);
   const [removeFaultIds, setRemoveFaultIds] = useState<string[]>([]);
+  const [reductionMode, setReductionMode] = useState<ReductionMode>("keep");
+  const [reductionInput, setReductionInput] = useState("");
   const locationTree = useMemo(() => buildLocationTree(locations), [locations]);
   // Only asked for while a location is actually being chosen: *Leave as is* and *Clear* write no
   // ref at all, so there is nothing to suggest and nothing to collide with.
@@ -269,13 +282,26 @@ export function BulkEditCopiesDialog({
   const changedIdentity = identityAxes.filter((axis) => axis.choice !== KEEP);
   const changesTags = addTagIds.length > 0 || removeTagIds.length > 0;
   const changesFaults = addFaultIds.length > 0 || removeFaultIds.length > 0;
+  // *Set to…* needs a percentage that parses; a blank or 0 there would be a clear spelled the long
+  // way, so it is not an answer until a figure is typed.
+  const parsedReduction = parseFaultReductionInput(reductionInput);
+  const reductionError =
+    reductionMode === "set" && reductionInput.trim() && !parsedReduction.ok
+      ? parsedReduction.message
+      : null;
+  const reductionAnswered =
+    reductionMode === "clear" ||
+    (reductionMode === "set" && parsedReduction.ok && parsedReduction.value !== null);
+  const reducedNow = copies.filter((c) => c.faultReductionPercent !== null).length;
   const canApply =
     !isPending &&
+    reductionError === null &&
     (locationAnswered ||
       changedFlags.length > 0 ||
       changedIdentity.length > 0 ||
       changesTags ||
-      changesFaults);
+      changesFaults ||
+      reductionAnswered);
 
   return (
     <DialogShell
@@ -314,6 +340,10 @@ export function BulkEditCopiesDialog({
           if (removeTagIds.length > 0) changes.removeTagIds = removeTagIds;
           if (addFaultIds.length > 0) changes.addFaultIds = addFaultIds;
           if (removeFaultIds.length > 0) changes.removeFaultIds = removeFaultIds;
+          if (reductionMode === "clear") changes.faultReductionPercent = null;
+          if (reductionMode === "set" && parsedReduction.ok && parsedReduction.value !== null) {
+            changes.faultReductionPercent = parsedReduction.value;
+          }
           onSubmit(changes);
         }}
       >
@@ -554,6 +584,43 @@ export function BulkEditCopiesDialog({
                 </p>
               </div>
             )}
+
+            {/* How much the copies' faults take off their value (#1560). Shown whatever the fault
+                dictionary holds, since a piece can be worth less for a reason it does not name. */}
+            <div>
+              <LabelWithError htmlFor="bulk-edit-fault-reduction" error={reductionError ?? undefined}>
+                Value reduction
+              </LabelWithError>
+              <Segmented
+                options={REDUCTION_MODES}
+                value={reductionMode}
+                onChange={setReductionMode}
+                disabled={isPending}
+                ariaLabel="Value reduction"
+              />
+              {reductionMode === "set" && (
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "0.35rem", marginTop: "0.625rem" }}
+                >
+                  <NumericInput
+                    kind="number"
+                    inputMode="numeric"
+                    id="bulk-edit-fault-reduction"
+                    value={reductionInput}
+                    onChange={(e) => setReductionInput(e.target.value)}
+                    disabled={isPending}
+                    placeholder="e.g. 40"
+                    style={{ ...SELECT_STYLE, width: "6rem", textAlign: "right" }}
+                  />
+                  <span style={{ color: "var(--color-text-muted)" }}>%</span>
+                </div>
+              )}
+              <p style={HINT_STYLE}>
+                {reducedNow === 0
+                  ? `${count === 1 ? "It has" : "None of them have"} a reduction yet.`
+                  : `${reducedNow} of ${count} already ${reducedNow === 1 ? "has" : "have"} one.`}
+              </p>
+            </div>
 
             {/* The collector's own labels (#1181). Two controls, never one: a copy carries any
                 number of tags, so *what these copies are tagged* has no single answer a picker

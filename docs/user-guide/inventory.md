@@ -285,6 +285,23 @@ your collection's **base currency** alongside it — matching how prices read on
 list. Totals are summed in the base currency. A price in a currency with no available
 exchange rate is shown in its own currency only and left out of the total.
 
+### Lowering a copy's value for its faults
+
+A faulty stamp is worth less than the catalog says. Type by how much in the copy's **Value
+reduction** field, beside its [faults](faults.md) in the copy dialog — a whole percentage from 1 to
+100; leave it empty for none. It can be set on a copy with no listed faults too.
+
+The reduction lowers **every value of that copy**: its catalog value (or the value recorded on a
+piece carrying several stamps), its market value, and every total and suggestion built from them —
+the holdings bar, the Overview, the offer's suggested price, a purchase's percentage of catalog, the
+lot builder and your own valuation of a trade line. The stamp's catalog price is not changed; only
+this copy's figure is.
+
+A lowered figure says so: the value carries an amber **−40 %**, and its hover names the full figure
+(*full 45.00 EUR, −40 % for faults*). A total that includes lowered copies says how many, and its
+hover gives the total without the reductions. The figure you agreed with a trade partner from their
+catalog is not lowered — adjust that line with its own value if the faults should count there.
+
 Above the list, the holdings summary bar sums three figures over every copy that matches your
 current filters (change the filters and all of them follow).
 
@@ -636,7 +653,8 @@ beside **Add copy**. Both are gone; what you had on that screen is now on an ope
 3. Choose the **condition** (required) and, optionally, a **certificate status**. Both
    come from your collection's configurable sets.
    Under them, pick the copy's **faults** — a thin, a crease, a missing tooth — if it has any. See
-   [Faults](faults.md).
+   [Faults](faults.md). Beside them, **Value reduction** lowers the copy's value by a percentage —
+   see [Lowering a copy's value for its faults](#lowering-a-copys-value-for-its-faults).
 4. Set the **disposition** flags. New copies default to *In collection* until you've added
    one — after that, see the note below.
 5. Optionally file the copy into a **storage location** and add an in-location **ref**
@@ -1300,6 +1318,11 @@ whether you are about to change anything.
   as ordinary singles rather than pairs or blocks.
 
 The certificate and format rows appear only once your collection defines some.
+
+**Value reduction** sets one percentage on every picked copy (**Set to…**), takes the reduction off
+them (**Clear**), or leaves each copy's own (**Leave as is**). The line under it says how many of the
+picked copies already have one. See
+[Lowering a copy's value for its faults](#lowering-a-copys-value-for-its-faults).
 
 **Faults**, the fourth section, works the same way as the tags below it: **Add** puts the [faults](faults.md) you name on
 every picked copy, **Remove** takes them off, and every fault you do not name stays where it is.

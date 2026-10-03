@@ -272,6 +272,7 @@ export async function getOfferListedVariantChoice(
         // recorded on that entry, which is what "cheapest" was decided on.
         unknownVariant: false,
         carrier: null,
+        faultReductionPercent: null,
       }))
     ),
     automaticFor(collectionId, subject, stampId, conditionId, ownCatalogItemId, labeller),

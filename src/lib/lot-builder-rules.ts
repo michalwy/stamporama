@@ -36,6 +36,9 @@ export interface LotCandidate {
   formatId: string | null;
   /** Base-currency catalog value, or null when the copy is unpriced. */
   catalogValue: number | null;
+  /** What the copy's faults took off {@link catalogValue} (#1560), in base currency; absent or 0
+   *  when nothing was. The value above is already the lowered one — this is only for saying so. */
+  faultReduction?: number;
 }
 
 /** One series the lot may take whole. A series is a `Checklist` (#531) and `stampIds` is its
@@ -169,6 +172,10 @@ export interface LotPlan {
    *  one fact and so one figure rather than two. The pool-wide count is the pool readout's own
    *  (#759); this one describes the lot. */
   unpricedItemIds: string[];
+  /** Chosen copies counted lowered for their faults (#1560), and what that took off the value sum —
+   *  so the lot's figure can say it is reduced and name the full one. */
+  faultReducedItemIds: string[];
+  faultReduction: number;
   /** Checklists that entered whole, in the order they were taken. */
   takenChecklistIds: string[];
   /** Checklists complete in the pool that did not enter, with the reason. */
@@ -434,6 +441,8 @@ export function planLot(input: LotBuilderInput): LotPlan {
     count: axisReport(state.picks.length, criteria.count),
     catalogValue: axisReport(state.value, criteria.catalogValue),
     unpricedItemIds: state.unpricedItemIds,
+    faultReducedItemIds: state.faultReducedItemIds,
+    faultReduction: state.faultReduction,
     takenChecklistIds,
     refusedChecklists,
     missingPinnedItemIds,
@@ -459,12 +468,23 @@ interface PickState {
   picks: LotPick[];
   taken: Set<string>;
   unpricedItemIds: string[];
+  faultReducedItemIds: string[];
+  faultReduction: number;
   perPile: Map<string, number>;
   value: number;
 }
 
 function newState(criteria: LotCriteria): PickState {
-  return { criteria, picks: [], taken: new Set(), unpricedItemIds: [], perPile: new Map(), value: 0 };
+  return {
+    criteria,
+    picks: [],
+    taken: new Set(),
+    unpricedItemIds: [],
+    faultReducedItemIds: [],
+    faultReduction: 0,
+    perPile: new Map(),
+    value: 0,
+  };
 }
 
 function take(state: PickState, candidate: LotCandidate, phase: LotPickPhase, checklistId: string | null): void {
@@ -474,6 +494,10 @@ function take(state: PickState, candidate: LotCandidate, phase: LotPickPhase, ch
   state.perPile.set(key, (state.perPile.get(key) ?? 0) + 1);
   state.value += valueOf(candidate);
   if (candidate.catalogValue === null) state.unpricedItemIds.push(candidate.itemId);
+  if (candidate.faultReduction) {
+    state.faultReducedItemIds.push(candidate.itemId);
+    state.faultReduction += candidate.faultReduction;
+  }
 }
 
 /** An axis is aimed at its `min`, or at its `max` when that is the only bound given. */

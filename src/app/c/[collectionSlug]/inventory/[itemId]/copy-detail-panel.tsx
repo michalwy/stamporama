@@ -47,6 +47,9 @@ import {
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { FaultChips } from "@/app/c/[collectionSlug]/shared/fault-chip";
+import { FaultReductionMark } from "@/app/c/[collectionSlug]/shared/fault-reduction-mark";
+import { faultReductionHint } from "@/lib/fault-reduction";
+import type { CopyValuation } from "@/lib/valuation";
 import { Icon } from "@/app/icons";
 
 // The copy detail screen (#517). Read-only by design: every field here is edited through the copy
@@ -295,6 +298,10 @@ export function CopyDetailPanel({
                     </span>
                   ) : null}
                 </Field>
+                {/* What those faults take off the copy's value (#1560), beside them. */}
+                <Field label="Value reduction">
+                  {item.faultReductionPercent !== null ? `${item.faultReductionPercent} %` : null}
+                </Field>
                 <Field label="Certificate">
                   {item.certificateStatusName ? (
                     <CertificateStatusChip
@@ -331,13 +338,24 @@ export function CopyDetailPanel({
                 {/* A piece carrying several stamps is priced by no catalog (#745); its figure is the
                     one recorded on it (#747), and the label must not say otherwise. */}
                 <Field label={item.multiStamp ? "Recorded value" : "Catalog value"}>
-                  {value.unpriced
-                    ? null
-                    : `${value.amount} ${value.currency}${
-                        value.baseAmountDisplay && value.currency !== baseCurrency
-                          ? ` ≈ ${value.baseAmountDisplay} ${baseCurrency}`
-                          : ""
-                      }${value.uncertain ? " (estimate)" : ""}`}
+                  {value.unpriced ? null : value.faultReduction ? (
+                    // Lowered for the copy's faults (#1560): the Copies row's mark, and the full
+                    // figure in the hover, from the same valuation.
+                    <Tooltip
+                      content={`Full ${faultReductionHint(
+                        value.faultReduction.fullAmount,
+                        value.currency,
+                        value.faultReduction.percent
+                      )}`}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.35rem" }}>
+                        {copyValueText(value, baseCurrency)}
+                        <FaultReductionMark percent={value.faultReduction.percent} />
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    copyValueText(value, baseCurrency)
+                  )}
                 </Field>
                 <Field label="Added">{new Date(item.createdAt).toLocaleDateString()}</Field>
                 {item.disposedAt && (
@@ -591,4 +609,13 @@ function MissingFigure({ label, reason }: { label: string; reason: string }) {
       <span style={{ color: "var(--color-text-muted)" }}>{label}</span>
     </Tooltip>
   );
+}
+
+/** A copy's figure as the page prints it: in its own currency, the base beside it when converted. */
+function copyValueText(value: CopyValuation, baseCurrency: string): string {
+  return `${value.amount} ${value.currency}${
+    value.baseAmountDisplay && value.currency !== baseCurrency
+      ? ` ≈ ${value.baseAmountDisplay} ${baseCurrency}`
+      : ""
+  }${value.uncertain ? " (estimate)" : ""}`;
 }

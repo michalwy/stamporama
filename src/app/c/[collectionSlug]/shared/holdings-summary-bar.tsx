@@ -17,6 +17,7 @@ import {
   type StatedFigure,
 } from "@/lib/summary-figure";
 import { usePersistedFlag } from "./use-persisted-flag";
+import { FaultReducedNote } from "./fault-reduction-mark";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 
@@ -675,6 +676,12 @@ function CatalogValueRow({
         {itemCount !== undefined ? `${itemCount} ${copiesWord(itemCount)} · ` : ""}
         {total.pricedCount} priced
         {valuationNotes.length > 0 ? ` · ${valuationNotes.join(" · ")}` : ""}
+        <FaultReducedNote
+          reducedCount={total.faultReducedCount}
+          totalBaseAmount={total.totalBaseAmount}
+          reductionBaseAmount={total.faultReductionBaseAmount}
+          baseCurrency={total.baseCurrency}
+        />
       </span>
       {children}
     </div>
@@ -699,6 +706,12 @@ function MarketValueRow({ total }: { total: HoldingsSummary }) {
       <span style={NOTE_STYLE}>
         from {market.valuedCount} of {covered} {copiesWord(covered)}
         {market.noEvidenceCount > 0 ? ` · ${market.noEvidenceCount} with no auction results` : ""}
+        <FaultReducedNote
+          reducedCount={market.faultReducedCount}
+          totalBaseAmount={market.totalBaseAmount}
+          reductionBaseAmount={market.faultReductionBaseAmount}
+          baseCurrency={market.baseCurrency}
+        />
       </span>
     </div>
   );
