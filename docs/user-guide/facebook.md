@@ -5,10 +5,10 @@ bid in the comments under it, and the sale closes there. Stamporama treats Faceb
 platform** and keeps the groups you auction in under it, each with its own customs — how a post there
 reads, what you say about shipping and payment, and what a new auction starts from.
 
-Everything on this page is set up under **Settings → Facebook**.
+The platform and its groups are set up under **Settings → Facebook**; an auction is an
+[offer](offers.md) on the Facebook platform, prepared, posted and followed like any other.
 
-> Preparing an auction in a group, posting it and recording its result are coming in the next steps.
-> This page covers the platform and its groups, which those steps start from.
+> Recording the current bid and the result of an auction is coming in a next step.
 
 ## Which platform is Facebook
 
@@ -71,3 +71,71 @@ back.
 **Delete** removes a group for good, and only a group **no offer names** can be deleted. A group
 with offers is where sales happened, and your sales by group need it to still be there — so the
 Delete button is greyed out, and hovering it says to archive the group instead.
+
+## Auctioning in a group
+
+An auction in a group is an offer on the Facebook platform. Create it the usual way — **New offer**
+on the Offers screen, or **Add to new offer** from your copies — and choose Facebook as the platform:
+the form then asks for the **Group**, and a Facebook offer is always an auction, so it does not ask
+how the listing is sold.
+
+Picking a group fills in that group's defaults, each of which you can change before you save:
+
+- the **starting price** — the group's amount, or its percentage of the copies' catalogue value
+  when the form suggests one from your copies;
+- the **bid increment**;
+- **Closes** — the group's number of days from today, at its closing time (or at the time it is now,
+  if the group names none);
+- the **currency** — the group's own when it has one, otherwise the platform's. An auction in a group
+  with a currency of its own is in that currency, whatever the platform's is.
+
+Changing the group's settings later changes nothing about auctions already made from it. Only groups
+in use are offered; an archived group can be kept by an auction already in it, but not chosen for a
+new one.
+
+### A copy is in one auction at a time
+
+A copy that is in a Facebook auction which is up — active or paused — cannot be put in another
+Facebook auction, in any group. The refusal names the auction it is in, for example *offer #41 in
+Znaczki — aukcje*. Closing or withdrawing that auction frees the copy. Two auctions still being
+prepared may hold the same copy; the second one then cannot go up while the first is.
+
+Listing the same copy on another platform at the same time is not affected.
+
+## Posting
+
+Facebook has no way for an app to post in a group, so you post by hand from the **Facebook** card on
+the offer's screen, which holds everything the post needs:
+
+- the **group**, with a link to open it;
+- the **post text**: the group's post template filled in from the auction, with the group's note on
+  shipping, payment and terms under it. **Copy** puts it on the clipboard in one click. A group with
+  no template posts each lot's description;
+- **↓ Photos**: the offer's photos as one download.
+
+Once the post is up, paste its link into **Post link** and choose **Record link**. That activates the
+offer, the same as publishing any other listing — so the offer has to be **Ready** first, and the card
+says so until it is.
+
+## A post with several lots
+
+A post can hold several auctions as **lots** — an album, each photo a lot bid on in its own comments.
+On the **Offers** screen, tick the auctions to post together and choose **Post together** in the
+selection bar. They must all be Facebook auctions in the same group, not yet posted and not in another
+post. They become lots 1, 2, 3… in the order you ticked them, and they share one closing time — the
+first lot's — from then on: changing it on one lot changes it on all of them.
+
+Each lot's Facebook card then shows the whole post:
+
+- the lots, in order, each linking to its offer;
+- the **post text** for the whole post — each lot's text in lot order, the standing note once under
+  the last — and **↓ Photos, in lot order**, every lot's photos in one download, each file starting
+  with its lot (`lot-01-…`), so the album uploads in the right order;
+- **Post link**: recording it activates **every** lot, so every lot has to be Ready first. A lot's own
+  photo link, if you want it, is that offer's listing URL.
+
+Until the post's link is recorded, **Take this lot out of the post** removes a lot: the lots after it
+move up, and a post left with one lot becomes an ordinary single post. Once the post is up, its lots
+stay as they were posted. Deleting a lot's offer works the same way as taking it out.
+
+A lot cannot be moved to another group while it is in a post; take it out first.

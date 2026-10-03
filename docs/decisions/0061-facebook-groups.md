@@ -87,6 +87,11 @@ apart, offered to no new auction, and brought back with one click. `Offer.facebo
 - `Offer.facebookGroupId` exists before anything writes it: #1544 is the writer. It is null on every
   offer not on Facebook.
 - A group's currency may differ from the platform's, which the platform-currency lock (#196) did not
-  foresee; how an offer in such a group takes its currency is #1544's to settle.
+  foresee. **Settled by #1544 with the collector on 2026-10-03:** an auction in a group with a
+  currency of its own is in that currency, and the platform's lock is left untouched; a group naming
+  none follows the lock.
+- A post holding several lots is a `FacebookPost` row (#1544) and a single post is not: an offer
+  posted alone carries its post's link as its own `url`. The lots share their group and closing time;
+  the closing time is kept on each lot's `endsAt` and written to all of them together.
 - Moving the Facebook marker to another contact leaves the groups with the contact that owns them,
   as Delcampe's profiles are left; the page then shows the new platform's groups, which start empty.

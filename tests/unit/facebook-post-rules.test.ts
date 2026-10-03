@@ -1,0 +1,161 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  describeFacebookAuctionCopies,
+  facebookDefaultEndsAt,
+  facebookDefaultStartingPrice,
+  facebookMoney,
+  facebookPostRefusal,
+  parseBidIncrement,
+  renderFacebookLotText,
+  renderFacebookPostText,
+  type FacebookPostCandidate,
+  type FacebookPostLotText,
+} from "../../src/lib/facebook-post-rules";
+
+// A Facebook auction and its post (#1544; ADR-0061 §2, §3, §6): what a group's defaults become on a
+// new auction, and the kit's text. The database half — the group required, its currency, a copy in
+// one auction at a time, posts and their links — is `tests/integration/facebook-auctions.test.ts`.
+
+function lot(overrides: Partial<FacebookPostLotText> = {}): FacebookPostLotText {
+  return {
+    lotNo: null,
+    description: "Mercury, 1850, unused",
+    catalog: "Mi·AT 1",
+    startingPrice: "10.00 PLN",
+    increment: "1.00 PLN",
+    closesAt: "Sun 5 Oct, 20:00",
+    ...overrides,
+  };
+}
+
+describe("facebookDefaultEndsAt (#1544)", () => {
+  const now = new Date(2026, 9, 3, 14, 37, 12); // Sat 3 Oct 2026, 14:37 local
+
+  it("closes the group's number of days later, at its closing time of day", () => {
+    const end = facebookDefaultEndsAt(now, 7, "20:00");
+    assert.deepEqual(
+      [end?.getFullYear(), end?.getMonth(), end?.getDate(), end?.getHours(), end?.getMinutes()],
+      [2026, 9, 10, 20, 0]
+    );
+  });
+
+  it("keeps the time it is now when the group states no time of day", () => {
+    const end = facebookDefaultEndsAt(now, 3, null);
+    assert.deepEqual([end?.getDate(), end?.getHours(), end?.getMinutes(), end?.getSeconds()], [6, 14, 37, 0]);
+  });
+
+  it("crosses a month end by the calendar", () => {
+    const end = facebookDefaultEndsAt(new Date(2026, 9, 30, 9, 0), 5, "21:30");
+    assert.deepEqual([end?.getMonth(), end?.getDate(), end?.getHours(), end?.getMinutes()], [10, 4, 21, 30]);
+  });
+
+  it("names no end without a length — a time of day alone names no day", () => {
+    assert.equal(facebookDefaultEndsAt(now, null, "20:00"), null);
+    assert.equal(facebookDefaultEndsAt(now, 0, "20:00"), null);
+  });
+});
+
+describe("facebookDefaultStartingPrice (#1544)", () => {
+  it("takes an amount as it stands", () => {
+    assert.equal(facebookDefaultStartingPrice("amount", 5, null), "5.00");
+  });
+
+  it("takes a percentage of the catalogue value, rounded to the cent", () => {
+    assert.equal(facebookDefaultStartingPrice("catalogPercent", 30, "12.50"), "3.75");
+    assert.equal(facebookDefaultStartingPrice("catalogPercent", 33, "10.01"), "3.30");
+  });
+
+  it("states none without a catalogue value, or without a default", () => {
+    assert.equal(facebookDefaultStartingPrice("catalogPercent", 30, null), null);
+    assert.equal(facebookDefaultStartingPrice("catalogPercent", 30, "0.00"), null);
+    assert.equal(facebookDefaultStartingPrice(null, null, "12.50"), null);
+  });
+});
+
+describe("parseBidIncrement (#1544)", () => {
+  it("reads blank as none and a figure as two decimals", () => {
+    assert.deepEqual(parseBidIncrement("  "), { ok: true, value: null });
+    assert.deepEqual(parseBidIncrement("0,5"), { ok: true, value: "0.50" });
+  });
+
+  it("refuses nothing a bid could beat the last by", () => {
+    assert.equal(parseBidIncrement("0").ok, false);
+    assert.equal(parseBidIncrement("abc").ok, false);
+  });
+});
+
+describe("the post's text (#1544; ADR-0061 §3)", () => {
+  it("fills every placeholder and keeps an unknown token as typed", () => {
+    const text = renderFacebookLotText(
+      "Lot {lot}: {catalog} {description}\nStart {startingPrice}, +{increment}, ends {closesAt} {startprice}",
+      lot({ lotNo: 3 })
+    );
+    assert.equal(
+      text,
+      "Lot 3: Mi·AT 1 Mercury, 1850, unused\nStart 10.00 PLN, +1.00 PLN, ends Sun 5 Oct, 20:00 {startprice}"
+    );
+  });
+
+  it("leaves {lot} empty on an offer posted alone", () => {
+    assert.equal(renderFacebookLotText("[{lot}] {catalog}", lot()), "[] Mi·AT 1");
+  });
+
+  it("falls back to the description when the group has no template", () => {
+    assert.equal(renderFacebookLotText("   ", lot()), "Mercury, 1850, unused");
+  });
+
+  it("joins the lots in lot order and puts the standing note under the last, once", () => {
+    const text = renderFacebookPostText("Lot {lot}: {catalog}", "Shipping 5 PLN.", [
+      lot({ lotNo: 2, catalog: "Mi·AT 2" }),
+      lot({ lotNo: 1, catalog: "Mi·AT 1" }),
+    ]);
+    assert.equal(text, "Lot 1: Mi·AT 1\n\nLot 2: Mi·AT 2\n\nShipping 5 PLN.");
+  });
+
+  it("leaves out an empty standing note rather than a gap", () => {
+    assert.equal(renderFacebookPostText("{catalog}", "  ", [lot()]), "Mi·AT 1");
+  });
+
+  it("writes a figure with its currency, and nothing for none", () => {
+    assert.equal(facebookMoney("1.00", "PLN"), "1.00 PLN");
+    assert.equal(facebookMoney(null, "PLN"), "");
+  });
+});
+
+describe("facebookPostRefusal (#1544; ADR-0061 §2)", () => {
+  function offer(overrides: Partial<FacebookPostCandidate> = {}): FacebookPostCandidate {
+    return { offerNo: 1, facebookGroupId: "g1", facebookPostId: null, state: "ready", url: null, ...overrides };
+  }
+
+  it("lets two unposted auctions in one group become a post", () => {
+    assert.equal(facebookPostRefusal([offer(), offer({ offerNo: 2, state: "preparing" })]), null);
+  });
+
+  it("refuses a single offer, another platform, a second group, another post, or one already up", () => {
+    assert.match(facebookPostRefusal([offer()])!, /at least two/);
+    assert.match(facebookPostRefusal([offer(), offer({ offerNo: 7, facebookGroupId: null })])!, /#7 is not a Facebook auction/);
+    assert.match(facebookPostRefusal([offer(), offer({ offerNo: 2, facebookGroupId: "g2" })])!, /different groups/);
+    assert.match(facebookPostRefusal([offer(), offer({ offerNo: 3, facebookPostId: "p" })])!, /#3 is already a lot/);
+    assert.match(
+      facebookPostRefusal([offer({ offerNo: 4, state: "active" }), offer({ offerNo: 5, state: "sold" })])!,
+      /Offers #4 and #5 are already up or closed/
+    );
+  });
+});
+
+describe("describeFacebookAuctionCopies (ADR-0061 §5)", () => {
+  it("names each copy and the auction holding it", () => {
+    assert.equal(
+      describeFacebookAuctionCopies([{ itemNo: 12, offerNo: 41, groupName: "Znaczki" }]),
+      "Copy #12 is already in an active Facebook auction: offer #41 in Znaczki. A copy is in one Facebook auction at a time — close or withdraw that one first."
+    );
+    assert.match(
+      describeFacebookAuctionCopies([
+        { itemNo: 12, offerNo: 41, groupName: "Znaczki" },
+        { itemNo: 13, offerNo: 41, groupName: "Znaczki" },
+      ]),
+      /^Copies #12, #13 are already in an active Facebook auction: offer #41 in Znaczki\./
+    );
+  });
+});

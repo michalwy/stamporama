@@ -41,6 +41,7 @@ import { ComposeSetDialog } from "./compose-set-dialog";
 import { OfferPhotosCard } from "./offer-photos-card";
 import { OfferPlatformItemsCard } from "./offer-platform-items-card";
 import { OfferAllegroCard } from "./offer-allegro-card";
+import { OfferFacebookCard } from "./offer-facebook-card";
 import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
@@ -1328,6 +1329,18 @@ export function OfferDetailPanel({
           config={offer.delcampeListing}
           listingType={offer.listingType}
           categorySearchTerm={offer.delcampeListing.categorySearchTerm}
+          onChanged={() => invalidateAll(collectionId)}
+        />
+      )}
+
+      {/* A Facebook auction's kit (#1544; ADR-0061 §3): its group, the post that carries it, the
+          post's text and photos, and the link that activates it. Null (and so absent) on every offer
+          that is not a Facebook auction. */}
+      {offer.facebook && (
+        <OfferFacebookCard
+          collectionSlug={collectionSlug}
+          offerId={offerId}
+          kit={offer.facebook}
           onChanged={() => invalidateAll(collectionId)}
         />
       )}

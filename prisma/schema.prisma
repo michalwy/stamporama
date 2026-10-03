@@ -182,6 +182,7 @@ model Collection {
   delcampeListings  DelcampeListing[]
   delcampeImportState DelcampeImportState?
   facebookGroups  FacebookGroup[]
+  facebookPosts   FacebookPost[]
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
   valueSnapshots  CollectionValueSnapshot[]
@@ -2748,11 +2749,35 @@ model FacebookGroup {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   platform   Contact    @relation("PlatformFacebookGroup", fields: [platformId], references: [id], onDelete: Cascade)
   offers     Offer[]    @relation("OfferFacebookGroup")
+  posts      FacebookPost[]
 
   @@unique([platformId, name])
   @@index([collectionId])
   @@index([platformId])
   @@map("facebook_group")
+}
+
+// A post holding several lots in one Facebook group (#1544; ADR-0061 §2): an album, each photo a lot
+// bid on in its own comments. Its lots are offers naming it (`Offer.facebookPostId`), numbered by
+// `Offer.facebookLotNo`, sharing its group and their closing time. An offer posted alone has no post
+// row — its own `url` is the post's link. The closing time is kept on each lot (`Offer.endsAt`),
+// where everything that reads an auction's end already looks, and written to all of them together.
+model FacebookPost {
+  id           String   @id @default(cuid())
+  collectionId String
+  groupId      String
+  // The post's link, pasted once it is up — recording it activates the lots. Null until then.
+  url          String?
+  createdAt    DateTime @default(now())
+
+  collection Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // Restrict, for the offers' own reason: a group with posts is where sales happened.
+  group      FacebookGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  lots       Offer[]       @relation("OfferFacebookPost")
+
+  @@index([collectionId])
+  @@index([groupId])
+  @@map("facebook_post")
 }
 
 // What was listed for a kind of stamp — the **key → category** register (#488; ADR-0026, generalised
@@ -4464,6 +4489,13 @@ model Offer {
   // preference about one, so a group with offers is archived and never deleted — the reports per
   // group need it to still be there.
   facebookGroupId String?
+  // How much a bid must beat the last by (#1544), on a Facebook auction: read from the group when the
+  // offer is created, then the offer's own. Null on every other offer.
+  bidIncrement Decimal? @db.Decimal(10, 2)
+  // The multi-lot post this offer is a lot of, and its number there (#1544; ADR-0061 §2) — both null
+  // on an offer posted alone. `SetNull`: a post is removed only by the app, which renumbers first.
+  facebookPostId String?
+  facebookLotNo  Int?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside
@@ -4570,6 +4602,7 @@ model Offer {
   allegroListingProfile AllegroListingProfile? @relation("OfferAllegroListingProfile", fields: [allegroListingProfileId], references: [id], onDelete: SetNull)
   delcampeListingProfile DelcampeListingProfile? @relation("OfferDelcampeListingProfile", fields: [delcampeListingProfileId], references: [id], onDelete: SetNull)
   facebookGroup FacebookGroup? @relation("OfferFacebookGroup", fields: [facebookGroupId], references: [id], onDelete: Restrict)
+  facebookPost  FacebookPost?  @relation("OfferFacebookPost", fields: [facebookPostId], references: [id], onDelete: SetNull)
   sets       OfferSet[]
   saleLines  SaleLine[]
   /** Listing images owned by this offer (#311): the generated collages, and the files uploaded
@@ -4599,6 +4632,9 @@ model Offer {
   @@index([allegroListingProfileId])
   @@index([delcampeListingProfileId])
   @@index([facebookGroupId])
+  @@index([facebookPostId])
+  // One lot number per post; offers outside a post carry nulls, which never collide.
+  @@unique([facebookPostId, facebookLotNo])
   // One listing is one offer's (#611), which is what makes the reconciliation's refusal to guess
   // enforceable rather than merely intended.
   @@unique([collectionId, delcampeItemId])

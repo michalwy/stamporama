@@ -74,7 +74,8 @@ the request.
 
 If you auction in **Facebook groups**, Facebook is one platform and your groups sit under it, each
 with its own post template, note on shipping and payment, and auction defaults; Facebook has no API
-for group posts, so nothing here talks to it — see [Facebook](docs/user-guide/facebook.md).
+for group posts, so an auction there is prepared as a kit — the post's text and photos — that you
+paste by hand, alone or as lots of one post — see [Facebook](docs/user-guide/facebook.md).
 
 If you sell on **Allegro**, the instance can also talk to Allegro's own API using an application you
 register yourself — see [Allegro](docs/user-guide/allegro.md): it keeps a worklist of what has sold

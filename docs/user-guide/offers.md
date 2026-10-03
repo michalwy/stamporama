@@ -182,6 +182,10 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    On the platform named as **Delcampe**, an offer carries an **On Delcampe** card instead, naming
    the [listing profile](delcampe.md#on-an-offer) its upload row is built from — the shipping model,
    the renewal setting and the bid step it will state.
+   On the platform named as **Facebook**, an offer is an auction in a group and carries a
+   **Facebook** card: the post's text and photos to paste by hand, and the post's link, which
+   activates it once recorded. Several auctions in one group can be **posted together** as lots of
+   one post. See [Facebook](facebook.md#auctioning-in-a-group).
 
 The asking price sits on one line with the two figures you weigh it against, in the order
 **min · suggested · price** — for example *min 0.05 · suggested 0.60 · no price yet*:

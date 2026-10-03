@@ -1080,6 +1080,46 @@ export async function buildOffersPhotoArchive(
   };
 }
 
+/**
+ * A Facebook post's photos as one ZIP, **in lot order** (#1544; ADR-0061 §3): every lot's upload set,
+ * each file prefixed with its lot (`lot-01-…`), flat — an album is uploaded as one selection, and the
+ * prefix is what keeps the photos in the order the post numbers its lots. A lot with nothing to upload
+ * is left out rather than refusing the post; the archive is refused only when no lot has anything.
+ *
+ * @throws {OfferPhotoGenerationError} when no lot of the post has images to upload.
+ */
+export async function buildFacebookPostPhotoArchive(
+  ownerId: string,
+  postId: string
+): Promise<{ fileName: string; bytes: Buffer }> {
+  // The post is checked first, so somebody else's post reads as missing rather than failing on its
+  // first lot's owner check.
+  const post = await prisma.facebookPost.findFirst({
+    where: { id: postId, collection: { ownerId } },
+    select: { id: true },
+  });
+  if (!post) throw new OfferPhotoGenerationError("Post not found.");
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: postId },
+    orderBy: { facebookLotNo: "asc" },
+    select: { id: true, facebookLotNo: true },
+  });
+  const sets = await Promise.all(lots.map((lot) => readOfferUploadSet(ownerId, lot.id)));
+  const entries: ZipEntry[] = [];
+  sets.forEach((set, index) => {
+    if ("reason" in set) return;
+    const prefix = `lot-${String(lots[index].facebookLotNo ?? index + 1).padStart(2, "0")}`;
+    for (const image of set.images) {
+      const file = zipEntryOf(image);
+      entries.push({ ...file, name: `${prefix}-${file.name}` });
+    }
+  });
+  if (entries.length === 0) {
+    throw new OfferPhotoGenerationError("None of this post's lots has images to upload — generate them first.");
+  }
+  return { fileName: `facebook-post-${lots.length}-lots-photos.zip`, bytes: zip(entries) };
+}
+
 /** An upload-set image as the archive stores it. The name is the plan's own, so a file in a ZIP and
  *  a file sent to a marketplace are the same file under the same name. */
 function zipEntryOf(image: OfferUploadImage): ZipEntry {

@@ -51,6 +51,7 @@ import {
 } from "@/lib/offer-photo-attachments";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
+import { parseBidIncrement } from "@/lib/facebook-post-rules";
 import { commitLotProposal, type MissingPinnedCopy } from "@/lib/lot-builder";
 import { composeSeriesOffer, type ComposeSeriesResult } from "@/lib/series-recombination";
 import {
@@ -176,6 +177,11 @@ async function readOfferInput(
   });
   if (!platformId) return { ok: false, message: "Choose a platform to list on." };
 
+  // A Facebook auction's group and increment (#1544). Sent only by a form showing them; the domain
+  // asks for the group on Facebook and ignores both everywhere else.
+  const increment = parseBidIncrement(str(formData, "bidIncrement"));
+  if (!increment.ok) return { ok: false, message: increment.message };
+
   return {
     ok: true,
     input: {
@@ -188,6 +194,8 @@ async function readOfferInput(
       currency,
       listingDate: listing.value,
       state,
+      facebookGroupId: str(formData, "facebookGroupId") || null,
+      bidIncrement: increment.value,
     },
   };
 }
