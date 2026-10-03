@@ -30,7 +30,7 @@ import {
   type SizePresetRow,
 } from "../size-reads";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
-import { loadStampLabels, resolveStampRefs } from "./stamp-refs";
+import { loadStampLabels, resolveStampRefs, stampNoOf } from "./stamp-refs";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
 
 // Stamp sizes and size presets (#1415): read a stamp's size and where it comes from, keep the
@@ -56,7 +56,7 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 export const MAX_NAMED_STAMPS = 100;
 
 const STAMP_PARAMETER_DESCRIPTION =
-  "The stamp: its id, or a catalogue number that names only it — `Mi 123a`, as `resolve_catalog_numbers` reads one. A number reaching several stamps is refused with their ids.";
+  "The stamp: its id, its short number (`st 123`), or a catalogue number that names only it — `Mi 123a`, as `resolve_catalog_numbers` reads one. A number reaching several stamps is refused with their ids.";
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
@@ -290,13 +290,19 @@ export async function readStampSize(
   const own = stampSizeFields(stamp);
 
   // Twice, cheaply: the first pass says which neighbours lend a figure, so only their numbers are read.
-  const draft = stampSizeReading({ stampId, catalogNumbers: [], name: null, path: "" }, own, sizeChecklists, () => undefined);
+  const draft = stampSizeReading(
+    { stampId, stampNo: 0, catalogNumbers: [], name: null, path: "" },
+    own,
+    sizeChecklists,
+    () => undefined
+  );
   const lenders = (draft.inherited ?? []).map((row) => row.fromStampId);
   const labels = await loadStampLabels(context, [stampId, ...lenders]);
   const self = labels.get(stampId);
   return stampSizeReading(
     {
       stampId,
+      stampNo: stampNoOf(labels, stampId),
       catalogNumbers: self?.catalogNumbers ?? [],
       name: self?.name ?? null,
       path: collectionPath(header, `/stamps/${stampId}`),
@@ -331,6 +337,7 @@ export async function writeStampSize(
 ): Promise<{
   status: "written" | "unchanged";
   stampId: string;
+  stampNo: number;
   catalogNumbers: string[];
   widthMm: number;
   heightMm: number;
@@ -354,6 +361,7 @@ export async function writeStampSize(
   return {
     status: result.status === "saved" ? "written" : "unchanged",
     stampId,
+    stampNo: stampNoOf(labels, stampId),
     catalogNumbers: labels.get(stampId)?.catalogNumbers ?? [],
     widthMm: result.size.widthMm,
     heightMm: result.size.heightMm,
@@ -524,7 +532,7 @@ function applyParameters(where: "query" | "body"): ParameterSpec[] {
       in: where,
       type: "string[]",
       required: false,
-      description: `Size these stamps, each an id or a catalogue number naming only it — at most ${MAX_NAMED_STAMPS}. Every entry must resolve to one stamp or nothing is done.${where === "query" ? " Repeat the parameter once per stamp, since a comma separates entries." : ""}`,
+      description: `Size these stamps, each an id, a short number (\`st 123\`) or a catalogue number naming only it — at most ${MAX_NAMED_STAMPS}. Every entry must resolve to one stamp or nothing is done.${where === "query" ? " Repeat the parameter once per stamp, since a comma separates entries." : ""}`,
     },
     {
       name: "overwrite",

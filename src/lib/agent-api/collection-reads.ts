@@ -78,6 +78,7 @@ export function leadPhotoUrl(collectionId: string, photoId: string | null): stri
  */
 export interface AgentSearchStamp {
   readonly stampId: string;
+  readonly stampNo: number;
   readonly name?: string;
   readonly issuedYear?: number;
   readonly area?: string;
@@ -160,6 +161,7 @@ interface AxisValueRow {
 /** The row shape `searchCollection` states a stamp in. */
 export interface SearchStampRow {
   readonly stampId: string;
+  readonly stampNo: number;
   readonly name: string | null;
   readonly issuedYear: number | null;
   readonly areaName: string | null;
@@ -191,6 +193,7 @@ export function subtypeName(
 export function searchStamp(collectionId: string, row: SearchStampRow): AgentSearchStamp {
   return compact({
     stampId: row.stampId,
+    stampNo: row.stampNo,
     name: row.name ?? undefined,
     issuedYear: row.issuedYear ?? undefined,
     area: row.areaName ?? undefined,
@@ -320,6 +323,7 @@ export interface AgentStampIssue {
 
 export interface AgentStampDetail {
   readonly stampId: string;
+  readonly stampNo: number;
   readonly name?: string;
   readonly issuedDay?: number;
   readonly issuedMonth?: number;
@@ -354,6 +358,7 @@ export interface AgentStampDetail {
 /** The row shape `getStampListItem` states a stamp in, narrowed to what is published. */
 export interface StampDetailRow {
   readonly id: string;
+  readonly stampNo: number;
   readonly parentId: string | null;
   readonly name: string | null;
   readonly issuedDay: number | null;
@@ -392,6 +397,7 @@ export function stampDetail(
 ): AgentStampDetail {
   return compact({
     stampId: row.id,
+    stampNo: row.stampNo,
     name: row.name ?? undefined,
     issuedDay: row.issuedDay ?? undefined,
     issuedMonth: row.issuedMonth ?? undefined,

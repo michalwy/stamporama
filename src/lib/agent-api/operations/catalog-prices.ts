@@ -171,6 +171,7 @@ export interface AgentCatalogPrice {
 /** One stamp of the tree, with its figures. */
 export interface AgentCatalogPriceRow {
   readonly stampId: string;
+  readonly stampNo: number;
   /** The stamp's leading catalogue number with its prefix, else its name. */
   readonly label: string;
   readonly name?: string;
@@ -259,8 +260,18 @@ async function readPrices(context: OperationContext, params: ParsedParams) {
     byStamp.set(cell.stampId, [...(byStamp.get(cell.stampId) ?? []), price]);
   }
 
+  // The grid is the screen's and carries no short numbers; they are read here, for this answer only.
+  const stampNos = new Map(
+    (
+      await prisma.stamp.findMany({
+        where: { id: { in: grid.rows.map((row) => row.stampId) }, collectionId: context.collectionId },
+        select: { id: true, stampNo: true },
+      })
+    ).map((row) => [row.id, row.stampNo])
+  );
   const rows: AgentCatalogPriceRow[] = grid.rows.map((row) => ({
     stampId: row.stampId,
+    stampNo: stampNos.get(row.stampId)!,
     label: row.label,
     ...(row.name ? { name: row.name } : {}),
     depth: row.depth,
@@ -322,14 +333,14 @@ export const getCatalogPricesOperation: Operation = {
       type: "string",
       required: false,
       description:
-        "A stamp of the tree to read, by id or by a catalogue number that names only it, such as `Mi 309AP`; the whole tree it hangs in is read. Send this or `issue`.",
+        "A stamp of the tree to read, by id, by its short number (`st 123`) or by a catalogue number that names only it, such as `Mi 309AP`; the whole tree it hangs in is read. Send this or `issue`.",
     },
     ...CELL_AXIS_PARAMETERS,
   ],
   result: {
     kind: "list",
     description:
-      "One row per stamp of the tree: `stampId`, `label`, `name`, `depth`, `umbrella` where it has variants, and `prices` — each with `edition`, `condition`, `certificate` and `format` (absent for none and single), `amount` and `currency`, and `rolledUp` or `derived` on a figure computed rather than recorded. A stamp with nothing recorded has empty `prices`.",
+      "One row per stamp of the tree: `stampId`, `stampNo` (its short number), `label`, `name`, `depth`, `umbrella` where it has variants, and `prices` — each with `edition`, `condition`, `certificate` and `format` (absent for none and single), `amount` and `currency`, and `rolledUp` or `derived` on a figure computed rather than recorded. A stamp with nothing recorded has empty `prices`.",
   },
   handler: async (context, params) => readPrices(context, params),
 };

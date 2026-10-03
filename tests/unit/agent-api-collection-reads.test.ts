@@ -70,6 +70,7 @@ describe("whether a search group may be trimmed", () => {
 
 const SEARCH_STAMP: SearchStampRow = {
   stampId: "s1",
+  stampNo: 41,
   name: "Kościuszko",
   issuedYear: 1919,
   areaName: "Poland",
@@ -88,6 +89,11 @@ const SEARCH_STAMP: SearchStampRow = {
 
 describe("a stamp a search matched", () => {
   const row = searchStamp("col1", SEARCH_STAMP);
+
+  it("carries the stamp's short number beside its id (#1574)", () => {
+    assert.equal(row.stampId, "s1");
+    assert.equal(row.stampNo, 41);
+  });
 
   it("reports the two copy counts apart and never summed", () => {
     // The umbrella shape: nothing filed on the stamp itself, two copies under its variants (#528).
@@ -132,6 +138,7 @@ describe("a stamp a search matched", () => {
       "path",
       "photoUrl",
       "stampId",
+      "stampNo",
       "variantCopies",
     ]);
   });
@@ -214,6 +221,7 @@ const COUNTS = {
 
 const STAMP_DETAIL: StampDetailRow = {
   id: "s1",
+  stampNo: 41,
   parentId: null,
   name: "Kościuszko",
   issuedDay: null,

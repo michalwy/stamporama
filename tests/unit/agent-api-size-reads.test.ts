@@ -75,7 +75,7 @@ describe("presets", () => {
 });
 
 describe("stampSizeReading", () => {
-  const stamp = { stampId: "b", catalogNumbers: ["Mi 2"], name: null, path: "/c/x/stamps/b" };
+  const stamp = { stampId: "b", stampNo: 2, catalogNumbers: ["Mi 2"], name: null, path: "/c/x/stamps/b" };
   const none = { widthMm: null, heightMm: null };
   const list = (id: string, name: string, entries: [string, number | null, number | null][]) => ({
     checklistId: id,
@@ -139,7 +139,7 @@ describe("unresolvedStamps", () => {
   const row = (input: string, verdict: AgentCatalogResolution["verdict"], ids: string[] = []): AgentCatalogResolution => ({
     input,
     verdict,
-    stamps: ids.map((stampId, i) => ({ stampId, matchedNumber: `Mi 12${"ab"[i]}`, catalogNumbers: [], path: "" })),
+    stamps: ids.map((stampId, i) => ({ stampId, stampNo: i + 1, matchedNumber: `Mi 12${"ab"[i]}`, catalogNumbers: [], path: "" })),
     ...(verdict === "unknown_vendor" ? { acceptedVendors: ["Michel (Mi)"] } : {}),
   });
 

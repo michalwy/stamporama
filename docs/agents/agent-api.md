@@ -706,6 +706,25 @@ parameter is matched against every catalogue and reported `ambiguous` when more 
 answers, which is the honest reading and needs no schema change. A collection with one vendor gets
 *the default* for free. A real collection-level setting is a product decision and would be an issue.
 
+### A stamp's short number is the third way to name one
+
+Since #1574 every stamp has a short number (`Stamp.stampNo`, ADR-0062), and the API carries it both
+ways. **Out:** every answer that describes a stamp — a search row, `get_stamp`, a resolution, a
+checklist's stamps, a size reading, a price-tree row, a checklist gap, a stamp a write created or
+named — has `stampNo` beside `stampId`. Rows whose subject is a copy, a want, a trade line or a bid
+line do not: they carry their own identity (`itemNo`, `wantId`, …) and the stamp is one `get_stamp`
+away, which is #710's *a row is leaner than a record* again.
+
+**In:** wherever a stamp is named — the `stamp`/`stamps` parameters `resolveStampRefs` reads and the
+older id-only `stamp_id`/`stamp_ids` parameters alike — `st 123` is accepted. It is the quick-jump
+box's own reading (`parseStampNoRef` in `quick-jump.ts`, over `parseQuickJump`), so the agent sends
+exactly what a row shows and the box takes. **The `st` is required**: a bare `123` stays a catalogue
+number, for the box's reason. A short number is read **before** anything else is tried, so it can
+never reach the catalogue resolver. `stampIdFromRef` turns one into an id and otherwise passes the
+value through untouched, so each operation's own *no stamp with id …* check still answers for an id;
+a number naming nothing is refused as a number. In a list (`stampIdsFromRefs`) one such number
+refuses the whole call, as a catalogue number that resolves to nothing does.
+
 ## Working on offers
 
 **Six operations, answering the second of the workflows** (#711): *what is not listed,

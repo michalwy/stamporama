@@ -1,8 +1,8 @@
 # Quick jump
 
 Every major record in a collection carries a small **number of its own** — a copy is `#123`, an
-offer is `#42`, and so are issues, purchases, sales, auction lots and trades. The **Jump to…** box at the
-top of the sidebar takes one of those numbers and goes straight there.
+offer is `#42`, and so are stamps, issues, purchases, sales, auction lots and trades. The **Jump to…**
+box at the top of the sidebar takes one of those numbers and goes straight there.
 
 Type a **prefix**, then the number:
 
@@ -12,6 +12,7 @@ Type a **prefix**, then the number:
 | `o 42` | offer `#42` |
 | `p 7` | purchase `#7` |
 | `s 7` | sale `#7` |
+| `st 901` | stamp `#901` — a variant has a number of its own too |
 | `iss 12` | issue `#12` |
 | `lot 3` | auction lot `#3` |
 | `t 7` | trade `#7` |
@@ -72,7 +73,7 @@ field on the screen itself ([Inventory](inventory.md#searching-and-filtering),
   of its own, and the filtered list shows it in the company of the rows around it.
 - **Offer** opens the offer's short address (`/o/<collection>/<number>`) — the same link a
   marketplace private note carries, so following a link and jumping are the same journey.
-- **Purchase**, **sale** and **trade** open their own detail screen.
+- **Stamp**, **purchase**, **sale** and **trade** open their own detail screen.
 - **Auction lot** opens the **sale** it belongs to, with that lot scrolled to and its card open.
   It [flashes once](auctions.md#the-lots-screen) as it arrives and leaves nothing behind — the same
   thing clicking the lot on the watchlist does.

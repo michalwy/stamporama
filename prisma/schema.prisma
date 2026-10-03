@@ -124,6 +124,9 @@ model Collection {
   // what the partner's copy of the list is headed with — so reuse would be worse here than
   // anywhere: two different exchanges answering to "trade 7" is an argument waiting to happen.
   nextTradeNo    Int    @default(1)
+  // And for `Stamp.stampNo` (#1574) — with one difference worth knowing: this counter is bumped by
+  // a database trigger on every stamp insert, never by application code. See `Stamp.stampNo`.
+  nextStampNo    Int    @default(1)
   ownerId      String
   createdAt    DateTime @default(now())
 
@@ -3145,6 +3148,15 @@ model StampCollectionArea {
 model Stamp {
   id           String   @id @default(cuid())
   collectionId String
+  // Short per-collection stamp number (#1574), variants included — what the quick-jump box takes
+  // after `st`, and what the agent API accepts as `st 123` wherever a stamp is named. Allocated from
+  // `Collection.nextStampNo` and never reused, as every other short number is, but **by a `BEFORE
+  // INSERT` trigger** rather than by `allocateEntityNumber` (ADR-0062): a stamp is written from
+  // many paths, nested creates and a few hundred test fixtures among them, and the trigger makes
+  // *every stamp has a number* a fact of the database rather than of each caller's discipline. Any
+  // value a caller supplies is overwritten, and an update that changes it is refused. `dbgenerated`
+  // only tells Prisma to leave the column out of an insert — the column has no SQL default.
+  stampNo      Int      @default(dbgenerated())
   parentId     String?
   subtypeId    String?
   // Per-stamp override of the subtype's `actsAsVariant` (ADR-0010). Tri-state:
@@ -3258,6 +3270,7 @@ model Stamp {
   // on two stamps is a mistake the matcher refuses to make (#250), not one to turn into a failed
   // insert somewhere else.
   @@index([collectionId, colnectId])
+  @@unique([collectionId, stampNo])
   @@map("stamp")
 }
 

@@ -218,12 +218,14 @@ describe("checklistGap (#712)", () => {
     missing: [
       {
         stampId: "s-3",
+        stampNo: 3,
         stampName: "Overprint",
         catalogNumbers: [{ label: "Mi·PL 202", isPrimary: true }],
         alreadyWanted: false,
       },
       {
         stampId: "s-4",
+        stampNo: 4,
         stampName: null,
         catalogNumbers: [{ label: "Mi·PL 203", isPrimary: true }],
         alreadyWanted: true,

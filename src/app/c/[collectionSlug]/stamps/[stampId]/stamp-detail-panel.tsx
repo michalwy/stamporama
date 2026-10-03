@@ -20,6 +20,7 @@ import {
   FieldGrid,
 } from "@/app/c/[collectionSlug]/shared/detail-page";
 import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import {
   STAMP_ATTRIBUTE_FIELDS,
   statedStampAttributes,
@@ -127,6 +128,7 @@ export function StampDetailPanel({
 
       <DetailLayout>
         <DetailFullRow style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
+          <EntityNoChip entity="stamp" no={stamp.stampNo} prefix="st" />
           <StampIdentity
             stamp={stamp}
             vendorMap={vendorMap}

@@ -39,7 +39,7 @@ import { presetVocabularyEntry } from "../size-reads";
 import { acceptedNames, resolveVocabularyValue, type VocabularyEntry, type VocabularyName } from "../vocabulary";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import { readIssue, readStamp } from "./records";
-import { loadStampLabels } from "./stamp-refs";
+import { loadStampLabels, stampNoOf, stampIdFromRef } from "./stamp-refs";
 import type { AgentIssueDetail, AgentStampDetail } from "../collection-reads";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
 
@@ -210,6 +210,7 @@ async function resolveSizePreset(context: OperationContext, ref: string): Promis
 /** A stamp this call created, as the collector reads it. */
 export interface AgentCreatedStamp {
   readonly stampId: string;
+  readonly stampNo: number;
   readonly catalogNumbers: readonly string[];
 }
 
@@ -218,7 +219,11 @@ async function createdStamps(
   stampIds: readonly string[]
 ): Promise<AgentCreatedStamp[]> {
   const labels = await loadStampLabels(context, stampIds);
-  return stampIds.map((stampId) => ({ stampId, catalogNumbers: labels.get(stampId)?.catalogNumbers ?? [] }));
+  return stampIds.map((stampId) => ({
+    stampId,
+    stampNo: stampNoOf(labels, stampId),
+    catalogNumbers: labels.get(stampId)?.catalogNumbers ?? [],
+  }));
 }
 
 async function translationLanguages(context: OperationContext) {
@@ -504,7 +509,7 @@ export async function addStampVariantsFromParams(
   createdStamps: AgentCreatedStamp[];
   ownPricesKept: { priceCount: number; editions: string[]; note: string } | null;
 }> {
-  const stamp = await loadStamp(context, requiredString(params, "stamp_id"));
+  const stamp = await loadStamp(context, await stampIdFromRef(context, requiredString(params, "stamp_id"), "stamp_id"));
   const memberships = stamp.issueMemberships.map((row) => row.issueId);
   const issueParam = optionalString(params, "issue_id");
   let issueId: string;
@@ -606,7 +611,7 @@ export const addStampVariantsOperation: Operation = {
     "Add a run of variants under one stamp, the way the collector's variant range dialog does: `a-f` under `240` makes `240a` … `240f`, `I-III` makes Roman-numbered ones, and full numbers (`240a-240f`, `309AP`) are taken as written. Every variant carries the same subtype, the base stamp's year, no name and no checklist entry, and goes at the end of the issue's order. A catalogue number this collection already has is refused with the stamp that has it.",
   writes: true,
   parameters: [
-    { name: "stamp_id", in: "path", type: "string", required: true, description: "The base stamp's id, as `search_collection` or `resolve_catalog_numbers` reports it." },
+    { name: "stamp_id", in: "path", type: "string", required: true, description: "The base stamp's id, as `search_collection` or `resolve_catalog_numbers` reports it. A stamp may also be named by its short number, `st 123`." },
     {
       name: "numbers",
       in: "body",
@@ -748,7 +753,7 @@ export async function updateStampFromParams(
   context: OperationContext,
   params: ParsedParams
 ): Promise<AgentStampDetail> {
-  const stamp = await loadStamp(context, requiredString(params, "stamp_id"));
+  const stamp = await loadStamp(context, await stampIdFromRef(context, requiredString(params, "stamp_id"), "stamp_id"));
   const cleared = clearList(params);
 
   const name = optionalString(params, "name");
@@ -844,7 +849,7 @@ export const updateStampOperation: Operation = {
     "Correct a stamp — or a variant — the way the collector's stamp form does: its name and translated names, its date of issue, its number in any catalogue its area keeps, and its catalogue attributes (denomination and perforation as printed; colour, watermark, paper and printing by name from `get_collection_vocabulary`). Only what is sent changes. A catalogue number another stamp already has is refused with that stamp. Nothing here deletes a stamp, moves it to another issue or parent, or reorders it; its size is `set_stamp_size`'s.",
   writes: true,
   parameters: [
-    { name: "stamp_id", in: "path", type: "string", required: true, description: "The stamp's id, as `search_collection` or `resolve_catalog_numbers` reports it." },
+    { name: "stamp_id", in: "path", type: "string", required: true, description: "The stamp's id, as `search_collection` or `resolve_catalog_numbers` reports it. A stamp may also be named by its short number, `st 123`." },
     { name: "name", in: "body", type: "string", required: false, description: "The stamp's name in the collection's own language." },
     NAMES_PARAMETER,
     CLEAR_NAMES_PARAMETER,

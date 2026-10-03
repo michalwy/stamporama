@@ -90,7 +90,7 @@ describe("compareChecklistOrder", () => {
 
 describe("the refusals and the lenient report", () => {
   it("names the stamps an issue's checklist may not hold, and says nothing was added", () => {
-    const err = stampsNotOnIssue("Basic set", "Grosik", [{ stampId: "s9", catalogNumbers: ["Mi·PL 300"] }]);
+    const err = stampsNotOnIssue("Basic set", "Grosik", [{ stampId: "s9", stampNo: 9, catalogNumbers: ["Mi·PL 300"] }]);
     assert.equal(err.code, "invalid_request");
     assert.match(err.message, /"Basic set" is "Grosik"'s own checklist/);
     assert.match(err.message, /Mi·PL 300 is not\. Nothing was added\./);

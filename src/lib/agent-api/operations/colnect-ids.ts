@@ -4,7 +4,7 @@ import { clearColnectMatch, confirmColnectMatch, findColnectIdHolders } from "..
 import { colnectIdHeld, parseAgentColnectId, type AgentColnectIdWrite } from "../colnect-ids";
 import { invalidRequest } from "../errors";
 import { optionalBoolean, optionalString, requiredString } from "../params";
-import { loadStampLabels, resolveStampRefs } from "./stamp-refs";
+import { loadStampLabels, resolveStampRefs, stampNoOf } from "./stamp-refs";
 import type { Operation, OperationContext, ParsedParams } from "../types";
 
 // A stamp's Colnect item-ID through the agent API (#1445) — the link listing on Colnect, the Colnect
@@ -30,7 +30,7 @@ import type { Operation, OperationContext, ParsedParams } from "../types";
 // confirmed that on 2026-09-28.
 
 const STAMP_PARAMETER_DESCRIPTION =
-  "The stamp: its id, or a catalogue number that names only it — `Mi 123a`, as `resolve_catalog_numbers` reads one. A number reaching several stamps is refused with their ids.";
+  "The stamp: its id, its short number (`st 123`), or a catalogue number that names only it — `Mi 123a`, as `resolve_catalog_numbers` reads one. A number reaching several stamps is refused with their ids.";
 
 async function writeColnectId(context: OperationContext, params: ParsedParams): Promise<AgentColnectIdWrite> {
   const raw = optionalString(params, "colnect_id");
@@ -75,6 +75,7 @@ async function writeColnectId(context: OperationContext, params: ParsedParams): 
   return {
     status,
     stampId,
+    stampNo: stampNoOf(labels, stampId),
     catalogNumbers: labels.get(stampId)?.catalogNumbers ?? [],
     ...(now !== null ? { colnectId: now } : {}),
     ...(status !== "unchanged" && before !== null ? { replaced: before } : {}),

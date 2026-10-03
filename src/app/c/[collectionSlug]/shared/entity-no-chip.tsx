@@ -3,8 +3,8 @@
 import { formatEntityNo, quickJumpLabel, type QuickJumpEntity } from "@/lib/quick-jump";
 import { Tooltip } from "./tooltip";
 
-/** The short per-collection number of an issue, purchase, sale or auction lot (#432), on the row
- * that entity owns.
+/** The short per-collection number of an issue, purchase, sale or auction lot (#432), a trade
+ * (#646) or a stamp (#1574), on the row that entity owns.
  *
  * One component rather than four copies of the same span, because the point of these numbers is
  * that they read the same everywhere: the quick-jump box (#431) takes exactly what is on screen,

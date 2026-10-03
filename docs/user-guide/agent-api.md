@@ -108,6 +108,11 @@ catalogues: a number written as Fischer's is never quietly answered with the Mic
 number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
 everywhere else in the app. A **read only** token can do all of this.
 
+**It knows your stamps' own numbers.** Every stamp it tells you about comes with the number the
+app shows on the stamp's row (`#901`), and wherever it has to name a stamp you can give it that
+number as `st 901` — the same thing you would type in **Jump to…** — instead of a catalog number.
+The `st` is needed: a bare `901` is read as a catalog number, because that is what it usually is.
+
 **A read-and-write token can change things, and there are eight places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking

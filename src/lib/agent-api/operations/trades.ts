@@ -55,6 +55,7 @@ import type {
 } from "../trade-reads";
 import type { ListResponse } from "../list";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
+import { stampIdFromRef } from "./stamp-refs";
 
 // Trades (#712) — the third agent workflow's second half: read an exchange, build both its sides,
 // and see whether it balances.
@@ -702,7 +703,7 @@ const REQUIREMENT_PARAMETERS: readonly ParameterSpec[] = [
     type: "string",
     required: false,
     description:
-      "The stamp the partner asked for, from `search_collection`. Send this or `checklist_id`, not both.",
+      "The stamp the partner asked for, from `search_collection`. Send this or `checklist_id`, not both. A stamp may also be named by its short number, `st 123`.",
   },
   {
     name: "checklist_id",
@@ -754,7 +755,8 @@ export async function serveRequirement(
   const { status } = await assertSection(context, sectionId);
   assertEditable(status, "promising copies");
 
-  const stampId = optionalString(params, "stamp_id");
+  const stampIdRef = optionalString(params, "stamp_id");
+  const stampId = stampIdRef === null ? null : await stampIdFromRef(context, stampIdRef, "stamp_id");
   const checklistId = optionalString(params, "checklist_id");
   if ((stampId === null) === (checklistId === null)) {
     throw invalidRequest(
@@ -856,7 +858,8 @@ export async function addReceiveLines(
   const { status } = await assertSection(context, sectionId);
   assertEditable(status, "asking for material");
 
-  const stampId = optionalString(params, "stamp_id");
+  const stampIdRef = optionalString(params, "stamp_id");
+  const stampId = stampIdRef === null ? null : await stampIdFromRef(context, stampIdRef, "stamp_id");
   const checklistId = optionalString(params, "checklist_id");
   if ((stampId === null) === (checklistId === null)) {
     throw invalidRequest(
@@ -931,7 +934,7 @@ export const addTradeReceiveLinesOperation: Operation = {
       type: "string",
       required: false,
       description:
-        "The stamp being asked for, from `search_collection`. Send this or `checklist_id`, not both. It has to be a stamp this collection already knows — when a partner offers material from an area the collection has never touched, adding that stamp is the collector's act on their own screen.",
+        "The stamp being asked for, from `search_collection`. Send this or `checklist_id`, not both. It has to be a stamp this collection already knows — when a partner offers material from an area the collection has never touched, adding that stamp is the collector's act on their own screen. A stamp may also be named by its short number, `st 123`.",
     },
     {
       name: "checklist_id",

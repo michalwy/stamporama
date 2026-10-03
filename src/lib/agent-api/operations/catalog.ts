@@ -42,6 +42,7 @@ import type { Operation, OperationContext, ParsedParams } from "../types";
 /** What the candidate scan needs off a stamp before its identity can be spelled. */
 const STAMP_SELECT = {
   id: true,
+  stampNo: true,
   name: true,
   catalogNumbers: { select: { catalogVendorId: true, number: true } },
   stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
@@ -56,6 +57,7 @@ const STAMP_SELECT = {
 
 type StampRow = {
   id: string;
+  stampNo: number;
   name: string | null;
   catalogNumbers: { catalogVendorId: string; number: string }[];
   stampAreaLinks: { collectionAreaId: string; isPrimary: boolean }[];
@@ -280,6 +282,7 @@ function matchStamps(
       hits.push(
         compact({
           stampId: stamp.id,
+          stampNo: stamp.stampNo,
           matchedNumber: formatCatalogNumber(abbr, prefix, cn.number),
           catalogNumbers: labelling
             .labelFor(areaId, issueId, stamp.catalogNumbers)

@@ -79,6 +79,7 @@ export interface ParsedForeignNumber {
 /** One stamp a string reached, with enough beside it to tell two candidates apart. */
 export interface AgentCatalogStamp {
   readonly stampId: string;
+  readonly stampNo: number;
   /** The stamp's own catalog number that answered, as the collector reads it — `"Mi·PL 123a"`. This
    *  is #1037's *with what it matched on*: an ambiguous pair is told apart by their labels first. */
   readonly matchedNumber: string;

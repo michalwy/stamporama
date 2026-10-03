@@ -322,6 +322,7 @@ export function wantMatch(row: WantMatchRow, context: WantMatchContext): AgentWa
 /** One stamp a checklist names and the collection has no copy of. */
 export interface AgentChecklistGapStamp {
   readonly stampId: string;
+  readonly stampNo: number;
   readonly stamp?: string;
   readonly catalogNumbers: string[];
   /**
@@ -372,6 +373,7 @@ export interface ChecklistGapRow {
   readonly required: number;
   readonly missing: readonly {
     readonly stampId: string;
+    readonly stampNo: number;
     readonly stampName: string | null;
     readonly catalogNumbers: readonly CatalogLabelRow[];
     readonly alreadyWanted: boolean;
@@ -387,6 +389,7 @@ export function checklistGap(row: ChecklistGapRow): AgentChecklistGap {
     missing: row.missing.map((stamp) =>
       compact({
         stampId: stamp.stampId,
+        stampNo: stamp.stampNo,
         stamp: stamp.stampName ?? undefined,
         catalogNumbers: catalogLabels(stamp.catalogNumbers),
         alreadyWanted: stamp.alreadyWanted || undefined,

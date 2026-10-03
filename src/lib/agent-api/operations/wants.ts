@@ -34,6 +34,7 @@ import type { AgentChecklistGaps, AgentWant, AgentWantMatch } from "../want-read
 import type { CollectionVocabulary } from "../vocabulary";
 import type { ListResponse } from "../list";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
+import { stampIdFromRef, stampIdsFromRefs } from "./stamp-refs";
 
 // Wants and checklists (#712) — the reading half of the third agent workflow: *what am I looking
 // for, what would a counterparty's material answer, and what is this set still missing*.
@@ -137,7 +138,7 @@ const WANT_PARAMETERS: readonly ParameterSpec[] = [
     type: "string",
     required: false,
     description:
-      "One stamp's wants, from `search_collection` or `get_stamp`. A stamp can carry several: mint with a certificate at high urgency, and anything at all at low.",
+      "One stamp's wants, from `search_collection` or `get_stamp`. A stamp can carry several: mint with a certificate at high urgency, and anything at all at low. A stamp may also be named by its short number, `st 123`.",
   },
   {
     name: "issue_id",
@@ -165,7 +166,8 @@ export async function readWants(
   const conditions = stringList(params, "condition");
   const year = optionalInteger(params, "year");
   const priorities = stringList(params, "priority");
-  const stampId = optionalString(params, "stamp_id");
+  const stampIdRef = optionalString(params, "stamp_id");
+  const stampId = stampIdRef === null ? null : await stampIdFromRef(context, stampIdRef, "stamp_id");
   const issueId = optionalString(params, "issue_id");
   const search = optionalString(params, "search");
 
@@ -255,7 +257,7 @@ const MATCH_PARAMETERS: readonly ParameterSpec[] = [
     type: "string[]",
     required: true,
     description:
-      "The stamps to ask about — what a counterparty is holding, resolved to this collection's own stamp ids with `search_collection`. Ask about one grade at a time: send the stamps a partner offers used in one call and the mint ones in another.",
+      "The stamps to ask about — what a counterparty is holding, resolved to this collection's own stamp ids with `search_collection`. Ask about one grade at a time: send the stamps a partner offers used in one call and the mint ones in another. A stamp may also be named by its short number, `st 123`.",
   },
   {
     name: "condition",
@@ -288,7 +290,7 @@ export async function readWantMatches(
   params: ParsedParams
 ): Promise<ListResponse<AgentWantMatch>> {
   const vocabulary = await readCollectionVocabulary(context);
-  const stampIds = [...new Set(stringList(params, "stamp_ids"))];
+  const stampIds = [...new Set(await stampIdsFromRefs(context, stringList(params, "stamp_ids"), "stamp_ids"))];
   if (stampIds.length === 0) {
     throw invalidRequest(
       '"stamp_ids" is empty. Resolve the counterparty\'s stamps with `search_collection` and send their ids.'
@@ -463,6 +465,7 @@ export async function readChecklistGaps(
     where: { id: { in: missingIds }, collectionId: context.collectionId },
     select: {
       id: true,
+      stampNo: true,
       name: true,
       catalogNumbers: { select: { catalogVendorId: true, number: true } },
       stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
@@ -487,6 +490,7 @@ export async function readChecklistGaps(
             stamp?.stampAreaLinks.find((l) => l.isPrimary) ?? stamp?.stampAreaLinks[0] ?? null;
           return {
             stampId,
+            stampNo: stamp!.stampNo,
             stampName: stamp?.name ?? null,
             catalogNumbers: labelling.labelFor(
               link?.collectionAreaId ?? null,

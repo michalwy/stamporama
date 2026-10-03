@@ -106,6 +106,7 @@ export type AgentSizeSource = "stated" | "inherited" | "none";
 
 export interface AgentStampSize {
   readonly stampId: string;
+  readonly stampNo: number;
   readonly catalogNumbers: readonly string[];
   readonly name?: string;
   readonly source: AgentSizeSource;
@@ -129,7 +130,13 @@ export interface AgentStampSize {
  * Picking one here would be this surface inventing a rule the album does not have.
  */
 export function stampSizeReading(
-  stamp: { readonly stampId: string; readonly catalogNumbers: readonly string[]; readonly name: string | null; readonly path: string },
+  stamp: {
+    readonly stampId: string;
+    readonly stampNo: number;
+    readonly catalogNumbers: readonly string[];
+    readonly name: string | null;
+    readonly path: string;
+  },
   own: StampSizeFields,
   checklists: readonly SizeChecklist[],
   catalogNumberOf: (stampId: string) => string | undefined
@@ -154,6 +161,7 @@ export function stampSizeReading(
   }
   return compact({
     stampId: stamp.stampId,
+    stampNo: stamp.stampNo,
     catalogNumbers: [...stamp.catalogNumbers],
     name: stamp.name ?? undefined,
     source: whole ? "stated" : inherited.length > 0 ? "inherited" : "none",

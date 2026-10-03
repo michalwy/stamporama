@@ -100,6 +100,7 @@ export interface AgentChecklistStamp {
   /** 1 is the first stamp the set reads. */
   readonly position: number;
   readonly stampId: string;
+  readonly stampNo: number;
   readonly catalogNumbers: readonly string[];
   readonly name?: string;
 }
@@ -107,6 +108,7 @@ export interface AgentChecklistStamp {
 /** A stamp named by a call, as the collector reads it. */
 export interface AgentNamedStamp {
   readonly stampId: string;
+  readonly stampNo: number;
   readonly catalogNumbers: readonly string[];
 }
 

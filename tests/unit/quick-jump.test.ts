@@ -4,6 +4,7 @@ import {
   formatEntityNo,
   parseEntityNoSearch,
   parseQuickJump,
+  parseStampNoRef,
   quickJumpLabel,
   QUICK_JUMP_PREFIXES,
 } from "../../src/lib/quick-jump";
@@ -29,6 +30,14 @@ describe("parseQuickJump (#431)", () => {
     // `t` is the trade (#646) and stays itself — there is no longer prefix starting with it.
     assert.deepEqual(parseQuickJump("t 7"), { entity: "trade", no: 7 });
     assert.deepEqual(parseQuickJump("t#7"), { entity: "trade", no: 7 });
+  });
+
+  it("reads `st` as the stamp, never as `s` followed by `t…` (#1574)", () => {
+    assert.deepEqual(parseQuickJump("st 12"), { entity: "stamp", no: 12 });
+    assert.deepEqual(parseQuickJump("st12"), { entity: "stamp", no: 12 });
+    assert.deepEqual(parseQuickJump("ST #12"), { entity: "stamp", no: 12 });
+    // The sale keeps its own letter.
+    assert.deepEqual(parseQuickJump("s 12"), { entity: "sale", no: 12 });
   });
 
   it("ignores case and surrounding space", () => {
@@ -91,5 +100,24 @@ describe("entity number display + search (#432)", () => {
     assert.equal(parseEntityNoSearch(""), null);
     assert.equal(parseEntityNoSearch("0"), null);
     assert.equal(parseEntityNoSearch("2147483648"), null);
+  });
+});
+
+describe("parseStampNoRef (#1574)", () => {
+  it("reads a stamp's short number the way the box does", () => {
+    assert.equal(parseStampNoRef("st 123"), 123);
+    assert.equal(parseStampNoRef("st123"), 123);
+    assert.equal(parseStampNoRef(" St #7 "), 7);
+  });
+
+  it("is not fooled by another entity's number, a bare number or a catalogue number", () => {
+    assert.equal(parseStampNoRef("s 123"), null);
+    assert.equal(parseStampNoRef("iss 123"), null);
+    // A bare number is as likely a catalogue number, so it stays one.
+    assert.equal(parseStampNoRef("123"), null);
+    assert.equal(parseStampNoRef("Mi 123a"), null);
+    assert.equal(parseStampNoRef("st 12a"), null);
+    // An id is passed through by the caller, never read as a number.
+    assert.equal(parseStampNoRef("cm0abc123stamp"), null);
   });
 });
