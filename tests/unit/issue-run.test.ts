@@ -16,6 +16,7 @@ import {
   runValueTabTarget,
   tilesOnUmbrella,
   treeOrder,
+  withoutAssigned,
   type RunCopyDetails,
   type RunMember,
 } from "../../src/lib/issue-run";
@@ -225,6 +226,53 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
     it("moves on after correcting a tile that had a stamp while another still waits", () => {
       const run = assignInTurn(["t1", "t2", "t3", "t4", "t5"], sequence, new Map([["t2", "s1"]]));
       assert.equal(nextWithoutStamp(run, "t2"), "t5");
+    });
+  });
+
+  describe("hiding the stamps other tiles have taken (#1579)", () => {
+    const members = [
+      member("s1", "201"),
+      member("s2", "202"),
+      member("o1", "301"),
+      member("o1a", "301a", { parentId: "o1", actsAsVariant: true }),
+      member("o2", "302"),
+    ];
+    const choices = runChoices(["s1", "s2"], [{ issueId: "i1", members }]);
+    const rows = (c: ReturnType<typeof runChoices<RunMember>>) => [
+      ids(c.onChecklist),
+      c.others.map((g) => g.nodes.map((n) => [n.node.stampId, n.depth])),
+    ];
+
+    it("hides what other tiles hold, in both parts of the list, and counts it", () => {
+      const run = assignInTurn(["t1", "t2", "t3"], [], new Map([["t1", null], ["t2", "s1"], ["t3", "o2"]]));
+      const { choices: left, hidden } = withoutAssigned(choices, run, "t1");
+      assert.equal(hidden, 2);
+      assert.deepEqual(rows(left), [["s2"], [[["o1", 0], ["o1a", 1]]]]);
+    });
+
+    it("keeps the tile in hand's own stamp, even when another tile has it too", () => {
+      const run = assignInTurn(["t1", "t2"], [], new Map([["t1", "s1"], ["t2", "s1"]]));
+      const { choices: left, hidden } = withoutAssigned(choices, run, "t1");
+      assert.equal(hidden, 0);
+      assert.deepEqual(ids(left.onChecklist), ["s1", "s2"]);
+    });
+
+    it("leaves an emptied part in place, and re-indents a row whose parent is hidden", () => {
+      const run = assignInTurn(
+        ["t1", "t2", "t3", "t4"],
+        [],
+        new Map([["t1", null], ["t2", "s1"], ["t3", "s2"], ["t4", "o1"]])
+      );
+      const { choices: left, hidden } = withoutAssigned(choices, run, "t1");
+      assert.equal(hidden, 3);
+      assert.deepEqual(rows(left), [[], [[["o1a", 0], ["o2", 0]]]]);
+    });
+
+    it("brings a stamp back once the tile holding it is cleared", () => {
+      const before = assignInTurn(["t1", "t2"], [], new Map([["t1", null], ["t2", "s2"]]));
+      assert.deepEqual(ids(withoutAssigned(choices, before, "t1").choices.onChecklist), ["s1"]);
+      const after = assignInTurn(["t1", "t2"], [], clearedAssignments(["t1", "t2"]));
+      assert.deepEqual(ids(withoutAssigned(choices, after, "t1").choices.onChecklist), ["s1", "s2"]);
     });
   });
 

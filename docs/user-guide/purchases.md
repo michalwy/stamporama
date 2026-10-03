@@ -1310,6 +1310,11 @@ stamps first, then the other stamps of its issue — and **its own details**.
   **Assign in turn** puts the whole run back on its turns; *Back to its turn* does it for one tile.
 - **Stamps already used in the run are marked** on the right with the tile that took them — *taken by
   #3* — so you can see what is left. A taken stamp can still be pressed.
+- **Hide assigned (N)**, above the stamp list, takes the stamps other tiles have out of it, so a long
+  checklist shows only what is still left — *N* says how many. It is off at first and remembered for
+  the next run. The tile in hand's own stamp always stays, a stamp disappears the moment another tile
+  takes it and comes back when that tile is cleared or given another, and a part of the list emptied
+  by it says *all assigned*. Turn it off to pick a duplicate.
 - **Two tiles on the same stamp is allowed** — duplicates are real — and the run says *Same stamp as
   #3* so a slip is noticed.
 - **A tile on an umbrella is flagged.** Checklists often hold a stamp that has variants of its own
