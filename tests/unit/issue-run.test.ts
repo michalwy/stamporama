@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assignInTurn,
+  branchFolded,
   changedRunPrices,
   clearedAssignments,
   nextWithoutStamp,
@@ -16,9 +17,11 @@ import {
   runValueTabTarget,
   tilesOnUmbrella,
   treeOrder,
+  unfoldedRows,
   withoutAssigned,
   type RunCopyDetails,
   type RunMember,
+  type RunRow,
 } from "../../src/lib/issue-run";
 
 // Identifying ticked tiles as the stamps of a checklist, in turn (#1220, #1225): which stamp each tile
@@ -38,7 +41,10 @@ const member = (
   ...extra,
 });
 
-const ids = (nodes: readonly RunMember[]) => nodes.map((m) => m.stampId);
+const rowIds = (rows: readonly RunRow<RunMember>[]) => rows.map((r) => r.node.stampId);
+/** A part of the list as `[stampId, depth]` pairs, with `off` on a row marked not on the checklist. */
+const drawn = (rows: readonly RunRow<RunMember>[]) =>
+  rows.map((r) => (r.offChecklist ? [r.node.stampId, r.depth, "off"] : [r.node.stampId, r.depth]));
 
 describe("a checklist's stamps, in turn (#1220, #1225)", () => {
   describe("the choices a tile is corrected among", () => {
@@ -49,10 +55,15 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
       member("s3", "203"),
     ];
 
-    it("offers the checklist's stamps first, in its own order and variants included, not catalogue order", () => {
-      // The checklist's hand-set order (#764): 203 before 201a before 201.
+    it("offers the checklist's stamps first, in its own order and variants nested, not catalogue order", () => {
+      // The checklist's hand-set order (#764): 203 before 201. 201a is on the checklist too, and is
+      // drawn under 201 rather than on its own (#1584).
       const choices = runChoices(["s3", "s1a", "s1"], [{ issueId: "i1", members }]);
-      assert.deepEqual(ids(choices.onChecklist), ["s3", "s1a", "s1"]);
+      assert.deepEqual(drawn(choices.onChecklist), [
+        ["s3", 0],
+        ["s1", 0],
+        ["s1a", 1],
+      ]);
       // …then every other stamp of the issue, so a tile off the checklist still has somewhere to go.
       assert.deepEqual(
         choices.others.map((g) => [g.issueId, g.nodes.map((n) => [n.node.stampId, n.depth])]),
@@ -60,23 +71,41 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
       );
     });
 
-    it("indents another stamp only under an ancestor drawn in the same group", () => {
+    it("nests a checklist stamp's whole branch under it, marking what the checklist does not hold (#1584)", () => {
       const tree = [
         member("b", null),
         member("b1", null, { parentId: "b" }),
         member("c", null),
         member("c1", null, { parentId: "c", actsAsVariant: true }),
+        member("c1x", null, { parentId: "c1", actsAsVariant: true }),
+        member("c2", null, { parentId: "c", actsAsVariant: true }),
       ];
-      // `c` is on the checklist, so its variant is not indented under a row that is not there.
-      const choices = runChoices(["c"], [{ issueId: "i1", members: tree }]);
-      assert.deepEqual(
-        choices.others[0].nodes.map((n) => [n.node.stampId, n.depth]),
-        [
-          ["b", 0],
-          ["b1", 1],
-          ["c1", 0],
-        ]
-      );
+      const choices = runChoices(["c", "c2"], [{ issueId: "i1", members: tree }]);
+      assert.deepEqual(drawn(choices.onChecklist), [
+        ["c", 0],
+        ["c1", 1, "off"],
+        ["c1x", 2, "off"],
+        ["c2", 1],
+      ]);
+      assert.deepEqual(drawn(choices.others[0].nodes), [
+        ["b", 0],
+        ["b1", 1],
+      ]);
+    });
+
+    it("keeps a checklist variant whose base is not on the checklist at the top of its part", () => {
+      const tree = [
+        member("d", null),
+        member("d1", null, { parentId: "d", actsAsVariant: true }),
+        member("d2", null, { parentId: "d", actsAsVariant: true }),
+      ];
+      // The base and its other variants stay in *Other stamps*, indented against what is drawn there.
+      const choices = runChoices(["d1"], [{ issueId: "i1", members: tree }]);
+      assert.deepEqual(drawn(choices.onChecklist), [["d1", 0]]);
+      assert.deepEqual(drawn(choices.others[0].nodes), [
+        ["d", 0],
+        ["d2", 1],
+      ]);
     });
 
     it("groups a checklist spanning issues by issue, offers a shared stamp once, and skips what is not read yet", () => {
@@ -87,7 +116,7 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
           { issueId: "ib", members: [member("shared", "2"), member("b1", "3"), member("b2", "4")] },
         ]
       );
-      assert.deepEqual(ids(choices.onChecklist), ["a1", "b1"]);
+      assert.deepEqual(rowIds(choices.onChecklist), ["a1", "b1"]);
       assert.deepEqual(
         choices.others.map((g) => [g.issueId, g.nodes.map((n) => n.node.stampId)]),
         [
@@ -239,7 +268,7 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
     ];
     const choices = runChoices(["s1", "s2"], [{ issueId: "i1", members }]);
     const rows = (c: ReturnType<typeof runChoices<RunMember>>) => [
-      ids(c.onChecklist),
+      rowIds(c.onChecklist),
       c.others.map((g) => g.nodes.map((n) => [n.node.stampId, n.depth])),
     ];
 
@@ -254,25 +283,73 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
       const run = assignInTurn(["t1", "t2"], [], new Map([["t1", "s1"], ["t2", "s1"]]));
       const { choices: left, hidden } = withoutAssigned(choices, run, "t1");
       assert.equal(hidden, 0);
-      assert.deepEqual(ids(left.onChecklist), ["s1", "s2"]);
+      assert.deepEqual(rowIds(left.onChecklist), ["s1", "s2"]);
     });
 
-    it("leaves an emptied part in place, and re-indents a row whose parent is hidden", () => {
+    it("leaves an emptied part in place, and keeps a taken stamp while a variant of it is shown (#1584)", () => {
       const run = assignInTurn(
         ["t1", "t2", "t3", "t4"],
         [],
         new Map([["t1", null], ["t2", "s1"], ["t3", "s2"], ["t4", "o1"]])
       );
       const { choices: left, hidden } = withoutAssigned(choices, run, "t1");
-      assert.equal(hidden, 3);
-      assert.deepEqual(rows(left), [[], [[["o1a", 0], ["o2", 0]]]]);
+      // `o1` is taken but stays, as the parent `o1a` is drawn under; it is not counted as hidden.
+      assert.equal(hidden, 2);
+      assert.deepEqual(rows(left), [[], [[["o1", 0], ["o1a", 1], ["o2", 0]]]]);
+    });
+
+    it("hides a taken stamp once its variants are hidden too", () => {
+      const run = assignInTurn(
+        ["t1", "t2", "t3"],
+        [],
+        new Map([["t1", null], ["t2", "o1"], ["t3", "o1a"]])
+      );
+      const { choices: left, hidden } = withoutAssigned(choices, run, "t1");
+      assert.equal(hidden, 2);
+      assert.deepEqual(rows(left), [["s1", "s2"], [[["o2", 0]]]]);
     });
 
     it("brings a stamp back once the tile holding it is cleared", () => {
       const before = assignInTurn(["t1", "t2"], [], new Map([["t1", null], ["t2", "s2"]]));
-      assert.deepEqual(ids(withoutAssigned(choices, before, "t1").choices.onChecklist), ["s1"]);
+      assert.deepEqual(rowIds(withoutAssigned(choices, before, "t1").choices.onChecklist), ["s1"]);
       const after = assignInTurn(["t1", "t2"], [], clearedAssignments(["t1", "t2"]));
-      assert.deepEqual(ids(withoutAssigned(choices, after, "t1").choices.onChecklist), ["s1", "s2"]);
+      assert.deepEqual(rowIds(withoutAssigned(choices, after, "t1").choices.onChecklist), ["s1", "s2"]);
+    });
+  });
+
+  describe("folding the stamp list's branches (#1584)", () => {
+    const tree = [
+      member("a", null),
+      member("a1", null, { parentId: "a", actsAsVariant: true }),
+      member("a1x", null, { parentId: "a1", actsAsVariant: true }),
+      member("b", null),
+    ];
+    const rows = runChoices(["a", "b"], [{ issueId: "i1", members: tree }]).onChecklist;
+
+    it("draws a folded row and skips everything under it, offering the caret only where there is a branch", () => {
+      const drawnRows = unfoldedRows(rows, (id) => id === "a1");
+      assert.deepEqual(
+        drawnRows.map((r) => [r.row.node.stampId, r.hasBranch, r.folded]),
+        [
+          ["a", true, false],
+          ["a1", true, true],
+          ["b", false, false],
+        ]
+      );
+      assert.deepEqual(
+        unfoldedRows(rows, (id) => id === "a").map((r) => r.row.node.stampId),
+        ["a", "b"]
+      );
+    });
+
+    it("starts open, and opens the branch holding the tile's current stamp unless it was folded over it", () => {
+      const branch = ["a1", "a1x"];
+      assert.equal(branchFolded(new Map(), "a", branch, null), false);
+      assert.equal(branchFolded(new Map([["a", "b"]]), "a", branch, "b"), true);
+      // Another tile, on a stamp inside the branch, comes into hand: the branch opens for it.
+      assert.equal(branchFolded(new Map([["a", "b"]]), "a", branch, "a1x"), false);
+      // Folded while that very stamp was the tile's: the collector's fold stands.
+      assert.equal(branchFolded(new Map([["a", "a1x"]]), "a", branch, "a1x"), true);
     });
   });
 

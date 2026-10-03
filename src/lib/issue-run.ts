@@ -85,20 +85,37 @@ export function treeOrder<T extends RunMember>(members: readonly T[]): T[] {
   return out;
 }
 
+/** One row of the list a tile picks its stamp from. */
+export interface RunRow<T extends RunMember> {
+  node: T;
+  /** Its ancestors drawn above it in the same part — the indentation the issues list gives it. */
+  depth: number;
+  /** A stamp drawn in *On the checklist* only because a stamp above it is there (#1584) — marked, so
+   * the part never reads as holding more than the checklist does. False throughout *Other stamps*. */
+  offChecklist: boolean;
+}
+
 /** The stamps a tile can be corrected to, in the order they are offered. */
 export interface RunChoices<T extends RunMember> {
-  /** The checklist's own stamps, in the sequence's order — offered first. Flat, as a checklist is. */
-  onChecklist: T[];
+  /** The checklist's own stamps, in the sequence's order, each with everything under it (#1584). */
+  onChecklist: RunRow<T>[];
   /** Every other stamp of the issues the checklist covers, one group per issue in the order given,
    * as that issue's tree draws them. `depth` counts only the ancestors drawn in the same group, so a
    * variant whose base is on the checklist is not indented under a row that is not there. */
-  others: { issueId: string; nodes: { node: T; depth: number }[] }[];
+  others: { issueId: string; nodes: RunRow<T>[] }[];
 }
 
 /**
  * **Correcting a tile still reaches any stamp** (#1225): a tile that turns out to be the perforated
  * one in an imperforate run must have somewhere to go. The checklist's stamps come first, because
  * they are what the tile most likely is; then the rest of each issue the checklist covers.
+ *
+ * **Both parts are trees, as everywhere else** (#1584). A checklist stamp heads its whole branch in
+ * *On the checklist* — its variants with it, each marked `offChecklist` when the checklist does not
+ * hold it itself — so a checklist of main stamps still shows every one's variants where they belong.
+ * The branches stand in the sequence's order; a checklist stamp under another one is drawn in its
+ * branch rather than again at the top. A variant on the checklist whose base is not stays at the top
+ * of the part: the base is not on the checklist, and pulling it in would pull in its other variants.
  *
  * A stamp is offered once — a stamp on two covered issues stays in the first group it appears in —
  * and a sequence id no issue carries (a stamp still being read) is simply not offered yet.
@@ -111,13 +128,36 @@ export function runChoices<T extends RunMember>(
   for (const issue of issues) {
     for (const m of issue.members) if (!byId.has(m.stampId)) byId.set(m.stampId, m);
   }
+  const children = new Map<string, T[]>();
+  for (const m of byId.values()) {
+    if (!m.parentId || !byId.has(m.parentId)) continue;
+    const list = children.get(m.parentId) ?? [];
+    list.push(m);
+    children.set(m.parentId, list);
+  }
+  const listed = new Set(sequence.filter((id) => byId.has(id)));
+  /** True when a stamp above this one is on the checklist — its branch draws it. */
+  const underListed = (node: T) => {
+    const seen = new Set<string>([node.stampId]);
+    let parentId = node.parentId;
+    while (parentId && byId.has(parentId) && !seen.has(parentId)) {
+      if (listed.has(parentId)) return true;
+      seen.add(parentId);
+      parentId = byId.get(parentId)?.parentId ?? null;
+    }
+    return false;
+  };
   const offered = new Set<string>();
-  const onChecklist: T[] = [];
+  const onChecklist: RunRow<T>[] = [];
+  const walk = (node: T, depth: number) => {
+    if (offered.has(node.stampId)) return;
+    offered.add(node.stampId);
+    onChecklist.push({ node, depth, offChecklist: !listed.has(node.stampId) });
+    for (const child of children.get(node.stampId) ?? []) walk(child, depth + 1);
+  };
   for (const id of sequence) {
     const node = byId.get(id);
-    if (!node || offered.has(id)) continue;
-    offered.add(id);
-    onChecklist.push(node);
+    if (node && !underListed(node)) walk(node, 0);
   }
   const others = issues.map((issue) => {
     const rest = treeOrder(issue.members).filter((m) => !offered.has(m.stampId));
@@ -129,7 +169,7 @@ export function runChoices<T extends RunMember>(
 
 /** Each node with its depth among the nodes drawn beside it — only an ancestor that is itself drawn
  * indents a row. */
-function withDepth<T extends RunMember>(drawn: readonly T[]): { node: T; depth: number }[] {
+function withDepth<T extends RunMember>(drawn: readonly T[]): RunRow<T>[] {
   const shown = new Map(drawn.map((m) => [m.stampId, m]));
   return drawn.map((node) => {
     let depth = 0;
@@ -140,7 +180,7 @@ function withDepth<T extends RunMember>(drawn: readonly T[]): { node: T; depth: 
       depth += 1;
       parentId = shown.get(parentId)?.parentId ?? null;
     }
-    return { node, depth };
+    return { node, depth, offChecklist: false };
   });
 }
 
@@ -150,9 +190,10 @@ function withDepth<T extends RunMember>(drawn: readonly T[]): { node: T; depth: 
  * say the same thing while the switch is off, and duplicates stay possible that way.
  *
  * **The tile in hand's own stamp always stays**, even when another tile has it too — its current
- * answer is never hidden from it. Both parts of the list are filtered, and a group keeps its place
- * when it is left empty, so the dialog can say *all assigned* rather than drop the heading. A row
- * whose parent is hidden is re-indented against what is still drawn.
+ * answer is never hidden from it. **A taken stamp also stays while anything under it is still shown**
+ * (#1584), so a variant never appears without its base and no row is re-indented. Both parts of the
+ * list are filtered, and a group keeps its place when it is left empty, so the dialog can say *all
+ * assigned* rather than drop the heading.
  *
  * `hidden` counts the stamps taken out — the *N* of *Hide assigned (N)* — and is the same whether or
  * not the switch is on, so the count can be read before turning it on.
@@ -168,17 +209,67 @@ export function withoutAssigned<T extends RunMember>(
     if (a.tileId !== tileId && a.stampId && a.stampId !== own) taken.add(a.stampId);
   }
   let hidden = 0;
-  const keep = (node: T) => {
-    if (!taken.has(node.stampId)) return true;
-    hidden += 1;
-    return false;
+  /** Walked bottom up, so a row knows whether anything in its branch is still drawn. */
+  const keep = (rows: readonly RunRow<T>[]) => {
+    const kept: RunRow<T>[] = [];
+    let shownBelow = -1;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const row = rows[i];
+      const holdsShown = shownBelow > row.depth;
+      if (taken.has(row.node.stampId) && !holdsShown) {
+        hidden += 1;
+        continue;
+      }
+      kept.unshift(row);
+      shownBelow = row.depth;
+    }
+    return kept;
   };
-  const onChecklist = choices.onChecklist.filter(keep);
+  const onChecklist = keep(choices.onChecklist);
   const others = choices.others.map((group) => ({
     issueId: group.issueId,
-    nodes: withDepth(group.nodes.map((n) => n.node).filter(keep)),
+    nodes: keep(group.nodes),
   }));
   return { choices: { onChecklist, others }, hidden };
+}
+
+/**
+ * The rows a fold leaves drawn (#1584): a folded row stays and everything under it goes. `isFolded`
+ * is asked only about a row with something under it, and is handed the stamps of that branch.
+ */
+export function unfoldedRows<T extends RunMember>(
+  rows: readonly RunRow<T>[],
+  isFolded: (stampId: string, branch: readonly string[]) => boolean
+): { row: RunRow<T>; hasBranch: boolean; folded: boolean }[] {
+  const out: { row: RunRow<T>; hasBranch: boolean; folded: boolean }[] = [];
+  let foldedAt: number | null = null;
+  rows.forEach((row, i) => {
+    if (foldedAt !== null && row.depth > foldedAt) return;
+    foldedAt = null;
+    const branch: string[] = [];
+    for (let j = i + 1; j < rows.length && rows[j].depth > row.depth; j++) {
+      branch.push(rows[j].node.stampId);
+    }
+    const folded = branch.length > 0 && isFolded(row.node.stampId, branch);
+    if (folded) foldedAt = row.depth;
+    out.push({ row, hasBranch: branch.length > 0, folded });
+  });
+  return out;
+}
+
+/**
+ * Whether a branch is folded (#1584). Branches start open. A fold is remembered with the stamp the
+ * tile in hand had when it was made, and **the branch holding the tile's current stamp opens** — unless
+ * it was folded over that very stamp, which is the collector saying so.
+ */
+export function branchFolded(
+  folds: ReadonlyMap<string, string | null>,
+  stampId: string,
+  branch: readonly string[],
+  current: string | null
+): boolean {
+  if (!folds.has(stampId)) return false;
+  return folds.get(stampId) === current || current === null || !branch.includes(current);
 }
 
 // ── Assigning ────────────────────────────────────────────────────────────────────────────────────

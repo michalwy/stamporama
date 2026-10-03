@@ -1302,7 +1302,11 @@ stamps first, then the other stamps of its issue — and **its own details**.
 - **Correct a tile by clicking it and pressing the stamp it really is.** **Any stamp of the issue can
   be chosen**, not only the checklist's: under *On the checklist* come the checklist's stamps, and
   under *Other stamps of …* the rest — so the perforated piece in an imperforate run still has
-  somewhere to go. *Back to its turn* undoes a correction. A correction does not move the tiles after
+  somewhere to go. **Both parts are trees, as on the Issues list**: a stamp's variants are nested under
+  it, and a stamp with variants of its own says *— unknown variant*. A variant of a checklist stamp
+  is listed under it in *On the checklist* even when the checklist does not hold it, marked **not on
+  the checklist**. The caret beside a stamp folds its variants away; everything starts open, and the
+  branch holding the tile in hand's stamp opens again when that tile comes into hand. *Back to its turn* undoes a correction. A correction does not move the tiles after
   it, and whenever you pick a stamp while some tile still has none, the next such tile comes into hand.
   With none left, the tile in hand stays.
 - **Clear assignments**, beside *The run*, leaves every tile without a stamp and puts the first tile in
@@ -1312,7 +1316,8 @@ stamps first, then the other stamps of its issue — and **its own details**.
   #3* — so you can see what is left. A taken stamp can still be pressed.
 - **Hide assigned (N)**, above the stamp list, takes the stamps other tiles have out of it, so a long
   checklist shows only what is still left — *N* says how many. It is off at first and remembered for
-  the next run. The tile in hand's own stamp always stays, a stamp disappears the moment another tile
+  the next run. The tile in hand's own stamp always stays, a stamp stays while any of its variants is
+  still listed (so a variant never appears without it), a stamp disappears the moment another tile
   takes it and comes back when that tile is cleared or given another, and a part of the list emptied
   by it says *all assigned*. Turn it off to pick a duplicate.
 - **Two tiles on the same stamp is allowed** — duplicates are real — and the run says *Same stamp as
