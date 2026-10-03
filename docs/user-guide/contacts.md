@@ -342,6 +342,42 @@ Both tokens and the block are for the description and the private note only: put
 **title** and it renders empty, since a title has no room for the caveat and a range there would read
 as a span you are selling — and the block stays as typed, like every block in a title.
 
+### Telling a buyer about faults
+
+A copy's [faults](faults.md) — a thin, a crease, a hinge remnant — are something a buyer is owed, so
+a description can name them instead of you typing them into each listing:
+
+- `{faults}` is the faults of the copies it describes, comma-separated, e.g. `Thin, Crease`. Inside
+  `{#copy}` that is the one copy's; on its own, every fault any copy in the offer has.
+- `{#faultyCopy}…{/faultyCopy}` repeats once per copy that **has** faults and skips the sound ones,
+  so an offer of several pieces says which one is which:
+
+```
+{#copy}{catalog} {name} — {conditionAbbr}
+{/copy}
+{#faultyCopy}Faults of {catalog}: {faults}
+{/faultyCopy}
+```
+
+which, for three stamps of which only the middle one is thinned and creased, comes out as:
+
+```
+Mi 12 Mercury — MNH
+Mi 13 Venus — MNH
+Mi 14 Mars — MNH
+Faults of Mi 13: Thin, Crease
+```
+
+An offer whose copies are all sound gets no faults line at all, so a template can carry the block
+permanently. Each fault is written in the **platform's listing language**, from the translation you
+gave it in Settings → Faults; one with no translation is written as you named it and shows up among
+the [missing translations](offers.md#filling-a-missing-translation-without-leaving-the-dialog) like
+any other untranslated word. Nothing new appears on its own: the faults show only where your
+template puts them. The empty **Listing description** box shows the block in its example.
+
+Like the variant caveat, `{faults}` is for the description and the private note only — in a
+**title** it renders empty, since a title is short and capped by the platforms.
+
 Blank means *no text is generated at all* for that field — unlike the title, there is no built-in
 default.
 

@@ -53,6 +53,12 @@ linked to, and a fault on one copy is never on another.
 
 A copy with no faults shows nothing at all.
 
+## In an offer's description
+
+A platform's description template can name a copy's faults, so a buyer is told what is wrong with
+the piece without you typing it into each listing — in the platform's language, from each fault's
+**Translations**. See [Telling a buyer about faults](contacts.md#telling-a-buyer-about-faults).
+
 ## Finding copies by fault
 
 The Copies list's **Faults** filter shows the copies carrying **any** of the faults you tick.

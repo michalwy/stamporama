@@ -392,6 +392,8 @@ export async function albumPlanContext(
         format: null,
         location: null,
         locationRef: null,
+        // Nor faults (#1559): a slot holds no piece that could be thinned.
+        faults: [],
         // A slot is one catalogue position by definition, so there is no carrier to enumerate.
         stampCount: 1,
         stamps: [],

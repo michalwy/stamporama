@@ -369,6 +369,11 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
       },
       location: null,
       locationRef: null,
+      // Two faults, the first translated into Polish and the second not (#1559).
+      faults: [
+        { fault: { id: "fault-1", name: "Thin", translations: [{ language: "pl", name: "Ścienienie" }] } },
+        { fault: { id: "fault-2", name: "Crease", translations: [] } },
+      ],
       stampCount: 1,
       stamps: [],
     };
@@ -423,5 +428,29 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
     const copy = toTitleCopy(single, EMPTY_MAPS, new Map(), "pl");
     assert.equal(copy.format, null);
     assert.equal(copy.formatAbbr, null);
+  });
+
+  // A copy's faults (#1559): each resolved on its own, in the order given, and each untranslated one
+  // reported against its own row.
+  it("resolves each fault in the requested language, and reports the one that fell back", () => {
+    const copy = toTitleCopy(row(), EMPTY_MAPS, new Map(), "pl");
+    assert.deepEqual(copy.faults, ["Ścienienie", "Crease"]);
+    assert.deepEqual(
+      (copy.fallbacks ?? []).filter((f) => f.field === "faults"),
+      [
+        {
+          field: "faults",
+          entityType: "fault",
+          entityId: "fault-2",
+          entityField: "name",
+          defaultValue: "Crease",
+        },
+      ]
+    );
+  });
+
+  it("leaves a copy without faults without the field", () => {
+    const copy = toTitleCopy({ ...row(), faults: [] }, EMPTY_MAPS, new Map(), "pl");
+    assert.equal(copy.faults, undefined);
   });
 });

@@ -119,6 +119,12 @@ const CARRIED_STAMP_ORDER: Prisma.ItemStampOrderByWithRelationInput[] = [
   { id: "asc" },
 ];
 
+/** A copy's faults in the dictionary's order (#1559) — `getFaults`' own order, the name breaking a tie. */
+const FAULT_ORDER: Prisma.ItemFaultOrderByWithRelationInput[] = [
+  { fault: { sortOrder: "asc" } },
+  { fault: { name: "asc" } },
+];
+
 /** Copy fields the title template resolves over: stamp name / **all** catalog numbers (with vendor
  * abbreviation, for `{catalog:Mi…}`) / year / condition / certificate / primary area + its id (to
  * resolve per-area catalog prefixes and the primary vendor) / issue. */
@@ -159,6 +165,12 @@ export const TITLE_COPY_SELECT = {
   },
   location: { select: { name: true } },
   locationRef: true,
+  // The copy's faults behind `{faults}` / `{#faultyCopy}` (#1559), in the dictionary's own order —
+  // the order the collector checks a stamp in, and the one every other surface lists them in.
+  faults: {
+    orderBy: FAULT_ORDER,
+    select: { fault: { select: ATTRIBUTE_SELECT } },
+  },
   // Every stamp the copy carries, behind `{catalog}` on a **multi-stamp copy** (ADR-0044 §8, #749).
   // Only what a catalog number is resolved from — the numbers, the primary area and the first issue,
   // in the very shapes the leading stamp's are selected in above, so a stamp named on a cover reads
@@ -183,7 +195,8 @@ export const TITLE_COPY_SELECT = {
 type NameTranslation = { language: string; name: string | null };
 /** A translation row for the name + abbreviation entities (condition, certificate status). */
 type LabelTranslation = { language: string; name: string | null; abbreviation: string | null };
-/** One of the stamp's four dictionary attributes as {@link ATTRIBUTE_SELECT} fetches it (#738). */
+/** One of the stamp's four dictionary attributes as {@link ATTRIBUTE_SELECT} fetches it (#738) — and
+ * a copy's fault (#1559), which is the same shape: an id, a default-language name, its translations. */
 type AttributeRow = { id: string; name: string; translations: NameTranslation[] };
 
 /** The stamp half of {@link TitleCopyRow}, as {@link TITLE_COPY_STAMP_SELECT} fetches it. Named so
@@ -243,6 +256,8 @@ export type TitleCopyRow = {
   } | null;
   location: { name: string } | null;
   locationRef: string | null;
+  /** The copy's faults (#1559), dictionary order. Empty where there is no copy — an album box. */
+  faults: { fault: AttributeRow }[];
   /** The summed quantity of the stamps the copy carries (ADR-0044 §4). 1 for an ordinary copy — and
    *  for an album box, which is one catalogue slot and carries nothing else. */
   stampCount: number;
@@ -525,6 +540,23 @@ export function toTitleCopy(
     watermark: attribute("watermark", row.stamp.watermark),
     paper: attribute("paper", row.stamp.paper),
     printing: attribute("printing", row.stamp.printing),
+    // Each fault resolved and reported on its own (#1559): one untranslated fault among three is one
+    // gap, on that fault's row. A copy without any leaves the field absent rather than empty, the
+    // shape every hand-built copy already has.
+    ...(row.faults.length > 0
+      ? {
+          faults: row.faults.flatMap(({ fault }) => {
+            const name = resolve(
+              "faults",
+              { type: "fault", id: fault.id, field: "name" },
+              fault.translations,
+              (t: NameTranslation) => t.name,
+              fault.name
+            );
+            return name ? [name] : [];
+          }),
+        }
+      : {}),
   };
   // `{area}` is resolved by the roll-up walk rather than `resolve`, so it reports separately — and
   // against the area the winning name came from, which may be an ancestor of the copy's own (#299).

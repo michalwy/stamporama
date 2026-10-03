@@ -128,6 +128,14 @@ async function loadEntity(
       const row = await stampAttributeTranslationStore(entityType).find(entityId);
       return row && { collectionId: row.collectionId, current: {} };
     }
+    // One translatable column, so — like the attributes above — nothing to carry along.
+    case "fault": {
+      const row = await prisma.fault.findUnique({
+        where: { id: entityId },
+        select: { collectionId: true },
+      });
+      return row && { collectionId: row.collectionId, current: {} };
+    }
   }
 }
 
@@ -273,6 +281,20 @@ function handlers(entityType: TranslatableEntity, entityId: string) {
         },
       };
     }
+    case "fault":
+      return {
+        upsert: async (language: string, fields: Record<string, string | null>) => {
+          const name = fields.name ?? null;
+          await prisma.faultTranslation.upsert({
+            where: { faultId_language: { faultId: entityId, language } },
+            create: { faultId: entityId, language, name },
+            update: { name },
+          });
+        },
+        remove: async (language: string) => {
+          await prisma.faultTranslation.deleteMany({ where: { faultId: entityId, language } });
+        },
+      };
   }
 }
 

@@ -39,7 +39,9 @@ export type TranslatableEntity =
   // A checklist's name (#1308), which an album's checklist heading prints as `{checklistName}` in the
   // album's own language. One still named after its issue follows the issue's translation instead
   // (`checklist-name.ts`); a row of its own is for one the collector named himself.
-  | "checklist";
+  | "checklist"
+  // A copy's fault (#1557), which an offer's description prints in the platform's language (#1559).
+  | "fault";
 
 /** The translatable columns of each entity, in the order their forms show them. Also the guard the
  * single-field save path validates an incoming field name against. */
@@ -56,6 +58,7 @@ export const TRANSLATABLE_ENTITY_FIELDS: Readonly<Record<TranslatableEntity, rea
   watermark: ["name"],
   paper: ["name"],
   printing: ["name"],
+  fault: ["name"],
 };
 
 /** The form-field name a translated value is submitted under: `titleName:pl`, `abbreviation:de`. */

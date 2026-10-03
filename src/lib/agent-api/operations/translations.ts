@@ -132,6 +132,7 @@ function columnSpecs(): Record<Exclude<TranslationKind, "checklist">, ColumnSpec
     watermark: { delegate: d(prisma.stampWatermark), nullable: false, orderBy: byOrder },
     paper: { delegate: d(prisma.stampPaper), nullable: false, orderBy: byOrder },
     printing: { delegate: d(prisma.stampPrinting), nullable: false, orderBy: byOrder },
+    fault: { delegate: d(prisma.fault), nullable: false, orderBy: byOrder },
   };
 }
 
@@ -380,7 +381,7 @@ export const findMissingTranslationsOperation: Operation = {
   method: "GET",
   path: "/translations/missing",
   description:
-    "The collection's texts that have no translation into a language it lists or prints in — area, issue, checklist and stamp names, and the names and abbreviations of its conditions, certificates, formats, subtypes, colours, watermarks, papers and printing methods. Until a translation exists, a listing title or an album page in that language prints the text in the collection's own language, and a printed album card keeps it for good. Each row carries the `key` to send to `set_translations`, the text to translate, and what it belongs to. Narrow it to one `kind`, to an `area` and every area under it, or to an `album`, which lists exactly what that album's unprinted pages would print untranslated, in page order.",
+    "The collection's texts that have no translation into a language it lists or prints in — area, issue, checklist and stamp names, and the names and abbreviations of its conditions, certificates, formats, subtypes, colours, watermarks, papers and printing methods, and the names of the faults a copy can carry. Until a translation exists, a listing title, an offer's description or an album page in that language prints the text in the collection's own language, and a printed album card keeps it for good. Each row carries the `key` to send to `set_translations`, the text to translate, and what it belongs to. Narrow it to one `kind`, to an `area` and every area under it, or to an `album`, which lists exactly what that album's unprinted pages would print untranslated, in page order.",
   writes: false,
   parameters: [
     {
