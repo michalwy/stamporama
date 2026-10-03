@@ -57,6 +57,8 @@ import {
   type StampCopyCounts,
 } from "./copy-counts";
 import { putStampOnChecklists } from "./checklists";
+import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
+import type { UmbrellaPricesPolicy } from "./umbrella-prices-question";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -1385,6 +1387,9 @@ export async function updateStampWithCatalog(
     // default. Top-level stamps are always forced back to null on both fields.
     subtypeId?: string | null;
     actsAsVariantOverride?: boolean | null;
+    /** What becomes of the parent's own catalogue prices when this edit makes the stamp its first
+     *  variant (#1573) — see {@link settleUmbrellaPrices}. Omitted, they are kept, as before. */
+    umbrellaPrices?: UmbrellaPricesPolicy;
   } & StampAttributeInput
 ): Promise<void> {
   const collectionId = await resolveStampCollection(stampId);
@@ -1396,7 +1401,7 @@ export async function updateStampWithCatalog(
     if (managesSubtype) {
       const current = await tx.stamp.findUniqueOrThrow({
         where: { id: stampId },
-        select: { parentId: true },
+        select: { parentId: true, subtypeId: true, actsAsVariantOverride: true },
       });
       if (current.parentId === null) {
         // Top-level stamps are never classified.
@@ -1422,6 +1427,19 @@ export async function updateStampWithCatalog(
         }
         if (data.actsAsVariantOverride !== undefined) {
           subtypeData.actsAsVariantOverride = data.actsAsVariantOverride;
+        }
+        // A child that becomes a variant by this edit may make its parent an umbrella, whose own
+        // prices would then override the value rolled up from its variants (#1573).
+        const wasVariant = await wouldActAsVariant(tx, current.subtypeId, current.actsAsVariantOverride);
+        const isVariant = await wouldActAsVariant(
+          tx,
+          subtypeData.subtypeId !== undefined ? subtypeData.subtypeId : current.subtypeId,
+          subtypeData.actsAsVariantOverride !== undefined
+            ? subtypeData.actsAsVariantOverride
+            : current.actsAsVariantOverride
+        );
+        if (!wasVariant && isVariant) {
+          await settleUmbrellaPrices(tx, collectionId, [current.parentId], data.umbrellaPrices ?? "keep");
         }
       }
     }

@@ -26,6 +26,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import type { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { Icon } from "@/app/icons";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 // The variant tree, managed from the stamp's own screen (#630).
 //
@@ -70,6 +71,7 @@ export function StampVariantsCard({
   const router = useRouter();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const [error, setError] = useState<string | undefined>();
   const [dialog, setDialog] = useState<
     | { kind: "none" }
@@ -324,7 +326,9 @@ export function StampVariantsCard({
           onSubmit={(issueId, fd) =>
             startTransition(async () => {
               const { addStampToIssueAction } = await import("@/app/actions/issues");
-              const result = await addStampToIssueAction(collectionId, issueId, fd);
+              const result = await askUmbrella((answer) =>
+                addStampToIssueAction(collectionId, issueId, withUmbrellaAnswer(fd, answer))
+              );
               if (result.status === "success") onSaved();
               else if (result.status === "error") setError(result.message);
             })
@@ -351,11 +355,8 @@ export function StampVariantsCard({
           onSubmit={(fd) =>
             startTransition(async () => {
               const { addVariantRangeAction } = await import("@/app/actions/issues");
-              const result = await addVariantRangeAction(
-                collectionId,
-                treeIssue.id,
-                stamp.id,
-                fd
+              const result = await askUmbrella((answer) =>
+                addVariantRangeAction(collectionId, treeIssue.id, stamp.id, withUmbrellaAnswer(fd, answer))
               );
               if (result.status === "success") onSaved();
               else if (result.status === "error") setError(result.message);
@@ -383,11 +384,8 @@ export function StampVariantsCard({
           onSubmit={(input) =>
             startTransition(async () => {
               const { addVariantTreeAction } = await import("@/app/actions/issues");
-              const result = await addVariantTreeAction(
-                collectionId,
-                treeIssue.id,
-                stamp.id,
-                input
+              const result = await askUmbrella((answer) =>
+                addVariantTreeAction(collectionId, treeIssue.id, stamp.id, { ...input, umbrellaPrices: answer })
               );
               if (result.status === "success") onSaved();
               else if (result.status === "error") setError(result.message);
@@ -422,7 +420,9 @@ export function StampVariantsCard({
           onSubmit={(fd) =>
             startTransition(async () => {
               const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-              const result = await updateStampWithCatalogAction(dialog.child.id, fd);
+              const result = await askUmbrella((answer) =>
+                updateStampWithCatalogAction(dialog.child.id, withUmbrellaAnswer(fd, answer))
+              );
               if (result.status === "success") onSaved();
               else if (result.status === "error") setError(result.message);
             })

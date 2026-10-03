@@ -1537,6 +1537,13 @@ the parameter and a mismatched span is refused pointing at `stamps_from`, never 
 translated name one of `getCollectionTranslationContext`'s languages: a number or a name the forms
 offer no field for would be one the collector could neither see nor correct on the record's screen.
 
+**`add_stamp_variants` does not ask #1573's question.** A screen that gives a priced stamp its
+first variant asks whether to keep or clear the stamp's own prices; an agent has no dialog, so the
+operation passes `umbrellaPrices: "keep"` — today's behaviour — and answers `ownPricesKept` (count,
+editions, a note naming `clear_catalog_prices`) instead of `null`. Clearing stays a separate,
+visible write the collector can be asked about, rather than a parameter that deletes prices as a
+side effect of adding variants.
+
 **A duplicate is refused whatever `Collection.duplicateCatalogMode` says**, and that is #1438's
 decision rather than an oversight of the setting. The setting decides what a person typing into a
 form may override; an agent that could have found the stamp with `resolve_catalog_numbers` has no

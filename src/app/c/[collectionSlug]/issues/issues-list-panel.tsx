@@ -96,6 +96,7 @@ import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import type { StampFilterQuery } from "@/lib/issue-stamp-match";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -199,6 +200,7 @@ export function IssuesListPanel({
     status: "idle",
   });
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const [autoExpandIssueId, setAutoExpandIssueId] = useState<string | null>(null);
   // The parent a sub-stamp was just added under (#359) — the tree expands it so the new child is
   // visible instead of disappearing behind a collapsed arrow. The nonce makes a repeat add under
@@ -518,7 +520,9 @@ export function IssuesListPanel({
         });
         return;
       }
-      const result = await addStampToIssueAction(collectionId, issueId, fd);
+      const result = await askUmbrella((answer) =>
+        addStampToIssueAction(collectionId, issueId, withUmbrellaAnswer(fd, answer))
+      );
       setActionState(result);
       if (result.status === "success") {
         if (parentStampId) {
@@ -1034,9 +1038,8 @@ export function IssuesListPanel({
                   const { updateStampWithCatalogAction } = await import(
                     "@/app/actions/stamps"
                   );
-                  const result = await updateStampWithCatalogAction(
-                    stamp.stampId,
-                    fd
+                  const result = await askUmbrella((answer) =>
+                    updateStampWithCatalogAction(stamp.stampId, withUmbrellaAnswer(fd, answer))
                   );
                   if (result.status === "success")
                     handleStampSuccess(issueId);
@@ -1178,11 +1181,8 @@ export function IssuesListPanel({
               onClose={closeDialog}
               onSubmit={(fd) =>
                 startTransition(async () => {
-                  const result = await addVariantRangeAction(
-                    collectionId,
-                    issueId,
-                    stampId,
-                    fd
+                  const result = await askUmbrella((answer) =>
+                    addVariantRangeAction(collectionId, issueId, stampId, withUmbrellaAnswer(fd, answer))
                   );
                   setActionState(result);
                   if (result.status === "success") {
@@ -1375,11 +1375,8 @@ export function IssuesListPanel({
           onSubmit={(fd) => {
             const { issueId, stampId } = dialog;
             startTransition(async () => {
-              const result = await reparentStampNodeAction(
-                collectionId,
-                issueId,
-                stampId,
-                fd
+              const result = await askUmbrella((answer) =>
+                reparentStampNodeAction(collectionId, issueId, stampId, withUmbrellaAnswer(fd, answer))
               );
               setActionState(result);
               // The tree's own shape changed, so the issue's members are re-read — and the list with

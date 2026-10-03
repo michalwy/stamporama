@@ -115,6 +115,7 @@ import { Icon } from "@/app/icons";
 import { WantReviewDialog } from "@/app/c/[collectionSlug]/wants/want-review-dialog";
 import type { ArrivingCopy } from "@/lib/want-rules";
 import type { WantMatchForCopy } from "@/lib/wants";
+import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 
 type DialogState =
   | { kind: "none" }
@@ -275,6 +276,7 @@ export function InventoryListPanel({
   const searchParams = useSearchParams();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   const [isPending, startTransition] = useTransition();
+  const askUmbrella = useUmbrellaPricesQuestion();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateList } = useInvalidateInventory();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
@@ -2009,7 +2011,9 @@ export function InventoryListPanel({
             setActionError(undefined);
             startTransition(async () => {
               const { updateStampWithCatalogAction } = await import("@/app/actions/stamps");
-              const result = await updateStampWithCatalogAction(stampId, fd);
+              const result = await askUmbrella((answer) =>
+                updateStampWithCatalogAction(stampId, withUmbrellaAnswer(fd, answer))
+              );
               if (result.status === "success") handleSuccess();
               else if (result.status === "error") setActionError(result.message);
             });

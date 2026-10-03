@@ -186,7 +186,10 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
 - **add stamps to an issue**, one per number, at the end of the issue's order and on its checklist,
   as the *Add stamp range* dialog does;
 - **add a run of variants under a stamp** — `a-f` under `240` makes `240a` to `240f` — with the kind
-  of variant they are, exactly as the *Add variant range* dialog does;
+  of variant they are, exactly as the *Add variant range* dialog does. Where they are a stamp's
+  first variants and it has catalogue prices of its own, the dialog would ask whether to keep
+  them ([see why](variant-prices.md#when-a-priced-stamp-gets-its-first-variant)); the assistant is
+  not asked — the prices stay, its answer says so, and it can clear them if you tell it to;
 - **correct an issue**: its name, its year, its name in your other languages, and the range it
   declares in a catalogue;
 - **correct a stamp or a variant**: its name and translated names, its date of issue, its number in

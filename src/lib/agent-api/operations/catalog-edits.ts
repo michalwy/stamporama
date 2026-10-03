@@ -497,7 +497,13 @@ async function loadStamp(context: OperationContext, stampId: string) {
 export async function addStampVariantsFromParams(
   context: OperationContext,
   params: ParsedParams
-): Promise<{ stampId: string; issueId: string; path: string; createdStamps: AgentCreatedStamp[] }> {
+): Promise<{
+  stampId: string;
+  issueId: string;
+  path: string;
+  createdStamps: AgentCreatedStamp[];
+  ownPricesKept: { priceCount: number; editions: string[]; note: string } | null;
+}> {
   const stamp = await loadStamp(context, requiredString(params, "stamp_id"));
   const memberships = stamp.issueMemberships.map((row) => row.issueId);
   const issueParam = optionalString(params, "issue_id");
@@ -565,17 +571,30 @@ export async function addStampVariantsFromParams(
     { areaId: issue.collectionAreaId, issueId },
     parsed.numbers.map((number) => ({ catalogVendorId, number }))
   );
-  const stampIds = await addVariantRangeToStamp(context.ownerId, context.collectionId, issueId, stamp.id, {
-    catalogVendorId,
-    numbers: parsed.numbers,
-    subtypeId,
-  });
+  // The collector's screens ask whether a priced stamp gaining its first variant keeps its prices
+  // (#1573). This surface does not ask: the prices stay, and the answer says so, so the assistant
+  // can clear them through `clear_catalog_prices` once the collector has said to.
+  const { stampIds, umbrellas } = await addVariantRangeToStamp(
+    context.ownerId,
+    context.collectionId,
+    issueId,
+    stamp.id,
+    { catalogVendorId, numbers: parsed.numbers, subtypeId, umbrellaPrices: "keep" }
+  );
+  const [umbrella] = umbrellas;
   const header = await loadCollectionHeader(context);
   return {
     stampId: stamp.id,
     issueId,
     path: collectionPath(header, `/stamps/${stamp.id}`),
     createdStamps: await createdStamps(context, stampIds),
+    ownPricesKept: umbrella
+      ? {
+          priceCount: umbrella.priceCount,
+          editions: umbrella.editions,
+          note: "The base stamp became an umbrella with catalogue prices of its own, and they were kept. A price recorded on an umbrella overrides the value rolled up from its variants, so its value no longer follows them. Ask the collector whether to clear them, and clear them with `clear_catalog_prices` if so.",
+        }
+      : null,
   };
 }
 
@@ -620,7 +639,8 @@ export const addStampVariantsOperation: Operation = {
   ],
   result: {
     kind: "object",
-    description: "`createdStamps` — each variant created, with its id and catalogue numbers, in order — and the base stamp's `path` in the app.",
+    description:
+      "`createdStamps` — each variant created, with its id and catalogue numbers, in order — and the base stamp's `path` in the app. `ownPricesKept` is null unless these were the base stamp's first variants while it carried catalogue prices of its own: then it gives their `priceCount` and `editions`, which were left in place and now override the value rolled up from the variants.",
   },
   handler: async (context, params) => addStampVariantsFromParams(context, params),
 };

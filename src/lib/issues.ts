@@ -51,6 +51,8 @@ import { allocateEntityNumber } from "./items";
 import { assertIssueChecklist, ensureIssueChecklist, putStampOnChecklists } from "./checklists";
 import { parseEntityNoSearch } from "./quick-jump";
 import { checkSiblingGroup, sortOrderAssignments } from "./issue-member-order";
+import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
+import type { UmbrellaPricesPolicy, UmbrellaWithOwnPrices } from "./umbrella-prices-question";
 import { getStampSizePresetPair, type StampSizePresetPair } from "./stamp-size-presets";
 import {
   levelsToReorder,
@@ -1941,8 +1943,11 @@ export async function addVariantRangeToStamp(
     numbers: string[];
     /** The subtype every variant carries; the collection's default when null/omitted. */
     subtypeId?: string | null;
+    /** What becomes of the base stamp's own catalogue prices when the run is its first variants
+     *  (#1573) — see {@link settleUmbrellaPrices}. Omitted, they are kept, as before. */
+    umbrellaPrices?: UmbrellaPricesPolicy;
   }
-): Promise<string[]> {
+): Promise<{ stampIds: string[]; umbrellas: UmbrellaWithOwnPrices[] }> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
   await assertCollectionOwner(ownerId, collectionId);
@@ -1976,8 +1981,11 @@ export async function addVariantRangeToStamp(
     subtypeId = def?.id ?? null;
   }
 
-  const stampIds = await prisma.$transaction((tx) =>
-    createRangeStamps(tx, {
+  const { stampIds, umbrellas } = await prisma.$transaction(async (tx) => {
+    const umbrellas = (await wouldActAsVariant(tx, subtypeId, null))
+      ? await settleUmbrellaPrices(tx, collectionId, [parentStampId], input.umbrellaPrices ?? "keep")
+      : [];
+    const stampIds = await createRangeStamps(tx, {
       collectionId,
       areaId: collectionAreaId,
       issueId,
@@ -1987,10 +1995,11 @@ export async function addVariantRangeToStamp(
         vendors: [{ catalogVendorId: input.catalogVendorId, numbers: input.numbers }],
       },
       parent: { stampId: parentStampId, subtypeId },
-    })
-  );
+    });
+    return { stampIds, umbrellas };
+  });
   await recomputeStampSortKeys(collectionId, stampIds);
-  return stampIds;
+  return { stampIds, umbrellas };
 }
 
 /** A variant stored under a stamp, as the tree write needs it: {@link ExistingVariant} plus what
@@ -2151,6 +2160,9 @@ export async function addVariantTreeToStamp(
     catalogVendorId: string;
     text: string;
     kinds?: Record<string, string>;
+    /** What becomes of the own catalogue prices of every stored stamp the tree gives its first
+     *  variant (#1573) — one answer for all of them. Omitted, they are kept, as before. */
+    umbrellaPrices?: UmbrellaPricesPolicy;
   }
 ): Promise<string[]> {
   const { collectionAreaId, issuedYear, baseNumber } = await loadTreeBase(
@@ -2216,6 +2228,26 @@ export async function addVariantTreeToStamp(
         }
       };
       walk(null, tree.roots);
+
+      // A stored stamp this tree hangs a variant under — the base, or a variant already there — may
+      // become an umbrella whose own prices would override its variants' (#1573). A new line's
+      // parent is new too, and has no prices to ask about.
+      const variantKinds = new Set(
+        (
+          await tx.stampSubtype.findMany({
+            where: { collectionId, actsAsVariant: true },
+            select: { id: true },
+          })
+        ).map((s) => s.id)
+      );
+      const gainingVariants = tree.created
+        .filter((node) => variantKinds.has(kinds[node.key] || defaultSubtypeId || ""))
+        .map((node) => {
+          const parent = parentOf.get(node.key) ?? null;
+          return parent ? parent.stampId : stampId;
+        })
+        .filter((id): id is string => id !== null);
+      await settleUmbrellaPrices(tx, collectionId, gainingVariants, input.umbrellaPrices ?? "keep");
 
       for (const node of tree.created) {
         const parent = parentOf.get(node.key) ?? null;
@@ -2579,6 +2611,9 @@ export interface AddStampData extends StampAttributeInput {
     price: string;
     currency: string;
   }[];
+  /** What becomes of the parent's own catalogue prices when this child is its first variant
+   *  (#1573) — see {@link settleUmbrellaPrices}. Omitted, they are kept, as before. */
+  umbrellaPrices?: UmbrellaPricesPolicy;
 }
 
 export async function addStampToIssue(
@@ -2621,6 +2656,11 @@ export async function addStampToIssue(
         subtypeId = def?.id ?? null;
       }
       actsAsVariantOverride = data.actsAsVariantOverride ?? null;
+      // A variant child may make the parent an umbrella, whose own prices would then override the
+      // value rolled up from its variants (#1573) — settled before the child is written.
+      if (await wouldActAsVariant(tx, subtypeId, actsAsVariantOverride)) {
+        await settleUmbrellaPrices(tx, collectionId, [data.parentStampId], data.umbrellaPrices ?? "keep");
+      }
     }
 
     const stamp = await tx.stamp.create({
@@ -2832,7 +2872,10 @@ export async function reparentStampNode(
   issueId: string,
   stampId: string,
   /** The stamp to file this one under, or null to take it back to the issue's top level. */
-  parentStampId: string | null
+  parentStampId: string | null,
+  /** What becomes of the new parent's own catalogue prices when this stamp is its first variant
+   *  (#1573) — see {@link settleUmbrellaPrices}. Omitted, they are kept, as before. */
+  umbrellaPrices: UmbrellaPricesPolicy = "keep"
 ): Promise<void> {
   const { collectionId: issueCollection } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
@@ -2842,7 +2885,10 @@ export async function reparentStampNode(
 
   const members = await prisma.issueMember.findMany({
     where: { issueId },
-    select: { stampId: true, stamp: { select: { parentId: true, subtypeId: true } } },
+    select: {
+      stampId: true,
+      stamp: { select: { parentId: true, subtypeId: true, actsAsVariantOverride: true } },
+    },
   });
   const byId = new Map(members.map((m) => [m.stampId, m.stamp]));
   const moving = byId.get(stampId);
@@ -2889,6 +2935,11 @@ export async function reparentStampNode(
             select: { id: true },
           })
         )?.id ?? null;
+    }
+    // Arriving as a variant may make the new parent an umbrella, whose own prices would then
+    // override the value rolled up from its variants (#1573) — settled before the edge is written.
+    if (parentStampId && (await wouldActAsVariant(tx, subtypeId, moving.actsAsVariantOverride))) {
+      await settleUmbrellaPrices(tx, collectionId, [parentStampId], umbrellaPrices);
     }
     await tx.stamp.update({
       where: { id: stampId },

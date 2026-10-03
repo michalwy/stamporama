@@ -56,11 +56,20 @@ import { parseTranslationValues } from "@/lib/translations";
 import { parseStampAttributes, parseStampSizeInput } from "@/lib/stamp-attribute-kinds";
 import { setStampTagEntries } from "@/lib/tags";
 import { parseTagEntries } from "@/lib/tag-entry";
+import { UmbrellaPricesUnanswered } from "@/lib/umbrella-prices";
+import {
+  UMBRELLA_PRICES_FIELD,
+  umbrellaPricesPolicyFrom,
+  type UmbrellaPricesQuestionState,
+} from "@/lib/umbrella-prices-question";
 
 export type StampActionState =
   | { status: "idle" }
   | { status: "success" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string }
+  // An edit that would make the parent of a priced stamp an umbrella, handed back unperformed until
+  // the collector says whether the parent keeps its own prices (#1573).
+  | UmbrellaPricesQuestionState;
 
 /** Result of loading quick-price context: the resolved target + any existing amount. */
 export type QuickPriceContextState =
@@ -437,6 +446,7 @@ export async function updateStampWithCatalogAction(
       ...attributes,
       ...size.input,
       translations: parseTranslationValues(formData, STAMP_TRANSLATION_FIELDS),
+      umbrellaPrices: umbrellaPricesPolicyFrom(formData.get(UMBRELLA_PRICES_FIELD)),
     });
     if (photoChangeSet) {
       await applyStampPhotoChangeSet(session.user.id, stampId, photoChangeSet);
@@ -446,7 +456,10 @@ export async function updateStampWithCatalogAction(
     const tagEntries = parseTagEntries(formData.get("stampTags"));
     if (tagEntries) await setStampTagEntries(session.user.id, stampId, tagEntries);
     return { status: "success" };
-  } catch {
+  } catch (e) {
+    if (e instanceof UmbrellaPricesUnanswered) {
+      return { status: "umbrella-prices", umbrellas: e.umbrellas };
+    }
     return { status: "error", message: "Failed to update stamp. Please try again." };
   }
 }

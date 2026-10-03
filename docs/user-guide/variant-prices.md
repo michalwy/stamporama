@@ -98,6 +98,26 @@ the padlock on the row to turn its cells back into inputs; the cell then prints 
 figure plainly, with no `≈`. Locking the row again changes nothing that is stored — it just
 puts the rolled-up figure back on screen.
 
+### When a priced stamp gets its first variant
+
+A set is often entered from a general catalogue first, its stamps priced, and the variants
+added later from a specialised one. The stamp then becomes an umbrella while still carrying
+the prices entered earlier — and those would override the value rolled up from its new
+variants. So the app asks, the moment a stamp with prices of its own gets its first variant:
+
+- **Keep prices** leaves them as the umbrella's recorded price, overriding the rollup.
+- **Clear prices** removes all of them — every edition, condition, certificate and format — so
+  its value becomes the lowest of its variants'.
+- **Cancel** adds no variant; the dialog you were in stays open as you left it.
+
+The question says how many prices the stamp has and in which catalogue editions. It comes from
+every way a stamp gets a variant: *Add child stamp*, *Add variant range…*, the variant tree,
+*Reassign to another parent…*, and editing a child so that its subtype makes it a variant. One operation
+asks once, however many variants it adds; a variant tree that gives several priced stamps their
+first variants asks once for all of them. A stamp that is already an umbrella, or has no prices,
+is not asked about. An assistant adding variants through the agent API is not asked either: the
+prices stay, and its answer says so.
+
 ## Where to open it
 
 - **An issue** — its `⋮` menu on the Issues list → **Price variants…**, beside the format
