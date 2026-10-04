@@ -146,6 +146,14 @@ because something in this tree states a reason a bump could invalidate, or becau
 is invisible to all five required checks. Read it there rather than restating it; `packageRules` are
 applied in array order and later rules win, which is load-bearing.
 
+**What the rules actually automerge is checked, not argued** (#818).
+`scripts/check-renovate-automerge.mjs` simulates them per dependency and update type and fails when a
+never-alone dependency or any major would automerge, with a positive control so it cannot pass by
+matching nothing. It fails closed on any matcher, preset or key it does not model — extending it
+means re-checking it against Renovate itself, and the script says how. The `Renovate rules`
+workflow runs it on a pull request touching `renovate.json`; it is **advisory, not required** (the
+user, 2026-10-04), so read its result before merging such a pull request.
+
 **The arrangement's whole point is that nobody watches it, so it fails by going quiet.** It was
 silently impossible for eight weeks once, asking for `squash` against a repository that only allows
 rebase, and no signal anywhere said so. A backlog review sweeps for that
