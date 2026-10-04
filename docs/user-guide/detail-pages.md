@@ -170,8 +170,10 @@ Offers. Only Details is always there; the rest appear when the copy has them.
 
 ## Measuring and marking a photo
 
-A stamp you did not measure while identifying it can still be measured from its picture. On the copy
-page and the stamp page, open any photo full-size and press **Measure and mark** under it. The photo
+A stamp you did not measure while identifying it can still be measured from its picture. **Every
+photo you enlarge offers Measure and mark** — on the copy page and the stamp page, and equally from a
+thumbnail on a list, in a picker, on an offer's card or in a dialog: open the photo full-size and
+press **Measure and mark** under it. The photo
 opens in the same viewer a [scan tile](purchases.md#measuring-on-the-scan) has: zoom, the **Ruler**,
 **Size** and **Perforation** tools, the **Watermark** view, and the
 [**Ring**, **Line** and **Snapshot**](purchases.md#marking-a-detail-and-keeping-a-snapshot) buttons.
@@ -205,8 +207,14 @@ said, and a new measurement fills the fields again. What is set is the size as t
 recorded as measured with that profile — the stamp's page names it beside the size. A size measured
 at a typed resolution records no profile. If
 the stamp states no size yet, it is written straight away. If it already states one — whole or only half — you are shown that size and
-asked before it is replaced, since it may itself have been measured carefully. On a copy carrying
-several stamps the figure is measured but not offered, because the piece is a copy of none of them.
+asked before it is replaced, since it may itself have been measured carefully. **Set as the stamp's
+size** is offered only where the photo is a stamp's or a copy's, wherever it was enlarged from, and
+it sets that stamp's size — a copy's photo sets the size of the stamp it is a copy of. On a copy
+carrying several stamps the figure is measured but not offered, because the piece is a copy of none
+of them; the same goes for a picture that is not of a stamp, such as an offer's composed image.
+
+A trading partner looking at the photos you shared with them sees the enlarged photo without
+**Measure and mark**: nothing on those pages is theirs to change.
 
 ## The issue page
 

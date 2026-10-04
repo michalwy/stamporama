@@ -1,6 +1,5 @@
 "use client";
 
-import type { ScanningSetup } from "@/lib/scanning-profile";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -107,7 +106,6 @@ export function CopyDetailPanel({
   areas,
   locations,
   sale,
-  scanning,
 }: {
   collectionId: string;
   collectionSlug: string;
@@ -116,8 +114,6 @@ export function CopyDetailPanel({
   areas: CollectionAreaData[];
   locations: LocationData[];
   sale: ItemSaleRecord | null;
-  /** The collection's stated scan resolution (#598) — the measuring viewer's prefill (#1290). */
-  scanning: ScanningSetup;
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
   const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
@@ -424,15 +420,7 @@ export function CopyDetailPanel({
             </DetailCard>
 
             <DetailCard title="Photos" count={item.photos.length} empty={item.photos.length === 0}>
-              {/* Measured after identification (#1290). A size read off the piece is its stamp's —
-                  and a piece carrying several stamps is a copy of none of them, so it measures but
-                  writes no size. */}
-              <PhotoStrip
-                collectionId={collectionId}
-                photos={item.photos}
-                size="7rem"
-                measure={{ scanning, stampId: item.multiStamp ? null : item.stampId }}
-              />
+              <PhotoStrip collectionId={collectionId} photos={item.photos} size="7rem" />
             </DetailCard>
 
             <CatalogPricesCard target={{ kind: "stamp", stampId: item.stampId }} />

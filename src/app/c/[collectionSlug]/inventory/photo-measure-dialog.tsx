@@ -2,6 +2,7 @@
 
 import type { MeasureScale, ScanningSetup } from "@/lib/scanning-profile";
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   ConfirmDialog,
@@ -25,18 +26,23 @@ import { ScanToolButton } from "@/app/c/[collectionSlug]/shared/scan-tool-button
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 /**
- * What a screen tells a photo strip so that its photos can be measured (#1290).
+ * What the viewer is told about a photo so that it can be measured (#1290) — asked of the server by
+ * the lightbox it is opened from (#1592), or handed over by the page editor (#1309).
  *
  * The scale is one of the collection's scanning profiles (#1443) — the default, switchable in the
  * viewer for the sitting, or a resolution typed when no profile fits a picture that was never
- * scanned here. The stamp is the one a measured size is written to — the copy's stamp, or
- * the stamp whose screen it is — and null where a picture is of no one stamp (a piece carrying
- * several), which keeps the measuring and drops the writing.
+ * scanned here. The stamp is the one a measured size is written to — the photo's stamp, or its
+ * copy's — and null where a picture is of no one stamp (a piece carrying several, an offer's
+ * composed image), which keeps the measuring and drops the writing.
  */
 export interface PhotoMeasureContext {
   scanning: ScanningSetup;
   stampId: string | null;
 }
+
+/** Above any dialog a lightbox can be opened from (the intake step's comparison is at 110, a picker
+ * over a dialog at 120), below the viewer's own windows over it (250, and the snapshot at 300). */
+const MEASURE_Z_INDEX = 200;
 
 /**
  * A photo, large, with the tile viewer's tools on it (#1290, #674) — the ruler, the size, the
@@ -134,7 +140,10 @@ export function PhotoMeasureDialog({
     });
   }
 
-  return (
+  if (typeof document === "undefined") return null;
+  // Portalled for the lightbox's own reason: opened from a picture inside a dialog, the panel's
+  // `transform` would otherwise hold this dialog's fixed layout inside that panel.
+  return createPortal(
     <>
     <DialogShell
       title={label}
@@ -145,6 +154,7 @@ export function PhotoMeasureDialog({
       // as a size of the window, it follows the window when that is resized.
       maxWidth={DIALOG_MAX_WIDTH}
       height={DIALOG_MAX_HEIGHT}
+      zIndexBase={MEASURE_Z_INDEX}
       dismissable={!confirm}
     >
       <div
@@ -251,11 +261,13 @@ export function PhotoMeasureDialog({
           variant="primary"
           isPending={pending}
           error={error}
+          zIndexBase={MEASURE_Z_INDEX + 10}
           onConfirm={() => writeSize(confirm, true)}
           onClose={() => setConfirm(null)}
         />
       )}
-    </>
+    </>,
+    document.body
   );
 }
 

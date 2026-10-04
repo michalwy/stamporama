@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { photoMeasureFrame } from "../../src/lib/photo-measure-frame";
+import { photoMeasureFrame, photoMeasureStampId } from "../../src/lib/photo-measure-frame";
 
 // The frame a plain photo is measured in (#1290). The failure this guards is silent: a reading taken
 // on a downscaled derivative against a dpi stated for the upload looks exactly as precise as a right
@@ -67,5 +67,21 @@ describe("photo measure frame (#1290)", () => {
       photoMeasureFrame({ width: 2500, height: 75, originalWidth: 10001, originalHeight: 301 }, CAP),
       { width: 10001, height: 301 }
     );
+  });
+});
+
+// Whose size a reading sets (#1592): every lightbox offers the viewer now, and knows only the picture,
+// so the stamp is read off the photo's owner — the rule the copy's and the stamp's pages each stated.
+describe("photo measure stamp (#1592)", () => {
+  it("sets the size of the stamp a picture hangs on, or of its copy's stamp", () => {
+    assert.equal(photoMeasureStampId({ stampId: "s1", item: null }), "s1");
+    assert.equal(photoMeasureStampId({ stampId: null, item: { stampId: "s2", stampCount: 1 } }), "s2");
+  });
+
+  it("sets nothing from a piece carrying several stamps, or a picture of no stamp", () => {
+    // A cover with three stamps is a copy of none of them (#744).
+    assert.equal(photoMeasureStampId({ stampId: null, item: { stampId: "s2", stampCount: 3 } }), null);
+    // An offer's composed image, a scan tile not yet a copy.
+    assert.equal(photoMeasureStampId({ stampId: null, item: null }), null);
   });
 });
