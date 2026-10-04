@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import type { OfferListItem, OfferLookupTarget } from "@/lib/offers";
 import { isTerminalState } from "@/lib/offer-rules";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
+import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
 import {
@@ -56,15 +57,15 @@ export function OfferTargetRow({
   collectionSlug: string;
   isLast: boolean;
 }) {
-  const router = useRouter();
-  const [hovered, setHovered] = useState(false);
+    const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}`;
+  const rowOpen = useRowOpen(detailHref);
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={() => router.push(detailHref)}
+      {...rowOpen}
       style={{
         position: "relative",
         padding: "0.75rem 1.25rem",

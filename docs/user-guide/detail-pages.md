@@ -25,17 +25,23 @@ when you want the whole picture instead.
 
 ## Opening one
 
-Every row that stands for one of these three records carries a small **arrow** icon, dimmed until
-you hover the row — click it to open that record's page. The same entry is the first one in the
-row's **⋮** menu:
+**Click the row.** Anywhere on a row that stands for one of these records opens that record's page —
+the row lights up under the pointer to show it:
 
-- **Copies** list → **Open copy page**
-- **Stamps** list, and any stamp inside the **Issues** tree → **Open stamp page**
-- **Issues** list → **Open issue page**
+- a row on the **Copies** list opens the **copy's** page
+- a row on the **Stamps** list, a stamp inside the **Issues** tree and a row on the **Wants** list
+  open the **stamp's** page
+- a row on the **Issues** list opens the **issue's** page
 
-The arrow is on the rows **inside** these pages too — the stamps of an issue, a stamp's variants
-and its issues, the copies listed on either — so stepping from record to record never needs the
-lists in between.
+A click on one of the row's own controls does what that control does and nothing more — the caret
+still only expands an issue, the checkbox only ticks, a price you click to edit is edited, a chip
+with its own pop-up opens that, and the **⋮** opens its menu. Dragging across a row to select its
+text does not open anything either, so a name or a number can still be copied by hand.
+
+Rows **inside** these pages work the same way — the stamps of an issue, a stamp's variants and its
+issues, the copies listed on either, the copies of an offer, a purchase, a sale or a trade — so
+stepping from record to record never needs the lists in between. The **pickers**, where clicking a
+row chooses it, are the exception: there a click still picks.
 
 Each page carries a back link to the list it came from. The three pages also link to each other: a
 copy links to its stamp, a stamp links to its issues and its variants, an issue links to every
@@ -47,11 +53,10 @@ Anything in the app that goes somewhere is a **real link**, so your browser's ow
 **cmd/ctrl+click** or the **middle mouse button** opens it in a new tab, and **right-clicking** it
 offers *Open link in new tab*, *Copy link address* and the rest of that menu.
 
-That covers the arrow icons and the ⋮ entries above, and the list rows themselves — an offer, a
-purchase, a sale and an auction sale all open from anywhere on the row, which means anywhere on the
-row can be middle-clicked or right-clicked too. The exception is the **chip line** under a row's
-name: those chips have hover explanations and controls of their own, so a plain click there still
-opens the row, but the new-tab shortcuts want the row's **name**. On the busy **Auction lots** rows,
+That covers the list rows themselves: **cmd/ctrl+click** or **middle-click** anywhere on a row opens
+its page in a new tab. The browser's **right-click** menu wants the row's **name** — on an offer, a
+purchase, a sale, an auction sale or a trade anywhere on the row outside the chip line under the
+name, whose chips have hover explanations and controls of their own. On the busy **Auction lots** rows,
 where the row is a grid of editable figures, use the row's **⋮ → Open sale**, or hold cmd/ctrl while
 clicking the row.
 
@@ -151,7 +156,8 @@ Offers. Only Details is always there; the rest appear when the copy has them.
   - **Enter tree** types the whole variant tree, several levels deep, as indented text with a live
     preview beside it. See [entering a whole variant tree](collections.md#entering-a-whole-variant-tree).
   - Each variant's `⋮` menu offers **Edit** — the same stamp form, subtype included — and
-    **Delete**. *Open stamp page* and *Edit* are also on the row as hover icons.
+    **Delete**. *Edit* is also on the row as a hover icon, and clicking the row opens the variant's
+    own page.
   - **Reorder** turns on drag handles so the variants can be put in the order you want them listed,
     exactly as [reordering on the issue's tree](collections.md#putting-the-stamps-in-your-own-order)
     does — it is the same order, so a drag here shows up there.
@@ -263,7 +269,8 @@ Offers. Details, Checklists and Stamps are always there.
     [entering a whole variant tree](collections.md#entering-a-whole-variant-tree)), **Edit** (the stamp
     form, including which of the issue's checklists the stamp is on) and **Delete**. Delete asks
     exactly what it asks on the Issues list, including what to do with the stamp's variants.
-    *Open stamp page*, *Edit* and *Add variant range…* are also on the row as hover icons.
+    *Edit* and *Add variant range…* are also on the row as hover icons, and clicking the row opens
+    the stamp's own page.
   - **Reorder** turns on drag handles so the stamps can be put in
     [your own order](collections.md#putting-the-stamps-in-your-own-order) — the same order the
     Issues list's tree shows. It is offered once the issue has more than one stamp.

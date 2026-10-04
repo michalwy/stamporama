@@ -49,7 +49,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import { useChecklistsAction } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
 import { useApplySizePresetAction } from "@/app/c/[collectionSlug]/shared/apply-size-preset-dialog";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { useRecordHref } from "@/app/c/[collectionSlug]/shared/use-record-href";
+import { ROW_OPEN_STYLE, RowTitleLink, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import type { AddVariantRangeParent } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import { useFormatFactorsAction } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
@@ -289,10 +290,12 @@ function StampTreeNode({
     onSaved: onPriceSaved,
   });
 
-  const detailPage = useDetailPageAction("stamp", node.stampId);
+  // The row opens the stamp's page (#1591) — except while reordering, where a press on the row is
+  // the start of a drag and the grip is what the row is for.
+  const pageHref = useRecordHref("stamp", node.stampId);
+  const rowOpen = useRowOpen(reordering ? null : pageHref);
 
   const actions: RowAction[] = [
-    detailPage,
     { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => onAddChild(node.stampId) },
     // Right below its one-at-a-time sibling: the same addition, for the case where the catalogue
     // splits this stamp into a lettered run (#722).
@@ -331,9 +334,11 @@ function StampTreeNode({
     <>
       <div
         {...(drag?.item ?? {})}
+        {...rowOpen}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
+          ...(rowOpen ? ROW_OPEN_STYLE : {}),
           padding: `0.4rem 1rem 0.55rem calc(0.5rem + ${indent})`,
           fontSize: "0.8125rem",
           // A selected stamp leads, as a ticked copy does on the Copies list: it is what the bar is
@@ -430,7 +435,9 @@ function StampTreeNode({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  <StampTitle node={node} />
+                  <RowTitleLink href={reordering ? null : pageHref}>
+                    <StampTitle node={node} />
+                  </RowTitleLink>
                 </span>
                 {checklistChips && (
                   <ChecklistChips
@@ -448,7 +455,6 @@ function StampTreeNode({
                   opposite ways: this one I have, that one I am after. */}
               <RowQuickActions
                 actions={pickRowActions(actions, [
-                  "detail-page",
                   "edit",
                   "add-variant-range",
                   "add-copy",
@@ -839,10 +845,10 @@ export function IssueRow({
   // before writing — the list row's warning chip is a hint, not the only way in.
   const [recomputeOpen, setRecomputeOpen] = useState(false);
 
-  const detailPage = useDetailPageAction("issue", issue.id);
+  const pageHref = useRecordHref("issue", issue.id);
+  const rowOpen = useRowOpen(pageHref);
 
   const actions: RowAction[] = [
-    detailPage,
     { key: "add-stamp", label: "Add stamp", icon: "add", onSelect: () => callbacks.onAddStamp(issue.id) },
     { key: "add-stamp-range", label: "Add stamp range…", icon: "more", onSelect: () => callbacks.onAddStampRange(issue) },
     addCopy.action,
@@ -958,10 +964,13 @@ export function IssueRow({
         borderBottom: isLast ? undefined : "1px solid var(--color-border)",
       }}
     >
+      {/* The whole row opens the issue's page (#1591); expanding it is the caret's job alone. */}
       <div
+        {...rowOpen}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
+          ...ROW_OPEN_STYLE,
           padding: "0.875rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
@@ -1033,7 +1042,9 @@ export function IssueRow({
               whiteSpace: "nowrap",
             }}
           >
-            <IssueTitle name={issue.name} year={issue.year} />
+            <RowTitleLink href={pageHref}>
+              <IssueTitle name={issue.name} year={issue.year} />
+            </RowTitleLink>
           </span>
 
           {/* The issue-level counterparts: edit · add a stamp to it · add a copy · want the whole
@@ -1041,7 +1052,6 @@ export function IssueRow({
               this one I have, that one I am after — only over a set rather than a stamp. */}
           <RowQuickActions
             actions={pickRowActions(actions, [
-              "detail-page",
               "edit",
               "add-stamp",
               "add-copy",

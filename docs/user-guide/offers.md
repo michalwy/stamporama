@@ -265,11 +265,11 @@ Each copy row has a quick **+ catalog value** link (click the value to edit it) 
 missing catalog prices without leaving the offer — which also feeds the suggested price. Each row's
 **⋮** menu gathers what you reach for next while writing the listing:
 
-- **Open copy page**, **Open stamp page** and **Open issue page** — real links, so Cmd/Ctrl-click or
-  the middle button opens them in a new tab and the offer stays where it is. A piece carrying
-  several stamps lists **Open stamp page** once per stamp, each named by its catalogue number; a
-  stamp filed in more than one issue lists **Open issue page** once per issue, each named. A stamp
-  filed in no issue keeps the entry greyed out, saying so.
+- **Open stamp page** and **Open issue page** — real links, so Cmd/Ctrl-click or the middle button
+  opens them in a new tab and the offer stays where it is. A piece carrying several stamps lists
+  **Open stamp page** once per stamp, each named by its catalogue number; a stamp filed in more than
+  one issue lists **Open issue page** once per issue, each named. A stamp filed in no issue keeps the
+  entry greyed out, saying so. The copy's own page is a click on the row.
 - **Edit copy** — the same copy editor the Copies list and the copy's own page open (condition,
   certificate, format, photos…), and saving it does to this offer exactly what it would from there;
   the rows and the generated texts re-read afterwards.
@@ -887,8 +887,7 @@ The stamp is named by **every catalogue number you have recorded for it**, each
 with its catalogue and area prefix (`Mi·PL 865`), the leading catalogue first. Elsewhere a number is
 printed bare, because the set around it already says which catalogue it came from; here you are
 cross-checking against somebody else's catalogue, so which one a number belongs to is the point.
-They are the ordinary [click-to-copy chips](inventory.md#copying-a-catalog-number), so a number goes
-into the platform's own search box without being retyped.
+Select a number with the mouse to copy it into the platform's own search box.
 
 The last column is the offer's **other** gap: a **+ CV** button on any row whose stamp has no catalog
 value recorded in that condition. It opens the same *Set catalog value* dialog the copies below do,

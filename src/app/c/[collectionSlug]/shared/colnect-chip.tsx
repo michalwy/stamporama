@@ -1,7 +1,7 @@
 "use client";
 
 import { colnectSearchUrl, colnectStampUrl } from "@/lib/colnect-link";
-import { catalogChipCopyValue } from "@/lib/catalog-number";
+import { catalogSearchValue } from "@/lib/catalog-number";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "./tooltip";
@@ -35,8 +35,7 @@ const CHIP: React.CSSProperties = {
 
 /**
  * The query a search chip runs for a stamp: the **area prefix and the number**, the vendor
- * abbreviation dropped — the same string the catalog chip beside it copies (#420), because
- * Colnect indexes numbers under country codes and knows nothing of our abbreviations. Pass the
+ * abbreviation dropped (`catalogSearchValue`), because Colnect indexes numbers under country codes and knows nothing of our abbreviations. Pass the
  * primary catalog number, falling back to any other one the row shows; null when the row has no
  * number at all, which is a stamp Colnect cannot be searched for.
  */
@@ -45,7 +44,7 @@ export function colnectSearchQueryFor(
   vendorMap: ReadonlyMap<string, AreaCatalogEntry>
 ): string | null {
   if (!catalogNumber) return null;
-  const query = catalogChipCopyValue(
+  const query = catalogSearchValue(
     vendorMap.get(catalogNumber.catalogVendorId)?.prefix,
     catalogNumber.number
   );

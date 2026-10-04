@@ -205,8 +205,7 @@ export function IssueCatalogChips({
       return <CatalogNumberChip key={c.catalogVendorId} label={label} style={style} />;
     }
     const proposed = `${warn.proposedFirst}${warn.proposedLast ? `–${warn.proposedLast}` : ""}`;
-    // A chip that already has something to say says *that*, not "click to copy" — but it still
-    // copies, since the range is exactly what one takes over to fix the numbering elsewhere.
+    // The one chip with something to say: the range it should widen to.
     return (
       <CatalogNumberChip
         key={c.catalogVendorId}

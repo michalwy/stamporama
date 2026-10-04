@@ -20,7 +20,6 @@ import { sortCopies, COPY_SORT_KEYS, COPY_SORT_LABELS } from "@/app/c/[collectio
 import { useHydrated, usePersistentToggle, usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import { InventoryItemFormDialog } from "@/app/c/[collectionSlug]/inventory/inventory-item-form-dialog";
 import { useCardExpansion } from "@/app/c/[collectionSlug]/shared/use-card-expansion";
@@ -154,10 +153,10 @@ interface CopyCtx {
   onEditCopy: (item: ItemListItem) => void;
 }
 
-/** What a copy row keeps as icons: the two it has carried since #676. The menu beside them is
- *  wider, but promoting *Edit copy* too would put a third icon on a row this screen reads far more
- *  often than it edits. */
-const COPY_ROW_PROMOTED = ["detail-page", "edit-stamp"] as const;
+/** What a copy row keeps as an icon: *Edit stamp*, carried since #676. The menu beside it is
+ *  wider, but promoting *Edit copy* too would put a second icon on a row this screen reads far more
+ *  often than it edits. The copy's own page is the row itself (#1591). */
+const COPY_ROW_PROMOTED = ["edit-stamp"] as const;
 
 function issueLabel(issue: ItemIssueRef): string {
   const name = issue.name || "Untitled issue";
@@ -165,9 +164,10 @@ function issueLabel(issue: ItemIssueRef): string {
 }
 
 /**
- * The copy row's `⋮` menu on an offer's sets (#1382): the copy's page, its stamp's page, its issue's
- * page, and the two editors. The pages are **links** (`href`, #557), so the offer stays open in its
- * own tab while something is looked up.
+ * The copy row's `⋮` menu on an offer's sets (#1382): its stamp's page, its issue's page, and the
+ * two editors. The copy's own page is a click on the row (#1591), which cannot reach these two —
+ * they are other records — so they stay here. The pages are **links** (`href`, #557), so the offer
+ * stays open in its own tab while something is looked up.
  *
  * Where the row stands for more than one record, the menu names each rather than picking one: a
  * multi-stamp copy (#744) offers every stamp it carries, named by catalogue number, and a stamp
@@ -176,7 +176,6 @@ function issueLabel(issue: ItemIssueRef): string {
  */
 function useCopyRowActions(item: ItemListItem, ctx: CopyCtx): RowAction[] {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
-  const copyPage = useDetailPageAction("copy", item.id);
   const base = `/c/${collectionSlug}`;
 
   // One entry per distinct stamp: a carrier may hold the same stamp twice (a single and a block).
@@ -232,7 +231,6 @@ function useCopyRowActions(item: ItemListItem, ctx: CopyCtx): RowAction[] {
         }];
 
   return [
-    copyPage,
     ...stampActions,
     ...issueActions,
     { key: "edit", label: "Edit copy", icon: "edit", separatorBefore: true, onSelect: () => ctx.onEditCopy(item) },
@@ -322,6 +320,7 @@ function CopyRow({
       primaryVendorId={primaryVendorId}
       vendorMap={vendorMap}
       isLast={isLast}
+      opensPage
       actionsOverride={actions}
       promote={COPY_ROW_PROMOTED}
       showCostBasis

@@ -13,7 +13,8 @@ import {
   RowQuickActions,
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { useRecordHref } from "@/app/c/[collectionSlug]/shared/use-record-href";
+import { ROW_OPEN_STYLE, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { WantCopyCountsLine } from "./want-copy-counts";
@@ -85,15 +86,14 @@ export function WantRow({
   // list row uses.
   const [hovered, setHovered] = useState(false);
 
-  // The stamp's own screen (#518) — where the catalogue numbers, the prices behind this row's range
-  // and the copies held all are. First in the menu, as it is in every menu it appears in: it is the
-  // entry that goes *somewhere*, and the rest act on the want in place.
-  const detailPage = useDetailPageAction("stamp", want.stampId);
+  // A want has no screen of its own, so the row opens the stamp's (#518, #1591) — where the
+  // catalogue numbers, the prices behind this row's range and the copies held all are.
+  const pageHref = useRecordHref("stamp", want.stampId);
+  const rowOpen = useRowOpen(pageHref);
 
   // Built once and handed to both the menu and the promoted icons beside it (`pickRowActions`), so
   // a shortcut and its menu entry cannot drift into doing different things.
   const rowActions: RowAction[] = [
-    detailPage,
     { key: "edit", label: "Edit want", icon: "edit", onSelect: () => onEdit(want) },
     open
       ? { key: "close", label: "Close want", icon: "check", onSelect: () => onClose(want) }
@@ -129,9 +129,11 @@ export function WantRow({
 
   return (
     <div
+      {...rowOpen}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        ...ROW_OPEN_STYLE,
         display: "flex",
         alignItems: "flex-start",
         gap: "0.75rem",
@@ -173,6 +175,7 @@ export function WantRow({
             vendorMap={vendorMap}
             primaryVendorId={primaryVendorId}
             size="small"
+            href={pageHref}
           />
           {want.unknownVariant && <span style={MUTED}>— any variant</span>}
           {!open && <span style={CHIP}>Closed</span>}
@@ -253,12 +256,11 @@ export function WantRow({
             </Tooltip>
           )}
         </div>
-        {/* The two things done from a want row over and over: open the stamp behind it — to read
-            the catalogue numbers, the prices this row's range came from, or the copies held — and
-            edit the terms, which are refined as you learn what is actually out there. Promoted, not
-            moved: both stay in the menu, which remains the complete list of what the row can do. */}
+        {/* What is done from a want row over and over: edit the terms, which are refined as you
+            learn what is actually out there. Promoted, not moved: it stays in the menu, which
+            remains the complete list of what the row can do. */}
         <RowQuickActions
-          actions={pickRowActions(rowActions, ["detail-page", "edit"])}
+          actions={pickRowActions(rowActions, ["edit"])}
           visible={hovered}
         />
         <RowActionsMenu ariaLabel="Want actions" actions={rowActions} />

@@ -34,11 +34,10 @@ export function StampIdentity({
   /**
    * Where the stamp's **name** links to, when the identity is a way to the stamp's own screen.
    *
-   * The link goes on the name and never around the whole line: this component already emits two
-   * other interactive things — the catalog chips (buttons, #420) and the Colnect chip (an `<a>` to
-   * colnect.com) — and an anchor cannot contain an anchor, which is a hydration error rather than
-   * a styling nuisance. The name is also the only part whose meaning *is* "this stamp"; the chips
-   * mean "copy this number" and "open this on Colnect".
+   * The link goes on the name and never around the whole line: this component also emits the
+   * Colnect chip (an `<a>` to colnect.com), and an anchor cannot contain an anchor, which is a
+   * hydration error rather than a styling nuisance. The name is also the only part whose meaning
+   * *is* "this stamp"; the Colnect chip means "open this on Colnect".
    */
   href?: string;
   /**

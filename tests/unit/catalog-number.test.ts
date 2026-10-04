@@ -15,47 +15,47 @@ import {
   formatSchemeValue,
   computeIssueRangeExtension,
   computeIssueRangeSuggestions,
-  catalogChipCopyValue,
-  catalogChipCopyValueFromLabel,
+  catalogSearchValue,
+  catalogSearchValueFromLabel,
 } from "../../src/lib/catalog-number";
 
-describe("catalogChipCopyValue", () => {
+describe("catalogSearchValue", () => {
   it("keeps the area prefix and drops the vendor (#420)", () => {
-    assert.equal(catalogChipCopyValue("PL", "200"), "PL 200");
+    assert.equal(catalogSearchValue("PL", "200"), "PL 200");
   });
 
   it("copies the bare number when the area sets no prefix", () => {
-    assert.equal(catalogChipCopyValue(null, "200"), "200");
-    assert.equal(catalogChipCopyValue(undefined, "200"), "200");
-    assert.equal(catalogChipCopyValue("  ", "200"), "200");
+    assert.equal(catalogSearchValue(null, "200"), "200");
+    assert.equal(catalogSearchValue(undefined, "200"), "200");
+    assert.equal(catalogSearchValue("  ", "200"), "200");
   });
 
   it("keeps a suffixed or prefixed number whole", () => {
-    assert.equal(catalogChipCopyValue("PL", "BL120a"), "PL BL120a");
+    assert.equal(catalogSearchValue("PL", "BL120a"), "PL BL120a");
   });
 });
 
-describe("catalogChipCopyValueFromLabel", () => {
+describe("catalogSearchValueFromLabel", () => {
   it("drops the vendor and keeps the prefix", () => {
-    assert.equal(catalogChipCopyValueFromLabel("Mi·PL 200"), "PL 200");
-    assert.equal(catalogChipCopyValueFromLabel("Fi·RU-NW 15-19"), "RU-NW 15-19");
+    assert.equal(catalogSearchValueFromLabel("Mi·PL 200"), "PL 200");
+    assert.equal(catalogSearchValueFromLabel("Fi·RU-NW 15-19"), "RU-NW 15-19");
   });
 
   it("drops a vendor that carries no prefix", () => {
-    assert.equal(catalogChipCopyValueFromLabel("Mi 200"), "200");
+    assert.equal(catalogSearchValueFromLabel("Mi 200"), "200");
   });
 
   it("keeps a bare number that merely contains a space", () => {
-    assert.equal(catalogChipCopyValueFromLabel("Ark. 103"), "Ark. 103");
+    assert.equal(catalogSearchValueFromLabel("Ark. 103"), "Ark. 103");
   });
 
   it("keeps a label with nothing to strip", () => {
-    assert.equal(catalogChipCopyValueFromLabel("200"), "200");
-    assert.equal(catalogChipCopyValueFromLabel(""), "");
+    assert.equal(catalogSearchValueFromLabel("200"), "200");
+    assert.equal(catalogSearchValueFromLabel(""), "");
   });
 
   it("handles an issue's declared range", () => {
-    assert.equal(catalogChipCopyValueFromLabel("Mi·PL 1–12"), "PL 1–12");
+    assert.equal(catalogSearchValueFromLabel("Mi·PL 1–12"), "PL 1–12");
   });
 });
 

@@ -643,6 +643,7 @@ export function TradeSideRows({
                   // menu survives the lock when the row has a signal to act on — and offers only
                   // that. Editing the line is what the lock is about; answering a remark is not.
                   readOnly={!editable && signalActions.length === 0}
+                  opensPage
                   showCostBasis
                   onSetCatalogPrice={
                     editable ? () => onQuickPrice(giveQuickPriceTarget(item.copy)) : undefined

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { SaleListItem } from "@/lib/sales";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
+import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
 import { Icon } from "@/app/icons";
 
@@ -36,9 +36,9 @@ interface SaleRowProps {
 /** A single sale as a stacked card row: date + platform on top, then item/line counts and the
  * net proceeds. The whole row opens the sale detail screen. */
 export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps) {
-  const router = useRouter();
-  const [hovered, setHovered] = useState(false);
+    const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/sales/${sale.id}`;
+  const rowOpen = useRowOpen(detailHref);
 
   // Deliberately **not** promoted onto the row (#527), unlike the offer and purchase rows beside
   // it: every entry here is already on screen or must not be a one-click icon. *View* is the row's
@@ -46,7 +46,6 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
   // destructive. A promotion with nothing left to promote is two dimmed icons duplicating controls
   // the collector can already see, which is the sprawl the pattern exists to avoid.
   const menuActions: RowAction[] = [
-    { key: "view", label: "View", icon: "open", href: detailHref },
     ...(sale.transactionUrl
       ? [
           {
@@ -76,7 +75,7 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete }: SaleRowProps
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => router.push(detailHref)}
+        {...rowOpen}
         style={{
           position: "relative",
           padding: "0.75rem 1.25rem",

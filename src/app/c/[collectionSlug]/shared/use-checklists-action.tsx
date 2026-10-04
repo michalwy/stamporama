@@ -916,8 +916,8 @@ function ChecklistStampOrderDialog({
  * belongs to one issue so the vendor is the dialog's context (#547). It is not: an issue carries a
  * number in *each* catalogue it is listed in, so `445 · 412 · 500` was three catalogues' answers
  * for one stamp with nothing saying which was whose. They are the same chips the issue's own rows
- * draw (#227), which also makes the leading catalogue the accented one and each number copyable
- * (#420) — the state this dialog is ticked against is read off those rows.
+ * draw (#227), which also makes the leading catalogue the accented one — the state this dialog is
+ * ticked against is read off those rows.
  *
  * A stamp with neither name nor date still gets a row worth reading when it has chips, so the
  * "(unnamed)" fallback is only for the one that has nothing at all.

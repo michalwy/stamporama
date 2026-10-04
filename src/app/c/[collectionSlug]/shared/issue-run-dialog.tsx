@@ -1147,7 +1147,7 @@ export function IssueRunDialog({
                           {a.stampId ? (
                             <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem", minWidth: 0 }}>
                               {/* Inert: the row is the button that takes this tile in hand. */}
-                              {named && <CatalogNumberChips chips={named.chips} inert />}
+                              {named && <CatalogNumberChips chips={named.chips} />}
                               {(!named || named.name || named.chips.length === 0) && (
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {named ? named.name || "(unnamed stamp)" : label}

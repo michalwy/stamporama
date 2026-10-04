@@ -70,9 +70,8 @@ const CHIP: React.CSSProperties = {
  * worse than none, and the two scopes on this one line are deliberately different.
  *
  * They are the chip **styling**, not `CatalogNumberChip`: a `Tooltip` bubble is `pointer-events:
- * none` and unmounts when the pointer leaves the trigger, so click-to-copy (#420) and the chip's own
- * hint could never fire inside one. A button that cannot be pressed claims an affordance it does not
- * have; these are a read-only list, which is what the popover is for.
+ * none` and unmounts when the pointer leaves the trigger, so a chip's own hint could never fire
+ * inside one; these are a read-only list, which is what the popover is for.
  *
  * **Hover**, because the work wants it: a sorting pass scans many issue groups in a row, and a click
  * per group, each leaving a popover to dismiss, is friction on the one screen where speed is the

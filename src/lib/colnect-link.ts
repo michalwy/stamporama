@@ -63,11 +63,9 @@ export function colnectMarketUrl(
 // the one question that page answers, and it answers it with the ordinary stamp-list cards the
 // Assistant's matcher already reads (`div.pl-it`) instead of the search page's own result shape.
 //
-// The query is the catalog number as the copy chips give it (#420): the **area prefix and the
+// The query is the catalog number as `catalogSearchValue` gives it: the **area prefix and the
 // number**, the vendor abbreviation dropped — `RU-CH 35`, not `Mi·RU-CH 35`. Colnect indexes numbers
-// under country codes and knows nothing of our abbreviations, and the same rule being what the chip
-// beside it puts on the clipboard is not a coincidence: it is the string that finds this stamp on
-// somebody else's site.
+// under country codes and knows nothing of our abbreviations.
 
 const COLNECT_SEARCH_BASE = "https://colnect.com/en/stamps/list/catalog_code/";
 

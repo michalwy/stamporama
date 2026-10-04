@@ -24,7 +24,8 @@ import {
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { CatalogNumberChip } from "@/app/c/[collectionSlug]/shared/catalog-number-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { useRecordHref } from "@/app/c/[collectionSlug]/shared/use-record-href";
+import { ROW_OPEN_STYLE, RowTitleLink, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
 import {
   RowQuickActions,
@@ -433,6 +434,11 @@ interface InventoryItemRowProps {
   isLast: boolean;
   /** Read-only mode hides the row actions (used by the inventory popup, #110). */
   readOnly?: boolean;
+  /** A click on the row opens the copy's own page (#1591). Off unless asked for, because the row is
+   *  also drawn inside pickers, where a click on it **chooses** the copy — and a picker that
+   *  navigated away mid-pick would lose the pick. Every screen that lists copies to be read turns
+   *  it on. */
+  opensPage?: boolean;
   /** Replace the default edit/identify/history/delete menu with a custom action set
    * (used by the lot intake view, which offers "Remove from lot", #121). */
   actionsOverride?: RowAction[];
@@ -518,6 +524,7 @@ export function InventoryItemRow({
   vendorMap,
   isLast,
   readOnly = false,
+  opensPage = false,
   actionsOverride,
   promote,
   trailingChips,
@@ -603,7 +610,9 @@ export function InventoryItemRow({
   const excludedHere =
     !!exclusionPlatform && item.excludedPlatformIds.includes(exclusionPlatform.id);
 
-  const detailPage = useDetailPageAction("copy", item.id);
+  const copyHref = useRecordHref("copy", item.id);
+  const pageHref = opensPage ? copyHref : null;
+  const rowOpen = useRowOpen(pageHref);
   // The Valuation window for the stamp behind this copy (#114) — the same entry the stamps and
   // issues rows carry, and the last list of stamps that could not open it. Deliberately **not**
   // gated on the stamp having a catalog price, as those two rows are: the window answers three
@@ -620,7 +629,6 @@ export function InventoryItemRow({
   );
 
   const menuActions: RowAction[] = [
-    detailPage,
     ...(item.unknownVariant
       ? [{ key: "identify", label: "Identify variant", icon: "variant", onSelect: () => onIdentify?.(item) } as RowAction]
       : []),
@@ -727,20 +735,15 @@ export function InventoryItemRow({
 
   const rowActions = actionsOverride ?? menuActions;
 
-  // A read-only surface gets the way to the copy's own screen (#517). Going to a record's page is
-  // navigation, not action — `readOnly` is about not editing a copy from a screen that is not the
-  // Copies list, and it would be a strange kind of read-only that refused to let you read more.
-  // This is what puts the icon on the copies list inside the stamp and issue detail screens, and on
-  // the copies popup (#110) it shares that list with.
-  //
-  // Beside it, where the screen offers one, **Edit stamp** (#676). It does not break what read-only
-  // means: the copy is still not edited from here — what it opens is the shared editor for the
-  // *stamp* behind it, a record this surface never claimed to own. The offer's sets asked for it
-  // first, and have since outgrown read-only altogether — a full menu of their own through
-  // `actionsOverride` (#1382). A screen that does not pass `onEditStamp` still shows the one icon.
+  // A read-only surface still gets **Edit stamp** where the screen offers one (#676). It does not
+  // break what read-only means: the copy is still not edited from here — what it opens is the
+  // shared editor for the *stamp* behind it, a record this surface never claimed to own. The
+  // offer's sets asked for it first, and have since outgrown read-only altogether — a full menu of
+  // their own through `actionsOverride` (#1382). The way to the copy's own screen is the row itself
+  // (#1591), read-only or not: going to a record's page is navigation, not action.
   const actions = readOnly ? (
     <RowQuickActions
-      actions={pickRowActions(menuActions, ["detail-page", "edit-stamp"])}
+      actions={pickRowActions(menuActions, ["edit-stamp"])}
       visible={hovered}
     />
   ) : (
@@ -754,7 +757,6 @@ export function InventoryItemRow({
           screen that drops one simply shows one icon fewer. */}
       <RowQuickActions
         actions={pickRowActions(rowActions, promote ?? [
-          "detail-page",
           // The lot builder's two acts (#760), promoted for the reason the offer verbs are: pinning
           // a copy and rejecting it is one decision made per row, ninety times in a sitting. They
           // sit high in the vocabulary because on the screen that offers them they *are* the row's
@@ -788,9 +790,11 @@ export function InventoryItemRow({
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
       <div
+        {...rowOpen}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
+          ...(rowOpen ? ROW_OPEN_STYLE : {}),
           padding: "0.75rem 1.25rem",
           background: hovered
             ? "var(--color-bg-row-hover)"
@@ -821,7 +825,7 @@ export function InventoryItemRow({
                 whiteSpace: "nowrap",
               }}
             >
-              {stampName}
+              <RowTitleLink href={pageHref}>{stampName}</RowTitleLink>
             </span>
             {actions}
           </div>
@@ -841,14 +845,17 @@ export function InventoryItemRow({
 
             {(dateStr || hasIssue) && (
               <span style={META_INLINE}>
-                {dateStr}
-                {dateStr && hasIssue && ", "}
-                {hasIssue && (
-                  <>
-                    {item.issueName ?? "(unnamed issue)"}
-                    {item.issueYear ? ` (${item.issueYear})` : ""}
-                  </>
-                )}
+                {/* The link for a copy whose stamp has no name to carry it (#1591). */}
+                <RowTitleLink href={stampName ? null : pageHref}>
+                  {dateStr}
+                  {dateStr && hasIssue && ", "}
+                  {hasIssue && (
+                    <>
+                      {item.issueName ?? "(unnamed issue)"}
+                      {item.issueYear ? ` (${item.issueYear})` : ""}
+                    </>
+                  )}
+                </RowTitleLink>
               </span>
             )}
 

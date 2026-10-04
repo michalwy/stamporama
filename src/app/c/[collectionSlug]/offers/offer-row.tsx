@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { OfferListItem } from "@/lib/offers";
 import {
   isAuctionListing,
@@ -18,6 +17,7 @@ import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
+import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import {
   RowQuickActions,
   pickRowActions,
@@ -118,11 +118,11 @@ export function OfferRow({
   onDelete,
   selection,
 }: OfferRowProps) {
-  const router = useRouter();
-  const [hovered, setHovered] = useState(false);
+    const [hovered, setHovered] = useState(false);
   // The detail screen walks the same filtered list this row is in (#429), so the row hands the
   // filter context on with the offer it opens.
   const detailHref = `/c/${collectionSlug}/offers/${offer.id}${listContextQuery}`;
+  const rowOpen = useRowOpen(detailHref);
   const terminal = isTerminalState(offer.state);
   // When a running auction's standing bid was recorded (#1545) — shown beside it as an age, and in
   // full on hover. A closed listing's figure is final, so its age says nothing.
@@ -158,7 +158,6 @@ export function OfferRow({
     });
 
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open", icon: "open", href: detailHref },
     ...(offer.url
       ? [{ key: "listing", label: "Open listing", icon: "externalLink", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
       : []),
@@ -233,7 +232,7 @@ export function OfferRow({
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => router.push(detailHref)}
+        {...rowOpen}
         style={{
           position: "relative",
           flex: selection ? 1 : undefined,
@@ -274,7 +273,7 @@ export function OfferRow({
           </span>
           <span style={{ flex: 1 }} />
           {/* The two things done to an offer *from the list*: correcting its terms, and recording
-              that it sold. Deliberately not **Open** — the row itself is the offer's door, so an
+              that it sold. Nothing for opening it — the row itself is the offer's door (#1591), so an
               icon for it would aim at what the whole row already does — and deliberately not
               **Open listing**, which line 2 already carries as a labelled `Listing` chip: a
               promotion is a shortcut past the menu, not a second copy of a control on the row. */}

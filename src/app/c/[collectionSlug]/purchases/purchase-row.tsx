@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { PurchaseListItem } from "@/lib/purchases";
 import { PURCHASE_STATUS_META, type PurchaseStatus } from "@/lib/purchase-status";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -12,6 +11,7 @@ import {
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
+import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -61,10 +61,10 @@ interface PurchaseRowProps {
  * total on top, then a meta line (date · status), then the line-count / shipping chips.
  * The whole row opens the intake / lot-lifecycle detail (#121). */
 export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDelete }: PurchaseRowProps) {
-  const router = useRouter();
-  const [hovered, setHovered] = useState(false);
+    const [hovered, setHovered] = useState(false);
   const status = statusChip(p.status);
   const detailHref = `/c/${collectionSlug}/purchases/${p.id}`;
+  const rowOpen = useRowOpen(detailHref);
   // An opening balance (#1323) is named by its title and has no supplier, platform, shipping or
   // delivery status to show — only *Completed* once marked (#1461); its money figure is the lots'
   // opening values, or a sentence saying there are none.
@@ -73,7 +73,6 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
   const fallbackName = opening ? "Untitled" : "No supplier";
 
   const menuActions: RowAction[] = [
-    { key: "open", label: "Open", icon: "open", href: detailHref },
     { key: "edit", label: "Edit", icon: "edit", onSelect: () => onEdit(p) },
     {
       key: "delete",
@@ -90,7 +89,7 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => router.push(detailHref)}
+        {...rowOpen}
         style={{
           position: "relative",
           padding: "0.75rem 1.25rem",
@@ -124,9 +123,9 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
             </Tooltip>
           )}
           <span style={{ flex: 1 }} />
-          {/* A three-entry menu promotes exactly one icon, and that is the point rather than a
-              disappointment: **Open** is the row's own click and **Delete** is destructive, so
-              editing the header — supplier, date, delivery status, shipping — is the only thing
+          {/* The menu promotes exactly one icon, and that is the point rather than a
+              disappointment: opening is the row's own click (#1591) and **Delete** is destructive,
+              so editing the header — supplier, date, delivery status, shipping — is the only thing
               this list repeats without opening the purchase. */}
           <span
             onClick={(e) => e.stopPropagation()}

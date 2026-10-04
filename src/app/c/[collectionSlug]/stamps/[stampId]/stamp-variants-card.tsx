@@ -10,7 +10,7 @@ import { StampIdentity } from "@/app/c/[collectionSlug]/shared/stamp-identity";
 import { CopyCountBadge } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { RowQuickActions, pickRowActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { ROW_OPEN_STYLE, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { AddVariantRangeDialog } from "@/app/c/[collectionSlug]/shared/add-variant-range-dialog";
@@ -452,10 +452,10 @@ export function StampVariantsCard({
 }
 
 /**
- * A neighbour in the variant tree: what it is to this stamp, its identity, and the same dimmed
- * icon every row in the app carries to reach a record's own screen. A child also carries the tree's
- * own operations — in one `⋮` menu, with *Open stamp page* and *Edit* promoted to the hover icons
- * through `pickRowActions`, so a shortcut and its menu entry cannot drift.
+ * A neighbour in the variant tree: what it is to this stamp and its identity, opening that stamp's
+ * own screen on a click anywhere on it, as every list row does (#1591). A child also carries the
+ * tree's own operations — in one `⋮` menu, with *Edit* promoted to the hover icon through
+ * `pickRowActions`, so a shortcut and its menu entry cannot drift.
  */
 function RelativeRow({
   role,
@@ -489,12 +489,13 @@ function RelativeRow({
   reordering?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const detailPage = useDetailPageAction("stamp", stamp.id);
+  const pageHref = `/c/${collectionSlug}/stamps/${stamp.id}`;
+  // Not while reordering, where a press on the row is the start of a drag.
+  const rowOpen = useRowOpen(reordering ? null : pageHref);
   const vendorMap = maps.vendorMapFor(stamp.areaId, stamp.issues[0]?.issueId ?? null);
   const primaryVendorId = maps.primaryVendorByArea.get(stamp.areaId ?? "") ?? null;
 
   const actions: RowAction[] = [
-    detailPage,
     ...(onEdit ? [{ key: "edit", label: "Edit", icon: "edit" as const, onSelect: onEdit }] : []),
     ...(onDelete
       ? [
@@ -513,14 +514,18 @@ function RelativeRow({
   return (
     <div
       {...(drag?.item ?? {})}
+      {...rowOpen}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        ...(rowOpen ? ROW_OPEN_STYLE : {}),
         display: "flex",
         alignItems: "center",
         gap: "0.5rem",
         padding: "0.125rem 0",
         paddingLeft: indented ? "1rem" : 0,
+        background: hovered && rowOpen ? "var(--color-bg-row-hover)" : undefined,
+        transition: "background 0.1s ease",
         ...(drag?.style ?? {}),
       }}
     >
@@ -542,7 +547,7 @@ function RelativeRow({
         vendorMap={vendorMap}
         primaryVendorId={primaryVendorId}
         size="small"
-        href={`/c/${collectionSlug}/stamps/${stamp.id}`}
+        href={pageHref}
       />
       {showCopies && (
         <CopyCountBadge
@@ -554,16 +559,11 @@ function RelativeRow({
       <span
         style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
       >
-        {actions.length > 1 ? (
+        {actions.length > 0 && (
           <>
-            <RowQuickActions
-              actions={pickRowActions(actions, ["detail-page", "edit"])}
-              visible={hovered}
-            />
+            <RowQuickActions actions={pickRowActions(actions, ["edit"])} visible={hovered} />
             <RowActionsMenu actions={actions} ariaLabel="Variant actions" />
           </>
-        ) : (
-          <RowQuickActions actions={actions} visible={hovered} />
         )}
       </span>
     </div>

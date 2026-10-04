@@ -313,6 +313,7 @@ function CopyRow({ item, ctx, isLast }: { item: SaleCopyItem; ctx: CopyCtx; isLa
           vendorMap={vendorMap}
           isLast={isLast}
           readOnly
+          opensPage
           showCostBasis
         />
       </div>

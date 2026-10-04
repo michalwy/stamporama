@@ -192,7 +192,7 @@ function IdentifyHistoryRow({
             {/* Inert: the row is the button, and a press anywhere on it is the repeat. A stamp with
                 no number at all is named by its name, as the copies list names one. */}
             {chips.length > 0 ? (
-              <CatalogNumberChips chips={chips} inert />
+              <CatalogNumberChips chips={chips} />
             ) : (
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {number}
