@@ -10,6 +10,8 @@ import {
   DialogLinkButton,
   DialogSecondaryButton,
   DialogShell,
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
 } from "@/app/dialog-shell";
 import {
   addTileCandidateAction,
@@ -697,10 +699,14 @@ export function TileIdentifyDialog({
       // is named by its size, there being no one position to name it after.
       title={tile ? `Tile ${tile.position + 1}` : `${count} tiles selected`}
       onClose={onClose}
-      // Sized for the picture rather than for the text beside it, and the same shape as the cut
-      // editor: the two surfaces that show a scan large are the two that are worth a whole screen.
-      maxWidth="min(96vw, 82rem)"
-      height="90vh"
+      // All the room the window has, up to the shell's margin, in both directions (#1598) — the
+      // Measure and mark window's size (#1388), and for its reason: the perforation, the watermark
+      // and the size are read off the piece, and only as well as the piece is large. The outcome
+      // column keeps its own width, so everything gained is the viewer's and *Fit* fills it; as a
+      // size of the window it follows the window when that is resized, and on a small one the
+      // viewer gives way first and the form keeps its column.
+      maxWidth={DIALOG_MAX_WIDTH}
+      height={DIALOG_MAX_HEIGHT}
       // While the *what to check* field is open, Escape belongs to **it** (#597): abandoning the
       // note is not abandoning the tile, and a collector three words into a doubt who presses
       // Escape means "not like that", not "close everything". The shared layer stack listens on the
