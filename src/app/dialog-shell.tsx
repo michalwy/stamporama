@@ -9,6 +9,7 @@ import {
   type Ref,
 } from "react";
 
+import { baseBtn } from "@/app/button-style";
 import { useEscapeLayer } from "@/app/escape-stack";
 import { Icon } from "@/app/icons";
 import { usePageScrollLock } from "@/app/page-scroll-lock";
@@ -308,41 +309,6 @@ export function DialogFooter({ children, error }: { children: ReactNode; error?:
 }
 
 // ── Buttons ───────────────────────────────────────────────────────────────────
-
-/**
- * Every dialog button, so the three variants are the same shape and only their colours differ.
- *
- * Two details exist to keep a footer's buttons the **same height**, which they were not:
- *
- * - `inline-flex` centring rather than the default inline layout. `Icon` is an inline-block with a
- *   `vertical-align` below the baseline, so an icon inside a button stretches its line box and the
- *   button grows — leaving *Discard* and *Assign…* a couple of pixels taller than a plain-text
- *   primary beside them. Laid out as a centred flex row, the icon no longer participates in a line
- *   box at all. Deliberately **no `gap`**: call sites write `<Icon /> Label`, and that literal space
- *   is their spacing — adding a gap would silently widen every one of them.
- * - a **transparent** border rather than none. The secondary and destructive variants draw a 1px
- *   border; without a placeholder here the primary would be 2px shorter whenever the content
- *   exceeds `minHeight`.
- *
- * And a **label never wraps** (#1553). A footer is a flex row, and a flex item shrinks to its
- * longest word: beside a long hint line the cut editor's *Cut 33 tiles* broke into *Cut 33* /
- * *tiles* and stood taller than *Cancel*. `nowrap` with `flexShrink: 0` leaves the shrinking to
- * whatever text sits beside the buttons, which wraps onto more lines instead.
- */
-const baseBtn: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flexShrink: 0,
-  whiteSpace: "nowrap",
-  minHeight: "2.25rem",
-  padding: "0.375rem 1rem",
-  borderRadius: "0.375rem",
-  fontSize: "0.875rem",
-  fontWeight: 500,
-  cursor: "pointer",
-  border: "1px solid transparent",
-};
 
 /** `ComponentPropsWithRef` rather than plain attributes so a `ref` reaches the button: a grid whose
  *  Tab walk ends at Save (#726) has to be able to put focus on it. */
