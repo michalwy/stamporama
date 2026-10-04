@@ -3,6 +3,17 @@ import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createCollection } from "../../src/lib/collections";
 import { fetchEcbRateOn, getOrFetchRate } from "../../src/lib/exchange-rates";
+import { installEcbStub } from "../fixtures/ecb/stub";
+
+// The ECB is answered from its own recorded responses (#1648): the suite is a required check, and a
+// 504 from the ECB must not fail a pull request. `tests/fixtures/ecb/stub.ts` says what was recorded.
+let restoreFetch: () => void;
+before(() => {
+  restoreFetch = installEcbStub();
+});
+after(() => {
+  restoreFetch();
+});
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({
@@ -124,14 +135,14 @@ describe("getOrFetchRate", () => {
 
   it("handles cross-currency conversion via EUR pivot", async () => {
     const result = await getOrFetchRate(collectionId, "USD", "GBP");
-    assert.ok(result.rate > 0);
-    assert.ok(result.rate < 1);
+    // 2026-10-02's table: USD 1.1225 and GBP 0.85033 per EUR.
+    assert.ok(Math.abs(result.rate - 0.85033 / 1.1225) < 1e-12, `USD → GBP was ${result.rate}`);
     assert.equal(result.isStale, false);
   });
 });
 
-// A past day's rate (#1633), for a price observed at a sale long before today's snapshot. Like the
-// rest of this file it reads the ECB itself; the figures are the ECB's published reference rates.
+// A past day's rate (#1633), for a price observed at a sale long before today's snapshot. The figures
+// are the ECB's published reference rates, out of the recorded data API response.
 describe("fetchEcbRateOn", () => {
   it("reads the rate of the day, pivoted through EUR", async () => {
     // Friday 2021-03-05: PLN 4.5748 and CHF 1.1066 per EUR.
@@ -149,5 +160,23 @@ describe("fetchEcbRateOn", () => {
 
   it("needs no request for a currency into itself", async () => {
     assert.equal(await fetchEcbRateOn(new Date("2021-03-05T00:00:00Z"), "EUR", "EUR"), 1);
+  });
+
+  it("throws, saying so, when the ECB cannot answer", async () => {
+    const stubbed = globalThis.fetch;
+    globalThis.fetch = async () => new Response("Gateway Timeout", { status: 504 });
+    try {
+      await assert.rejects(
+        () => fetchEcbRateOn(new Date("2021-03-05T00:00:00Z"), "PLN", "EUR"),
+        /ECB historic fetch failed: 504/
+      );
+    } finally {
+      globalThis.fetch = stubbed;
+    }
+  });
+
+  it("throws when the ECB quotes neither currency in the window", async () => {
+    // The recorded window holds CHF and PLN only, as the API would for a key naming them.
+    await assert.rejects(() => fetchEcbRateOn(new Date("2021-03-05T00:00:00Z"), "PLN", "SEK"));
   });
 });
