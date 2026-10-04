@@ -1611,133 +1611,141 @@ export function IssueRunDialog({
                   {fields
                     .filter((f) => RUN_PIECE_FIELDS.includes(f))
                     .map((field) => ownField(field, active.tileId))}
-                  {/* The tile's faults (#1558) — its own and nothing else, so no *as for all*: a
-                      fault belongs to one piece. Opened on the faults marked on the tile. */}
-                  <div
-                    style={{
-                      padding: "0.375rem 0.5rem",
-                      borderRadius: "0.375rem",
-                      border: "1px solid var(--color-border)",
-                    }}
-                  >
+                  {/* The tile's faults and tags side by side, each half the row (#1640), as in the
+                      condition step: both are short lists of chips. */}
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                    {/* The tile's faults (#1558) — its own and nothing else, so no *as for all*: a
+                        fault belongs to one piece. Opened on the faults marked on the tile. */}
                     <div
                       style={{
-                        fontSize: "0.8125rem",
-                        color: "var(--color-text-secondary)",
-                        marginBottom: "0.375rem",
+                        flex: 1,
+                        minWidth: 0,
+                        padding: "0.375rem 0.5rem",
+                        borderRadius: "0.375rem",
+                        border: "1px solid var(--color-border)",
                       }}
                     >
-                      <strong>Faults</strong>
-                      <span style={{ color: "var(--color-text-muted)" }}> — this tile&apos;s only</span>
-                      <SeedOriginNote
-                        origin={
-                          !faults.has(active.tileId) && markFaultIds(active.mark).length > 0
-                            ? "marked"
-                            : null
-                        }
-                      />
-                    </div>
-                    {faultDictionary ? (
-                      <FaultEntryField
-                        key={active.tileId}
-                        collectionId={collectionId}
-                        inputId={`run-faults-${active.tileId}`}
-                        name={null}
-                        initialFaults={faultsOf(active).flatMap((f) => {
-                          if (f.id === null) return [f];
-                          const fault = faultDictionary.find((d) => d.id === f.id);
-                          return fault ? [{ id: fault.id, name: fault.name }] : [];
-                        })}
-                        disabled={isPending}
-                        onChange={(entries) =>
-                          setFaults((prev) => new Map(prev).set(active.tileId, entries))
-                        }
-                      />
-                    ) : (
-                      <p style={MUTED}>Loading…</p>
-                    )}
-                  </div>
-                  {/* The tile's tags (#1599): the run's, with its own added and any of the run's
-                      dropped — the field shows the whole of what the copy gets. Opened on the run's
-                      tags and the ones marked on the tile. */}
-                  {(() => {
-                    const tileId = active.tileId;
-                    const isOwn = hasOwnTags(sharedTags, ownTags.get(tileId));
-                    return (
                       <div
                         style={{
-                          padding: "0.375rem 0.5rem",
-                          borderRadius: "0.375rem",
-                          border: `1px solid ${isOwn ? "var(--color-accent)" : "var(--color-border)"}`,
-                          background: isOwn ? "var(--color-accent-soft)" : "transparent",
+                          fontSize: "0.8125rem",
+                          color: "var(--color-text-secondary)",
+                          marginBottom: "0.375rem",
                         }}
                       >
+                        <strong>Faults</strong>
+                        <span style={{ color: "var(--color-text-muted)" }}> — this tile&apos;s only</span>
+                        <SeedOriginNote
+                          origin={
+                            !faults.has(active.tileId) && markFaultIds(active.mark).length > 0
+                              ? "marked"
+                              : null
+                          }
+                        />
+                      </div>
+                      {faultDictionary ? (
+                        <FaultEntryField
+                          key={active.tileId}
+                          collectionId={collectionId}
+                          inputId={`run-faults-${active.tileId}`}
+                          name={null}
+                          initialFaults={faultsOf(active).flatMap((f) => {
+                            if (f.id === null) return [f];
+                            const fault = faultDictionary.find((d) => d.id === f.id);
+                            return fault ? [{ id: fault.id, name: fault.name }] : [];
+                          })}
+                          disabled={isPending}
+                          onChange={(entries) =>
+                            setFaults((prev) => new Map(prev).set(active.tileId, entries))
+                          }
+                        />
+                      ) : (
+                        <p style={MUTED}>Loading…</p>
+                      )}
+                    </div>
+                    {/* The tile's tags (#1599): the run's, with its own added and any of the run's
+                        dropped — the field shows the whole of what the copy gets. Opened on the run's
+                        tags and the ones marked on the tile. */}
+                    {(() => {
+                      const tileId = active.tileId;
+                      const isOwn = hasOwnTags(sharedTags, ownTags.get(tileId));
+                      return (
                         <div
                           style={{
-                            display: "flex",
-                            alignItems: "baseline",
-                            gap: "0.375rem",
-                            fontSize: "0.8125rem",
-                            color: "var(--color-text-secondary)",
-                            marginBottom: "0.375rem",
+                            flex: 1,
+                            minWidth: 0,
+                            padding: "0.375rem 0.5rem",
+                            borderRadius: "0.375rem",
+                            border: `1px solid ${isOwn ? "var(--color-accent)" : "var(--color-border)"}`,
+                            background: isOwn ? "var(--color-accent-soft)" : "transparent",
                           }}
                         >
-                          <span style={{ flex: 1, minWidth: 0 }}>
-                            <strong>Tags</strong>
-                            <span style={{ color: "var(--color-text-muted)" }}>
-                              {isOwn ? " — this tile's own" : " — as for all"}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "baseline",
+                              gap: "0.375rem",
+                              fontSize: "0.8125rem",
+                              color: "var(--color-text-secondary)",
+                              marginBottom: "0.375rem",
+                            }}
+                          >
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <strong>Tags</strong>
+                              <span style={{ color: "var(--color-text-muted)" }}>
+                                {isOwn ? " — this tile's own" : " — as for all"}
+                              </span>
+                              <SeedOriginNote
+                                origin={
+                                  isOwn && !tagsTouched.has(tileId) && markTagIds(active.mark).length > 0
+                                    ? "marked"
+                                    : null
+                                }
+                              />
                             </span>
-                            <SeedOriginNote
-                              origin={
-                                isOwn && !tagsTouched.has(tileId) && markTagIds(active.mark).length > 0
-                                  ? "marked"
-                                  : null
-                              }
-                            />
-                          </span>
-                          {isOwn && (
-                            <button
-                              type="button"
+                            {isOwn && (
+                              <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() => {
+                                  setOwnTags((prev) => {
+                                    const next = new Map(prev);
+                                    next.delete(tileId);
+                                    return next;
+                                  });
+                                  setTagsTouched((prev) => new Set(prev).add(tileId));
+                                  setTagResets((n) => n + 1);
+                                }}
+                                style={{ ...CREATE_LINK_STYLE, border: "none", padding: 0 }}
+                              >
+                                As for all
+                              </button>
+                            )}
+                          </div>
+                          {tagDictionary ? (
+                            <TagEntryField
+                              // Opened afresh when the run's tags change, so it always shows what
+                              // this tile's copy gets.
+                              key={`${tileId}|${sharedTags.map(tagEntryKey).join(",")}|${tagResets}`}
+                              collectionId={collectionId}
+                              name={null}
+                              inputId={`run-tags-${tileId}`}
+                              initialTags={namedTags(tagsOf(active))}
                               disabled={isPending}
-                              onClick={() => {
-                                setOwnTags((prev) => {
-                                  const next = new Map(prev);
-                                  next.delete(tileId);
-                                  return next;
-                                });
+                              hint={null}
+                              onChange={(entries) => {
+                                setOwnTags((prev) =>
+                                  new Map(prev).set(tileId, ownTagsFrom(sharedTags, entries))
+                                );
                                 setTagsTouched((prev) => new Set(prev).add(tileId));
-                                setTagResets((n) => n + 1);
                               }}
-                              style={{ ...CREATE_LINK_STYLE, border: "none", padding: 0 }}
-                            >
-                              As for all
-                            </button>
+                            />
+                          ) : (
+                            <p style={MUTED}>Loading…</p>
                           )}
                         </div>
-                        {tagDictionary ? (
-                          <TagEntryField
-                            // Opened afresh when the run's tags change, so it always shows what
-                            // this tile's copy gets.
-                            key={`${tileId}|${sharedTags.map(tagEntryKey).join(",")}|${tagResets}`}
-                            collectionId={collectionId}
-                            name={null}
-                            inputId={`run-tags-${tileId}`}
-                            initialTags={namedTags(tagsOf(active))}
-                            disabled={isPending}
-                            hint={null}
-                            onChange={(entries) => {
-                              setOwnTags((prev) =>
-                                new Map(prev).set(tileId, ownTagsFrom(sharedTags, entries))
-                              );
-                              setTagsTouched((prev) => new Set(prev).add(tileId));
-                            }}
-                          />
-                        ) : (
-                          <p style={MUTED}>Loading…</p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                      );
+                    })()}
+                  </div>
                   {fields
                     .filter((f) => !RUN_PIECE_FIELDS.includes(f))
                     .map((field) => ownField(field, active.tileId))}

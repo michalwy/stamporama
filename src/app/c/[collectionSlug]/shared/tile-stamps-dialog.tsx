@@ -67,11 +67,11 @@ export function TileStampsDialog({
       title="Stamps on this piece"
       onClose={onClose}
       dismissable={!pickerOpen}
-      // The condition step's own shape, since this sits exactly over it (#1613).
+      // The condition step's own shape, since this sits exactly over it (#1613, #1640).
       maxWidth={aside ? DIALOG_MAX_WIDTH : "44rem"}
       height={aside ? DIALOG_MAX_HEIGHT : undefined}
       aside={aside}
-      asideWidth="max(16rem, 100% - 40rem)"
+      asideWidth="max(16rem, 100% - 50rem)"
     >
       <DialogBody>
         <p

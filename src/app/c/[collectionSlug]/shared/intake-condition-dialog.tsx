@@ -778,13 +778,14 @@ function IntakeConditionDialog({
       onClose={onClose}
       // The same size as the tile dialog one step back (#1598), which is where this picture was last
       // seen: the window less the shell's margin, so going from one step to the other does not
-      // resize anything (#1613). The form keeps the 40rem column it has always had and the viewer
-      // takes the rest, so *Fit* fills the added room; on a small window the viewer gives way first,
-      // down to a floor under which the form starts to give way too.
+      // resize anything (#1613). The form keeps a fixed column — a quarter wider than the 40rem it
+      // had, so faults and tags fit side by side (#1640) — and the viewer takes the rest, so *Fit*
+      // fills the added room; on a small window the viewer gives way first, down to a floor under
+      // which the form starts to give way too.
       maxWidth={pieceAside ? DIALOG_MAX_WIDTH : "36rem"}
       height={pieceAside ? DIALOG_MAX_HEIGHT : undefined}
       aside={pieceAside}
-      asideWidth="max(16rem, 100% - 40rem)"
+      asideWidth="max(16rem, 100% - 50rem)"
     >
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>
@@ -1012,39 +1013,73 @@ function IntakeConditionDialog({
             )}
           </div>
 
-          {/* The copy's faults (#1558), with the piece in hand: straight after condition, certificate
-              and format, because they describe the piece and are worked out with it, while the
-              catalogue value below is looked up afterwards (#1593). Opened on the faults marked on
-              the tiles, or empty — never the last tile's, since a fault belongs to one piece. */}
-          {askFaults && (
-            <div style={{ marginTop: "0.75rem" }}>
-              <LabelWithError htmlFor="intake-faults">
-                Faults (optional)
-                <SeedOriginNote origin={faultsOrigin} />
-              </LabelWithError>
-              {faultDictionary ? (
-                <FaultEntryField
-                  collectionId={collectionId}
-                  inputId="intake-faults"
-                  initialFaults={seededFaults}
-                  disabled={isPending}
-                  onChange={(entries) => {
-                    if (!sameFaults(entries.map((e) => e.id ?? `new:${e.name}`), seeds.faults.faultIds)) {
-                      setFaultsOrigin(null);
-                    }
-                  }}
-                />
-              ) : (
-                <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+          {/* The copy's faults (#1558) and tags (#1599), with the piece in hand: straight after
+              condition, certificate and format, because they describe the piece and are worked out
+              with it, while the catalogue value below is looked up afterwards (#1593). Side by side,
+              each half the row (#1640): both are short lists of chips, and one above the other ran
+              the step long enough to scroll for *Location* and the buttons. Each grows downwards as
+              chips are added, its hint under it. Faults open on the faults marked on the tiles, or
+              empty — never the last tile's, since a fault belongs to one piece; tags on the tags
+              marked on the tiles, or empty — never the last used. *To check*, *for expertising* are
+              often known while identifying, and a new name becomes a tag when the step is saved, as
+              on a copy. */}
+          {(askFaults || askTags) && (
+            <div
+              style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", marginTop: "0.75rem" }}
+            >
+              {askFaults && (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <LabelWithError htmlFor="intake-faults">
+                    Faults (optional)
+                    <SeedOriginNote origin={faultsOrigin} />
+                  </LabelWithError>
+                  {faultDictionary ? (
+                    <FaultEntryField
+                      collectionId={collectionId}
+                      inputId="intake-faults"
+                      initialFaults={seededFaults}
+                      disabled={isPending}
+                      onChange={(entries) => {
+                        const ids = entries.map((e) => e.id ?? `new:${e.name}`);
+                        if (!sameFaults(ids, seeds.faults.faultIds)) setFaultsOrigin(null);
+                      }}
+                    />
+                  ) : (
+                    <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+                  )}
+                </div>
+              )}
+              {askTags && (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <LabelWithError htmlFor="intake-tags">
+                    Tags (optional)
+                    <SeedOriginNote origin={tagsOrigin} />
+                  </LabelWithError>
+                  {tagDictionary ? (
+                    <TagEntryField
+                      collectionId={collectionId}
+                      name="copyTags"
+                      inputId="intake-tags"
+                      initialTags={seededTags}
+                      disabled={isPending}
+                      onChange={(entries) => {
+                        if (!sameFaults(entries.map(tagEntryKey), seeds.tags.tagIds)) setTagsOrigin(null);
+                      }}
+                    />
+                  ) : (
+                    <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+                  )}
+                </div>
               )}
             </div>
           )}
 
           {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
-              Under the row it is keyed on, with only the faults between (#1593) — a catalogue price
-              belongs to a condition × certificate, and its input keeps that row's columns so it
-              still lines up under the Condition control it follows. The format picked beside it is *not* one of those
-              answers: the figure always lands on the single, with a multiple's value derived from it.
+              Under the row it is keyed on, with only the faults and tags between (#1593, #1640) — a
+              catalogue price belongs to a condition × certificate, and its input keeps that row's
+              columns so it still lines up under the Condition control it follows. The format picked
+              beside it is *not* one of those answers: the figure always lands on the single, with a
+              multiple's value derived from it.
               One field, the primary catalogue only: the full quick-price dialog stays for the
               multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
               intake only, the rule photos and the format field follow — one figure cannot be the
@@ -1066,33 +1101,6 @@ function IntakeConditionDialog({
                   : undefined
               }
             />
-          )}
-
-          {/* The copy's tags (#1599), after the faults and the catalogue value — which #1593 keeps
-              under its condition row with only the faults between. *To check*, *for expertising*
-              are often known while identifying. Opened on the tags marked on the tiles, or empty: never the
-              last used. A new name becomes a tag when the step is saved, as on a copy. */}
-          {askTags && (
-            <div style={{ marginTop: "0.75rem" }}>
-              <LabelWithError htmlFor="intake-tags">
-                Tags (optional)
-                <SeedOriginNote origin={tagsOrigin} />
-              </LabelWithError>
-              {tagDictionary ? (
-                <TagEntryField
-                  collectionId={collectionId}
-                  name="copyTags"
-                  inputId="intake-tags"
-                  initialTags={seededTags}
-                  disabled={isPending}
-                  onChange={(entries) => {
-                    if (!sameFaults(entries.map(tagEntryKey), seeds.tags.tagIds)) setTagsOrigin(null);
-                  }}
-                />
-              ) : (
-                <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
-              )}
-            </div>
           )}
 
           {/* Storage location (#56/#121): optional at intake, shared by every created copy.
