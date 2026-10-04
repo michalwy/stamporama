@@ -20,6 +20,7 @@ import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults"
 import { NO_FAULTS } from "@/lib/fault-filter";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { DISPOSITION_FILTERS } from "./copies-list-filters";
+import { dispositionTint } from "@/app/c/[collectionSlug]/shared/disposition-colors";
 
 /**
  * The Copies list's filter controls — delivery state, disposition, condition, certificate, format,
@@ -194,7 +195,11 @@ export function CopiesFilterControls({
         <FilterSlot width={FILTER_WIDTH.dispositions}>
           <MultiSelectFilter
             fullWidth
-            options={DISPOSITION_FILTERS.map((f) => ({ id: f.key, label: f.label }))}
+            options={DISPOSITION_FILTERS.map((f) => ({
+              id: f.key,
+              label: f.label,
+              tint: dispositionTint(f.key),
+            }))}
             selected={DISPOSITION_FILTERS.map((f) => f.key).filter((key) =>
               activeDispositions.has(key)
             )}

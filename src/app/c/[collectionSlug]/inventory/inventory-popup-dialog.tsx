@@ -5,6 +5,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import { DELIVERY_STATES, DELIVERY_STATE_META } from "@/lib/delivery-state";
 import { DialogShell, DialogBody } from "@/app/dialog-shell";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { dispositionTint } from "@/app/c/[collectionSlug]/shared/disposition-colors";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
 import {
@@ -158,6 +159,7 @@ export function InventoryPopupDialog({
               key={key}
               label={label}
               active={dispositions.includes(key)}
+              tint={dispositionTint(key)}
               onClick={() => toggleDisposition(key)}
             />
           ))}

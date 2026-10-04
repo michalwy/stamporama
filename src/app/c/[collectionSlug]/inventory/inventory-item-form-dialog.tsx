@@ -41,6 +41,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { dispositionToggleColors } from "@/app/c/[collectionSlug]/shared/disposition-colors";
 
 // The tree-select trigger defaults to a compact toolbar height (min-h-8). Inside this
 // dialog it sits beside INPUT_STYLE inputs (~2.25rem, 0.5rem vertical padding), so bump
@@ -833,6 +834,9 @@ function DispositionField({
       >
         {DISPOSITIONS.map(({ key, label }, i) => {
           const active = disposition[key];
+          // The chosen ones take their disposition's colour (#1646); the joined box keeps its own
+          // edges, so only the text and the fill are borrowed.
+          const { color, background } = dispositionToggleColors(key, active);
           return (
             <button
               key={key}
@@ -847,8 +851,8 @@ function DispositionField({
                 padding: "0.5rem 0.85rem",
                 border: "none",
                 borderLeft: i === 0 ? undefined : "1px solid var(--color-border-strong)",
-                background: active ? "var(--color-accent-soft)" : "var(--color-bg-page)",
-                color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                background,
+                color,
                 fontSize: "0.8125rem",
                 fontWeight: active ? 600 : 500,
                 cursor: disabled ? "not-allowed" : "pointer",

@@ -4,6 +4,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/app/icons";
 import { foldForSearch } from "@/lib/fold-for-search";
+import type { TagColorTokens } from "@/lib/tag-colors";
 import { TextInput } from "./text-input";
 import {
   FILTER_MENU_HEADING_STYLE,
@@ -48,8 +49,12 @@ export function MultiSelectFilter({
    * must be **adjacent** — the menu draws a heading whenever the value changes, so the caller's
    * order is the grouping. Used where one control holds options that do not all pull the same way:
    * the Copies list's spare filters both narrow the list and widen it, and the headings are what
-   * say which is which. Leave it off and the menu is a flat checklist as before. */
-  options: { id: string; label: string; group?: string }[];
+   * say which is which. Leave it off and the menu is a flat checklist as before.
+   *
+   * `tint` draws the option's label as a chip in a colour the value has everywhere else (#1646) —
+   * the dispositions, so the menu names them the way the copy rows do. The trigger stays neutral,
+   * like every other filter in the bar. */
+  options: { id: string; label: string; group?: string; tint?: TagColorTokens }[];
   /** The selected ids. Empty is "every value" — the absence of a filter, not an empty set. */
   selected: string[];
   onChange: (ids: string[]) => void;
@@ -238,7 +243,22 @@ export function MultiSelectFilter({
                       onChange={() => toggle(o.id)}
                       style={{ cursor: "pointer" }}
                     />
-                    {o.label}
+                    {o.tint ? (
+                      <span
+                        style={{
+                          padding: "0 0.4rem",
+                          border: `1px solid ${o.tint.border}`,
+                          borderRadius: "0.375rem",
+                          color: o.tint.color,
+                          background: o.tint.background,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {o.label}
+                      </span>
+                    ) : (
+                      o.label
+                    )}
                   </label>
                 </Fragment>
               ))}

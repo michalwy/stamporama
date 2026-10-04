@@ -192,6 +192,11 @@ import {
 import { resolveLocationRefChoice } from "@/lib/location-ref";
 import { Icon } from "@/app/icons";
 import {
+  dispositionChipColors,
+  dispositionToggleColors,
+  type DispositionKey,
+} from "@/app/c/[collectionSlug]/shared/disposition-colors";
+import {
   CHIP,
   DISPOSITION_FLAGS,
   DispositionChips,
@@ -241,16 +246,24 @@ const DELIVERY_ADVANCE_ORDER = ["ordered", "in_transit", "to_sort", "delivered"]
  * copies are about one thing, and two vocabularies for it would read as two. */
 const DISPOSITION_FILTERS: readonly {
   key: CopyDispositionFilter;
+  /** The flag it narrows to, whose colour a lit chip takes (#1646). */
+  flag: DispositionKey;
   label: string;
   hint: string;
 }[] = [
   {
     key: "in-collection",
+    flag: "inCollection",
     label: "In collection",
     hint: "Show only the copies kept for the collection",
   },
-  { key: "for-sale", label: "For sale", hint: "Show only the copies kept as stock" },
-  { key: "for-trade", label: "For trade", hint: "Show only the copies kept for trading" },
+  { key: "for-sale", flag: "forSale", label: "For sale", hint: "Show only the copies kept as stock" },
+  {
+    key: "for-trade",
+    flag: "forTrade",
+    label: "For trade",
+    hint: "Show only the copies kept for trading",
+  },
 ];
 
 /** Which lots the order shows by their state (#1394): the ones still being worked, or the ones
@@ -1379,7 +1392,7 @@ export function PurchaseDetailPanel({
         {purchase.lots.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span style={TOOLBAR_LABEL}>Kept for</span>
-            {DISPOSITION_FILTERS.map(({ key, label, hint }) => {
+            {DISPOSITION_FILTERS.map(({ key, flag, label, hint }) => {
               const on = dispositionFilter === key;
               return (
                 <Tooltip key={key} content={on ? "Click to show every copy again" : hint}>
@@ -1391,9 +1404,7 @@ export function PurchaseDetailPanel({
                       ...CHIP,
                       cursor: "pointer",
                       fontWeight: on ? 600 : 500,
-                      color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: on ? "var(--color-accent)" : "var(--color-border)",
-                      background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                      ...dispositionToggleColors(flag, on),
                     }}
                   >
                     {on && <Icon name="check" size="xs" />} {label}
@@ -4421,9 +4432,7 @@ function StoreCopiesDialog({
                       ...CHIP,
                       cursor: isPending ? "not-allowed" : "pointer",
                       fontWeight: on ? 600 : 500,
-                      color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
-                      borderColor: on ? "var(--color-accent)" : "var(--color-border)",
-                      background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+                      ...dispositionToggleColors(d.key, on),
                       opacity: keepDisposition ? 0.6 : 1,
                     }}
                   >
@@ -4561,7 +4570,7 @@ function LotCopyChips({
         <DispositionInline item={item} onSet={onSetDisposition} />
       ) : (
         DISPOSITION_FLAGS.filter((d) => item[d.key]).map((d) => (
-          <span key={d.key} style={CHIP}>
+          <span key={d.key} style={{ ...CHIP, ...dispositionChipColors(d.key) }}>
             {d.label}
           </span>
         ))

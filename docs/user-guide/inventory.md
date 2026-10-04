@@ -21,6 +21,10 @@ Each row shows:
   [Condition and certificate colours](collections.md#condition-and-certificate-colours)).
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
   any combination at once. Copies you intend to sell are composed into [offers](offers.md).
+  Each has its own colour wherever it appears — *In collection* green, *For sale* blue,
+  *For trade* violet — on the rows, the filters, the copy page, the Overview and the held-copies
+  lines. Where you choose a disposition (adding or identifying a copy, the run, storing a lot), the
+  ones you picked take their colour and the others stay grey.
 - The copy's **catalog value** (see [Copy value and holdings total](#copy-value-and-holdings-total)).
 - Its **cost-basis** — what the copy actually cost you — when it came from a
   [purchase](purchases.md) (see [Cost-basis](#cost-basis)).
