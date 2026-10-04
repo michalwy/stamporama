@@ -14,6 +14,7 @@ import {
 import { exactCopiesListHref } from "./inventory/copies-list-filters";
 import { OverviewAreasDialog } from "./overview-areas-dialog";
 import { RowLink, ROW_LINK_ABOVE } from "./shared/row-link";
+import { dispositionTint, isDispositionKey } from "./shared/disposition-colors";
 import {
   useOverviewHoldings,
   useOverviewProgress,
@@ -228,9 +229,13 @@ function HoldingsRow({
   figure: HoldingsFigure;
   count: number;
 }) {
+  // A disposition's figure is named in its colour (#1646), as its chips are everywhere else.
+  const labelStyle = isDispositionKey(figure.key)
+    ? { ...HOLDINGS_ROW_LABEL_STYLE, color: dispositionTint(figure.key).color }
+    : HOLDINGS_ROW_LABEL_STYLE;
   return (
     <Link href={holdingsHref(base, figure)} style={HOLDINGS_ROW_STYLE}>
-      <span style={HOLDINGS_ROW_LABEL_STYLE}>{figure.label}</span>
+      <span style={labelStyle}>{figure.label}</span>
       <span style={count === 0 ? undefined : HOLDINGS_COUNT_STYLE}>{count}</span>
     </Link>
   );

@@ -217,9 +217,9 @@ export function CopyDetailPanel({
               </span>
             </Tooltip>
           )}
-          {item.inCollection && <StateChip label="In collection" />}
-          {item.forSale && <StateChip label="For sale" />}
-          {item.forTrade && <StateChip label="For trade" />}
+          {item.inCollection && <StateChip label="In collection" token="disposition-collection" />}
+          {item.forSale && <StateChip label="For sale" token="disposition-sale" />}
+          {item.forTrade && <StateChip label="For trade" token="disposition-trade" />}
           <StateChip
             label={deliveryStateLabel(item.deliveryState)}
             token={deliveryStateToken(item.deliveryState)}

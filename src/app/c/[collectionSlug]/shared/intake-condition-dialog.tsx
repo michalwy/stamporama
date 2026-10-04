@@ -78,6 +78,7 @@ import { FaultEntryField } from "./fault-entry-field";
 import { TagEntryField } from "./tag-entry-field";
 import { useCollectionFaults } from "./use-faults";
 import { useCollectionTags } from "./use-tags";
+import { dispositionToggleColors } from "./disposition-colors";
 
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
@@ -225,9 +226,7 @@ function DispositionChips({
               ...CHIP,
               cursor: disabled ? "default" : "pointer",
               fontWeight: on ? 600 : 500,
-              color: on ? "var(--color-accent)" : "var(--color-text-secondary)",
-              borderColor: on ? "var(--color-accent)" : "var(--color-border)",
-              background: on ? "var(--color-accent-soft)" : "var(--color-bg-page)",
+              ...dispositionToggleColors(d.key, on),
             }}
           >
             <Icon name={on ? "check" : "add"} size="xs" /> {d.label}

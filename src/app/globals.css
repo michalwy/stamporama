@@ -19,13 +19,15 @@
   --color-info: #1d4ed8;
   --color-info-soft: #dbeafe;
   --color-info-border: #bfdbfe;
-  /* Inventory disposition chips (distinct hues, soft tint) */
-  --color-disposition-collection: #15803d;
-  --color-disposition-collection-soft: #dcfce7;
-  --color-disposition-collection-border: #86efac;
-  --color-disposition-sale: #1d4ed8;
-  --color-disposition-sale-soft: #dbeafe;
-  --color-disposition-sale-border: #93c5fd;
+  /* Inventory disposition chips (distinct hues, soft tint). In collection is green, for sale blue,
+     for trade violet (#1646) — but an emerald and a sky rather than the green and blue of `success`,
+     `info` and the tag palette, so a disposition never wears exactly a condition's colour. */
+  --color-disposition-collection: #047857;
+  --color-disposition-collection-soft: #d1fae5;
+  --color-disposition-collection-border: #6ee7b7;
+  --color-disposition-sale: #0369a1;
+  --color-disposition-sale-soft: #e0f2fe;
+  --color-disposition-sale-border: #7dd3fc;
   --color-disposition-trade: #7c3aed;
   --color-disposition-trade-soft: #ede9fe;
   --color-disposition-trade-border: #c4b5fd;
