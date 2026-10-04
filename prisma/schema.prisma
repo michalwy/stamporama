@@ -4391,6 +4391,10 @@ model AuctionLot {
   // because a lot that simply vanished from view yields no datapoint (#24) — that is not an error
   // state, just an absent observation.
   maxBid         Decimal? @db.Decimal(10, 2)
+  // How the ceiling set apart was reached (#1627) — *MNH, no certificate, recommend_bid fair* —
+  // written with it through the agent API. It explains `maxBid` and nothing else, so any write that
+  // changes or clears `maxBid` without restating it clears it too.
+  ceilingNote    String?
   finalPrice     Decimal? @db.Decimal(10, 2)
   // Base-currency FX rate frozen when the outcome was recorded, at `endsAt` (#354), reusing the
   // `ExchangeRate` mechanism (#20) exactly as `Purchase` does at `purchasedAt` (ADR-0009 §4). Extra

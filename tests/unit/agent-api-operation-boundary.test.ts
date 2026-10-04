@@ -252,6 +252,12 @@ describe("the agent API's operation modules (#711, #712)", () => {
  * `auctionLotExposure`, `countAuctionLots` and `findLotsForListings` are the reads #1036 exposes; a
  * `captureAuctionLot` dry run is a read in practice and is still here, because the same function
  * with `dryRun: false` creates the lot and an import cannot say which it will be called with.
+ *
+ * **#1627 opened the auction writes without taking a row off this map.** What the agent may write
+ * goes through writers of its own — {@link AUCTION_API_WRITES} — each of which sets the *to review*
+ * marker in its own transaction and none of which writes the collector's bid. So every writer here
+ * stays closed: the screen's writers do not mark, and `setAuctionLotMyBid`, `recordAuctionLotTransition`
+ * (#1628's), `settleAuctionSale` and the deletes are acts the collector kept.
  */
 const AUCTION_WRITES = new Map<string, string>([
   ["createAuctionSale", "creates a sale"],
@@ -265,6 +271,8 @@ const AUCTION_WRITES = new Map<string, string>([
   ["touchAuctionLotChecked", "stamps a bid as freshly checked"],
   ["setAuctionLotMyBid", "records a bid the collector placed"],
   ["setAuctionLotMaxBid", "sets the collector's ceiling"],
+  // Missing from this map from #1515 until #1627's verb sweep below found it.
+  ["setAuctionLotMyBidAndCeiling", "records the collector's bid and ceiling in one write (#1515)"],
   ["setAuctionLotNotStamps", "marks a lot as not stamps, or removes the mark (#1624)"],
   ["recordAuctionLotTransition", "closes, cancels or reopens a lot, recording its result"],
   ["createAuctionLotLine", "describes what a lot holds"],
@@ -277,6 +285,91 @@ const AUCTION_WRITES = new Map<string, string>([
   ["confirmAuctionLotReviews", "clears the to-review marker on lots (#1626)"],
   ["confirmAuctionSaleReview", "clears the to-review marker on a sale and its lots (#1626)"],
 ]);
+
+/**
+ * The writers #1627 opened to the agent, and the one module that may reach them.
+ *
+ * **A map of what is allowed, where every other map in this file is what is not**, because the rule
+ * here is a property of the writers rather than of their callers: each one sets the *to review*
+ * marker (#1626) in the write's own transaction, and none writes `myBid` — the collector's bid,
+ * placed by hand on the platform (*the API writes the register and never bids*, the collector,
+ * 2026-10-04). Both are read off `auctions.ts` below, so a writer that stopped marking, or started
+ * bidding, turns this red whoever calls it.
+ */
+const AUCTION_API_WRITES = new Map<string, string>([
+  ["addAuctionLotThroughApi", "adds a lot, joining or starting its sale"],
+  ["updateAuctionLotThroughApi", "corrects a lot and records the auction's current bid"],
+  ["replaceAuctionLotLinesThroughApi", "replaces what a lot holds"],
+  ["setAuctionLotCeilingThroughApi", "sets or clears a lot's ceiling, with its note"],
+  ["updateAuctionSaleThroughApi", "edits a sale's terms"],
+]);
+
+const AUCTION_API_MODULE = path.join(AGENT_API, "operations/auction-writes.ts");
+
+/** The source of one exported function of `auctions.ts`, from its signature to its closing brace. */
+function exportedFunctionBody(source: string, name: string): string {
+  const file = ts.createSourceFile("auctions.ts", source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
+  for (const statement of file.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === name && statement.body) {
+      return statement.body.getText(file);
+    }
+  }
+  throw new Error(`\`${name}\` is not a function of src/lib/auctions.ts any more`);
+}
+
+describe("the auction writes the agent API may make (#1627)", () => {
+  const domain = readFileSync(path.join(ROOT, "src/lib/auctions.ts"), "utf8");
+
+  it("are reached from their own operation module and nowhere else", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      if (file === AUCTION_API_MODULE) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (AUCTION_API_WRITES.has(name)) breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(breaches, [], `The auction writes belong to operations/auction-writes.ts.\n  ${breaches.join("\n  ")}`);
+    // The control: the walk sees that module import every one of them.
+    const names = importedBindings(AUCTION_API_MODULE).map((binding) => binding.name);
+    for (const name of AUCTION_API_WRITES.keys()) {
+      assert.ok(names.includes(name), `the walk did not see \`${name}\` in operations/auction-writes.ts`);
+    }
+  });
+
+  it("each set the to-review marker", () => {
+    for (const name of AUCTION_API_WRITES.keys()) {
+      assert.match(
+        exportedFunctionBody(domain, name),
+        /markAuction(Lot|Sale)WrittenByApi\(tx,/,
+        `\`${name}\` writes through the agent API without setting the to-review marker in its transaction (#1626)`
+      );
+    }
+  });
+
+  it("never write the collector's bid", () => {
+    for (const name of AUCTION_API_WRITES.keys()) {
+      assert.doesNotMatch(
+        exportedFunctionBody(domain, name),
+        /myBid/,
+        `\`${name}\` touches \`myBid\` — the agent API never bids (#1627)`
+      );
+    }
+  });
+
+  it("leave every other writer of the module on the closed map", () => {
+    // **Anything in `auctions.ts` that writes** is on one of the two maps — read off its exports by
+    // verb, so a writer added later has to be placed before this goes green again.
+    const writers = [...domain.matchAll(/export async function ((?:create|update|set|delete|record|settle|capture|confirm|mark|touch|add|replace)[A-Za-z]*)\(/g)].map(
+      (match) => match[1]
+    );
+    assert.ok(writers.length >= AUCTION_WRITES.size, `found only ${writers.length} writers in auctions.ts`);
+    const unplaced = writers.filter((name) => !AUCTION_WRITES.has(name) && !AUCTION_API_WRITES.has(name));
+    assert.deepEqual(unplaced, [], "every writer in auctions.ts is on AUCTION_WRITES or AUCTION_API_WRITES");
+    for (const name of AUCTION_API_WRITES.keys()) {
+      assert.ok(!AUCTION_WRITES.has(name), `\`${name}\` is on both maps`);
+    }
+  });
+});
 
 describe("the agent API's operation modules (#1036)", () => {
   it("reach no domain function that writes to the auction watchlist", () => {
@@ -294,7 +387,7 @@ describe("the agent API's operation modules (#1036)", () => {
     assert.deepEqual(
       breaches,
       [],
-      `The agent only reads auctions: no lot, sale, bid or line is created or changed through it (#1036).\n  ${breaches.join("\n  ")}`
+      `The screen's auction writers stay closed to the agent (#1036); what it writes goes through AUCTION_API_WRITES (#1627).\n  ${breaches.join("\n  ")}`
     );
   });
 
@@ -674,7 +767,8 @@ describe("the agent API's operation modules (#1539)", () => {
  * reach it.
  *
  * **A boundary of its own, and meant to outlive {@link AUCTION_WRITES}.** That map holds the auction
- * writers away from the agent while it only reads auctions, and #1627 opens most of them to it. This
+ * writers away from the agent while it only reads auctions, and #1627 was expected to open most of
+ * them — it opened writers of its own instead ({@link AUCTION_API_WRITES}). This
  * one does not open: the collector accepts an assistant writing lots only if everything it wrote is
  * visibly waiting for review, so the marker is set by every API write and cleared by the
  * collector's *Confirm* alone. An operation that could clear it could hide its own work from the

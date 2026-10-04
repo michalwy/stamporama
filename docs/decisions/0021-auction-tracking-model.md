@@ -224,6 +224,11 @@ two to one figure, and a stored copy would have had to be kept in step on every 
 bid. The lots screen therefore has no Ceiling column; a ceiling set apart is shown under the bid.
 `docs/agents/auctions.md` carries the detail.
 
+**Amended by #1627: a ceiling set apart may carry a note on how it was reached.** The agent API sets
+ceilings from its recommendation, and the collector wants the reasoning kept beside the figure.
+`ceilingNote` explains `maxBid` and nothing else: written with it through the API, and cleared by any
+write that changes or clears `maxBid`, so it never explains a figure it was not written for.
+
 Four things settled when this was built (#353), all of them consequences of the reuse rather than
 new policy:
 

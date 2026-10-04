@@ -391,13 +391,25 @@ export async function setAuctionLotTagEntries(
   if (!lot) throw new Error("Lot not found.");
   const { collectionId } = lot.auctionSale;
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.$transaction(async (tx) => {
-    const valid = await resolveTagEntries(tx, collectionId, entries);
-    await tx.auctionLotTag.deleteMany({ where: { auctionLotId: lotId, tagId: { notIn: valid } } });
-    await tx.auctionLotTag.createMany({
-      data: valid.map((tagId) => ({ auctionLotId: lotId, tagId })),
-      skipDuplicates: true,
-    });
+  await prisma.$transaction((tx) => replaceAuctionLotTagsTx(tx, collectionId, lotId, entries));
+}
+
+/**
+ * {@link setAuctionLotTagEntries}' replace, inside a transaction the caller already holds — the agent
+ * API's writes (#1627), whose tags must land in the same transaction as the lot and the *to review*
+ * marker. Ownership is the caller's: `lotId` must already be proved a lot of `collectionId`.
+ */
+export async function replaceAuctionLotTagsTx(
+  tx: DbTransaction,
+  collectionId: string,
+  lotId: string,
+  entries: readonly TagEntry[]
+): Promise<void> {
+  const valid = await resolveTagEntries(tx, collectionId, entries);
+  await tx.auctionLotTag.deleteMany({ where: { auctionLotId: lotId, tagId: { notIn: valid } } });
+  await tx.auctionLotTag.createMany({
+    data: valid.map((tagId) => ({ auctionLotId: lotId, tagId })),
+    skipDuplicates: true,
   });
 }
 

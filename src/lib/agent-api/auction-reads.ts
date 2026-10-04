@@ -17,9 +17,9 @@
 //
 // ## Read only, by absence
 //
-// **No create-, edit- or bid-shaped auction operation exists** (the collector, 2026-09-10): the agent
-// reads, and adding a listing to the watchlist stays a decision the collector makes in the app after
-// reading the report. Nothing in this file could write if it wanted to, and nothing in
+// *No create-, edit- or bid-shaped auction operation exists* (the collector, 2026-09-10) held until
+// #1627 opened the register — `operations/auction-writes.ts`, whose answers reuse {@link watchlistLot}.
+// No bid-shaped one exists still. Nothing in this file could write if it wanted to, and nothing in
 // `operations/auctions.ts` imports a function that does — `tests/unit/agent-api-operation-boundary.test.ts`
 // fails if one ever does.
 
@@ -33,6 +33,7 @@ import { compact } from "./collection-reads";
 /** One lot as the watchlist projection reads it — the subset of `AuctionLotListItem` it states. */
 export interface WatchlistLotRow {
   readonly id: string;
+  readonly saleId: string;
   readonly saleName: string;
   readonly sellerName: string;
   readonly platformName: string;
@@ -53,6 +54,8 @@ export interface WatchlistLotRow {
   readonly maxBid: string | null;
   readonly ceiling: string | null;
   readonly ceilingSetApart: boolean;
+  /** How the ceiling set apart was reached, when the agent API set it with a note (#1627). */
+  readonly ceilingNote: string | null;
   readonly bidRoom: string | null;
   readonly standing: "leading" | "outbid" | null;
   readonly overCeiling: boolean | null;
@@ -75,6 +78,12 @@ export interface WatchlistLotRow {
   }[];
   /** The collector's own labels on the lot (#1625), already in the dictionary's order. */
   readonly tags: readonly { readonly name: string }[];
+  /** The *to review* marker (#1626) — `ApiReviewMark`, structurally — or null when nothing waits. */
+  readonly apiReview: {
+    readonly at: string;
+    readonly created: boolean;
+    readonly fields: readonly string[];
+  } | null;
 }
 
 /** A lot's tags as the agent reads them (#1625): the names, in the order the app lists them. A tag's
@@ -95,6 +104,8 @@ export interface AgentWatchlistLot {
   readonly platformLotNo?: string;
   readonly url?: string;
   readonly sale: string;
+  /** The sale's id — what `update_auction_sale` takes. */
+  readonly saleId: string;
   readonly seller: string;
   readonly platform: string;
   readonly currency: string;
@@ -117,6 +128,8 @@ export interface AgentWatchlistLot {
   readonly ceiling?: string;
   /** The ceiling was set apart from the bid and stays put when the bid changes. */
   readonly ceilingSetApart: boolean;
+  /** How the ceiling set apart was reached, as `set_auction_lot_ceiling` recorded it (#1627). */
+  readonly ceilingNote?: string;
   /** The highest hammer price whose all-in cost still fits inside {@link ceiling}. */
   readonly ceilingBid?: string;
   /** `leading` while the placed bid still covers the price, `outbid` once it does not. */
@@ -155,6 +168,14 @@ export interface AgentWatchlistLot {
     readonly possibleConditions?: readonly string[];
     readonly conditionUnknown?: true;
   }[];
+  /** What the agent API wrote to this lot that the collector has not yet confirmed (#1626): it
+   *  `created` the lot, and/or `changed` these fields, the latest `at` this instant. Absent when
+   *  nothing waits for review. Only the collector clears it, in the app. */
+  readonly toReview?: {
+    readonly at: string;
+    readonly created: boolean;
+    readonly changed: readonly string[];
+  };
   /** Where the lot is in the app, relative to this instance: its sale's screen, focused on it. */
   readonly path: string;
 }
@@ -199,6 +220,7 @@ export function watchlistLot(row: WatchlistLotRow, now: Date, path: string): Age
     platformLotNo: row.lotNo,
     url: row.url,
     sale: row.saleName,
+    saleId: row.saleId,
     seller: row.sellerName,
     platform: row.platformName,
     currency: row.currency,
@@ -212,6 +234,7 @@ export function watchlistLot(row: WatchlistLotRow, now: Date, path: string): Age
     myBidAllIn: row.myAllIn,
     ceiling: row.ceiling,
     ceilingSetApart: row.ceilingSetApart,
+    ceilingNote: row.ceilingNote,
     ceilingBid: row.bidRoom,
     standing: row.standing,
     overCeiling: row.overCeiling,
@@ -238,6 +261,9 @@ export function watchlistLot(row: WatchlistLotRow, now: Date, path: string): Age
                 conditionUnknown: line.unknown ? (true as const) : undefined,
               }) as { stamp: string; possibleConditions?: string[]; conditionUnknown?: true }
           ),
+    toReview: row.apiReview
+      ? { at: row.apiReview.at, created: row.apiReview.created, changed: [...row.apiReview.fields] }
+      : undefined,
     path,
   }) as AgentWatchlistLot;
 }

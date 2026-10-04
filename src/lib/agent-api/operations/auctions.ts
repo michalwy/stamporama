@@ -26,15 +26,14 @@ import type { Operation, OperationContext, ParsedParams } from "../types";
 // on new Allegro listings could not make before: which lots are open and how each stands, what they
 // can cost, and whether a listing in the mail is one it reported yesterday.
 //
-// ## Read only, and no lot is created
+// ## Read only here, and no lot is created from this module
 //
 // The collector, 2026-09-10: *the agent only reads from Stamporama — it does not create auctions
-// automatically, at least at this stage.* So there is no create-, edit- or bid-shaped auction
-// operation at all, **as an absence rather than a switch** (`agent-api.md`, *What is deliberately
-// absent*). Adding a listing to the watchlist stays the collector's decision, made in the app after
-// reading the report. This module imports three reads from `auctions.ts` and nothing that writes;
-// `tests/unit/agent-api-operation-boundary.test.ts` fails if that changes, whatever the operation is
-// called.
+// automatically, at least at this stage.* That stage ended with #1627, whose writes live in
+// `operations/auction-writes.ts` and go through writers of their own that mark every write for
+// review and never bid. This module still imports three reads from `auctions.ts` and nothing that
+// writes; `tests/unit/agent-api-operation-boundary.test.ts` fails if that changes, whatever the
+// operation is called.
 //
 // ## Everything is `src/lib/` exposed rather than reinvented
 //
@@ -109,13 +108,13 @@ export const listAuctionWatchlistOperation: Operation = {
   method: "GET",
   path: "/auctions/lots",
   description:
-    "The auction lots the collector is following and that are still open, soonest closing first — each with its closing time, what the auction stands at, the bid the collector placed, their ceiling, and whether they are leading or outbid. Read this before reporting on new listings: a listing already here is not new, and an open lot is money already committed. Nothing here bids, creates or edits a lot; adding one to the watchlist is the collector's decision.",
+    "The auction lots the collector is following and that are still open, soonest closing first — each with its closing time, what the auction stands at, the bid the collector placed, their ceiling, and whether they are leading or outbid. Read this before reporting on new listings: a listing already here is not new, and an open lot is money already committed. This only reads; `add_auction_lot` adds a listing the collector has decided to bid on, and nothing bids.",
   writes: false,
   parameters: [],
   result: {
     kind: "list",
     description:
-      "The open lots. Every amount is in the lot's own `currency`, the sale's. Three amounts are different things and must not be merged: `currentBid` is what the auction stood at when it was last looked at (dated by `checkedAt` — refreshing it is manual, so an old `checkedAt` means an old price), `myBid` is the proxy maximum the collector placed with the platform, and `ceiling` is their private valuation, **already all-in** — premium included — so `ceilingBid` is the highest hammer price that still fits inside it. The ceiling follows the bid unless `ceilingSetApart` is true: it is then `myBidAllIn`, and moves whenever the bid does. `currentBidAllIn` and `myBidAllIn` add the buyer's premium and never shipping, which belongs to the parcel. `standing` is `leading` while `myBid` covers `currentBid` and `outbid` once it does not; it is absent when either is unrecorded. `signals` are the lots screen's own: `bid-possible` (the ceiling leaves room above the price), `outbid`, `leading`, `over-ceiling` (the price all-in has passed the ceiling) and `won-pending` (the lot has closed with the collector ahead and nobody has recorded the result). `ended: true` means the closing time has passed: `standing` is then where the bidding was last seen, not a confirmed result. `notStamps: true` marks a lot that is not stamps — a catalogue, literature, an accessory — with `notStampsDescription` saying what it is when the collector did: it lists no stamps and has no catalogue value, and a won one becomes an expense on the purchase. `tags` are the collector's own labels on the lot, by name — free words such as `agent-found` or `for the Danzig album`, empty when it carries none. `catalogueValue` is what the described contents list at, and `recommended` the lots screen's recommended figure (`recommend_bid`'s `fair`) — both absent until the lot is described. `conditionToSettle: true` means some line's condition is unknown or one of several (*MNH or MH*): `unsettledLines` names them with their `possibleConditions` (or `conditionUnknown` for any grade), the figures are then ranges — `catalogueValue` and `recommended` are the low end, the cautious one to compare with, and `catalogueValueHigh` / `recommendedHigh` the top — and a won lot cannot be settled into its purchase until each line has one condition. Lots the collector has closed or cancelled are not listed.",
+      "The open lots. Every amount is in the lot's own `currency`, the sale's. Three amounts are different things and must not be merged: `currentBid` is what the auction stood at when it was last looked at (dated by `checkedAt` — refreshing it is manual, so an old `checkedAt` means an old price), `myBid` is the proxy maximum the collector placed with the platform, and `ceiling` is their private valuation, **already all-in** — premium included — so `ceilingBid` is the highest hammer price that still fits inside it. The ceiling follows the bid unless `ceilingSetApart` is true: it is then `myBidAllIn`, and moves whenever the bid does. `currentBidAllIn` and `myBidAllIn` add the buyer's premium and never shipping, which belongs to the parcel. `standing` is `leading` while `myBid` covers `currentBid` and `outbid` once it does not; it is absent when either is unrecorded. `signals` are the lots screen's own: `bid-possible` (the ceiling leaves room above the price), `outbid`, `leading`, `over-ceiling` (the price all-in has passed the ceiling) and `won-pending` (the lot has closed with the collector ahead and nobody has recorded the result). `ended: true` means the closing time has passed: `standing` is then where the bidding was last seen, not a confirmed result. `saleId` names the lot's sale, for `update_auction_sale`. `ceilingNote` says how a ceiling set apart was reached, when `set_auction_lot_ceiling` recorded one. `toReview` is present while what the agent API wrote to the lot (`created`, and the fields it `changed`) waits for the collector to confirm it. `notStamps: true` marks a lot that is not stamps — a catalogue, literature, an accessory — with `notStampsDescription` saying what it is when the collector did: it lists no stamps and has no catalogue value, and a won one becomes an expense on the purchase. `tags` are the collector's own labels on the lot, by name — free words such as `agent-found` or `for the Danzig album`, empty when it carries none. `catalogueValue` is what the described contents list at, and `recommended` the lots screen's recommended figure (`recommend_bid`'s `fair`) — both absent until the lot is described. `conditionToSettle: true` means some line's condition is unknown or one of several (*MNH or MH*): `unsettledLines` names them with their `possibleConditions` (or `conditionUnknown` for any grade), the figures are then ranges — `catalogueValue` and `recommended` are the low end, the cautious one to compare with, and `catalogueValueHigh` / `recommendedHigh` the top — and a won lot cannot be settled into its purchase until each line has one condition. Lots the collector has closed or cancelled are not listed.",
   },
   handler: async (context, params) => readAuctionWatchlist(context, params),
 };
@@ -181,7 +180,7 @@ export const findTrackedAuctionLotsOperation: Operation = {
   method: "GET",
   path: "/auctions/tracked",
   description:
-    "Whether the collection already follows the auctions behind some listings — send each listing's link or its offer number, as many as a mail holds, and learn for each whether a lot records it, which lot, and how it stands. This is how a listing reported yesterday is told from a new one. It is the same lookup the Stamporama browser extension makes on a listing page, so the two cannot disagree. It only reads: a listing that is not tracked stays untracked until the collector adds it.",
+    "Whether the collection already follows the auctions behind some listings — send each listing's link or its offer number, as many as a mail holds, and learn for each whether a lot records it, which lot, and how it stands. This is how a listing reported yesterday is told from a new one. It is the same lookup the Stamporama browser extension makes on a listing page, so the two cannot disagree. It only reads: a listing that is not tracked stays untracked until it is added — by the collector, or with `add_auction_lot` once they decide to bid.",
   writes: false,
   parameters: [
     {

@@ -390,9 +390,7 @@ whether you already track it, which lot it is, and how it ended if you have clos
 come out of the same code your lots screen uses, so it cannot give you a different number from the
 one you would see there.
 
-- **It only looks.** It does not add a listing to your watchlist, bid, change a ceiling or close a
-  lot — a listing it tells you is new stays untracked until you add it. A **read only** token can
-  ask all of this.
+- **Reading needs only a read only token.** Listing, costing and recognising lots changes nothing.
 - **Whatever it ever writes to your auctions waits for you.** Every lot or sale written through the
   agent API is marked **To review · API**, saying what was added or changed and when, and only you
   can clear that mark — by pressing **Confirm** on the lot, on the lots you tick, or on the whole
@@ -405,6 +403,29 @@ one you would see there.
 - **It recognises an Allegro offer number, not a house's lot number.** A listing at another auction
   house is recognised by the address saved on its lot, never by `Lot 42`, which means something
   different in every house's catalogue.
+
+**And once you decide to bid on a listing it found, it can put the lot on your watchlist for you**,
+with a writing token, instead of you typing it in. It can:
+
+- **add the lot** — where it is listed and who sells it, its address and number, title, starting
+  price, closing time, the stamps in it, its tags and a ceiling. The lot lands in the sale it belongs
+  to by the same rule as **Add lot**: on Allegro the seller's open sale; on Philasearch the house's
+  open sale *of that name* (*Köhler 385*), since a house's next auction is a new parcel. A sale it
+  starts takes the seller's usual premium and shipping.
+- **say what is in it** — each stamp with its grade, and where the listing does not say the grade,
+  the grades it may be in (*MNH or MH*) or *unknown*, exactly as you can on the lot yourself. A lot
+  that is not stamps can be marked so.
+- **set or clear the ceiling**, with a note on how it worked it out, which you can read by hovering
+  the ceiling.
+- **record what the auction stands at**, with when it looked, and **correct** the lot's title,
+  number, address, closing time, starting price and tags, and a sale's name, address, closing time,
+  currency, premium and shipping.
+
+A listing you already track is never added twice: it is refused, and the assistant is told which lot
+has it. **It never bids**: it does not touch *my bid* — the bid you place by hand on the platform —
+and it does not close, cancel or settle a lot. **Every lot and sale it writes is marked
+*To review · API* until you confirm it.** A seller you have never bought from is not created by
+adding a lot; the assistant adds them as a contact first, as it does for a purchase.
 
 **Everything it writes is on a screen you already know, and is undone there.**
 
@@ -420,8 +441,8 @@ Two things it will never do, however you ask, and they are absent rather than sw
   else's platform.
 - **It never reaches a counterparty.** It can build and balance a trade; it does not send a
   proposal, share a link, agree or close a trade, answer what a partner wrote on one, or write to
-  Colnect. Nor does it bid on anything: working out what a lot is worth is as far as it goes, and
-  typing a figure into an auction house's box stays with you. It also never sees a partner's email address, telephone number or the notes you keep
+  Colnect. Nor does it bid on anything: working out what a lot is worth and keeping your watchlist
+  is as far as it goes, and typing a figure into an auction house's box stays with you. It also never sees a partner's email address, telephone number or the notes you keep
   about them — the only thing it is told about a person is their name.
 
 And with a **read only** token it changes nothing at all, which is the setting to start from.

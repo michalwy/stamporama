@@ -138,7 +138,7 @@ async function loadSellerCandidates(context: OperationContext): Promise<SellerCa
   });
 }
 
-async function resolveSellerParam(
+export async function resolveSellerParam(
   context: OperationContext,
   value: string,
   parameter: string
@@ -456,7 +456,7 @@ const CREATE_PURCHASE_PARAMETERS: readonly ParameterSpec[] = [
   SHIPPING_PARAMETER,
 ];
 
-async function resolvePlatformParam(
+export async function resolvePlatformParam(
   context: OperationContext,
   value: string
 ): Promise<string> {

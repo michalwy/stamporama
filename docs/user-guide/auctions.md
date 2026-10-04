@@ -284,6 +284,10 @@ your bid, when the bid costs more than it all-in. **Clear ceiling** in the same 
 the bid again, and so does clearing the figure under the bid. The **Separate ceiling** field when
 you add or edit a lot is the same thing: left empty, the ceiling follows the bid.
 
+A ceiling an [AI assistant](agent-api.md) set can carry a **note on how it was reached** — the grade
+and certificate its recommendation assumed, say. Hover the ceiling to read it. The note belongs to
+that figure: change or clear the ceiling yourself and the note goes with it.
+
 Lots tracked before this worked the old way keep their figures: a ceiling that was simply the bid's
 own all-in — including one set with the old `REC` and then bid with `CEIL`, a cent apart from
 rounding — now follows the bid, and any other ceiling shows as one set apart.

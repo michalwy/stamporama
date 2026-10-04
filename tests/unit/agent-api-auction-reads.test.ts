@@ -25,6 +25,7 @@ const PATH = "/c/mine/auctions/sales/s1?lot=l1";
 function rowOf(overrides: Partial<WatchlistLotRow> = {}): WatchlistLotRow {
   return {
     id: "l1",
+    saleId: "s1",
     saleName: "Philkam · Allegro",
     sellerName: "Philkam",
     platformName: "Allegro",
@@ -45,6 +46,7 @@ function rowOf(overrides: Partial<WatchlistLotRow> = {}): WatchlistLotRow {
     maxBid: "70.00",
     ceiling: "70.00",
     ceilingSetApart: true,
+    ceilingNote: null,
     bidRoom: "62.72",
     standing: "leading",
     overCeiling: false,
@@ -59,6 +61,7 @@ function rowOf(overrides: Partial<WatchlistLotRow> = {}): WatchlistLotRow {
     recommendation: null,
     conditionToSettle: false,
     unsettledLines: [],
+    apiReview: null,
     ...overrides,
   };
 }
