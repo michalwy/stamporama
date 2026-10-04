@@ -3,12 +3,15 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+import { useEscapeLayer } from "@/app/escape-stack";
 import { TextInput } from "./text-input";
 
 // Shared flat search-suggestion autocomplete primitive (#109). A single
@@ -38,18 +41,50 @@ export const SEARCH_INPUT_STYLE: CSSProperties = {
 };
 
 const DROPDOWN_STYLE: CSSProperties = {
-  position: "absolute",
-  top: "100%",
-  left: 0,
-  right: 0,
-  marginTop: "0.25rem",
+  position: "fixed",
+  boxSizing: "border-box",
   background: "var(--color-bg-elevated)",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
   boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-  maxHeight: "12rem",
   overflowY: "auto",
 };
+
+/** The list's height when the window has room for it (12rem). */
+const DROPDOWN_MAX_HEIGHT = 192;
+/** Between the field and its list, and between the list and the window's edge. */
+const DROPDOWN_GAP = 4;
+const VIEWPORT_MARGIN = 8;
+
+/** The rank of the surface the field sits in — the dialog panel, usually — read off the nearest
+ * ancestors that set one, so the list is drawn just above whatever it was opened in without each
+ * caller having to know its dialog's `zIndexBase`. */
+function surfaceRank(el: HTMLElement): number {
+  let rank = 0;
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const z = Number.parseInt(getComputedStyle(node).zIndex, 10);
+    if (Number.isFinite(z)) rank = Math.max(rank, z);
+  }
+  return rank;
+}
+
+/** Draw the portaled list against its field: under it, or over it when the window has no room
+ * below, and never taller than the window leaves it. */
+function placeDropdown(anchor: HTMLElement, list: HTMLElement, floor: number) {
+  const rect = anchor.getBoundingClientRect();
+  const wanted = Math.min(list.scrollHeight, DROPDOWN_MAX_HEIGHT);
+  const below = window.innerHeight - rect.bottom - DROPDOWN_GAP - VIEWPORT_MARGIN;
+  const above = rect.top - DROPDOWN_GAP - VIEWPORT_MARGIN;
+  // Below when it fits there; otherwise on whichever side has more room, cut to that room.
+  const down = wanted <= below || below >= above;
+  const style = list.style;
+  style.left = `${rect.left}px`;
+  style.width = `${rect.width}px`;
+  style.zIndex = String(Math.max(floor, surfaceRank(anchor) + 1));
+  style.top = down ? `${rect.bottom + DROPDOWN_GAP}px` : "";
+  style.bottom = down ? "" : `${window.innerHeight - rect.top + DROPDOWN_GAP}px`;
+  style.maxHeight = `${Math.max(0, Math.min(wanted, down ? below : above))}px`;
+}
 
 const OPTION_STYLE: CSSProperties = {
   padding: "0.375rem 0.625rem",
@@ -102,7 +137,8 @@ export interface AutocompleteProps<T> {
   inputStyle?: CSSProperties;
   inputId?: string;
   disabled?: boolean;
-  /** Dropdown stacking order (default 30). */
+  /** The lowest rank the dropdown is drawn at (default 30); inside a dialog it is raised above the
+   *  dialog on its own. */
   zIndex?: number;
   /** Whether the dropdown may open for a query (default: non-empty when trimmed). */
   canOpen?: (value: string) => boolean;
@@ -130,6 +166,7 @@ export function Autocomplete<T>({
   const [isOpen, setIsOpen] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
   const listboxId = `${baseId}-listbox`;
 
@@ -138,19 +175,48 @@ export function Autocomplete<T>({
   const showDropdown = isOpen && optionKeys.length > 0;
   const activeOptionId = activeKey ? `${baseId}-${activeKey}` : undefined;
 
-  // Close on any click outside the input+dropdown.
+  // The list is portaled to `<body>` with fixed positioning (#1597), so a dialog's scrolling body
+  // can never clip it. Placed before paint after every render while open — its rows change with
+  // each keystroke, and so does the room it needs — and written straight onto the element, since
+  // the place is a measurement and not something the render decides.
+  useLayoutEffect(() => {
+    if (showDropdown && containerRef.current && listRef.current) {
+      placeDropdown(containerRef.current, listRef.current, zIndex);
+    }
+  });
+
+  // While its list is up the autocomplete is the topmost escape layer, so Escape closes the list and
+  // leaves the dialog it sits in open (#1597). It cannot stop the key from the input: the escape
+  // stack listens on the document in the capture phase and would close the dialog first.
+  useEscapeLayer(() => setIsOpen(false), showDropdown);
+
+  // Close on any click outside the input+dropdown, and on a scroll or resize that would leave the
+  // fixed list behind its field — except a scroll *within* the list, which is how a long one is read.
   useEffect(() => {
     if (!isOpen) return;
+    function inside(target: EventTarget | null) {
+      return (
+        target instanceof Node &&
+        (containerRef.current?.contains(target) || listRef.current?.contains(target))
+      );
+    }
     function onPointerDown(e: PointerEvent) {
-      if (
-        e.target instanceof Node &&
-        !containerRef.current?.contains(e.target)
-      ) {
-        setIsOpen(false);
-      }
+      if (!inside(e.target)) setIsOpen(false);
+    }
+    function onScroll(e: Event) {
+      if (!inside(e.target)) setIsOpen(false);
+    }
+    function onResize() {
+      setIsOpen(false);
     }
     document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
   }, [isOpen]);
 
   // Keep the highlighted row scrolled into view during keyboard navigation.
@@ -267,12 +333,19 @@ export function Autocomplete<T>({
         onKeyDown={handleKeyDown}
         style={inputStyle ?? SEARCH_INPUT_STYLE}
       />
-      {showDropdown && (
-        <div id={listboxId} role="listbox" style={{ ...DROPDOWN_STYLE, zIndex }}>
-          {items.map((item) => renderRow(getItemKey(item), renderItem(item)))}
-          {actions.map((action) => renderRow(action.key, action.node, action.style))}
-        </div>
-      )}
+      {showDropdown &&
+        createPortal(
+          <div
+            ref={listRef}
+            id={listboxId}
+            role="listbox"
+            style={DROPDOWN_STYLE}
+          >
+            {items.map((item) => renderRow(getItemKey(item), renderItem(item)))}
+            {actions.map((action) => renderRow(action.key, action.node, action.style))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

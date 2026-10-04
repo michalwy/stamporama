@@ -34,6 +34,8 @@ the condition. The copy's own page opens the same dialog from its **Edit** butto
 
 - **Press ↓** in the empty field to see every fault you have not picked yet, or **start typing** to
   narrow the list; click a fault, or highlight it and press Enter, to add it.
+  The list opens upwards when the field is near the bottom of the window, and **Escape** closes the
+  list without closing the dialog.
 - **A name that is not on your list** becomes a new fault: type it and press Enter, or pick
   *New fault "…"*. It is added to your list when you save the copy, at the end of the order — a
   cancelled dialog adds nothing.
