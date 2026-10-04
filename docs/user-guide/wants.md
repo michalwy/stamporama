@@ -218,9 +218,9 @@ leading catalog abbreviation narrows the number to that catalog.
 
 Open wants come first, High priority before the rest.
 
-Hovering a row brings up two shortcuts beside its **⋮** menu: **open the stamp's page** —
-for its catalogue numbers, the prices the range came from, or the copies you hold — and
-**edit the want**. Both are still in the menu; the icons are a shortcut, not a move.
+**Click a row** to open the stamp's page — for its catalogue numbers, the prices the range came
+from, or the copies you hold. Hovering a row brings up a shortcut to **edit the want** beside its
+**⋮** menu; it is still in the menu too, the icon is a shortcut, not a move.
 
 ### On the stamp's and the copy's own pages
 

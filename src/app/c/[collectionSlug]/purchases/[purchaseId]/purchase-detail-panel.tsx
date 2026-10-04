@@ -2347,6 +2347,7 @@ function CopyRow({
       vendorMap={vendorMap}
       isLast={false}
       readOnly={!open}
+      opensPage
       highlight={highlight}
       onSetCatalogPrice={open ? () => copy.setQuickPriceItem(item) : undefined}
       onSetLocation={open ? () => copy.setBulkMove({ kind: "ids", ids: [item.id] }) : undefined}

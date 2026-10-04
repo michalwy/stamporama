@@ -63,7 +63,7 @@ import { parseEntityNoSearch } from "./quick-jump";
 import { normalizeDescriptionFormat, type DescriptionFormat } from "./description-format";
 import { loadColnectConditionMap } from "./colnect";
 import { colnectGradeFor } from "./colnect-conditions";
-import { catalogChipCopyValueFromLabel } from "./catalog-number";
+import { catalogSearchValueFromLabel } from "./catalog-number";
 import { composeSetCatalogKeys, composeSetSearchText } from "./offer-compose-search";
 import { colnectMarketUrl, colnectSaleCode, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
@@ -4576,7 +4576,7 @@ function platformItemsFor(
         // the long way round to a link that is right there.
         searchUrl: colnectId
           ? null
-          : colnectSearchUrl(searchLabel ? catalogChipCopyValueFromLabel(searchLabel) : null),
+          : colnectSearchUrl(searchLabel ? catalogSearchValueFromLabel(searchLabel) : null),
         marketUrl: colnectMarketUrl(colnectId, grade?.marketSlug ?? null),
         catalogItemVariant: variantLabel,
         catalogItemVariantChosen: resolved?.sourceChosen ?? false,

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
+import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { AuctionSaleView } from "../use-auctions-query";
 import { SaleStatusChip } from "../auction-badges";
@@ -28,12 +28,11 @@ export function AuctionSaleRow({
   onEdit,
   onDelete,
 }: AuctionSaleRowProps) {
-  const router = useRouter();
-  const [hovered, setHovered] = useState(false);
+    const [hovered, setHovered] = useState(false);
   const detailHref = `/c/${collectionSlug}/auctions/sales/${sale.id}`;
+  const rowOpen = useRowOpen(detailHref);
 
   const actions: RowAction[] = [
-    { key: "open", label: "Open", icon: "open", href: detailHref },
     ...(sale.url
       ? [
           {
@@ -81,7 +80,7 @@ export function AuctionSaleRow({
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => router.push(detailHref)}
+        {...rowOpen}
         style={{
           position: "relative",
           padding: "0.75rem 1.25rem",

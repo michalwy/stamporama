@@ -13,6 +13,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
+import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -82,6 +83,8 @@ export function TradeRow({
   onDelete,
 }: TradeRowProps) {
   const [hovered, setHovered] = useState(false);
+  const detailHref = `/c/${collectionSlug}/trades/${t.id}`;
+  const rowOpen = useRowOpen(detailHref);
   const status = statusChip(t.status);
 
   const menuActions: RowAction[] = [
@@ -106,6 +109,8 @@ export function TradeRow({
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
       <div
+        // The chip lines are lifted above the link (#557); a click there opens the trade too (#1591).
+        {...rowOpen}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -116,7 +121,7 @@ export function TradeRow({
           cursor: "pointer",
         }}
       >
-        <RowLink href={`/c/${collectionSlug}/trades/${t.id}`} label={t.partnerName} />
+        <RowLink href={detailHref} label={t.partnerName} />
 
         {/* Line 1: the partner + actions */}
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>

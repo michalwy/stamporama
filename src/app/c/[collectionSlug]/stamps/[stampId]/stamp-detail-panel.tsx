@@ -27,8 +27,7 @@ import {
 import { formatStampSize } from "@/lib/stamp-size";
 import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-prices-card";
 import { CopyCountBadge, dispositionParts } from "@/app/c/[collectionSlug]/shared/copy-count-badge";
-import { RowQuickActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { ROW_OPEN_STYLE, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -383,7 +382,8 @@ function ChecklistMembershipChip({
   );
 }
 
-/** One issue the stamp is a member of, and which of its checklists count it. */
+/** One issue the stamp is a member of, and which of its checklists count it. A click anywhere on
+ *  it opens the issue's page, as a row does on every list (#1591). */
 function IssueMembershipRow({
   membership,
   collectionSlug,
@@ -392,25 +392,31 @@ function IssueMembershipRow({
   collectionSlug: string;
 }) {
   const [hovered, setHovered] = useState(false);
-  const detailPage = useDetailPageAction("issue", membership.issueId);
+  const pageHref = `/c/${collectionSlug}/issues/${membership.issueId}`;
+  const rowOpen = useRowOpen(pageHref);
 
   return (
     <div
+      {...rowOpen}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+      style={{
+        ...ROW_OPEN_STYLE,
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+        background: hovered ? "var(--color-bg-row-hover)" : undefined,
+        transition: "background 0.1s ease",
+      }}
     >
       <Link
-        href={`/c/${collectionSlug}/issues/${membership.issueId}`}
+        href={pageHref}
         style={{ fontSize: "0.875rem", color: "var(--color-accent)", textDecoration: "none" }}
       >
         {[membership.issueYear, membership.issueName].filter(Boolean).join(", ") ||
           "(unnamed issue)"}
       </Link>
       <ChecklistMembershipChip checklists={membership.checklists} />
-      <span style={{ marginLeft: "auto" }}>
-        <RowQuickActions actions={[detailPage]} visible={hovered} />
-      </span>
     </div>
   );
 }

@@ -16,8 +16,7 @@ page**; see [Detail pages](detail-pages.md).
 Each row shows:
 
 - The copy's **internal number** (e.g. `#00123`) — see [Internal copy number](#internal-copy-number).
-- The linked stamp's **catalog number**, **name**, and **issue**. A catalog-number chip is
-  **clickable — it copies the number** (see [Copying a catalog number](#copying-a-catalog-number)).
+- The linked stamp's **catalog number**, **name**, and **issue**.
 - The **condition** and any **certificate status**, each in the colour you gave it (see
   [Condition and certificate colours](collections.md#condition-and-certificate-colours)).
 - **Disposition** markers — *In collection*, *For sale*, *For trade* — a copy can carry
@@ -1346,16 +1345,6 @@ collection has no tags yet, the section says so and links to Settings.
 Applying acts on every ticked copy, clears the selection (what has been dealt with should not invite
 doing it twice) and confirms with a toast — worth having on this list, where a moved or re-flagged
 copy often lands outside the filter you are looking through.
-
-## Copying a catalog number
-
-Every catalog-number chip in the app — on this list, the Stamps and Issues lists, the pickers, the
-*Set catalog value* dialog — copies its number when you click it. The chip flashes green to confirm.
-
-What lands on the clipboard is **not quite what the chip reads**: the area prefix stays and the
-catalog abbreviation goes. `Mi·PL 200` copies as `PL 200`, and `Mi 200` as plain `200`. The prefix is
-part of the number's identity — `Mi·PL 200` and `Mi·DE 200` are different stamps — while the
-catalogue it came out of is something you already know in the box you are pasting into.
 
 ## Grouping the list
 

@@ -928,9 +928,8 @@ export function OfferPlatformItemsCard({
                 {/* Every number the stamp carries, each naming its catalogue (#423): this row is read
                     against the *platform's* catalogue, so which vendor a number belongs to is the
                     thing being checked, and a stamp recorded in two is looked up in both. They are
-                    the same click-to-copy chips as everywhere else (#420) — leading catalogue first —
-                    because pasting a number into the platform's own search is exactly what this card
-                    is for. A stamp carrying no number at all falls back to its bare label. */}
+                    the same chips as everywhere else — leading catalogue first — and selectable, since
+                    pasting a number into the platform's own search is what this card is for. A stamp carrying no number at all falls back to its bare label. */}
                 <span style={{ ...CELL, gap: "0.375rem" }}>
                   {item.catalogNumbers.length > 0 ? (
                     item.catalogNumbers.map((label, i) => (

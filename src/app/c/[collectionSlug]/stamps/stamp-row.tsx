@@ -31,7 +31,8 @@ import {
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { usePriceDetailsAction } from "@/app/c/[collectionSlug]/shared/use-price-details-action";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { useRecordHref } from "@/app/c/[collectionSlug]/shared/use-record-href";
+import { ROW_OPEN_STYLE, RowTitleLink, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { useOffersPopupAction } from "@/app/c/[collectionSlug]/offers/use-offers-popup-action";
 import {
   useInventoryPopupAction,
@@ -124,13 +125,13 @@ export function StampRow({
     target: { kind: "stamp", stampId: stamp.id, label: popupLabel },
   });
   const prices = usePriceDetailsAction({ kind: "stamp", stampId: stamp.id });
-  const detailPage = useDetailPageAction("stamp", stamp.id);
+  const pageHref = useRecordHref("stamp", stamp.id);
+  const rowOpen = useRowOpen(pageHref);
   // The same stamp the add-copy dialog is opened on — one shape, so the want form and the copy form
   // cannot summarise one stamp two ways.
   const addWant = useAddWantAction({ collectionId, areas, stamp: pickedStamp });
 
   const actions: RowAction[] = [
-    detailPage,
     addCopy.action,
     addWant.action,
     copies.action,
@@ -155,7 +156,7 @@ export function StampRow({
           There is no "add child stamp" here: variants are added from the issue tree, where the
           parent is on screen. */}
       <RowQuickActions
-        actions={pickRowActions(actions, ["detail-page", "edit", "add-copy", "add-want"])}
+        actions={pickRowActions(actions, ["edit", "add-copy", "add-want"])}
         visible={hovered}
       />
       <RowActionsMenu actions={actions} ariaLabel="Stamp actions" />
@@ -173,10 +174,13 @@ export function StampRow({
         borderBottom: isLast ? undefined : "1px solid var(--color-border)",
       }}
     >
+      {/* The whole row opens the stamp's page (#1591); its controls keep their own clicks. */}
       <div
+        {...rowOpen}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
+          ...ROW_OPEN_STYLE,
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
@@ -205,7 +209,7 @@ export function StampRow({
                 whiteSpace: "nowrap",
               }}
             >
-              {stamp.name}
+              <RowTitleLink href={pageHref}>{stamp.name}</RowTitleLink>
             </span>
 
             {actionsMenu}
@@ -250,15 +254,18 @@ export function StampRow({
                 flexShrink: 0,
               }}
             >
-              {dateStr}
-              {dateStr && firstIssue && ", "}
-              {firstIssue && (
-                <>
-                  {firstIssue.issueName ?? "(unnamed issue)"}
-                  {firstIssue.issueYear ? ` (${firstIssue.issueYear})` : ""}
-                  {stamp.issues.length > 1 && ` +${stamp.issues.length - 1}`}
-                </>
-              )}
+              {/* The link for a stamp with no name to carry it (#1591). */}
+              <RowTitleLink href={stamp.name ? null : pageHref}>
+                {dateStr}
+                {dateStr && firstIssue && ", "}
+                {firstIssue && (
+                  <>
+                    {firstIssue.issueName ?? "(unnamed issue)"}
+                    {firstIssue.issueYear ? ` (${firstIssue.issueYear})` : ""}
+                    {stamp.issues.length > 1 && ` +${stamp.issues.length - 1}`}
+                  </>
+                )}
+              </RowTitleLink>
             </span>
           )}
 

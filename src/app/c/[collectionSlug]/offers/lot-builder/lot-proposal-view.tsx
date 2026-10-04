@@ -12,7 +12,6 @@ import { Icon } from "@/app/icons";
 import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { QuickPriceDialog } from "@/app/c/[collectionSlug]/shared/quick-price-dialog";
@@ -375,17 +374,14 @@ function LotCopyRow({
   busy: boolean;
   isLast: boolean;
 }) {
-  const detailPage = useDetailPageAction("copy", copy.id);
-
+  // The copy's own page is a click on the row (#1591), so the menu is the lot's two acts alone.
   const actions: RowAction[] = [
-    detailPage,
     pinned
       ? {
           key: "pin",
           label: "Unpin",
           icon: "unpin",
           hint: "Let the next re-roll decide about this copy again",
-          separatorBefore: true,
           onSelect: () => onUnpin(copy.id),
           disabled: busy,
         }
@@ -394,7 +390,6 @@ function LotCopyRow({
           label: "Pin to the lot",
           icon: "pin",
           hint: "Kept through every re-roll",
-          separatorBefore: true,
           onSelect: () => onPin(copy.id),
           disabled: busy,
         },
@@ -420,6 +415,7 @@ function LotCopyRow({
       }
       vendorMap={vendorMaps.vendorMapFor(copy.areaId, copy.issueId)}
       isLast={isLast}
+      opensPage
       onSetCatalogPrice={onSetCatalogPrice}
       // The tint `accent` rather than `error`: a pinned copy is singled out, and nothing about it is
       // wrong (#658's reading, and the only one that fits a choice the collector made on purpose).

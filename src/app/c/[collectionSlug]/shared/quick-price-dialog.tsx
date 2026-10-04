@@ -249,9 +249,8 @@ export function QuickPriceDialog({
             {issueLabel && <div style={{ color: "var(--color-text-muted)" }}>Issue: {issueLabel}</div>}
             {catalogNumbers.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.125rem" }}>
-                {/* The chips carry the copy hint (#420) rather than a "Primary catalog" one: the
-                    accent styling already says which catalogue leads, exactly as it does on every
-                    list, and a chip cannot show two bubbles. */}
+                {/* No "Primary catalog" hint: the accent styling already says which catalogue
+                    leads, exactly as it does on every list. */}
                 {catalogNumbers.map((cn) => (
                   <CatalogNumberChip
                     key={cn.catalogVendorId}

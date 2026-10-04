@@ -93,18 +93,17 @@ export function catalogIdentityKey(
   return `${vendorId}\u0000${(areaPrefix ?? "").trim()}\u0000${number.trim()}`;
 }
 
-// ── What a catalog-number chip copies (#420) ─────────────────────────────────
+// ── A catalog number as another site searches for it ─────────────────────────
 //
-// Clicking a chip puts the number on the clipboard, and what lands there is deliberately
-// *narrower* than what the chip reads: the **area prefix stays, the vendor abbreviation goes**.
-// `Mi·PL 200` copies as `PL 200`. The prefix is part of the number's identity — `Mi·PL 200` and
-// `Mi·DE 200` are different stamps (#66/#377) — while the vendor names the catalogue the number was
-// read out of, which is context the collector already has wherever they are pasting it (a Colnect
-// search box, a marketplace title, a note).
+// What a Colnect search is run with (#420 defined it for the chip's click-to-copy, which #1590
+// retired), and deliberately *narrower* than what the chip reads: the **area prefix stays, the
+// vendor abbreviation goes**. `Mi·PL 200` searches as `PL 200`. The prefix is part of the number's
+// identity — `Mi·PL 200` and `Mi·DE 200` are different stamps (#66/#377) — while the vendor names
+// the catalogue the number was read out of, which another site knows nothing of.
 
-/** {@link catalogChipCopyValue} for a chip built from its parts — the area's effective prefix
+/** {@link catalogSearchValue} for a chip built from its parts — the area's effective prefix
  * (#377) and the stored number. */
-export function catalogChipCopyValue(
+export function catalogSearchValue(
   areaPrefix: string | null | undefined,
   number: string
 ): string {
@@ -118,10 +117,10 @@ export function catalogChipCopyValue(
  * `formatIssueCatalogNumber` write `<vendor>·<prefix> <number>` or `<vendor> <number>`, so the head
  * is everything up to the **first** space — leaving a multi-word number (`Ark. 103`) intact — and
  * the prefix is what follows the `·` in it. A label with no vendor head at all (a bare number, which
- * is what `formatStampCN` renders with no vendor entry) is copied unchanged: there is nothing to
+ * is what `formatStampCN` renders with no vendor entry) is used unchanged: there is nothing to
  * strip, and guessing would eat the number itself.
  */
-export function catalogChipCopyValueFromLabel(label: string): string {
+export function catalogSearchValueFromLabel(label: string): string {
   const trimmed = label.trim();
   const space = trimmed.indexOf(" ");
   if (space < 0) return trimmed;

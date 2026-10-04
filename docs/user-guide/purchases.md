@@ -243,7 +243,7 @@ Use the **⋮** menu on a row to **Edit** or **Delete**.
 
 ## Intake and the lot lifecycle
 
-Click a purchase row (or **Open** in its **⋮** menu) to open its **detail** screen. This is
+Click a purchase row to open its **detail** screen. This is
 where you build up the order's lots and identify copies into them over time.
 
 The header carries a **status** dropdown (top-right). Switch between **Preparing** and **In
@@ -1108,7 +1108,7 @@ stockbook order with a couple of hand-entered copies offers them. There are thre
 
   The box at the top of that step names the stamp you picked by its **catalogue numbers as chips** —
   the main catalogue's highlighted and first, the others after it, as on the Issues screen — so the
-  number you check the piece against is the one that stands out. Click a chip to copy its number.
+  number you check the piece against is the one that stands out.
 
   If the order has more than one open lot, that step also asks **which lot** the copy belongs to —
   the question a card cannot answer, because one card routinely holds pieces from several. Your last

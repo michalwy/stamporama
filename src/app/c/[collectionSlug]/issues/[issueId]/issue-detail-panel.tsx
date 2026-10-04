@@ -48,7 +48,7 @@ import { CatalogPricesCard } from "@/app/c/[collectionSlug]/shared/catalog-price
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { RowQuickActions, pickRowActions } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
-import { useDetailPageAction } from "@/app/c/[collectionSlug]/shared/use-detail-page-action";
+import { ROW_OPEN_STYLE, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
@@ -875,8 +875,9 @@ function AddMissingToWantList({
   );
 }
 
-/** One member of the issue, and its variants under it. Every node links to its own screen (#518) —
- *  the tree is what this page is for, so it is drawn whole rather than behind an expander. */
+/** One member of the issue, and its variants under it. Every node opens its own screen (#518), by
+ *  a click anywhere on it as on the list (#1591) — the tree is what this page is for, so it is
+ *  drawn whole rather than behind an expander. */
 function TreeNode({
   node,
   depth,
@@ -905,13 +906,14 @@ function TreeNode({
   actions: IssueStampActions;
 }) {
   const [hovered, setHovered] = useState(false);
-  const detailPage = useDetailPageAction("stamp", node.node.stampId);
   const stamp = node.node;
+  const pageHref = `/c/${collectionSlug}/stamps/${stamp.stampId}`;
+  // Not while reordering, where a press on the row is the start of a drag.
+  const rowOpen = useRowOpen(reorder ? null : pageHref);
   // The Issues list's stamp row menu, less what stays on the list (move, reassign, copies, wants,
   // prices): the entries and labels are that row's own, so one stamp is not offered the same act
   // under two names depending on the screen.
   const rowActions: RowAction[] = [
-    detailPage,
     { key: "add-child", label: "Add child stamp", icon: "add", onSelect: () => actions.addChild(stamp) },
     {
       key: "add-variant-range",
@@ -940,14 +942,18 @@ function TreeNode({
     <>
       <div
         {...(drag?.item ?? {})}
+        {...rowOpen}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
+          ...(rowOpen ? ROW_OPEN_STYLE : {}),
           display: "flex",
           alignItems: "flex-start",
           gap: "0.625rem",
           padding: "0.5rem 0",
           paddingLeft: `${depth * 1.5}rem`,
+          background: hovered && rowOpen ? "var(--color-bg-row-hover)" : undefined,
+          transition: "background 0.1s ease",
           borderTop: depth === 0 ? "1px solid var(--color-border)" : undefined,
           // Context, not a member of the filtered set — see the list row's own tree.
           opacity: contextIds.has(node.node.stampId) ? 0.5 : undefined,
@@ -969,7 +975,7 @@ function TreeNode({
         />
         <div style={{ minWidth: 0, flex: 1 }}>
           <Link
-            href={`/c/${collectionSlug}/stamps/${node.node.stampId}`}
+            href={pageHref}
             style={{
               fontSize: "0.875rem",
               fontWeight: node.node.checklistIds.length > 0 ? 600 : 400,
@@ -984,12 +990,12 @@ function TreeNode({
             primaryVendorId={primaryVendorId}
           />
         </div>
-        {/* The same dimmed icon the lists carry, on the same hover rule — a row inside a detail
-            card is still a row, and the way to a record should not be a different gesture here
-            than it is on the list this card mirrors. */}
+        {/* The same dimmed icons the lists carry, on the same hover rule — a row inside a detail
+            card is still a row, and what is done to a record should not be a different gesture
+            here than it is on the list this card mirrors. */}
         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
           <RowQuickActions
-            actions={pickRowActions(rowActions, ["detail-page", "edit", "add-variant-range"])}
+            actions={pickRowActions(rowActions, ["edit", "add-variant-range"])}
             visible={hovered && !reorder}
           />
           <RowActionsMenu actions={rowActions} ariaLabel="Stamp actions" />
