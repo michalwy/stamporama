@@ -2,10 +2,12 @@ import "server-only";
 import { prisma } from "../../db";
 import { formatIssueCatalogNumber } from "../../catalog-range";
 import { effectivePrefixFor, buildAreaPrefixNodes } from "../../area-prefix";
+import { readCollectionAreas } from "../../areas";
 import { loadIssuePrefixMap } from "../../issue-prefix";
 import { getIssueListItem } from "../../issues";
 import { listItemsPaginated } from "../../items";
 import { getStampListItem } from "../../stamps";
+import { issueCatalogues } from "../area-reads";
 import { copyDetail, issueDetail, stampDetail } from "../collection-reads";
 import { notFound } from "../errors";
 import { requiredString } from "../params";
@@ -98,7 +100,7 @@ export async function readIssue(
   // stamp labeller: `formatIssueCatalogNumber` is the app's own spelling of one (`Mi·PL 1298–302`),
   // and the prefix under it is the ordinary three-level walk — the issue's own override, then the
   // nearest area that states one (#675).
-  const [vendors, areas, issuePrefixes] = await Promise.all([
+  const [vendors, areas, issuePrefixes, areaTree] = await Promise.all([
     prisma.catalogVendor.findMany({
       where: { collectionId: context.collectionId },
       select: { id: true, abbreviation: true, name: true },
@@ -114,6 +116,7 @@ export async function readIssue(
       },
     }),
     loadIssuePrefixMap(context.collectionId),
+    readCollectionAreas(context.collectionId),
   ]);
   const abbrOf = new Map(vendors.map((vendor) => [vendor.id, vendor.abbreviation]));
   const nodes = buildAreaPrefixNodes(areas);
@@ -132,6 +135,14 @@ export async function readIssue(
           issuePrefixes
         )
       )
+    ),
+    // The issue's own prefix per catalogue beside the one it resolves to (#1606), so an agent can tell
+    // an override from an inherited prefix and send the first back through `update_issue`.
+    catalogues: issueCatalogues(
+      areaTree,
+      issue.collectionAreaId,
+      { catalogues: abbrOf, books: new Map() },
+      issuePrefixes.get(issue.id) ?? new Map()
     ),
     area: areas.find((area) => area.id === issue.collectionAreaId)?.name ?? null,
     path: collectionPath(header, `/issues/${issue.id}`),
@@ -215,7 +226,7 @@ export const getIssueOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "One issue. `memberCount` is every stamp filed under it, variants included; `requiredCount` is the distinct stamps on any of its checklists — a stamp on two checklists is counted once, so the checklist sizes do not add up to it. `catalogTotal` is stated per checklist for the same reason. To find out what is held from it, call `list_holdings` with this `issue_id`.",
+      "One issue. `memberCount` is every stamp filed under it, variants included; `requiredCount` is the distinct stamps on any of its checklists — a stamp on two checklists is counted once, so the checklist sizes do not add up to it. `catalogTotal` is stated per checklist for the same reason. `catalogues` states each catalogue its area keeps twice: `own`, as the issue sets it — `\"Mi: GG\"` where it has a prefix of its own, `\"Mi\"` where it follows its area, the spelling `update_issue` takes in `prefixes` — and `resolved`, the prefix its stamps' numbers actually carry (`Mi·GG`). To find out what is held from it, call `list_holdings` with this `issue_id`.",
   },
   handler: async (context, params) => readIssue(context, params),
 };

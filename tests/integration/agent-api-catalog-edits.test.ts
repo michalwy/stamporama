@@ -442,6 +442,82 @@ describe("the catalogue writes (#1438)", () => {
     });
   });
 
+  describe("an issue's own prefixes (#1606)", () => {
+    type UpdatedIssue = AgentIssueDetail & { prefixChange?: { changed: boolean; before: string[]; after: string[] } };
+    const prefixRows = (issueId: string) =>
+      prisma.issueCatalogPrefix.findMany({ where: { issueId }, select: { catalogVendorId: true, areaPrefix: true }, orderBy: { catalogVendorId: "asc" } });
+
+    it("creates an issue with a prefix of its own, which its generated stamps carry, and reads it back", async () => {
+      const issue = await ok<CreatedIssue>(token, "POST", "/issues", {
+        area: "Poland",
+        name: "Occupation",
+        catalog_numbers: ["Mi: 700-701"],
+        prefixes: ["Mi: GG", "Fi"],
+      });
+      assert.deepEqual(issue.createdStamps.map((stamp) => stamp.catalogNumbers), [["Mi·GG 700"], ["Mi·GG 701"]]);
+      assert.deepEqual(issue.catalogues, { own: ["Fi", "Mi: GG"], resolved: ["Fi", "Mi·GG"] });
+      assert.deepEqual(issue.catalogRanges, ["Mi·GG 700–01"]);
+      assert.deepEqual(await prefixRows(issue.issueId), [{ catalogVendorId: michelId, areaPrefix: "GG" }]);
+
+      const read = await ok<AgentIssueDetail>(token, "GET", `/issues/${issue.issueId}`);
+      assert.deepEqual(read.catalogues, { own: ["Fi", "Mi: GG"], resolved: ["Fi", "Mi·GG"] });
+    });
+
+    it("checks a new issue's numbers under the prefix it is created with", async () => {
+      const before = [await issueCount(), await stampCount()];
+      // `Mi·PL 700` is free; `Mi·GG 700` is the issue above's.
+      const err = await refused(token, "POST", "/issues", { area: "Poland", catalog_numbers: ["Mi: 700"], prefixes: ["Mi: GG"] });
+      assert.equal(err.status, 400);
+      assert.match(err.error.message, /Mi·GG 700 is already/);
+      assert.deepEqual([await issueCount(), await stampCount()], before);
+    });
+
+    it("sets, changes and clears an issue's prefix, only for the catalogues sent, saying what changed", async () => {
+      const issue = await ok<CreatedIssue>(token, "POST", "/issues", { area: "Poland", catalog_numbers: ["Mi: 710-711", "Fi: 810-811"] });
+      assert.deepEqual(issue.catalogues, { own: ["Fi", "Mi"], resolved: ["Fi", "Mi·PL"] });
+
+      const set = await ok<UpdatedIssue>(token, "PATCH", `/issues/${issue.issueId}`, { prefixes: ["Mi: XX", "Fi: F"] });
+      assert.deepEqual(set.prefixChange, { changed: true, before: ["Fi", "Mi·PL"], after: ["Fi·F", "Mi·XX"] });
+      assert.deepEqual(set.catalogues, { own: ["Fi: F", "Mi: XX"], resolved: ["Fi·F", "Mi·XX"] });
+
+      const changed = await ok<UpdatedIssue>(token, "PATCH", `/issues/${issue.issueId}`, { prefixes: ["Michel: YY"] });
+      assert.deepEqual(changed.catalogues.own, ["Fi: F", "Mi: YY"], "Fischer was not sent and keeps its prefix");
+
+      const cleared = await ok<UpdatedIssue>(token, "PATCH", `/issues/${issue.issueId}`, { prefixes: ["Mi"] });
+      assert.deepEqual(cleared.prefixChange, { changed: true, before: ["Fi·F", "Mi·YY"], after: ["Fi·F", "Mi·PL"] });
+      assert.deepEqual(await prefixRows(issue.issueId), [{ catalogVendorId: fischerId, areaPrefix: "F" }]);
+
+      const stamp = await ok<AgentStampDetail>(token, "GET", `/stamps/${issue.createdStamps[0].stampId}`);
+      assert.deepEqual(stamp.catalogNumbers, ["Mi·PL 710", "Fi·F 810"]);
+
+      const untouched = await ok<UpdatedIssue>(token, "PATCH", `/issues/${issue.issueId}`, { name: "Renamed" });
+      assert.equal(untouched.prefixChange, undefined);
+      assert.deepEqual(await prefixRows(issue.issueId), [{ catalogVendorId: fischerId, areaPrefix: "F" }], "an edit without prefixes keeps them");
+    });
+
+    it("refuses a prefix that would duplicate a number the collection has, naming both stamps, and writes nothing", async () => {
+      const holder = await ok<CreatedIssue>(token, "POST", "/issues", { area: "Poland", catalog_numbers: ["Mi: 720"], prefixes: ["Mi: ZZ"] });
+      const issue = await ok<CreatedIssue>(token, "POST", "/issues", { area: "Poland", name: "Plain", catalog_numbers: ["Mi: 720-721"] });
+      const err = await refused(token, "PATCH", `/issues/${issue.issueId}`, { name: "Moved over", prefixes: ["Mi: ZZ"] });
+      assert.equal(err.status, 400);
+      assert.match(err.error.message, new RegExp(`Mi·ZZ 720 would be this issue's stamp \\(id ${issue.createdStamps[0].stampId}\\)`));
+      assert.match(err.error.message, /Nothing was written/);
+      assert.deepEqual(err.error.accepted, [holder.createdStamps[0].stampId]);
+      assert.deepEqual(await prefixRows(issue.issueId), []);
+      const row = await prisma.issue.findUniqueOrThrow({ where: { id: issue.issueId }, select: { name: true } });
+      assert.equal(row.name, "Plain");
+    });
+
+    it("refuses *no prefix*, which an issue cannot state, and a catalogue the area does not keep", async () => {
+      const issue = await ok<CreatedIssue>(token, "POST", "/issues", { area: "Poland", generate_stamps: false, catalog_numbers: ["Mi: 730"] });
+      const none = await refused(token, "PATCH", `/issues/${issue.issueId}`, { prefixes: ["Mi: -"] });
+      assert.equal(none.status, 400);
+      assert.match(none.error.message, /an issue cannot state that/);
+      const scott = await refused(token, "POST", "/issues", { area: "Poland", prefixes: ["Sc: X"] });
+      assert.deepEqual(scott.error.accepted, ["Fischer (Fi)", "Michel (Mi)"]);
+    });
+  });
+
   describe("the vocabulary", () => {
     it("carries the attribute dictionaries update_stamp takes", async () => {
       const vocabulary = await ok<CollectionVocabulary>(token, "GET", "/vocabulary");

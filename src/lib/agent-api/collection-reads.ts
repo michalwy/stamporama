@@ -449,6 +449,15 @@ export interface AgentIssueChecklist {
   readonly catalogTotal?: AgentMoney;
 }
 
+/** An issue's catalogues (#1606): its own prefixes as `update_issue` takes them, and what they resolve to. */
+export interface AgentIssueCatalogues {
+  /** Every catalogue the issue's area keeps: `"Mi: GG"` where the issue sets its own prefix, `"Mi"`
+   *  where it follows the area's — the spelling `create_issue` and `update_issue` take in `prefixes`. */
+  readonly own: readonly string[];
+  /** The same catalogues with the prefix each resolves to, `Mi·GG` — what its stamps' numbers carry. */
+  readonly resolved: readonly string[];
+}
+
 export interface AgentIssueDetail {
   readonly issueId: string;
   readonly issueNo: number;
@@ -456,6 +465,7 @@ export interface AgentIssueDetail {
   readonly year?: number;
   readonly area?: string;
   readonly catalogRanges: string[];
+  readonly catalogues: AgentIssueCatalogues;
   /** Stamps filed under this issue, its variants included. */
   readonly memberCount: number;
   /** Distinct stamps on any of its checklists — the **union** (#531). With one checklist this is
@@ -486,7 +496,12 @@ export interface IssueDetailRow {
 export function issueDetail(
   collectionId: string,
   row: IssueDetailRow,
-  extra: { readonly catalogRanges: readonly string[]; readonly area: string | null; readonly path: string }
+  extra: {
+    readonly catalogRanges: readonly string[];
+    readonly catalogues: AgentIssueCatalogues;
+    readonly area: string | null;
+    readonly path: string;
+  }
 ): AgentIssueDetail {
   return compact({
     issueId: row.id,
@@ -495,6 +510,7 @@ export function issueDetail(
     year: row.year ?? undefined,
     area: extra.area ?? undefined,
     catalogRanges: [...extra.catalogRanges],
+    catalogues: extra.catalogues,
     memberCount: row.memberCount,
     requiredCount: row.requiredCount,
     checklists: row.checklists.map((list) =>

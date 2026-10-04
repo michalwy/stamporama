@@ -1529,10 +1529,10 @@ where until then the resolver could find a number and nothing could add one.
 
 | operation | writes | what it is for |
 | --- | --- | --- |
-| `create_issue` | yes | an issue in an area, its declared ranges, and the stamps they generate (#70, #451) |
+| `create_issue` | yes | an issue in an area, its declared ranges, its own prefixes (#1606), and the stamps they generate (#70, #451) |
 | `add_issue_stamps` | yes | the issue's *Add stamp range* dialog (#219), optionally sized from a preset (#807) |
 | `add_stamp_variants` | yes | the *Add variant range* dialog (#722), with its subtype (#1000) |
-| `update_issue` | yes | the name, the year, the translated names, a catalogue's declared range |
+| `update_issue` | yes | the name, the year, the translated names, a catalogue's declared range, its own prefix in a catalogue (#1606) |
 | `update_stamp` | yes | the name, translated names, date, catalogue numbers and attributes (#71, #736) |
 
 **Every write is the app's own.** `createIssue`, `addStampRangeToIssue`, `addVariantRangeToStamp`,
@@ -1555,6 +1555,28 @@ the parameter and a mismatched span is refused pointing at `stamps_from`, never 
 **A catalogue must be one the area keeps** (`effectiveVendorsForArea`, the forms' own set), and a
 translated name one of `getCollectionTranslationContext`'s languages: a number or a name the forms
 offer no field for would be one the collector could neither see nor correct on the record's screen.
+
+**An issue's own prefix per catalogue (#377) is `prefixes`**, on both `create_issue` and
+`update_issue` (#1606), so a series a catalogue files under another prefix than the rest of its area
+is set up in one call. It is spelled as the area operations spell a catalogue — `"Mi: GG"` a prefix of
+its own, `"Mi"` follow the area — and only the catalogues sent change; `updateIssue` replaces the whole
+set, so the rest is handed back as it is. **`"Mi: -"` is refused**, and that is the model rather than
+the API: an issue has two states, not the area's three — no `IssueCatalogPrefix` row is inheritance
+and a row always carries a prefix, which is also all the issue form can say (a blank field inherits).
+The collector chose refusing it over adding a third state on 2026-10-04. `get_issue` states
+`catalogues` twice — `own`, every catalogue the area keeps in the spelling `prefixes` takes, and
+`resolved`, the prefix its stamps' numbers carry — so an override can be told from an inherited
+prefix; a stored prefix for a catalogue the area no longer keeps resolves nowhere and is not stated.
+
+**A prefix that would make a duplicate is refused before anything is written**, whatever the
+duplicate setting, for the reason below. On a create the prefixes sent are the generated stamps'
+prefix context, as the create form's typed fields are. On an edit every catalogue whose *resolved*
+prefix changes is checked over all the issue's stamps — `findCatalogDuplicatesForCandidates` with the
+new set as unsaved `prefixes`, per primary area — and the issue's own stamps are never counted against
+each other, since they move together. The refusal names the issue's stamp and the holder, with the
+holders' ids in `accepted`. This is a check the screen does not make: the issue edit dialog saves a
+prefix without looking at the stamps it re-labels. `update_issue` answers with `prefixChange`, the
+resolved catalogues `before` and `after`, as `move_issue_to_area` does.
 
 **`add_stamp_variants` does not ask #1573's question.** A screen that gives a priced stamp its
 first variant asks whether to keep or clear the stamp's own prices; an agent has no dialog, so the

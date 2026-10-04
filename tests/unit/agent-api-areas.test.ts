@@ -7,6 +7,7 @@ import {
   areaTreeOrder,
   areaUnderItself,
   groupingOnlyHoldsMaterial,
+  issueCatalogues,
   noValuingBook,
   ownCatalogues,
   parseCatalogueEntries,
@@ -111,6 +112,18 @@ describe("an area's catalogues (#1539)", () => {
   it("lets an issue's own prefix replace the area's for that issue alone", () => {
     const own = new Map([["mi", "GG"]]);
     assert.deepEqual(resolvedCatalogues(AREAS, "poland", NAMES, own).catalogues, ["Fi·PL", "Mi·GG"]);
+  });
+
+  it("states an issue's own prefixes beside what they resolve to (#1606)", () => {
+    assert.deepEqual(issueCatalogues(AREAS, "poland", NAMES, new Map([["mi", "GG"]])), {
+      own: ["Fi", "Mi: GG"],
+      resolved: ["Fi·PL", "Mi·GG"],
+    });
+    // A stored prefix for a catalogue the area does not keep resolves nowhere and is not stated.
+    assert.deepEqual(issueCatalogues(AREAS, "austria", NAMES, new Map([["fi", "X"]])), {
+      own: ["Mi"],
+      resolved: ["Mi·A"],
+    });
   });
 
   it("tells a change in prefix from none", () => {

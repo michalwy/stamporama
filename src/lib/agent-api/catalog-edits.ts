@@ -10,6 +10,7 @@
 // Pure: no Prisma, so `pnpm test:unit` holds every rule here.
 
 import { normalizeLanguage } from "../languages";
+import { NO_PREFIX, parseCatalogueEntries } from "./area-reads";
 import { invalidRequest, type ApiError } from "./errors";
 
 /** One `"key: value"` entry, split. */
@@ -93,6 +94,57 @@ export function checkTranslationLanguage(
     );
   }
   return language;
+}
+
+/** One catalogue's issue-level prefix as sent: its key, and the prefix — null hands it back to the area. */
+export interface IssuePrefixInput {
+  readonly key: string;
+  readonly prefix: string | null;
+}
+
+/**
+ * An issue's own prefixes (#377, #1606), spelled as the area operations spell a catalogue (#1539):
+ * `"Mi: GG"` gives the issue a prefix of its own, `"Mi"` hands Michel back to the area's prefix.
+ * **`"Mi: -"` is refused**: an issue has no *no prefix here* state — no override row is
+ * inheritance, and a row always carries a prefix — so the area's own three states are two here.
+ */
+export function parseIssuePrefixes(entries: readonly string[], parameter: string): IssuePrefixInput[] {
+  return parseCatalogueEntries(entries, parameter).map(({ key, areaPrefix }) => {
+    if (areaPrefix === "") {
+      throw invalidRequest(
+        `"${parameter}" entry "${key}: ${NO_PREFIX}" asks for no prefix on this issue, and an issue cannot state that: it either gives a catalogue a prefix of its own or follows its area's. Send "${key}: <prefix>" for a prefix of its own, or "${key}" to follow the area; an area takes "${key}: ${NO_PREFIX}" through \`update_area\`.`
+      );
+    }
+    return { key, prefix: areaPrefix };
+  });
+}
+
+/** A stamp of the issue whose number a prefix change would make a duplicate, and who holds it already. */
+export interface PrefixCollision {
+  /** The identity the issue's stamp would take, `Mi·GG 5`. */
+  readonly label: string;
+  /** The issue's own stamps that would carry it. */
+  readonly issueStampIds: readonly string[];
+  readonly holders: readonly DuplicateHolder[];
+}
+
+/**
+ * The refusal for an issue prefix that would give one of its stamps a catalogue number the
+ * collection already has under that catalogue and prefix (#1606) — the identity duplicate detection
+ * compares (#85). Refused whatever the duplicate setting says, for `duplicateCatalogNumbers`' reason.
+ * Both sides are named: the issue's stamp and the stamp that already holds the number, whose ids are
+ * in `accepted`.
+ */
+export function prefixCollisions(collisions: readonly PrefixCollision[]): ApiError {
+  const held = collisions.filter((collision) => collision.holders.length > 0);
+  const lines = held.map((collision) => {
+    const own = collision.issueStampIds.map((id) => `id ${id}`).join(", ");
+    return `${collision.label} would be this issue's stamp (${own}) and is already ${collision.holders.map(describeHolder).join(" and ")}`;
+  });
+  return invalidRequest(
+    `${lines.join("; ")}. Nothing was written. A catalogue number names one stamp here, so a prefix that makes two stamps share one is refused — choose another prefix, or correct the numbers first.`,
+    [...new Set(held.flatMap((collision) => collision.holders.map((stamp) => stamp.stampId)))]
+  );
 }
 
 /** The years the collector's forms accept (the issue form, the stamp form). */

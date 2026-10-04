@@ -187,7 +187,9 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
   written the way the *Add issue* form takes them — `Mi: 100-105, 107`, or `2895A-2897A,
   2895B-2897B`. The numbers declare the issue's range and create its stamps, one per number, matched
   across catalogues by position and put on the issue's checklist, as the form's *Assign to stamps*
-  boxes do. It can give the new stamps a size preset while it is at it;
+  boxes do. It can give the new stamps a size preset while it is at it, and give the issue a prefix of
+  its own in a catalogue — the *Prefix* field beside each catalogue on the form — when a catalogue
+  files the series under another prefix than the rest of the area;
 - **add stamps to an issue**, one per number, at the end of the issue's order and on its checklist,
   as the *Add stamp range* dialog does;
 - **add a run of variants under a stamp** — `a-f` under `240` makes `240a` to `240f` — with the kind
@@ -195,8 +197,10 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
   first variants and it has catalogue prices of its own, the dialog would ask whether to keep
   them ([see why](variant-prices.md#when-a-priced-stamp-gets-its-first-variant)); the assistant is
   not asked — the prices stay, its answer says so, and it can clear them if you tell it to;
-- **correct an issue**: its name, its year, its name in your other languages, and the range it
-  declares in a catalogue;
+- **correct an issue**: its name, its year, its name in your other languages, the range it
+  declares in a catalogue, and its own prefix in a catalogue — set, changed, or taken off so the issue
+  follows its area's prefix again. It cannot make an issue show *no* prefix where its area has one,
+  because the issue form cannot either; that is said on the area;
 - **correct a stamp or a variant**: its name and translated names, its date of issue, its number in
   any catalogue its area keeps, and its attributes — denomination and perforation as printed, and the
   colour, watermark, paper and printing from your own lists in Settings.
@@ -208,8 +212,9 @@ are. A name in another language is accepted only in a language you list or print
 — the same catalogue and the same prefix, so `Mi·SP 1` and `Mi·PL 1` still count as two — is refused,
 and the assistant is told which stamp has it. That holds even when your **Duplicates** setting only
 warns: that setting is for you, typing a duplicate on purpose, and the assistant can always look the
-number up first. It will not create an issue in a grouping-only area, nor record a number in a
-catalogue the area does not keep.
+number up first. The same goes for an issue's prefix: one that would make a stamp of that issue read
+as a number another stamp already has is refused, naming both, and nothing is changed. It will not
+create an issue in a grouping-only area, nor record a number in a catalogue the area does not keep.
 
 **What it cannot do on the catalogue is delete or move anything.** It never deletes an issue, a
 stamp or a variant, never takes a catalogue number off a stamp, never moves a stamp to another issue
