@@ -1,7 +1,7 @@
 "use client";
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   DialogBody,
   DialogFooter,
@@ -73,6 +73,7 @@ export function HeldCopiesCompareDialog({
   conditions,
   certificateStatuses,
   excludeItemId,
+  focusItemId = null,
   pieces,
   previews,
   scanning,
@@ -86,6 +87,9 @@ export function HeldCopiesCompareDialog({
   certificateStatuses: CertificateStatusData[];
   /** The copy a re-identified tile already became: the piece itself, never one to compare it with. */
   excludeItemId: string | null;
+  /** The copy whose thumbnail was clicked in the step (#1621): scrolled to and outlined, the rest
+   * still listed around it, since the piece is often weighed against more than the one. */
+  focusItemId?: string | null;
   /** The scan tiles being identified, when there are any. */
   pieces?: IdentifiedPiece[];
   /** The photos added in the intake step, for an intake with no tile. */
@@ -154,6 +158,7 @@ export function HeldCopiesCompareDialog({
                 itemNo={formatItemNo(copy.itemNo, pad)}
                 conditions={conditions}
                 certificateStatuses={certificateStatuses}
+                focused={copy.id === focusItemId}
               />
             ))}
           </div>
@@ -245,14 +250,24 @@ function HeldCopyCard({
   itemNo,
   conditions,
   certificateStatuses,
+  focused,
 }: {
   collectionId: string;
   copy: HeldCopyPicture;
   itemNo: string;
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
+  focused: boolean;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Once, as the card first mounts — the copy list arrives after the window opens, so this is when
+  // the clicked copy first has somewhere to be scrolled to.
+  const scrollTo = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (el && focused) el.scrollIntoView({ block: "nearest" });
+    },
+    [focused]
+  );
   const condition = conditions.find((c) => c.id === copy.conditionId);
   const certificate = copy.certificateStatusId
     ? certificateStatuses.find((c) => c.id === copy.certificateStatusId)
@@ -262,10 +277,12 @@ function HeldCopyCard({
 
   return (
     <div
+      ref={scrollTo}
       style={{
         padding: "0.625rem 0.75rem",
         borderRadius: "0.5rem",
-        border: "1px solid var(--color-border)",
+        border: `1px solid var(--color-${focused ? "accent" : "border"})`,
+        boxShadow: focused ? "0 0 0 1px var(--color-accent)" : undefined,
         background: "var(--color-bg-page)",
       }}
     >

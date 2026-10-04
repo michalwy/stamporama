@@ -1970,6 +1970,15 @@ ends with **Compare with it…** (or **Compare with them…**). It opens a windo
   leaving it out would look as if you did not hold it.
 - Copies you **no longer hold** — sold, traded away, written off, never arrived — are not shown.
 
+**Your collection's copies, at a glance.** Under the line, the step also shows **thumbnails of the
+copies you hold in your collection** — only those: copies for sale, for trade, with no disposition or
+not filed yet are left to the line and the comparison. Each carries its condition chip, and its
+certificate chip when it has one; hover one to enlarge it, click it to open the comparison above
+**on that copy**, outlined, with the others still listed around it. Up to six are drawn, in your
+conditions' own order; beyond that **+N more** opens the comparison on all of them. A copy with no
+photo shows the usual empty frame, so the number of thumbnails is the number of copies. With nothing
+in your collection, no thumbnails are drawn and the line reads as before.
+
 It is **only for looking**. Nothing in the window changes anything, and nothing decides which copy is
 better: that call is yours. **Back to the identification** (or Escape) returns you to the step with
 everything as you left it, and whatever you then decide — keeping the new piece in the collection,
