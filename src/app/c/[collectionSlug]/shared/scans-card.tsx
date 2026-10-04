@@ -2985,7 +2985,7 @@ function TileSelectionBar({
           targets={marks}
           disabled={busy}
           ariaLabel="Mark the ticked tiles"
-          hint={`Mark the condition, certificate and faults of the ${count} ticked ${count === 1 ? "tile" : "tiles"} in view, before identifying them`}
+          hint={`Mark the condition, certificate, faults and tags of the ${count} ticked ${count === 1 ? "tile" : "tiles"} in view, before identifying them`}
           triggerStyle={smallButtonStyle({ disabled: busy })}
           onPatch={onMark}
         >
@@ -3212,7 +3212,7 @@ function TileMarkSlot({
         hint={
           mark
             ? "Marked before identifying — click to change it, or type another abbreviation with the tile focused"
-            : "Mark the condition, certificate and faults from the card in hand — or type the abbreviation with the tile focused"
+            : "Mark the condition, certificate, faults and tags from the card in hand — or type the abbreviation with the tile focused"
         }
         triggerStyle={{
           display: "inline-flex",

@@ -648,6 +648,8 @@ export function TileIdentifyChainDialogs({
           // The new copies' faults (#1558), opened on the faults marked on the tiles. Not on a
           // correction: it re-answers what the copy is, and the copy's faults are edited on the copy.
           askFaults={!tileCorrection}
+          // And their tags (#1599), opened on the tags marked on the tiles — never the last used.
+          askTags={!tileCorrection}
           // The one question #586 left to identification. Only the order's **open** lots, since a
           // closed one takes no new copy at all (ADR-0009 §3) and offering it would be offering a
           // refusal.

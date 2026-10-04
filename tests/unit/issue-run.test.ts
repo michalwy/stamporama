@@ -5,14 +5,17 @@ import {
   branchFolded,
   changedRunPrices,
   clearedAssignments,
+  hasOwnTags,
   nextWithoutStamp,
   overriddenFields,
+  ownTagsFrom,
   repeatedStamps,
   resolveRunCopyDetails,
   runBlockers,
   runChoices,
   runPriceSubjects,
   runStart,
+  runTileTags,
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
@@ -576,5 +579,37 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
         assert.equal(runValueTabTarget(keys, "zz", false, true), null);
       });
     });
+  });
+});
+
+describe("a run tile's tags (#1599)", () => {
+  const t = (id: string) => ({ id, name: id, color: null });
+  const fresh = { id: null, name: "Check", color: null };
+
+  it("are the run's tags while the tile has none of its own", () => {
+    assert.deepEqual(runTileTags([t("a"), t("b")], undefined), [t("a"), t("b")]);
+    assert.equal(hasOwnTags([t("a")], undefined), false);
+  });
+  it("add the tile's own and drop the run's it dropped", () => {
+    const own = { add: [t("c"), fresh], drop: ["a"] };
+    assert.deepEqual(runTileTags([t("a"), t("b")], own), [t("b"), t("c"), fresh]);
+    assert.equal(hasOwnTags([t("a"), t("b")], own), true);
+  });
+  it("are read back from the tile's field as a difference against the run's", () => {
+    const own = ownTagsFrom([t("a"), t("b")], [t("b"), t("c"), fresh]);
+    assert.deepEqual(own, { add: [t("c"), fresh], drop: ["a"] });
+  });
+  it("keep reaching a run tag set after the tile was edited", () => {
+    const own = ownTagsFrom([t("a")], [t("a"), t("c")]);
+    assert.deepEqual(runTileTags([t("a"), t("z")], own), [t("a"), t("z"), t("c")]);
+  });
+  it("are not the tile's own once the run carries the same", () => {
+    const own = { add: [t("c")], drop: ["x"] };
+    assert.equal(hasOwnTags([t("c")], own), false);
+    assert.deepEqual(runTileTags([t("c")], own), [t("c")]);
+  });
+  it("match a new tag by its name, whatever its case", () => {
+    const own = ownTagsFrom([{ id: null, name: "check", color: null }], [fresh]);
+    assert.deepEqual(own, { add: [], drop: [] });
   });
 });

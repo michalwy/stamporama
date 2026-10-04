@@ -60,15 +60,21 @@ import {
   keeperAnswers,
   keeperGroups,
   markFaultIds,
+  markTagIds,
   sameFaults,
   seedFaults,
   seedField,
+  seedTags,
   type FaultSeed,
   type SeedOrigin,
+  type TagSeed,
 } from "@/lib/tile-marks";
 import type { FaultEntry } from "@/lib/fault-entry";
+import { tagEntryKey, type TagEntry } from "@/lib/tag-entry";
 import { FaultEntryField } from "./fault-entry-field";
+import { TagEntryField } from "./tag-entry-field";
 import { useCollectionFaults } from "./use-faults";
+import { useCollectionTags } from "./use-tags";
 
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
@@ -371,6 +377,13 @@ export interface IntakeConditionDialogProps {
    */
   askFaults?: boolean;
   /**
+   * Ask for the new copies' **tags** (#1599) — the scan-tile chain's identification, as the faults
+   * are. Opened on the tags marked on every tile (with `seedFromMarks`) and otherwise empty: never the
+   * last used (settled with the collector). Every copy takes the field's tags; a tile marked with
+   * more keeps those as well. Not on a correction, where the copy's tags are the copy's own to edit.
+   */
+  askTags?: boolean;
+  /**
    * Offer to make the tile's front the **stamp's** photo (#1340) — the scan-tile chain only, where a
    * piece is in hand to be compared with the stamp's current picture. On by default when the stamp
    * has no photo (#149's seed, made visible) and off when it has one; the answer is sent as
@@ -407,6 +420,7 @@ function IntakeConditionDialog({
   offerStampPhoto,
   seedFromMarks,
   askFaults,
+  askTags,
   onBack,
   onClose,
   onSubmit,
@@ -440,11 +454,14 @@ function IntakeConditionDialog({
     };
     // Faults have no fallback at all (#1558): the marks, or nothing.
     const noFaults: FaultSeed = { faultIds: [], origin: null, keepers: [] };
+    // Nor do tags (#1599): every identification starts with none but what is marked.
+    const noTags: TagSeed = { tagIds: [], origin: null, keepers: [] };
     if (!seedFromMarks || !pieces) {
       return {
         condition: { value: fallback.condition.value, origin: null, keepers: [] },
         certificate: { value: fallback.certificate.value, origin: null, keepers: [] },
         faults: noFaults,
+        tags: noTags,
       };
     }
     const known = (id: string | null | undefined, list: readonly { id: string }[]) =>
@@ -464,6 +481,9 @@ function IntakeConditionDialog({
       faults: askFaults
         ? seedFaults(pieces.map((p) => ({ tileId: p.tileId, faultIds: markFaultIds(p.mark) })))
         : noFaults,
+      tags: askTags
+        ? seedTags(pieces.map((p) => ({ tileId: p.tileId, tagIds: markTagIds(p.mark) })))
+        : noTags,
     };
   });
   const [conditionId, setConditionId] = useState(seeds.condition.value);
@@ -480,6 +500,16 @@ function IntakeConditionDialog({
     const fault = faultDictionary?.find((f) => f.id === id);
     return fault ? [{ id: fault.id, name: fault.name }] : [];
   });
+  const [tagsOrigin, setTagsOrigin] = useState(seeds.tags.origin);
+  // The tags the field opens on (#1599), named and coloured from the dictionary once it is here.
+  const { data: tagDictionary } = useCollectionTags(collectionId);
+  const seededTags: TagEntry[] = seeds.tags.tagIds.flatMap((id) => {
+    const tag = tagDictionary?.find((t) => t.id === id);
+    return tag ? [{ id: tag.id, name: tag.name, color: tag.color }] : [];
+  });
+  /** The tiles marked with tags beyond the field's (#1599) — they keep them **as well**, so this is
+   * said apart from the keepers above, whose answers replace the shared ones. */
+  const tagKeepers = seeds.tags.keepers.length;
   /** The tiles keeping their own marks, in words — *3 tiles keep their marked MNG*. */
   const keepersSaid = [
     ...keeperGroups(seeds.condition.keepers).map(({ value, count }) => {
@@ -660,7 +690,7 @@ function IntakeConditionDialog({
     if (lotChoice && lotId) fd.set("lotId", lotId);
     // The tiles keeping their own marks (#1550) — exactly what the step said, so the write creates
     // what was read here rather than re-reading the marks behind it.
-    const own = keeperAnswers(seeds.condition, seeds.certificate, seeds.faults);
+    const own = keeperAnswers(seeds.condition, seeds.certificate, seeds.faults, seeds.tags);
     if (own.length > 0) fd.set("tileAnswers", JSON.stringify(own));
     fd.set("inCollection", String(disposition.inCollection));
     fd.set("forSale", String(disposition.forSale));
@@ -816,6 +846,16 @@ function IntakeConditionDialog({
                   <>
                     {" "}
                     <strong>{keepersSaid.join(", ")}</strong>; the answers below apply to the rest.
+                  </>
+                )}
+                {tagKeepers > 0 && (
+                  <>
+                    {" "}
+                    <strong>
+                      {tagKeepers} {tagKeepers === 1 ? "tile keeps the tags" : "tiles keep the tags"}{" "}
+                      marked on {tagKeepers === 1 ? "it" : "them"}
+                    </strong>{" "}
+                    besides the tags below.
                   </>
                 )}
               </div>
@@ -1007,6 +1047,33 @@ function IntakeConditionDialog({
                   : undefined
               }
             />
+          )}
+
+          {/* The copy's tags (#1599), after the faults and the catalogue value — which #1593 keeps
+              under its condition row with only the faults between. *To check*, *for expertising*
+              are often known while identifying. Opened on the tags marked on the tiles, or empty: never the
+              last used. A new name becomes a tag when the step is saved, as on a copy. */}
+          {askTags && (
+            <div style={{ marginTop: "0.75rem" }}>
+              <LabelWithError htmlFor="intake-tags">
+                Tags (optional)
+                <SeedOriginNote origin={tagsOrigin} />
+              </LabelWithError>
+              {tagDictionary ? (
+                <TagEntryField
+                  collectionId={collectionId}
+                  name="copyTags"
+                  inputId="intake-tags"
+                  initialTags={seededTags}
+                  disabled={isPending}
+                  onChange={(entries) => {
+                    if (!sameFaults(entries.map(tagEntryKey), seeds.tags.tagIds)) setTagsOrigin(null);
+                  }}
+                />
+              ) : (
+                <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
+              )}
+            </div>
           )}
 
           {/* Storage location (#56/#121): optional at intake, shared by every created copy.

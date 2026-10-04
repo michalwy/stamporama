@@ -143,6 +143,15 @@ export function parseTagEntries(raw: FormDataEntryValue | null): TagEntry[] | un
   } catch {
     return undefined;
   }
+  return tagEntriesFrom(parsed);
+}
+
+/**
+ * Tag chips as they arrive in a JSON argument rather than a form field — a run's per-tile tags
+ * (#1599). The same reading as {@link parseTagEntries}: anything that is not a list is `undefined`,
+ * and an entry with neither an id nor a name is dropped.
+ */
+export function tagEntriesFrom(parsed: unknown): TagEntry[] | undefined {
   if (!Array.isArray(parsed)) return undefined;
   const out: TagEntry[] = [];
   for (const row of parsed) {
@@ -154,4 +163,10 @@ export function parseTagEntries(raw: FormDataEntryValue | null): TagEntry[] | un
     out.push({ id: tagId, name: trimmed, color: typeof color === "string" && isTagColor(color) ? color : null });
   }
   return out;
+}
+
+/** The identity of a chip — its tag's id, or its lower-cased name for one created on save — so two
+ *  lists of chips can be compared, merged and subtracted (#1599). */
+export function tagEntryKey(entry: Pick<TagEntry, "id" | "name">): string {
+  return entry.id ?? `new:${entry.name.toLowerCase()}`;
 }

@@ -25,6 +25,7 @@ import {
 } from "@/lib/scan-sheets";
 import { parseTileOwnAnswers, type MarkPatch } from "@/lib/tile-marks";
 import { faultEntriesFrom, parseFaultEntries } from "@/lib/fault-entry";
+import { parseTagEntries, tagEntriesFrom } from "@/lib/tag-entry";
 import type { Box } from "@/lib/scan-boxes";
 import {
   addTileCandidate,
@@ -239,9 +240,9 @@ export async function unpairTileBackAction(tileId: string): Promise<ScanActionSt
 }
 
 /**
- * Mark tiles' condition and certificate before they are identified, or clear them (#1550) — one tile
- * or the ticked ones, from the strip or from the boxes of the cut editor. With `onlyUnmarked`, every
- * tile handed over is given only the halves it has none of (#1556).
+ * Mark tiles' condition, certificate, faults and tags before they are identified, or clear them
+ * (#1550, #1558, #1599) — one tile or the ticked ones, from the strip or from the boxes of the cut
+ * editor. With `onlyUnmarked`, every tile handed over is given only the halves it has none of (#1556).
  */
 export async function markTilesAction(
   tileIds: string[],
@@ -370,6 +371,8 @@ export async function identifyTilesAction(
       tileAnswers: parseTileOwnAnswers(formData.get("tileAnswers")),
       // The copies' faults (#1558) — the copy dialog's own field and reading. Absent is none.
       faults: parseFaultEntries(formData.get("copyFaults")) ?? [],
+      // The copies' tags (#1599) — the copy dialog's own field and reading. Absent is none.
+      tags: parseTagEntries(formData.get("copyTags")) ?? [],
     });
     return { status: "success", outcomes: copies };
   } catch (e) {
@@ -403,7 +406,12 @@ export async function identifyTilesAsChecklistStampsAction(
       ...input,
       // Each tile's faults (#1558), read as the copy dialog's field is read — a JSON argument is no
       // more trusted than a form field.
-      tiles: input.tiles.map((t) => ({ ...t, faults: faultEntriesFrom(t.faults) ?? [] })),
+      tiles: input.tiles.map((t) => ({
+        ...t,
+        faults: faultEntriesFrom(t.faults) ?? [],
+        // And its tags (#1599), read the same way.
+        tags: tagEntriesFrom(t.tags) ?? [],
+      })),
     });
     return { status: "success", outcomes };
   } catch (e) {

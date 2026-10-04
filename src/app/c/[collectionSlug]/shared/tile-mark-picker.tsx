@@ -7,13 +7,16 @@ import {
   faultTogglePatch,
   markFaultIds,
   markKeys,
+  markTagIds,
   matchMarkKey,
   normalizeMark,
+  tagTogglePatch,
   type MarkKey,
   type MarkPatch,
   type TileMark,
 } from "@/lib/tile-marks";
 import type { FaultSummary } from "@/lib/faults";
+import type { TagSummary } from "@/lib/tags";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampConditionData } from "@/lib/conditions";
 import { CertificateStatusChip, ConditionChip } from "./dictionary-chip";
@@ -29,11 +32,12 @@ import { Tooltip } from "./tooltip";
 import { tagColorTokens } from "@/lib/tag-colors";
 import { ROW_CHIP } from "./chip-styles";
 import { useCollectionFaults } from "./use-faults";
+import { useCollectionTags } from "./use-tags";
 import { Icon } from "@/app/icons";
 
 /**
- * Marking a tile's condition and certificate before it is identified (#1550), and its faults (#1558)
- * — the pieces the strip and the cut editor share, so a mark is given, shown and cleared the same way
+ * Marking a tile's condition and certificate before it is identified (#1550), its faults (#1558)
+ * and its tags (#1599) — the pieces the strip and the cut editor share, so a mark is given, shown and cleared the same way
  * in both: a box's mark **is** its tile's.
  *
  * Three of them: the mark drawn as the dictionary's own chips (#728), the picker a chip area or a
@@ -43,26 +47,29 @@ import { Icon } from "@/app/icons";
  */
 
 /** The collection's dictionaries a mark points into, and the keys the two halves can be typed as —
- * a fault has no abbreviation, so it is picked and never typed. */
+ * a fault or a tag has no abbreviation, so it is picked and never typed. */
 export function useMarkDictionaries(collectionId: string): {
   conditions: StampConditionData[];
   certificateStatuses: CertificateStatusData[];
   faults: FaultSummary[];
+  tags: TagSummary[];
   keys: MarkKey[];
 } {
   const { data: conditions = EMPTY_CONDITIONS } = useCollectionConditions(collectionId);
   const { data: certificateStatuses = EMPTY_CERTS } = useCollectionCertificateStatuses(collectionId);
   const { data: faults = EMPTY_FAULTS } = useCollectionFaults(collectionId);
+  const { data: tags = EMPTY_TAGS } = useCollectionTags(collectionId);
   const keys = useMemo(
     () => markKeys(conditions, certificateStatuses),
     [conditions, certificateStatuses]
   );
-  return { conditions, certificateStatuses, faults, keys };
+  return { conditions, certificateStatuses, faults, tags, keys };
 }
 
 const EMPTY_CONDITIONS: StampConditionData[] = [];
 const EMPTY_CERTS: CertificateStatusData[] = [];
 const EMPTY_FAULTS: FaultSummary[] = [];
+const EMPTY_TAGS: TagSummary[] = [];
 
 /** A mark in words — *MNG · Cert* — for a hint or a sentence. */
 export function markText(
@@ -109,7 +116,8 @@ const SMALL_CHIP: React.CSSProperties = {
 /**
  * A mark as the dictionary's own chips — the condition's colour (#728), the certificate beside it,
  * and the marked faults (#1558) as one warning-tinted count, named in its tooltip: a fault's name is a
- * word or two, and the strip's squares have room for a number. Nothing at all for an unmarked tile.
+ * word or two, and the strip's squares have room for a number. The marked tags (#1599) the same way,
+ * as one neutral count. Nothing at all for an unmarked tile.
  */
 export function TileMarkChips({
   collectionId,
@@ -120,9 +128,11 @@ export function TileMarkChips({
   mark: TileMark | null | undefined;
   small?: boolean;
 }) {
-  const { conditions, certificateStatuses, faults } = useMarkDictionaries(collectionId);
+  const { conditions, certificateStatuses, faults, tags } = useMarkDictionaries(collectionId);
   const m = normalizeMark(mark);
   if (!m) return null;
+  const taggedWith = new Set(markTagIds(m));
+  const markedTags = tags.filter((t) => taggedWith.has(t.id));
   const condition = conditions.find((c) => c.id === m.conditionId);
   const certificate = certificateStatuses.find((c) => c.id === m.certificateStatusId);
   // In the dictionary's order, the order the chips read everywhere else.
@@ -165,6 +175,23 @@ export function TileMarkChips({
           >
             <Icon name="warning" size="xs" />
             {markedFaults.length}
+          </span>
+        </Tooltip>
+      )}
+      {markedTags.length > 0 && (
+        <Tooltip content={`Marked ${markedTags.length === 1 ? "tag" : "tags"}: ${markedTags.map((t) => t.name).join(", ")}`}>
+          <span
+            style={{
+              ...ROW_CHIP,
+              ...(style ?? { fontSize: "0.6875rem", padding: "0 0.3rem" }),
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.1rem",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <Icon name="tags" size="xs" />
+            {markedTags.length}
           </span>
         </Tooltip>
       )}
@@ -236,7 +263,9 @@ const TYPEAHEAD_PAUSE_MS = 700;
  * this is one answer about one piece of paper, not a filter being tuned.
  *
  * Below them the **faults** (#1558), each a toggle — on every target lacking it, off when all carry
- * it — and a fault pick leaves the menu open, since a piece can have several.
+ * it — and a fault pick leaves the menu open, since a piece can have several. Then the **tags**
+ * (#1599), the same toggles in the tags' own colours; a tag not in the dictionary yet is typed while
+ * identifying, not here.
  *
  * The trigger is the caller's: on the strip it is the tile's chip area, in the editor and on the
  * ticked-tiles bar a toolbar button. `targets` are the marks being changed, so the picker can say
@@ -271,7 +300,7 @@ export function TileMarkPicker({
   /** *Mark all unmarked* (#1556): how many of the targets lack each half. */
   fill?: { condition: number; certificate: number; noun: [string, string] };
 }) {
-  const { conditions, certificateStatuses, faults } = useMarkDictionaries(collectionId);
+  const { conditions, certificateStatuses, faults, tags } = useMarkDictionaries(collectionId);
   const { open, setOpen, pos, triggerRef, menuRef } = useFilterPopover<HTMLButtonElement>({
     disabled,
     onOpenChange,
@@ -283,6 +312,9 @@ export function TileMarkPicker({
   const anyCondition = !fill && targets.some((m) => m?.conditionId);
   const anyCertificate = !fill && targets.some((m) => m?.certificateStatusId);
   const anyFault = !fill && targets.some((m) => markFaultIds(m).length > 0);
+  const allCarryTag = (id: string) =>
+    targets.length > 0 && targets.every((m) => markTagIds(m).includes(id));
+  const anyTag = !fill && targets.some((m) => markTagIds(m).length > 0);
   /** A heading, with the count a fill pick reaches — *Condition · 27 tiles without one*. */
   const heading = (label: string, count: number | undefined) =>
     fill && count !== undefined
@@ -389,7 +421,43 @@ export function TileMarkPicker({
                 </ChipRow>
               </>
             )}
-            {(anyCondition || anyCertificate || anyFault) && (
+            {/* Never in a fill either (#1599): a tag on every unmarked tile would be a guess. The
+                list scrolls, since a collector's tags grow without limit. */}
+            {!fill && tags.length > 0 && (
+              <>
+                <div style={FILTER_MENU_HEADING_STYLE}>Tags</div>
+                <div style={{ maxHeight: "9rem", overflowY: "auto" }}>
+                  <ChipRow>
+                    {tags.map((t) => {
+                      const pressed = allCarryTag(t.id);
+                      const tokens = tagColorTokens(t.color);
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={pressed}
+                          // A piece can carry several, so the menu stays open.
+                          onClick={() => onPatch(tagTogglePatch(t.id, targets))}
+                          style={{
+                            ...ROW_CHIP,
+                            cursor: "pointer",
+                            color: tokens.color,
+                            borderColor: pressed ? tokens.color : tokens.border,
+                            background: tokens.background,
+                            fontWeight: pressed ? 700 : 500,
+                            boxShadow: pressed ? `0 0 0 1px ${tokens.color}` : undefined,
+                          }}
+                        >
+                          {t.name}
+                        </button>
+                      );
+                    })}
+                  </ChipRow>
+                </div>
+              </>
+            )}
+            {(anyCondition || anyCertificate || anyFault || anyTag) && (
               <div
                 style={{
                   display: "flex",
@@ -406,13 +474,22 @@ export function TileMarkPicker({
                     Clear the certificate
                   </ClearButton>
                 )}
-                {anyFault && (anyCondition || anyCertificate) && (
+                {anyFault && (anyCondition || anyCertificate || anyTag) && (
                   <ClearButton
                     onClick={() =>
                       pick({ removeFaultIds: [...new Set(targets.flatMap((m) => markFaultIds(m)))] })
                     }
                   >
                     Clear the faults
+                  </ClearButton>
+                )}
+                {anyTag && (anyCondition || anyCertificate || anyFault) && (
+                  <ClearButton
+                    onClick={() =>
+                      pick({ removeTagIds: [...new Set(targets.flatMap((m) => markTagIds(m)))] })
+                    }
+                  >
+                    Clear the tags
                   </ClearButton>
                 )}
               </div>

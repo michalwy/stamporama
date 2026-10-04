@@ -20,6 +20,7 @@ import {
 } from "../../src/lib/scan-sheets";
 import { discardTile, identifyTilesAsNewCopies } from "../../src/lib/scan-tiles";
 import { deleteFault } from "../../src/lib/faults";
+import { deleteTag } from "../../src/lib/tags";
 import type { Box } from "../../src/lib/scan-boxes";
 
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-tile-marks-"));
@@ -36,7 +37,8 @@ process.env.STAMPORAMA_DATA_DIR = DATA_DIR;
 //     and where the two were marked differently the mark given last wins and the replacement is said;
 //   - identifying several tiles as one stamp lets the tiles that keep their marks keep them;
 //   - faults marked on a tile (#1558) are added and removed one at a time, ride a box and a pairing
-//     (both sides' faults kept), reach the identified copies, and go with a fault deleted.
+//     (both sides' faults kept), reach the identified copies, and go with a fault deleted;
+//   - tags marked on a tile (#1599) do the same, and reach the copies **beside** the step's tags.
 
 describe("tile marks (#1550)", () => {
   let userId: string;
@@ -51,6 +53,9 @@ describe("tile marks (#1550)", () => {
   let crease: string;
   let thinGum: string;
   let foreignFault: string;
+  let toCheck: string;
+  let fromBox: string;
+  let foreignTag: string;
 
   const SHEET_W = 800;
   const SHEET_H = 600;
@@ -170,6 +175,11 @@ describe("tile marks (#1550)", () => {
       await prisma.fault.create({
         data: { collectionId: otherCollectionId, name: "Crease", sortOrder: 0 },
       })
+    ).id;
+    toCheck = (await prisma.tag.create({ data: { collectionId, name: "to-check" } })).id;
+    fromBox = (await prisma.tag.create({ data: { collectionId, name: "grandfather-box" } })).id;
+    foreignTag = (
+      await prisma.tag.create({ data: { collectionId: otherCollectionId, name: "to-check" } })
     ).id;
   });
 
@@ -603,5 +613,145 @@ describe("tile marks (#1550)", () => {
     // Not refused: a mark is owed to nobody, unlike a copy's fault.
     await deleteFault(userId, stain);
     assert.deepEqual(await faultsOf(a.id), [crease]);
+  });
+
+  // ── Tags marked on a tile (#1599) ──────────────────────────────────────────────────────────────
+
+  const tagsOf = async (tileId: string) =>
+    (await prisma.scanTileTag.findMany({ where: { tileId }, select: { tagId: true } }))
+      .map((t) => t.tagId)
+      .sort();
+  const copyTagNames = async (itemId: string) =>
+    (
+      await prisma.itemTag.findMany({ where: { itemId }, select: { tag: { select: { name: true } } } })
+    )
+      .map((t) => t.tag.name)
+      .sort();
+
+  it("marks tags on tiles, adds and removes them one at a time, and clears them with the mark", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+
+    await setTileMarks(userId, [a.id, b.id], { addTagIds: [toCheck] });
+    await setTileMarks(userId, [a.id], { addTagIds: [fromBox], addFaultIds: [crease] });
+    assert.deepEqual(await tagsOf(a.id), [toCheck, fromBox].sort());
+    assert.deepEqual(await tagsOf(b.id), [toCheck]);
+    assert.deepEqual(await faultsOf(a.id), [crease], "tags and faults sit side by side");
+
+    const listed = (await listScans(userId, { purchaseId })).batches[0].tiles;
+    assert.deepEqual(
+      [...(listed.find((t) => t.id === a.id)!.mark?.tagIds ?? [])].sort(),
+      [toCheck, fromBox].sort(),
+      "the strip reads the tags with the mark"
+    );
+
+    await setTileMarks(userId, [a.id, b.id], { removeTagIds: [toCheck] });
+    assert.deepEqual(await tagsOf(a.id), [fromBox]);
+    assert.deepEqual(await tagsOf(b.id), []);
+    assert.equal(
+      (await prisma.scanTile.findUniqueOrThrow({ where: { id: b.id } })).markedAt,
+      null,
+      "a tile left with nothing marked is unmarked"
+    );
+
+    await assert.rejects(
+      () => setTileMarks(userId, [a.id], { addTagIds: [foreignTag] }),
+      ScanValidationError
+    );
+    assert.deepEqual(await tagsOf(a.id), [fromBox], "nothing was written");
+  });
+
+  it("writes a box's tags onto its tile, and a paired back and front keep the tags of both", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, [
+      { ...BOXES[0], mark: { conditionId: mnh, certificateStatusId: null, tagIds: [toCheck] } },
+      BOXES[1],
+    ]);
+    const [a] = await tilesOf(purchaseId);
+    assert.deepEqual(await tagsOf(a.id), [toCheck]);
+
+    const back = await upload(purchaseId, "back", front.batchNo);
+    const report = await commitCut(userId, back.id, [
+      { ...BOXES[0], mark: { conditionId: null, certificateStatusId: null, tagIds: [fromBox] } },
+      BOXES[1],
+    ]);
+    assert.deepEqual(report.marksReplaced, [], "tags never replace one another");
+    assert.deepEqual(await tagsOf(a.id), [toCheck, fromBox].sort());
+
+    const second = await upload(purchaseId, "front");
+    await assert.rejects(
+      () =>
+        commitCut(userId, second.id, [
+          { ...BOXES[0], mark: { conditionId: null, certificateStatusId: null, tagIds: [foreignTag] } },
+        ]),
+      ScanValidationError
+    );
+  });
+
+  it("gives every copy the step's tags, a tile's own marked ones beside them, and a typed one born once", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+
+    const copies = await identifyTilesAsNewCopies(userId, [a.id, b.id], {
+      stampId,
+      conditionId: mnh,
+      tags: [
+        { id: toCheck, name: "to-check", color: null },
+        { id: null, name: "expertise", color: "blue" },
+      ],
+      tileAnswers: [{ tileId: a.id, tagIds: [fromBox] }],
+    });
+    assert.deepEqual(
+      await copyTagNames(copies[0].itemId),
+      ["expertise", "grandfather-box", "to-check"],
+      "a tile's own tags are added to the step's"
+    );
+    assert.deepEqual(await copyTagNames(copies[1].itemId), ["expertise", "to-check"]);
+    assert.equal(
+      await prisma.tag.count({ where: { collectionId, name: "expertise" } }),
+      1,
+      "a typed tag is born once"
+    );
+
+    // A plain identification gives no tags at all — nothing is carried over.
+    const c = await newOrder();
+    const f2 = await upload(c, "front");
+    await commitCut(userId, f2.id, [BOXES[0]]);
+    const [only] = await tilesOf(c);
+    const [plain] = await identifyTilesAsNewCopies(userId, [only.id], { stampId, conditionId: mnh });
+    assert.deepEqual(await copyTagNames(plain.itemId), []);
+  });
+
+  it("refuses a tile's own tag from another collection before creating anything", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, BOXES);
+    const [a, b] = await tilesOf(purchaseId);
+    await assert.rejects(
+      () =>
+        identifyTilesAsNewCopies(userId, [a.id, b.id], {
+          stampId,
+          conditionId: mnh,
+          tileAnswers: [{ tileId: a.id, tagIds: [foreignTag] }],
+        }),
+      ScanValidationError
+    );
+    assert.equal(await prisma.item.count({ where: { scanTiles: { some: { purchaseId } } } }), 0);
+  });
+
+  it("drops a tag's marks when the tag is deleted", async () => {
+    const purchaseId = await newOrder();
+    const front = await upload(purchaseId, "front");
+    await commitCut(userId, front.id, [BOXES[0]]);
+    const [a] = await tilesOf(purchaseId);
+    const gone = (await prisma.tag.create({ data: { collectionId, name: "gone" } })).id;
+    await setTileMarks(userId, [a.id], { addTagIds: [gone, toCheck] });
+    await deleteTag(userId, gone);
+    assert.deepEqual(await tagsOf(a.id), [toCheck]);
   });
 });

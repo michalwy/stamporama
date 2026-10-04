@@ -45,6 +45,7 @@ import {
   fillPatch,
   isEmptyPatch,
   markFaultIds,
+  markTagIds,
   normalizeMark,
   pairedMark,
   type MarkPatch,
@@ -594,26 +595,30 @@ function boxMark(box: CutBox, now: Date): { mark: TileMark | null; markedAt: Dat
 
 /**
  * The mark columns of a tile, as written — the two halves and the time, and the marked faults
- * (#1558) as a nested write of their link rows: **created** on a tile being created, **replaced** on
- * one being updated, so a mark always lands whole.
+ * (#1558) and tags (#1599) as nested writes of their link rows: **created** on a tile being created,
+ * **replaced** on one being updated, so a mark always lands whole.
  */
 function markColumns(
   { mark, markedAt }: { mark: TileMark | null; markedAt: Date | null },
   write: "create" | "update"
 ) {
   const create = markFaultIds(mark).map((faultId) => ({ faultId }));
+  const createTags = markTagIds(mark).map((tagId) => ({ tagId }));
   return {
     markConditionId: mark?.conditionId ?? null,
     markCertificateStatusId: mark?.certificateStatusId ?? null,
     markedAt: mark ? markedAt : null,
     markFaults: write === "create" ? { create } : { deleteMany: {}, create },
+    markTags: write === "create" ? { create: createTags } : { deleteMany: {}, create: createTags },
   };
 }
 
 /** What a tile read selects to know its marked faults (#1558). */
 const MARK_FAULTS_SELECT = { select: { faultId: true } } as const;
+/** What a tile read selects to know its marked tags (#1599). */
+const MARK_TAGS_SELECT = { select: { tagId: true } } as const;
 
-/** Every condition, certificate and fault a set of marks names, checked against the collection
+/** Every condition, certificate, fault and tag a set of marks names, checked against the collection
  * before any of them is written — a mark is a pointer into the collection's own dictionaries. */
 async function assertMarksInCollection(
   collectionId: string,
@@ -624,7 +629,8 @@ async function assertMarksInCollection(
     ...new Set(marks.flatMap((m) => (m?.certificateStatusId ? [m.certificateStatusId] : []))),
   ];
   const faultIds = [...new Set(marks.flatMap((m) => markFaultIds(m)))];
-  const [conditions, certs, faults] = await Promise.all([
+  const tagIds = [...new Set(marks.flatMap((m) => markTagIds(m)))];
+  const [conditions, certs, faults, tags] = await Promise.all([
     conditionIds.length > 0
       ? prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } })
       : 0,
@@ -632,6 +638,7 @@ async function assertMarksInCollection(
       ? prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } })
       : 0,
     faultIds.length > 0 ? prisma.fault.count({ where: { collectionId, id: { in: faultIds } } }) : 0,
+    tagIds.length > 0 ? prisma.tag.count({ where: { collectionId, id: { in: tagIds } } }) : 0,
   ]);
   if (conditions !== conditionIds.length) {
     throw new ScanValidationError("Condition not found in this collection.");
@@ -641,6 +648,9 @@ async function assertMarksInCollection(
   }
   if (faults !== faultIds.length) {
     throw new ScanValidationError("Fault not found in this collection.");
+  }
+  if (tags !== tagIds.length) {
+    throw new ScanValidationError("Tag not found in this collection.");
   }
 }
 
@@ -826,6 +836,7 @@ async function commitBackCut(args: {
       markCertificateStatusId: true,
       markedAt: true,
       markFaults: MARK_FAULTS_SELECT,
+      markTags: MARK_TAGS_SELECT,
     },
     orderBy: { position: "asc" },
   });
@@ -1222,11 +1233,13 @@ function tileMark(tile: {
   markConditionId: string | null;
   markCertificateStatusId: string | null;
   markFaults?: readonly { faultId: string }[];
+  markTags?: readonly { tagId: string }[];
 }): TileMark | null {
   return normalizeMark({
     conditionId: tile.markConditionId,
     certificateStatusId: tile.markCertificateStatusId,
     faultIds: (tile.markFaults ?? []).map((f) => f.faultId),
+    tagIds: (tile.markTags ?? []).map((t) => t.tagId),
   });
 }
 
@@ -1267,6 +1280,7 @@ export async function setTileMarks(
       markCertificateStatusId: true,
       markedAt: true,
       markFaults: MARK_FAULTS_SELECT,
+      markTags: MARK_TAGS_SELECT,
     },
   });
   if (tiles.length !== new Set(tileIds).size) {
@@ -1289,6 +1303,7 @@ export async function setTileMarks(
       conditionId: patch.conditionId ?? null,
       certificateStatusId: patch.certificateStatusId ?? null,
       faultIds: [...(patch.addFaultIds ?? []), ...(patch.removeFaultIds ?? [])],
+      tagIds: [...(patch.addTagIds ?? []), ...(patch.removeTagIds ?? [])],
     }),
   ]);
 
@@ -1506,6 +1521,7 @@ export async function setBackTurnover(
       markCertificateStatusId: true,
       markedAt: true,
       markFaults: MARK_FAULTS_SELECT,
+      markTags: MARK_TAGS_SELECT,
       photos: {
         where: { role: "back" },
         select: { id: true, storageBackend: true, storageKey: true, mime: true },
@@ -1722,6 +1738,7 @@ async function loadTile(tileId: string) {
       markCertificateStatusId: true,
       markedAt: true,
       markFaults: MARK_FAULTS_SELECT,
+      markTags: MARK_TAGS_SELECT,
     },
   });
   if (!tile) throw new ScanAuthError("Tile not found or access denied.");
@@ -2465,6 +2482,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         markCertificateStatusId: true,
         markedAt: true,
         markFaults: MARK_FAULTS_SELECT,
+        markTags: MARK_TAGS_SELECT,
         photos: { select: { id: true, role: true } },
         // The shortlist a parked tile carries (#607), with everything the *use the parent instead*
         // correction needs to decide itself and then name the parent: the variant flags

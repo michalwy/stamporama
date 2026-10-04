@@ -845,6 +845,14 @@ have no abbreviation.
   *the mark given last wins*.
 - **Mark all unmarked…** never gives faults: a fault belongs to one piece.
 
+**Tags.** Below the faults the pickers list your [tags](tags.md) — *to check*, *for expertising*,
+*from the box grandfather left* — in their own colours, and they work exactly as faults do: click to
+mark, click again to take off, the picker staying open; several tiles carrying a tag all have it drawn
+pressed. Merging boxes and pairing a back with its front keep the tags of both, **Mark all
+unmarked…** never gives them, and **Clear the tags** clears only them. A tile's marked tags show as a
+small chip with their number — point at it for their names. Only tags already in your list can be
+marked here; a new one is typed while identifying.
+
 Marks are kept on the tile, so they survive a reload and a break of a week between marking and
 identifying. They can be changed until the tile is identified. A tile that has become a copy or been
 discarded shows no mark any more — the copy's own condition is what counts from then on.
@@ -879,6 +887,21 @@ the same order.
   certificate and format — there is no *for all tiles* answer for them. Each tile opens on the faults marked on it, and its row says how many it has.
 - **Identify again** does not ask: it corrects what the copy is, and the copy's faults are changed in
   its own dialog.
+
+**Tags in identification.** Every identification dialog also asks for the new copy's **Tags**, after
+*Faults* — the field the copy's own dialog has: pick a tag from your list, or type a new name and
+press Enter (it is added to your list when the copy is created). Every identification **starts with
+no tags**: the field opens with the tags **marked on the tile**, labelled so, and is otherwise empty —
+the last identification's tags are never filled in.
+
+- **Several tiles identified as one stamp** all take the tags you give. The field opens on the tags
+  marked on **every** one of them; a tile marked with more **keeps** those as well, and the step says
+  so (*2 tiles keep the tags marked on them besides the tags below*).
+- **A run**: **Tags** under *For all N tiles* reach every tile. Under a tile's *its own details*, its
+  **Tags** field shows everything its copy will get — add a tag there for that tile only, or take one
+  of the run's off it. Its row then says *own tags*, and **As for all** gives it the run's tags back.
+  A tile marked with tags opens with them as its own, *marked on the tile*.
+- **Identify again** does not ask: the copy's tags are changed in its own dialog.
 
 #### Working through the tiles
 

@@ -50,7 +50,8 @@ stamps.
 **Delete**, in the same pane, takes the tag off everything carrying it. The confirmation says how many issues, stamps
 and copies that is, and nothing else about them changes — no copy, price, checklist or catalogue
 number is touched. Unlike conditions or certificate statuses, a tag in use is **not** blocked from
-being deleted: taking the label off is exactly what deleting it means.
+being deleted: taking the label off is exactly what deleting it means. A tag marked on a scan tile that is still
+to be identified comes off it too.
 
 ## Putting a tag on something
 
@@ -60,6 +61,10 @@ the one you add it with:
 - an **issue** — the issue dialog, from the Issues list or the issue's own page
 - a **stamp** — the stamp dialog, on its **Details** tab
 - a **copy** — the copy dialog, under **Notes**
+
+A new copy can also be tagged **while it is identified** from a scan tile, and a tile can be marked
+with tags before that, with the card in hand — see
+[Marking the condition before identifying](purchases.md#marking-the-condition-before-identifying).
 
 The **Tags** field is a text field. Type a name and press **space** (or **Enter**): the name becomes a
 chip, and you carry on typing the next one. To take a tag off, press the `×` on its chip, or

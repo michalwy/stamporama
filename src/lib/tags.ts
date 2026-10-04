@@ -331,6 +331,33 @@ export async function setItemTagEntries(
   });
 }
 
+/**
+ * Give copies **just created by identifying scan tiles** their tags (#1599) — each copy its own chips,
+ * since a run's tiles can add tags of their own and drop shared ones. One transaction, resolving as the
+ * copy dialog does: a name the dictionary does not hold becomes a tag once, and the next copy naming
+ * it finds it.
+ *
+ * Ownership is the caller's: the copies were created a moment ago from tiles it has checked, in
+ * `collectionId`. Never a replace — a new copy has no tags to keep or lose.
+ */
+export async function giveNewCopiesTags(
+  collectionId: string,
+  perCopy: readonly { itemId: string; entries: readonly TagEntry[] }[]
+): Promise<void> {
+  const wanted = perCopy.filter((c) => c.entries.length > 0);
+  if (wanted.length === 0) return;
+  await prisma.$transaction(async (tx) => {
+    for (const { itemId, entries } of wanted) {
+      const tagIds = await resolveTagEntries(tx, collectionId, entries);
+      if (tagIds.length === 0) continue;
+      await tx.itemTag.createMany({
+        data: tagIds.map((tagId) => ({ itemId, tagId })),
+        skipDuplicates: true,
+      });
+    }
+  });
+}
+
 /** {@link setItemTagEntries} for tags that already exist, named by id. */
 export async function setItemTags(ownerId: string, itemId: string, tagIds: string[]): Promise<void> {
   await setItemTagEntries(ownerId, itemId, idEntries(tagIds));

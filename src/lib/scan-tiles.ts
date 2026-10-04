@@ -20,6 +20,8 @@ import type { ArrivingCopy } from "./want-rules";
 import type { TileOwnAnswer } from "./tile-marks";
 import type { FaultEntry } from "./fault-entry";
 import { giveNewCopiesFaults } from "./faults";
+import type { TagEntry } from "./tag-entry";
+import { giveNewCopiesTags } from "./tags";
 import {
   resolveRunCopyDetails,
   type IssueRunIdentification,
@@ -152,7 +154,8 @@ export interface TileIdentification {
    * condition step works these out and says how many keep what, so the write is handed exactly what
    * the step said rather than re-reading the marks behind it. Absent is the ordinary pass.
    *
-   * A tile's own **faults** (#1558) replace the shared ones below for that tile alone.
+   * A tile's own **faults** (#1558) replace the shared ones below for that tile alone; its own
+   * **tags** (#1599) are added to the shared ones.
    */
   tileAnswers?: readonly TileOwnAnswer[] | null;
   /**
@@ -161,6 +164,12 @@ export interface TileIdentification {
    * (`tileAnswers`). Absent is none: a fault is never carried over from anywhere.
    */
   faults?: readonly FaultEntry[] | null;
+  /**
+   * The tags the step gave the copies (#1599) — the copy dialog's chips, so a name the dictionary does
+   * not hold becomes a tag. **Every** copy takes them, and a tile keeping its own marked tags
+   * (`tileAnswers`) takes those as well. Absent is none: tags are never carried over from anywhere.
+   */
+  tags?: readonly TagEntry[] | null;
 }
 
 export async function identifyTileAsNewCopy(
@@ -267,6 +276,17 @@ export async function identifyTilesAsNewCopies(
       entries: ownFaultEntries(own.get(tile.id)) ?? input.faults ?? [],
     }))
   );
+  // The tags (#1599): the step's on every copy, and a tile's own marked ones beside them.
+  await giveNewCopiesTags(
+    tiles[0].collectionId,
+    tiles.map((tile, i) => ({
+      itemId: copies[i].itemId,
+      entries: [
+        ...(input.tags ?? []),
+        ...(own.get(tile.id)?.tagIds ?? []).map((id) => ({ id, name: "", color: null })),
+      ],
+    }))
+  );
 
   // One tile, one copy, in the order the pieces are laid out on the card — which is the order their
   // internal numbers were allocated in, so the strip and the copy list read the same way round.
@@ -292,7 +312,8 @@ function ownFaultEntries(answer: TileOwnAnswer | undefined): FaultEntry[] | unde
 }
 
 /**
- * The tiles keeping their own condition, certificate or faults (#1550, #1558), checked before any
+ * The tiles keeping their own condition, certificate, faults or tags (#1550, #1558, #1599), checked
+ * before any
  * copy exists: each one of the tiles being identified, named once, and every answer one this
  * collection holds — a refusal on the ninth copy would leave eight tiles identified and the rest not.
  */
@@ -316,10 +337,12 @@ async function tileOwnAnswers(
     ...new Set(answers.flatMap((a) => (a.certificateStatusId ? [a.certificateStatusId] : []))),
   ];
   const faultIds = [...new Set(answers.flatMap((a) => a.faultIds ?? []))];
-  const [conditions, certs, faults] = await Promise.all([
+  const tagIds = [...new Set(answers.flatMap((a) => a.tagIds ?? []))];
+  const [conditions, certs, faults, tags] = await Promise.all([
     prisma.stampCondition.count({ where: { collectionId, id: { in: conditionIds } } }),
     prisma.certificateStatus.count({ where: { collectionId, id: { in: certIds } } }),
     prisma.fault.count({ where: { collectionId, id: { in: faultIds } } }),
+    prisma.tag.count({ where: { collectionId, id: { in: tagIds } } }),
   ]);
   if (conditions !== conditionIds.length) {
     throw new ScanValidationError("Condition not found in this collection.");
@@ -329,6 +352,9 @@ async function tileOwnAnswers(
   }
   if (faults !== faultIds.length) {
     throw new ScanValidationError("Fault not found in this collection.");
+  }
+  if (tags !== tagIds.length) {
+    throw new ScanValidationError("Tag not found in this collection.");
   }
   return own;
 }
@@ -480,6 +506,11 @@ export async function identifyTilesAsChecklistStamps(
     // A run's faults are the tile's own and nothing else (#1558): there is no shared answer for them.
     await giveNewCopiesFaults(collectionId, [
       { itemId: copy.itemId, entries: input.tiles[i].faults ?? [] },
+    ]);
+    // A run's tags (#1599) arrive per tile already decided — the run's shared tags with the tile's
+    // own added and its dropped ones taken off, which the dialog works out.
+    await giveNewCopiesTags(collectionId, [
+      { itemId: copy.itemId, entries: input.tiles[i].tags ?? [] },
     ]);
     // Each copy gets **its own** tile's pictures — #596's rule, unchanged.
     await consumeTile(tile.id, copy.itemId);
