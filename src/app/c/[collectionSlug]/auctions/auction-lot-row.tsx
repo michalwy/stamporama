@@ -45,6 +45,7 @@ import {
   RECOMMENDATION_CARET_SLOT,
 } from "./bid-recommendation-popover";
 import { Icon } from "@/app/icons";
+import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -895,29 +896,26 @@ export function AuctionLotRow({
             pushed to the far edge — a two-line grid held out at arm's length stretched the row
             across the screen and put the numbers furthest from everything they describe. */}
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          {/* The caret leads both lines, in a cell running the row's full height and reaching its
+              left edge (#1589) — a click there expands and never opens the sale. */}
+          {onToggleExpanded && (
+            <CaretCell
+              expanded={!!expanded}
+              onToggle={onToggleExpanded}
+              label={expanded ? "Collapse contents" : "Expand contents"}
+              bleed={{
+                top: "0.75rem",
+                bottom: lot.notes ? undefined : "0.75rem",
+                left: "1.25rem",
+                right: "0.25rem",
+              }}
+              // Half the row's gap from the lot's name, as it sat when it was on line 1.
+              style={{ marginRight: "-0.75rem" }}
+            />
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Line 1: what the lot is and where to see it */}
             <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
-              {onToggleExpanded && (
-                <button
-                  type="button"
-                  onClick={onToggleExpanded}
-                  aria-label={expanded ? "Collapse contents" : "Expand contents"}
-                  aria-expanded={expanded}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.75rem",
-                    lineHeight: 1,
-                    padding: 0,
-                    flexShrink: 0,
-                  }}
-                >
-                  <Icon name={expanded ? "collapse" : "expand"} size="sm" />
-                </button>
-              )}
               <span
                 style={{
                   fontSize: "0.9375rem",

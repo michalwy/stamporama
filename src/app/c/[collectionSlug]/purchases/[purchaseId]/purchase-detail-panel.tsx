@@ -202,6 +202,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
+import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 /** When to release the arrival mark on a deep-linked lot card (#876). A **floor** under the 2s
  * `.arrival-flash` animation in `globals.css`, not a duration of its own: the animation starts a
@@ -3151,7 +3152,7 @@ function LotCard({
           background: checked ? "var(--color-accent-soft)" : undefined,
         }}
       >
-        <label style={SELECT_STRIP}>
+        <CheckCell style={SELECT_STRIP}>
           <input
             type="checkbox"
             checked={checked}
@@ -3162,7 +3163,7 @@ function LotCard({
             aria-label="Select this copy"
             style={{ cursor: "pointer" }}
           />
-        </label>
+        </CheckCell>
         <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
       </div>
     );
@@ -3262,15 +3263,17 @@ function LotCard({
         {/* The third checkbox, one level up from an issue group's (#571). It works on a collapsed
             card on purpose: lot cards start collapsed, and making a whole-lot action wait for an
             expand would be the click the ⋮ entries used to save, back by another route. */}
+        {/* The box and the caret are clickable across their whole cells, to the header line's top
+            and bottom (#1589). */}
         {open && filteredCount > 0 && (
-          <Tooltip
-            content={
-              filterMode === "none" && !dispositionFilter
-                ? "Select every copy in this lot"
-                : "Select every copy the current filter is showing"
-            }
-          >
-            <label style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+          <CheckCell bleed={{ top: "0.875rem", bottom: "0.875rem", left: "1.25rem", right: "0.3125rem" }}>
+            <Tooltip
+              content={
+                filterMode === "none" && !dispositionFilter
+                  ? "Select every copy in this lot"
+                  : "Select every copy the current filter is showing"
+              }
+            >
               <input
                 type="checkbox"
                 checked={lotBoxState === "on"}
@@ -3279,26 +3282,21 @@ function LotCard({
                 }}
                 onChange={() => setSelection((sel) => toggleContainer(sel, lotContainer))}
                 aria-label="Select every copy this lot is showing"
-                style={{ cursor: "pointer" }}
+                style={{ margin: 0, cursor: "pointer" }}
               />
-            </label>
-          </Tooltip>
+            </Tooltip>
+          </CheckCell>
         )}
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          aria-label={expanded ? "Collapse" : "Expand"}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-            padding: 0,
+        <CaretCell
+          expanded={expanded}
+          onToggle={onToggleExpanded}
+          bleed={{
+            top: "0.875rem",
+            bottom: "0.875rem",
+            left: open && filteredCount > 0 ? "0.3125rem" : "1.25rem",
+            right: "0.3125rem",
           }}
-        >
-          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
-        </button>
+        />
         {/* The title takes the width the row has and is shortened only when it genuinely does not
             fit (#1412): a title copied off an auction is long, and the end a fixed cap cut off is
             usually what tells two lots apart. It is the one item on this row that gives way — the
@@ -3969,7 +3967,7 @@ function OrderCopiesView({
           background: checked ? "var(--color-accent-soft)" : undefined,
         }}
       >
-        <label style={SELECT_STRIP}>
+        <CheckCell style={SELECT_STRIP}>
           <input
             type="checkbox"
             checked={checked}
@@ -3977,7 +3975,7 @@ function OrderCopiesView({
             aria-label="Select this copy"
             style={{ cursor: "pointer" }}
           />
-        </label>
+        </CheckCell>
         <div style={{ flex: 1, minWidth: 0 }}>{row}</div>
       </div>
     );

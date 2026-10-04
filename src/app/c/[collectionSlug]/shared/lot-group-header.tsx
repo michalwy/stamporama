@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Tooltip } from "./tooltip";
-import { Icon } from "@/app/icons";
+import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 /**
  * A plain collapsible heading over part of a lot's item list (#1189) — an area, or a year of
@@ -49,26 +49,12 @@ export function LotGroupHeader({
         cursor: "pointer",
       }}
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        aria-label={collapsed ? "Expand" : "Collapse"}
-        style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "var(--color-text-muted)",
-          fontSize: "0.75rem",
-          padding: "0.25rem",
-          flexShrink: 0,
-          lineHeight: 1,
-        }}
-      >
-        <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
-      </button>
+      {/* The header's own click collapses it too; the caret's cell is what lights (#1589). */}
+      <CaretCell
+        expanded={!collapsed}
+        onToggle={onToggle}
+        bleed={{ top: "0.5rem", bottom: "0.5rem", left: "1.25rem", right: "0.25rem" }}
+      />
 
       <span
         style={{

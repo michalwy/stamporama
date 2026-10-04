@@ -24,6 +24,7 @@ import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-
 import { addTradeGiveLinesAction } from "@/app/actions/trades";
 import { useOfferableCopies, useInvalidateTradeDetail } from "./use-trade-detail-query";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 // The **give side's** picker (#637): which copies leave.
 //
@@ -304,7 +305,7 @@ export function TradeCopyPickerDialog({
                       background: checked ? "var(--color-accent-soft)" : undefined,
                     }}
                   >
-                    <label style={SELECT_STRIP}>
+                    <CheckCell style={SELECT_STRIP}>
                       <input
                         type="checkbox"
                         checked={checked}
@@ -312,7 +313,7 @@ export function TradeCopyPickerDialog({
                         aria-label="Select this copy"
                         style={{ cursor: "pointer" }}
                       />
-                    </label>
+                    </CheckCell>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <InventoryItemRow
                         collectionId={collectionId}

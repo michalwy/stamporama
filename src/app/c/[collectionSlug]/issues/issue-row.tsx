@@ -36,6 +36,7 @@ import {
   type StampTreeReorder,
 } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { CaretCell, CARET_GLYPH_WIDTH, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -361,29 +362,20 @@ function StampTreeNode({
               subtree travels with the row it is on. */}
           {reordering && <StampDragGrip drag={drag} />}
           {/* Expand/collapse toggle sits first, before the photo. */}
+          {/* The caret's and the box's cells run the row's full height (#1589). */}
           {hasChildren ? (
-            <button
-              type="button"
-              onClick={() => setCollapsed(!collapsed)}
-              aria-label={collapsed ? "Expand" : "Collapse"}
-              style={{
-                alignSelf: "center",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--color-text-muted)",
-                fontSize: "0.625rem",
-                padding: "0.125rem",
-                flexShrink: 0,
-                lineHeight: 1,
-                width: "0.875rem",
-                textAlign: "center",
+            <CaretCell
+              expanded={!collapsed}
+              onToggle={() => setCollapsed(!collapsed)}
+              bleed={{
+                top: "0.4rem",
+                bottom: "0.55rem",
+                left: reordering ? undefined : "0.5rem",
+                right: "0.25rem",
               }}
-            >
-              <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
-            </button>
+            />
           ) : (
-            <span style={{ width: "0.875rem", flexShrink: 0 }} />
+            <span style={{ width: CARET_GLYPH_WIDTH, flexShrink: 0 }} />
           )}
 
           {/* The selection box (#808), after the caret so it indents with the node: a child's box
@@ -391,23 +383,27 @@ function StampTreeNode({
               ticked and locked, and says why on hover — the rule shown where it acts. Put away while
               reordering, where the grip is what the row is for; the ticks stay. */}
           {selection && !reordering && (
-            <Tooltip
-              content={
-                carried
-                  ? "Selected with the ticked stamp above it — a ticked stamp brings all its variants and child stamps with it."
-                  : ""
-              }
-              style={{ alignSelf: "center", flexShrink: 0 }}
+            <CheckCell
+              disabled={carried}
+              bleed={{ top: "0.4rem", bottom: "0.55rem", left: "0.25rem", right: "0.25rem" }}
             >
-              <input
-                type="checkbox"
-                checked={selected}
-                disabled={carried}
-                onChange={() => onToggleTick(node.stampId)}
-                aria-label={carried ? "Selected with the stamp above it" : "Select this stamp"}
-                style={{ margin: 0, cursor: carried ? "default" : "pointer" }}
-              />
-            </Tooltip>
+              <Tooltip
+                content={
+                  carried
+                    ? "Selected with the ticked stamp above it — a ticked stamp brings all its variants and child stamps with it."
+                    : ""
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  disabled={carried}
+                  onChange={() => onToggleTick(node.stampId)}
+                  aria-label={carried ? "Selected with the stamp above it" : "Select this stamp"}
+                  style={{ margin: 0, cursor: carried ? "default" : "pointer" }}
+                />
+              </Tooltip>
+            </CheckCell>
           )}
 
           {/* Catalog-level photo of this stamp (#137) as a left column, so the row reads as
@@ -979,29 +975,17 @@ export function IssueRow({
           gap: "0.75rem",
         }}
       >
-        {/* Expand/collapse toggle sits first, before the photo. */}
-        <button
-          type="button"
-          onClick={() => {
+        {/* Expand/collapse toggle sits first, before the photo — in a cell that runs the row's full
+            height and reaches its left edge (#1589). */}
+        <CaretCell
+          expanded={isExpanded}
+          onToggle={() => {
             // Branches opened by hand stay open while the issue does (#1520), and no longer.
             if (isExpanded) setBranchToggles({});
             setIsExpanded(!isExpanded);
           }}
-          aria-label={isExpanded ? "Collapse" : "Expand"}
-          style={{
-            alignSelf: "center",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-            padding: "0.25rem",
-            flexShrink: 0,
-            lineHeight: 1,
-          }}
-        >
-          <Icon name={isExpanded ? "collapse" : "expand"} size="sm" />
-        </button>
+          bleed={{ top: "0.875rem", bottom: "0.875rem", left: "1.25rem", right: "0.375rem" }}
+        />
 
         {/* Issue-level gallery (#137): the main photos of the required-for-completeness stamps,
             shown as a left column so the issue reads as [arrow][photo][text] like inventory. The

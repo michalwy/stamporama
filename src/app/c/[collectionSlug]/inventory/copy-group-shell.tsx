@@ -7,6 +7,7 @@ import { SELECT_STRIP, type CopySelection } from "./inventory-copy-list";
 import { useInventoryItemsInfinite, type InventoryItemFilters } from "./use-inventory-query";
 import { useReportRowsInView } from "./use-rows-in-view";
 import { Icon } from "@/app/icons";
+import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 /**
  * What every grouped row of the Copies list is made of — the duplicate groups (#372) and the filing
@@ -69,9 +70,13 @@ export function CopyGroupShell({
           // The strip's layout rides on the tooltip's own wrapper — it is the flex item here, and a
           // hint around a full-height gutter would otherwise collapse it (see the `Tooltip` rules).
           <Tooltip content={selectAll.disabledHint ?? selectAll.label} style={SELECT_STRIP}>
-            {/* A `<label>` filling the strip, so the whole gutter is the hit area rather than the
-                13px box in it — the same target a member copy's checkbox gets. */}
-            <label style={GROUP_SELECT_LABEL}>
+            {/* The whole gutter, to the row's top and bottom edges, is the hit area rather than the
+                13px box in it — the same target a member copy's checkbox gets (#1589). */}
+            <CheckCell
+              disabled={!!selectAll.disabledHint}
+              bleed={{ top: "0.75rem", bottom: "0.75rem" }}
+              style={{ flex: 1 }}
+            >
               <input
                 type="checkbox"
                 checked={selectAll.checked}
@@ -84,30 +89,18 @@ export function CopyGroupShell({
                 aria-label={selectAll.label}
                 style={{ cursor: selectAll.disabledHint ? "not-allowed" : "pointer" }}
               />
-            </label>
+            </CheckCell>
           </Tooltip>
         ) : (
           <span style={{ ...SELECT_STRIP, cursor: "default" }} />
         )}
 
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={open ? "Hide copies" : "Show copies"}
-          aria-expanded={open}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "1.5rem",
-            flexShrink: 0,
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-            padding: 0,
-          }}
+        <CaretCell
+          expanded={open}
+          onToggle={onToggle}
+          label={open ? "Hide copies" : "Show copies"}
+          bleed={{ top: "0.75rem", bottom: "0.75rem" }}
+          style={{ width: "1.5rem" }}
         >
           <span
             style={{
@@ -118,7 +111,7 @@ export function CopyGroupShell({
           >
             <Icon name="expand" size="sm" />
           </span>
-        </button>
+        </CaretCell>
 
         <div style={{ flex: 1, minWidth: 0 }}>{header}</div>
       </div>
@@ -251,11 +244,3 @@ export function useGroupMembers({
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
-const GROUP_SELECT_LABEL: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "100%",
-  height: "100%",
-  cursor: "pointer",
-};

@@ -243,6 +243,14 @@ A few of the most-repeated actions are also reachable **without opening the menu
 - a row on the **Purchases** list — pencil (Edit), and only that: the row opens the purchase on its own click, and deleting one is never a single click.
 - a lot on the **Auction lots** list — the circular arrow (Bid unchanged) and the contents icon (Describe contents / Contents), which are the two halves of a watchlist pass. When there is a new figure to record you type it straight into the row, so the bid-filling entries stay in the menu. A greyed-out icon still says why when you hover it — for example, there is no bid to confirm as unchanged until one has been recorded.
 
+**The caret and the checkbox at the front of a row are easy to hit.** You do not have to land on the
+little arrow or the box itself: anywhere in the strip they sit in — the full height of the row, from
+its left edge to the start of what follows — expands the row or ticks it, and hovering there lights
+the arrow or the box to show it. A click there only expands or ticks; it never also opens the row.
+This holds on every list and list-shaped dialog with a caret or a checkbox: issues and the stamps in
+their trees, copies and their group rows, offers, a purchase's lots and the issue groups inside
+them, the sets and lines of an offer or a sale, auction lots, areas, locations and the pickers.
+
 Lists whose menus hold nothing worth promoting keep the plain **⋮**. The **Sales** list is the one such: viewing a sale is the row's own click, its transaction link is already on the row as a labelled **Transaction** chip, and deleting is destructive.
 
 The arrow appears on rows **inside** the detail pages too — the stamps of an issue, a stamp's variants and issues, the copies listed on either — so reaching a record's own screen is the same gesture wherever you meet that record.

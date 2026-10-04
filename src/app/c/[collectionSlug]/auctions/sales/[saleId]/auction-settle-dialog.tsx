@@ -8,6 +8,7 @@ import { settlementLinePrice } from "@/lib/auction-lot";
 import { auctionLotName } from "@/lib/auction-rules";
 import type { AuctionLotDetailView, AuctionSaleDetailView } from "../../use-auctions-query";
 import { formatDay } from "../../auction-format";
+import { CELL_GLYPH } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 // **Settling a parcel into a purchase** (#28) — the winning half of ADR-0021 §7.
 //
@@ -196,15 +197,22 @@ export function AuctionSettleDialog({
                 const n = copyCount(lot);
                 return (
                   <tr key={lot.id} style={{ opacity: on ? 1 : 0.5 }}>
-                    <Td>
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        aria-label={`Include ${lotLabel(lot)}`}
-                        onChange={(e) =>
-                          setIncluded((prev) => ({ ...prev, [lot.id]: e.currentTarget.checked }))
-                        }
-                      />
+                    <Td
+                      // The whole cell toggles the box, not the box alone (#1589). A table cell
+                      // cannot hold a full-height label, so the cell takes the click itself.
+                      onCellClick={() => setIncluded((prev) => ({ ...prev, [lot.id]: !prev[lot.id] }))}
+                    >
+                      <span className="cell-target-glyph" style={CELL_GLYPH}>
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          aria-label={`Include ${lotLabel(lot)}`}
+                          onChange={(e) =>
+                            setIncluded((prev) => ({ ...prev, [lot.id]: e.currentTarget.checked }))
+                          }
+                          style={{ margin: 0 }}
+                        />
+                      </span>
                     </Td>
                     <Td>
                       <div style={{ fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
@@ -334,17 +342,28 @@ function Th({
 function Td({
   children,
   align,
+  onCellClick,
 }: {
   children?: React.ReactNode;
   align?: "right";
+  /** Makes the cell a target for the control in it: a click anywhere but on the control itself. */
+  onCellClick?: () => void;
 }) {
   return (
     <td
+      className={onCellClick ? "cell-target" : undefined}
+      onClick={
+        onCellClick &&
+        ((e) => {
+          if (!(e.target instanceof HTMLInputElement)) onCellClick();
+        })
+      }
       style={{
         textAlign: align ?? "left",
         padding: "0.5rem",
         verticalAlign: "middle",
         borderBottom: "1px solid var(--color-border)",
+        cursor: onCellClick ? "pointer" : undefined,
       }}
     >
       {children}

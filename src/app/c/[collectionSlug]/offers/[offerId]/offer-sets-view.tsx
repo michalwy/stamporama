@@ -40,6 +40,7 @@ import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/us
 import { Icon, type IconName } from "@/app/icons";
 import { faultReducedTotalHint } from "@/lib/fault-reduction";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
+import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 
 // The offer sets view adds two keys to the shared copy sort list: "Set order" — the offer's own
@@ -836,9 +837,11 @@ function SetCard({
         }}
       >
         {setDrag && <DragGrip label="Drag to reorder this set" />}
-        <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
-        </span>
+        <CaretCell
+          expanded={expanded}
+          onToggle={onToggle}
+          bleed={{ top: "0.75rem", bottom: "0.75rem", left: setDrag ? undefined : "1rem", right: "0.3125rem" }}
+        />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {set.label}
@@ -922,9 +925,11 @@ function LocationCard({ group, byIssue, ctx }: { group: CopyGroup; byIssue: bool
           boxShadow: stuck ? STUCK_SHADOW : undefined,
         }}
       >
-        <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
-        </span>
+        <CaretCell
+          expanded={!collapsed}
+          onToggle={() => setCollapsed((c) => !c)}
+          bleed={{ top: "0.625rem", bottom: "0.625rem", left: "1rem", right: "0.25rem" }}
+        />
         <span style={{ flex: 1, minWidth: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <Icon name="location" size="sm" /> {group.label}
         </span>

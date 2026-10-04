@@ -21,8 +21,8 @@ import { LocationTreeSelect, buildLocationTree } from "@/app/location-tree-selec
 import { getLocationDescendantIds, flattenLocationTree } from "@/app/c/[collectionSlug]/shared/location-helpers";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
-import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 // Persisted collapse state for the location management tree, consistent with the area
 // management tree (#237) and area filter tree (#81). Distinct key so it collapses independently.
@@ -344,33 +344,16 @@ export function LocationsPanel({
               }}
             >
               {/* Expand/collapse toggle for nodes with children; a reserved spacer otherwise so
-                  every row's name lines up (#237). */}
+                  every row's name lines up (#237). The caret's cell runs the row's full height
+                  (#1589). */}
               {hasChildren ? (
-                <button
-                  type="button"
-                  onClick={() => toggle(location.id)}
-                  aria-label={isCollapsed ? "Expand" : "Collapse"}
-                  aria-expanded={!isCollapsed}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "1rem",
-                    height: "1rem",
-                    flexShrink: 0,
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "var(--color-text-muted)",
-                    fontSize: "0.625rem",
-                    padding: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  <Icon name={isCollapsed ? "expand" : "collapse"} size="sm" />
-                </button>
+                <CaretCell
+                  expanded={!isCollapsed}
+                  onToggle={() => toggle(location.id)}
+                  bleed={{ top: "0.75rem", bottom: "0.75rem", left: "0.75rem", right: "0.375rem" }}
+                />
               ) : (
-                <span style={{ width: "1rem", flexShrink: 0 }} />
+                <span style={{ width: CARET_GLYPH_WIDTH, flexShrink: 0 }} />
               )}
 
               <span

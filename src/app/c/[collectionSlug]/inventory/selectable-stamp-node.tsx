@@ -16,6 +16,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/checklist-chip";
 import { PhotoThumb } from "./photo-thumb";
 import { Icon } from "@/app/icons";
+import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 /** A selectable stamp/variant row in a rich picker tree (catalog chips, dates, prices, and
  * the "— unknown variant" marker on a node that still has variant children). Shared by the
@@ -139,32 +140,15 @@ export function SelectableStampNode({
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
             {/* Expand/collapse toggle sits first, before the photo. */}
+            {/* In a full-height cell (#1589), which keeps its click from picking the row. */}
             {hasChildren ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setUserCollapsed(!collapsed);
-                }}
-                aria-label={collapsed ? "Expand" : "Collapse"}
-                style={{
-                  alignSelf: "center",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--color-text-muted)",
-                  fontSize: "0.625rem",
-                  padding: "0.125rem",
-                  flexShrink: 0,
-                  lineHeight: 1,
-                  width: "0.875rem",
-                  textAlign: "center",
-                }}
-              >
-                <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
-              </button>
+              <CaretCell
+                expanded={!collapsed}
+                onToggle={() => setUserCollapsed(!collapsed)}
+                bleed={{ top: "0.4rem", bottom: "0.55rem", left: "0.5rem", right: "0.25rem" }}
+              />
             ) : (
-              <span style={{ width: "0.875rem", flexShrink: 0 }} />
+              <span style={{ width: CARET_GLYPH_WIDTH, flexShrink: 0 }} />
             )}
 
             {/* Catalog-level photo (#137) as a left column, matching the inventory list. Reserved

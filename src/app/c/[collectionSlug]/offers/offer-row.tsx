@@ -35,6 +35,7 @@ import {
 } from "./offer-badges";
 import { Icon, type IconName } from "@/app/icons";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -217,9 +218,9 @@ export function OfferRow({
       }}
     >
       {selection && (
-        // A `<label>`, so the whole strip is the hit area rather than the 13px box in it, and its
-        // own click never reaches the row's navigation handler.
-        <label style={SELECT_STRIP} onClick={(e) => e.stopPropagation()}>
+        // The whole strip is the hit area rather than the 13px box in it, and its click never
+        // reaches the row's navigation handler (#1589).
+        <CheckCell style={SELECT_STRIP}>
           <input
             type="checkbox"
             checked={checked}
@@ -227,7 +228,7 @@ export function OfferRow({
             aria-label={`Select offer ${offer.name ?? offer.label}`}
             style={{ cursor: "pointer" }}
           />
-        </label>
+        </CheckCell>
       )}
       <div
         onMouseEnter={() => setHovered(true)}
