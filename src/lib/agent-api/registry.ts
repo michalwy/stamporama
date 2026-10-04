@@ -15,7 +15,7 @@
 // taking it to fifty-six; #1512 added the eight checklist operations, six of which write, taking it
 // to sixty-four; #1540 added the four catalogue-price operations, two of which write, taking it to
 // sixty-eight; #1539 added the six area operations, five of which write, taking it to
-// **seventy-four**. Each one is an entry here
+// seventy-four; #1627 added the five auction writes, taking it to **seventy-nine**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -31,7 +31,8 @@
 // this counterparty have that answers it, what is this set still missing, then the trade itself,
 // built one side at a time and read back as a verdict — then the auctions already followed (#1036),
 // in the order a morning's mail is read against them: what is open, what it can cost, and whether a
-// listing in the mail is one of them — then purchases (#1390), in the order an order confirmation
+// listing in the mail is one of them — then the register kept of them (#1627), in the order a lot
+// is entered: the lot, its corrections, its contents, its ceiling, and its sale's terms — then purchases (#1390), in the order an order confirmation
 // is entered: is it already here, who sold it, the purchase, its lots, its expenses — then the
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
 // their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then
@@ -49,8 +50,8 @@
 // a model reads down.
 //
 // **Nothing here publishes to a marketplace, nothing here reaches a counterparty and nothing here
-// writes to the auction watchlist, and all three are enforced by there being no such entry** (#711,
-// #712, #1036; `agent-api.md`, *What is deliberately absent*). It is not a flag: a switch is something that can be flipped, and an operation that does
+// bids, and all three are enforced by there being no such entry** (#711, #712, #1036 as #1627
+// narrowed it — the register is written, a bid never; `agent-api.md`, *What is deliberately absent*). It is not a flag: a switch is something that can be flipped, and an operation that does
 // not exist cannot be. Four tests keep it that way, in two pairs that fail on different things —
 // `tests/integration/agent-api-offers.test.ts` and `tests/integration/agent-api-trades.test.ts` fail
 // on a publish-shaped or send-shaped **name** in this array, and
@@ -95,6 +96,13 @@ import {
   listAuctionWatchlistOperation,
   summarizeAuctionExposureOperation,
 } from "./operations/auctions";
+import {
+  addAuctionLotOperation,
+  setAuctionLotCeilingOperation,
+  setAuctionLotLinesOperation,
+  updateAuctionLotOperation,
+  updateAuctionSaleOperation,
+} from "./operations/auction-writes";
 import {
   addTradeGiveLinesOperation,
   addTradeReceiveLinesOperation,
@@ -195,6 +203,11 @@ export const OPERATIONS: readonly Operation[] = [
   listAuctionWatchlistOperation,
   summarizeAuctionExposureOperation,
   findTrackedAuctionLotsOperation,
+  addAuctionLotOperation,
+  updateAuctionLotOperation,
+  setAuctionLotLinesOperation,
+  setAuctionLotCeilingOperation,
+  updateAuctionSaleOperation,
   listPurchasesOperation,
   getPurchaseOperation,
   createSellerOperation,

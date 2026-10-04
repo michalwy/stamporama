@@ -30,7 +30,11 @@ import {
   lineConditionLabel,
   normalizeLineCondition,
 } from "./auction-line-condition";
-import { offerUrlMatchClauses, urlNamesPlatformOffer } from "./platform-offer-url";
+import {
+  offerUrlMatchClauses,
+  platformOfferIdFromUrl,
+  urlNamesPlatformOffer,
+} from "./platform-offer-url";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
@@ -64,7 +68,13 @@ import {
   type ApiReviewWrite,
 } from "./auction-review";
 import { roundAmount } from "./decimal-input";
-import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
+import {
+  orderTagSummaries,
+  replaceAuctionLotTagsTx,
+  TAG_SUMMARY_SELECT,
+  type TagSummary,
+} from "./tags";
+import type { TagEntry } from "./tag-entry";
 import { tagFilterWhere, type TagFilterOpts } from "./tag-filter";
 
 // Server-side domain logic for **auction tracking** (ADR-0021, #350–#352): a bidding watchlist with
@@ -108,6 +118,8 @@ export type AuctionBlockReason =
   // Settlement (#1623): a line in a lot going into the parcel still has its condition unknown or
   // one of several, and no condition was picked for it.
   | "condition-unsettled"
+  // The agent API's add (#1627): the lot has no closing time of its own and its sale none to share.
+  | "no-closing-time"
   // Capture (#355): no platform of this collection is marked as the marketplace the page came from.
   // Distinct from `no-platform`, which is a lot being written without one — here the collector named
   // nothing and nothing is missing from the page; a setting has simply not been made yet.
@@ -299,6 +311,10 @@ export interface AuctionLotListItem {
   /** Whether the ceiling was set apart from the bid — the row then shows it under the bid, and it
    * stays put when the bid changes until it is cleared. */
   ceilingSetApart: boolean;
+  /** How the ceiling set apart was reached, when the agent API set it with a note (#1627) — the
+   * condition and certificate a recommendation assumed. Null without one, and whenever the ceiling
+   * follows the bid: a note explains {@link maxBid} and is cleared with it. */
+  ceilingNote: string | null;
   finalPrice: string | null;
   /** Where the lot is in its life, as recorded: `open | closed | cancelled`. */
   status: AuctionLotStatus;
@@ -455,6 +471,7 @@ const LOT_SELECT = {
   checkedAt: true,
   myBid: true,
   maxBid: true,
+  ceilingNote: true,
   finalPrice: true,
   fxRateToBase: true,
   status: true,
@@ -539,6 +556,7 @@ function toLotListItem(
     maxBid: money(row.maxBid),
     ceiling,
     ceilingSetApart: row.maxBid !== null,
+    ceilingNote: row.maxBid !== null ? row.ceilingNote : null,
     finalPrice: money(row.finalPrice),
     status,
     wonTie: row.wonTie,
@@ -1962,6 +1980,24 @@ export async function createAuctionSale(
   input: AuctionSaleInput
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
+  const sale = await prisma.auctionSale.create({
+    data: await newAuctionSaleData(ownerId, collectionId, input),
+    select: { id: true },
+  });
+  await rememberSellerPlatform(input.sellerId, input.platformId);
+  return sale.id;
+}
+
+/**
+ * The row a new sale is created as: the parties checked, and everything the caller left unset
+ * seeded from the seller's defaults. Read before any write, so the agent API's add (#1627) can
+ * create the sale inside the same transaction as its lot and the *to review* marker.
+ */
+async function newAuctionSaleData(
+  ownerId: string,
+  collectionId: string,
+  input: AuctionSaleInput
+): Promise<Prisma.AuctionSaleUncheckedCreateInput> {
   await assertContact(collectionId, input.sellerId, "seller");
   await assertContact(collectionId, input.platformId, "platform");
 
@@ -1970,27 +2006,21 @@ export async function createAuctionSale(
     prisma.contact.findUniqueOrThrow({ where: { id: input.sellerId }, select: { name: true } }),
     prisma.contact.findUniqueOrThrow({ where: { id: input.platformId }, select: { name: true } }),
   ]);
-
-  const sale = await prisma.auctionSale.create({
-    data: {
-      collectionId,
-      sellerId: input.sellerId,
-      platformId: input.platformId,
-      name: input.name ?? deriveAuctionSaleName(seller.name, platform.name),
-      url: input.url,
-      endsAt: input.endsAt,
-      currency:
-        input.currency ||
-        (await resolveNewSaleCurrency(collectionId, input.sellerId, input.platformId)),
-      shippingCost: input.shippingCost ?? defaults?.defaultShippingCost ?? null,
-      premiumPercent: input.premiumPercent ?? defaults?.buyerPremiumPercent ?? null,
-      premiumFixed: input.premiumFixed ?? defaults?.buyerPremiumFixed ?? null,
-      status: input.status ?? "open",
-    },
-    select: { id: true },
-  });
-  await rememberSellerPlatform(input.sellerId, input.platformId);
-  return sale.id;
+  return {
+    collectionId,
+    sellerId: input.sellerId,
+    platformId: input.platformId,
+    name: input.name ?? deriveAuctionSaleName(seller.name, platform.name),
+    url: input.url,
+    endsAt: input.endsAt,
+    currency:
+      input.currency ||
+      (await resolveNewSaleCurrency(collectionId, input.sellerId, input.platformId)),
+    shippingCost: input.shippingCost ?? defaults?.defaultShippingCost ?? null,
+    premiumPercent: input.premiumPercent ?? defaults?.buyerPremiumPercent ?? null,
+    premiumFixed: input.premiumFixed ?? defaults?.buyerPremiumFixed ?? null,
+    status: input.status ?? "open",
+  };
 }
 
 /** Edit a sale's own fields. The currency and fees stay editable in every status — the terms of a
@@ -2697,7 +2727,7 @@ export async function updateAuctionLot(
 
   const current = await prisma.auctionLot.findUniqueOrThrow({
     where: { id: lotId },
-    select: { currentBid: true },
+    select: { currentBid: true, maxBid: true },
   });
   const bidChanged = money(current.currentBid) !== input.currentBid;
 
@@ -2714,9 +2744,23 @@ export async function updateAuctionLot(
       ...(bidChanged ? { checkedAt: input.currentBid !== null ? new Date() : null } : {}),
       myBid: input.myBid,
       maxBid: input.maxBid,
+      ...ceilingNoteAfter(current.maxBid, input.maxBid),
       notes: input.notes,
     },
   });
+}
+
+/**
+ * What a write of the ceiling set apart does to its note (#1627). The note explains the figure the
+ * agent API wrote it with, so a write that changes or clears that figure without restating the note
+ * takes the note away rather than leaving it to explain a ceiling it was never written for. An
+ * unchanged figure keeps it — the lot dialog restates every field on save.
+ */
+function ceilingNoteAfter(
+  current: Prisma.Decimal | null,
+  next: string | null
+): { ceilingNote?: null } {
+  return money(current) === next ? {} : { ceilingNote: null };
 }
 
 /** What marking a lot *not stamps* (#1624) writes: the mark, and what the thing is. */
@@ -2830,7 +2874,14 @@ export async function setAuctionLotMaxBid(
 ): Promise<void> {
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
-  await prisma.auctionLot.update({ where: { id: lotId }, data: { maxBid } });
+  const current = await prisma.auctionLot.findUniqueOrThrow({
+    where: { id: lotId },
+    select: { maxBid: true },
+  });
+  await prisma.auctionLot.update({
+    where: { id: lotId },
+    data: { maxBid, ...ceilingNoteAfter(current.maxBid, maxBid) },
+  });
 }
 
 /**
@@ -2845,9 +2896,17 @@ export async function setAuctionLotMyBidAndCeiling(
 ): Promise<void> {
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
+  const current = await prisma.auctionLot.findUniqueOrThrow({
+    where: { id: lotId },
+    select: { maxBid: true },
+  });
   await prisma.auctionLot.update({
     where: { id: lotId },
-    data: { myBid: figures.myBid, maxBid: figures.maxBid },
+    data: {
+      myBid: figures.myBid,
+      maxBid: figures.maxBid,
+      ...ceilingNoteAfter(current.maxBid, figures.maxBid),
+    },
   });
 }
 
@@ -3501,6 +3560,567 @@ export async function confirmAuctionSaleReview(ownerId: string, saleId: string):
     });
     return count;
   });
+}
+
+// ── Agent API writes (#1627) ────────────────────────────────────────────────
+//
+// The register an assistant keeps through the agent API: a lot added with its sale, corrected, its
+// lines replaced, its ceiling set, the auction's bid recorded, a sale's terms edited. **It never
+// bids** — nothing here writes `myBid`, the bid the collector placed by hand on the platform, and
+// nothing reaches a platform. Outcomes are #1628.
+//
+// Each function is one transaction that **sets the *to review* marker (#1626) on what it touched**,
+// so a write cannot land unmarked: the operation modules may import these and none of the writers
+// above (`tests/unit/agent-api-operation-boundary.test.ts`), and that test also checks every one of
+// these calls a marker setter. Ids arrive resolved — the operation layer names things for an agent —
+// and each function re-proves them against the collection, as every writer here does.
+
+/** The parcel rules of a platform, from its marketplace marker (#742): which number identifies a
+ * listing, and whether a lot joins the sale of its name or the seller's open basket. A platform no
+ * module captures from follows the basket rule, as the *Add lot* form does (#352). */
+async function apiPlatformRules(
+  collectionId: string,
+  platformId: string
+): Promise<{ id: string; name: string; lotNoIsListingId: boolean; parcelIsNamedSale: boolean }> {
+  const platform = await prisma.contact.findFirst({
+    where: { id: platformId, collectionId },
+    select: { id: true, name: true, platformModule: true },
+  });
+  if (!platform) {
+    throw new AuctionActionBlockedError("no-platform", "Pick the platform this lot is listed on.");
+  }
+  const rules = captureModuleRules(platform.platformModule);
+  return {
+    id: platform.id,
+    name: platform.name,
+    lotNoIsListingId: rules?.lotNoIsListingId ?? false,
+    parcelIsNamedSale: rules?.parcelIsNamedSale ?? false,
+  };
+}
+
+/** A listing as the API names it, for recognising one already tracked. */
+interface ApiListingKey {
+  platformId: string;
+  /** The platform's lot number **is** the listing's id (Allegro's offer number, #742). */
+  lotNoIsListingId: boolean;
+  url: string | null;
+  lotNo: string | null;
+  /** The sale the lot is in or would join — a house's lot number is unique only within it. */
+  saleId: string | null;
+}
+
+/**
+ * The lot already tracking a listing, or null — `find_tracked_auction_lots`' rule, asked before a
+ * write so an add can never make a second lot for one auction (#1627).
+ *
+ * Where the platform's lot number is the listing's id, the offer number is looked for as the
+ * capture looks for it (`findCapturedLot`): stored as a lot number on this platform, or inside any
+ * stored address at the address's own boundaries, read off the link sent as well as off the number.
+ * Elsewhere a lot number is a house's catalogue position — `Lot 1` is in every sale — so it is
+ * matched **within the sale** only, and an address only as itself: a house's address may end in a
+ * digit run another house's shares, which would refuse a lot nobody tracks.
+ */
+async function findLotTrackingListing(
+  collectionId: string,
+  listing: ApiListingKey,
+  exceptLotId: string | null = null
+): Promise<{ id: string } | null> {
+  const arms: Prisma.AuctionLotWhereInput[] = [];
+  const url = listing.url?.trim() || null;
+  const lotNo = listing.lotNo?.trim() || null;
+  if (url) arms.push({ url });
+  if (listing.lotNoIsListingId) {
+    const ids = new Set<string>();
+    const fromUrl = url ? platformOfferIdFromUrl(url) : null;
+    if (fromUrl) ids.add(fromUrl);
+    if (lotNo && /^\d+$/.test(lotNo)) ids.add(lotNo);
+    for (const id of ids) {
+      arms.push({ lotNo: id, auctionSale: { collectionId, platformId: listing.platformId } });
+      arms.push(...offerUrlMatchClauses(id));
+    }
+  } else if (lotNo && listing.saleId) {
+    arms.push({ lotNo: { equals: lotNo, mode: "insensitive" }, auctionSaleId: listing.saleId });
+  }
+  if (arms.length === 0) return null;
+  return prisma.auctionLot.findFirst({
+    where: {
+      auctionSale: { collectionId },
+      ...(exceptLotId ? { id: { not: exceptLotId } } : {}),
+      OR: arms,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+}
+
+/** A lot the owner may act on, proved to be in `collectionId` — the token's collection. */
+async function assertApiLot(ownerId: string, collectionId: string, lotId: string) {
+  const lot = await assertLotOwner(ownerId, lotId);
+  if (lot.collectionId !== collectionId) throw new Error("Auction lot not found");
+  return lot;
+}
+
+/** The ceiling set apart, with how it was reached (#1627). */
+export interface AuctionLotApiCeiling {
+  /** All-in, in the sale's currency, as a 2-dp string. */
+  maxBid: string;
+  note: string | null;
+}
+
+/** What `add_auction_lot` writes, ids resolved. */
+export interface AuctionLotApiAddInput {
+  platformId: string;
+  /** Required unless the lot joins a named sale that already exists, whose seller it takes. */
+  sellerId: string | null;
+  /** The house's sale (`Christoph Gärtner 66th Auction`): the parcel on a platform whose parcel is
+   * the named sale, and the name of a sale this add starts anywhere else. */
+  saleName: string | null;
+  url: string | null;
+  lotNo: string | null;
+  title: string | null;
+  startingPrice: string | null;
+  /** Null takes the joined sale's closing time — a house sale's lots share one. */
+  endsAt: Date | null;
+  ceiling: AuctionLotApiCeiling | null;
+  lines: AuctionLotLineInput[];
+  /** Null leaves the lot without tags. */
+  tags: TagEntry[] | null;
+  /** The lot is not stamps (#1624), with what it is; null for a lot of stamps. */
+  notStamps: { description: string | null } | null;
+}
+
+export type AuctionLotApiAddResult =
+  | { outcome: "created"; lotId: string; saleId: string; saleCreated: boolean }
+  /** The listing is already tracked by `lotId`; nothing was written. */
+  | { outcome: "tracked"; lotId: string };
+
+/**
+ * Add a lot through the agent API, joining or starting its sale by the capture's rule (#352, #742):
+ * on a platform whose parcel is the named sale (Philasearch) the open sale **of that name** on the
+ * platform, and its seller; anywhere else the seller's open sale on the platform. A sale started
+ * here is seeded from the seller's defaults like any other. A listing already tracked is answered
+ * with the lot that has it and nothing is written, so a second call never makes a duplicate.
+ */
+export async function addAuctionLotThroughApi(
+  ownerId: string,
+  collectionId: string,
+  input: AuctionLotApiAddInput
+): Promise<AuctionLotApiAddResult> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const platform = await apiPlatformRules(collectionId, input.platformId);
+  const saleName = input.saleName?.trim() || null;
+
+  let joined: { id: string; sellerId: string; endsAt: Date | null } | null = null;
+  if (platform.parcelIsNamedSale) {
+    if (!saleName) {
+      throw new AuctionActionBlockedError(
+        "no-sale",
+        `A lot on ${platform.name} joins the house's sale by its name, and none was given.`
+      );
+    }
+    joined = await prisma.auctionSale.findFirst({
+      where: {
+        collectionId,
+        platformId: platform.id,
+        status: "open",
+        name: { equals: saleName, mode: "insensitive" },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, sellerId: true, endsAt: true },
+    });
+  } else if (input.sellerId) {
+    joined = await prisma.auctionSale.findFirst({
+      where: { collectionId, sellerId: input.sellerId, platformId: platform.id, status: "open" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, sellerId: true, endsAt: true },
+    });
+  }
+  const sellerId = joined?.sellerId ?? input.sellerId;
+  if (!sellerId) {
+    throw new AuctionActionBlockedError("no-seller", "Pick the seller this lot is being bought from.");
+  }
+
+  const tracked = await findLotTrackingListing(collectionId, {
+    platformId: platform.id,
+    lotNoIsListingId: platform.lotNoIsListingId,
+    url: input.url,
+    lotNo: input.lotNo,
+    saleId: joined?.id ?? null,
+  });
+  if (tracked) return { outcome: "tracked", lotId: tracked.id };
+
+  const endsAt = input.endsAt ?? joined?.endsAt ?? null;
+  if (!endsAt) {
+    throw new AuctionActionBlockedError(
+      "no-closing-time",
+      "A lot needs its closing time, and the sale it joins has none to share."
+    );
+  }
+  if (input.notStamps && input.lines.length > 0) {
+    throw new AuctionActionBlockedError(
+      "has-lines",
+      "A lot marked as not stamps holds no stamps. Send either the mark or the lines."
+    );
+  }
+  for (const line of input.lines) await assertLineTargets(collectionId, line);
+  const saleData = joined
+    ? null
+    : await newAuctionSaleData(ownerId, collectionId, {
+        sellerId,
+        platformId: platform.id,
+        name: saleName,
+        url: null,
+        // A seed the sale's own screen edits, exactly as the capture seeds it (#352).
+        endsAt,
+        currency: "",
+        shippingCost: null,
+        premiumPercent: null,
+        premiumFixed: null,
+      });
+
+  const written = await prisma.$transaction(async (tx) => {
+    const now = new Date();
+    let saleId = joined?.id ?? null;
+    if (!saleId) {
+      const sale = await tx.auctionSale.create({ data: saleData!, select: { id: true } });
+      saleId = sale.id;
+      await markAuctionSaleWrittenByApi(tx, saleId, { kind: "created" }, now);
+    }
+    const lot = await tx.auctionLot.create({
+      data: {
+        auctionSaleId: saleId,
+        auctionLotNo: await allocateEntityNumber(tx, collectionId, "auctionLot"),
+        lotNo: input.lotNo,
+        url: input.url,
+        title: input.title,
+        endsAt,
+        startingPrice: input.startingPrice,
+        maxBid: input.ceiling?.maxBid ?? null,
+        ceilingNote: input.ceiling?.note ?? null,
+        notStamps: input.notStamps !== null,
+        notStampsDescription: input.notStamps?.description?.trim() || null,
+        ...(input.lines.length > 0
+          ? {
+              lines: {
+                create: input.lines.map((line) => ({
+                  stampId: line.stampId,
+                  ...lineConditionCreate(line),
+                  certificateStatusId: line.certificateStatusId,
+                  formatId: line.formatId,
+                  quantity: line.quantity,
+                })),
+              },
+            }
+          : {}),
+      },
+      select: { id: true },
+    });
+    if (input.tags && input.tags.length > 0) {
+      await replaceAuctionLotTagsTx(tx, collectionId, lot.id, input.tags);
+    }
+    await markAuctionLotWrittenByApi(tx, lot.id, { kind: "created" }, now);
+    return { lotId: lot.id, saleId };
+  });
+  await rememberSellerPlatform(sellerId, platform.id);
+  return { outcome: "created", ...written, saleCreated: !joined };
+}
+
+/** What `update_auction_lot` changes; an absent key is left as it is, null clears. */
+export interface AuctionLotApiPatch {
+  title?: string | null;
+  lotNo?: string | null;
+  url?: string | null;
+  endsAt?: Date;
+  startingPrice?: string | null;
+  /** What the auction stands at, and when it was looked at — an observation, so it is dated even
+   * when the figure has not moved. Null clears it, and its date with it. */
+  currentBid?: { amount: string | null; checkedAt: Date };
+  /** The whole set, replacing what the lot carries. */
+  tags?: TagEntry[];
+  notStamps?: AuctionLotNotStampsInput;
+}
+
+export type AuctionLotApiPatchResult =
+  | { outcome: "written"; changed: string[] }
+  /** The listing the patch names is tracked by another lot, `lotId`; nothing was written. */
+  | { outcome: "tracked"; lotId: string };
+
+/**
+ * Correct a lot through the agent API, and record the auction's current bid (#1627). Only what is
+ * sent is written, and the marker names what actually changed — a figure restated unchanged is not
+ * a change, though a current bid always is, since it dates a fresh look. Nothing here touches the
+ * collector's own bid or ceiling; the lines and the ceiling have their own writes.
+ *
+ * A settled lot refuses everything but its tags, which settlement did not transcribe (#1625).
+ */
+export async function updateAuctionLotThroughApi(
+  ownerId: string,
+  collectionId: string,
+  lotId: string,
+  patch: AuctionLotApiPatch
+): Promise<AuctionLotApiPatchResult> {
+  const lot = await assertApiLot(ownerId, collectionId, lotId);
+  const onlyTags = Object.keys(patch).every((key) => key === "tags");
+  if (!onlyTags) assertLotEditable(lot);
+
+  const current = await prisma.auctionLot.findUniqueOrThrow({
+    where: { id: lotId },
+    select: {
+      title: true,
+      lotNo: true,
+      url: true,
+      endsAt: true,
+      startingPrice: true,
+      notStampsDescription: true,
+      auctionSale: { select: { platformId: true } },
+      tags: { select: { tag: { select: { name: true } } } },
+      _count: { select: { lines: true } },
+    },
+  });
+
+  if (patch.notStamps) {
+    if (patch.notStamps.notStamps && current._count.lines > 0) {
+      const n = current._count.lines;
+      throw new AuctionActionBlockedError(
+        "has-lines",
+        `This lot has ${n} stamp${n === 1 ? "" : "s"} entered. Remove ${n === 1 ? "it" : "them"} before marking the lot as not stamps.`
+      );
+    }
+    if (!patch.notStamps.notStamps && lot.notStamps && lot.status !== "open") {
+      throw new AuctionActionBlockedError(
+        "not-stamps",
+        "The not-stamps mark can only be removed while the lot is open."
+      );
+    }
+  }
+
+  if (patch.url !== undefined || patch.lotNo !== undefined) {
+    const platform = await apiPlatformRules(collectionId, current.auctionSale.platformId);
+    const tracked = await findLotTrackingListing(
+      collectionId,
+      {
+        platformId: platform.id,
+        lotNoIsListingId: platform.lotNoIsListingId,
+        url: patch.url !== undefined ? patch.url : null,
+        lotNo: patch.lotNo !== undefined ? patch.lotNo : null,
+        saleId: lot.auctionSaleId,
+      },
+      lotId
+    );
+    if (tracked) return { outcome: "tracked", lotId: tracked.id };
+  }
+
+  const data: Prisma.AuctionLotUncheckedUpdateInput = {};
+  const changed: string[] = [];
+  const set = (field: string, differs: boolean, write: Prisma.AuctionLotUncheckedUpdateInput) => {
+    if (!differs) return;
+    Object.assign(data, write);
+    changed.push(field);
+  };
+  if (patch.title !== undefined) set("title", patch.title !== current.title, { title: patch.title });
+  if (patch.lotNo !== undefined) set("lotNo", patch.lotNo !== current.lotNo, { lotNo: patch.lotNo });
+  if (patch.url !== undefined) set("url", patch.url !== current.url, { url: patch.url });
+  if (patch.endsAt !== undefined) {
+    set("endsAt", patch.endsAt.getTime() !== current.endsAt.getTime(), { endsAt: patch.endsAt });
+  }
+  if (patch.startingPrice !== undefined) {
+    set("startingPrice", patch.startingPrice !== money(current.startingPrice), {
+      startingPrice: patch.startingPrice,
+    });
+  }
+  if (patch.currentBid !== undefined) {
+    const { amount, checkedAt } = patch.currentBid;
+    set("currentBid", true, { currentBid: amount, checkedAt: amount !== null ? checkedAt : null });
+  }
+  if (patch.notStamps !== undefined) {
+    const description = patch.notStamps.notStamps
+      ? patch.notStamps.description?.trim() || null
+      : null;
+    set(
+      "notStamps",
+      patch.notStamps.notStamps !== lot.notStamps || description !== current.notStampsDescription,
+      { notStamps: patch.notStamps.notStamps, notStampsDescription: description }
+    );
+  }
+  const fold = (names: string[]) =>
+    [...new Set(names.map((name) => name.toLowerCase()))].sort().join("\n");
+  const tagsChanged =
+    patch.tags !== undefined &&
+    fold(patch.tags.map((entry) => entry.name)) !==
+      fold(current.tags.map((row) => row.tag.name));
+  if (tagsChanged) changed.push("tags");
+
+  if (changed.length === 0) return { outcome: "written", changed };
+  await prisma.$transaction(async (tx) => {
+    if (Object.keys(data).length > 0) await tx.auctionLot.update({ where: { id: lotId }, data });
+    if (tagsChanged) await replaceAuctionLotTagsTx(tx, collectionId, lotId, patch.tags!);
+    await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: changed });
+  });
+  return { outcome: "written", changed };
+}
+
+/**
+ * Replace a lot's lines through the agent API (#1627) — the whole composition, each line a stamp at
+ * a condition (one, one of several, or unknown, #1623), a certificate, a format and a quantity.
+ * Every line is checked before anything is written, so a refusal leaves the lot as it was. An empty
+ * list takes the lines off, and the lot reads as *Not described* again.
+ */
+export async function replaceAuctionLotLinesThroughApi(
+  ownerId: string,
+  collectionId: string,
+  lotId: string,
+  lines: AuctionLotLineInput[]
+): Promise<void> {
+  const lot = await assertApiLot(ownerId, collectionId, lotId);
+  assertLotEditable(lot);
+  if (lines.length > 0) assertHoldsStamps(lot);
+  for (const line of lines) await assertLineTargets(collectionId, line);
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionLotLine.deleteMany({ where: { auctionLotId: lotId } });
+    for (const line of lines) {
+      await tx.auctionLotLine.create({
+        data: {
+          auctionLotId: lotId,
+          stampId: line.stampId,
+          ...lineConditionCreate(line),
+          certificateStatusId: line.certificateStatusId,
+          formatId: line.formatId,
+          quantity: line.quantity,
+        },
+      });
+    }
+    await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: ["lines"] });
+  });
+}
+
+/**
+ * Set a lot's ceiling apart from the bid through the agent API, with how it was reached, or clear
+ * it so the ceiling follows the bid again (#1515, #1627). The note goes with the figure: clearing
+ * the ceiling clears it, and setting one without a note leaves none.
+ */
+export async function setAuctionLotCeilingThroughApi(
+  ownerId: string,
+  collectionId: string,
+  lotId: string,
+  ceiling: AuctionLotApiCeiling | null
+): Promise<void> {
+  const lot = await assertApiLot(ownerId, collectionId, lotId);
+  assertLotEditable(lot);
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionLot.update({
+      where: { id: lotId },
+      data: { maxBid: ceiling?.maxBid ?? null, ceilingNote: ceiling?.note?.trim() || null },
+    });
+    await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: ["ceiling"] });
+  });
+}
+
+/** A sale's terms as `update_auction_sale` changes them; an absent key is left as it is. */
+export interface AuctionSaleApiPatch {
+  name?: string;
+  url?: string | null;
+  endsAt?: Date | null;
+  currency?: string;
+  premiumPercent?: string | null;
+  premiumFixed?: string | null;
+  shippingCost?: string | null;
+}
+
+/**
+ * Edit a sale's terms through the agent API (#1627): its name, address, closing time, currency,
+ * premium and shipping — never its parties or its status. A settled sale is refused, as in the app.
+ * The marker names what changed; the two premium components are one term, *premium*.
+ */
+export async function updateAuctionSaleThroughApi(
+  ownerId: string,
+  collectionId: string,
+  saleId: string,
+  patch: AuctionSaleApiPatch
+): Promise<{ changed: string[] }> {
+  const sale = await assertSaleOwner(ownerId, saleId);
+  if (sale.collectionId !== collectionId) throw new Error("Auction sale not found");
+  if (sale.purchaseId) {
+    throw new AuctionActionBlockedError(
+      "settled",
+      "This sale has been settled into a purchase. Edit the purchase instead."
+    );
+  }
+  const current = await prisma.auctionSale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: {
+      name: true,
+      url: true,
+      endsAt: true,
+      currency: true,
+      premiumPercent: true,
+      premiumFixed: true,
+      shippingCost: true,
+    },
+  });
+  const data: Prisma.AuctionSaleUncheckedUpdateInput = {};
+  const changed: string[] = [];
+  const set = (field: string, differs: boolean, write: Prisma.AuctionSaleUncheckedUpdateInput) => {
+    if (!differs) return;
+    Object.assign(data, write);
+    if (!changed.includes(field)) changed.push(field);
+  };
+  if (patch.name !== undefined) set("name", patch.name !== current.name, { name: patch.name });
+  if (patch.url !== undefined) set("url", patch.url !== current.url, { url: patch.url });
+  if (patch.endsAt !== undefined) {
+    set("endsAt", (patch.endsAt?.getTime() ?? null) !== (current.endsAt?.getTime() ?? null), {
+      endsAt: patch.endsAt,
+    });
+  }
+  if (patch.currency !== undefined) {
+    set("currency", patch.currency !== current.currency, { currency: patch.currency });
+  }
+  if (patch.premiumPercent !== undefined) {
+    set("premium", patch.premiumPercent !== money(current.premiumPercent), {
+      premiumPercent: patch.premiumPercent,
+    });
+  }
+  if (patch.premiumFixed !== undefined) {
+    set("premium", patch.premiumFixed !== money(current.premiumFixed), {
+      premiumFixed: patch.premiumFixed,
+    });
+  }
+  if (patch.shippingCost !== undefined) {
+    set("shipping", patch.shippingCost !== money(current.shippingCost), {
+      shippingCost: patch.shippingCost,
+    });
+  }
+  if (changed.length === 0) return { changed };
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionSale.update({ where: { id: saleId }, data });
+    await markAuctionSaleWrittenByApi(tx, saleId, { kind: "changed", fields: changed });
+  });
+  return { changed };
+}
+
+/**
+ * One lot as the lots screen reads it, with its lines — what the agent API answers a lot write with
+ * (#1627), so the answer and `list_auction_watchlist` state a lot in one shape from one read. Null
+ * when the lot is not the owner's in this collection.
+ */
+export async function getAuctionLotDetail(
+  ownerId: string,
+  collectionId: string,
+  lotId: string
+): Promise<AuctionLotDetailItem | null> {
+  const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.auctionLot.findMany({
+    where: { id: lotId, auctionSale: { collectionId } },
+    select: LOT_SELECT,
+  });
+  if (rows.length === 0) return null;
+  const compositions = await compositionsFor(collectionId, rows);
+  const recommendations = await recommendationsFor(collectionId, rows, compositions);
+  const item = {
+    ...toLotListItem(rows[0], baseCurrency, compositions.get(lotId), recommendations.get(lotId)),
+    lines: compositions.get(lotId)?.lines ?? [],
+  };
+  await attachBaseRates(collectionId, baseCurrency, [item]);
+  return item;
 }
 
 // ── Settlement (#28) ────────────────────────────────────────────────────────

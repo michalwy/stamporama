@@ -82,6 +82,20 @@ export async function resolveStampRefs(
   refs: readonly string[],
   parameter: string
 ): Promise<string[]> {
+  const byRef = await resolveStampRefMap(context, refs, parameter);
+  return [...new Set(refs.map((ref) => byRef.get(ref.trim())!))];
+}
+
+/**
+ * {@link resolveStampRefs}, answered per reference: the stamp id each trimmed ref names, for a caller
+ * whose refs travel with something else — a lot line's condition and quantity (#1627). The same
+ * refusals, refusing the whole call.
+ */
+export async function resolveStampRefMap(
+  context: OperationContext,
+  refs: readonly string[],
+  parameter: string
+): Promise<Map<string, string>> {
   const wanted = [...new Set(refs.map((ref) => ref.trim()))];
   if (wanted.length === 0 || wanted.some((ref) => ref === "")) {
     throw invalidRequest(
@@ -105,9 +119,9 @@ export async function resolveStampRefs(
   if (failures.length > 0) throw unresolvedStamps(failures, parameter);
 
   const byNumber = new Map(numbers.map((ref, i) => [ref, resolutions[i].stamps[0].stampId]));
-  return [
-    ...new Set(wanted.map((ref) => byShort.get(ref) ?? (ids.has(ref) ? ref : byNumber.get(ref)!))),
-  ];
+  return new Map(
+    wanted.map((ref) => [ref, byShort.get(ref) ?? (ids.has(ref) ? ref : byNumber.get(ref)!)])
+  );
 }
 
 /** A stamp as an answer names it: its short number (#1574), its name and its catalogue numbers. */

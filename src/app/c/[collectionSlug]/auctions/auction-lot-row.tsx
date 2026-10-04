@@ -253,6 +253,9 @@ function resolvePending(
  * finished answer, and the collector would bid against it. `inBase` is the catalogue value in the
  * base currency, where the screen converts every figure (#498).
  */
+const CEILING_HINT =
+  "A ceiling set apart from your bid: the most this lot may cost you, all-in. It stays put when the bid changes; clear it and the ceiling follows the bid.";
+
 function catalogHint(lot: AuctionLotView, inBase: string | null): string {
   if (lot.lineCount === 0) {
     return "Nothing described yet. Say what the lot holds and its catalogue value follows.";
@@ -1426,7 +1429,15 @@ export function AuctionLotRow({
                 <span />
                 {withBase(
                   maxBid,
-                  <Tooltip content="A ceiling set apart from your bid: the most this lot may cost you, all-in. It stays put when the bid changes; clear it and the ceiling follows the bid.">
+                  <Tooltip
+                    content={
+                      // How the agent API reached it (#1627), when it set it with a note; any other
+                      // change of the figure clears the note, so it never explains another one.
+                      lot.ceilingNote && maxBid === lot.maxBid
+                        ? `${CEILING_HINT} How it was reached: ${lot.ceilingNote}`
+                        : CEILING_HINT
+                    }
+                  >
                     <span>
                       <InlineText
                         value={maxBid}

@@ -245,6 +245,7 @@ describe("onlySettledLots — a lot is market evidence once every condition is s
 describe("the agent's reads report the possible conditions and the range", () => {
   const row: WatchlistLotRow = {
     id: "l1",
+    saleId: "s1",
     saleName: "S",
     sellerName: "Seller",
     platformName: "Allegro",
@@ -265,6 +266,7 @@ describe("the agent's reads report the possible conditions and the range", () =>
     maxBid: null,
     ceiling: null,
     ceilingSetApart: false,
+    ceilingNote: null,
     bidRoom: null,
     standing: null,
     overCeiling: null,
@@ -285,6 +287,7 @@ describe("the agent's reads report the possible conditions and the range", () =>
       { stamp: "Mi 1", possibleConditions: ["MNH", "MH"], unknown: false },
       { stamp: "Mi 2", possibleConditions: [], unknown: true },
     ],
+    apiReview: null,
   };
 
   it("names the unsettled lines and gives both ends of the value and the recommendation", () => {
