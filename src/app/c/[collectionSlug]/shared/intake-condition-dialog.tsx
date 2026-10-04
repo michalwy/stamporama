@@ -30,6 +30,7 @@ import {
 import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
+import { HeldCopyThumbs } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copy-thumbs";
 import { IntakeCatalogValueField } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-catalog-value";
 import { IdentifiedPieceAside, type IdentifiedPiece } from "./tile-zoom-view";
 import { TileStampPhotoField, pieceFrontPhotoId } from "./tile-stamp-photo-field";
@@ -638,7 +639,8 @@ function IntakeConditionDialog({
   // **over** this step rather than replacing it, so every answer here is as it was left on closing.
   // The photos added above are its picture of the piece when there is no tile — state rather than a
   // ref like the change-set, because the comparison draws them.
-  const [comparing, setComparing] = useState(false);
+  // Open with the copy to land on (#1621), `null` for the whole list, `false` closed.
+  const [comparing, setComparing] = useState<string | null | false>(false);
   const [photoPreviews, setPhotoPreviews] = useState<PhotoEditorPreview[]>([]);
 
   // The catalogue value typed while the paper catalogue is still open at this stamp (#593). Held in
@@ -880,7 +882,19 @@ function IntakeConditionDialog({
                 conditionId={conditionId}
                 certificateStatusId={certId}
                 formatId={formatId}
-                onCompare={() => setComparing(true)}
+                onCompare={() => setComparing(null)}
+              />
+            )}
+            {/* The in-collection copies themselves (#1621), since whether the piece should take one
+                of their places is judged by looking. Under the line, on the line's own terms. */}
+            {selection.kind === "stamp" && !(carriedStamps && carriedStamps.length > 0) && (
+              <HeldCopyThumbs
+                collectionId={collectionId}
+                stampId={selection.stampId}
+                conditions={conditions}
+                certificateStatuses={certificateStatuses}
+                excludeItemId={correctedCopyId ?? null}
+                onOpen={setComparing}
               />
             )}
           </div>
@@ -1188,7 +1202,7 @@ function IntakeConditionDialog({
       {/* Portalled to the body rather than drawn inside the shell: the shell's panel is transformed,
           which would make it the containing block of the comparison's fixed overlay and crop it to
           this dialog — the lightbox's own reason for a portal. */}
-      {comparing &&
+      {comparing !== false &&
         selection.kind === "stamp" &&
         createPortal(
           <HeldCopiesCompareDialog
@@ -1198,6 +1212,7 @@ function IntakeConditionDialog({
             conditions={conditions}
             certificateStatuses={certificateStatuses}
             excludeItemId={correctedCopyId ?? null}
+            focusItemId={comparing}
             pieces={pieces}
             previews={photos ? photoPreviews : []}
             scanning={scanning}
