@@ -8,6 +8,8 @@ import {
   DialogPrimaryButton,
   DialogSecondaryButton,
   DialogShell,
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
 } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { StampFormatData } from "@/lib/stamp-formats";
@@ -65,11 +67,11 @@ export function TileStampsDialog({
       title="Stamps on this piece"
       onClose={onClose}
       dismissable={!pickerOpen}
-      // The condition step's own shape, since this sits exactly over it.
-      maxWidth={aside ? "min(96vw, 78rem)" : "44rem"}
-      height={aside ? "min(90vh, 54rem)" : undefined}
+      // The condition step's own shape, since this sits exactly over it (#1613).
+      maxWidth={aside ? DIALOG_MAX_WIDTH : "44rem"}
+      height={aside ? DIALOG_MAX_HEIGHT : undefined}
       aside={aside}
-      asideWidth="min(46vw, 38rem)"
+      asideWidth="max(16rem, 100% - 40rem)"
     >
       <DialogBody>
         <p
