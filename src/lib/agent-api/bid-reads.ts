@@ -117,6 +117,10 @@ export interface AgentBidResult {
   /** `lot` — one of the collector's own closed lots; `observation` — a realised price recorded from
    *  someone else's auction. */
   readonly kind: "lot" | "observation";
+  /** The observation's id — what `update_price_observation` and `delete_price_observation` take
+   *  (#1635) — or the lot's, as `find_tracked_auction_lots` names it. Absent where the anchor came
+   *  from a caller that did not carry it. */
+  readonly id?: string;
   /** Where it was sold, as a reader would look it up — `Köhler 412 · lot 1234 · via Philasearch`. */
   readonly source: string;
   /** The country it was sold in; absent when its seller, house or platform names none, which counts
@@ -251,6 +255,7 @@ export function bidLine(
       /** #1634's results behind the median; absent reads as none listed. */
       results?: readonly {
         kind: "lot" | "observation";
+        id?: string;
         source: string;
         market: string | null;
         amount: string;
@@ -299,6 +304,7 @@ export function bidLine(
             (r) =>
               compact({
                 kind: r.kind,
+                id: r.id,
                 source: r.source,
                 market: r.market ?? undefined,
                 amount: r.amount,

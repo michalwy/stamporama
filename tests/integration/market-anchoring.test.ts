@@ -68,6 +68,8 @@ describe("markets and anchoring (#1634)", () => {
   let houseId: string;
   let sellerId: string;
 
+  // Each call names a lot of its own: a source lot is recorded once (#1635).
+  let lotSeq = 0;
   function raw(overrides: Partial<PriceObservationRaw> = {}): PriceObservationRaw {
     return {
       conditionId,
@@ -85,7 +87,7 @@ describe("markets and anchoring (#1634)", () => {
       auctionHouseId: houseId,
       auctionHouseName: null,
       auctionName: "385",
-      lotNo: "1203",
+      lotNo: String(1203 + lotSeq++),
       url: "",
       ...overrides,
     };

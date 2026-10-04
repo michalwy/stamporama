@@ -37,6 +37,7 @@ import {
   MAX_SELLER_SUGGESTIONS,
 } from "../purchase-reads";
 import { readCollectionVocabulary } from "./vocabulary";
+import { normalizeMarketCode } from "../../market-anchoring";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import type {
   AgentPurchase,
@@ -130,7 +131,7 @@ function assertEditable(ref: PurchaseRef, what: string): void {
 }
 
 /** Every contact, reduced to what a seller is matched against. */
-async function loadSellerCandidates(context: OperationContext): Promise<SellerCandidate[]> {
+export async function loadSellerCandidates(context: OperationContext): Promise<SellerCandidate[]> {
   return prisma.contact.findMany({
     where: { collectionId: context.collectionId, collection: { ownerId: context.ownerId } },
     select: { id: true, name: true, fullName: true },
@@ -320,6 +321,22 @@ const CREATE_SELLER_PARAMETERS: readonly ParameterSpec[] = [
       "The seller's login on the marketplace the purchase came through, when it came through one. A marketplace seller is filed under their login, because that is what the collector sees on the site; the name is then kept beside it as their full name.",
   },
   {
+    name: "auction_house",
+    in: "body",
+    type: "boolean",
+    required: false,
+    description:
+      "Send true when the seller is an auction house — the house a price observation names as `house` (#1635).",
+  },
+  {
+    name: "market",
+    in: "body",
+    type: "string",
+    required: false,
+    description:
+      "The country the seller sells in, as a two-letter code such as `DE` — the market every result they sold counts in. Send it for an auction house: a house naming no market counts as the collection's home market, so a German house's results would anchor Polish valuations until the collector sets it.",
+  },
+  {
     name: "different_person",
     in: "body",
     type: "boolean",
@@ -336,6 +353,14 @@ export async function addSeller(
   const name = requiredString(params, "name");
   const login = optionalString(params, "marketplace_login");
   const differentPerson = optionalBoolean(params, "different_person") ?? false;
+  const auctionHouse = optionalBoolean(params, "auction_house") ?? false;
+  const marketValue = optionalString(params, "market");
+  const market = marketValue === null ? null : normalizeMarketCode(marketValue);
+  if (marketValue !== null && market === null) {
+    throw invalidRequest(
+      `"market" is a two-letter country code, such as DE or PL; "${marketValue}" is not one. Nobody was created.`
+    );
+  }
 
   // Filed under the login where there is one (#463), with the name beside it — unless the two are
   // the same string, when there is nothing to keep beside it.
@@ -373,6 +398,8 @@ export async function addSeller(
       name: filedUnder,
       fullName,
       seller: true,
+      auctionHouse,
+      market,
     });
     return sellerProjection(created);
   } catch (err) {
@@ -392,13 +419,13 @@ export const createSellerOperation: Operation = {
   method: "POST",
   path: "/sellers",
   description:
-    "Add a seller to the collection's contacts, for a purchase from somebody it has never bought from. Only when `list_purchases` or `create_purchase` has refused the name as unknown: an existing contact is always used rather than duplicated, and a name close to one already there is refused with the candidates until you state it is a different person. The contact is created with a name and, for a marketplace seller, their login — nothing else.",
+    "Add a seller to the collection's contacts, for a purchase from somebody it has never bought from, or an auction house a price observation names. Only when an operation has refused the name as unknown: an existing contact is always used rather than duplicated, and a name close to one already there is refused with the candidates until you state it is a different person. The contact is created with a name, for a marketplace seller their login, whether it is an auction house, and the market it sells in — nothing else.",
   writes: true,
   parameters: CREATE_SELLER_PARAMETERS,
   result: {
     kind: "object",
     description:
-      "The new contact: its id, to send as `seller`, and the name it is filed under. It cannot be edited or deleted from here.",
+      "The new contact: its id, to send as `seller` (or as an observation's `house`), and the name it is filed under. It cannot be edited or deleted from here.",
   },
   handler: async (context, params) => addSeller(context, params),
 };

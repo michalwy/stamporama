@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register and #1628 auction outcomes; both wrappers exist and the registry carries **eighty operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes and #1635 price observations; both wrappers exist and the registry carries **eighty-four operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1168's bid recommendation, and #1037's catalog-number
-resolver. Twelve counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1168's bid recommendation, and #1037's catalog-number
+resolver. Thirteen counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,10 +21,10 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627) and *the registry carries seventy-nine operations* (from #1627 until #1628).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628) and *the registry carries eighty operations* (from #1628 until #1635).
 
-**Forty-seven of them write** since #1628 added one; *forty-six of them write* was the count from
-#1627 until then, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
+**Fifty of them write** since #1635 added three; *forty-seven of them write* was the count from #1628 until
+then, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that was a boundary the collector
@@ -1579,6 +1579,61 @@ against the seller's invoice and asks each unsettled line's condition (#1623), a
 collector's. `settleAuctionSale` stays on `AUCTION_WRITES`, as does `recordAuctionLotTransition`
 itself, since it reopens. A settled lot is refused, as every API write to one is.
 
+## Recording price observations (#1635)
+
+**A realised price from someone else's auction is recorded, listed, corrected and deleted here**
+(ADR-0063, ADR-0064). The bidding assistant reads results pages — Philasearch, a house's price list,
+an ended Allegro offer — often hundreds for one field, so the write is a batch:
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `list_price_observations` | no | what is recorded, by stamp, area subtree, market, platform, house and sale days |
+| `record_price_observations` | yes | a page of results, up to 100, each answered `recorded`, `duplicate` or `refused` |
+| `update_price_observation` | yes | a correction, only what is sent; `clear` empties an optional field; `stamp` moves it |
+| `delete_price_observation` | yes | one recorded by mistake |
+
+**One observation is one `name=value` string**, the grammar of `set_catalog_prices` and the lot lines
+(`agent-api/price-observations.ts`, pure): `stamp`, `price`, `sold_on` and `platform` required,
+`currency` unless the house has a usual one. A piece with no `=` after `url` continues the address,
+which may carry a `;`. **A batch answers per row and never fails whole over one** (#1540's rule).
+
+**Every write is the Valuation dialog's own**, `createPriceObservation` / `updatePriceObservation`,
+and every read is judged by its `toView` — so `counted`, `notCounted` and `doubts` mean in an answer
+what they mean on the screen. A recorded row answers in `list_price_observations`' shape, so the
+assistant learns at once whether it counts and why not.
+
+**Nothing is guessed.** A stamp is named as every catalogue write names one — an id, `st 123`, or a
+catalogue number in any catalogue through #1037's resolver (`resolveRowStamps`, answered per row
+rather than refusing the call as `resolveStampRefMap` does). Ambiguous or unmatched refuses the row
+with `unresolvedStampReason`'s sentence. A number that names an unknown-variant umbrella is recorded
+**on the umbrella** — what the listing established — and is a hint by ADR-0063 §3's live read,
+without the API having to say so. `condition=?` and `certificate=?` record the other two doubts.
+
+**Contacts are matched, never created** — the collector's choice on #1635, #1627's rule. A platform
+resolves by the vocabulary, a house by the address book (`resolveSeller`), and the domain is handed
+ids alone, since its `resolvePurchaseContact` creates a contact from any name. The reason is the
+market: a house naming none counts as the home market (ADR-0064 §2), so a German house created
+silently would anchor Polish valuations. **`create_seller` grew `auction_house` and `market`** for
+it, so the assistant adds a house with its country in one call. A house's premium, fee and usual
+currency fill those a row leaves out (ADR-0063 §5).
+
+**A source lot is recorded once**, in the domain and so in the dialog too: the same address, or the
+same lot number in the same auction at the same house — at the same platform where there is no house
+(an Allegro offer number). `DuplicatePriceObservationError` carries the existing id; a batch answers
+`duplicate` with `duplicateOf`, a correction is refused with it. A row with neither address nor lot
+number names no lot and duplicates nothing. Rows are written in order, so a batch repeating itself
+meets the rule exactly as a page recorded yesterday does.
+
+**Rates are looked up once per sale day and currency** within a batch (`ObservationRateCache`), the
+grouping ADR-0063's *Consequences* asked for; a failed lookup is remembered for the batch too.
+
+**The `market` filter is the market a result counts in**: the house's, else the platform's, else the
+home market — so asking for the home market also finds results whose contacts name none, and the
+query spells `resultMarket`'s order rather than filtering after the page.
+
+**`recommend_bid` already lists its evidence** (#1634: `marketResults`, `notCounted`); #1635 adds each
+result's `id`, so an observation a recommendation stood on can be corrected or deleted directly.
+
 ## Entering purchases
 
 **Eleven operations** (#1390): an order the agent has in front of it as text — an order
@@ -2061,7 +2116,8 @@ like the catalogues — `anchorMarkets` as set on the area, `anchoringMarkets` i
 (absent meaning the home market). Omitted on `update_area`, the list is left as it is, which is also
 why `move_area` cannot clear it. `recommend_bid` lists the results a market anchor rests on
 (`marketResults`, each with its market) and counts the other markets' results it left out
-(`notCounted`). A contact's market has no operation — contacts have none here.
+(`notCounted`). A contact's market is set only as `create_seller` creates one (#1635) — an existing
+contact's details are the collector's, as #1390 has them.
 
 **A catalogue's three states are one string each**: `"Mi"` declares the catalogue with its prefix
 inherited, `"Mi: GG"` gives it one here, and `"Mi: -"` states *no prefix here* — the column's null,
@@ -2183,6 +2239,9 @@ exist cannot be.
   a book or an edition — see *Pricing the catalogue* — and moves and orders areas and moves an issue
   to another area — see *Organising the area tree*.
 - **The agent never deletes an area** (#1539).
+- **Price observations are deleted** (#1635): they are market facts the assistant itself records,
+  not the collector's transactions, and a misread one must be removable — see *Recording price
+  observations* above.
 
 Do not add a publish-shaped, send-shaped, bid-shaped or copy-touching operation to the
 registry, whatever it is called, nor an auction write beyond #1627's five and #1628's outcome, nor one that deletes a size preset, deletes an area, or deletes,
@@ -2411,7 +2470,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries eighty operations.** It was empty on #706, which shipped none; #708
+**The document carries eighty-four operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2430,9 +2489,10 @@ added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` a
 `set_catalog_prices` and `clear_catalog_prices`; #1539 added `list_areas`, `create_area`,
 `update_area`, `move_area`, `set_area_order` and `move_issue_to_area`; #1627 added `add_auction_lot`,
 `update_auction_lot`, `set_auction_lot_lines`, `set_auction_lot_ceiling` and `update_auction_sale`;
-#1628 added `record_auction_lot_outcome`.
+#1628 added `record_auction_lot_outcome`; #1635 added `list_price_observations`,
+`record_price_observations`, `update_price_observation` and `delete_price_observation`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628, and *eighty* from #1628 until #1635. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries

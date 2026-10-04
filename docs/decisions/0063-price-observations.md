@@ -5,7 +5,7 @@
 Accepted. Written by #1633, which builds the observation and its place in market value. **Amends
 ADR-0022** §2 (what a datapoint is) and ADR-0029 §2 (what the ratio is learned from); both read as
 they did for the collector's own lots. Markets and the anchoring set per area are #1634 (§8 below);
-the agent API that records observations in batches is #1635.
+the agent API that records observations in batches is #1635, which also added §9.
 
 ## Context
 
@@ -114,12 +114,23 @@ a market and derives an observation's from its house or platform (and a lot's fr
 seller), so there is no copy on the observation to drift from the contact. **Decided in
 [ADR-0064](0064-markets-and-anchoring.md).**
 
+### 9. A source lot is recorded once
+
+Written by #1635, which records observations by the hundred from results pages read more than once.
+An observation is refused when one already records the same **source lot**: the same address, or the
+same lot number in the same auction (as typed, case aside) at the same house — at the same platform
+when there is no house, since an Allegro offer number is the platform's. One with neither an address
+nor a lot number names no lot, and nothing is a duplicate of it. The rule is the domain's, so the
+dialog refuses a repeat as the agent API does, and a correction that would make an observation the
+same lot as another is refused too. It is checked at the write rather than by a unique index: the key
+is two alternatives over nullable, case-folded columns, and the collector's few writes do not race.
+
 ## Consequences
 
 - A realised price can be recorded without inventing a lot, and the lots screen's recommendations and
   the Valuation dialog's figures move with it.
-- A foreign-currency write makes one request to the ECB's data API; a batch of hundreds (#1635) will
-  want those grouped by day.
+- A foreign-currency write makes one request to the ECB's data API; a batch (#1635) makes one per sale
+  day and currency.
 - An observation and a lot of the collector's describing the same sale would both count. Recording
   someone else's result is what an observation is for, and a lot is what the collector's own bidding
   produces; the two are not reconciled.

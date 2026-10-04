@@ -2,6 +2,7 @@ import { describe, it, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import {
+  DuplicatePriceObservationError,
   createPriceObservation,
   deletePriceObservation,
   getAuctionHouseTerms,
@@ -38,7 +39,11 @@ describe("price observations (#1633)", () => {
   /** An unknown-variant umbrella over one variant. */
   let umbrellaId: string;
 
+  // Each call names a lot of its own: a source lot is recorded once (#1635), and these cases are
+  // about everything else.
+  let lotSeq = 0;
   function raw(overrides: Partial<PriceObservationRaw> = {}): PriceObservationRaw {
+    const lotNo = String(1203 + lotSeq++);
     return {
       conditionId,
       certificateStatusId: null,
@@ -55,8 +60,8 @@ describe("price observations (#1633)", () => {
       auctionHouseId: houseId,
       auctionHouseName: null,
       auctionName: "385",
-      lotNo: "1203",
-      url: "https://example.com/lot/1203",
+      lotNo,
+      url: `https://example.com/lot/${lotNo}`,
       ...overrides,
     };
   }
@@ -287,6 +292,41 @@ describe("price observations (#1633)", () => {
     await deletePriceObservation(userId, id);
     assert.deepEqual(await getStampMarketValue(userId, collectionId, stampId), []);
     assert.equal(await prisma.priceObservation.count({ where: { id } }), 0);
+  });
+
+  it("records a source lot once — by its address, or by its number in the same auction at the same house (#1635)", async () => {
+    const id = await createPriceObservation(
+      userId,
+      stampId,
+      raw({ lotNo: "77", auctionName: "Spring Sale", url: "https://example.com/r/77" })
+    );
+    // The same address, whatever else is typed.
+    await assert.rejects(
+      createPriceObservation(userId, umbrellaId, raw({ lotNo: "78", url: "https://example.com/r/77" })),
+      (err: unknown) => err instanceof DuplicatePriceObservationError && err.existingId === id
+    );
+    // The same lot number in the same auction at the same house, case aside, with no address.
+    await assert.rejects(
+      createPriceObservation(userId, stampId, raw({ lotNo: "77", auctionName: " spring sale ", url: "" })),
+      DuplicatePriceObservationError
+    );
+    // The same number in another auction, or with no house at another platform, is another lot.
+    await createPriceObservation(userId, stampId, raw({ lotNo: "77", auctionName: "Autumn Sale", url: "" }));
+    await createPriceObservation(userId, stampId, raw({ lotNo: "77", auctionName: "Spring Sale", auctionHouseId: null, url: "" }));
+    // Neither an address nor a number names no lot, and nothing duplicates it.
+    await createPriceObservation(userId, stampId, raw({ lotNo: "", url: "" }));
+    await createPriceObservation(userId, stampId, raw({ lotNo: "", url: "" }));
+    // A correction is not its own duplicate, and cannot become another's.
+    await updatePriceObservation(
+      userId,
+      id,
+      raw({ lotNo: "77", auctionName: "Spring Sale", url: "https://example.com/r/77", price: "41" })
+    );
+    const other = await createPriceObservation(userId, stampId, raw());
+    await assert.rejects(
+      updatePriceObservation(userId, other, raw({ url: "https://example.com/r/77" })),
+      DuplicatePriceObservationError
+    );
   });
 
   it("is never a lot, a sale or a purchase", async () => {

@@ -21,7 +21,7 @@ import {
 } from "./price-observation";
 import type { MarketObservationInput } from "./market-value";
 import { resultMarket, type AnchoringResolver, type MarketCode } from "./market-anchoring";
-import { loadAnchoring } from "./market-anchorings";
+import { getCollectionHomeMarket, loadAnchoring } from "./market-anchorings";
 
 // **Realised prices from other people's auctions** (#1633; ADR-0063) — recorded, corrected, deleted
 // and read back. The rules about what an observation *means* are in the pure `price-observation.ts`;
@@ -46,6 +46,18 @@ export class PriceObservationError extends Error {
   }
 }
 
+/**
+ * The source lot is already recorded (#1635): the same address, or the same lot number in the same
+ * auction of the same house — of the same platform where there is no house. One lot is one sale, so
+ * recording it twice would count it twice.
+ */
+export class DuplicatePriceObservationError extends PriceObservationError {
+  constructor(readonly existingId: string) {
+    super("This lot is already recorded — the same address, or the same lot number in the same auction.");
+    this.name = "DuplicatePriceObservationError";
+  }
+}
+
 /** The fields as the form submits them. Platform and house are each an id or a typed name. */
 export interface PriceObservationRaw {
   conditionId: string | null;
@@ -66,6 +78,9 @@ export interface PriceObservationRaw {
   auctionName: string;
   lotNo: string;
   url: string;
+  /** Moves the observation to another stamp of the collection (#1635) — the agent API's correction
+   * of a stamp named too broadly. The dialog never sends it: its form is opened on one stamp. */
+  stampId?: string;
 }
 
 /** One observation as the Valuation dialog lists it: as observed, as counted, and why not. */
@@ -213,7 +228,7 @@ function premiumOf(row: { premiumPercent: Prisma.Decimal | null; premiumFixed: P
   };
 }
 
-function toView(
+export function toView(
   row: ObservationRow,
   baseCurrency: string,
   anchoring: AnchoringResolver
@@ -341,6 +356,135 @@ export async function readObservationRows(
   });
 }
 
+/** What `list_price_observations` narrows by (#1635). Every field is optional and they combine. */
+export interface PriceObservationFilter {
+  stampIds?: string[];
+  /** Stamps filed in any of these areas — the caller resolves an area to its subtree. */
+  areaIds?: string[];
+  /** The market a result **counts as** (#1634): its house's, else its platform's, else the home
+   * market — so asking for the home market also finds results whose contacts name none. */
+  market?: MarketCode;
+  platformId?: string;
+  auctionHouseId?: string;
+  soldFrom?: Date;
+  soldTo?: Date;
+}
+
+/** One page of a collection's observations, newest sale first, each judged as the dialog judges it. */
+export interface PriceObservationPage {
+  total: number;
+  baseCurrency: string;
+  homeMarket: MarketCode;
+  observations: PriceObservationView[];
+}
+
+function observationWhere(
+  collectionId: string,
+  filter: PriceObservationFilter,
+  homeMarket: MarketCode
+): Prisma.PriceObservationWhereInput {
+  const and: Prisma.PriceObservationWhereInput[] = [{ collectionId }];
+  if (filter.stampIds) and.push({ stampId: { in: filter.stampIds } });
+  if (filter.areaIds) {
+    and.push({ stamp: { stampAreaLinks: { some: { collectionAreaId: { in: filter.areaIds } } } } });
+  }
+  if (filter.platformId) and.push({ platformId: filter.platformId });
+  if (filter.auctionHouseId) and.push({ auctionHouseId: filter.auctionHouseId });
+  if (filter.soldFrom) and.push({ soldOn: { gte: filter.soldFrom } });
+  if (filter.soldTo) and.push({ soldOn: { lte: filter.soldTo } });
+  if (filter.market) {
+    // `resultMarket`'s order, spelled as a query: the house's market when it names one, else the
+    // platform's, else the home market.
+    const houseSilent: Prisma.PriceObservationWhereInput = {
+      OR: [{ auctionHouseId: null }, { auctionHouse: { market: null } }],
+    };
+    const or: Prisma.PriceObservationWhereInput[] = [
+      { auctionHouse: { market: filter.market } },
+      { AND: [houseSilent, { platform: { market: filter.market } }] },
+    ];
+    if (filter.market === homeMarket) or.push({ AND: [houseSilent, { platform: { market: null } }] });
+    and.push({ OR: or });
+  }
+  return { AND: and };
+}
+
+/**
+ * A collection's observations, narrowed and paged (#1635) — the agent API's read. Each row is judged
+ * exactly as the Valuation dialog judges it (`toView`), so *counted* here and there cannot differ.
+ * Ownership is checked here.
+ */
+export async function listPriceObservations(
+  ownerId: string,
+  collectionId: string,
+  filter: PriceObservationFilter,
+  window: { offset: number; limit: number }
+): Promise<PriceObservationPage> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [baseCurrency, homeMarket] = await Promise.all([
+    getCollectionBaseCurrency(collectionId),
+    getCollectionHomeMarket(collectionId),
+  ]);
+  const where = observationWhere(collectionId, filter, homeMarket);
+  const [total, rows] = await Promise.all([
+    prisma.priceObservation.count({ where }),
+    prisma.priceObservation.findMany({
+      where,
+      select: OBSERVATION_SELECT,
+      orderBy: [{ soldOn: "desc" }, { createdAt: "desc" }, { id: "asc" }],
+      skip: window.offset,
+      take: window.limit,
+    }),
+  ]);
+  const anchoring = await loadAnchoring(collectionId, rows.map((row) => row.stampId));
+  return {
+    total,
+    baseCurrency,
+    homeMarket,
+    observations: rows.map((row) => toView(row, baseCurrency, anchoring)),
+  };
+}
+
+/** The given observations of a collection, judged — what a write answers with. Missing ids are
+ * simply absent. Ownership is the caller's. */
+export async function readPriceObservationViews(
+  collectionId: string,
+  ids: readonly string[]
+): Promise<Map<string, PriceObservationView>> {
+  if (ids.length === 0) return new Map();
+  const rows = await prisma.priceObservation.findMany({
+    where: { collectionId, id: { in: [...ids] } },
+    select: OBSERVATION_SELECT,
+  });
+  const [baseCurrency, anchoring] = await Promise.all([
+    getCollectionBaseCurrency(collectionId),
+    loadAnchoring(collectionId, rows.map((row) => row.stampId)),
+  ]);
+  return new Map(rows.map((row) => [row.id, toView(row, baseCurrency, anchoring)]));
+}
+
+/** An observation as the form would submit it unchanged — what a partial correction is merged onto. */
+export function priceObservationRawOf(view: PriceObservationView): PriceObservationRaw {
+  return {
+    conditionId: view.conditionId,
+    certificateStatusId: view.certificateStatusId,
+    certificateUncertain: view.certificateUncertain,
+    formatId: view.formatId,
+    price: view.price,
+    currency: view.currency,
+    priceBasis: view.priceBasis,
+    premiumPercent: view.premiumPercent ?? "",
+    premiumFixed: view.premiumFixed ?? "",
+    soldOn: view.soldOn,
+    platformId: view.platformId,
+    platformName: null,
+    auctionHouseId: view.auctionHouseId,
+    auctionHouseName: null,
+    auctionName: view.auctionName ?? "",
+    lotNo: view.lotNo ?? "",
+    url: view.url ?? "",
+  };
+}
+
 /** A house's terms, to propose for a new observation. The contact is read only within the collection. */
 export async function getAuctionHouseTerms(
   ownerId: string,
@@ -386,6 +530,48 @@ function parseDay(raw: string): Date | null {
   const date = new Date(`${trimmed}T00:00:00Z`);
   if (Number.isNaN(date.getTime()) || isoDay(date) !== trimmed) return null;
   return date;
+}
+
+/**
+ * The rows that record the same source lot (#1635): the same address, or the same lot number in the
+ * same auction at the same house — at the same platform when there is no house, since an Allegro
+ * offer number is the platform's. A row with neither an address nor a lot number names no lot, and
+ * nothing is a duplicate of it. Compared as typed, case aside; the address is stored trimmed.
+ */
+function sameSourceLot(input: {
+  url: string | null;
+  lotNo: string | null;
+  auctionName: string | null;
+  platformId: string;
+  auctionHouseId: string | null;
+}): Prisma.PriceObservationWhereInput[] {
+  const or: Prisma.PriceObservationWhereInput[] = [];
+  if (input.url) or.push({ url: input.url });
+  if (input.lotNo) {
+    or.push({
+      lotNo: { equals: input.lotNo, mode: "insensitive" },
+      auctionName: input.auctionName ? { equals: input.auctionName, mode: "insensitive" } : null,
+      ...(input.auctionHouseId
+        ? { auctionHouseId: input.auctionHouseId }
+        : { auctionHouseId: null, platformId: input.platformId }),
+    });
+  }
+  return or;
+}
+
+/** Refuse a write that would record a source lot a second time; `exceptId` is the row being edited. */
+async function assertNotRecorded(
+  collectionId: string,
+  input: ParsedObservation,
+  exceptId: string | null
+): Promise<void> {
+  const or = sameSourceLot(input);
+  if (or.length === 0) return;
+  const existing = await prisma.priceObservation.findFirst({
+    where: { collectionId, OR: or, ...(exceptId ? { id: { not: exceptId } } : {}) },
+    select: { id: true },
+  });
+  if (existing) throw new DuplicatePriceObservationError(existing.id);
 }
 
 /** Validate and resolve the form's fields. Creates a platform or house contact for a typed name, as
@@ -477,31 +663,58 @@ async function parseObservation(
   };
 }
 
+/**
+ * The rates already looked up in one batch, by day and currency (#1635). A field read off
+ * Philasearch is hundreds of results from a handful of sale days, and each needs the same rate: one
+ * request per day and currency, not one per row (ADR-0063, *Consequences*). A failed lookup is
+ * remembered too — the next row of the same day would only fail the same way.
+ */
+export type ObservationRateCache = Map<string, Promise<Prisma.Decimal | null>>;
+
 /** The ECB rate of the sale's day into the base currency, or null — when none is needed, and when
  * none could be had (see the module comment). */
 async function freezeObservationRate(
   collectionId: string,
   currency: string,
-  soldOn: Date
+  soldOn: Date,
+  cache?: ObservationRateCache
 ): Promise<Prisma.Decimal | null> {
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
   if (currency === baseCurrency) return null;
-  try {
-    return new Prisma.Decimal(await fetchEcbRateOn(soldOn, currency, baseCurrency));
-  } catch {
-    return null;
+  const lookup = async () => {
+    try {
+      return new Prisma.Decimal(await fetchEcbRateOn(soldOn, currency, baseCurrency));
+    } catch {
+      return null;
+    }
+  };
+  if (!cache) return lookup();
+  const key = `${isoDay(soldOn)}~${currency}~${baseCurrency}`;
+  let rate = cache.get(key);
+  if (!rate) {
+    rate = lookup();
+    cache.set(key, rate);
   }
+  return rate;
 }
 
-/** Record an observation on a stamp. Returns its id. */
+/** Record an observation on a stamp. Returns its id. A source lot already recorded is refused with
+ * {@link DuplicatePriceObservationError}. */
 export async function createPriceObservation(
   ownerId: string,
   stampId: string,
-  raw: PriceObservationRaw
+  raw: PriceObservationRaw,
+  options: { rateCache?: ObservationRateCache } = {}
 ): Promise<string> {
   const collectionId = await stampCollection(ownerId, stampId);
   const input = await parseObservation(collectionId, raw);
-  const fxRateToBase = await freezeObservationRate(collectionId, input.currency, input.soldOn);
+  await assertNotRecorded(collectionId, input, null);
+  const fxRateToBase = await freezeObservationRate(
+    collectionId,
+    input.currency,
+    input.soldOn,
+    options.rateCache
+  );
   const row = await prisma.priceObservation.create({
     data: { collectionId, stampId, ...input, fxRateToBase },
     select: { id: true },
@@ -526,6 +739,15 @@ export async function updatePriceObservation(
   if (!existing) throw new PriceObservationError("That observation no longer exists.");
   await assertCollectionOwner(ownerId, existing.collectionId);
   const input = await parseObservation(existing.collectionId, raw);
+  const stampId = raw.stampId?.trim() || undefined;
+  if (stampId !== undefined) {
+    const stamp = await prisma.stamp.findFirst({
+      where: { id: stampId, collectionId: existing.collectionId },
+      select: { id: true },
+    });
+    if (!stamp) throw new PriceObservationError("That stamp is not in this collection.");
+  }
+  await assertNotRecorded(existing.collectionId, input, observationId);
 
   const unchanged =
     input.currency === existing.currency && input.soldOn.getTime() === existing.soldOn.getTime();
@@ -536,7 +758,7 @@ export async function updatePriceObservation(
 
   await prisma.priceObservation.update({
     where: { id: observationId },
-    data: { ...input, fxRateToBase },
+    data: { ...input, fxRateToBase, ...(stampId !== undefined ? { stampId } : {}) },
   });
 }
 
