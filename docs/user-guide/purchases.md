@@ -876,19 +876,21 @@ same field the copy's own dialog has: pick from your list, or type a new name an
 added to your list when the copy is created). The field opens with the faults **marked on the tile**,
 labelled so, and an unmarked tile opens with **no faults** — never with the last tile's, since a fault
 belongs to one piece. The field sits straight after condition, certificate and format, with the rest of
-what describes the piece, and before the catalogue value, which is looked up afterwards; Tab follows
-the same order.
+what describes the piece, and before the catalogue value, which is looked up afterwards. **Tags** sit
+beside it on the same row, each taking half, and each grows downwards as you add more; Tab goes from
+*Faults* to *Tags* to *Catalog value*.
 
 - **Several tiles identified as one stamp**: when they are all marked with the same faults, the field
   opens on them and they go on every copy. Otherwise it opens empty, the tiles marked with faults
   **keep their own**, and the faults you give apply to the rest — the step says so (*2 tiles keep
   their marked faults*).
 - **A run**: faults are always a tile's own, under *its own details*, straight after its condition,
-  certificate and format — there is no *for all tiles* answer for them. Each tile opens on the faults marked on it, and its row says how many it has.
+  certificate and format, with the tile's **Tags** beside them — there is no *for all tiles* answer
+  for faults. Each tile opens on the faults marked on it, and its row says how many it has.
 - **Identify again** does not ask: it corrects what the copy is, and the copy's faults are changed in
   its own dialog.
 
-**Tags in identification.** Every identification dialog also asks for the new copy's **Tags**, after
+**Tags in identification.** Every identification dialog also asks for the new copy's **Tags**, beside
 *Faults* — the field the copy's own dialog has: pick a tag from your list, or type a new name and
 press Enter (it is added to your list when the copy is created). Every identification **starts with
 no tags**: the field opens with the tags **marked on the tile**, labelled so, and is otherwise empty —
@@ -1454,8 +1456,8 @@ back. Each step opens fitted to its own panel; the zoom you set is kept across a
 as it is here.
 
 The **condition step** is the same size as this dialog — the whole browser window, less a narrow
-margin — so moving from one to the other does not resize anything. Its form keeps its column and the
-piece takes the rest, so at **Fit** the piece is as large as the window allows; on a small window the
+margin — so moving from one to the other does not resize anything. Its form keeps a fixed column, wide
+enough for *Faults* and *Tags* side by side, and the piece takes the rest, so at **Fit** the piece is as large as the window allows; on a small window the
 picture gives way before the form does. Without a piece to show, the step is its usual narrow form.
 
 It appears **only where there is a picture of that piece** — which means the scan-tile path and
@@ -1847,9 +1849,8 @@ never chose is much harder to spot than a missing one, which at least reads as *
 
 #### The catalogue value, while the catalogue is still open
 
-Underneath the condition row, after the faults, there is one optional **Catalog value** field.
-Identifying a stamp is
-the one moment you already have the paper catalogue open at that very stamp, so entering the figure
+Underneath the condition row, after the faults and tags, there is one optional **Catalog value**
+field. Identifying a stamp is the one moment you already have the paper catalogue open at that very stamp, so entering the figure
 costs you a field; entering it a month later means finding the stamp again, on paper and in the app,
 from a list of hundreds. It is also what stops the `N unpriced` chip and the refusal to
 [close a lot](#closing-a-lot) from ever coming up: both exist because prices are usually entered
