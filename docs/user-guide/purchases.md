@@ -2010,6 +2010,16 @@ estimate are figured over the whole lot on the server. There is no cap: a "stock
 thousands of positions shows every copy, and ticking a whole lot or a whole issue group means
 **every copy the list is showing** — resolved on the server, not just the rows you have loaded.
 
+Each copy's **⋮** menu also offers **Edit copy** (condition, certificate, storage,
+disposition) and **Edit stamp** (the underlying stamp, including its catalog prices on the
+**Prices** tab) — so you can correct a copy or fill in a missing price without leaving the
+lot.
+
+To remove a stamp from a lot, use its **⋮** menu → **Remove from lot**. Because these copies
+exist only to populate the lot, removing one **deletes** it.
+
+### Grouping, filtering and sorting the copies
+
 **The lots toolbar.** One row above the lots carries everything about how they are shown and how
 new ones are made: the **Lots** heading, **Group by**, **Lot state**, **Still needs**, **Kept
 for**, **Sort copies**, **Expand all**, and — at the right-hand end — **Add lot** and **Add lot with stamps**.
@@ -2164,14 +2174,6 @@ complete?* are two questions and one merged figure would answer neither.
 A for-sale copy filed under a **variant** of a stamp on the checklist counts for that stamp, at any
 depth — a `226yw` in the stockbook is the `226` the set is short of. The same rule the issue's own
 [completeness grid](detail-pages.md#completeness) states in full.
-
-Each copy's **⋮** menu also offers **Edit copy** (condition, certificate, storage,
-disposition) and **Edit stamp** (the underlying stamp, including its catalog prices on the
-**Prices** tab) — so you can correct a copy or fill in a missing price without leaving the
-lot.
-
-To remove a stamp from a lot, use its **⋮** menu → **Remove from lot**. Because these copies
-exist only to populate the lot, removing one **deletes** it.
 
 ### Attaching a copy that already exists
 
