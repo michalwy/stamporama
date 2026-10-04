@@ -36,6 +36,8 @@ import { AuctionLotLineDialog } from "../../auction-lot-line-dialog";
 import type { AuctionLotDetailView } from "../../use-auctions-query";
 import { AuctionLotLineRow } from "./auction-lot-line-row";
 import { Icon, type IconName } from "@/app/icons";
+import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
+import { tagFilterTriggerLabel } from "@/lib/tag-filter";
 
 // **A parcel's lots, as collapsible cards over what each one holds** (#353).
 //
@@ -86,7 +88,11 @@ const TOOLBAR_LABEL: React.CSSProperties = {
  * The three line filters lose their counts here and keep their words: a chip reads `12 no photo`
  * because the number is the reason to press it, while the band is naming what is in force.
  */
-function narrowingLabel({ key, value }: AuctionSaleNarrowing): string {
+function narrowingLabel(
+  { key, value }: AuctionSaleNarrowing,
+  view: AuctionSaleView,
+  tags: readonly { id: string; name: string }[]
+): string {
   switch (key) {
     case "signal":
       return SIGNALS.find((s) => s.value === value)?.label ?? value;
@@ -102,6 +108,12 @@ function narrowingLabel({ key, value }: AuctionSaleNarrowing): string {
       // The flat watchlist's own wording for the same question (#442), so the two screens name it
       // identically.
       return "Not described";
+    case "tagIds": {
+      // The filter control's own trigger wording, mode included (#1625).
+      const ids = new Set(value.split(","));
+      const names = tags.filter((t) => ids.has(t.id)).map((t) => t.name);
+      return names.length > 0 ? tagFilterTriggerLabel(names, view.tagMode) : "Tags";
+    }
     default:
       return value;
   }
@@ -671,6 +683,8 @@ export function AuctionLotCardsView({
   const [linePending, startLineTransition] = useTransition();
 
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  // The band names a tag filter by its tags' names (#1625).
+  const { data: tagDictionary } = useCollectionTags(collectionId);
   const areaNameById = useMemo(() => new Map(areas.map((a) => [a.id, a.name])), [areas]);
 
   function runLine(
@@ -858,7 +872,7 @@ export function AuctionLotCardsView({
             ) : (
               <>This view is narrowed — </>
             )}
-            {narrowings.map(narrowingLabel).join(" · ")}
+            {narrowings.map((n) => narrowingLabel(n, view, tagDictionary ?? [])).join(" · ")}
             {/* The lot a link asked for, named beside the figure rather than counted into it
                 (#1356): counted in, clearing the filters would move the figure in a direction the
                 collector does not expect. */}

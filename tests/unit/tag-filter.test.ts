@@ -8,6 +8,8 @@ import {
   tagFilterFromParams,
   tagFilterTriggerLabel,
   tagFilterWhere,
+  tagsMatchFilter,
+  NO_TAGS,
 } from "../../src/lib/tag-filter";
 import {
   readAreaFacetFilters,
@@ -131,6 +133,31 @@ describe("tagFilterWhere", () => {
     assert.deepEqual(tagFilterWhere({ tagIds: ["a", "a"], tagMode: "all" }), {
       tags: { some: { tagId: "a" } },
     });
+  });
+});
+
+describe("tagsMatchFilter — the same question asked in memory (#1625)", () => {
+  it("lets everything through when the filter is off", () => {
+    assert.equal(tagsMatchFilter([], {}), true);
+    assert.equal(tagsMatchFilter(["a"], { tagIds: [] }), true);
+  });
+
+  it("matches any of the ticked tags by default", () => {
+    assert.equal(tagsMatchFilter(["a"], { tagIds: ["a", "b"] }), true);
+    assert.equal(tagsMatchFilter(["c"], { tagIds: ["a", "b"] }), false);
+    assert.equal(tagsMatchFilter([], { tagIds: ["a"] }), false);
+  });
+
+  it("demands every ticked tag under *all*", () => {
+    assert.equal(tagsMatchFilter(["a", "b", "c"], { tagIds: ["a", "b"], tagMode: "all" }), true);
+    assert.equal(tagsMatchFilter(["a"], { tagIds: ["a", "b"], tagMode: "all" }), false);
+  });
+
+  it("reads *no tags* as the untagged, ORed beside the tags as the `where` reads it", () => {
+    assert.equal(tagsMatchFilter([], { tagIds: [NO_TAGS] }), true);
+    assert.equal(tagsMatchFilter(["a"], { tagIds: [NO_TAGS] }), false);
+    assert.equal(tagsMatchFilter(["a"], { tagIds: [NO_TAGS, "a"] }), true);
+    assert.equal(tagsMatchFilter([], { tagIds: [NO_TAGS, "a", "b"], tagMode: "all" }), true);
   });
 });
 

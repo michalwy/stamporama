@@ -47,7 +47,9 @@ import {
   RECOMMENDATION_CARET_SLOT,
 } from "./bid-recommendation-popover";
 import { Icon } from "@/app/icons";
-import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
+import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -509,6 +511,13 @@ interface AuctionLotRowProps {
    * trades in the base currency, so a collection with one currency sees neither.
    */
   baseAmounts?: "headline" | "full";
+  /**
+   * The row's tick on the lots list (#1625), where ticked lots are tagged together. Absent on the
+   * sale's own screen, where the row is a card's header and nothing is ticked. A gutter beside the
+   * row rather than a box inside it, as on the Offers list: the row is a click target, and a
+   * checkbox in it would be a hole in that target.
+   */
+  selection?: { selected: boolean; onToggle: (lot: AuctionLotView) => void };
 }
 
 /**
@@ -542,6 +551,7 @@ export function AuctionLotRow({
   expanded,
   onToggleExpanded,
   baseAmounts = "headline",
+  selection,
 }: AuctionLotRowProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -879,15 +889,42 @@ export function AuctionLotRow({
     },
   ];
 
+  const checked = !!selection?.selected;
+
   return (
-    <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
+    <div
+      style={{
+        borderBottom: isLast ? undefined : "1px solid var(--color-border)",
+        ...(selection ? { display: "flex", alignItems: "stretch" } : {}),
+        // A ticked row leads — what is ticked is what the bar above is about to act on.
+        ...(checked ? { background: "var(--color-accent-soft)" } : {}),
+      }}
+    >
+      {selection && (
+        // The whole strip is the hit area, and its click never reaches the row's own (#1589).
+        <CheckCell style={SELECT_STRIP}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => selection.onToggle(lot)}
+            aria-label={`Select ${lotLabel(lot)}`}
+            style={{ cursor: "pointer" }}
+          />
+        </CheckCell>
+      )}
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onClick={handleRowClick}
         style={{
-          padding: "0.75rem 1.25rem",
-          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          flex: selection ? 1 : undefined,
+          minWidth: 0,
+          padding: selection ? "0.75rem 1.25rem 0.75rem 0" : "0.75rem 1.25rem",
+          background: hovered
+            ? "var(--color-bg-row-hover)"
+            : checked
+              ? "transparent"
+              : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
           // Only where the click goes somewhere. The pointer is the whole affordance — the row is
           // not a link element, so the keyboard route stays the ⋮ menu's *Open sale* entry.
@@ -1016,6 +1053,9 @@ export function AuctionLotRow({
                   bidding, so it never stands between the status and what the price is doing. */}
               {lotNeedsComposition(lot) && <NotDescribedChip />}
               {lot.notStamps && <NotStampsChip description={lot.notStampsDescription} />}
+              {/* The collector's own labels (#1625), after everything the app says about the lot —
+                  the order the Copies row reads its chips in. Nothing at all when it has none. */}
+              <TagChips tags={lot.tags} />
 
             </div>
             </div>

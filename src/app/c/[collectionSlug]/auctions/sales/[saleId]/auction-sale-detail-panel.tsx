@@ -26,6 +26,8 @@ import { lotHasSignal, LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { SaleStatusChip } from "../../auction-badges";
 import { SIGNALS } from "../../auction-controls";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
+import { tagsMatchFilter } from "@/lib/tag-filter";
 import { useAuctionSaleView } from "./use-auction-sale-view";
 import {
   auctionSaleViewOnArrival,
@@ -240,8 +242,17 @@ export function AuctionSaleDetailPanel({
     LOT_SIGNALS.map((s) => [s, sale.lots.filter((lot) => carries(lot, s)).length])
   ) as Record<LotSignal, number>;
 
+  // The tag filter (#1625) is `tag-filter.ts`' own reading, asked in memory — the same answer the
+  // flat watchlist's server filter gives for the same lot.
+  const tagFilter = { tagIds: view.tagIds, tagMode: view.tagMode };
   const visibleLots = sale.lots.filter(
-    (lot) => (!outcome || lot.outcome === outcome) && (!signal || carries(lot, signal))
+    (lot) =>
+      (!outcome || lot.outcome === outcome) &&
+      (!signal || carries(lot, signal)) &&
+      tagsMatchFilter(
+        lot.tags.map((t) => t.id),
+        tagFilter
+      )
   );
 
   // Settlement (#28). A parcel is paid for as a whole, so the action only appears once every lot's
@@ -540,6 +551,17 @@ export function AuctionSaleDetailPanel({
               />
             );
           })}
+          {/* The collector's own labels (#1625) — the flat watchlist's control, asked of this parcel.
+              Absent in a collection with no tags at all. */}
+          <span style={{ marginLeft: "auto" }}>
+            <TagFilterControl
+              collectionId={collectionId}
+              tagIds={view.tagIds}
+              mode={view.tagMode}
+              width="10rem"
+              onChange={({ tagIds, mode }) => setView({ tagIds, tagMode: mode })}
+            />
+          </span>
         </div>
       )}
 

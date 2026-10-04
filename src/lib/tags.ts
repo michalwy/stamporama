@@ -7,8 +7,9 @@ import { findTagByName, type TagEntry } from "./tag-entry";
  * User-defined tags (#152) — the collector's own labels for what the fixed schema does not name:
  * *to check*, *for expertising*, *birds*, *from the box grandfather left*.
  *
- * This module is the dictionary and the three places a tag hangs: an **issue**, a **stamp** and a
- * **copy** (#1181). Narrowing a list *by* tag is not here at all: it is `tag-filter.ts` (#1182),
+ * This module is the dictionary and the four places a tag hangs: an **issue**, a **stamp**, a
+ * **copy** (#1181) and an **auction lot** (#1625). Narrowing a list *by* tag is not here at all: it
+ * is `tag-filter.ts` (#1182),
  * which is pure because the panel, the route and the three list modules all have to agree about one
  * spelling of it — what this module left for it was the join tables' `tagId` indexes, which it reads
  * in the direction they were added for.
@@ -24,7 +25,9 @@ import { findTagByName, type TagEntry } from "./tag-entry";
  * list's bulk edit **adds** named tags and **removes** named tags ({@link applyItemTagChanges}),
  * leaving every tag it did not name alone. Copies arrive by the drawerful and a selection is
  * routinely mixed, so a replace over one would flatten forty copies onto whatever the dialog
- * happened to show.
+ * happened to show. An **auction lot** follows the copy exactly (#1625): its edit dialog replaces
+ * ({@link setAuctionLotTagEntries}), and the lots list's ticked lots take an add and a remove
+ * ({@link applyAuctionLotTagChanges}).
  */
 
 /** A tag as every surface that draws one needs it. There is nothing else on the row worth
@@ -47,6 +50,8 @@ export interface TagData extends TagSummary {
    *  delete takes the label off all three, and a tag that is on no stamp but on ninety copies is
    *  exactly the one a collector would otherwise delete believing it unused. */
   copyCount: number;
+  /** Auction lots carrying it (#1625), counted beside the rest for the same reason. */
+  lotCount: number;
 }
 
 export class TagNameTakenError extends Error {
@@ -96,7 +101,7 @@ export async function getTags(ownerId: string, collectionId: string): Promise<Ta
       id: true,
       name: true,
       color: true,
-      _count: { select: { issues: true, stamps: true, copies: true } },
+      _count: { select: { issues: true, stamps: true, copies: true, auctionLots: true } },
     },
   });
   return byName(rows).map((t) => ({
@@ -104,6 +109,7 @@ export async function getTags(ownerId: string, collectionId: string): Promise<Ta
     issueCount: t._count.issues,
     stampCount: t._count.stamps,
     copyCount: t._count.copies,
+    lotCount: t._count.auctionLots,
   }));
 }
 
@@ -173,15 +179,16 @@ export async function deleteTag(ownerId: string, tagId: string): Promise<void> {
 export async function getTagUsage(
   ownerId: string,
   tagId: string
-): Promise<{ issueCount: number; stampCount: number; copyCount: number }> {
+): Promise<{ issueCount: number; stampCount: number; copyCount: number; lotCount: number }> {
   const collectionId = await resolveTagCollection(tagId);
   await assertCollectionOwner(ownerId, collectionId);
-  const [issueCount, stampCount, copyCount] = await Promise.all([
+  const [issueCount, stampCount, copyCount, lotCount] = await Promise.all([
     prisma.issueTag.count({ where: { tagId } }),
     prisma.stampTag.count({ where: { tagId } }),
     prisma.itemTag.count({ where: { tagId } }),
+    prisma.auctionLotTag.count({ where: { tagId } }),
   ]);
-  return { issueCount, stampCount, copyCount };
+  return { issueCount, stampCount, copyCount, lotCount };
 }
 
 /**
@@ -361,6 +368,87 @@ export async function giveNewCopiesTags(
 /** {@link setItemTagEntries} for tags that already exist, named by id. */
 export async function setItemTags(ownerId: string, itemId: string, tagIds: string[]): Promise<void> {
   await setItemTagEntries(ownerId, itemId, idEntries(tagIds));
+}
+
+/**
+ * Replace the set of tags on one auction lot (#1625) — {@link setItemTagEntries}'s rules, from the
+ * lot's edit dialog, whose chips are the whole answer. The lots list's ticked lots are never
+ * replaced wholesale — see {@link applyAuctionLotTagChanges}.
+ *
+ * **Not refused on a settled lot**, unlike every other edit to one (`assertLotEditable`): a tag is a
+ * label and not part of what settlement transcribed into the purchase, so nothing it changes can
+ * disagree with the record. Nothing propagates to the lot's sale or to the copies it settled into.
+ */
+export async function setAuctionLotTagEntries(
+  ownerId: string,
+  lotId: string,
+  entries: readonly TagEntry[]
+): Promise<void> {
+  const lot = await prisma.auctionLot.findUnique({
+    where: { id: lotId },
+    select: { auctionSale: { select: { collectionId: true } } },
+  });
+  if (!lot) throw new Error("Lot not found.");
+  const { collectionId } = lot.auctionSale;
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.$transaction(async (tx) => {
+    const valid = await resolveTagEntries(tx, collectionId, entries);
+    await tx.auctionLotTag.deleteMany({ where: { auctionLotId: lotId, tagId: { notIn: valid } } });
+    await tx.auctionLotTag.createMany({
+      data: valid.map((tagId) => ({ auctionLotId: lotId, tagId })),
+      skipDuplicates: true,
+    });
+  });
+}
+
+/** {@link setAuctionLotTagEntries} for tags that already exist, named by id. */
+export async function setAuctionLotTags(ownerId: string, lotId: string, tagIds: string[]): Promise<void> {
+  await setAuctionLotTagEntries(ownerId, lotId, idEntries(tagIds));
+}
+
+/**
+ * Add and remove named tags across the lots ticked on the lots list (#1625) — {@link
+ * applyItemTagChanges}'s rules exactly, and for its reason: a selection is routinely mixed, so the
+ * pass names what to put on and what to take off and leaves every other tag on each lot alone.
+ * Remove runs before add.
+ *
+ * Its own transaction and its own ownership check, since unlike the copies' pass it rides on no
+ * other write. **Lots that are not this collection's are dropped rather than refused**, as foreign
+ * tag ids are: the list cannot tick one, so a request naming it is not something the collector did.
+ * Returns how many lots the pass reached.
+ */
+export async function applyAuctionLotTagChanges(
+  ownerId: string,
+  collectionId: string,
+  lotIds: string[],
+  changes: ItemTagChanges
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  if (lotIds.length === 0 || !hasItemTagChanges(changes)) return 0;
+  return prisma.$transaction(async (tx) => {
+    const lots = await tx.auctionLot.findMany({
+      where: { id: { in: [...new Set(lotIds)] }, auctionSale: { collectionId } },
+      select: { id: true },
+    });
+    const ids = lots.map((l) => l.id);
+    if (ids.length === 0) return 0;
+    const [add, remove] = await Promise.all([
+      validTagIdsWith(tx, collectionId, changes.addTagIds ?? []),
+      validTagIdsWith(tx, collectionId, changes.removeTagIds ?? []),
+    ]);
+    if (remove.length > 0) {
+      await tx.auctionLotTag.deleteMany({
+        where: { auctionLotId: { in: ids }, tagId: { in: remove } },
+      });
+    }
+    if (add.length > 0) {
+      await tx.auctionLotTag.createMany({
+        data: ids.flatMap((auctionLotId) => add.map((tagId) => ({ auctionLotId, tagId }))),
+        skipDuplicates: true,
+      });
+    }
+    return ids.length;
+  });
 }
 
 /** The tags on one stamp, for the stamp dialog to seed its field with. Fetched by id, the way that

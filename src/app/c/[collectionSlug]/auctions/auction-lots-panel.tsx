@@ -55,6 +55,22 @@ import { useToast } from "@/app/toast-provider";
 import { AuctionLotLinesDialog } from "./auction-lot-lines-dialog";
 import { SIGNALS } from "./auction-controls";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
+import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
+import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
+import {
+  DEFAULT_TAG_FILTER_MODE,
+  isTagFilterMode,
+  tagFilterTriggerLabel,
+  TAG_FILTER_PARAM,
+  TAG_MODE_PARAM,
+  type TagFilterMode,
+} from "@/lib/tag-filter";
+import { rowsInView, selectionInView } from "@/lib/rows-in-view";
+import { toggleRowsInView } from "@/lib/offer-selection";
+import { AuctionLotTagsDialog } from "./auction-lot-tags-dialog";
+import { Icon } from "@/app/icons";
 
 /**
  * The two fixed widths the toolbar's dropdowns are given (#868): a trigger sized to its own label
@@ -62,7 +78,7 @@ import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/share
  * reading — `Outcome: any + closed` and `Closing: This week` — with room to spare, so the label is
  * never the half that gets ellipsised away.
  */
-const FILTER_WIDTH = { outcome: "12rem", closing: "10.5rem" } as const;
+const FILTER_WIDTH = { outcome: "12rem", closing: "10.5rem", tags: "10rem" } as const;
 
 /** What a `Tooltip` around a fixed-width bar control needs to keep that width: it renders an
  *  `inline-flex` span, and **that span** is the row's flex child rather than the control inside it,
@@ -74,7 +90,19 @@ type DialogState =
   | { kind: "add" }
   | { kind: "edit"; lot: AuctionLotView }
   | { kind: "lines"; lot: AuctionLotView }
-  | { kind: "delete"; lot: AuctionLotView };
+  | { kind: "delete"; lot: AuctionLotView }
+  | { kind: "tags"; lots: AuctionLotView[] };
+
+/** The selection bar's quiet buttons — the Offers list's `LINK_BTN`. */
+const LINK_BTN: React.CSSProperties = {
+  border: "none",
+  background: "none",
+  padding: 0,
+  cursor: "pointer",
+  fontSize: "0.8125rem",
+  color: "var(--color-accent)",
+  fontWeight: 600,
+};
 
 /**
  * The clock every row on the list ages against (closing times, staleness). One instant shared by
@@ -147,6 +175,11 @@ export function AuctionLotsPanel({
     "auction-duplicate",
     collectionId
   );
+  const [storedTagIds, rememberTagIds] = usePersistedCollectionValue("auction-tags", collectionId);
+  const [storedTagMode, rememberTagMode] = usePersistedCollectionValue(
+    "auction-tag-mode",
+    collectionId
+  );
 
   const outcomeRaw = searchParams.has("outcome")
     ? (searchParams.get("outcome") ?? "")
@@ -211,6 +244,22 @@ export function AuctionLotsPanel({
   // by the URL whenever it carries one, so a link to a searched list still means what it says.
   const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
 
+  // The collector's own labels (#1625) — remembered like every other filter here, the URL winning
+  // when it carries them, in `tag-filter.ts`' own param names. The ids and the mode are one filter,
+  // so the mode is read from wherever the ids came from: a link naming tags and no mode means *any*,
+  // not whatever mode was last remembered.
+  const tagsFromUrl = searchParams.has(TAG_FILTER_PARAM);
+  const tagIdsRaw = (tagsFromUrl ? searchParams.get(TAG_FILTER_PARAM) : storedTagIds) ?? "";
+  const tagIdsKey = tagIdsRaw
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .join(",");
+  const tagIds = useMemo(() => (tagIdsKey ? tagIdsKey.split(",") : []), [tagIdsKey]);
+  const tagModeRaw = tagsFromUrl ? searchParams.get(TAG_MODE_PARAM) : storedTagMode;
+  const tagMode: TagFilterMode = isTagFilterMode(tagModeRaw) ? tagModeRaw : DEFAULT_TAG_FILTER_MODE;
+  const { data: tagDictionary } = useCollectionTags(collectionId);
+
   const [groupBySale, setGroupBySale] = usePersistedFlag(
     `stamporama:auctions:groupBySale:${collectionId}`
   );
@@ -239,6 +288,8 @@ export function AuctionLotsPanel({
       search: search || undefined,
       sellerId,
       platformId,
+      tagIds: tagIds.length > 0 ? tagIds : undefined,
+      tagMode: tagIds.length > 0 ? tagMode : undefined,
     }),
     [
       outcome,
@@ -250,6 +301,8 @@ export function AuctionLotsPanel({
       search,
       sellerId,
       platformId,
+      tagIds,
+      tagMode,
     ]
   );
 
@@ -276,6 +329,38 @@ export function AuctionLotsPanel({
   const { data: counts } = useAuctionLotCounts(collectionId, filters);
   const { data: exposure } = useAuctionLotExposure(collectionId, filters);
   const rows = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+
+  /* ── Ticked lots (#1625) ──────────────────────────────────────────────────────────────────────
+   * The Offers list's selection, on lots, and under its rules (`ui-patterns.md`, #1020/#1031): a
+   * filter never unticks anything, and the bar counts and acts on the ticked lots **in view** — the
+   * rows the current filters loaded — while the ticks a filter is hiding stay ticked and come back
+   * when it is released. The one action is tagging, so the selection exists for that.
+   */
+  const [selection, setSelection] = useState<Map<string, AuctionLotView>>(() => new Map());
+  const selectedCount = selection.size;
+  /** The ticked lots in view, read off the loaded rows rather than off the selection, so a lot
+   * re-tagged a moment ago is handed on with the tags it carries now. */
+  const lotsInView = useMemo(() => rowsInView([rows.map((r) => r.id)]), [rows]);
+  const selectedInView = useMemo(
+    () =>
+      selectionInView([...selection.values()], lotsInView).map(
+        (picked) => rows.find((r) => r.id === picked.id) ?? picked
+      ),
+    [selection, lotsInView, rows]
+  );
+  const hiddenSelectedCount = selectedCount - selectedInView.length;
+  const toggleSelected = useCallback((lot: AuctionLotView) => {
+    setSelection((prev) => {
+      const next = new Map(prev);
+      if (next.has(lot.id)) next.delete(lot.id);
+      else next.set(lot.id, lot);
+      return next;
+    });
+  }, []);
+  /** Clearing is the collector's own act and clears everything, the ticks a filter hides included. */
+  const clearSelection = useCallback(() => setSelection(new Map()), []);
+  const allLoadedSelected = rows.length > 0 && rows.every((r) => selection.has(r.id));
+  const toggleAllLoaded = useCallback(() => setSelection((prev) => toggleRowsInView(prev, rows)), [rows]);
 
   // Grouping is a presentation of the rows already loaded, exactly as the listing workspace groups
   // its batch (#322) — the server order is preserved within each group, so the reading order inside
@@ -355,6 +440,13 @@ export function AuctionLotsPanel({
         return parties?.sellers.find((s) => s.id === value)?.name ?? "Seller";
       case "platformId":
         return parties?.platforms.find((p) => p.id === value)?.name ?? "Platform";
+      case "tagIds": {
+        // The filter control's own trigger wording, mode included — the band names the filter in the
+        // words of the control that set it.
+        const ids = new Set(value.split(","));
+        const names = (tagDictionary ?? []).filter((t) => ids.has(t.id)).map((t) => t.name);
+        return names.length > 0 ? tagFilterTriggerLabel(names, tagMode) : "Tags";
+      }
       default:
         return value;
     }
@@ -384,6 +476,8 @@ export function AuctionLotsPanel({
     rememberSignal("");
     rememberUndescribed("");
     rememberDuplicate("");
+    rememberTagIds("");
+    rememberTagMode("");
     setIncludeClosed(false);
     // The box holds its own debounced copy, so the input has to be told as well or it goes on
     // showing a phrase that is no longer narrowing anything.
@@ -397,6 +491,8 @@ export function AuctionLotsPanel({
       signal: "",
       undescribed: "",
       duplicate: "",
+      [TAG_FILTER_PARAM]: "",
+      [TAG_MODE_PARAM]: "",
     });
   }, [
     rememberOutcome,
@@ -407,6 +503,8 @@ export function AuctionLotsPanel({
     rememberSignal,
     rememberUndescribed,
     rememberDuplicate,
+    rememberTagIds,
+    rememberTagMode,
     setIncludeClosed,
     setLocalSearch,
     updateParams,
@@ -686,6 +784,22 @@ export function AuctionLotsPanel({
               </option>
             ))}
           </select>
+          {/* The collector's own labels (#1625) — the control the Issues, Stamps and Copies lists
+              share, at a fixed width so a pick never moves the bar (#868). Absent in a collection
+              with no tags at all. */}
+          <TagFilterControl
+            collectionId={collectionId}
+            tagIds={tagIds}
+            mode={tagMode}
+            width={FILTER_WIDTH.tags}
+            onChange={({ tagIds: nextIds, mode: nextMode }) => {
+              const ids = nextIds.join(",");
+              const modeParam = nextIds.length > 0 && nextMode !== DEFAULT_TAG_FILTER_MODE ? nextMode : "";
+              rememberTagIds(ids);
+              rememberTagMode(modeParam);
+              updateParams({ [TAG_FILTER_PARAM]: ids, [TAG_MODE_PARAM]: modeParam });
+            }}
+          />
         </div>
 
         <div style={{ marginLeft: "auto", flexShrink: 0, display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -825,6 +939,99 @@ export function AuctionLotsPanel({
           </div>
         )}
 
+        {/* The selection bar (#1625) — the Offers list's, and drawn on its rule: always while there
+            are rows, so the select-all box and the feature itself can be found before anything is
+            ticked; the action arrives with the selection. It counts and acts on the ticked lots in
+            view, and while every ticked lot is hidden it keeps only *Clear*. */}
+        {rows.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.625rem",
+              padding: "0.5rem 1.25rem 0.5rem 0",
+              borderBottom: "1px solid var(--color-border)",
+              background: selectedCount ? "var(--color-accent-soft)" : "var(--color-bg-elevated)",
+            }}
+          >
+            <Tooltip
+              content={
+                allLoadedSelected
+                  ? "Deselect all"
+                  : `Select the ${rows.length} lot${rows.length === 1 ? "" : "s"} loaded so far`
+              }
+              style={{ ...SELECT_STRIP, alignSelf: "stretch" }}
+            >
+              <CheckCell bleed={{ top: "0.5rem", bottom: "0.5rem" }} style={{ flex: 1 }}>
+                <input
+                  type="checkbox"
+                  checked={allLoadedSelected}
+                  // Asked of the rows in view, the set it acts on — over a filter hiding every ticked
+                  // lot it reads plainly "off".
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectedInView.length > 0 && !allLoadedSelected;
+                  }}
+                  onChange={toggleAllLoaded}
+                  aria-label="Select all loaded lots"
+                  style={{ cursor: "pointer" }}
+                />
+              </CheckCell>
+            </Tooltip>
+            {selectedCount > 0 ? (
+              <>
+                <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-accent)" }}>
+                  {hiddenSelectedCount > 0
+                    ? `${selectedInView.length} of ${selectedCount} ticked lots in view`
+                    : `${selectedCount} lot${selectedCount === 1 ? "" : "s"} selected`}
+                </span>
+                {hiddenSelectedCount > 0 && (
+                  <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                    {hiddenSelectedCount === 1
+                      ? "The other one is still ticked and comes back when the filter is released."
+                      : `The other ${hiddenSelectedCount} are still ticked and come back when the filter is released.`}
+                  </span>
+                )}
+                <Tooltip
+                  content={
+                    hiddenSelectedCount > 0
+                      ? `Untick all ${selectedCount}, including the ${hiddenSelectedCount} the filter is hiding`
+                      : ""
+                  }
+                >
+                  <button type="button" onClick={clearSelection} style={LINK_BTN}>
+                    Clear
+                  </button>
+                </Tooltip>
+                {selectedInView.length > 0 && (
+                  <Tooltip content="Put tags on these lots or take them off. Tags you do not name stay as they are.">
+                    <button
+                      type="button"
+                      onClick={() => setDialog({ kind: "tags", lots: selectedInView })}
+                      disabled={isPending}
+                      style={{
+                        ...FILTER_CONTROL_STYLE,
+                        marginLeft: "auto",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.375rem",
+                      }}
+                    >
+                      <Icon name="tags" size="sm" />
+                      {hiddenSelectedCount > 0 ? `Tags for ${selectedInView.length}…` : "Tags…"}
+                    </button>
+                  </Tooltip>
+                )}
+              </>
+            ) : (
+              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+                Select lots to tag them together
+              </span>
+            )}
+          </div>
+        )}
+
         {rows.length > 0 &&
           (groups ? (
             groups.map((group, groupIdx) => (
@@ -899,6 +1106,7 @@ export function AuctionLotsPanel({
                     }
                     onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
                     onOutcomeRecorded={() => invalidateAll(collectionId)}
+                    selection={{ selected: selection.has(lot.id), onToggle: toggleSelected }}
                   />
                 ))}
               </div>
@@ -949,6 +1157,7 @@ export function AuctionLotsPanel({
                   }
                   onEditComposition={(row) => setDialog({ kind: "lines", lot: row })}
                   onOutcomeRecorded={() => invalidateAll(collectionId)}
+                  selection={{ selected: selection.has(lot.id), onToggle: toggleSelected }}
                 />
               ))}
             </>
@@ -989,6 +1198,23 @@ export function AuctionLotsPanel({
           areas={areas}
           onClose={closeDialog}
           onChanged={() => invalidateAll(collectionId)}
+        />
+      )}
+
+      {dialog.kind === "tags" && (
+        <AuctionLotTagsDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          lots={dialog.lots}
+          onClose={closeDialog}
+          onApplied={(count) => {
+            // The lots the pass reached are done with; a tick the filter was hiding was never in it,
+            // so it stays — a bulk action never unticks a row the collector cannot see.
+            const reached = new Set(dialog.lots.map((l) => l.id));
+            setSelection((prev) => new Map([...prev].filter(([id]) => !reached.has(id))));
+            handleSuccess();
+            toast({ message: `Tags changed on ${count} lot${count === 1 ? "" : "s"}` });
+          }}
         />
       )}
 

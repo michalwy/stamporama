@@ -8,7 +8,8 @@
 // filter here is applied in the browser — and the toolbar reaches across **two** units at once,
 // which is the one thing this module exists to keep straight:
 //
-//  - **lots** — the status chips and *not described*: whole cards leave the screen;
+//  - **lots** — the status chips, *not described* and the tag filter (#1625): whole cards leave the
+//    screen;
 //  - **lines** — *unpriced*, *no photo*, *unknown variant*: the composition inside a card is
 //    narrowed and the card itself stays.
 //
@@ -28,6 +29,13 @@ import { COPY_SORT_KEYS, type CopySortKey } from "@/lib/copy-sort";
 import { LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { isAuctionLotOutcome, type AuctionLotOutcome } from "@/lib/auction-rules";
 import { byLotWithArrival } from "@/app/c/[collectionSlug]/shared/lot-arrival";
+import {
+  DEFAULT_TAG_FILTER_MODE,
+  isTagFilterMode,
+  TAG_FILTER_PARAM,
+  TAG_MODE_PARAM,
+  type TagFilterMode,
+} from "@/lib/tag-filter";
 
 /** Everything the toolbar over a sale's lots decides. */
 export interface AuctionSaleView {
@@ -47,6 +55,10 @@ export interface AuctionSaleView {
   unknownVariant: boolean;
   /** **Lots** with nothing recorded in their composition (#353) — see the note at the top. */
   notDescribed: boolean;
+  /** **Lots** carrying the collector's own labels (#1625). Empty is the filter off. */
+  tagIds: string[];
+  /** *Any* or *all* of {@link tagIds} — meaningless, and always the default, without them. */
+  tagMode: TagFilterMode;
   sortKey: CopySortKey;
   sortDir: "asc" | "desc";
 }
@@ -65,6 +77,8 @@ export const AUCTION_SALE_VIEW_DEFAULTS: AuctionSaleView = {
   noPhoto: false,
   unknownVariant: false,
   notDescribed: false,
+  tagIds: [],
+  tagMode: DEFAULT_TAG_FILTER_MODE,
   sortKey: "added",
   sortDir: "asc",
 };
@@ -88,6 +102,9 @@ const VIEW_PARAM: { [K in keyof Required<AuctionSaleView>]-?: string } = {
   noPhoto: "noPhoto",
   unknownVariant: "unknownVariant",
   notDescribed: "undescribed",
+  // `tag-filter.ts`' own names, as the flat watchlist's — one spelling for one filter.
+  tagIds: TAG_FILTER_PARAM,
+  tagMode: TAG_MODE_PARAM,
   sortKey: "sort",
   sortDir: "dir",
 };
@@ -115,6 +132,15 @@ export function resolveAuctionSaleView(
   const outcomeRaw = readParam(VIEW_PARAM.outcome) ?? "";
   const sortRaw = readParam(VIEW_PARAM.sortKey) ?? "";
   const group = readParam(VIEW_PARAM.group) === "none" ? "none" : "lot";
+  const tagIds = [
+    ...new Set(
+      (readParam(VIEW_PARAM.tagIds) ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    ),
+  ];
+  const tagModeRaw = readParam(VIEW_PARAM.tagMode);
   return {
     signal: LOT_SIGNALS.includes(signalRaw as LotSignal) ? (signalRaw as LotSignal) : undefined,
     outcome: isAuctionLotOutcome(outcomeRaw) ? outcomeRaw : undefined,
@@ -125,6 +151,10 @@ export function resolveAuctionSaleView(
     unknownVariant: flag(VIEW_PARAM.unknownVariant),
     // Lot-level, and there are no lots on screen with the grouping off — the note at the top.
     notDescribed: group === "lot" && flag(VIEW_PARAM.notDescribed),
+    tagIds,
+    // The mode rides with the ids, and only with them: a mode left behind by a cleared filter must
+    // not decide how the next one reads.
+    tagMode: tagIds.length > 0 && isTagFilterMode(tagModeRaw) ? tagModeRaw : DEFAULT_TAG_FILTER_MODE,
     sortKey: COPY_SORT_KEYS.includes(sortRaw as CopySortKey) ? (sortRaw as CopySortKey) : "added",
     sortDir: readParam(VIEW_PARAM.sortDir) === "desc" ? "desc" : "asc",
   };
@@ -134,6 +164,7 @@ export function resolveAuctionSaleView(
 function serialize(key: keyof AuctionSaleView, view: Partial<AuctionSaleView>): string {
   const value = view[key];
   if (value === undefined || value === false) return "";
+  if (Array.isArray(value)) return value.join(",");
   if (value === AUCTION_SALE_VIEW_DEFAULTS[key]) return "";
   return value === true ? "1" : String(value);
 }
@@ -197,6 +228,9 @@ const VIEW_NARROWS: {
   noPhoto: (value) => (value ? "1" : null),
   unknownVariant: (value) => (value ? "1" : null),
   notDescribed: (value) => (value ? "1" : null),
+  // The ids narrow; the mode only qualifies them, and the band names it inside the tags' label.
+  tagIds: (value) => (value.length > 0 ? value.join(",") : null),
+  tagMode: null,
   sortKey: null,
   sortDir: null,
 };
@@ -209,6 +243,7 @@ export function auctionSaleViewNarrowings(view: AuctionSaleView): AuctionSaleNar
     if (!describe) continue;
     const value = view[key];
     if (value === undefined || value === false) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
     const described = (describe as (value: unknown) => string | null)(value);
     if (described !== null) out.push({ key, value: described });
   }
@@ -224,7 +259,7 @@ export function auctionSaleViewNarrowings(view: AuctionSaleView): AuctionSaleNar
  * not touch. The band says *This view is narrowed* instead and lets the named filters speak.
  */
 export function auctionSaleViewNarrowsLots(view: AuctionSaleView): boolean {
-  return Boolean(view.signal || view.outcome || view.notDescribed);
+  return Boolean(view.signal || view.outcome || view.notDescribed || view.tagIds.length > 0);
 }
 
 /**
@@ -239,6 +274,8 @@ export function auctionSaleViewClearUpdates(): Record<string, string> {
   for (const key of VIEW_KEYS) {
     if (VIEW_NARROWS[key]) updates[VIEW_PARAM[key]] = "";
   }
+  // The tag filter's mode narrows nothing on its own, but it is half of that filter and goes with it.
+  updates[VIEW_PARAM.tagMode] = "";
   return updates;
 }
 

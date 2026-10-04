@@ -36,6 +36,8 @@ describe("auction sale view params (#1353)", () => {
     noPhoto: true,
     unknownVariant: true,
     notDescribed: true,
+    tagIds: ["tag-a", "tag-b"],
+    tagMode: "all",
     sortKey: "year",
     sortDir: "desc",
   };
@@ -120,7 +122,7 @@ describe("auction sale view params (#1353)", () => {
       const narrowings = auctionSaleViewNarrowings({ ...every, group: "lot" });
       assert.deepEqual(
         narrowings.map((n) => n.key),
-        ["signal", "outcome", "unpriced", "noPhoto", "unknownVariant", "notDescribed"]
+        ["signal", "outcome", "unpriced", "noPhoto", "unknownVariant", "notDescribed", "tagIds"]
       );
       assert.equal(narrowings.find((n) => n.key === "signal")?.value, "outbid");
     });
@@ -167,6 +169,32 @@ describe("auction sale view params (#1353)", () => {
       }
       // What is cleared stays cleared when read back.
       assert.deepEqual(resolveAuctionSaleView(reader(cleared)), AUCTION_SALE_VIEW_DEFAULTS);
+    });
+  });
+
+  describe("the tag filter (#1625)", () => {
+    it("travels under the names every tag filter uses, and reads back", () => {
+      const updates = auctionSaleViewUpdatesFor({ tagIds: ["a", "b"], tagMode: "all" });
+      assert.deepEqual(updates, { tagIds: "a,b", tagMode: "all" });
+      const back = resolveAuctionSaleView(reader(updates));
+      assert.deepEqual([back.tagIds, back.tagMode], [["a", "b"], "all"]);
+    });
+
+    it("takes whole lots off the screen", () => {
+      assert.equal(
+        auctionSaleViewNarrowsLots({ ...AUCTION_SALE_VIEW_DEFAULTS, tagIds: ["a"] }),
+        true
+      );
+    });
+
+    it("reads a mode left without tags as the default, so it cannot decide the next filter", () => {
+      assert.equal(resolveAuctionSaleView(reader({ tagMode: "all" })).tagMode, "any");
+    });
+
+    it("is cleared whole — the mode with the tags", () => {
+      const cleared = auctionSaleViewClearUpdates();
+      assert.equal(cleared.tagIds, "");
+      assert.equal(cleared.tagMode, "");
     });
   });
 

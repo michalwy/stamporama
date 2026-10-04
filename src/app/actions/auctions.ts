@@ -31,6 +31,12 @@ import {
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
+  applyAuctionLotTagChanges,
+  setAuctionLotTagEntries,
+  type ItemTagChanges,
+} from "@/lib/tags";
+import { tagEntriesFrom, type TagEntry } from "@/lib/tag-entry";
+import {
   normalizeAuctionText,
   normalizeAuctionUrl,
   parseAuctionAmount,
@@ -230,6 +236,9 @@ export interface AuctionLotRaw {
   /** The lot's composition, entered while the lot is being captured (#353). Empty is the normal
    * state — a lot can always be described later from the sale's screen. Create only. */
   lines?: AuctionLotLineRaw[];
+  /** The tag field's chips (#1625): the whole set, replacing the lot's. Absent — the field had not
+   *  loaded, or the caller has none — leaves the lot's tags as they are. */
+  tags?: TagEntry[];
 }
 
 async function resolveLot(collectionId: string, ownerId: string, raw: AuctionLotRaw) {
@@ -309,6 +318,7 @@ export async function createAuctionLotAction(
     const resolved = await resolveLot(collectionId, session.user.id, raw);
     if (!resolved.ok) return { status: "error", message: resolved.message };
     const id = await createAuctionLot(session.user.id, collectionId, resolved.input);
+    await applyTypedLotTags(session.user.id, id, raw, "add");
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to add this lot. Please try again.");
@@ -325,9 +335,55 @@ export async function updateAuctionLotAction(
     const resolved = await resolveLot(collectionId, session.user.id, raw);
     if (!resolved.ok) return { status: "error", message: resolved.message };
     await updateAuctionLot(session.user.id, lotId, resolved.input);
+    await applyTypedLotTags(session.user.id, lotId, raw, "edit");
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update this lot.");
+  }
+}
+
+/**
+ * The tags typed into the lot dialog (#1625), written after the lot itself — the copy dialog's rule
+ * (`applyTypedTags` in `items.ts`): when adding, an empty set writes nothing; when editing, a
+ * submitted set replaces the lot's tags, and an absent one leaves them alone. Re-read through
+ * `tagEntriesFrom` because a server action's argument is whatever the wire carried.
+ */
+async function applyTypedLotTags(
+  ownerId: string,
+  lotId: string,
+  raw: AuctionLotRaw,
+  mode: "add" | "edit"
+): Promise<void> {
+  const entries = raw.tags === undefined ? undefined : tagEntriesFrom(raw.tags);
+  if (!entries || (mode === "add" && entries.length === 0)) return;
+  await setAuctionLotTagEntries(ownerId, lotId, entries);
+}
+
+export type AuctionLotTagsActionState =
+  | { status: "success"; count: number }
+  | { status: "error"; message: string };
+
+/**
+ * Put tags on and take tags off the lots ticked on the lots list (#1625) — never a replace: every
+ * tag the pass does not name stays where it is on each lot. See `applyAuctionLotTagChanges`.
+ */
+export async function applyAuctionLotTagChangesAction(
+  collectionId: string,
+  lotIds: string[],
+  changes: ItemTagChanges
+): Promise<AuctionLotTagsActionState> {
+  const session = await getSession();
+  try {
+    // A server action's arguments are whatever the wire carried, so only strings go on.
+    const ids = (value: unknown): string[] =>
+      Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v !== "") : [];
+    const count = await applyAuctionLotTagChanges(session.user.id, collectionId, ids(lotIds), {
+      addTagIds: ids(changes?.addTagIds),
+      removeTagIds: ids(changes?.removeTagIds),
+    });
+    return { status: "success", count };
+  } catch (e) {
+    return fail(e, "Failed to change the tags on these lots.");
   }
 }
 

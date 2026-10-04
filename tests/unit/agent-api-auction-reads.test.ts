@@ -53,6 +53,7 @@ function rowOf(overrides: Partial<WatchlistLotRow> = {}): WatchlistLotRow {
     premiumFixed: "1.00",
     notStamps: false,
     notStampsDescription: null,
+    tags: [],
     ...overrides,
   };
 }
@@ -185,6 +186,17 @@ describe("watchlistLot", () => {
     assert.equal(watchlistLot(rowOf(), NOW, PATH).name, "Lot 18795065609");
     assert.equal(watchlistLot(rowOf({ lotNo: null }), NOW, PATH).name, "Untitled lot");
   });
+
+  it("reports the lot's tags by name, in the order the app lists them, and an empty list as one (#1625)", () => {
+    const tagged = watchlistLot(
+      rowOf({ tags: [{ name: "agent-found" }, { name: "for the Danzig album" }] }),
+      NOW,
+      PATH
+    );
+    assert.deepEqual(tagged.tags, ["agent-found", "for the Danzig album"]);
+    // Kept when empty, as `signals` is: *no tags* is an answer, not a missing figure.
+    assert.deepEqual(watchlistLot(rowOf(), NOW, PATH).tags, []);
+  });
 });
 
 describe("auctionExposure", () => {
@@ -244,6 +256,7 @@ describe("trackedListings", () => {
     notStampsDescription: null,
     path: PATH,
     matchedBy: "lot-no",
+    tags: [{ name: "agent-found" }],
   };
 
   it("answers every listing in the order sent, and none is dropped", () => {
@@ -278,6 +291,7 @@ describe("trackedListings", () => {
       outcome: "pending",
       notStamps: false,
       matchedBy: "lot-no",
+      tags: ["agent-found"],
       path: PATH,
     });
     assert.deepEqual(untracked, {
