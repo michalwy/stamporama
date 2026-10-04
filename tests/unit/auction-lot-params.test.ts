@@ -26,6 +26,7 @@ describe("auction lot params", () => {
     undescribed: true,
     conditionToSettle: true,
     duplicate: true,
+    toReview: true,
     search: "köhler",
     sellerId: "seller-1",
     platformId: "platform-1",
@@ -49,6 +50,7 @@ describe("auction lot params", () => {
     assert.equal(params.get("undescribed"), "1");
     assert.equal(params.get("conditionToSettle"), "1");
     assert.equal(params.get("duplicate"), "1");
+    assert.equal(params.get("toReview"), "1");
     assert.equal(params.get("search"), "köhler");
     assert.equal(params.get("sellerId"), "seller-1");
     assert.equal(params.get("platformId"), "platform-1");
@@ -102,6 +104,7 @@ describe("auction lot narrowings", () => {
     undescribed: true,
     conditionToSettle: true,
     duplicate: true,
+    toReview: true,
     search: "köhler",
     sellerId: "seller-1",
     platformId: "platform-1",
@@ -131,6 +134,7 @@ describe("auction lot narrowings", () => {
   it("carries the value, so the band can name it in the control's own words", () => {
     assert.deepEqual(lotNarrowings({ closing: "ended" }), [{ key: "closing", value: "ended" }]);
     assert.deepEqual(lotNarrowings({ undescribed: true }), [{ key: "undescribed", value: "1" }]);
+    assert.deepEqual(lotNarrowings({ toReview: true }), [{ key: "toReview", value: "1" }]);
     assert.deepEqual(lotNarrowings({ sellerId: "s-1" }), [{ key: "sellerId", value: "s-1" }]);
   });
 

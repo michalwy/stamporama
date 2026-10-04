@@ -6,6 +6,8 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import {
   AuctionActionBlockedError,
+  confirmAuctionLotReviews,
+  confirmAuctionSaleReview,
   createAuctionLot,
   createAuctionLotLine,
   createAuctionSale,
@@ -470,6 +472,36 @@ export async function touchAuctionLotCheckedAction(lotId: string): Promise<Aucti
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to record the check.");
+  }
+}
+
+/**
+ * *Confirm* the *to review* marker on one lot or on the ticked lots in view (#1626). The collector's
+ * act alone: no agent API operation reaches this, and editing a lot does not do it on the way.
+ */
+export async function confirmAuctionLotReviewsAction(
+  collectionId: string,
+  lotIds: string[]
+): Promise<{ status: "success"; confirmed: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const confirmed = await confirmAuctionLotReviews(session.user.id, collectionId, lotIds);
+    return { status: "success", confirmed };
+  } catch (e) {
+    return fail(e, "Failed to confirm the review.");
+  }
+}
+
+/** *Confirm* for a whole sale (#1626): its own marker and every one of its lots'. */
+export async function confirmAuctionSaleReviewAction(
+  saleId: string
+): Promise<{ status: "success"; confirmed: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const confirmed = await confirmAuctionSaleReview(session.user.id, saleId);
+    return { status: "success", confirmed };
+  } catch (e) {
+    return fail(e, "Failed to confirm the review.");
   }
 }
 

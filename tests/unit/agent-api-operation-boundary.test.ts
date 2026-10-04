@@ -272,6 +272,10 @@ const AUCTION_WRITES = new Map<string, string>([
   ["deleteAuctionLotLine", "removes a line from a lot"],
   ["deleteAuctionLot", "deletes a lot"],
   ["settleAuctionSale", "transcribes a won parcel into a purchase (#28)"],
+  ["markAuctionLotWrittenByApi", "sets the to-review marker on a lot (#1626)"],
+  ["markAuctionSaleWrittenByApi", "sets the to-review marker on a sale (#1626)"],
+  ["confirmAuctionLotReviews", "clears the to-review marker on lots (#1626)"],
+  ["confirmAuctionSaleReview", "clears the to-review marker on a sale and its lots (#1626)"],
 ]);
 
 describe("the agent API's operation modules (#1036)", () => {
@@ -659,6 +663,54 @@ describe("the agent API's operation modules (#1539)", () => {
       assert.match(
         readFileSync(path.join(ROOT, module), "utf8"),
         new RegExp(`export async function ${name}\\(`),
+        `\`${name}\` is not an export of ${module} any more`
+      );
+    }
+  });
+});
+
+/**
+ * What clears the *to review* marker on an auction lot or sale (#1626), and why no operation may
+ * reach it.
+ *
+ * **A boundary of its own, and meant to outlive {@link AUCTION_WRITES}.** That map holds the auction
+ * writers away from the agent while it only reads auctions, and #1627 opens most of them to it. This
+ * one does not open: the collector accepts an assistant writing lots only if everything it wrote is
+ * visibly waiting for review, so the marker is set by every API write and cleared by the
+ * collector's *Confirm* alone. An operation that could clear it could hide its own work from the
+ * review it is waiting for — the same shape as `markOfferListingSynced` in {@link FORBIDDEN}.
+ *
+ * `CONFIRMED_API_REVIEW` is on it because it is what a confirm writes: a handler importing it is
+ * clearing the marker by hand rather than through a function on this list.
+ */
+const REVIEW_CLEARERS = new Map<string, string>([
+  ["confirmAuctionLotReviews", "src/lib/auctions.ts"],
+  ["confirmAuctionSaleReview", "src/lib/auctions.ts"],
+  ["CONFIRMED_API_REVIEW", "src/lib/auction-review.ts"],
+]);
+
+describe("the agent API's operation modules (#1626)", () => {
+  it("never reach what clears the to-review marker", () => {
+    const breaches: string[] = [];
+    for (const file of operationModules()) {
+      for (const { name, from } of importedBindings(file)) {
+        if (REVIEW_CLEARERS.has(name)) {
+          breaches.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+        }
+      }
+    }
+    assert.deepEqual(
+      breaches,
+      [],
+      `Only the collector clears the to-review marker; no API call can (#1626).\n  ${breaches.join("\n  ")}`
+    );
+  });
+
+  it("names only real exports", () => {
+    for (const [name, module] of REVIEW_CLEARERS) {
+      assert.match(
+        readFileSync(path.join(ROOT, module), "utf8"),
+        new RegExp(`export (async function|const) ${name}\\b`),
         `\`${name}\` is not an export of ${module} any more`
       );
     }

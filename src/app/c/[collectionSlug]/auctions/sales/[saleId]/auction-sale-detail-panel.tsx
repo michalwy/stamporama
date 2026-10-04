@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueHeader } from "@/lib/issues";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useToast } from "@/app/toast-provider";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import {
   useAuctionSaleDetail,
@@ -23,7 +24,7 @@ import {
   type AuctionLotOutcome,
 } from "@/lib/auction-rules";
 import { lotHasSignal, LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
-import { SaleStatusChip } from "../../auction-badges";
+import { SaleApiReviewChip, SaleStatusChip } from "../../auction-badges";
 import { SIGNALS } from "../../auction-controls";
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
@@ -164,6 +165,7 @@ export function AuctionSaleDetailPanel({
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | undefined>();
   const { invalidateAll } = useInvalidateAuctions();
+  const { toast } = useToast();
 
   // Take the param out of the address bar once it has been answered. A reload is then an ordinary
   // sale screen — the provenance is spent, and re-flashing it minutes later would be telling the
@@ -303,6 +305,7 @@ export function AuctionSaleDetailPanel({
           {sale.name}
         </h2>
         <SaleStatusChip status={sale.status} />
+        <SaleApiReviewChip mark={sale.apiReview} lotsToReview={sale.lotsToReview} />
         {sale.url && (
           <a
             href={sale.url}
@@ -316,6 +319,39 @@ export function AuctionSaleDetailPanel({
         <span style={{ flex: 1 }} />
         {actionError && (
           <span style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{actionError}</span>
+        )}
+        {/* *Confirm* for the whole parcel (#1626): the sale's own marker and every lot's, in one
+            press. Only while something waits — one lot at a time is its ⋮ menu. Allowed on a
+            settled sale too: the marker is about what the API wrote, not about whether it can still
+            be edited. */}
+        {(sale.apiReview || sale.lotsToReview > 0) && (
+          <Tooltip
+            align="end"
+            content={
+              sale.lotsToReview > 0
+                ? `You have reviewed what the agent API wrote — remove the To review mark from this sale and its ${sale.lotsToReview} lot${sale.lotsToReview === 1 ? "" : "s"}.`
+                : "You have reviewed what the agent API wrote — remove the To review mark from this sale."
+            }
+          >
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setActionError(undefined);
+                startTransition(async () => {
+                  const { confirmAuctionSaleReviewAction } = await import("@/app/actions/auctions");
+                  const result = await confirmAuctionSaleReviewAction(saleId);
+                  if (result.status === "success") {
+                    invalidateAll(collectionId);
+                    toast({ message: `${sale.name} confirmed` });
+                  } else setActionError(result.message);
+                });
+              }}
+              style={{ ...FILTER_CONTROL_STYLE, cursor: isPending ? "not-allowed" : "pointer", fontWeight: 600 }}
+            >
+              Confirm all
+            </button>
+          </Tooltip>
         )}
         <button
           type="button"

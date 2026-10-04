@@ -28,6 +28,7 @@ import {
 import type { BidRecommendation } from "@/lib/bid-recommendation";
 import type { AuctionLotView } from "./use-auctions-query";
 import {
+  ApiReviewChip,
   BidFreshnessChip,
   BidStandingChip,
   LotOutcomeChip,
@@ -518,7 +519,8 @@ interface AuctionLotRowProps {
    */
   baseAmounts?: "headline" | "full";
   /**
-   * The row's tick on the lots list (#1625), where ticked lots are tagged together. Absent on the
+   * The row's tick on the lots list (#1625), where ticked lots are tagged together — and confirmed
+   * together, when the agent API wrote them (#1626). Absent on the
    * sale's own screen, where the row is a card's header and nothing is ticked. A gutter beside the
    * row rather than a box inside it, as on the Offers list: the row is a click target, and a
    * checkbox in it would be a hole in that target.
@@ -726,6 +728,22 @@ export function AuctionLotRow({
     });
   }
 
+  /**
+   * *Confirm* the *to review* marker (#1626): the collector has looked at what the agent API wrote.
+   * Its own entry rather than a side effect of *Edit*, because reviewing is a deliberate act — a lot
+   * edited in the app keeps the marker until this is pressed.
+   */
+  async function confirmReview() {
+    const { confirmAuctionLotReviewsAction } = await import("@/app/actions/auctions");
+    const result = await confirmAuctionLotReviewsAction(collectionId, [lot.id]);
+    if (result.status === "success") {
+      toast({ message: `${lotLabel(lot)} confirmed` });
+      onOutcomeRecorded();
+    } else {
+      toast({ message: result.message, tone: "error" });
+    }
+  }
+
   const separateCeiling = useSeparateCeiling(
     { currency: lot.currency, myBid, ceiling },
     applyMaxBid
@@ -881,6 +899,20 @@ export function AuctionLotRow({
     ...outcome.actions.map((action, idx) =>
       idx === 0 ? { ...action, separatorBefore: true } : action
     ),
+    // Only while there is something to confirm (#1626): an entry for a marker that is not there
+    // would be a dead item on every lot the collector entered by hand.
+    ...(lot.apiReview
+      ? [
+          {
+            key: "confirm-review",
+            label: "Confirm",
+            icon: "check",
+            separatorBefore: true,
+            hint: "You have reviewed what the agent API wrote — remove the To review mark",
+            onSelect: () => void confirmReview(),
+          } as RowAction,
+        ]
+      : []),
     {
       key: "edit",
       label: "Edit",
@@ -1067,6 +1099,9 @@ export function AuctionLotRow({
               {lotNeedsComposition(lot) && <NotDescribedChip />}
               {lot.notStamps && <NotStampsChip description={lot.notStampsDescription} />}
               {lot.conditionToSettle && <ConditionToSettleChip lines={lot.unsettledLineCount} />}
+              {/* Written through the agent API and not yet confirmed (#1626) — work outstanding on
+                  the record, so it sits with *Not described* at the end of the chips. */}
+              <ApiReviewChip mark={lot.apiReview} />
               {/* The collector's own labels (#1625), after everything the app says about the lot —
                   the order the Copies row reads its chips in. Nothing at all when it has none. */}
               <TagChips tags={lot.tags} />

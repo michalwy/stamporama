@@ -1,6 +1,6 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import { prisma, type DbTransaction } from "./db";
 import {
   allIn,
   bidStanding,
@@ -56,6 +56,13 @@ import {
   type AuctionSaleStatus,
 } from "./auction-rules";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import {
+  CONFIRMED_API_REVIEW,
+  nextApiReview,
+  readApiReviewMark,
+  type ApiReviewMark,
+  type ApiReviewWrite,
+} from "./auction-review";
 import { roundAmount } from "./decimal-input";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { tagFilterWhere, type TagFilterOpts } from "./tag-filter";
@@ -427,6 +434,12 @@ export interface AuctionLotListItem {
   /** The collector's own labels on the lot (#1625), in the dictionary's order. Nothing inherited
    *  from the sale, and the empty list is the normal case. */
   tags: TagSummary[];
+  /**
+   * The *to review* marker (#1626): what the agent API created or changed on this lot since the
+   * collector last confirmed it, or null when nothing waits. Set by API writes only and cleared by
+   * *Confirm* only — see `auction-review.ts`.
+   */
+  apiReview: ApiReviewMark | null;
   createdAt: Date;
 }
 
@@ -451,6 +464,9 @@ const LOT_SELECT = {
   notStampsDescription: true,
   purchaseLotId: true,
   purchaseExpenseId: true,
+  apiReviewAt: true,
+  apiReviewCreated: true,
+  apiReviewFields: true,
   createdAt: true,
   auctionSale: {
     select: {
@@ -583,6 +599,7 @@ function toLotListItem(
     premiumFixed: fees.premiumFixed,
     settled: row.purchaseLotId !== null || row.purchaseExpenseId !== null,
     tags: orderTagSummaries(row.tags),
+    apiReview: readApiReviewMark(row),
     createdAt: row.createdAt,
   };
 }
@@ -709,6 +726,10 @@ export interface AuctionLotFilters extends TagFilterOpts {
    * express — and hard matches only, so the chip means "on course to buy this twice" rather than
    * "related to something else in the list". */
   duplicate?: boolean;
+  /** Only lots carrying the *to review* marker (#1626) — written through the agent API and not yet
+   * confirmed. A stored column, so an ordinary `where`. It narrows under the hide-closed default
+   * like every other filter here; a sale's own screen shows its closed lots and their markers. */
+  toReview?: boolean;
   /** Free text the list is narrowed to (#484): the lot's title, its notes, the house's lot number or
    * its URL, the lot's own short number, and the sale / seller / platform it belongs to. Composes
    * with every other filter rather than replacing them. */
@@ -744,6 +765,7 @@ function lotListWhere(
   else if (!filters.includeClosed && !filters.saleId) and.push(outcomeWhere("pending"));
   if (filters.undescribed) and.push(UNDESCRIBED_WHERE);
   if (filters.conditionToSettle) and.push(CONDITION_TO_SETTLE_WHERE);
+  if (filters.toReview) and.push(TO_REVIEW_WHERE);
   // Its own `AND` entry rather than a sibling key, for the same reason: the search is an `OR` over
   // several columns, and a second `OR` on the object would replace the outcome's rather than narrow
   // alongside it.
@@ -863,6 +885,8 @@ const UNDESCRIBED_WHERE: Prisma.AuctionLotWhereInput = {
 const CONDITION_TO_SETTLE_WHERE: Prisma.AuctionLotWhereInput = {
   lines: { some: { conditionId: null } },
 };
+/** A lot carrying the *to review* marker (#1626): `apiReviewAt` is null exactly when there is none. */
+const TO_REVIEW_WHERE: Prisma.AuctionLotWhereInput = { apiReviewAt: { not: null } };
 
 /** The rows a signal is computed over: every live lot the rest of the filters admit. Bounded by
  * what one person is currently bidding on, and each row is a handful of numbers. */
@@ -1209,6 +1233,8 @@ export interface AuctionLotFilterCounts {
   conditionToSettle: number;
   /** Lots holding a stamp another lot being won also holds (#369), under everything else selected. */
   duplicate: number;
+  /** Lots carrying the *to review* marker (#1626), under everything else selected. */
+  toReview: number;
   /** Rows the list is actually showing — **every** filter applied, the derived ones included. */
   total: number;
   /**
@@ -1298,6 +1324,7 @@ export async function auctionLotFilterCounts(
     undescribed,
     conditionToSettle,
     duplicateCount,
+    toReview,
     total,
     unfiltered,
     allOutcomes,
@@ -1364,6 +1391,17 @@ export async function auctionLotFilterCounts(
         ),
       });
     })(),
+    // The *to review* chip (#1626), ignoring whether it is itself selected like the two above.
+    prisma.auctionLot.count({
+      where: lotListWhere(collectionId, {
+        ...rest,
+        outcome,
+        sellerId,
+        platformId,
+        closing,
+        toReview: true,
+      }),
+    }),
     (async () =>
       prisma.auctionLot.count({
         where: lotListWhere(
@@ -1414,6 +1452,7 @@ export async function auctionLotFilterCounts(
     undescribed,
     conditionToSettle,
     duplicate: duplicateCount,
+    toReview,
     total,
     allSellers: sumCounts(sellers),
     allPlatforms: sumCounts(platforms),
@@ -1520,6 +1559,11 @@ export interface AuctionSaleListItem {
   purchaseId: string | null;
   /** Parcel totals over the payable (`pending` + `won`) lots, shipping added once. */
   summary: AuctionSaleSummary;
+  /** The sale's own *to review* marker (#1626) — the agent API created it or changed its terms. */
+  apiReview: ApiReviewMark | null;
+  /** How many of its lots carry the marker, whatever their outcome. A sale shows the chip when
+   * either this or {@link apiReview} says so — the collector's decision on #1626. */
+  lotsToReview: number;
   createdAt: Date;
 }
 
@@ -1534,6 +1578,9 @@ const SALE_SELECT = {
   premiumPercent: true,
   premiumFixed: true,
   purchaseId: true,
+  apiReviewAt: true,
+  apiReviewCreated: true,
+  apiReviewFields: true,
   createdAt: true,
   sellerId: true,
   platformId: true,
@@ -1543,6 +1590,8 @@ const SALE_SELECT = {
     select: {
       id: true,
       status: true,
+      // The sale's count of lots waiting for review (#1626).
+      apiReviewAt: true,
       currentBid: true,
       finalPrice: true,
       // The parcel's totals count the lots the collector pays for, and which those are is now read
@@ -1606,6 +1655,8 @@ function toSaleListItem(
       })),
       fees
     ),
+    apiReview: readApiReviewMark(row),
+    lotsToReview: row.lots.filter((lot) => lot.apiReviewAt !== null).length,
     createdAt: row.createdAt,
   };
 }
@@ -3365,6 +3416,91 @@ export async function deleteAuctionLot(ownerId: string, lotId: string): Promise<
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
   await prisma.auctionLot.delete({ where: { id: lotId } });
+}
+
+// ── The *to review* marker (#1626) ──────────────────────────────────────────
+
+/**
+ * Record one agent API write on a lot: the *to review* marker is set, or added to if it already
+ * stands (`nextApiReview`). **Every API write to a lot calls this**, in the same transaction as the
+ * write itself, so a lot cannot be changed through the API and come out unmarked.
+ *
+ * It only ever sets. Nothing reachable from the agent API clears the marker — that is
+ * {@link confirmAuctionLotReviews} and {@link confirmAuctionSaleReview}, the collector's act, and
+ * `tests/unit/agent-api-operation-boundary.test.ts` holds the operation modules away from both.
+ */
+export async function markAuctionLotWrittenByApi(
+  tx: DbTransaction,
+  lotId: string,
+  write: ApiReviewWrite,
+  at: Date = new Date()
+): Promise<void> {
+  const current = await tx.auctionLot.findUniqueOrThrow({
+    where: { id: lotId },
+    select: { apiReviewAt: true, apiReviewCreated: true, apiReviewFields: true },
+  });
+  await tx.auctionLot.update({ where: { id: lotId }, data: nextApiReview(current, write, at) });
+}
+
+/** The same for a sale — one the API started, or whose terms it changed. A lot written into a sale
+ * marks the lot; the sale shows it through its count rather than being marked itself. */
+export async function markAuctionSaleWrittenByApi(
+  tx: DbTransaction,
+  saleId: string,
+  write: ApiReviewWrite,
+  at: Date = new Date()
+): Promise<void> {
+  const current = await tx.auctionSale.findUniqueOrThrow({
+    where: { id: saleId },
+    select: { apiReviewAt: true, apiReviewCreated: true, apiReviewFields: true },
+  });
+  await tx.auctionSale.update({ where: { id: saleId }, data: nextApiReview(current, write, at) });
+}
+
+/**
+ * *Confirm*: the collector has reviewed these lots, so their markers go (#1626). One lot from its
+ * ⋮ menu, or the ticked lots in view from the list's selection bar.
+ *
+ * Every id has to be a lot the owner holds in one collection, or nothing is written — a batch that
+ * half-applied would leave the bar unable to say what it did. A lot without a marker is simply
+ * already confirmed, so it is not an error; the answer is how many markers were actually cleared.
+ *
+ * Settled lots are confirmable too: the marker is about what the API did, and a settled lot can
+ * still be carrying one from before it was settled.
+ */
+export async function confirmAuctionLotReviews(
+  ownerId: string,
+  collectionId: string,
+  lotIds: string[]
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const ids = [...new Set(lotIds)];
+  if (ids.length === 0) return 0;
+  const owned = await prisma.auctionLot.count({
+    where: { id: { in: ids }, auctionSale: { collectionId } },
+  });
+  if (owned !== ids.length) throw new Error("Auction lot not found");
+  const { count } = await prisma.auctionLot.updateMany({
+    where: { id: { in: ids }, apiReviewAt: { not: null } },
+    data: CONFIRMED_API_REVIEW,
+  });
+  return count;
+}
+
+/**
+ * *Confirm* for a whole sale (#1626): the sale's own marker and every one of its lots', in one
+ * transaction. Returns how many lots were cleared, for the toast.
+ */
+export async function confirmAuctionSaleReview(ownerId: string, saleId: string): Promise<number> {
+  await assertSaleOwner(ownerId, saleId);
+  return prisma.$transaction(async (tx) => {
+    await tx.auctionSale.update({ where: { id: saleId }, data: CONFIRMED_API_REVIEW });
+    const { count } = await tx.auctionLot.updateMany({
+      where: { auctionSaleId: saleId, apiReviewAt: { not: null } },
+      data: CONFIRMED_API_REVIEW,
+    });
+    return count;
+  });
 }
 
 // ── Settlement (#28) ────────────────────────────────────────────────────────
