@@ -829,7 +829,10 @@ the same rules, so the two can never disagree:
 - **The condition, certificate and format must all match.** Matching is strict, exactly as it is for
   a copy: a lot described as carrying a Fotoattest stays unpriced until a catalogue value exists at
   that certificate level. That is not a gap in the data so much as a question the catalogue has not
-  been asked yet — and the **+ catalog value** link fills it in at the right level.
+  been asked yet — and the **+ catalog value** link fills it in at the right level. The bid
+  recommendation is the one exception: it works such a line out from the **None** price and the
+  certificate's percentage, and says so (see [Where each line's figure comes
+  from](#where-each-lines-figure-comes-from)).
 - **A multiple is priced as that multiple.** An explicit catalogue price recorded for the format wins;
   failing that, the single's price is multiplied by that format's multiplier. With **neither**, the
   line is left **unpriced** — never quietly valued at the single's price, which would be a different
@@ -1061,6 +1064,16 @@ have results for with one you have never seen:
    much they agree and how much of the evidence was a whole lot rather than a share of a mixed one.
 2. Otherwise **its catalogue value times a learned percentage** — see below. The panel names the
    percentage, the group it was learned from and how many results that group holds.
+   - **A certificate with no price of its own.** When the line carries a certificate and the
+     catalogue has no price at that level, the catalogue value is taken from the **None** price
+     times that certificate status's [percentage](collections.md#certificate-statuses) — the same
+     percentage *Fill certificates* uses — and the panel says so: *derived: no Gu price, None 100.00
+     × 120%*. A price you have recorded at the certificate always wins over it, and nothing is ever
+     worked backwards from a certified price to a plain one. A status **without a percentage**
+     derives nothing: the line stays unpriced and the panel says the status has no percentage.
+     Nothing is written to the catalogue, and the lot's own **catalogue value** stays the
+     certificate's own — only the recommendation uses the derived figure. Recorded results are never
+     derived this way: they stay what lots at that exact certificate fetched.
 3. Otherwise **nothing**. The line is counted and named at the foot of the panel, never treated as
    worth zero: a lot half of which cannot be priced must not read as a finished answer.
 

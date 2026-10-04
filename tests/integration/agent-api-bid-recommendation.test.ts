@@ -7,6 +7,7 @@ import { isApiError } from "../../src/lib/agent-api/errors";
 import { assertOperationScope } from "../../src/lib/agent-api/scope";
 import { recommendBidForLines, resolveLotRecommendations } from "../../src/lib/bid-recommendations";
 import { valuateAuctionLotLines } from "../../src/lib/auction-lines";
+import { resolveAuctionLotAnchors } from "../../src/lib/auction-lot-anchors";
 import type { OperationContext } from "../../src/lib/agent-api/types";
 import type { AgentBidRecommendation } from "../../src/lib/agent-api/bid-reads";
 
@@ -89,16 +90,21 @@ describe("recommend_bid (#1168)", () => {
   let unknownStampId: string;
   /** Priced 100.00 MNH each, and what the ratio evidence is built from. */
   const evidenceStampIds: string[] = [];
+  /** Priced 40.00 MNH and 70.00 MNH with a guarantee — a certificate price of its own (#1636). */
+  let certifiedStampId: string;
+  /** A guarantee at 120% of the plain price, and a signature with no percentage set (#1242). */
+  let guaranteeId: string;
+  let signatureId: string;
 
   let seq = 0;
 
-  async function price(stampId: string, amount: string) {
+  async function price(stampId: string, amount: string, certificateStatusId: string | null = null) {
     await prisma.stampCatalogPrice.create({
       data: {
         stampId,
         catalogEditionId: editionId,
         conditionId,
-        certificateStatusId: null,
+        certificateStatusId,
         formatId: null,
         price: amount,
         currency: "EUR",
@@ -126,7 +132,7 @@ describe("recommend_bid (#1168)", () => {
     saleId: string;
     finalPrice?: string | null;
     status?: string;
-    lines: { stampId: string; quantity?: number }[];
+    lines: { stampId: string; quantity?: number; certificateStatusId?: string | null }[];
   }
 
   async function lot(spec: LotSpec): Promise<string> {
@@ -142,7 +148,7 @@ describe("recommend_bid (#1168)", () => {
           create: spec.lines.map((l) => ({
             stampId: l.stampId,
             conditionId,
-            certificateStatusId: null,
+            certificateStatusId: l.certificateStatusId ?? null,
             formatId: null,
             quantity: l.quantity ?? 1,
           })),
@@ -232,6 +238,20 @@ describe("recommend_bid (#1168)", () => {
       evidenceStampIds.push(id);
     }
 
+    guaranteeId = (
+      await prisma.certificateStatus.create({
+        data: { collectionId, name: "Guarantee", abbreviation: "Gu", sortOrder: 0, pricePercent: 120 },
+      })
+    ).id;
+    signatureId = (
+      await prisma.certificateStatus.create({
+        data: { collectionId, name: "Signature", abbreviation: "Sig", sortOrder: 1 },
+      })
+    ).id;
+    certifiedStampId = await stamp("Certified");
+    await price(certifiedStampId, "40.00");
+    await price(certifiedStampId, "70.00", guaranteeId);
+
     sellerId = (await prisma.contact.create({ data: { collectionId, name: "Philkam", seller: true } }))
       .id;
     platformId = (
@@ -303,6 +323,104 @@ describe("recommend_bid (#1168)", () => {
     assert.equal(agent.marketLines, 1);
     assert.equal(agent.catalogueLines, 1);
     assert.equal(agent.unanchoredLines, 1);
+  });
+
+  // ── A certificate with no price of its own (#1636) ─────────────────────────
+
+  it("derives a certified line from the plain price × the status's percentage, as the lots screen does", async () => {
+    const saleId = await sale();
+    const lotId = await lot({
+      saleId,
+      status: "open",
+      lines: [{ stampId: plainStampId, certificateStatusId: guaranteeId }],
+    });
+    const valued = await valuateAuctionLotLines(collectionId, [lotId]);
+    const screen = (await resolveLotRecommendations(collectionId, [lotId], valued, () => ({}))).get(lotId)!;
+    const [anchor] = (await resolveAuctionLotAnchors(collectionId, [lotId], valued)).get(lotId)!.lines;
+
+    const agent = await call<AgentBidRecommendation>(context, "bid-recommendation", {
+      stamp_ids: plainStampId,
+      condition: "MNH",
+      certificate: "Gu",
+    });
+
+    // 40.00 × 120%, at the fallback ratio of 100% — nothing has been learned yet.
+    assert.equal(agent.fair?.allIn, "48.00");
+    assert.equal(screen.fair?.allIn, "48.00");
+    assert.equal(agent.catalogueLines, 1);
+    assert.equal(agent.unanchoredLines, 0);
+    const [line] = agent.lines;
+    assert.equal(line.anchoredOn, "catalogue");
+    assert.equal(line.derivation?.percent, 120);
+    assert.equal(line.derivation?.plainValue, "40.00");
+    assert.match(line.derivation?.statement ?? "", /None × 120%/);
+
+    // The popover's evidence says the same, and the lot's own catalogue value stays the
+    // certificate's own: unpriced, since no catalogue printed 48.00.
+    assert.equal(anchor.catalogueValue, "48.00");
+    assert.deepEqual(
+      { percent: anchor.derivation?.percent, plain: anchor.derivation?.plainUnitValue },
+      { percent: 120, plain: "40.00" }
+    );
+    const [compositionLine] = valued.get(lotId)!.lines;
+    assert.equal(compositionLine.unpriced, true);
+    assert.equal(valued.get(lotId)!.catalogValue, null);
+  });
+
+  it("uses a price recorded at the certificate over a derived one", async () => {
+    const agent = await call<AgentBidRecommendation>(context, "bid-recommendation", {
+      stamp_ids: certifiedStampId,
+      condition: "MNH",
+      certificate: "Gu",
+    });
+    // 70.00 as recorded, not 40.00 × 120% = 48.00.
+    assert.equal(agent.fair?.allIn, "70.00");
+    assert.equal(agent.lines[0].derivation, undefined);
+  });
+
+  it("derives nothing for a status with no percentage, and says that is why", async () => {
+    const agent = await call<AgentBidRecommendation>(context, "bid-recommendation", {
+      stamp_ids: plainStampId,
+      condition: "MNH",
+      certificate: "Sig",
+    });
+    assert.equal(agent.fair, undefined);
+    assert.equal(agent.unanchoredLines, 1);
+    const [line] = agent.lines;
+    assert.equal(line.anchoredOn, undefined);
+    assert.equal(line.derivation?.percent, undefined);
+    assert.match(line.derivation?.statement ?? "", /Sig has no percentage/);
+
+    // The popover's evidence carries the same reason for the same line on a lot.
+    const lotId = await lot({
+      saleId: await sale(),
+      status: "open",
+      lines: [{ stampId: plainStampId, certificateStatusId: signatureId }],
+    });
+    const [anchor] = (await resolveAuctionLotAnchors(collectionId, [lotId])).get(lotId)!.lines;
+    assert.equal(anchor.anchor, null);
+    assert.equal(anchor.source, null);
+    assert.deepEqual(
+      { certificate: anchor.derivation?.certificate, percent: anchor.derivation?.percent },
+      { certificate: "Sig", percent: null }
+    );
+  });
+
+  it("anchors a certified line on a result at its exact key, never deriving the market", async () => {
+    const saleId = await sale();
+    await lot({
+      saleId,
+      finalPrice: "90.00",
+      lines: [{ stampId: plainStampId, certificateStatusId: guaranteeId }],
+    });
+    const agent = await call<AgentBidRecommendation>(context, "bid-recommendation", {
+      stamp_ids: plainStampId,
+      condition: "MNH",
+      certificate: "Gu",
+    });
+    assert.equal(agent.fair?.allIn, "90.00");
+    assert.equal(agent.lines[0].anchoredOn, "market");
+    assert.equal(agent.lines[0].derivation, undefined);
   });
 
   // ── The three unanswerable cases ───────────────────────────────────────────

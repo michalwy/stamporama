@@ -490,6 +490,57 @@ export function lotLineValueOf(
 }
 
 /**
+ * A certified line's catalogue figure **derived from the plain one** (#1636), for a certificate the
+ * catalogue gives no price of its own — `None × 120%`. See {@link deriveCertifiedValue}.
+ */
+export interface CertificateDerivation {
+  /** The status's percentage of the plain price (#1242); null when it has none, and then nothing is
+   *  derived — never an assumed 100%. */
+  percent: number | null;
+  /** The figure with **no** certificate, for one, in the line's currency — what is multiplied. Null
+   *  when that figure has no rate into the line's currency. */
+  plainUnitValue: number | null;
+  /** `plainUnitValue × percent`, for one; null when either half is missing. */
+  unitValue: number | null;
+  /** The plain figure exists and no rate carries it into the line's currency. */
+  unconvertible: boolean;
+}
+
+/**
+ * What a certified line is worth when its certificate has **no price of its own** (#1636): the price
+ * without a certificate × the status's percentage — the percentage *Fill from None* copies with
+ * (#1242), here applied on the spot and never written anywhere. Null when there is nothing to derive.
+ *
+ * - **A recorded figure wins.** A line priced at its certificate — even one with no rate — is
+ *   answered by that, and a cell the catalogue marks (#1615) is the catalogue's own answer at that
+ *   certificate, which the fill leaves alone too.
+ * - **Only that way round**: `plain` is the line at no certificate, and nothing here divides a
+ *   certified price back into a plain one.
+ * - **No plain figure, nothing derived** — and nothing said about it either, since the percentage is
+ *   then not the reason the line is unpriced.
+ * - **A status with no percentage derives nothing**, and says so: the derivation comes back with
+ *   `percent: null` and no figure.
+ *
+ * Read only by the bid anchor (`auction-lot-anchors.ts`). The composition's own catalogue value stays
+ * exact, so a lot's catalogue column never shows a figure no catalogue printed.
+ */
+export function deriveCertifiedValue(
+  own: Pick<LotLineValue, "unpriced" | "mark">,
+  plain: Pick<LotLineValue, "unitValue" | "unpriced" | "unconvertible">,
+  percent: number | null
+): CertificateDerivation | null {
+  if (!own.unpriced || own.mark) return null;
+  if (plain.unpriced) return null;
+  const plainUnitValue = plain.unconvertible ? null : plain.unitValue;
+  return {
+    percent,
+    plainUnitValue,
+    unitValue: percent === null || plainUnitValue === null ? null : (plainUnitValue * percent) / 100,
+    unconvertible: plain.unconvertible,
+  };
+}
+
+/**
  * The same three outcomes for a line whose condition is **not settled** (#1623): valued at each of
  * its possible conditions, and stated as a range from the lowest figure to the highest.
  *

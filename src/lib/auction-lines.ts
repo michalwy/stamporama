@@ -3,6 +3,7 @@ import type { CatalogPriceMark } from "./catalog-price-mark";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
+  deriveCertifiedValue,
   lotLineRangeOf,
   lotLineValueOf,
   summarizeLotComposition,
@@ -89,7 +90,8 @@ export interface AnchorableLine {
   conditions: AnchorableCondition[];
   /** The certificate the line is described as carrying; null is **none**, the unmarked default a
    * copy uses (ADR-0006 §2). Matching is exact — a line with an Attest is unpriced until a price
-   * exists at that level, exactly as a copy is. */
+   * exists at that level, exactly as a copy is; only the bid anchor derives one from the price
+   * without it ({@link AnchorableCondition.derivation}, #1636). */
   certificateStatusId: string | null;
   /** Null is the single — no such row exists (ADR-0020). */
   formatId: string | null;
@@ -132,6 +134,24 @@ export interface AnchorableCondition {
   unitValue: string | null;
   unpriced: boolean;
   mark: CatalogPriceMark | null;
+  unconvertible: boolean;
+  /** Set when the line carries a certificate the catalogue gives no price for here and a price
+   * without one exists (#1636) — what the bid anchor derives instead. Never read by the catalogue
+   * value itself, which stays the certificate's own. */
+  derivation: AnchorableDerivation | null;
+}
+
+/** `deriveCertifiedValue`'s answer as a line carries it: 2-dp strings, and the certificate named, so
+ * the derivation can be stated wherever the figure appears (#1636). */
+export interface AnchorableDerivation {
+  /** The certificate as it is named — `Attest` — for the sentence that states the derivation. */
+  certificate: string;
+  /** The status's percentage; null when it has none, and then {@link unitValue} is null too. */
+  percent: number | null;
+  /** One without a certificate, in the line's currency, 2-dp; null when it has no rate into it. */
+  plainUnitValue: string | null;
+  /** `plainUnitValue × percent`, 2-dp; null when either half is missing. */
+  unitValue: string | null;
   unconvertible: boolean;
 }
 
@@ -296,12 +316,19 @@ interface CandidateLineValue {
   label: { short: string; long: string };
 }
 
+/** A certified line's row at the same key with **no** certificate — what #1636 derives from. */
+const PLAIN_ROW = "\u0000plain";
+
 /**
  * Value every line at **each of its possible conditions** in one `valuateItemRows` pass (#1623).
  *
  * A settled line is one row, exactly as before; an unsettled one is one row per possible condition,
  * and `lotLineRangeOf` turns those into the line's range. Nothing about valuing a condition is
  * decided here — each row is the same `stamp × condition × certificate × format` a copy is valued as.
+ *
+ * A line with a certificate is valued once more at each condition **without** it, in the same pass,
+ * so the bid anchor can derive a figure where the certificate has none of its own (#1636,
+ * `deriveCertifiedValue`). The line's own value never reads that row.
  */
 async function valueAcrossConditions(
   collectionId: string,
@@ -312,32 +339,59 @@ async function valueAcrossConditions(
   const conditionIds = conditions.map((condition) => condition.id);
   const conditionById = new Map(conditions.map((condition) => [condition.id, condition]));
   const candidates = new Map(lines.map((line) => [line.key, lineConditionCandidates(line, conditionIds)]));
-  const valuations = await valuateItemRows(
-    collectionId,
-    lines.flatMap((line) =>
-      candidates.get(line.key)!.map<ValuationRow>((conditionId) => ({
-        id: `${line.key}\u0000${conditionId}`,
-        stampId: line.stampId,
-        conditionId,
-        certificateStatusId: line.certificateStatusId,
-        formatId: line.formatId,
-        unknownVariant: line.unknownVariant,
-        carrier: null,
-        faultReductionPercent: null,
-      }))
-    )
-  );
+  const certified = lines.some((line) => line.certificateStatusId !== null);
+  const [valuations, statuses] = await Promise.all([
+    valuateItemRows(
+      collectionId,
+      lines.flatMap((line) =>
+        candidates.get(line.key)!.flatMap<ValuationRow>((conditionId) => {
+          const row: ValuationRow = {
+            id: `${line.key}\u0000${conditionId}`,
+            stampId: line.stampId,
+            conditionId,
+            certificateStatusId: line.certificateStatusId,
+            formatId: line.formatId,
+            unknownVariant: line.unknownVariant,
+            carrier: null,
+            faultReductionPercent: null,
+          };
+          return line.certificateStatusId === null
+            ? [row]
+            : [row, { ...row, id: `${row.id}${PLAIN_ROW}`, certificateStatusId: null }];
+        })
+      )
+    ),
+    certified
+      ? prisma.certificateStatus.findMany({
+          where: { collectionId },
+          select: { id: true, name: true, abbreviation: true, pricePercent: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const statusById = new Map(statuses.map((status) => [status.id, status]));
 
   const out = new Map<string, CandidateLineValue>();
   for (const line of lines) {
     const rate = rateOf(line);
     const ids = candidates.get(line.key)!;
     const each = ids.map((conditionId) => valuations.get(`${line.key}\u0000${conditionId}`));
+    const status = line.certificateStatusId === null ? null : statusById.get(line.certificateStatusId);
     out.set(line.key, {
       value: lotLineRangeOf(line.quantity, each, rate, line.conditionId === null),
       conditions: ids.map((conditionId, index) => {
         const value = lotLineValueOf(line.quantity, each[index], rate);
         const condition = conditionById.get(conditionId);
+        const derived = status
+          ? deriveCertifiedValue(
+              value,
+              lotLineValueOf(
+                line.quantity,
+                valuations.get(`${line.key}\u0000${conditionId}${PLAIN_ROW}`),
+                rate
+              ),
+              status.pricePercent
+            )
+          : null;
         return {
           conditionId,
           conditionName: condition?.name ?? conditionId,
@@ -346,6 +400,17 @@ async function valueAcrossConditions(
           unpriced: value.unpriced,
           mark: value.mark,
           unconvertible: value.unconvertible,
+          derivation:
+            status && derived
+              ? {
+                  certificate: status.abbreviation || status.name,
+                  percent: derived.percent,
+                  plainUnitValue:
+                    derived.plainUnitValue === null ? null : derived.plainUnitValue.toFixed(2),
+                  unitValue: derived.unitValue === null ? null : derived.unitValue.toFixed(2),
+                  unconvertible: derived.unconvertible,
+                }
+              : null,
         };
       }),
       label: lineConditionLabel(line, conditions),
