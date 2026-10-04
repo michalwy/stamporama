@@ -6,7 +6,7 @@ import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-lin
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import type { AuctionSaleView } from "../use-auctions-query";
-import { SaleStatusChip } from "../auction-badges";
+import { SaleApiReviewChip, SaleStatusChip } from "../auction-badges";
 import { formatDay } from "../auction-format";
 import { AmountWithBase } from "../auction-base-amount";
 
@@ -110,6 +110,9 @@ export function AuctionSaleRow({
               row's link overlay (#557) — the name to their left is the link's own surface. */}
           <span style={ROW_LINK_ABOVE}>
             <SaleStatusChip status={sale.status} />
+            {/* Something the agent API wrote waits for review — the sale itself, or any of its lots,
+                with their count (#1626). */}
+            <SaleApiReviewChip mark={sale.apiReview} lotsToReview={sale.lotsToReview} />
           </span>
           {sale.endsAt && (
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>

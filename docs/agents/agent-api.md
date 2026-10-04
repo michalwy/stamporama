@@ -1369,6 +1369,27 @@ every name on it is still a real export, so a renamed writer cannot leave a row 
 `captureAuctionLot` is on it although its dry run is a read, because an import cannot say which way
 it will be called.
 
+### What the agent writes to auctions waits for review, and that boundary does not open
+
+**#1626 laid the marker the auction writes (#1627, #1628) are bound by, before any of them exists.**
+The collector accepts an assistant writing lots only if everything it created or changed is visibly
+waiting for review, and that has to be enforced rather than left to a tag the assistant could
+forget. So `AuctionLot` and `AuctionSale` carry a *to review* marker (`auctions.md`), and two rules
+hold for every auction write this surface will ever make:
+
+- **Every write marks what it touched**, in the write's own transaction, through
+  `markAuctionLotWrittenByApi` / `markAuctionSaleWrittenByApi` with `{ kind: "created" }` or
+  `{ kind: "changed", fields }`. The field keys are `AUCTION_LOT_REVIEW_FIELD_LABEL` /
+  `AUCTION_SALE_REVIEW_FIELD_LABEL` in `auction-review.ts`, which word the chip's hint; a key not on
+  them still shows, as itself. A lot written into a sale marks the lot, and the sale shows it by its
+  count; a sale the API starts or whose terms it changes is marked itself.
+- **Nothing reachable from an agent clears it.** That is `REVIEW_CLEARERS` in
+  `tests/unit/agent-api-operation-boundary.test.ts` — `confirmAuctionLotReviews`,
+  `confirmAuctionSaleReview` and `CONFIRMED_API_REVIEW` — and it is **a map of its own on purpose**:
+  #1627 takes writers off `AUCTION_WRITES` as it opens them, and this map is the half that must not
+  go with them. An operation able to clear the marker could hide its own work from the review it is
+  waiting for, which is `markOfferListingSynced`'s shape in `FORBIDDEN`.
+
 ### One watchlist, and it is the screen's default
 
 The list and the exposure both read the lots screen **with nothing narrowed**: open lots, soonest

@@ -4323,6 +4323,13 @@ model AuctionSale {
   // Set on settlement (#28). `SetNull` so deleting the purchase leaves the auction history intact
   // rather than taking it along; unique because a settlement is 1:1.
   purchaseId   String?
+  // The *to review* marker (#1626): set by every write the agent API makes to this sale, cleared
+  // only by the collector's *Confirm*. `apiReviewAt` is the latest such write and null means no
+  // marker; `apiReviewCreated` says the API created the sale, and `apiReviewFields` what it changed,
+  // accumulated until confirmed (`auction-review.ts`). Editing in the app leaves all three alone.
+  apiReviewAt      DateTime?
+  apiReviewCreated Boolean   @default(false)
+  apiReviewFields  String[]  @default([])
 
   collection Collection   @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   seller     Contact      @relation("AuctionSaleSeller", fields: [sellerId], references: [id], onDelete: Restrict)
@@ -4421,6 +4428,11 @@ model AuctionLot {
   // of `purchaseLotId`, unique and `SetNull` for the same reasons — deleting the expense or its
   // purchase leaves the bidding record standing, which is also the undo.
   purchaseExpenseId String?
+  // The *to review* marker (#1626), exactly as on `AuctionSale`: every agent API write sets it,
+  // only the collector's *Confirm* clears it, and editing the lot in the app does not.
+  apiReviewAt      DateTime?
+  apiReviewCreated Boolean   @default(false)
+  apiReviewFields  String[]  @default([])
 
   auctionSale     AuctionSale      @relation(fields: [auctionSaleId], references: [id], onDelete: Cascade)
   purchaseLot     PurchaseLot?     @relation(fields: [purchaseLotId], references: [id], onDelete: SetNull)
@@ -4434,6 +4446,7 @@ model AuctionLot {
   @@unique([purchaseExpenseId])
   @@index([auctionSaleId])
   @@index([auctionLotNo])
+  @@index([apiReviewAt])
   @@map("auction_lot")
 }
 

@@ -23,6 +23,8 @@ export interface AuctionLotFilters {
   conditionToSettle?: boolean;
   /** Only lots holding a stamp another lot being won also holds (#369). */
   duplicate?: boolean;
+  /** Only lots carrying the *to review* marker — written through the agent API, not confirmed (#1626). */
+  toReview?: boolean;
   /** Free-text search over the lot, its notes and the sale it belongs to (#484). */
   search?: string;
   sellerId?: string;
@@ -52,6 +54,7 @@ const LOT_PARAM: {
   undescribed: () => "1",
   conditionToSettle: () => "1",
   duplicate: () => "1",
+  toReview: () => "1",
   search: (value) => value,
   sellerId: (value) => value,
   platformId: (value) => value,
@@ -96,7 +99,7 @@ export function lotParams(filters: AuctionLotFilters): URLSearchParams {
  */
 export interface LotNarrowing {
   key: keyof AuctionLotFilters;
-  /** The raw value, for the panel to look a label up by. `"1"` for the two boolean chips. */
+  /** The raw value, for the panel to look a label up by. `"1"` for the three boolean chips. */
   value: string;
 }
 
@@ -128,6 +131,7 @@ const LOT_NARROWS: {
   undescribed: () => "1",
   conditionToSettle: () => "1",
   duplicate: () => "1",
+  toReview: () => "1",
   // A blank-but-present search narrows nothing, and the box routinely holds one mid-edit.
   search: (value) => (value.trim() ? value : null),
   sellerId: (value) => value,

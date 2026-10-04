@@ -10,6 +10,14 @@ import {
   type AuctionSaleStatus,
   type BidFreshness,
 } from "@/lib/auction-rules";
+import {
+  API_REVIEW_LABEL,
+  AUCTION_LOT_REVIEW_FIELD_LABEL,
+  describeApiReview,
+  describeSaleApiReview,
+  type ApiReviewMark,
+} from "@/lib/auction-review";
+import { formatInstant } from "./auction-format";
 
 // Shared chip presentation for auction tracking (#351), mirroring `offer-badges.tsx` so a status
 // reads identically on the flat lot list, on a sale's detail and in the sale list.
@@ -221,5 +229,40 @@ export function OverCeilingChip() {
     "error",
     "Over ceiling",
     "The all-in cost of the current bid has passed the ceiling you set"
+  );
+}
+
+/**
+ * Written through the agent API and not yet confirmed (#1626). `warning`, like the other chips that
+ * name work outstanding rather than a state of the bidding, and its hint says what the API did — it
+ * created the lot, or which fields it changed, and when it last wrote. Nothing renders once the
+ * collector has confirmed it.
+ */
+export function ApiReviewChip({ mark }: { mark: ApiReviewMark | null }) {
+  if (!mark) return null;
+  return tinted(
+    "warning",
+    API_REVIEW_LABEL,
+    describeApiReview(mark, AUCTION_LOT_REVIEW_FIELD_LABEL, formatInstant)
+  );
+}
+
+/**
+ * The same chip on a sale (#1626): shown when the sale itself was written through the API **or**
+ * any of its lots carries the marker, with the count of those lots — the collector's decision, so a
+ * parcel with something waiting cannot look finished from the sales list.
+ */
+export function SaleApiReviewChip({
+  mark,
+  lotsToReview,
+}: {
+  mark: ApiReviewMark | null;
+  lotsToReview: number;
+}) {
+  if (!mark && lotsToReview === 0) return null;
+  return tinted(
+    "warning",
+    lotsToReview > 0 ? `${API_REVIEW_LABEL} (${lotsToReview})` : API_REVIEW_LABEL,
+    describeSaleApiReview(mark, lotsToReview, formatInstant)
   );
 }

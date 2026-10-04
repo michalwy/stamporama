@@ -68,9 +68,10 @@ import {
   type TagFilterMode,
 } from "@/lib/tag-filter";
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
-import { toggleRowsInView } from "@/lib/offer-selection";
+import { keptAfterBulkRun, toggleRowsInView } from "@/lib/offer-selection";
 import { AuctionLotTagsDialog } from "./auction-lot-tags-dialog";
 import { Icon } from "@/app/icons";
+import { API_REVIEW_LABEL } from "@/lib/auction-review";
 
 /**
  * The two fixed widths the toolbar's dropdowns are given (#868): a trigger sized to its own label
@@ -175,6 +176,10 @@ export function AuctionLotsPanel({
     "auction-duplicate",
     collectionId
   );
+  const [storedToReview, rememberToReview] = usePersistedCollectionValue(
+    "auction-to-review",
+    collectionId
+  );
   const [storedTagIds, rememberTagIds] = usePersistedCollectionValue("auction-tags", collectionId);
   const [storedTagMode, rememberTagMode] = usePersistedCollectionValue(
     "auction-tag-mode",
@@ -250,6 +255,11 @@ export function AuctionLotsPanel({
     (searchParams.has("conditionToSettle")
       ? searchParams.get("conditionToSettle")
       : storedConditionToSettle) === "1" || undefined;
+  // "What did the assistant write that I have not looked at?" (#1626). Remembered like every other
+  // filter here (#1018), with the URL winning.
+  const toReview =
+    (searchParams.has("toReview") ? searchParams.get("toReview") : storedToReview) === "1" ||
+    undefined;
 
   // "Which lot was that?" (#484) — remembered like the outcome and the two parties, and overridden
   // by the URL whenever it carries one, so a link to a searched list still means what it says.
@@ -297,6 +307,7 @@ export function AuctionLotsPanel({
       undescribed,
       conditionToSettle,
       duplicate,
+      toReview,
       search: search || undefined,
       sellerId,
       platformId,
@@ -311,6 +322,7 @@ export function AuctionLotsPanel({
       undescribed,
       conditionToSettle,
       duplicate,
+      toReview,
       search,
       sellerId,
       platformId,
@@ -449,6 +461,8 @@ export function AuctionLotsPanel({
         return "Condition to settle";
       case "duplicate":
         return "Duplicate";
+      case "toReview":
+        return API_REVIEW_LABEL;
       case "search":
         return `Search “${value}”`;
       case "sellerId":
@@ -494,6 +508,7 @@ export function AuctionLotsPanel({
     rememberDuplicate("");
     rememberTagIds("");
     rememberTagMode("");
+    rememberToReview("");
     setIncludeClosed(false);
     // The box holds its own debounced copy, so the input has to be told as well or it goes on
     // showing a phrase that is no longer narrowing anything.
@@ -510,6 +525,7 @@ export function AuctionLotsPanel({
       duplicate: "",
       [TAG_FILTER_PARAM]: "",
       [TAG_MODE_PARAM]: "",
+      toReview: "",
     });
   }, [
     rememberOutcome,
@@ -523,10 +539,37 @@ export function AuctionLotsPanel({
     rememberDuplicate,
     rememberTagIds,
     rememberTagMode,
+    rememberToReview,
     setIncludeClosed,
     setLocalSearch,
     updateParams,
   ]);
+
+  /** The ticked lots in view that actually carry the marker, read off the rows as they are now
+   * rather than as they were when ticked — a lot confirmed from its own menu since is not one. */
+  const toConfirm = useMemo(
+    () => rows.filter((r) => selection.has(r.id) && r.apiReview !== null),
+    [rows, selection]
+  );
+  /** *Confirm* the ticked lots in view (#1626). What the run covered is unticked; a tick the filter
+   * was hiding stays, never having been in the batch. */
+  function confirmTicked() {
+    const covered = selectedInView.map((lot) => lot.id);
+    const batch = toConfirm.map((lot) => lot.id);
+    setActionError(undefined);
+    startTransition(async () => {
+      const { confirmAuctionLotReviewsAction } = await import("@/app/actions/auctions");
+      const result = await confirmAuctionLotReviewsAction(collectionId, batch);
+      if (result.status === "success") {
+        setSelection((prev) => keptAfterBulkRun(prev, covered, []));
+        invalidateAll(collectionId);
+        toast({
+          message:
+            result.confirmed === 1 ? "1 lot confirmed" : `${result.confirmed} lots confirmed`,
+        });
+      } else setActionError(result.message);
+    });
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -770,6 +813,21 @@ export function AuctionLotsPanel({
               }}
             />
           </Tooltip>
+          {/* The third question about the record (#1626): what the agent API wrote that the
+              collector has not confirmed. A boolean, so a chip (#1070). */}
+          <Tooltip content="Lots the agent API added or changed that you have not confirmed yet. Confirm one from its ⋮ menu, or tick several and confirm them together.">
+            <FilterChip
+              label={API_REVIEW_LABEL}
+              count={counts ? counts.toReview : undefined}
+              active={!!toReview}
+              toggle
+              onClick={() => {
+                const next = toReview ? "" : "1";
+                rememberToReview(next);
+                updateParams({ toReview: next });
+              }}
+            />
+          </Tooltip>
           <span
             style={{
               width: "1px",
@@ -975,8 +1033,9 @@ export function AuctionLotsPanel({
 
         {/* The selection bar (#1625) — the Offers list's, and drawn on its rule: always while there
             are rows, so the select-all box and the feature itself can be found before anything is
-            ticked; the action arrives with the selection. It counts and acts on the ticked lots in
-            view, and while every ticked lot is hidden it keeps only *Clear*. */}
+            ticked; the actions arrive with the selection. It counts and acts on the ticked lots in
+            view, and while every ticked lot is hidden it keeps only *Clear*. Two actions: *Tags…*
+            (#1625) and *Confirm* (#1626), the to-review marker on the ticked lots that carry it. */}
         {rows.length > 0 && (
           <div
             style={{
@@ -1037,6 +1096,7 @@ export function AuctionLotsPanel({
                   </button>
                 </Tooltip>
                 {selectedInView.length > 0 && (
+                  <>
                   <Tooltip content="Put tags on these lots or take them off. Tags you do not name stay as they are.">
                     <button
                       type="button"
@@ -1056,11 +1116,33 @@ export function AuctionLotsPanel({
                       {hiddenSelectedCount > 0 ? `Tags for ${selectedInView.length}…` : "Tags…"}
                     </button>
                   </Tooltip>
+                  <Tooltip
+                    align="end"
+                    content={
+                      toConfirm.length > 0
+                        ? "You have reviewed what the agent API wrote on these lots — remove their To review mark."
+                        : "None of the ticked lots is waiting for review."
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={confirmTicked}
+                      disabled={isPending || toConfirm.length === 0}
+                      style={{
+                        ...FILTER_CONTROL_STYLE,
+                        fontWeight: 600,
+                        cursor: isPending || toConfirm.length === 0 ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {toConfirm.length > 0 ? `Confirm ${toConfirm.length}` : "Confirm"}
+                    </button>
+                  </Tooltip>
+                  </>
                 )}
               </>
             ) : (
               <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                Select lots to tag them together
+                Select lots to tag them or confirm them together
               </span>
             )}
           </div>

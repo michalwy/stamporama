@@ -559,6 +559,9 @@ about the bidding:
   week, or a bid that pulled ahead overnight. Only lots you are leading on, or that closed with you
   ahead, are compared, and both sides of a collision are listed. The same set is what the
   [notification centre](action-items.md) reports as *Winning the same stamp twice*.
+- **To review · API** — lots your [AI assistant](agent-api.md) added or changed that you have not
+  confirmed yet, with a count. See [What the assistant wrote](#what-the-assistant-wrote--to-review--api)
+  below.
 
 Finally:
 
@@ -623,6 +626,32 @@ is released. **Clear** unticks all of them, hidden ones included.
 
 A tag is a label only. It is not the sale's, and settling a won lot does not put it on the copies
 the lot becomes.
+
+### What the assistant wrote — *To review · API*
+
+When an [AI assistant](agent-api.md) adds a lot to your watchlist or changes one — its contents,
+its ceiling, the current bid — the lot is marked **To review · API**, and it stays marked until you
+say you have looked. Hover the chip to see what the assistant did: *Added through the agent API*,
+or which things it *changed*, and when it last wrote. Several writes before you confirm add up, so a
+lot it added and then gave a ceiling says both.
+
+- **The assistant cannot remove the mark.** Nothing it can ask for clears it, so anything it wrote
+  waits for you whatever it does next.
+- **Editing the lot does not remove it either.** Correcting a figure is not the same as having
+  checked the whole lot, so the mark stays until you press **Confirm**.
+- **Confirm one lot** from its **⋮** menu — the entry appears only while the lot is marked.
+- **Confirm several at once** by ticking them: the lots list has a tick box on every row and a bar
+  above the rows, as the offers list does, and **Confirm** in that bar clears the ticked lots you
+  can see. Ticks a filter is hiding are left alone — still ticked, not confirmed — and come back when
+  the filter is released. **To review · API** in the filters is the quickest way to tick just the
+  marked ones: filter, tick all, confirm.
+- **A sale shows it too.** On the sales list and on the sale's own screen, a sale with marked lots
+  carries **To review · API (3)** — three of its lots wait — and a sale the assistant started or
+  whose terms it changed carries the chip itself. **Confirm all** on the sale's screen clears the
+  sale and every lot in it in one press.
+
+The filter follows the list's usual rule and shows open lots unless you turn on **Show closed**; the
+sale's own screen shows every lot in the parcel, closed ones included.
 
 ## Sales — paying for a parcel
 

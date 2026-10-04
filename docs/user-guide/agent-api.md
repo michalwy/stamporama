@@ -393,6 +393,11 @@ one you would see there.
 - **It only looks.** It does not add a listing to your watchlist, bid, change a ceiling or close a
   lot — a listing it tells you is new stays untracked until you add it. A **read only** token can
   ask all of this.
+- **Whatever it ever writes to your auctions waits for you.** Every lot or sale written through the
+  agent API is marked **To review · API**, saying what was added or changed and when, and only you
+  can clear that mark — by pressing **Confirm** on the lot, on the lots you tick, or on the whole
+  sale. Editing the lot yourself does not clear it. See
+  [What the assistant wrote](auctions.md#what-the-assistant-wrote--to-review--api).
 - **A price is as fresh as your last check.** Bids are refreshed by hand, so each lot says when its
   price was last looked at; an old check means an old price.
 - **Lots you have closed are not on the list**, but it still recognises their listings and says how
