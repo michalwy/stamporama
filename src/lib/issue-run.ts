@@ -437,6 +437,16 @@ export const RUN_DETAIL_FIELDS: readonly RunDetailField[] = [
   "disposition",
 ];
 
+/**
+ * The fields that describe the piece itself (#1593). The tile's faults are asked straight after
+ * them, as every copy form asks them — before the lot, the location and what the copy is for.
+ */
+export const RUN_PIECE_FIELDS: readonly RunDetailField[] = [
+  "conditionId",
+  "certificateStatusId",
+  "formatId",
+];
+
 /** A tile's own answers: only the fields it overrides are present. */
 export type RunCopyOverrides = Partial<RunCopyDetails>;
 
