@@ -12,7 +12,6 @@ import { deliveryStateLabel, deliveryStateToken } from "@/lib/delivery-state";
 import { disposalReasonLabel } from "@/lib/disposal";
 import { saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
 import {
-  DetailBackLink,
   DetailCard,
   DetailFullRow,
   DetailLayout,
@@ -160,7 +159,6 @@ export function CopyDetailPanel({
 
   return (
     <>
-      <DetailBackLink href={`/c/${collectionSlug}/inventory`} label="Back to copies" />
 
       <DetailLayout>
         <DetailFullRow style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>

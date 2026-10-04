@@ -84,7 +84,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
           href={`/c/${collectionSlug}/sales/${saleId}`}
           style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", textDecoration: "none" }}
         >
-          ← Back to the sale
+          ← Sale {formatEntityNo(sale.saleNo)}
         </Link>
         {/* Browsers won't render CSS page numbers, but their own print header/footer does — so
             point at it rather than pretend the sheet can number its pages itself. */}

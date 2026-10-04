@@ -2299,14 +2299,13 @@ count — it widens the list rather than selecting a slice of it.
 
 ### Stepping through the filtered list
 
-Opening an offer from the list carries the filter with it. At the top of the offer's own screen,
-opposite **← Offers** on the right, you get **‹ Previous**, the offer's position (**3 of 12**) and
-**Next ›** —
-the same list, in the same order, without going back to it between offers. This is what preparing a
-batch looks like: filter by platform and **Preparing**, open the first one, finish it, and step on.
+Opening an offer from the list carries the filter with it. At the top right of the offer's own
+screen you get **‹ Previous**, the offer's position (**3 of 12**) and **Next ›** — the same list, in
+the same order, without going back to it between offers. This is what preparing a batch looks like:
+filter by platform and **Preparing**, open the first one, finish it, and step on.
 
-- **← Offers** goes back to the list **as you left it**, with the same platform and state filter and
-  the same search.
+- The browser's **back** returns to the list **as you left it**, with the same platform and state
+  filter and the same search; **Offers** in the sidebar opens it afresh.
 - The position and the two steps are worked out **once, when the offer opens**, and stay put while
   you work on it. Marking the offer Ready takes it out of a **Preparing** filter, and **Next ›**
   still goes where it was going to.

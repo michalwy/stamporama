@@ -14,7 +14,6 @@ import {
 } from "@/lib/checklist-completeness-rules";
 import { moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import {
-  DetailBackLink,
   DetailCard,
   DetailFullRow,
   DetailLayout,
@@ -207,7 +206,6 @@ export function IssueDetailPanel({
 
   return (
     <>
-      <DetailBackLink href={`/c/${collectionSlug}/issues`} label="Back to issues" />
 
       <DetailLayout>
         <DetailFullRow style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>

@@ -795,12 +795,6 @@ export function AlbumScreen({
 
   return (
     <div style={{ padding: "2rem" }}>
-      <Link
-        href={`/c/${collectionSlug}/albums`}
-        style={{ ...MUTED, textDecoration: "none", display: "inline-block", marginBottom: "0.5rem" }}
-      >
-        ← Albums
-      </Link>
 
       {/* ── Header: the album, and what can be done to all of it ── */}
 

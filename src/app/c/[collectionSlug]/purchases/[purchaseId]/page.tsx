@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getStampConditions } from "@/lib/conditions";
@@ -75,17 +74,6 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         flexDirection: "column",
       }}
     >
-      <Link
-        href={`/c/${collectionSlug}/purchases`}
-        style={{
-          fontSize: "0.8125rem",
-          color: "var(--color-text-secondary)",
-          textDecoration: "none",
-          marginBottom: "0.75rem",
-        }}
-      >
-        ← Back to intake documents
-      </Link>
       <RecordRecentVisit
         collectionId={collection.id}
         kind="purchase"

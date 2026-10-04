@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getLocations, getLocationRefUsage } from "@/lib/locations";
@@ -87,12 +86,6 @@ export default async function RefCardsPage({ params, searchParams }: RefCardsPag
         className="no-print"
         style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}
       >
-        <Link
-          href={`/c/${collectionSlug}/locations`}
-          style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", textDecoration: "none" }}
-        >
-          ← Back to locations
-        </Link>
         <span style={{ marginLeft: "auto" }} />
         <PrintButton />
       </div>

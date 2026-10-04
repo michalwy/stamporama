@@ -82,22 +82,3 @@ export function parseOfferListContext(
     search: get("search") || undefined,
   };
 }
-
-/** The offer list as `context` had it — the detail screen's own way back (#429). The show-closed
- * toggle is deliberately dropped: it is remembered per collection (#245) and the list reads its own
- * value, so re-stating it here could only ever disagree with it. */
-export function offerListHref(collectionSlug: string, context: OfferListContext | null): string {
-  const base = `/c/${collectionSlug}/offers`;
-  if (!context) return base;
-  const params = new URLSearchParams();
-  if (context.platformId) params.set("platform", context.platformId);
-  if (context.bidding) params.set("bidding", "1");
-  if (context.endedAuction) params.set("endedAuction", "1");
-  if (context.listingOutOfDate) params.set("listingOutOfDate", "1");
-  if (context.platformSale) params.set("platformSale", "1");
-  if (context.needsAction) params.set("needsAction", "1");
-  else if (context.states?.length) params.set("state", context.states.join(","));
-  if (context.search) params.set("search", context.search);
-  const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
-}

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getSaleDetail, getSaleIssueIds } from "@/lib/sales";
@@ -61,17 +60,6 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
         flexDirection: "column",
       }}
     >
-      <Link
-        href={`/c/${collectionSlug}/sales`}
-        style={{
-          fontSize: "0.8125rem",
-          color: "var(--color-text-secondary)",
-          textDecoration: "none",
-          marginBottom: "0.75rem",
-        }}
-      >
-        ← Back to sales
-      </Link>
       <RecordRecentVisit
         collectionId={collection.id}
         kind="sale"

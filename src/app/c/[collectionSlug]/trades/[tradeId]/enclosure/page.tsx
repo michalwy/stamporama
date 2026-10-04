@@ -89,7 +89,7 @@ export default async function TradeEnclosurePage({ params }: PageProps) {
           href={`/c/${collectionSlug}/trades/${tradeId}`}
           style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", textDecoration: "none" }}
         >
-          ← Back to the trade
+          ← Trade #{trade.tradeNo}
         </Link>
         <Link
           href={`/c/${collectionSlug}/trades/${tradeId}/packing-list`}

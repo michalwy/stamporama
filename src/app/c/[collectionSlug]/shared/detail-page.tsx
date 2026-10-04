@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
 // Shared chrome for the full detail screens (#517/#518/#519) — a copy, a stamp, an Issue. The
-// three pages answer different questions but read as one screen: the same back link, the same
-// card, the same label/value grid. Presentational only: no data fetching, no page knowledge.
+// three pages answer different questions but read as one screen: the same card, the same
+// label/value grid. There is no back link (#1595) — the sidebar and the browser's back are the way
+// out. Presentational only: no data fetching, no page knowledge.
 
 const CARD: CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -13,23 +13,6 @@ const CARD: CSSProperties = {
   background: "var(--color-bg-elevated)",
   padding: "1rem 1.25rem 1.25rem",
 };
-
-/** "← Back to copies" — the way out of a detail screen, in every list's own words. */
-export function DetailBackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      style={{
-        fontSize: "0.8125rem",
-        color: "var(--color-text-secondary)",
-        textDecoration: "none",
-        marginBottom: "0.75rem",
-      }}
-    >
-      ← {label}
-    </Link>
-  );
-}
 
 /**
  * One section of a detail screen. `actions` sits on the heading row — that is where a card's

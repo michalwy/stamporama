@@ -358,18 +358,6 @@ export function TradeDetailPanel({
         sublabel={trade.partnerName}
       />
 
-      <Link
-        href={`/c/${collectionSlug}/trades`}
-        style={{
-          fontSize: "0.8125rem",
-          color: "var(--color-text-secondary)",
-          textDecoration: "none",
-          marginBottom: "1rem",
-          alignSelf: "flex-start",
-        }}
-      >
-        ← Back to trades
-      </Link>
 
       {/* ── The terms ─────────────────────────────────────────────────────────────────────────── */}
       <section style={{ ...CARD, marginBottom: "1.25rem" }}>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { signInPath } from "@/lib/sign-in-redirect";
@@ -54,12 +53,6 @@ export default async function SeriesFromSinglesPage({ params }: SeriesFromSingle
         >
           Series from singles
         </h2>
-        <Link
-          href={`/c/${collectionSlug}/offers`}
-          style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
-        >
-          ← Back to offers
-        </Link>
       </div>
       <SeriesFromSinglesPanel
         collectionId={collection.id}

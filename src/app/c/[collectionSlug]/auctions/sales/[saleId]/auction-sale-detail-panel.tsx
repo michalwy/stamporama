@@ -281,12 +281,6 @@ export function AuctionSaleDetailPanel({
         sublabel={sale.sellerName || sale.platformName}
       />
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link
-          href={`/c/${collectionSlug}/auctions/sales`}
-          style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
-        >
-          ← Auction sales
-        </Link>
         <h2
           style={{
             margin: 0,
