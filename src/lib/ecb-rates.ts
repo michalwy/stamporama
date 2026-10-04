@@ -39,3 +39,70 @@ export function convertViaEur(
   }
   return toRate / fromRate;
 }
+
+/**
+ * The ECB's reference rates **on a given day**, out of the CSV its data API returns for a window
+ * ending on that day (#1633): `currency → rate against EUR`, each currency at the **latest** day it
+ * was quoted on or before `day` (`YYYY-MM-DD`).
+ *
+ * The ECB quotes no rate at weekends or on TARGET holidays, so the figure for a sale on a Sunday is
+ * Friday's — the rate a bank would have used — which is why the request asks for a window and this
+ * takes the last observation in it rather than the one on `day` exactly. Rows are read by their
+ * header names, never by position: the CSV carries some thirty columns and the order is the API's to
+ * change. `EUR` is seeded at 1, as in {@link parseEcbXml}.
+ */
+export function parseEcbHistoricCsv(csv: string, day: string): Map<string, number> {
+  const rates = new Map<string, number>();
+  rates.set("EUR", 1);
+  const lines = csv.split(/\r?\n/).filter((line) => line.trim() !== "");
+  if (lines.length === 0) return rates;
+  const header = splitCsvLine(lines[0]);
+  const currencyAt = header.indexOf("CURRENCY");
+  const periodAt = header.indexOf("TIME_PERIOD");
+  const valueAt = header.indexOf("OBS_VALUE");
+  if (currencyAt < 0 || periodAt < 0 || valueAt < 0) return rates;
+
+  const latest = new Map<string, string>();
+  for (const line of lines.slice(1)) {
+    const cells = splitCsvLine(line);
+    const currency = cells[currencyAt];
+    const period = cells[periodAt];
+    const value = Number(cells[valueAt]);
+    if (!currency || !period || period > day || !Number.isFinite(value) || value <= 0) continue;
+    const seen = latest.get(currency);
+    if (seen !== undefined && seen >= period) continue;
+    latest.set(currency, period);
+    rates.set(currency, value);
+  }
+  return rates;
+}
+
+/** One CSV row's cells, honouring double-quoted cells (the API quotes its long titles, which carry
+ * commas). */
+function splitCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      cells.push(cell);
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  cells.push(cell);
+  return cells;
+}

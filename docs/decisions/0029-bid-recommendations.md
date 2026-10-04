@@ -3,7 +3,9 @@
 ## Status
 
 Accepted. Resolves the design question in #25. Builds directly on ADR-0021 (auction tracking) and
-ADR-0022 (market valuation); it decides nothing those two already decided.
+ADR-0022 (market valuation); it decides nothing those two already decided. **Amended by
+[ADR-0063](0063-price-observations.md) §7** (#1633): the ratio is learned from exact price
+observations as well as from the collector's own lots.
 
 ## Context
 

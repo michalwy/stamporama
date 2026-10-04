@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import type { BaseCurrency } from "./currencies";
-import { convertViaEur, parseEcbXml } from "./ecb-rates";
+import { convertViaEur, parseEcbHistoricCsv, parseEcbXml } from "./ecb-rates";
 
 // **One dated snapshot of the ECB table per collection, never a bag of per-pair rates.**
 //
@@ -157,4 +157,48 @@ export async function getOrFetchRates(
     results.set(from, await getOrFetchRate(collectionId, from, toCurrency));
   }
   return results;
+}
+
+// ── A rate of a past day (#1633) ──────────────────────────────────────────────
+
+/** The ECB data API, for the daily reference rates of any day since 1999 — the snapshot above holds
+ * only today's table, and a realised price from a 2021 sale has to be read at 2021's rate. */
+const ECB_DATA_API = "https://data-api.ecb.europa.eu/service/data/EXR/D.";
+
+/** How far back the request window reaches. The ECB skips weekends and TARGET holidays, and the
+ * longest run of those (Easter, Christmas into New Year) is well inside a fortnight. */
+const HISTORIC_WINDOW_DAYS = 14;
+
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The ECB reference rate `fromCurrency → toCurrency` **of `day`**: the last one published on or
+ * before it, pivoted through EUR exactly as today's table is (`convertViaEur`), so the two directions
+ * of one day are reciprocals.
+ *
+ * Fetched, never cached: it is read once per write and frozen on what it priced (a price observation,
+ * #1633), which is what keeps that figure stating the day it describes. `day` is read in UTC, the way
+ * a `@db.Date` column comes back. Throws when the API cannot be reached or does not quote one of the
+ * two currencies on or before that day; the caller decides what a missing rate means.
+ */
+export async function fetchEcbRateOn(
+  day: Date,
+  fromCurrency: string,
+  toCurrency: string
+): Promise<number> {
+  if (fromCurrency === toCurrency) return 1;
+  const quoted = [...new Set([fromCurrency, toCurrency].filter((c) => c !== ANCHOR))];
+  const end = isoDay(day);
+  const start = isoDay(new Date(day.getTime() - HISTORIC_WINDOW_DAYS * 24 * 60 * 60 * 1000));
+  const url =
+    `${ECB_DATA_API}${quoted.join("+")}.EUR.SP00.A` +
+    `?startPeriod=${start}&endPeriod=${end}&format=csvdata`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`ECB historic fetch failed: ${response.status}`);
+  }
+  const rates = parseEcbHistoricCsv(await response.text(), end);
+  return convertViaEur(rates, fromCurrency, toCurrency);
 }

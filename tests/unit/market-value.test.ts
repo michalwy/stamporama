@@ -177,8 +177,7 @@ describe("aggregateMarketDatapoints", () => {
     const odd = aggregateMarketDatapoints(
       ["8", "40", "11", "14", "12"].map((p) => ({
         key: { stampId: "s", conditionId: "c", certificateStatusId: null, formatId: null },
-        lotId: "l",
-        lineId: `x${p}`,
+        source: { kind: "lot" as const, lotId: "l", lineId: `x${p}` },
         amount: Number(p),
         at: RECENT,
         split: false,
@@ -191,8 +190,7 @@ describe("aggregateMarketDatapoints", () => {
     const even = aggregateMarketDatapoints(
       [10, 20, 30, 50].map((amount, i) => ({
         key: { stampId: "s", conditionId: "c", certificateStatusId: null, formatId: null },
-        lotId: "l",
-        lineId: `y${i}`,
+        source: { kind: "lot" as const, lotId: "l", lineId: `y${i}` },
         amount,
         at: RECENT,
         split: false,

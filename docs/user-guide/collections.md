@@ -1701,9 +1701,9 @@ The warning clears once the newest edition has its own price.
 
 ## Market value
 
-The catalog says what a stamp is *listed* at. **Market value** says what one has actually fetched — worked out from the closed auction lots you have recorded (see [Auctions](auctions.md)). It is the first section of the [Valuation dialog](#the-valuation-dialog), above the cross-catalog average, and it is entirely read-only: nothing here is edited, and nothing is stored. Change a lot's final price and the next time you open the dialog the figures follow.
+The catalog says what a stamp is *listed* at. **Market value** says what one has actually fetched — worked out from the closed auction lots you have recorded (see [Auctions](auctions.md)) and from the [price observations](#price-observations) you record from other people's auctions. It is the first section of the [Valuation dialog](#the-valuation-dialog), above the cross-catalog average. The figures themselves are never typed in and nothing is stored: change a lot's final price, or correct an observation, and the next time you open the dialog the figures follow.
 
-Neither of the dialog's toggles touches it. There are no editions to choose between — a hammer price belongs to the day it was struck, not to a published book — and every figure is already in the collection currency, converted at the rate frozen on each lot when it closed.
+Neither of the dialog's toggles touches it. There are no editions to choose between — a hammer price belongs to the day it was struck, not to a published book — and every figure is already in the collection currency, converted at the rate frozen on each lot when it closed, or on each observation for the day of its sale.
 
 ### For a single stamp
 
@@ -1713,7 +1713,7 @@ The grid is the dialog's own: **conditions as rows, certificate statuses as colu
 
 **Hover a figure** and a small panel gives the rest of it, one fact per line: the confidence spelled out with its score out of 100, the median, the mean, the range, how many results (and how many of those came out of a mixed lot), the span of dates they cover, and the catalog price for the same cell with what fraction of it the market paid. Hovering a set's total gives the same panel, with its coverage on it.
 
-**Click a figure** and the lots behind it open under the table — the lot, the sale it was in, the day it closed, and what it contributed, each linking straight to itself on its sale's screen. One cell at a time; clicking it again closes it. Where a lot held several of something, or held other stamps too, the list says so: a mixed lot's hammer price is divided between its stamps in proportion to their catalog values, and the number of results arrived at that way is stated at the bottom.
+**Click a figure** and the results behind it open under the table — for a lot of yours, the lot, the sale it was in, the day it closed, and what it contributed, each linking straight to itself on its sale's screen; for a price observation, where it was sold and when, linking to the address you recorded. One cell at a time; clicking it again closes it. Where a lot held several of something, or held other stamps too, the list says so: a mixed lot's hammer price is divided between its stamps in proportion to their catalog values, and the number of results arrived at that way is stated at the bottom.
 
 **Multiples get their own grid.** A market value hangs off the physical format as well — a pair does not fetch what a single does — so each format that has results is a separate table under its own heading, the single first. Where you have only ever recorded singles, there is just the one table and no heading.
 
@@ -1732,6 +1732,22 @@ Set totals do not expand: a set's evidence is every lot of every member, which i
 
 A stamp — or a set — with no results at all shows a short note saying where the figures would come from, rather than an empty section.
 
+### Price observations
+
+An auction you did not take part in still tells you what a stamp fetched — an aggregator such as Philasearch publishes realised prices with the catalog number, the condition and the date. **Price observations** are where those go. Each is a fact about the market, not something you did: it is never a lot, a sale or a purchase, and it never appears on the watchlist, in exposure or in your purchase history.
+
+They are listed in the **Market value** section of a stamp's Valuation dialog, under the grid. **Record a price** opens a small form; each row's **⋮** menu has **Edit** and **Delete**. An observation holds:
+
+- **Condition, certificate and format** — what the listing says was sold. A condition left as *Not established*, or a certificate ticked *Not established*, makes it a hint (below).
+- **Price, currency and whether it is the hammer or all-in**, with the **buyer's premium** (percentage and lot fee) it was subject to. Picking an **auction house** that has terms of its own fills in its premium and currency; they are copied onto the observation, so a house changing its terms later re-prices nothing you recorded.
+- **The day it sold**, the **auction house** (none for a marketplace seller), the **platform**, the **auction**, the **lot** and its **address**.
+
+**What counts.** Market value stays on hammer prices, so an all-in price is reduced by its premium first; with no premium the two are the same. A price in another currency is converted at the **ECB reference rate of the day it sold** — the last one published on or before it — fetched when you record it and kept from then on. An observation counts only when it is an **exact** match: the stamp itself (not one with variants where none is named), an established condition and an established certificate. Exact observations count in the stamp's market value beside your own lots — in its median, its confidence and its sample — and in the realization ratio behind [Estimated value](#estimated-value) and the bid recommendations.
+
+**Hints.** An observation that is not exact, or whose rate for the day could not be read, is listed under **Hints — not counted in the market value**, saying why. It never enters a figure. A price recorded on a stamp that has variants is always a hint — record it on the variant when the listing says which. A missing rate is read again when you edit the observation.
+
+Each row shows the price **as observed** (hover it for the other of hammer and all-in, the premium and the rate of the day) and **as counted** — the hammer in your collection currency.
+
 ### The market total on the summary bar
 
 Wherever the [holdings summary bar](inventory.md) appears, a **Market value** line sits between catalog value and purchase cost. Each copy you still hold is valued at the median for its own condition, certificate and format, in the collection currency.
@@ -1740,7 +1756,7 @@ Its coverage is always stated: *"from 14 of 112 copies · 98 with no auction res
 
 ## Estimated value
 
-Most stamps have never come up at an auction you recorded, so [Market value](#market-value) has nothing to say about them. **Estimated value** answers the question anyway, and says out loud that it is answering it differently: it is the stamp's **catalog value times the realization ratio** the app has learned from the results you *have* recorded — the same arithmetic behind the [bid recommendation](auctions.md#what-a-lot-is-worth-bidding) on the auction lots screen, which is why the two screens now agree instead of appearing to contradict each other.
+Most stamps have never come up at an auction you recorded, so [Market value](#market-value) has nothing to say about them. **Estimated value** answers the question anyway, and says out loud that it is answering it differently: it is the stamp's **catalog value times the realization ratio** the app has learned from the results you *have* recorded — your own closed lots and your exact [price observations](#price-observations) alike — the same arithmetic behind the [bid recommendation](auctions.md#what-a-lot-is-worth-bidding) on the auction lots screen, which is why the two screens now agree instead of appearing to contradict each other.
 
 It is the second section of the [Valuation dialog](#the-valuation-dialog), directly under Market value. Read-only, worked out when you open the dialog, stored nowhere. Neither of the dialog's toggles touches it: a ratio is a plain fraction with no catalog edition attached.
 
@@ -1750,7 +1766,7 @@ Every figure is prefixed **≈** and set in muted italics — the mark this app 
 
 Beside each condition, the row states the **bucket** the ratio was learned from, the percentage and how many results stand behind it — *"Polska Ludowa, MNH, 1946–1950 · 41% · n = 6"*. That is deliberate and it is the point of the section: the ratio is learned per condition (see [the ladder](auctions.md#where-each-lines-figure-comes-from)), so two rows of the same grid can be extrapolated from two different samples, and a number without its bucket is unarguable.
 
-**Click a figure** and the lots the *bucket* was learned from open under the table, newest first, each a link to the lot: which stamp, at what condition, on what date, and what fraction of catalog it fetched. These are other stamps' lots — that is what a bucket is.
+**Click a figure** and the results the *bucket* was learned from open under the table, newest first: which stamp, at what condition, on what date, and what fraction of catalog it fetched — your lots each a link to the lot, your price observations each named by where they sold. These are other stamps' results — that is what a bucket is.
 
 When nothing has been learned yet, the row falls back to the **percentage of catalog value** set in the collection's bid settings, and says so in amber: *"No recorded results · policy, not evidence"*. That is the case where knowing which you are looking at matters most.
 

@@ -1133,6 +1133,12 @@ Recorded results are also what a stamp's own **market value** is worked out from
 or issue row's **⋮ → Show valuation**, or look at the **Market value** line on the holdings summary
 bar. See [Market value](collections.md#market-value).
 
+A realised price from an auction you did not take part in — one read on Philasearch, say — does not
+need a lot of its own: record it as a **price observation** in the stamp's Valuation dialog. An exact
+one counts in the market value and in the learned percentages above exactly as a result of yours
+does, and it never appears on the watchlist, in exposure or among your purchases. See
+[Price observations](collections.md#price-observations).
+
 ## What is not here yet
 
 - Winning **part** of a lot, when a multi-stamp lot is split.

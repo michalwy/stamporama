@@ -3,7 +3,12 @@ import { prisma } from "./db";
 import { buildDescendantMap, getCollectionBaseCurrency } from "./pricing";
 import { valuateItemRows, type ValuationRow } from "./item-valuation";
 import { readStampMarketValues } from "./market-values";
-import { loadRealizationRatios, primaryAreaIdOf, type RatioEvidenceLot } from "./realization-ratios";
+import {
+  loadRealizationRatios,
+  primaryAreaIdOf,
+  type RatioEvidenceLot,
+  type RatioEvidenceObservation,
+} from "./realization-ratios";
 import type { RatioBucketLevel } from "./realization-ratio";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 
@@ -91,6 +96,8 @@ export interface EstimatedValueRow {
   /** The lots the bucket was learned from, newest first — what the figure expands into. Empty on a
    * set, which does not expand, and at `fallback`, which has no evidence. */
   lots: RatioEvidenceLot[];
+  /** The price observations among that evidence (#1633), newest sale first. Empty where `lots` is. */
+  observations: RatioEvidenceObservation[];
 }
 
 export interface StampEstimatedValue {
@@ -271,6 +278,7 @@ async function estimateStamps(
           level: resolved.level,
           n: resolved.n,
           lots: ratios.describeLots(resolved),
+          observations: ratios.describeObservations(resolved),
         };
         rows.set(axes.conditionId, row);
       }
@@ -408,6 +416,7 @@ export async function getChecklistEstimatedValue(
         // A set does not expand — its evidence is every bucket of every member, which is a list
         // read one stamp at a time (the same reason Market value's set total does not expand).
         lots: [],
+        observations: [],
       };
     }),
     [...cells.values()]

@@ -20,6 +20,11 @@ import type {
   ChecklistMarketValue,
   ChecklistMarketCell,
 } from "@/lib/market-values";
+import {
+  StampPriceObservationList,
+  observationSource,
+  soldOnLabel,
+} from "./price-observation-sections";
 
 // **What the market paid** — the read-only section that leads the Valuation dialog (#457;
 // ADR-0022 §8).
@@ -123,6 +128,39 @@ function LotList({ value, collectionSlug }: { value: StampMarketValue; collectio
           .join(" · ")}{" "}
         — {value.n} result{value.n === 1 ? "" : "s"}, {span(value.earliestAt, value.latestAt)}
       </div>
+      {value.observations.map((o) => (
+        <div
+          key={o.observationId}
+          style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}
+        >
+          {/* Someone else's auction (#1633): there is no lot of ours to open, so the source is named
+              and, where an address was recorded, linked out. */}
+          {o.url ? (
+            <a
+              href={o.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
+            >
+              {observationSource(o)}
+            </a>
+          ) : (
+            <span style={{ fontSize: "0.8125rem" }}>{observationSource(o)}</span>
+          )}
+          <span style={mutedSmallStyle}>observed</span>
+          <span style={mutedSmallStyle}>{soldOnLabel(o.soldOn)}</span>
+          <span style={{ ...mutedSmallStyle, marginLeft: "auto", whiteSpace: "nowrap" }}>
+            {o.amount} {value.baseCurrency}
+            {(o.currency !== value.baseCurrency || o.priceBasis === "all_in") && (
+              <span style={{ opacity: 0.8 }}>
+                {" "}
+                (of {o.price} {o.currency}
+                {o.priceBasis === "all_in" ? " all-in" : ""})
+              </span>
+            )}
+          </span>
+        </div>
+      ))}
       {value.lots.map((lot) => (
         <div
           key={lot.lotId}
@@ -229,7 +267,7 @@ function MedianDetails({ value }: { value: StampMarketValue }) {
         )}
       </div>
 
-      <span style={{ color: "var(--color-text-muted)" }}>Click for the lots behind it.</span>
+      <span style={{ color: "var(--color-text-muted)" }}>Click for the results behind it.</span>
     </div>
   );
 }
@@ -291,11 +329,16 @@ function ChecklistTotalDetails({
  * "where did **this** figure come from".
  */
 export function StampMarketValueSection({
+  stampId,
   query,
   certificates,
+  onMenuOpenChange,
 }: {
+  stampId: string;
   query: UseQueryResult<StampMarketValue[]>;
   certificates: CertColumn[];
+  /** Raised by the observation rows' menus, so the dialog can hold off its own Escape (#361). */
+  onMenuOpenChange?: (open: boolean) => void;
 }) {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -305,7 +348,12 @@ export function StampMarketValueSection({
   const open = values.find((v) => keyOf(v) === openKey) ?? null;
 
   return (
-    <MarketSection query={query} empty={values.length === 0} emptySubject="this stamp">
+    <MarketSection
+      query={query}
+      empty={values.length === 0}
+      emptySubject="this stamp"
+      footer={<StampPriceObservationList stampId={stampId} onMenuOpenChange={onMenuOpenChange} />}
+    >
       <FormatTables
         values={values.map((value) => ({ ...value, ...axesOf(value) }))}
         certificates={certificates}
@@ -462,11 +510,15 @@ function MarketSection({
   query,
   empty,
   emptySubject,
+  footer,
   children,
 }: {
   query: { isLoading: boolean; isError: boolean };
   empty: boolean;
   emptySubject: string;
+  /** Drawn under the answer whatever it is — the stamp's price observations (#1633), which are the
+   * way to fill an empty section as well as the evidence of a full one. */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -477,11 +529,13 @@ function MarketSection({
       {!query.isLoading && !query.isError && empty && (
         <Muted>
           No auction results recorded for {emptySubject} yet. Market value is worked out from closed
-          lots on the Auctions screen — a lot added purely to watch what it fetched counts too.
+          lots on the Auctions screen — a lot added purely to watch what it fetched counts too — and
+          from realised prices recorded as price observations.
         </Muted>
       )}
 
       {!query.isLoading && !query.isError && !empty && children}
+      {footer}
     </CollapsibleSection>
   );
 }

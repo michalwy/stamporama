@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseEcbXml, convertViaEur } from "../../src/lib/ecb-rates";
+import { parseEcbXml, convertViaEur, parseEcbHistoricCsv } from "../../src/lib/ecb-rates";
 
 const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01"
@@ -82,3 +82,53 @@ function assertApprox(actual: number, expected: number, epsilon = 1e-10) {
     `Expected ${actual} to be approximately ${expected}`
   );
 }
+
+// The ECB data API's CSV for a window of days (#1633): a price observed on a given day is converted at
+// the rate of that day, which the collection's own one-snapshot table cannot answer for a past day.
+describe("parseEcbHistoricCsv", () => {
+  const HEADER =
+    "KEY,FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE,OBS_STATUS,TITLE_COMPL";
+  const row = (currency: string, day: string, value: string) =>
+    `EXR.D.${currency}.EUR.SP00.A,D,${currency},EUR,SP00,A,${day},${value},A,"ECB reference exchange rate, ${currency}/Euro, 2.15 pm (C.E.T.)"`;
+  const CSV = [
+    HEADER,
+    row("CHF", "2021-03-04", "1.1114"),
+    row("CHF", "2021-03-05", "1.1066"),
+    row("PLN", "2021-03-04", "4.5529"),
+    row("PLN", "2021-03-05", "4.5748"),
+    // After the day asked about — the window's end is the day, but a row past it must never win.
+    row("PLN", "2021-03-08", "4.6000"),
+  ].join("\n");
+
+  it("takes each currency at the latest day on or before the one asked about", () => {
+    // 2021-03-07 is a Sunday: the rate a bank would have used is Friday's.
+    const rates = parseEcbHistoricCsv(CSV, "2021-03-07");
+    assert.equal(rates.get("CHF"), 1.1066);
+    assert.equal(rates.get("PLN"), 4.5748);
+    assert.equal(rates.get("EUR"), 1);
+  });
+
+  it("ignores a row dated after the day, so a later rate never prices an earlier sale", () => {
+    const rates = parseEcbHistoricCsv(CSV, "2021-03-04");
+    assert.equal(rates.get("PLN"), 4.5529);
+  });
+
+  it("reads the columns by name, whatever order the API puts them in", () => {
+    const reordered = [
+      "OBS_VALUE,TIME_PERIOD,CURRENCY",
+      "4.5748,2021-03-05,PLN",
+    ].join("\n");
+    assert.equal(parseEcbHistoricCsv(reordered, "2021-03-05").get("PLN"), 4.5748);
+  });
+
+  it("pivots through EUR exactly as today's table does", () => {
+    const rates = parseEcbHistoricCsv(CSV, "2021-03-05");
+    // CHF → PLN = PLN per EUR ÷ CHF per EUR.
+    assert.ok(Math.abs(convertViaEur(rates, "CHF", "PLN") - 4.5748 / 1.1066) < 1e-12);
+  });
+
+  it("returns only EUR for an empty or unrecognised answer", () => {
+    assert.deepEqual([...parseEcbHistoricCsv("", "2021-03-05").keys()], ["EUR"]);
+    assert.deepEqual([...parseEcbHistoricCsv("A,B\n1,2", "2021-03-05").keys()], ["EUR"]);
+  });
+});

@@ -91,6 +91,9 @@ export function PriceDetailsDialog({
 }) {
   const [scope, setScope] = useState<Scope>("latest");
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>("catalog");
+  /** A price observation's row menu is open (#1633): the menu has its own Escape listener and is not
+   * an escape layer, so the window stops being dismissable until it closes (#361). */
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const stampQuery = useQuery<StampPriceDetails>({
     queryKey: ["stampPriceDetails", target.kind === "stamp" ? target.stampId : null],
@@ -147,6 +150,7 @@ export function PriceDetailsDialog({
       onClose={onClose}
       maxWidth="min(98vw, 92rem)"
       height="min(96vh, 66rem)"
+      dismissable={!menuOpen}
     >
       {/* Pinned toolbar — stays put while the sections below scroll. */}
       <div
@@ -188,6 +192,7 @@ export function PriceDetailsDialog({
             stampId={target.stampId}
             scope={scope}
             currencyMode={currencyMode}
+            onMenuOpenChange={setMenuOpen}
           />
         )}
 
@@ -212,11 +217,13 @@ function StampSections({
   stampId,
   scope,
   currencyMode,
+  onMenuOpenChange,
 }: {
   data: StampPriceDetails;
   stampId: string;
   scope: Scope;
   currencyMode: CurrencyMode;
+  onMenuOpenChange: (open: boolean) => void;
 }) {
   const market = useStampMarketValue(stampId);
   const estimate = useStampEstimatedValue(stampId);
@@ -242,7 +249,12 @@ function StampSections({
   if (data.averageCells.length === 0 && editions.length === 0) {
     return (
       <>
-        <StampMarketValueSection query={market} certificates={certColumns} />
+        <StampMarketValueSection
+          stampId={stampId}
+          query={market}
+          certificates={certColumns}
+          onMenuOpenChange={onMenuOpenChange}
+        />
         <StampEstimatedValueSection query={estimate} certificates={certColumns} />
         <StampPurchaseCostSection query={purchases} certificates={certColumns} />
         <Empty>No catalog prices recorded.</Empty>
@@ -252,7 +264,12 @@ function StampSections({
 
   return (
     <>
-      <StampMarketValueSection query={market} certificates={certColumns} />
+      <StampMarketValueSection
+        stampId={stampId}
+        query={market}
+        certificates={certColumns}
+        onMenuOpenChange={onMenuOpenChange}
+      />
       {/* Directly under Market value: it answers the question that section leaves open for a key
           with no results, and it must never be read as part of the answer above it (#602). */}
       <StampEstimatedValueSection query={estimate} certificates={certColumns} />

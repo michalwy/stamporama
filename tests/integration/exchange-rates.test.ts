@@ -2,7 +2,7 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../../src/lib/db";
 import { createCollection } from "../../src/lib/collections";
-import { getOrFetchRate } from "../../src/lib/exchange-rates";
+import { fetchEcbRateOn, getOrFetchRate } from "../../src/lib/exchange-rates";
 
 async function createTestUser(suffix: string) {
   return prisma.user.create({
@@ -127,5 +127,27 @@ describe("getOrFetchRate", () => {
     assert.ok(result.rate > 0);
     assert.ok(result.rate < 1);
     assert.equal(result.isStale, false);
+  });
+});
+
+// A past day's rate (#1633), for a price observed at a sale long before today's snapshot. Like the
+// rest of this file it reads the ECB itself; the figures are the ECB's published reference rates.
+describe("fetchEcbRateOn", () => {
+  it("reads the rate of the day, pivoted through EUR", async () => {
+    // Friday 2021-03-05: PLN 4.5748 and CHF 1.1066 per EUR.
+    const plnToEur = await fetchEcbRateOn(new Date("2021-03-05T00:00:00Z"), "PLN", "EUR");
+    assert.ok(Math.abs(plnToEur - 1 / 4.5748) < 1e-12, `PLN → EUR was ${plnToEur}`);
+    const chfToPln = await fetchEcbRateOn(new Date("2021-03-05T00:00:00Z"), "CHF", "PLN");
+    assert.ok(Math.abs(chfToPln - 4.5748 / 1.1066) < 1e-12, `CHF → PLN was ${chfToPln}`);
+  });
+
+  it("takes the last published rate for a day the ECB did not quote", async () => {
+    // Sunday 2021-03-07 is Friday's rate.
+    const sunday = await fetchEcbRateOn(new Date("2021-03-07T00:00:00Z"), "PLN", "EUR");
+    assert.ok(Math.abs(sunday - 1 / 4.5748) < 1e-12, `PLN → EUR on a Sunday was ${sunday}`);
+  });
+
+  it("needs no request for a currency into itself", async () => {
+    assert.equal(await fetchEcbRateOn(new Date("2021-03-05T00:00:00Z"), "EUR", "EUR"), 1);
   });
 });

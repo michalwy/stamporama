@@ -175,6 +175,7 @@ model Collection {
   shippingMethods ShippingMethod[]
   carriers        Carrier[]
   auctionSales    AuctionSale[]
+  priceObservations PriceObservation[]
   trades          Trade[]
   colnectCatalogMappings ColnectCatalogMapping[]
   colnectConditionMappings ColnectConditionMapping[]
@@ -219,6 +220,7 @@ model StampCondition {
   translations  StampConditionTranslation[]
   formatFactors StampFormatFactor[]
   auctionLotLines AuctionLotLine[]
+  priceObservations PriceObservation[]
   /** Lot lines that may be in this condition, their condition not yet settled (#1623). */
   auctionLotLinePossibilities AuctionLotLineCondition[]
   colnectMapping ColnectConditionMapping?
@@ -272,6 +274,7 @@ model StampFormat {
   factors       StampFormatFactor[]
   translations  StampFormatTranslation[]
   auctionLotLines AuctionLotLine[]
+  priceObservations PriceObservation[]
   wantAcceptance WantFormat[]
   profileAcceptance AcceptanceProfileFormat[]
   tradeLines    TradeLine[]
@@ -380,6 +383,7 @@ model CertificateStatus {
   catalogPrices StampCatalogPrice[]
   items         Item[]
   auctionLotLines AuctionLotLine[]
+  priceObservations PriceObservation[]
   translations  CertificateStatusTranslation[]
   wantAcceptance WantCertificateStatus[]
   profileAcceptance AcceptanceProfileCertificateStatus[]
@@ -3268,6 +3272,7 @@ model Stamp {
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
   auctionLotLines    AuctionLotLine[]
+  priceObservations  PriceObservation[]
   photos             Photo[]
   translations       StampTranslation[]
   tileCandidates     ScanTileCandidate[]
@@ -4507,6 +4512,71 @@ model AuctionLotLineCondition {
   @@id([auctionLotLineId, conditionId])
   @@index([conditionId])
   @@map("auction_lot_line_condition")
+}
+
+// A realised price from **someone else's** auction (#1633; ADR-0063, amending ADR-0022) — what a
+// Philasearch page or an Allegro listing says a stamp fetched. A market fact, not the collector's
+// transaction: never a lot, a sale or a purchase, so it never reaches the watchlist, exposure or
+// purchase history. An exact one counts in market value beside the collector's own closed lots; an
+// uncertain one is shown as a hint and never counts.
+//
+// **Uncertainty is mostly derived, never typed twice.** The variant is not established when the stamp
+// is an unknown-variant umbrella (#238), and the condition is not when `conditionId` is null — both
+// read live, so a stamp that grows variants later turns its observations into hints without anything
+// being rewritten. The certificate is the one axis whose doubt cannot be read off a column: null
+// already means *none* (ADR-0006 §2), so `certificateUncertain` says the listing did not establish it.
+//
+// **The price is stored as observed** — `hammer` or `all_in` in its own currency, with the buyer's
+// premium it was subject to — and reduced to the hammer when it is counted, because market value stays
+// on hammer prices (ADR-0022 §2). The premium is copied from the house when one is named and is the
+// observation's from then on: a house changing its terms later does not re-price old results.
+model PriceObservation {
+  id                  String   @id @default(cuid())
+  collectionId        String
+  stampId             String
+  conditionId         String?
+  certificateStatusId String?
+  certificateUncertain Boolean @default(false)
+  formatId            String?
+  price               Decimal  @db.Decimal(10, 2)
+  currency            String
+  // `hammer` | `all_in`.
+  priceBasis          String
+  premiumPercent      Decimal? @db.Decimal(5, 2)
+  premiumFixed        Decimal? @db.Decimal(10, 2)
+  // The day of the sale — what the datapoint is dated with, and the day its rate is read for.
+  soldOn              DateTime @db.Date
+  // The ECB reference rate **of `soldOn`** into the base currency, frozen at the write. Null when the
+  // price is already in the base currency and when no rate could be had; only `currency` tells the two
+  // apart, exactly as on `AuctionLot.fxRateToBase`. An unconvertible observation does not count.
+  fxRateToBase        Decimal?
+  // Where it was sold: the platform always, the house when there is one (an Allegro seller is not a
+  // house). Both are contacts, so the premium is proposed from the house and #1634's market from either.
+  platformId          String
+  auctionHouseId      String?
+  auctionName         String?
+  lotNo               String?
+  url                 String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  collection        Collection         @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  // Cascade: an observation is a fact about one catalogue position and about nothing else.
+  stamp             Stamp              @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  condition         StampCondition?    @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
+  format            StampFormat?       @relation(fields: [formatId], references: [id], onDelete: Restrict)
+  platform          Contact            @relation("PriceObservationPlatform", fields: [platformId], references: [id], onDelete: Restrict)
+  auctionHouse      Contact?           @relation("PriceObservationHouse", fields: [auctionHouseId], references: [id], onDelete: Restrict)
+
+  @@index([collectionId])
+  @@index([stampId])
+  @@index([conditionId])
+  @@index([certificateStatusId])
+  @@index([formatId])
+  @@index([platformId])
+  @@index([auctionHouseId])
+  @@map("price_observation")
 }
 
 // A listing on one platform (ADR-0013, supersedes ADR-0012 §1–§2). The offer **owns its
@@ -6272,6 +6342,9 @@ model Contact {
   // platform (ADR-0021). Both FKs are `onDelete: Restrict`, like purchases and sales.
   auctionSalesSeller   AuctionSale[] @relation("AuctionSaleSeller")
   auctionSalesPlatform AuctionSale[] @relation("AuctionSalePlatform")
+  // Realised prices recorded from this contact as the platform, or as the auction house (#1633).
+  priceObservationsPlatform PriceObservation[] @relation("PriceObservationPlatform")
+  priceObservationsHouse    PriceObservation[] @relation("PriceObservationHouse")
   // Exchanges with this contact as the partner (#646; ADR-0039). `onDelete: Restrict` from
   // `Trade.partnerId`, the same detach-before-delete guard purchases and sales carry — a trade is a
   // record of something that happened *with a person*, and a nameless one records half of it.

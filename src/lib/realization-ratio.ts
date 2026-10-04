@@ -2,7 +2,8 @@
 // ADR-0029 §2). No Prisma import — kept apart from the domain layer so it is unit-testable, exactly
 // as `market-value.ts` and `bid-recommendation.ts` beside it.
 //
-// ADR-0022 turns closed lots into datapoints; every one of those carries both halves of a ratio:
+// ADR-0022 turns closed lots into datapoints, and ADR-0063 adds the exact price observations from
+// other people's auctions (#1633); every one of those carries both halves of a ratio:
 //
 //     ratio(datapoint) = perUnitMarketValue ÷ catalogueValue(key)      both in base currency
 //
@@ -41,6 +42,8 @@
 // evidence is, not preferences, and a collector asked to tune them would have no way to tell a
 // better value from a worse one.
 
+import type { MarketDatapointSource } from "./market-value";
+
 /** Ratios a bucket must hold before it is preferred to the broader one beneath it.
  *
  * ADR-0022 §4 refused a minimum sample for a market value and this imposes one, which is not a
@@ -56,11 +59,10 @@ export const RATIO_PERIOD_RADIUS = 2;
 
 /** One recorded ratio, as the caller reads it off a market datapoint. */
 export interface RatioObservation {
-  /** The lot the datapoint came from — what split-derived ratios are deduplicated by. */
-  lotId: string;
-  /** The composition line it was read off, so a caller expanding a bucket can name the stamp the
-   * ratio was learned from (#602). Opaque here: the pure ladder never looks at it. */
-  lineId: string;
+  /** Where the datapoint came from: a lot's line — the lot being what split-derived ratios are
+   * deduplicated by, the line what a caller expanding a bucket names the stamp from (#602) — or a
+   * price observation from someone else's auction (#1633), which is never split. */
+  source: MarketDatapointSource;
   /** The figure was carved out of a mixed lot's pro-rata split rather than taken whole
    * (ADR-0022 §3), which is exactly when the dedup applies. */
   split: boolean;
@@ -129,9 +131,9 @@ function ratiosOf(observations: RatioObservation[]): RatioObservation[] {
   const out: RatioObservation[] = [];
   const seenLots = new Set<string>();
   for (const observation of observations) {
-    if (observation.split) {
-      if (seenLots.has(observation.lotId)) continue;
-      seenLots.add(observation.lotId);
+    if (observation.split && observation.source.kind === "lot") {
+      if (seenLots.has(observation.source.lotId)) continue;
+      seenLots.add(observation.source.lotId);
     }
     out.push(observation);
   }
