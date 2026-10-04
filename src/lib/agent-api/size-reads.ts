@@ -22,6 +22,7 @@ import {
   type StampSizePresetApplyCounts,
 } from "../stamp-size-preset-rules";
 import type { AgentCatalogResolution } from "./catalog-resolve";
+import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
 
 // ── Figures ────────────────────────────────────────────────────────────────
 
@@ -89,12 +90,15 @@ export function presetVocabularyEntry(row: SizePresetRow): { id: string; name: s
 export interface SizeChecklist {
   readonly checklistId: string;
   readonly name: string;
+  readonly kind: string;
   readonly entries: readonly StampSizeEntry[];
 }
 
 export interface AgentInheritedSize {
   readonly checklistId: string;
   readonly checklist: string;
+  /** The lending checklist's type, `standard` or `specialised` (#1617). */
+  readonly checklistType: ChecklistKind;
   readonly widthMm: number;
   readonly heightMm: number;
   /** The stamp on that checklist the figure is borrowed from. */
@@ -151,6 +155,7 @@ export function stampSizeReading(
         compact({
           checklistId: checklist.checklistId,
           checklist: checklist.name,
+          checklistType: asChecklistKind(checklist.kind),
           widthMm: resolved.widthMm,
           heightMm: resolved.heightMm,
           fromStampId: resolved.fromStampId,

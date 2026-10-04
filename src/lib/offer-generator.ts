@@ -94,7 +94,8 @@ const POOL_SELECT = {
 async function readGeneratorState(
   ownerId: string,
   collectionId: string,
-  input: GeneratorInput
+  input: GeneratorInput,
+  includeSpecialised: boolean
 ): Promise<GeneratorState> {
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await prisma.contact.findFirst({
@@ -161,7 +162,11 @@ async function readGeneratorState(
   }));
 
   const [checklists, members] = await Promise.all([
-    orderedChecklists(collectionId, copies.filter((copy) => !copy.multiStamp)),
+    orderedChecklists(
+      collectionId,
+      copies.filter((copy) => !copy.multiStamp),
+      includeSpecialised
+    ),
     loadCollisionMembers(collectionId, collisionStampIds(copies), { platformId: input.platformId }),
   ]);
   const offers = await readOffers(collectionId, [...new Set(members.map((member) => member.offerId))]);
@@ -184,9 +189,10 @@ async function readGeneratorState(
  */
 async function orderedChecklists(
   collectionId: string,
-  copies: readonly GeneratorCopy[]
+  copies: readonly GeneratorCopy[],
+  includeSpecialised: boolean
 ): Promise<LotChecklist[]> {
-  const checklists = await loadPoolChecklists(collectionId, copies);
+  const checklists = await loadPoolChecklists(collectionId, copies, includeSpecialised);
   if (checklists.length === 0) return [];
   const rows = await prisma.checklist.findMany({
     where: { id: { in: checklists.map((c) => c.checklistId) }, collectionId },
@@ -352,9 +358,11 @@ export interface OfferGeneratorPreview {
 export async function previewOfferGeneration(
   ownerId: string,
   collectionId: string,
-  input: GeneratorInput
+  input: GeneratorInput,
+  /** Whether specialised checklists are sets an offer may be built on (#1617). */
+  includeSpecialised = false
 ): Promise<OfferGeneratorPreview> {
-  const state = await readGeneratorState(ownerId, collectionId, input);
+  const state = await readGeneratorState(ownerId, collectionId, input, includeSpecialised);
   const [lines, creationBlock] = await Promise.all([
     nameLines(collectionId, state),
     quickOfferCreationBlock(ownerId, collectionId, input.platformId, input.state),
@@ -544,9 +552,10 @@ export async function commitOfferGeneration(
   ownerId: string,
   collectionId: string,
   input: GeneratorInput,
-  expected: PlanFingerprint
+  expected: PlanFingerprint,
+  includeSpecialised = false
 ): Promise<OfferGeneratorResult> {
-  const state = await readGeneratorState(ownerId, collectionId, input);
+  const state = await readGeneratorState(ownerId, collectionId, input, includeSpecialised);
   const drift = findPlanDrift(expected, fingerprintPlan(state.plan, state.offers));
   if (drift) throw new OfferActionBlockedError("not-eligible", await describeDrift(collectionId, drift));
   const { lines } = state.plan;

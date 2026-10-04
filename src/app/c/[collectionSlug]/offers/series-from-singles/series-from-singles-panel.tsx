@@ -44,6 +44,7 @@ import {
 import { OfferStateChip } from "../offer-badges";
 import { BAND, Callout, Empty, NOTE, SectionHeading, SkeletonBlock } from "../lot-builder/lot-builder-chrome";
 import { useInvalidateOffers, useSeriesFromSingles } from "../use-offers-query";
+import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 
 // The series-recombination screen (#1210). The platform comes first, as on the lot builder, because
 // availability is a per-platform question; it lives in the URL, so a refresh or a shared link lands on
@@ -287,6 +288,8 @@ export function SeriesFromSinglesPanel({
               }
             />
           ) : null}
+          {/* Whether a specialised checklist is a series to recombine into too (#1617). */}
+          <SpecialisedChecklistsToggle />
         </div>
       </div>
 

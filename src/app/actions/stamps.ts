@@ -386,6 +386,9 @@ export async function updateStampWithCatalogAction(
         .filter(Boolean)
     : undefined;
   const checklistIssueId = (formData.get("checklistIssueId") as string | null) || null;
+  // Whether the form's list carried the specialised checklists (#1617); without them a place on one
+  // is not the form's to remove.
+  const checklistsIncludeSpecialised = formData.get("checklistsIncludeSpecialised") === "true";
 
   // Colnect item-ID (#247): present only when the edit form rendered the field.
   // Absent → undefined → leave the stored value untouched.
@@ -441,6 +444,7 @@ export async function updateStampWithCatalogAction(
       colnectId,
       checklistIds,
       checklistIssueId,
+      checklistsIncludeSpecialised,
       subtypeId,
       actsAsVariantOverride,
       ...attributes,

@@ -19,6 +19,7 @@
 
 import { catalogLabels, compact, subtypeName } from "./collection-reads";
 import type { CatalogLabelRow } from "./collection-reads";
+import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
 
 // ── Acceptance sets ──────────────────────────────────────────────────────────
 
@@ -351,6 +352,8 @@ export interface AgentChecklistGapStamp {
 export interface AgentChecklistGap {
   readonly checklistId: string;
   readonly name: string;
+  /** `standard` or `specialised` (#1617). */
+  readonly type: ChecklistKind;
   /** Stamps on the checklist — the denominator of everything else here. */
   readonly required: number;
   /** Members the collection has a counted copy of, **through the variant tree**: a copy filed under
@@ -370,6 +373,7 @@ export interface AgentChecklistGaps {
 export interface ChecklistGapRow {
   readonly checklistId: string;
   readonly name: string;
+  readonly kind: string;
   readonly required: number;
   readonly missing: readonly {
     readonly stampId: string;
@@ -384,6 +388,7 @@ export function checklistGap(row: ChecklistGapRow): AgentChecklistGap {
   return {
     checklistId: row.checklistId,
     name: row.name,
+    type: asChecklistKind(row.kind),
     required: row.required,
     held: row.required - row.missing.length,
     missing: row.missing.map((stamp) =>

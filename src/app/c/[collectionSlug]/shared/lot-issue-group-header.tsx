@@ -13,6 +13,7 @@ import { IssueTitle, IssueCatalogChips, StampCountBadge } from "./issue-view";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { markedChecklistName } from "@/lib/checklist-kind";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -115,7 +116,7 @@ function SetCompletenessLine({
       <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
         {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
         {named && (
-          <span style={{ color: "var(--color-text-muted)" }}>{entry.name} </span>
+          <span style={{ color: "var(--color-text-muted)" }}>{markedChecklistName(entry)} </span>
         )}
         {entry.owned}/{entry.requiredCount}
         {!complete && entry.missingCount > 0 && (

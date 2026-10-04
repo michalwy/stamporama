@@ -6,6 +6,7 @@ import { getSpanningChecklistTotals } from "./issues";
 import type { IssuePriceTotal } from "./catalog-price";
 import { orderedChecklistStampIds } from "./checklists";
 import { translationsByLanguage } from "./translations";
+import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 
 // Checklists that span issues (#1416) — the Checklists screen's read. A module of its own because it
 // joins three that must not import one another: the checklist storage (`checklists.ts`), the
@@ -20,6 +21,8 @@ import { translationsByLanguage } from "./translations";
 export interface SpanningChecklistOverview {
   id: string;
   name: string;
+  /** Standard or specialised (#1617) — set on the row, and marked when specialised. */
+  kind: ChecklistKind;
   /** Per-language names (#1308), for the rename form's translations. */
   nameByLanguage: Record<string, string>;
   /** Its stamps, in the order the set reads (#764). */
@@ -35,19 +38,26 @@ export interface SpanningChecklistOverview {
   albums: { id: string; name: string }[];
 }
 
-/** Every checklist of the collection that spans issues, in their own order, with their figures. */
+/** Every checklist of the collection that spans issues, in their own order, with their figures —
+ *  the specialised ones only when `includeSpecialised` (#1617). */
 export async function getSpanningChecklistOverview(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  includeSpecialised: boolean
 ): Promise<SpanningChecklistOverview[]> {
   // Owner-checked by the completeness read, which runs first for exactly that reason.
-  const completeness = await getSpanningChecklistsCompleteness(ownerId, collectionId);
+  const completeness = await getSpanningChecklistsCompleteness(
+    ownerId,
+    collectionId,
+    includeSpecialised
+  );
   const rows = await prisma.checklist.findMany({
-    where: { collectionId, issueId: null },
+    where: { collectionId, issueId: null, ...shownChecklistWhere(includeSpecialised) },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
       name: true,
+      kind: true,
       translations: { select: { language: true, name: true } },
       stamps: { select: { stampId: true, sortOrder: true } },
       albumEntries: {
@@ -80,6 +90,7 @@ export async function getSpanningChecklistOverview(
     return {
       id: row.id,
       name: row.name,
+      kind: asChecklistKind(row.kind),
       nameByLanguage: translationsByLanguage(row.translations, (t) => t.name),
       stampIds,
       issueCount: new Set(stampIds.flatMap((id) => issuesOf.get(id) ?? [])).size,

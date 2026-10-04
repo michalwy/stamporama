@@ -274,8 +274,10 @@ for you: *a checklist of the watermark Y stamps of this issue*, *a checklist of 
 - **list your checklists**, each with the issue it belongs to — or, for one spanning issues, every
   issue its stamps come from — how many stamps it holds and which albums print it, and **read a
   checklist's stamps in their order**. A **read only** token can do this much;
-- **create a checklist** on an issue, or one spanning issues like the ones on the *Checklists* screen;
-- **rename one** and set or take off its name in your other languages;
+- **create a checklist** on an issue, or one spanning issues like the ones on the *Checklists* screen,
+  and give it its [type](collections.md#standard-and-specialised-checklists) — a checklist of one
+  stamp's colour variants is made *specialised*, an everyday set *standard*;
+- **rename one**, set or take off its name in your other languages, and change its type;
 - **add stamps** to it, at the end of its order. An issue's own checklist takes only that issue's
   stamps, as its editor on the issue offers only those; a stamp of another issue is refused, and
   belongs on a checklist spanning issues;
@@ -292,6 +294,12 @@ number it cannot place, is reported and the rest is still done. A checklist prin
 changes just as it would from the screen — the printed card reports the difference, and nothing is
 reprinted. It **cannot change the order of an issue's checklists** among themselves; that stays on
 the issue.
+
+The assistant sees checklists the way the app shows them by default: **only standard ones are listed
+and counted** — in its list of checklists, an issue's and a stamp's checklists, the gaps it finds,
+the sizes a stamp borrows and the names missing a translation — unless it asks to include the
+specialised ones, which it does when you ask about them. Every checklist it reads states its type,
+and one it names directly is answered whatever its type.
 
 On **areas** — the countries, periods and territories your issues are filed under — it can set up a
 new collecting field from a catalogue's table of contents, and reorganise the tree. It can:

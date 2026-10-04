@@ -312,7 +312,7 @@ describe("an album in its own language (#1308, #1311)", () => {
     await renameChecklist(userId, handNamedChecklistId, "Imperforate", {
       de: { name: "Ungezähnt" },
     });
-    const [row] = await getChecklistsForIssue(userId, collectionId, issue1939);
+    const [row] = await getChecklistsForIssue(userId, collectionId, issue1939, false);
     assert.deepEqual(row.nameByLanguage, { pl: "Nieząbkowane", de: "Ungezähnt" });
 
     // A blank clears the language back to the default, and the flag returns.

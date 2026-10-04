@@ -9,6 +9,7 @@ import {
   type ChecklistCompletenessGrid,
 } from "./checklist-completeness-rules";
 import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-rollup";
+import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 
 // The I/O half of #519's completeness card, per checklist since #531: one `groupBy` over every
 // stamp on the issue's checklists, split back out into one pure grid each. Deliberately **not** on
@@ -25,6 +26,8 @@ import { loadChecklistVariantRollup, rollUpCounts } from "./checklist-variant-ro
 export interface ChecklistCompleteness extends ChecklistCompletenessGrid {
   checklistId: string;
   name: string;
+  /** Standard or specialised (#1617) — the card marks a specialised one. */
+  kind: ChecklistKind;
 }
 
 /** Every checklist of one issue, plus the dictionaries they are laid out against. */
@@ -44,10 +47,12 @@ export interface IssueCompleteness {
 export async function getIssueCompleteness(
   ownerId: string,
   collectionId: string,
-  issueId: string
+  issueId: string,
+  /** Whether the issue's specialised checklists are counted too (#1617). */
+  includeSpecialised: boolean
 ): Promise<IssueCompleteness> {
   await assertCollectionOwner(ownerId, collectionId);
-  return completenessOf(collectionId, { issueId });
+  return completenessOf(collectionId, { issueId }, includeSpecialised);
 }
 
 /**
@@ -57,10 +62,11 @@ export async function getIssueCompleteness(
  */
 export async function getSpanningChecklistsCompleteness(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  includeSpecialised: boolean
 ): Promise<IssueCompleteness> {
   await assertCollectionOwner(ownerId, collectionId);
-  return completenessOf(collectionId, { issueId: null });
+  return completenessOf(collectionId, { issueId: null }, includeSpecialised);
 }
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
@@ -75,13 +81,14 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
 
 async function completenessOf(
   collectionId: string,
-  scope: { issueId: string | null }
+  scope: { issueId: string | null },
+  includeSpecialised: boolean
 ): Promise<IssueCompleteness> {
   const [checklists, conditions, formats] = await Promise.all([
     prisma.checklist.findMany({
-      where: { collectionId, issueId: scope.issueId },
+      where: { collectionId, issueId: scope.issueId, ...shownChecklistWhere(includeSpecialised) },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true, stamps: { select: { stampId: true } } },
+      select: { id: true, name: true, kind: true, stamps: { select: { stampId: true } } },
     }),
     prisma.stampCondition.findMany({
       where: { collectionId },
@@ -141,6 +148,7 @@ async function completenessOf(
       return {
         checklistId: c.id,
         name: c.name,
+        kind: asChecklistKind(c.kind),
         ...computeChecklistCompleteness(
           [...members],
           rollUpCounts(counts, rollup, members),

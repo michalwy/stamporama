@@ -8,6 +8,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getAlbums } from "@/lib/albums";
 import { getSpanningChecklistOverview } from "@/lib/spanning-checklists";
 import { ChecklistsPanel } from "./checklists-panel";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 export const metadata = { title: "Checklists" };
 
@@ -34,7 +35,11 @@ export default async function ChecklistsPage({ params }: ChecklistsPageProps) {
   if (!collection) notFound();
 
   const [checklists, areas, albums] = await Promise.all([
-    getSpanningChecklistOverview(session.user.id, collection.id),
+    getSpanningChecklistOverview(
+      session.user.id,
+      collection.id,
+      await readIncludeSpecialised(collection.id)
+    ),
     getCollectionAreas(session.user.id, collection.id),
     getAlbums(session.user.id, collection.id),
   ]);

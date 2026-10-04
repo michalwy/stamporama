@@ -20,6 +20,7 @@ import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useOfferGeneratorPreview } from "@/app/c/[collectionSlug]/offers/use-offers-query";
 import { useCollectionItemNoPad } from "./use-inventory-query";
 import { PhotoThumb } from "./photo-thumb";
+import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 
 // Generating offers in bulk (#1287): quick offer mode's platform and status (#537), applied to every
 // copy the collector can see in one pass instead of one click per offer. The dialog asks the two
@@ -221,6 +222,10 @@ export function OfferGeneratorDialog({
               : "the copies the list's filters show"}
             , as <strong>{OFFER_STATE_LABEL[state]}</strong> offers with no asking price and no listing URL — the
             same as quick offer mode.
+          </div>
+          {/* Which checklists count as sets an offer may be built on (#1617). */}
+          <div>
+            <SpecialisedChecklistsToggle />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>

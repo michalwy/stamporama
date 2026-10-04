@@ -62,6 +62,7 @@ import {
 import { commitOfferGeneration, type OfferGeneratorResult } from "@/lib/offer-generator";
 import { parseGeneratorRequest, parsePlanFingerprint } from "@/lib/offer-generator-rules";
 import { readItemFilters } from "@/app/api/collections/[collectionId]/items/item-filters";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import {
   parseLotBuilderRequest,
   toLotRecipe,
@@ -228,11 +229,12 @@ export async function commitLotBuilderAction(
     return { status: "error", message: "Choose a platform to build the lot for." };
   }
   try {
-    const result = await commitLotProposal(session.user.id, collectionId, {
-      ...parsed,
-      name,
-      description,
-    });
+    const result = await commitLotProposal(
+      session.user.id,
+      collectionId,
+      { ...parsed, name, description },
+      await readIncludeSpecialised(collectionId)
+    );
     return {
       status: "success",
       id: result.offerId,
@@ -316,7 +318,8 @@ export async function generateOffersAction(
       session.user.id,
       collectionId,
       { ...request, filters: readItemFilters(new URLSearchParams(request.filters)) },
-      expected
+      expected,
+      await readIncludeSpecialised(collectionId)
     );
     return { status: "success", ...result };
   } catch (e) {

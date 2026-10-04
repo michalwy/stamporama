@@ -87,6 +87,7 @@ import {
 } from "./intake-groups";
 import { parseItemNoSearch } from "./item-number";
 import { isDeliveryState, isDelivered, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
+import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 import {
   disposalNoteRequired,
   isDisposalReason,
@@ -2797,6 +2798,8 @@ export interface IssueGroupChecklistCompleteness {
   checklistId: string;
   /** Printed only where the issue carries more than one (ADR-0031, #563's rule). */
   name: string;
+  /** Standard or specialised (#1617) — a specialised one is counted only while switched on. */
+  kind: ChecklistKind;
   /** Stamps on the checklist — the denominator of every `owned` below. */
   requiredCount: number;
   /** Over every condition at once: *have I got the series at all*. */
@@ -2836,7 +2839,9 @@ export async function listIssueGroupCompleteness(
   ownerId: string,
   collectionId: string,
   issueIds: string[],
-  filters: ItemListFiltersPaginated = {}
+  filters: ItemListFiltersPaginated = {},
+  /** Whether specialised checklists are counted too (#1617). */
+  includeSpecialised = false
 ): Promise<IssueGroupCompleteness> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -2844,12 +2849,13 @@ export async function listIssueGroupCompleteness(
   if (ids.length === 0) return {};
 
   const checklists = await prisma.checklist.findMany({
-    where: { collectionId, issueId: { in: ids } },
+    where: { collectionId, issueId: { in: ids }, ...shownChecklistWhere(includeSpecialised) },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
       issueId: true,
       name: true,
+      kind: true,
       // The stamps a set is still missing are named in the order the set reads (#764).
       stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
     },
@@ -2914,6 +2920,7 @@ export async function listIssueGroupCompleteness(
     byIssue[checklist.issueId].push({
       checklistId: checklist.id,
       name: checklist.name,
+      kind: asChecklistKind(checklist.kind),
       requiredCount: result.requiredCount,
       owned: result.any.owned,
       completeSets: result.any.completeSets,

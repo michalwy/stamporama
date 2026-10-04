@@ -31,6 +31,13 @@ import { CLEAR_NAMES_PARAMETER, NAMES_PARAMETER, translationWrites } from "./cat
 import { collectionPath, loadCollectionHeader, type CollectionHeader } from "./reads-shared";
 import { loadStampLabels, resolveStampRefs, stampNoOf } from "./stamp-refs";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
+import {
+  CHECKLIST_TYPE_MEANING,
+  checklistTypeParam,
+  checklistTypeParameter,
+  includeSpecialisedParam,
+  INCLUDE_SPECIALISED_PARAMETER,
+} from "./checklist-type-params";
 
 // Checklists through the agent API (#1512): list and read them, create one on an issue or spanning
 // several (#1416), rename it and set its translations, add stamps, remove stamps, set their order
@@ -51,6 +58,11 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // refusing a batch over one stamp. Adding is not: a stamp the call cannot name, or one an issue's
 // checklist may not hold, refuses the whole call, because an add is a statement about what the set
 // contains.
+//
+// **Every checklist answered carries its `type`** (#1617): standard or specialised. `create_checklist`
+// and `update_checklist` set it; `list_checklists` lists the standard ones unless `include_specialised`
+// is sent, or narrows to one type with `type` — asking for `specialised` is itself the request for
+// them. A checklist named by id is read, changed and deleted whatever its type.
 
 const CHECKLIST_ID_PARAMETER: ParameterSpec = {
   name: "checklist_id",
@@ -96,6 +108,7 @@ async function describeChecklists(context: OperationContext, ids: readonly strin
       select: {
         id: true,
         name: true,
+        kind: true,
         issueId: true,
         issue: { select: { id: true, name: true, year: true } },
         translations: { select: { language: true, name: true } },
@@ -150,6 +163,7 @@ async function describeChecklists(context: OperationContext, ids: readonly strin
         {
           id: row.id,
           name: row.name,
+          kind: row.kind,
           nameByLanguage: translationsByLanguage(row.translations, (t) => t.name),
           issue: row.issue,
           coversIssues,
@@ -175,6 +189,8 @@ export async function listChecklistsFromParams(
   const issueId = optionalString(params, "issue_id");
   const spanning = optionalBoolean(params, "spanning");
   const name = optionalString(params, "name");
+  const type = checklistTypeParam(params);
+  const includeSpecialised = includeSpecialisedParam(params);
   if (issueId !== null && spanning === true) {
     throw invalidRequest('"issue_id" asks for one issue\'s own checklists and "spanning": true for those spanning issues. Send one or the other.');
   }
@@ -189,6 +205,8 @@ export async function listChecklistsFromParams(
       collectionId: context.collectionId,
       ...(issueId !== null ? { issueId } : spanning === true ? { issueId: null } : spanning === false ? { issueId: { not: null } } : {}),
       ...(name !== null ? { name: { contains: name, mode: "insensitive" as const } } : {}),
+      // A type asked for is that type; otherwise the specialised ones only when included (#1617).
+      ...(type !== null ? { kind: type } : includeSpecialised ? {} : { kind: "standard" }),
     },
     select: { id: true, sortOrder: true, createdAt: true, issue: { select: { id: true, year: true, issueNo: true } } },
   });
@@ -202,7 +220,7 @@ export const listChecklistsOperation: Operation = {
   method: "GET",
   path: "/checklists",
   description:
-    "The collection's checklists — each a named set of stamps that counts as one complete unit — with the issue each belongs to, or, for one spanning issues, every issue its stamps come from. The ones spanning issues come first, then each issue's own in the order the Issues list reads. A row is the whole checklist but its stamps; `list_checklist_stamps` reads those in order, and `find_checklist_gaps` what is missing.",
+    "The collection's checklists — each a named set of stamps that counts as one complete unit — with the issue each belongs to, or, for one spanning issues, every issue its stamps come from. The ones spanning issues come first, then each issue's own in the order the Issues list reads. Only standard checklists are listed unless `include_specialised` is sent or `type` asks for specialised ones. A row is the whole checklist but its stamps; `list_checklist_stamps` reads those in order, and `find_checklist_gaps` what is missing.",
   writes: false,
   parameters: [
     {
@@ -220,11 +238,16 @@ export const listChecklistsOperation: Operation = {
       description: "true for only the checklists spanning issues, false for only those belonging to one issue.",
     },
     { name: "name", in: "query", type: "string", required: false, description: "Only checklists whose name contains this text, ignoring case." },
+    checklistTypeParameter(
+      "query",
+      `Only checklists of this type: ${CHECKLIST_TYPE_MEANING}. Asking for \`specialised\` lists them without \`include_specialised\`.`
+    ),
+    INCLUDE_SPECIALISED_PARAMETER,
   ],
   result: {
     kind: "list",
     description:
-      "Checklists: `checklistId`, `name`, `translatedNames` by language, `spansIssues`, its own `issue` or the `coversIssues` a spanning one reaches, `stampCount`, and the `albums` printing it — a checklist an album prints cannot be deleted here.",
+      "Checklists: `checklistId`, `name`, `type` (`standard` or `specialised`), `translatedNames` by language, `spansIssues`, its own `issue` or the `coversIssues` a spanning one reaches, `stampCount`, and the `albums` printing it — a checklist an album prints cannot be deleted here.",
   },
   handler: async (context, params) => listChecklistsFromParams(context, params),
 };
@@ -315,6 +338,7 @@ export async function createChecklistFromParams(
     issueId,
     name: requiredString(params, "name"),
     translations,
+    kind: checklistTypeParam(params) ?? undefined,
   });
   return withNamesakes(context, checklistId);
 }
@@ -327,7 +351,7 @@ export const createChecklistOperation: Operation = {
   method: "POST",
   path: "/checklists",
   description:
-    "Create an empty checklist — a named set of stamps counted as one complete unit — on one issue, or, without `issue_id`, one spanning issues (a thematic set, all Grosik 1928–1932). An issue's own checklist can hold only that issue's stamps; a spanning one any stamp. Then put stamps on it with `add_checklist_stamps`.",
+    "Create an empty checklist — a named set of stamps counted as one complete unit — on one issue, or, without `issue_id`, one spanning issues (a thematic set, all Grosik 1928–1932). An issue's own checklist can hold only that issue's stamps; a spanning one any stamp. Give it the right `type`: a checklist of one stamp's variants — every colour, every perforation of it — is `specialised`; a set collected in everyday work is `standard`, the default. Then put stamps on it with `add_checklist_stamps`.",
   writes: true,
   parameters: [
     { name: "name", in: "body", type: "string", required: true, description: "The checklist's name in the collection's own language — `Basic set`, `Imperforate`." },
@@ -339,6 +363,7 @@ export const createChecklistOperation: Operation = {
       required: false,
       description: "The issue it belongs to, by id from `search_collection` or `get_stamp`. Leave it out for a checklist spanning issues.",
     },
+    checklistTypeParameter("body", `Its type, \`standard\` when left out: ${CHECKLIST_TYPE_MEANING}.`),
   ],
   result: { kind: "object", description: `The checklist as \`list_checklists\` states it. ${SAME_NAME_RESULT}` },
   handler: async (context, params) => createChecklistFromParams(context, params),
@@ -350,12 +375,19 @@ export async function updateChecklistFromParams(
 ): Promise<WithNamesakes> {
   const checklist = await loadChecklist(context, requiredString(params, "checklist_id"));
   const name = optionalString(params, "name");
+  const type = checklistTypeParam(params);
   const translations = await translationWrites(context, params);
-  if (name === null && !translations) {
-    throw invalidRequest('Nothing to change: send "name", "names" or "clear_names".');
+  if (name === null && !translations && type === null) {
+    throw invalidRequest('Nothing to change: send "name", "names", "clear_names" or "type".');
   }
   // `renameChecklist` writes the name whatever it is handed, so an unchanged one is restated.
-  await renameChecklist(context.ownerId, checklist.id, name ?? checklist.name, translations);
+  await renameChecklist(
+    context.ownerId,
+    checklist.id,
+    name ?? checklist.name,
+    translations,
+    type ?? undefined
+  );
   return withNamesakes(context, checklist.id);
 }
 
@@ -364,13 +396,14 @@ export const updateChecklistOperation: Operation = {
   method: "PATCH",
   path: "/checklists/{checklist_id}",
   description:
-    "Rename a checklist or set its names in other languages — only what is sent changes. A checklist still called what its issue is called prints the issue's translations until it has its own; renaming it ends that. Its stamps are changed with `add_checklist_stamps`, `remove_checklist_stamps` and `set_checklist_order`.",
+    "Rename a checklist, set its names in other languages or change its `type` — only what is sent changes. A checklist made `specialised` drops out of every list, choice and count that does not include specialised ones, the app's included; nothing built on it — an album entry, a want — changes. A checklist still called what its issue is called prints the issue's translations until it has its own; renaming it ends that. Its stamps are changed with `add_checklist_stamps`, `remove_checklist_stamps` and `set_checklist_order`.",
   writes: true,
   parameters: [
     CHECKLIST_ID_PARAMETER,
     { name: "name", in: "body", type: "string", required: false, description: "The new name in the collection's own language." },
     NAMES_PARAMETER,
     CLEAR_NAMES_PARAMETER,
+    checklistTypeParameter("body", `Its new type: ${CHECKLIST_TYPE_MEANING}.`),
   ],
   result: { kind: "object", description: `The checklist as \`list_checklists\` now states it. ${SAME_NAME_RESULT}` },
   handler: async (context, params) => updateChecklistFromParams(context, params),

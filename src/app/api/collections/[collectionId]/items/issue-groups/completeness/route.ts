@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listIssueGroupCompleteness } from "@/lib/items";
 import { readItemFilters } from "../../item-filters";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 /**
  * Per-checklist, per-condition completeness for the issue groups on screen (#594).
@@ -30,7 +31,8 @@ export async function GET(
       session.user.id,
       collectionId,
       issueIds,
-      readItemFilters(sp)
+      readItemFilters(sp),
+      await readIncludeSpecialised(collectionId)
     );
     return NextResponse.json(byIssue);
   } catch {

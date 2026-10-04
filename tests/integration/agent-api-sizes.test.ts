@@ -237,7 +237,7 @@ describe("the size operations (#1415)", () => {
       assert.equal(inherited.source, "inherited");
       assert.equal(inherited.widthMm, undefined);
       assert.deepEqual(inherited.inherited, [
-        { checklistId, checklist: "Basic", widthMm: 21, heightMm: 25, fromStampId: s302, fromCatalogNumber: "Mi 302" },
+        { checklistId, checklist: "Basic", checklistType: "standard", widthMm: 21, heightMm: 25, fromStampId: s302, fromCatalogNumber: "Mi 302" },
       ]);
 
       // Half a size is not a size: `304` borrows its neighbour's and keeps its own width beside it.

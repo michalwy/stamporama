@@ -33,6 +33,7 @@ import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
 import { TagChips } from "./tag-chip";
 import { FilterChip } from "./filter-chip";
 import { filterStampTreeBy, filterStampTreeByChecklists } from "@/lib/stamp-tree-filter";
+import { markedChecklistName } from "@/lib/checklist-kind";
 
 // The rules that decide what survives a narrowing — the checklist filter (#531) and the list
 // filter's stamp matches (#631) — are pure and live in `src/lib/stamp-tree-filter.ts`; re-exported
@@ -112,7 +113,7 @@ export function ChecklistTreeFilter({
   onChange,
   colors,
 }: {
-  checklists: { id: string; name: string }[];
+  checklists: { id: string; name: string; kind?: string }[];
   selected: string[];
   onChange: (ids: string[]) => void;
   colors?: ReadonlyMap<string, TagColorTokens>;
@@ -130,7 +131,7 @@ export function ChecklistTreeFilter({
       {checklists.map((c) => (
         <FilterChip
           key={c.id}
-          label={c.name}
+          label={markedChecklistName(c)}
           active={selected.includes(c.id)}
           toggle
           tint={colors?.get(c.id)}
@@ -281,7 +282,7 @@ export function ChecklistsBadge({
           <div style={{ fontWeight: 600, marginBottom: "0.15rem" }}>Checklists</div>
           {checklists.map((c) => (
             <div key={c.id} style={{ color: "var(--color-text-secondary)" }}>
-              {c.name} — {c.stampCount} stamp{c.stampCount !== 1 ? "s" : ""}
+              {markedChecklistName(c)} — {c.stampCount} stamp{c.stampCount !== 1 ? "s" : ""}
               {c.priceTotal ? ` · ${moneyPrimaryText(c.priceTotal)}` : ""}
             </div>
           ))}

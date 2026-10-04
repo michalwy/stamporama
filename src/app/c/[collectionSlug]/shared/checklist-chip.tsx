@@ -2,6 +2,8 @@
 
 import type { TagColorTokens } from "@/lib/tag-colors";
 import { Tooltip } from "./tooltip";
+import { SpecialisedMark } from "./specialised-checklists";
+import { markedChecklistName } from "@/lib/checklist-kind";
 
 // The checklists a stamp is on, named on its row of the Issues list's expanded tree (#1519).
 //
@@ -33,12 +35,17 @@ const CHIP: React.CSSProperties = {
 export interface ChecklistChipData {
   id: string;
   name: string;
+  /** Standard or specialised (#1617); a specialised one wears the mark beside its chip. */
+  kind?: string;
   tokens: TagColorTokens;
 }
 
 export function ChecklistChip({ checklist }: { checklist: ChecklistChipData }) {
   return (
-    <Tooltip content={`Checklist: ${checklist.name}`} style={{ flexShrink: 0, minWidth: 0 }}>
+    <Tooltip
+      content={`Checklist: ${markedChecklistName(checklist)}`}
+      style={{ flexShrink: 0, minWidth: 0, display: "inline-flex", alignItems: "center", gap: "0.2rem" }}
+    >
       <span
         style={{
           ...CHIP,
@@ -49,6 +56,7 @@ export function ChecklistChip({ checklist }: { checklist: ChecklistChipData }) {
       >
         {checklist.name}
       </span>
+      {checklist.kind && <SpecialisedMark kind={checklist.kind} />}
     </Tooltip>
   );
 }

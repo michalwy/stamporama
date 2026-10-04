@@ -18,6 +18,10 @@ import { useToast } from "@/app/toast-provider";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { useInvalidateWants } from "./use-wants-query";
 import {
+  SpecialisedChecklistsToggle,
+  SpecialisedMark,
+} from "@/app/c/[collectionSlug]/shared/specialised-checklists";
+import {
   isWantDepth,
   WANT_DEPTHS,
   WANT_DEPTH_LABEL,
@@ -269,6 +273,12 @@ export function AddIssueWantsDialog({
       dismissable={!menuOpen}
     >
       <DialogBody>
+        {/* Which of an issue's checklists are offered (#1617) — not for a run named on one. */}
+        {issueId !== null && !checklistId && (
+          <div style={{ marginBottom: "0.75rem" }}>
+            <SpecialisedChecklistsToggle />
+          </div>
+        )}
         {isLoading ? (
           <p style={MESSAGE_STYLE}>Checking what {subject} is missing…</p>
         ) : isError || !gaps ? (
@@ -317,7 +327,10 @@ export function AddIssueWantsDialog({
                       onChange={() => toggle(g.checklistId)}
                       disabled={isPending}
                     />
-                    <span style={{ flex: 1, minWidth: 0 }}>{g.name}</span>
+                    <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      {g.name}
+                      <SpecialisedMark kind={g.kind} />
+                    </span>
                     <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
                       {g.toCreateStampIds.length > 0
                         ? `${g.toCreateStampIds.length} to add`

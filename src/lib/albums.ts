@@ -31,6 +31,7 @@ import {
 } from "./album-corrections";
 import type { AlbumBlockBreak, AlbumTextRole } from "./album-layout";
 import { albumPrintModeOffered, asAlbumPrintMode, type AlbumPrintMode } from "./album-print-mode";
+import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 import {
   asAlbumFreeElementKind,
   asAlbumFreeTextAlign,
@@ -252,7 +253,9 @@ export async function createAlbum(
   ownerId: string,
   collectionId: string,
   input: AlbumInput,
-  templateId: string | null
+  templateId: string | null,
+  /** Whether the first gathering takes specialised checklists too (#1617). */
+  includeSpecialised = false
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -297,7 +300,7 @@ export async function createAlbum(
     rethrowNameClash(err, input.name);
   }
 
-  await gatherAlbumEntries(ownerId, albumId);
+  await gatherAlbumEntries(ownerId, albumId, includeSpecialised);
   return albumId;
 }
 
@@ -454,6 +457,9 @@ export interface AlbumEntryData {
   id: string;
   checklistId: string;
   checklistName: string;
+  /** Standard or specialised (#1617). An entry on a specialised checklist is listed and printed
+   *  whatever the switch says — the album is built — and its row says what it is built on. */
+  checklistKind: ChecklistKind;
   /** The checklist's own translations, language → name (#1308). */
   checklistNameByLanguage: Record<string, string>;
   issueId: string | null;
@@ -516,6 +522,7 @@ const ENTRY_SELECT = {
   checklist: {
     select: {
       name: true,
+      kind: true,
       translations: { select: { language: true, name: true } },
       issueId: true,
       issue: {
@@ -561,6 +568,7 @@ function toEntryData(row: EntryRow): AlbumEntryData {
     id: row.id,
     checklistId: row.checklistId,
     checklistName: row.checklist.name,
+    checklistKind: asChecklistKind(row.checklist.kind),
     checklistNameByLanguage: translationsByLanguage(row.checklist.translations, (t) => t.name),
     issueId: row.checklist.issueId,
     issueName: row.checklist.issue?.name ?? null,
@@ -615,7 +623,14 @@ export async function getAlbumEntries(
  *
  * Returns how many entries were added, so a refresh can say so.
  */
-export async function gatherAlbumEntries(ownerId: string, albumId: string): Promise<number> {
+export async function gatherAlbumEntries(
+  ownerId: string,
+  albumId: string,
+  /** Whether specialised checklists are gathered too (#1617). Off, only the standard ones are: the
+   *  switch decides what is offered, and an album gathering every colour-variant checklist of its
+   *  area is the clutter it exists to keep out. */
+  includeSpecialised = false
+): Promise<number> {
   const album = await prisma.album.findUnique({
     where: { id: albumId },
     select: { collectionId: true, collectionAreaId: true },
@@ -628,6 +643,7 @@ export async function gatherAlbumEntries(ownerId: string, albumId: string): Prom
     where: {
       collectionId: album.collectionId,
       issue: { collectionAreaId: { in: areaIds } },
+      ...shownChecklistWhere(includeSpecialised),
     },
     select: {
       id: true,

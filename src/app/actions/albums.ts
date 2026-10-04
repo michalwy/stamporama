@@ -88,6 +88,7 @@ import {
 } from "@/lib/album-printing";
 import { albumPlanContext } from "@/lib/album-plan";
 import { asAlbumPrintMode } from "@/lib/album-print-mode";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 // Server actions for albums (#767), `actions/hawid-stock.ts`'s shape: `FormData` in, a state out,
 // every rule in the library beneath.
@@ -152,7 +153,8 @@ export async function createAlbumAction(
       session.user.id,
       collectionId,
       { name: input.name, collectionAreaId: input.collectionAreaId, language: input.language },
-      input.templateId
+      input.templateId,
+      await readIncludeSpecialised(collectionId)
     );
     return { status: "success" };
   } catch (err) {
@@ -382,10 +384,18 @@ export async function deleteAlbumAction(albumId: string): Promise<AlbumActionSta
 
 /** Pick up checklists that have appeared in the area since the album was made. Additive: nothing an
  *  entry says is removed, because an entry is a decision about a card. */
-export async function gatherAlbumEntriesAction(albumId: string): Promise<AlbumActionState> {
+export async function gatherAlbumEntriesAction(
+  albumId: string,
+  /** The album's collection, whose specialised-checklists switch decides what is gathered (#1617). */
+  collectionId: string
+): Promise<AlbumActionState> {
   const session = await getSession();
   try {
-    const added = await gatherAlbumEntries(session.user.id, albumId);
+    const added = await gatherAlbumEntries(
+      session.user.id,
+      albumId,
+      await readIncludeSpecialised(collectionId)
+    );
     return {
       status: "success",
       message:

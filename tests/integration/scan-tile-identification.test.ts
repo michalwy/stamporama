@@ -1591,7 +1591,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.deepEqual(run.stampIds, [i302, i301]);
     assert.deepEqual(run.issues.map((i) => i.id), [issueId]);
     // The checklist's own screen reads the same order, and the other checklist is not in the run.
-    const screen = await getChecklistsForIssue(userId, collectionId, issueId);
+    const screen = await getChecklistsForIssue(userId, collectionId, issueId, false);
     assert.deepEqual(
       screen.map((c) => [c.id, c.stampIds]),
       [
@@ -1631,7 +1631,7 @@ describe("identifying scan tiles into copies (#567)", () => {
     // Rows written before the column existed all hold 0; the stamp id behind it decides, twice alike.
     const untouchedId = await checklistOn(issueId, "Untouched", [...stampIds].reverse(), [0, 0, 0]);
     const run = await getRunChecklist(userId, collectionId, untouchedId);
-    const screen = (await getChecklistsForIssue(userId, collectionId, issueId)).find(
+    const screen = (await getChecklistsForIssue(userId, collectionId, issueId, false)).find(
       (c) => c.id === untouchedId
     );
     assert.ok(run && screen);
@@ -1655,7 +1655,7 @@ describe("identifying scan tiles into copies (#567)", () => {
       [first.issueId, second.issueId].sort()
     );
     // Offered on the rows of the issues it covers.
-    const listed = (await listSpanningChecklists(userId, collectionId)).find((c) => c.id === acrossId);
+    const listed = (await listSpanningChecklists(userId, collectionId, false)).find((c) => c.id === acrossId);
     assert.ok(listed);
     assert.deepEqual(listed.issueIds.sort(), [first.issueId, second.issueId].sort());
     assert.deepEqual(listed.stampIds, run.stampIds);

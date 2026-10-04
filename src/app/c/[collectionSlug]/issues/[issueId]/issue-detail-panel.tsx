@@ -59,6 +59,11 @@ import {
   SET_COMPLETENESS_CHIP_COMPLETE,
 } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { ChecklistsDialog } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
+import {
+  SpecialisedChecklistsToggle,
+  SpecialisedMark,
+} from "@/app/c/[collectionSlug]/shared/specialised-checklists";
+import { markedChecklistName } from "@/lib/checklist-kind";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { RelatedCopiesCard } from "@/app/c/[collectionSlug]/inventory/related-copies-card";
 import { RelatedOffersCard } from "@/app/c/[collectionSlug]/offers/related-offers-card";
@@ -258,7 +263,7 @@ export function IssueDetailPanel({
                     basic and a specialized set both claim, so each set states its own worth. */}
                 {issue.checklists.map((c) =>
                   c.priceTotal ? (
-                    <Field key={c.id} label={`Catalog value — ${c.name}`}>
+                    <Field key={c.id} label={`Catalog value — ${markedChecklistName(c)}`}>
                       <ChecklistValue checklist={c} />
                     </Field>
                   ) : null
@@ -370,7 +375,9 @@ export function IssueDetailPanel({
                 key={c.id}
                 target={{ kind: "checklist", collectionId, checklistId: c.id }}
                 title={
-                  issue.checklists.length === 1 ? "Catalog value" : `Catalog value — ${c.name}`
+                  issue.checklists.length === 1
+                    ? "Catalog value"
+                    : `Catalog value — ${markedChecklistName(c)}`
                 }
               />
             ))}
@@ -388,7 +395,7 @@ export function IssueDetailPanel({
                 title={
                   completeness.checklists.length === 1
                     ? "Completeness"
-                    : `Completeness — ${checklist.name}`
+                    : `Completeness — ${markedChecklistName(checklist)}`
                 }
               >
                 <ChecklistCompletenessGrid
@@ -495,11 +502,16 @@ function ChecklistsCard({
       title="Checklists"
       count={checklists.length || null}
       actions={
-        <Tooltip content="Add, rename, reorder or delete this issue's checklists, and choose the stamps on each.">
-          <button type="button" style={DETAIL_BUTTON} onClick={onManage}>
-            <Icon name="list" size="sm" /> Manage…
-          </button>
-        </Tooltip>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+          {/* The one switch (#1617): this whole page — the card, the tree, the values and the
+              completeness grids — reads the issue's checklists by it. */}
+          <SpecialisedChecklistsToggle />
+          <Tooltip content="Add, rename, reorder or delete this issue's checklists, and choose the stamps on each.">
+            <button type="button" style={DETAIL_BUTTON} onClick={onManage}>
+              <Icon name="list" size="sm" /> Manage…
+            </button>
+          </Tooltip>
+        </span>
       }
     >
       {checklists.length === 0 ? (
@@ -589,6 +601,7 @@ function ChecklistsCardRow({
           {checklist.name}
         </button>
       </Tooltip>
+      <SpecialisedMark kind={checklist.kind} />
       <span
         style={{
           fontSize: "0.75rem",

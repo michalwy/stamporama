@@ -715,6 +715,7 @@ export function IssueRow({
         ? issue.checklists.map((c) => ({
             id: c.id,
             name: c.name,
+            kind: c.kind,
             tokens: checklistColors.get(c.id)!,
           }))
         : null,

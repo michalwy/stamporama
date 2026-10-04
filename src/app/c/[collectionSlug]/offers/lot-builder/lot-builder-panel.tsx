@@ -36,6 +36,7 @@ import { LotFigures } from "./lot-figures";
 import { LotPresetBar, applyLotRecipe } from "./lot-preset-bar";
 import { useLotPoolSummary, useLotProposal } from "../use-offers-query";
 import { LotProposalView } from "./lot-proposal-view";
+import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 
 // The bulk-lot builder's screen (#760), over #758's rules and #759's two reads.
 //
@@ -634,6 +635,8 @@ export function LotBuilderPanel({
                   flexWrap: "wrap",
                 }}
               >
+                {/* Whether a specialised checklist is a set the lot may complete (#1617). */}
+                <SpecialisedChecklistsToggle />
                 {proposalFetching && <span style={NOTE}>Working the pool…</span>}
                 {marked > 0 && (
                   <>

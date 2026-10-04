@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { buildLotProposal } from "@/lib/lot-builder";
 import { parseLotBuilderRequest } from "@/lib/lot-builder-criteria";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 // One round of the bulk-lot builder (#759): the criteria, the seed, the pins and the rejections —
 // the five things the wizard holds in its URL — read back into a proposal.
@@ -25,7 +26,14 @@ export async function GET(
   }
 
   try {
-    return NextResponse.json(await buildLotProposal(session.user.id, collectionId, parsed));
+    return NextResponse.json(
+      await buildLotProposal(
+        session.user.id,
+        collectionId,
+        parsed,
+        await readIncludeSpecialised(collectionId)
+      )
+    );
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

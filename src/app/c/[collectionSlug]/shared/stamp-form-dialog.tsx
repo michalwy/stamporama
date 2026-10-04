@@ -61,6 +61,7 @@ import type { TagSummary } from "@/lib/tags";
 import { DEFAULT_CHECKLIST } from "@/lib/checklist-vocabulary";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
+import { SpecialisedMark, useSpecialisedChecklists } from "./specialised-checklists";
 
 /** The stamp's one translatable field (#296). `defaultValue` is filled in at render time from the
  * live Name input, so the dialog's placeholder shows what a blank entry falls back to. Mirrors
@@ -137,7 +138,7 @@ export interface StampFormData {
    *  Inventory / purchases, #243) — the picker is then hidden and no membership is touched. */
   issues?: {
     issueId: string;
-    checklists: { id: string; name: string; on: boolean }[];
+    checklists: { id: string; name: string; kind?: string; on: boolean }[];
   }[];
   // Colnect item-ID (#247). `undefined` on an edit-mode stamp means the caller doesn't manage
   // the field — the input is then hidden and never submitted, so the stored value is untouched.
@@ -374,6 +375,10 @@ export function StampFormDialog(props: StampFormDialogProps) {
           : new Set<string>([DEFAULT_CHECKLIST])
   );
   const onAnyChecklist = checklistIds.size > 0;
+  // Whether the boxes on offer carry the specialised checklists (#1617), as the switch stood when the
+  // dialog opened: with it off, a place on one is not this form's to remove, and the save says so.
+  const { include: includeSpecialisedNow } = useSpecialisedChecklists();
+  const [checklistsIncludeSpecialised] = useState(includeSpecialisedNow);
 
   function toggleChecklist(id: string) {
     setChecklistIds((prev) => {
@@ -619,7 +624,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
       return getChecklistsForIssueAction(collectionId, selectedIssueId);
     },
   });
-  const offeredChecklists: { id: string; name: string }[] = editProps
+  const offeredChecklists: { id: string; name: string; kind?: string }[] = editProps
     ? (editedMembership?.checklists ?? [])
     : autoCreateIssue
       ? []
@@ -707,6 +712,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
       if (editedMembership) {
         fd.set("checklistIds", [...checklistIds].join(","));
         fd.set("checklistIssueId", editedMembership.issueId);
+        fd.set("checklistsIncludeSpecialised", String(checklistsIncludeSpecialised));
       }
       props.onSubmit(fd);
       return;
@@ -1016,6 +1022,7 @@ export function StampFormDialog(props: StampFormDialogProps) {
                         disabled={isPending}
                       />
                       {c.name}
+                      {c.kind && <SpecialisedMark kind={c.kind} />}
                     </label>
                   ))
                 )}

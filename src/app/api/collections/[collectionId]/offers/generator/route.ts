@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { previewOfferGeneration } from "@/lib/offer-generator";
 import { parseGeneratorRequest } from "@/lib/offer-generator-rules";
 import { readItemFilters } from "../../items/item-filters";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 // The preview of a bulk offer pass from the Copies list (#1287). Read-only; confirming it is the
 // `generateOffersAction` server action, which re-reads and re-plans (#717).
@@ -25,10 +26,12 @@ export async function GET(
 
   try {
     return NextResponse.json(
-      await previewOfferGeneration(session.user.id, collectionId, {
-        ...parsed,
-        filters: readItemFilters(new URLSearchParams(parsed.filters)),
-      })
+      await previewOfferGeneration(
+        session.user.id,
+        collectionId,
+        { ...parsed, filters: readItemFilters(new URLSearchParams(parsed.filters)) },
+        await readIncludeSpecialised(collectionId)
+      )
     );
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { findSeriesRecombinations } from "@/lib/series-recombination";
 import { parseSeriesCriteria } from "@/lib/series-recombination-rules";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 // The series one platform's single offers plus its available copies could complete (#1210), under the
 // screen's filters and mixing switches (#1265). Read-only; composing a listed series (#1211) is the
@@ -29,7 +30,8 @@ export async function GET(
         session.user.id,
         collectionId,
         platformId,
-        parseSeriesCriteria(request.nextUrl.searchParams)
+        parseSeriesCriteria(request.nextUrl.searchParams),
+        await readIncludeSpecialised(collectionId)
       )
     );
   } catch {

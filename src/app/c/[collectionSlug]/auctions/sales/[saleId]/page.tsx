@@ -6,6 +6,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getAuctionSaleIssueIds } from "@/lib/auction-lines";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { AuctionSaleDetailPanel } from "./auction-sale-detail-panel";
 
 export const metadata = { title: "Auction sale" };
@@ -32,7 +33,12 @@ export default async function AuctionSaleDetailPage({ params }: AuctionSaleDetai
   ]);
   // Issue headers for the composition's issue groups — the same lookup the offer detail does, so
   // the group headers carry their catalog chips and stamp count here too (#353).
-  const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
+  const issueHeaders = await getIssueHeadersByIds(
+    session.user.id,
+    collection.id,
+    issueIds,
+    await readIncludeSpecialised(collection.id)
+  );
   const issueHeaderById: Record<string, IssueHeader> = {};
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 

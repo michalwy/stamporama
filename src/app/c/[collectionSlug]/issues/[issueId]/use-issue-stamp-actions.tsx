@@ -222,6 +222,7 @@ export function useIssueStampActions({
               checklists: issue.checklists.map((c) => ({
                 id: c.id,
                 name: c.name,
+                kind: c.kind,
                 on: stamp.checklistIds.includes(c.id),
               })),
             },

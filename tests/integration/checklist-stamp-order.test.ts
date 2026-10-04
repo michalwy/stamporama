@@ -166,10 +166,10 @@ describe("checklist stamp order (#764)", () => {
 
   it("appends a stamp that joins through the stamp form, and keeps one already on", async () => {
     // `c` joins: it lands last, whatever place it held before it was taken off.
-    await setStampChecklistsForIssue(userId, collectionId, issueId, c, [checklistId]);
+    await setStampChecklistsForIssue(userId, collectionId, issueId, c, [checklistId], false);
     assert.deepEqual(await order(), [a, b, d, c]);
     // `a` is re-saved on the same checklist: editing a stamp says nothing about the set's order.
-    await setStampChecklistsForIssue(userId, collectionId, issueId, a, [checklistId]);
+    await setStampChecklistsForIssue(userId, collectionId, issueId, a, [checklistId], false);
     assert.deepEqual(await order(), [a, b, d, c]);
   });
 });

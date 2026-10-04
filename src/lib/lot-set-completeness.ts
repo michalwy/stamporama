@@ -9,6 +9,7 @@ import { loadChecklistVariantRollup, rollUpStampIds } from "./checklist-variant-
 import { IN_HAND_DELIVERY_STATES } from "./delivery-state";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 
 // How close a purchase lot's issues are to a **complete for-sale set** (#563) — the I/O half.
 //
@@ -32,6 +33,8 @@ export interface ChecklistSetCompleteness {
   checklistId: string;
   /** The checklist's name — printed only where an issue carries more than one (ADR-0031). */
   name: string;
+  /** Standard or specialised (#1617). */
+  kind: ChecklistKind;
   /** Stamps on the checklist: the denominator of {@link owned}. */
   requiredCount: number;
   /** Of those, the ones the collection holds an in-hand for-sale copy of, **anywhere**. */
@@ -120,7 +123,9 @@ export async function getLotSetCompleteness(
   ownerId: string,
   collectionId: string,
   issueIds: string[],
-  scope: LotSetScope
+  scope: LotSetScope,
+  /** Whether specialised checklists are counted too (#1617). */
+  includeSpecialised = false
 ): Promise<SetCompletenessByIssue> {
   const collection = await prisma.collection.findUnique({
     where: { id: collectionId },
@@ -134,12 +139,13 @@ export async function getLotSetCompleteness(
   if (ids.length === 0) return {};
 
   const checklists = await prisma.checklist.findMany({
-    where: { collectionId, issueId: { in: ids } },
+    where: { collectionId, issueId: { in: ids }, ...shownChecklistWhere(includeSpecialised) },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
       issueId: true,
       name: true,
+      kind: true,
       // The stamps a set is still missing are named in the order the set reads (#764).
       stamps: { select: { stampId: true }, orderBy: [...CHECKLIST_STAMP_ORDER] },
       issue: { select: { collectionAreaId: true } },
@@ -231,13 +237,14 @@ export async function getLotSetCompleteness(
 }
 
 function describe(
-  checklist: { id: string; name: string },
+  checklist: { id: string; name: string; kind: string },
   result: { requiredCount: number; owned: number; fromHere: number; missingStampIds: string[] },
   missing: string[]
 ): ChecklistSetCompleteness {
   return {
     checklistId: checklist.id,
     name: checklist.name,
+    kind: asChecklistKind(checklist.kind),
     requiredCount: result.requiredCount,
     owned: result.owned,
     fromHere: result.fromHere,

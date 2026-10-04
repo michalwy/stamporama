@@ -214,6 +214,7 @@ describe("checklistGap (#712)", () => {
   const ROWS: ChecklistGapRow = {
     checklistId: "cl-1",
     name: "Basic set",
+    kind: "standard",
     required: 12,
     missing: [
       {
@@ -253,7 +254,14 @@ describe("checklistGap (#712)", () => {
   });
 
   it("reports an empty checklist as complete-of-nothing rather than as complete", () => {
-    const projected = checklistGap({ checklistId: "cl-2", name: "Empty", required: 0, missing: [] });
+    const projected = checklistGap({
+      checklistId: "cl-2",
+      name: "Empty",
+      kind: "specialised",
+      required: 0,
+      missing: [],
+    });
+    assert.equal(projected.type, "specialised");
     assert.equal(projected.required, 0);
     assert.equal(projected.held, 0);
   });

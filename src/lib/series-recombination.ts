@@ -319,7 +319,9 @@ export async function findSeriesRecombinations(
   ownerId: string,
   collectionId: string,
   platformId: string,
-  criteria: SeriesCriteria = DEFAULT_SERIES_CRITERIA
+  criteria: SeriesCriteria = DEFAULT_SERIES_CRITERIA,
+  /** Whether specialised checklists are series to recombine into too (#1617). */
+  includeSpecialised = false
 ): Promise<SeriesRecombinationResult> {
   const pool = await readRecombinationPool(ownerId, collectionId, platformId, criteria, {
     stopWithoutSingles: true,
@@ -328,7 +330,7 @@ export async function findSeriesRecombinations(
 
   const found = findRecombinableSeries({
     copies: pool.copies,
-    checklists: await loadPoolChecklists(collectionId, pool.copies),
+    checklists: await loadPoolChecklists(collectionId, pool.copies, includeSpecialised),
     offerStates: pool.offerStates,
     mixing: criteria.mixing,
   });

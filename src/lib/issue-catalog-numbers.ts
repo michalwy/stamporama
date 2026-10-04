@@ -101,7 +101,9 @@ export async function getIssueCatalogNumberGrid(
       name: true,
       year: true,
       collection: { select: { duplicateCatalogMode: true } },
-      checklists: { select: { id: true, name: true, stamps: { select: { stampId: true } } } },
+      checklists: {
+        select: { id: true, name: true, kind: true, stamps: { select: { stampId: true } } },
+      },
     },
   });
   if (!issue) throw new Error("Issue not found.");
@@ -145,7 +147,14 @@ export async function getIssueCatalogNumberGrid(
     // stamp form's own order.
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
-  const onChecklist = new Set(issue.checklists.flatMap((c) => c.stamps.map((s) => s.stampId)));
+  // The stamps that define the declared range: the **standard** checklists' (#1617), whatever the
+  // switch says — a declared range is stored, and what is stored must not depend on the browser it
+  // was edited from. `refreshIssueDeclaredRange` reads the same.
+  const onChecklist = new Set(
+    issue.checklists
+      .filter((c) => c.kind === "standard")
+      .flatMap((c) => c.stamps.map((s) => s.stampId))
+  );
   const checklist = checklistId ? issue.checklists.find((c) => c.id === checklistId) : null;
   if (checklistId && !checklist) throw new Error("Checklist not found.");
   const inScope = checklist
@@ -259,7 +268,9 @@ async function refreshIssueDeclaredRange(
         where: { catalogVendorId },
         select: { firstNumber: true, lastNumber: true },
       },
+      // Standard checklists only (#1617), as the grid's own reading above.
       checklists: {
+        where: { kind: "standard" },
         select: {
           stamps: {
             select: {

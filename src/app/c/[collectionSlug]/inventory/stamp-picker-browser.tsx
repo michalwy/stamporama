@@ -64,6 +64,10 @@ import {
   type ChecklistDisplayMode,
 } from "@/app/c/[collectionSlug]/issues/checklist-display-switcher";
 import type { ChecklistChipData } from "@/app/c/[collectionSlug]/shared/checklist-chip";
+import {
+  SpecialisedChecklistsToggle,
+  SpecialisedMark,
+} from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import type { CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
@@ -144,6 +148,8 @@ export interface IssueRunPick {
 interface RunChecklistOption {
   id: string;
   name: string;
+  /** Standard or specialised (#1617) — a specialised one is offered only while switched on, marked. */
+  kind: string;
   stampCount: number;
   /** A checklist that spans issues, offered on each issue it covers. */
   spans: boolean;
@@ -155,10 +161,22 @@ function runChecklistOptions(
   spanning: readonly SpanningChecklistSummary[]
 ): RunChecklistOption[] {
   return [
-    ...issue.checklists.map((c) => ({ id: c.id, name: c.name, stampCount: c.stampCount, spans: false })),
+    ...issue.checklists.map((c) => ({
+      id: c.id,
+      name: c.name,
+      kind: c.kind,
+      stampCount: c.stampCount,
+      spans: false,
+    })),
     ...spanning
       .filter((c) => c.issueIds.includes(issue.id))
-      .map((c) => ({ id: c.id, name: c.name, stampCount: c.stampIds.length, spans: true })),
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        kind: c.kind,
+        stampCount: c.stampIds.length,
+        spans: true,
+      })),
   ];
 }
 
@@ -803,6 +821,8 @@ function IssueBrowser({
           data-autofocus-select
         />
         <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
+        {/* Specialised checklists (#1617): out of the rows, the branches and the set buttons until on. */}
+        <SpecialisedChecklistsToggle />
         <button
           type="button"
           onClick={() => onNewIssue(selectedAreaId)}
@@ -945,9 +965,10 @@ function RunChecklistButton({
           e.stopPropagation();
           onPick();
         }}
-        style={RUN_BUTTON_STYLE}
+        style={{ ...RUN_BUTTON_STYLE, display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
       >
         {label}
+        <SpecialisedMark kind={checklist.kind} />
       </button>
     </Tooltip>
   );
@@ -971,9 +992,10 @@ function LotChecklistButton({
           e.stopPropagation();
           onPick();
         }}
-        style={LOT_BUTTON_STYLE}
+        style={{ ...LOT_BUTTON_STYLE, display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
       >
         {label}
+        <SpecialisedMark kind={checklist.kind} />
       </button>
     </Tooltip>
   );
@@ -1089,7 +1111,12 @@ function PickIssueRow({
   const checklistChips = useMemo<ChecklistChipData[] | null>(
     () =>
       multiChecklist
-        ? issue.checklists.map((c) => ({ id: c.id, name: c.name, tokens: checklistColors.get(c.id)! }))
+        ? issue.checklists.map((c) => ({
+            id: c.id,
+            name: c.name,
+            kind: c.kind,
+            tokens: checklistColors.get(c.id)!,
+          }))
         : null,
     [multiChecklist, issue.checklists, checklistColors]
   );

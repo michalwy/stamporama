@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getLotPoolSummary } from "@/lib/lot-builder";
 import { parseLotBuilderRequest } from "@/lib/lot-builder-criteria";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 // The bulk-lot wizard's criteria readout (#759): what the pool holds, answered **without** running a
 // pick, so the criteria panel stays live while generating a proposal stays a deliberate act. Reads
@@ -26,7 +27,14 @@ export async function GET(
   }
 
   try {
-    return NextResponse.json(await getLotPoolSummary(session.user.id, collectionId, criteria));
+    return NextResponse.json(
+      await getLotPoolSummary(
+        session.user.id,
+        collectionId,
+        criteria,
+        await readIncludeSpecialised(collectionId)
+      )
+    );
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

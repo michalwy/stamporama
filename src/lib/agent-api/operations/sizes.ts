@@ -32,6 +32,8 @@ import {
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import { loadStampLabels, resolveStampRefs, stampNoOf } from "./stamp-refs";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
+import { includeSpecialisedParam, INCLUDE_SPECIALISED_PARAMETER } from "./checklist-type-params";
+import { shownChecklistWhere } from "../../checklist-kind";
 
 // Stamp sizes and size presets (#1415): read a stamp's size and where it comes from, keep the
 // collection's presets, set one stamp's size, and apply a preset or a typed size to an issue, a
@@ -257,11 +259,17 @@ export async function readStampSize(
     loadCollectionHeader(context),
     prisma.stamp.findUniqueOrThrow({ where: { id: stampId }, select: { widthMm: true, heightMm: true } }),
     prisma.checklist.findMany({
-      where: { collectionId: context.collectionId, stamps: { some: { stampId } } },
+      where: {
+        collectionId: context.collectionId,
+        stamps: { some: { stampId } },
+        // The stamp's specialised checklists only when asked (#1617), as everywhere a read names them.
+        ...shownChecklistWhere(includeSpecialisedParam(params)),
+      },
       orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
       select: {
         id: true,
         name: true,
+        kind: true,
         stamps: {
           select: {
             stamp: {
@@ -278,6 +286,7 @@ export async function readStampSize(
   const sizeChecklists: SizeChecklist[] = checklists.map((checklist) => ({
     checklistId: checklist.id,
     name: checklist.name,
+    kind: checklist.kind,
     entries: checklist.stamps
       .map((entry) => entry.stamp)
       .sort(
@@ -322,11 +331,12 @@ export const getStampSizeOperation: Operation = {
   writes: false,
   parameters: [
     { name: "stamp", in: "query", type: "string", required: true, description: STAMP_PARAMETER_DESCRIPTION },
+    INCLUDE_SPECIALISED_PARAMETER,
   ],
   result: {
     kind: "object",
     description:
-      "`source` is `stated` when the stamp states both figures itself, `inherited` when it does not and a checklist it is on lends one, and `none` otherwise. `widthMm` / `heightMm` are always the stamp's **own** figures, and either may stand alone: half a size is not a size, so a stamp stating only a width is `inherited` or `none`. `inherited` has one row per checklist that lends a figure — a stamp on two checklists can borrow two — naming the stamp it is borrowed from. An inherited figure is nobody's measurement; setting the stamp's own size ends the borrowing. Nothing records whether a stated size was measured, typed or applied from a preset.",
+      "Only the stamp's standard checklists are read for an inherited figure unless `include_specialised` is sent; each `inherited` row states its `checklistType`. `source` is `stated` when the stamp states both figures itself, `inherited` when it does not and a checklist it is on lends one, and `none` otherwise. `widthMm` / `heightMm` are always the stamp's **own** figures, and either may stand alone: half a size is not a size, so a stamp stating only a width is `inherited` or `none`. `inherited` has one row per checklist that lends a figure — a stamp on two checklists can borrow two — naming the stamp it is borrowed from. An inherited figure is nobody's measurement; setting the stamp's own size ends the borrowing. Nothing records whether a stated size was measured, typed or applied from a preset.",
   },
   handler: async (context, params) => readStampSize(context, params),
 };

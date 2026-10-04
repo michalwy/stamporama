@@ -16,6 +16,7 @@ import {
   listSpanningChecklists,
   addStampsToSpanningChecklist,
   getChecklistUsage,
+  setChecklistKind,
   type ChecklistData,
   type SpanningChecklistSummary,
 } from "@/lib/checklists";
@@ -27,10 +28,15 @@ import { getIssueCompleteness } from "@/lib/checklist-completeness";
 import { headlineCompleteness } from "@/lib/checklist-completeness-rules";
 import type { RunChecklist } from "@/lib/issue-run";
 import type { TranslationValueMap } from "@/lib/translations";
+import { isChecklistKind, type ChecklistKind } from "@/lib/checklist-kind";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 // Server actions for the checklists editors: an issue's own (#531), scoped to that issue — ADR-0020
 // §7's rule, and the reason those take no anchor the calling screen has already answered — and the
 // Checklists screen's (#1416), for the ones that span issues and so have no issue to be scoped to.
+//
+// Every read that lists checklists honours the specialised-checklists switch (#1617), read from the
+// cookie the screens write — the switch is the collector's, so no screen has to remember to pass it.
 
 export type ChecklistActionState =
   | { status: "idle" }
@@ -49,7 +55,12 @@ export async function getChecklistsForIssueAction(
   issueId: string
 ): Promise<ChecklistData[]> {
   const session = await getSession();
-  return getChecklistsForIssue(session.user.id, collectionId, issueId);
+  return getChecklistsForIssue(
+    session.user.id,
+    collectionId,
+    issueId,
+    await readIncludeSpecialised(collectionId)
+  );
 }
 
 /** How complete one checklist of an issue is, as its branch heading on the Issues list says it. */
@@ -68,7 +79,12 @@ export async function getIssueChecklistHeadlinesAction(
   issueId: string
 ): Promise<Record<string, ChecklistHeadline>> {
   const session = await getSession();
-  const { checklists } = await getIssueCompleteness(session.user.id, collectionId, issueId);
+  const { checklists } = await getIssueCompleteness(
+    session.user.id,
+    collectionId,
+    issueId,
+    await readIncludeSpecialised(collectionId)
+  );
   return Object.fromEntries(
     checklists.map((grid) => {
       const { owned, completeSets } = headlineCompleteness(grid);
@@ -93,7 +109,11 @@ export async function listSpanningChecklistsAction(
   collectionId: string
 ): Promise<SpanningChecklistSummary[]> {
   const session = await getSession();
-  return listSpanningChecklists(session.user.id, collectionId);
+  return listSpanningChecklists(
+    session.user.id,
+    collectionId,
+    await readIncludeSpecialised(collectionId)
+  );
 }
 
 export async function createChecklistAction(
@@ -101,11 +121,14 @@ export async function createChecklistAction(
   /** Null creates a checklist that spans issues (#1416). */
   issueId: string | null,
   name: string,
-  translations?: TranslationValueMap
+  translations?: TranslationValueMap,
+  /** Standard unless chosen otherwise (#1617). */
+  kind?: ChecklistKind
 ): Promise<ChecklistActionState> {
   const session = await getSession();
   try {
-    await createChecklist(session.user.id, collectionId, { issueId, name, translations });
+    if (kind !== undefined && !isChecklistKind(kind)) throw new Error("Unknown checklist type.");
+    await createChecklist(session.user.id, collectionId, { issueId, name, translations, kind });
     return { status: "success" };
   } catch (err) {
     return {
@@ -118,16 +141,37 @@ export async function createChecklistAction(
 export async function renameChecklistAction(
   checklistId: string,
   name: string,
-  translations?: TranslationValueMap
+  translations?: TranslationValueMap,
+  /** Its type (#1617), when the form carried one. */
+  kind?: ChecklistKind
 ): Promise<ChecklistActionState> {
   const session = await getSession();
   try {
-    await renameChecklist(session.user.id, checklistId, name, translations);
+    if (kind !== undefined && !isChecklistKind(kind)) throw new Error("Unknown checklist type.");
+    await renameChecklist(session.user.id, checklistId, name, translations, kind);
     return { status: "success" };
   } catch (err) {
     return {
       status: "error",
       message: err instanceof Error ? err.message : "Failed to rename checklist. Please try again.",
+    };
+  }
+}
+
+/** Make a checklist standard or specialised (#1617). */
+export async function setChecklistKindAction(
+  checklistId: string,
+  kind: ChecklistKind
+): Promise<ChecklistActionState> {
+  const session = await getSession();
+  try {
+    if (!isChecklistKind(kind)) throw new Error("Unknown checklist type.");
+    await setChecklistKind(session.user.id, checklistId, kind);
+    return { status: "success" };
+  } catch (err) {
+    return {
+      status: "error",
+      message: err instanceof Error ? err.message : "Failed to change the checklist's type.",
     };
   }
 }
@@ -193,7 +237,11 @@ export async function getSpanningChecklistOverviewAction(
   collectionId: string
 ): Promise<SpanningChecklistOverview[]> {
   const session = await getSession();
-  return getSpanningChecklistOverview(session.user.id, collectionId);
+  return getSpanningChecklistOverview(
+    session.user.id,
+    collectionId,
+    await readIncludeSpecialised(collectionId)
+  );
 }
 
 /** What deleting a checklist would take with it — the confirmation names it (#1416). */
@@ -234,14 +282,17 @@ export type CreateSpanningChecklistState =
 export async function createSpanningChecklistAction(
   collectionId: string,
   name: string,
-  translations?: TranslationValueMap
+  translations?: TranslationValueMap,
+  kind?: ChecklistKind
 ): Promise<CreateSpanningChecklistState> {
   const session = await getSession();
   try {
+    if (kind !== undefined && !isChecklistKind(kind)) throw new Error("Unknown checklist type.");
     const checklistId = await createChecklist(session.user.id, collectionId, {
       issueId: null,
       name,
       translations,
+      kind,
     });
     return { status: "success", checklistId };
   } catch (err) {

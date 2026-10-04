@@ -3,6 +3,7 @@ import {
   catalogValueSubjectKey,
   type IntakeCatalogValue,
 } from "./intake-catalog-value";
+import type { ChecklistKind } from "./checklist-kind";
 import type { FaultEntry } from "./fault-entry";
 import { tagEntryKey, type TagEntry } from "./tag-entry";
 
@@ -42,6 +43,9 @@ import { tagEntryKey, type TagEntry } from "./tag-entry";
 export interface RunChecklist {
   id: string;
   name: string;
+  /** Standard or specialised (#1617) — a run built on a specialised one still works with the switch
+   *  off, and its dialog says what it is. */
+  kind: ChecklistKind;
   /** Null for a checklist that spans issues. */
   issueId: string | null;
   stampIds: string[];

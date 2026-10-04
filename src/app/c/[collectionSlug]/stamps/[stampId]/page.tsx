@@ -7,6 +7,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getStampListItem, getStampRelatives } from "@/lib/stamps";
 import { getIssueListItem } from "@/lib/issues";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { listStampCopyPhotos } from "@/lib/photos";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { StampDetailPanel } from "./stamp-detail-panel";
@@ -44,9 +45,11 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
+  // The specialised-checklists switch (#1617), for every read below that names the stamp's checklists.
+  const includeSpecialised = await readIncludeSpecialised(collection.id);
   let stamp;
   try {
-    stamp = await getStampListItem(session.user.id, stampId);
+    stamp = await getStampListItem(session.user.id, stampId, { includeSpecialised });
   } catch {
     notFound();
   }
@@ -55,13 +58,15 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
 
   const [areas, relatives, copyPhotos] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
-    getStampRelatives(session.user.id, stampId),
+    getStampRelatives(session.user.id, stampId, { includeSpecialised }),
     listStampCopyPhotos(session.user.id, stampId),
   ]);
   // The issue the Variants card writes against (#630), read through the Issues list' own
   // enrichment so the add dialog offers the checklists and the range prompt it offers there.
   const treeIssue = relatives.treeIssueId
-    ? await getIssueListItem(session.user.id, collection.id, relatives.treeIssueId)
+    ? await getIssueListItem(session.user.id, collection.id, relatives.treeIssueId, {
+        includeSpecialised,
+      })
     : null;
 
   return (

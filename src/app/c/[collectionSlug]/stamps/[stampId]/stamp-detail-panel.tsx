@@ -43,6 +43,7 @@ import { Icon } from "@/app/icons";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { StampVariantsCard } from "./stamp-variants-card";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
+import { markedChecklistName } from "@/lib/checklist-kind";
 
 // The stamp detail screen (#518). Everything the flat list row hints at, at full size — and the
 // two relationships a row cannot draw at all: the variant tree around it (#54) and the copies
@@ -358,14 +359,14 @@ export function StampDetailPanel({
 function ChecklistMembershipChip({
   checklists,
 }: {
-  checklists: { id: string; name: string; on: boolean }[];
+  checklists: { id: string; name: string; kind?: string; on: boolean }[];
 }) {
   const on = checklists.filter((c) => c.on);
   return (
     <Tooltip
       content={
         on.length > 0
-          ? `Counted towards ${on.map((c) => c.name).join(", ")}`
+          ? `Counted towards ${on.map((c) => markedChecklistName(c)).join(", ")}`
           : "An extra in this issue — on no checklist, so counted towards no set"
       }
     >
@@ -373,7 +374,7 @@ function ChecklistMembershipChip({
         {on.length === 0
           ? "Optional"
           : on.length === 1
-            ? on[0].name
+            ? markedChecklistName(on[0])
             : `${on.length} checklists`}
       </span>
     </Tooltip>

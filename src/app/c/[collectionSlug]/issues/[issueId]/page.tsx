@@ -8,6 +8,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getIssueListItem, listIssueMembers } from "@/lib/issues";
 import { getIssueCompleteness } from "@/lib/checklist-completeness";
 import { formatEntityNo } from "@/lib/quick-jump";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { IssueDetailPanel } from "./issue-detail-panel";
 
@@ -41,13 +42,18 @@ export default async function IssueDetailPage({ params }: IssueDetailPageProps) 
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const issue = await getIssueListItem(session.user.id, collection.id, issueId);
+  // The specialised-checklists switch (#1617): the header, the tree and the completeness cards all
+  // read the issue's checklists, and all three by the same answer.
+  const includeSpecialised = await readIncludeSpecialised(collection.id);
+  const issue = await getIssueListItem(session.user.id, collection.id, issueId, {
+    includeSpecialised,
+  });
   if (!issue) notFound();
 
   const [areas, members, completeness] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
-    listIssueMembers(session.user.id, collection.id, issueId),
-    getIssueCompleteness(session.user.id, collection.id, issueId),
+    listIssueMembers(session.user.id, collection.id, issueId, undefined, null, includeSpecialised),
+    getIssueCompleteness(session.user.id, collection.id, issueId, includeSpecialised),
   ]);
 
   return (

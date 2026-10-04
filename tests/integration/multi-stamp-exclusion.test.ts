@@ -267,7 +267,7 @@ describe("a multi-stamp copy is a copy of none of its stamps (#745)", () => {
   // -------------------------------------------------------------------------
 
   it("counts two of the issue's three stamps as held, the carrier completing nothing", async () => {
-    const { checklists } = await getIssueCompleteness(userId, collectionId, issueId);
+    const { checklists } = await getIssueCompleteness(userId, collectionId, issueId, false);
     const [basic] = checklists;
     assert.equal(basic.checklistId, checklistId);
     assert.equal(basic.requiredCount, 3);
@@ -370,7 +370,7 @@ describe("a multi-stamp copy is a copy of none of its stamps (#745)", () => {
       ),
       1
     );
-    const [basic] = (await getIssueCompleteness(userId, collectionId, issueId)).checklists;
+    const [basic] = (await getIssueCompleteness(userId, collectionId, issueId, false)).checklists;
     assert.equal(
       basic.rows.find((row) => row.disposition === "for_sale" && row.conditionId === null)?.owned,
       3

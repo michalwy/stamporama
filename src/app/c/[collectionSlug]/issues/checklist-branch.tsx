@@ -26,6 +26,7 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/use-inventory-copy-actions";
 import { useAddIssueWantsAction } from "@/app/c/[collectionSlug]/wants/use-add-issue-wants-action";
 import { useInvalidateIssues } from "./use-issues-query";
+import { SpecialisedMark } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 
 // One checklist of an expanded issue as a branch of the Issues list's tree (#1520): a heading that
 // names it in its colour (#1519) with its stamp count and how complete it is, and under it — once
@@ -154,6 +155,7 @@ export function ChecklistBranch({
           >
             {name}
           </span>
+          {checklist && <SpecialisedMark kind={checklist.kind} />}
           <span style={COUNT_TEXT}>
             {stampCount} stamp{stampCount !== 1 ? "s" : ""}
           </span>

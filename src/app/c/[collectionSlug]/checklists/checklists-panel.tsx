@@ -19,8 +19,10 @@ import {
   setChecklistStampsAction,
   getSpanningChecklistOverviewAction,
   getRunChecklistAction,
+  setChecklistKindAction,
   type ChecklistActionState,
 } from "@/app/actions/checklists";
+import type { ChecklistKind } from "@/lib/checklist-kind";
 import { addAlbumEntryAction } from "@/app/actions/albums";
 import type { SpanningChecklistOverview } from "@/lib/spanning-checklists";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -46,7 +48,14 @@ import {
 } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { ChecklistNameDialog } from "@/app/c/[collectionSlug]/shared/checklist-name-dialog";
 import { ChecklistUsageNote } from "@/app/c/[collectionSlug]/shared/checklist-usage-note";
-import { StampLabel } from "@/app/c/[collectionSlug]/shared/use-checklists-action";
+import {
+  StampLabel,
+  checklistKindAction,
+} from "@/app/c/[collectionSlug]/shared/use-checklists-action";
+import {
+  SpecialisedChecklistsToggle,
+  SpecialisedMark,
+} from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import { ApplySizePresetDialog } from "@/app/c/[collectionSlug]/shared/apply-size-preset-dialog";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
@@ -62,6 +71,9 @@ import { AddIssueWantsDialog } from "@/app/c/[collectionSlug]/wants/use-add-issu
 // area, and **ordered and taken off** here. That split is deliberate: picking needs the whole
 // catalogue tree to browse, which the Issues list already is, while what is on the set is a flat
 // list in its own order (#764) and belongs with the set.
+//
+// A checklist here is standard or specialised too (#1617): the specialised ones are listed only while
+// they are switched on, with the switch beside *New checklist*, and each row can change its type.
 
 const COUNT_TEXT: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -166,20 +178,20 @@ export function ChecklistsPanel({
   }
   const drag = useReorderList(checklists.length > 1 && !isPending, move, { handleOnly: true });
 
-  function submitName(name: string, translations: TranslationValueMap) {
+  function submitName(name: string, translations: TranslationValueMap, kind: ChecklistKind) {
     const current = dialog;
     run(
       () =>
         current.kind === "rename"
-          ? renameChecklistAction(current.checklist.id, name, translations)
-          : createChecklistAction(collectionId, null, name, translations),
+          ? renameChecklistAction(current.checklist.id, name, translations, kind)
+          : createChecklistAction(collectionId, null, name, translations, kind),
       () => setDialog({ kind: "none" })
     );
   }
 
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
+      <div style={{ marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
         <button
           type="button"
           onClick={() => {
@@ -191,6 +203,7 @@ export function ChecklistsPanel({
         >
           + New checklist
         </button>
+        <SpecialisedChecklistsToggle />
       </div>
 
       {error && dialog.kind === "none" && (
@@ -270,6 +283,9 @@ export function ChecklistsPanel({
                       icon: "edit",
                       onSelect: () => setDialog({ kind: "rename", checklist }),
                     },
+                    checklistKindAction(checklist, (kind) =>
+                      run(() => setChecklistKindAction(checklist.id, kind), () => {})
+                    ),
                     {
                       key: "delete",
                       label: "Delete",
@@ -392,17 +408,20 @@ function ChecklistRowBody({ checklist }: { checklist: SpanningChecklistOverview 
   return (
     <>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.1rem" }}>
-        <span
-          style={{
-            fontSize: "0.9375rem",
-            fontWeight: 500,
-            color: "var(--color-text-primary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {checklist.name}
+        <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0 }}>
+          <span
+            style={{
+              fontSize: "0.9375rem",
+              fontWeight: 500,
+              color: "var(--color-text-primary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {checklist.name}
+          </span>
+          <SpecialisedMark kind={checklist.kind} />
         </span>
         <span style={COUNT_TEXT}>
           {count} stamp{count !== 1 ? "s" : ""}

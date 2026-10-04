@@ -659,7 +659,7 @@ The issue's **declared range follows the numbers**: every number you save recomp
 
 ## Keeping an issue's catalog range in step with its stamps
 
-An issue can declare a **catalog number range** per catalog (a **First** and optional **Last**, e.g. `100`–`105`). Stamporama checks whether the stamps on the issue's **checklists** still fit inside that declared range and flags it when one **extends beyond** it. Only stamps on a checklist count — optional extras such as blocks or varieties never widen the range. When an issue carries several checklists, all of them are read together: an issue publishes one range of numbers however many sets are collected inside it.
+An issue can declare a **catalog number range** per catalog (a **First** and optional **Last**, e.g. `100`–`105`). Stamporama checks whether the stamps on the issue's **checklists** still fit inside that declared range and flags it when one **extends beyond** it. Only stamps on a checklist count — optional extras such as blocks or varieties never widen the range. When an issue carries several checklists, all of them are read together: an issue publishes one range of numbers however many sets are collected inside it. Only **standard** checklists count here, whether or not specialised ones are shown: the declared range is stored with the issue, and what it says must not depend on which screen it was last edited from (see [Standard and specialised checklists](#standard-and-specialised-checklists)).
 
 **When you add a stamp** that is on a checklist and whose catalog number falls outside the issue's declared range, the **Add stamp** dialog shows the proposed widened range (for example, `Mi 100–105 → 100–106`) and asks you to choose before saving:
 
@@ -692,22 +692,39 @@ Some publications are collected more than one way, and those need several:
 
 Each checklist has its own completeness and its own catalog value, and its own **order** — the sequence the set reads in, which starts as the catalog's and is yours to change.
 
+### Standard and specialised checklists
+
+Every checklist has a **type**:
+
+- **Standard** — a set you collect in everyday work: a series, a series perforated and imperforate as two checklists. Every checklist you had before types existed is standard, and a new one is standard unless you choose otherwise.
+- **Specialised** — a finer goal, used mostly for building albums or completing a specialised collection: one checklist holding every colour variant of one particular stamp, say.
+
+Specialised checklists are many and rarely needed day to day, so **only standard checklists are shown and counted until you switch them on**. The switch is the **Show specialised checklists** chip, offered wherever checklists are listed or chosen — the **Issues** list's toolbar, the stamp picker, an issue's page and its checklists editor, the **Checklists** screen, **Add to checklist…**, **Add missing to want list…**, an album's **Entries**, the offer generator, the lot builder and **Series from singles**. It is **one setting**: turning it on or off in any of those places does it everywhere, and it is remembered for this collection in this browser.
+
+**With it off**, specialised checklists are absent everywhere checklists are listed, offered or counted: the issue rows' badges, totals and stamp chips, the tree's branches (a stamp that is only on specialised checklists sits under **Not on a checklist**), the issue page's cards and completeness grids, the set completeness on the **Copies** list and in a purchase, the **Overview**'s progress, the stamp form's **Counts towards** boxes, the run-of-tiles checklist choice, want-list gaps, the sets the offer generator, the lot builder and **Series from singles** build from, an album's **Gather new checklists**, and the **Checklists** screen.
+
+**With it on**, they appear everywhere too, each marked with a small **specialised** badge — or *(specialised)* after its name where only text fits — so the two kinds stay apart.
+
+**What already uses a specialised checklist keeps working with the switch off.** An album entry built on one stays in its album and is printed, a run of tiles identified on one goes on, and the wants made from one stay on your want list. The entry's own screen names the checklist and marks it *specialised*. Saving a stamp while the switch is off leaves its places on specialised checklists exactly as they were — the form could not show them, so it does not change them.
+
+You set the type when you add a checklist, in the same form as its name, and can change it later: **Rename…** shows the type beside the name, and the checklist's **⋮** menu offers **Make specialised** or **Make standard** — in an issue's checklists editor and on the **Checklists** screen alike. Changing it moves nothing else: its stamps, its order and everything built on it stay as they are.
+
 ### Managing an issue's checklists
 
 Open **Checklists…** from the issue's **⋮** menu, or **Manage…** on the **Checklists** card of the issue's own detail page — both open the same editor. From there you can:
 
-- **Add** a checklist and give it a name (*Basic set*, *Imperforate*, *With tabs*).
+- **Add** a checklist, give it a name (*Basic set*, *Imperforate*, *With tabs*) and choose its [type](#standard-and-specialised-checklists) — **Standard** unless you pick **Specialised**.
 - **Choose stamps…** — tick the stamps the set is made of. The whole issue's stamp tree is listed, each row carrying the same catalog-number chips the issue's own rows do — `Mi·PL 200` rather than a bare `200`, so a stamp listed in three catalogs reads as three labelled numbers instead of three anonymous ones. Anything left unticked is an extra the issue holds but no set counts.
 - **Order stamps…** — drag the ⠿ grip to say what order the set reads in. It starts in catalog order, which is what every screen showed before, so nothing moves until you change it; change it where the catalogue's numbering is not how the set is laid out. Each drop is saved as you make it, and every screen that lists the checklist follows the order — the copies an intake creates from a whole set, the lines an auction lot or a trade takes it as, the stamps a set is still missing.
-- **Rename** or **Delete** a checklist. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures. If the checklist is in an [album](albums.md), the confirmation names the album: it loses its card for the checklist.
+- **Rename** a checklist, change its type (**Make specialised** / **Make standard**), or **Delete** it. Deleting one leaves the stamps in the issue — only the goal goes, along with its completeness figures. If the checklist is in an [album](albums.md), the confirmation names the album: it loses its card for the checklist.
 - **Translate** a checklist's name with the 🌐 button beside it, when adding or renaming one. It is what an [album](albums.md#the-language-is-the-albums-own-and-it-changes-the-plan) printed in that language calls the checklist. A checklist still named after its issue needs nothing here: it uses the issue's own translation unless you give it one of its own.
 
 Names are **labels, not identifiers**: the same name may repeat freely across issues, and *Imperforate* on two different series is two unrelated checklists that never meet on one screen. Within **one** issue a repeated name is allowed too, but the field shows a **⚠** saying so — two checklists called the same thing read alike everywhere they are listed, and you can still save it if that is what you meant.
-- **Reorder** them by dragging the ⠿ grip. The order matters: the **first** checklist is the one the issue's row shows, and the one a new stamp joins by default.
+- **Reorder** them by dragging the ⠿ grip. The order matters: the **first** checklist is the one the issue's row shows, and the one a new stamp joins by default — the first **standard** one, since a specialised checklist is never what *the issue's set* means. With specialised checklists switched off, reordering the ones shown leaves the hidden ones where they were.
 
 ### Putting a stamp on a checklist
 
-The **Add stamp** and **Edit stamp** dialogs carry a **Counts towards** list with one box per checklist of the issue — tick as many as apply. On an issue that has no checklist yet, the list is a single **Required for completeness** box; ticking it starts the issue's set, named after the issue.
+The **Add stamp** and **Edit stamp** dialogs carry a **Counts towards** list with one box per checklist of the issue — tick as many as apply. Specialised checklists are among them only while they are switched on, marked **specialised**. On an issue that has no standard checklist yet, the list is a single **Required for completeness** box; ticking it starts the issue's set, named after the issue.
 
 Leave every box clear for an extra the issue holds but no set counts.
 
@@ -776,7 +793,7 @@ The issue's own **detail page** is where several checklists get room: a **Checkl
 
 Some sets are not one issue's: a thematic set, a definitive series printed over several years and several issues, *all Grosik 1928–1932*. Those live on the **Checklists** screen, in the **Catalog** section of the sidebar. It lists only the checklists that span issues — an issue's own checklists stay on the issue.
 
-- **New checklist** starts one and names it. The same ⚠ as on an issue warns when the name is already taken by another checklist on this screen; you can still save it.
+- **New checklist** starts one, names it and sets its [type](#standard-and-specialised-checklists). The **Show specialised checklists** chip beside it decides whether the specialised ones are listed; each row's **⋮** menu can **Make specialised** or **Make standard**. The same ⚠ as on an issue warns when the name is already taken by another checklist on this screen; you can still save it.
 - **Adding stamps.** On the **Issues** list, tick the stamps on the expanded trees — across as many issues and areas as you like — and choose **Add to checklist…** in the selection bar. Pick the checklist, or **New checklist…** to start one from the ticked stamps. Only the stamps you ticked join, **not the variants a tick brings along**: a copy of a variant already counts for the stamp it is a variant of, so the set lists `309` and a `309A` in your album fills it. Stamps already on the checklist are left where they are, and new ones go after them.
 - **Stamps and order…** in a row's **⋮** menu lists what is on the checklist, each stamp with its catalogue numbers and the issue it comes from. Drag the ⠿ grip to set the order the set reads in, or take a stamp off with **−**. Each change is saved as you make it.
 - Each row shows the checklist's **size**, how many **issues** it reaches, how **complete** it is (stamps held over stamps on it, in any condition, and how many complete sets) and its **catalogue value** — read exactly as an issue's checklist is. Each stamp is priced on the leading catalogue of **its own area**; when those catalogues are in different currencies, the total is given in your base currency.

@@ -9,6 +9,7 @@ import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { intakeDocumentName } from "@/lib/purchase-kind";
@@ -61,7 +62,12 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
   const today = new Date().toISOString().slice(0, 10);
 
   const issueIds = await getPurchaseIssueIds(purchase.id);
-  const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
+  const issueHeaders = await getIssueHeadersByIds(
+    session.user.id,
+    collection.id,
+    issueIds,
+    await readIncludeSpecialised(collection.id)
+  );
   const issueHeaderById: Record<string, IssueHeader> = {};
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 
