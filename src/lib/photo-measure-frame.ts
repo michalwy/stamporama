@@ -26,6 +26,8 @@
 // measuring tools must never do. **No frame, and the tools are absent**, exactly as on a tile side
 // with no box.
 
+import { isMultiStampCount } from "./multi-stamp";
+
 export interface PhotoPixels {
   /** The stored `full` derivative's size. */
   width: number;
@@ -69,4 +71,30 @@ export function photoMeasureFrame(photo: PhotoPixels, maxEdge: number): MeasureF
   // may be a downscale by an unknown factor.
   if (Math.max(width, height) >= maxEdge) return null;
   return { width, height };
+}
+
+// ## Whose size a reading sets
+//
+// Every enlarged photo offers the measuring viewer (#1592), and the lightbox it opens from knows only
+// the picture. So which stamp a measured size is written to is read off the photo's own owner, here,
+// rather than told by each screen — the one rule the copy's and the stamp's pages used to state each
+// for itself (#1290).
+
+/** A photo's owner, as far as {@link photoMeasureStampId} needs it: the stamp it hangs on, or the
+ * copy it hangs on with that copy's stamp and how many stamps the copy carries (#744). */
+export interface PhotoMeasureOwner {
+  stampId: string | null;
+  item: { stampId: string; stampCount: number } | null;
+}
+
+/**
+ * The stamp a size measured on this photo is written to, or null where the picture is of no one
+ * stamp. A stamp's own picture is that stamp's; a copy's is its stamp's — unless the copy is a piece
+ * carrying several stamps, whose picture shows them all and so sizes none of them. Anything else (an
+ * offer's composed image, a scan tile not yet a copy) measures and sets nothing.
+ */
+export function photoMeasureStampId(owner: PhotoMeasureOwner): string | null {
+  if (owner.stampId) return owner.stampId;
+  if (owner.item && !isMultiStampCount(owner.item.stampCount)) return owner.item.stampId;
+  return null;
 }

@@ -16,6 +16,7 @@ import {
 import { saveAnnotatedSnapshot } from "../../src/lib/photo-snapshot";
 import { DEFAULT_ANNOTATION_STYLE } from "../../src/lib/annotations";
 import {
+  getPhotoMeasureTarget,
   getStampSizeSources,
   writeMeasuredStampSize,
   StampMeasuredSizeError,
@@ -466,5 +467,35 @@ describe("annotated snapshots and measured sizes (#674, #1290)", () => {
     assert.deepEqual(none.size, { widthMm: null, heightMm: null });
 
     await assert.rejects(getStampSizeSources(otherUserId, stampId), StampMeasuredSizeError);
+  });
+
+  it("tells a lightbox what the viewer needs about any photo, and whose size it sets (#1592)", async () => {
+    // A copy's photo: its frame, the copy's stamp, and the collection's scanning profiles.
+    const front = await getPhotoMeasureTarget(userId, collectionId, frontPhotoId);
+    assert.deepEqual(front.frame, { width: W, height: H });
+    assert.equal(front.stampId, stampId);
+    assert.deepEqual(front.scanning, { profiles: [], defaultProfileId: null });
+
+    // A stamp's own photo (the snapshot kept on the stamp above) sets that stamp.
+    const own = await prisma.photo.findFirstOrThrow({ where: { stampId } });
+    assert.equal((await getPhotoMeasureTarget(userId, collectionId, own.id)).stampId, stampId);
+
+    // A piece carrying several stamps measures, and sets none of them.
+    await prisma.item.update({ where: { id: itemId }, data: { stampCount: 3 } });
+    try {
+      const multi = await getPhotoMeasureTarget(userId, collectionId, frontPhotoId);
+      assert.equal(multi.stampId, null);
+      assert.deepEqual(multi.frame, { width: W, height: H });
+    } finally {
+      await prisma.item.update({ where: { id: itemId }, data: { stampCount: 1 } });
+    }
+
+    // Someone else's photo, or one asked for under another collection, is not found.
+    await assert.rejects(getPhotoMeasureTarget(otherUserId, collectionId, frontPhotoId), StampMeasuredSizeError);
+    await assert.rejects(
+      getPhotoMeasureTarget(otherUserId, otherCollectionId, frontPhotoId),
+      StampMeasuredSizeError
+    );
+    await assert.rejects(getPhotoMeasureTarget(userId, collectionId, "no-such-photo"), StampMeasuredSizeError);
   });
 });

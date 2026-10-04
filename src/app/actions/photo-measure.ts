@@ -8,10 +8,12 @@ import { parseSnapshotRequest } from "@/lib/annotations";
 import { saveAnnotatedSnapshot, type SnapshotOwner } from "@/lib/photo-snapshot";
 import { PhotoAuthError, PhotoValidationError } from "@/lib/photos";
 import {
+  getPhotoMeasureTarget,
   getStampSizeSources,
   StampMeasuredSizeError,
   writeMeasuredStampSize,
   type MeasuredSizeWriteResult,
+  type PhotoMeasureTarget,
   type StampSizeSources,
 } from "@/lib/stamp-measured-size";
 
@@ -98,5 +100,26 @@ export async function getStampSizeSourcesAction(
       return { status: "error", message: err.message };
     }
     return { status: "error", message: "Failed to read the stamp's size. Please try again." };
+  }
+}
+
+export type PhotoMeasureTargetActionState =
+  | { status: "success"; target: PhotoMeasureTarget }
+  | { status: "error"; message: string };
+
+/** What the measuring viewer needs about a photo enlarged anywhere in the collection (#1592). */
+export async function getPhotoMeasureTargetAction(
+  collectionId: string,
+  photoId: string
+): Promise<PhotoMeasureTargetActionState> {
+  const session = await getSession();
+  try {
+    return {
+      status: "success",
+      target: await getPhotoMeasureTarget(session.user.id, collectionId, photoId),
+    };
+  } catch (err) {
+    if (err instanceof StampMeasuredSizeError) return { status: "error", message: err.message };
+    return { status: "error", message: "Failed to open the photo for measuring. Please try again." };
   }
 }

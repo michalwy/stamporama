@@ -1,6 +1,5 @@
 "use client";
 
-import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -68,7 +67,6 @@ export function StampDetailPanel({
   relatives,
   treeIssue,
   areas,
-  scanning,
   copyPhotos,
 }: {
   collectionId: string;
@@ -76,8 +74,6 @@ export function StampDetailPanel({
   baseCurrency: string;
   stamp: StampListItem;
   relatives: StampRelatives;
-  /** The collection's stated scan resolution (#598) — the measuring viewer's prefill (#1290). */
-  scanning: ScanningSetup;
   /** The photos of this stamp's copies (#1290), the first {@link STAMP_COPY_PHOTO_LIMIT} of `total`. */
   copyPhotos: { photos: PhotoSummary[]; total: number };
   /** The issue the Variants card writes against (#630) — {@link StampRelatives.treeIssueId}
@@ -262,7 +258,6 @@ export function StampDetailPanel({
                 collectionId={collectionId}
                 photos={stamp.photos}
                 size="7rem"
-                measure={{ scanning, stampId: stamp.id }}
               />
             </DetailCard>
 
@@ -278,7 +273,6 @@ export function StampDetailPanel({
                 collectionId={collectionId}
                 photos={copyPhotos.photos}
                 size="7rem"
-                measure={{ scanning, stampId: stamp.id }}
               />
               {copyPhotos.total > copyPhotos.photos.length && (
                 <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>

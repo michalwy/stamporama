@@ -569,6 +569,8 @@ export interface ConfirmDialogProps {
   variant?: "primary" | "destructive";
   isPending?: boolean;
   error?: ReactNode;
+  /** As {@link DialogShell}'s — for a confirmation asked from a dialog that is itself stacked high. */
+  zIndexBase?: number;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -581,11 +583,12 @@ export function ConfirmDialog({
   variant = "destructive",
   isPending,
   error,
+  zIndexBase,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
   return (
-    <DialogShell title={title} onClose={onClose}>
+    <DialogShell title={title} onClose={onClose} zIndexBase={zIndexBase}>
       <DialogBody>
         <p
           style={{

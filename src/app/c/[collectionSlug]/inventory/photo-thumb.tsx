@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import type { PhotoSummary } from "@/lib/photos";
 import { SLOT_ROLE_META, isSlotRole } from "./photo-slot-meta";
 import {
@@ -10,6 +10,7 @@ import {
   type ViewablePhoto,
 } from "@/app/photo-viewer";
 import { Icon } from "@/app/icons";
+import { getPhotoMeasureTargetAction } from "@/app/actions/photo-measure";
 import { PhotoMeasureDialog, type PhotoMeasureContext } from "./photo-measure-dialog";
 
 // The hover preview and the overlay themselves live in `@/app/photo-viewer`, which knows nothing
@@ -234,18 +235,13 @@ export function PhotoStrip({
   collectionId,
   photos,
   size = "4.5rem",
-  measure,
 }: {
   collectionId: string;
   photos: PhotoSummary[];
   /** Edge length of each (square) thumbnail. */
   size?: string;
-  /** Offer the measuring viewer from the lightbox (#1290) — the detail screens of a copy and a
-   * stamp, where a picture of the piece is looked at closely and its stamp's size is written. */
-  measure?: PhotoMeasureContext;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [measuringIndex, setMeasuringIndex] = useState<number | null>(null);
   if (photos.length === 0) return null;
   return (
     <div style={{ display: "flex", gap: "0.375rem", overflowX: "auto", paddingBottom: "0.125rem" }}>
@@ -318,23 +314,6 @@ export function PhotoStrip({
           index={Math.min(lightboxIndex, photos.length - 1)}
           onIndex={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
-          onMeasure={
-            measure
-              ? (i) => {
-                  setLightboxIndex(null);
-                  setMeasuringIndex(i);
-                }
-              : undefined
-          }
-        />
-      )}
-      {measure && measuringIndex !== null && photos[measuringIndex] && (
-        <PhotoMeasureDialog
-          collectionId={collectionId}
-          photo={photos[measuringIndex]}
-          label={roleLabel(photos[measuringIndex])}
-          context={measure}
-          onClose={() => setMeasuringIndex(null)}
         />
       )}
     </div>
@@ -355,58 +334,99 @@ export function collectionPhotoViews(
 }
 
 /** The shared lightbox, addressed by collection: the call shape every screen in the app already
- * uses, over the overlay in `@/app/photo-viewer`. */
+ * uses, over the overlay in `@/app/photo-viewer`.
+ *
+ * **Every photo enlarged here offers _Measure and mark_** (#1592), as the one opened from a copy's or
+ * a stamp's page always did (#1290) — a list's thumbnail, a picker's, an offer's card. The screen
+ * says nothing about it: what the viewer needs (the frame, the stamp a reading sets the size of, the
+ * scanning profiles) is asked of the server when the button is pressed, from the photo alone. The
+ * partner's pages (#666) draw the bare overlay and never come through here, so nothing there offers
+ * it. Measuring takes the lightbox's place, and closing it closes both, as on the detail pages.
+ */
 export function PhotoLightbox({
   collectionId,
   photos,
   index,
   onIndex,
   onClose,
-  onMeasure,
 }: {
   collectionId: string;
   photos: PhotoSummary[];
   index: number;
   onIndex: (index: number) => void;
   onClose: () => void;
-  /** Open the photo on screen in the measuring viewer (#1290). Absent where a screen does not offer it. */
-  onMeasure?: (index: number) => void;
 }) {
+  const [measuring, setMeasuring] = useState<{
+    photo: PhotoSummary;
+    context: PhotoMeasureContext;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function measure(i: number) {
+    const photo = photos[i];
+    if (!photo) return;
+    setError(null);
+    startTransition(async () => {
+      const state = await getPhotoMeasureTargetAction(collectionId, photo.id);
+      if (state.status === "error") {
+        setError(state.message);
+        return;
+      }
+      const { frame, stampId, scanning } = state.target;
+      setMeasuring({ photo: { ...photo, measureFrame: frame }, context: { scanning, stampId } });
+    });
+  }
+
+  if (measuring) {
+    return (
+      <PhotoMeasureDialog
+        collectionId={collectionId}
+        photo={measuring.photo}
+        label={roleLabel(measuring.photo)}
+        context={measuring.context}
+        onClose={onClose}
+      />
+    );
+  }
+
   return (
     <PhotoLightboxView
       photos={collectionPhotoViews(collectionId, photos)}
       index={index}
-      onIndex={onIndex}
+      onIndex={(i) => {
+        setError(null);
+        onIndex(i);
+      }}
       onClose={onClose}
-      actions={
-        onMeasure
-          ? (i) => (
-              <button
-                type="button"
-                onClick={() => onMeasure(i)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  padding: "0.375rem 0.75rem",
-                  borderRadius: "999px",
-                  border: "1px solid rgba(255,255,255,0.35)",
-                  background: "rgba(0,0,0,0.45)",
-                  color: "#fff",
-                  font: "inherit",
-                  fontSize: "0.8125rem",
-                  cursor: "pointer",
-                }}
-              >
-                <Icon name="measure" size="sm" /> Measure and mark
-              </button>
-            )
-          : undefined
-      }
+      actions={(i) => (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.625rem" }}>
+          <button
+            type="button"
+            onClick={() => measure(i)}
+            disabled={pending}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              padding: "0.375rem 0.75rem",
+              borderRadius: "999px",
+              border: "1px solid rgba(255,255,255,0.35)",
+              background: "rgba(0,0,0,0.45)",
+              color: "#fff",
+              font: "inherit",
+              fontSize: "0.8125rem",
+              cursor: pending ? "wait" : "pointer",
+            }}
+          >
+            <Icon name="measure" size="sm" /> {pending ? "Opening…" : "Measure and mark"}
+          </button>
+          {error && <span style={{ color: "#fff", fontSize: "0.8125rem" }}>{error}</span>}
+        </span>
+      )}
     />
   );
 }
-
 
 /** Small round chevron overlaid on the thumbnail that cycles the shown photo without opening the
  * lightbox. A circular puck keeps most of the stamp visible (unlike a full-height bar). Stops

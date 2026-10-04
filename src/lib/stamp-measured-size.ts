@@ -23,6 +23,7 @@ import {
   toScanningSetup,
 } from "./scanning-profiles";
 import type { ScanningSetup } from "./scanning-profile";
+import { photoMeasureStampId, type MeasureFrame } from "./photo-measure-frame";
 
 // A size measured on a photo, written onto the stamp (#1290) — so measuring and setting the size is
 // one act rather than reading a figure off the viewer and typing it somewhere else.
@@ -169,5 +170,57 @@ export async function getStampSizeSources(
     // Copies past the strip's cap are not looked at, and are not counted here either: this says why
     // nothing listed can be measured, not how many pictures exist.
     unmeasurable: all.length - photos.length,
+  };
+}
+
+/**
+ * What the measuring viewer needs about one photo, opened from whichever lightbox enlarged it
+ * (#1592): the frame it is measured in, the stamp a reading sets the size of, and the collection's
+ * scanning profiles (#1443) to read it at.
+ *
+ * Asked when *Measure* is pressed rather than carried by every list that draws a thumbnail: a dozen
+ * readers build photo summaries and none of them shows a frame, and the stamp a reading belongs to is
+ * the photo's owner's business (`photoMeasureStampId`), not the screen's.
+ */
+export interface PhotoMeasureTarget {
+  /** Null where the photo cannot be measured honestly — the viewer then opens without its tools. */
+  frame: MeasureFrame | null;
+  /** Null where the picture is of no one stamp: it measures, and sets nothing. */
+  stampId: string | null;
+  scanning: ScanningSetup;
+}
+
+export async function getPhotoMeasureTarget(
+  ownerId: string,
+  collectionId: string,
+  photoId: string
+): Promise<PhotoMeasureTarget> {
+  const photo = await prisma.photo.findUnique({
+    where: { id: photoId },
+    select: {
+      ...PHOTO_FRAME_SELECT,
+      stampId: true,
+      // Exactly one owner is set (#137, #311, #566) — any of them answers which collection it is in.
+      item: { select: { collectionId: true, stampId: true, stampCount: true } },
+      stamp: { select: { collectionId: true } },
+      offer: { select: { collectionId: true } },
+      tile: { select: { collectionId: true } },
+    },
+  });
+  const owner = photo && (photo.item ?? photo.stamp ?? photo.offer ?? photo.tile);
+  if (!photo || !owner || owner.collectionId !== collectionId) {
+    throw new StampMeasuredSizeError("Photo not found.");
+  }
+  const collection = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true, ...SCANNING_SETUP_SELECT },
+  });
+  if (!collection || collection.ownerId !== ownerId) {
+    throw new StampMeasuredSizeError("Photo not found.");
+  }
+  return {
+    frame: measureFrameOf(photo),
+    stampId: photoMeasureStampId({ stampId: photo.stampId, item: photo.item }),
+    scanning: toScanningSetup(collection),
   };
 }

@@ -37,13 +37,10 @@ import {
 import { buildAreaPrefixNodes, effectivePrefixFor } from "./area-prefix";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import {
-  PHOTO_FRAME_SELECT,
   deletePhotoBytesForStamp,
-  measureFrameOf,
   sortPhotos,
   type PhotoSummary,
 } from "./photos";
-import type { PhotoPixels } from "./photo-measure-frame";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { recomputeStampSortKeys } from "./catalog-sort-key-recompute";
 import { makeFormatFactorLookup, makeFormatFactorResolver } from "./format-pricing";
@@ -510,7 +507,7 @@ const STAMP_LIST_SELECT = {
     },
   },
   checklistEntries: { select: { checklistId: true } },
-  photos: { select: { id: true, role: true, title: true, sortOrder: true, ...PHOTO_FRAME_SELECT } },
+  photos: { select: { id: true, role: true, title: true, sortOrder: true } },
   // The collector's own labels (#152) — this stamp's own rows and nothing else: a tag on its
   // parent, on one of its variants or on its issue is not on this stamp.
   tags: TAG_SUMMARY_SELECT,
@@ -546,7 +543,7 @@ function toStampListItem(
       };
     }[];
     checklistEntries: { checklistId: string }[];
-    photos: ({ id: string; role: string | null; title: string | null; sortOrder: number } & PhotoPixels)[];
+    photos: { id: string; role: string | null; title: string | null; sortOrder: number }[];
     tags: { tag: { id: string; name: string; color: string | null } }[];
   } & StampAttributeDisplayRow & {
       widthMm: Prisma.Decimal | null;
@@ -631,7 +628,6 @@ function toStampListItem(
           : null) as "front" | "back" | "main" | null,
         title: p.title,
         sortOrder: p.sortOrder,
-        measureFrame: measureFrameOf(p),
       }))
       .sort(sortPhotos),
     copies: copyCounts.direct.get(stamp.id) ?? NO_COPIES,

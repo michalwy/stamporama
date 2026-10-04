@@ -89,8 +89,9 @@ export interface PhotoSummary {
   title: string | null;
   sortOrder: number;
   /** The frame the photo is measured in (#1290) — its upload's own pixels — or null when that cannot
-   * be known, which leaves the measuring tools absent. Only the readers whose screens open the
-   * measuring viewer fill it; absent everywhere else. See `photo-measure-frame.ts`. */
+   * be known, which leaves the measuring tools absent. Filled where a photo is handed to the measuring
+   * viewer — by the lightbox, which asks for it when *Measure* is pressed (#1592), and by the page
+   * editor's size sources (#1309); absent on the lists. See `photo-measure-frame.ts`. */
   measureFrame?: MeasureFrame | null;
 }
 

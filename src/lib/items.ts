@@ -42,9 +42,7 @@ import {
   type SubtypeLabel,
 } from "./variant-classification";
 import {
-  PHOTO_FRAME_SELECT,
   deletePhotoBytesForItem,
-  measureFrameOf,
   sortPhotos,
   type PhotoSummary,
 } from "./photos";
@@ -1796,7 +1794,7 @@ const ITEM_LIST_SELECT = {
       },
     },
   },
-  photos: { select: { id: true, role: true, title: true, sortOrder: true, ...PHOTO_FRAME_SELECT } },
+  photos: { select: { id: true, role: true, title: true, sortOrder: true } },
   // The card scan this copy was identified from (#1188). At most one is read: a copy is made from
   // one tile, and the pathological case of two tiles pointing at it (a second tile handing an
   // existing copy its photographs) still came off *a* card, so the earliest is the answer rather
@@ -1982,7 +1980,6 @@ function toItemListItem(
           | null,
         title: p.title,
         sortOrder: p.sortOrder,
-        measureFrame: measureFrameOf(p),
       }))
       .sort(sortPhotos),
     scan: scanOriginOf(row),

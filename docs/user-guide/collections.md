@@ -969,7 +969,8 @@ stamp's page shows it beside the size (*21.5 × 25 mm — measured with Epson V6
 the profile describes a measurement, not a figure you typed.
 
 A stamp you did not measure while identifying it can still be measured afterwards, on a photo of a
-copy: **Measure and mark** under an enlarged photo on the copy's or the stamp's page, then the
+copy: **Measure and mark** under any enlarged photo of the copy or the stamp — from its page, a
+list or a picker alike — then the
 **Size** tool, correct the width and height if the box landed a fraction off, then **Set as the
 stamp's size**. A stamp that already states a size is not changed until you have seen that size and
 confirmed replacing it. See
