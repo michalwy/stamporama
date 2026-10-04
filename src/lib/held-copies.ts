@@ -23,6 +23,7 @@
  * lifted into `delivery-state.ts` rather than restated here.
  */
 
+import type { MeasureFrame } from "./photo-measure-frame";
 import {
   copyDeliveryBucket,
   IN_FLIGHT_COPY_BUCKETS,
@@ -231,7 +232,56 @@ export interface HeldCopyPicture {
   forTrade: boolean;
   /** The copy's attached photos, front and back first. Empty for a copy with no picture — which is
    *  still listed, because leaving it out would read as *not held*. */
-  photos: { id: string; role: "front" | "back" | null; title: string | null; sortOrder: number }[];
+  photos: HeldCopyPhoto[];
+}
+
+/** One of a held copy's photos, with what the comparison (#1641) needs to draw it at a known scale. */
+export interface HeldCopyPhoto {
+  id: string;
+  role: "front" | "back" | null;
+  title: string | null;
+  sortOrder: number;
+  /** The upload's own pixels (`photo-measure-frame.ts`), or null when they cannot be known. */
+  frame: MeasureFrame | null;
+  /** The scan the picture was cut from, when it is still that crop ({@link tracePhotoScan}) — and
+   * the profile the card was scanned with, null where the sheet does not say. Null for a picture
+   * that was not traced to a scan, whose resolution nothing records. */
+  scan: { scanningProfileId: string | null } | null;
+}
+
+/** One side of a scan tile a copy was made from (#567), as tracing its picture back needs it: the
+ * side's box on the card **turned** as its crop was cut, and the card's profile. */
+export interface ConsumedTileSide {
+  role: "front" | "back";
+  width: number;
+  height: number;
+  scanningProfileId: string | null;
+}
+
+/**
+ * Whether a copy's photo is still the crop of a scan tile it was made from (#1641), and so is in
+ * that card's pixels at that card's resolution.
+ *
+ * Identification hands the tile's own photo rows to the copy (#567) and keeps no link from the photo
+ * back to the tile, so the photo is matched to the tile by what the crop recorded: its role, and an
+ * upload size that **is** the tile's box — a crop's `originalWidth`/`originalHeight` are written as
+ * the turned box (`scan-sheets.ts`). Either way round, because the photo editor turns a photo by a
+ * quarter by swapping them. A photo replaced since, or one uploaded straight onto the copy, has
+ * another size and comes back null — its resolution is then not known, rather than assumed.
+ */
+export function tracePhotoScan(
+  photo: { role: "front" | "back" | null; frame: MeasureFrame | null },
+  sides: readonly ConsumedTileSide[]
+): { scanningProfileId: string | null } | null {
+  const { role, frame } = photo;
+  if (!role || !frame) return null;
+  const match = sides.find(
+    (s) =>
+      s.role === role &&
+      ((s.width === frame.width && s.height === frame.height) ||
+        (s.width === frame.height && s.height === frame.width))
+  );
+  return match ? { scanningProfileId: match.scanningProfileId } : null;
 }
 
 /**

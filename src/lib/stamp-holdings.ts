@@ -1,8 +1,15 @@
 import "server-only";
 import { prisma } from "./db";
 import { countHeldCopyRowsByStamp, heldCopiesWhere } from "./copy-counts";
-import type { HeldCopyPicture, HeldCopyRow } from "./held-copies";
-import { sortPhotos } from "./photos";
+import {
+  tracePhotoScan,
+  type ConsumedTileSide,
+  type HeldCopyPhoto,
+  type HeldCopyPicture,
+  type HeldCopyRow,
+} from "./held-copies";
+import { measureFrameOf, PHOTO_FRAME_SELECT, sortPhotos } from "./photos";
+import { asQuarterTurn, turnedSize } from "./tile-turn";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 
 /**
@@ -85,27 +92,81 @@ export async function listHeldCopyPictures(
       inCollection: true,
       forSale: true,
       forTrade: true,
-      photos: { select: { id: true, role: true, title: true, sortOrder: true } },
+      photos: {
+        select: { id: true, role: true, title: true, sortOrder: true, ...PHOTO_FRAME_SELECT },
+      },
+      // The tiles the copy was made from (#567), so each photo still their crop is drawn at its
+      // card's resolution in the comparison (#1641).
+      scanTiles: {
+        where: { state: "consumed" },
+        select: {
+          frontW: true,
+          frontH: true,
+          frontTurn: true,
+          backW: true,
+          backH: true,
+          backTurn: true,
+          frontSheet: { select: { scanningProfileId: true } },
+          backSheet: { select: { scanningProfileId: true } },
+        },
+      },
     },
     orderBy: { itemNo: "asc" },
   });
-  return rows.map((row) => ({
-    id: row.id,
-    itemNo: row.itemNo,
-    conditionId: row.conditionId,
-    certificateStatusId: row.certificateStatusId,
-    deliveryState: row.deliveryState,
-    inCollection: row.inCollection,
-    forSale: row.forSale,
-    forTrade: row.forTrade,
-    // Narrowed as the copy list narrows them (`items.ts`): a copy's reserved slots are front and back.
-    photos: row.photos
-      .map((p) => ({
-        id: p.id,
-        role: (p.role === "front" || p.role === "back" ? p.role : null) as "front" | "back" | null,
-        title: p.title,
-        sortOrder: p.sortOrder,
-      }))
-      .sort(sortPhotos),
-  }));
+  return rows.map((row) => {
+    const sides = row.scanTiles.flatMap(consumedTileSides);
+    return {
+      id: row.id,
+      itemNo: row.itemNo,
+      conditionId: row.conditionId,
+      certificateStatusId: row.certificateStatusId,
+      deliveryState: row.deliveryState,
+      inCollection: row.inCollection,
+      forSale: row.forSale,
+      forTrade: row.forTrade,
+      // Narrowed as the copy list narrows them (`items.ts`): a copy's reserved slots are front and back.
+      photos: row.photos
+        .map((p): HeldCopyPhoto => {
+          const role = p.role === "front" || p.role === "back" ? p.role : null;
+          const frame = measureFrameOf(p);
+          return {
+            id: p.id,
+            role,
+            title: p.title,
+            sortOrder: p.sortOrder,
+            frame,
+            scan: tracePhotoScan({ role, frame }, sides),
+          };
+        })
+        .sort(sortPhotos),
+    };
+  });
+}
+
+/** A consumed tile's sides with a box on a card, each as its crop was cut — turned. */
+function consumedTileSides(tile: {
+  frontW: number | null;
+  frontH: number | null;
+  frontTurn: number;
+  backW: number | null;
+  backH: number | null;
+  backTurn: number;
+  frontSheet: { scanningProfileId: string | null } | null;
+  backSheet: { scanningProfileId: string | null } | null;
+}): ConsumedTileSide[] {
+  const sides: ConsumedTileSide[] = [];
+  const add = (
+    role: "front" | "back",
+    w: number | null,
+    h: number | null,
+    turn: number,
+    sheet: { scanningProfileId: string | null } | null
+  ) => {
+    if (w == null || h == null || !sheet) return;
+    const size = turnedSize({ width: w, height: h }, asQuarterTurn(turn));
+    sides.push({ role, ...size, scanningProfileId: sheet.scanningProfileId });
+  };
+  add("front", tile.frontW, tile.frontH, tile.frontTurn, tile.frontSheet);
+  add("back", tile.backW, tile.backH, tile.backTurn, tile.backSheet);
+  return sides;
 }
