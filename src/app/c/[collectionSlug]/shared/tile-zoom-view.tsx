@@ -92,6 +92,7 @@ import {
   type ViewportSize,
 } from "@/lib/scan-viewport";
 import { isSideways, turnBy, turnedSize, type QuarterTurn } from "@/lib/tile-turn";
+import { fitAt, type PictureSize } from "@/lib/compare-scale";
 import { ScanToolButton } from "./scan-tool-button";
 import { useSheetRegion } from "./use-sheet-region";
 import { useWatermarkView, type WatermarkStatus } from "./use-watermark-view";
@@ -243,6 +244,34 @@ interface Props {
   onTurn?: (side: TileSideView["side"], turn: QuarterTurn) => void;
   /** A turn is on its way — the controls wait for it rather than stacking a second on top. */
   turning?: boolean;
+  /** One of the two viewers of *Compare with the copies you hold* (#1641); see {@link ViewerPairing}. */
+  pairing?: ViewerPairing;
+}
+
+/**
+ * A viewer drawn beside another of the same piece of paper's kind (#1641) — the piece being
+ * identified and a copy already held, compared at one scale, their zoom and pan linkable.
+ *
+ * The viewer knows nothing of the other one. It reports where it stands (`onLayout`) and every move
+ * the collector makes in it (`onMove`), and it takes what *Fit* means (`fitScale`) and the other
+ * viewer's moves, already carried into its own frame (`incoming`), from the surface around it —
+ * which holds both and does the arithmetic (`compare-scale.ts`). A carried move is applied and never
+ * reported back, which is what keeps two linked viewers from answering each other's every step.
+ */
+export interface ViewerPairing {
+  /** Display pixels per picture pixel that *Fit* means here, or null for the viewer's own fit. */
+  fitScale: number | null;
+  /** The other viewer's latest move, carried into this one — applied once for each `seq`, and only
+   * over the picture it was carried onto (`photoId`): a viewer remounted on another piece or copy
+   * must not open on a view taken for the last one. */
+  incoming: { seq: number; photoId: string; view: Viewport; fitted: boolean } | null;
+  /** Where the viewer stands — the picture on screen, its size and the viewport's — or null while it
+   * has no picture laid out. Called again whenever any of it changes. */
+  onLayout: (layout: { photoId: string; picture: PictureSize; viewport: ViewportSize } | null) => void;
+  /** A zoom, a pan, *Fit* or `1:1` the collector made here, as the view it produced. */
+  onMove: (move: { view: Viewport; fitted: boolean }) => void;
+  /** Whether the zoom keys are this viewer's — false while they belong to the other one. */
+  keys: boolean;
 }
 
 /**
@@ -316,6 +345,7 @@ export function IdentifiedPieceAside({
   onTurn,
   turning,
   runOrder,
+  pairing,
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
@@ -333,6 +363,9 @@ export function IdentifiedPieceAside({
   /** The pieces are a run about to take one issue's stamps in turn (#1220), in the order they were
    * ticked — so the grid says that rather than *one stamp*, and numbers each by its turn. */
   runOrder?: boolean;
+  /** The open viewer is one of a compared pair (#1641). A run showing the grid has no viewer, so
+   * nothing to pair. */
+  pairing?: ViewerPairing;
 }) {
   const shown = pieces.filter((p) => p.sides.length > 0);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -377,6 +410,7 @@ export function IdentifiedPieceAside({
         onGauge={onGauge}
         onTurn={onTurn ? (side, turn) => onTurn(shown[0].tileId, side, turn) : undefined}
         turning={turning}
+        pairing={pairing}
       />
     );
   }
@@ -449,6 +483,7 @@ export function IdentifiedPieceAside({
           onTurn={onTurn ? (side, turn) => onTurn(opened.tileId, side, turn) : undefined}
           turning={turning}
           onEnlargedChange={setEnlarged}
+          pairing={pairing}
         />
       </div>
     );
@@ -799,6 +834,7 @@ export function TileZoomView({
   carried,
   onStateChange,
   onEnlargedChange,
+  pairing,
 }: Props) {
   const noun = subject === "photo" ? "photo" : "tile";
   const [sideKey, setSideKey] = useState(() => carried?.side ?? sides[0]?.side ?? "front");
@@ -858,6 +894,17 @@ export function TileZoomView({
     setFitted(value);
   }, []);
 
+  /** What *Fit* means here: the whole picture in the viewport, or — beside another viewer at one
+   * scale (#1641) — the picture at the pair's scale. */
+  const pairedFit = pairing?.fitScale ?? null;
+  const fitView = useCallback(
+    (picture: PictureSize, viewport: ViewportSize) =>
+      pairedFit !== null ? fitAt(picture, viewport, pairedFit) : fitViewport(picture, viewport),
+    [pairedFit]
+  );
+  /** The next view change is a move the collector made, for the viewer beside this one (#1641). */
+  const movedRef = useRef(false);
+
   // Measure the viewport, and fit inside it. One observer covers the dialog being resized with the
   // window and the later observations; the **first** measurement is taken here, synchronously,
   // because the observer's first callback only arrives after a paint has already happened — and a
@@ -897,15 +944,53 @@ export function TileZoomView({
     const picture = { width: pictureWidth, height: pictureHeight };
     const from = laidOutRef.current.width > 0 ? laidOutRef.current : size;
     laidOutRef.current = size;
+    movedRef.current = false;
     setView((v) =>
-      fittedRef.current ? fitViewport(picture, size) : resizeViewport(v, picture, from, size)
+      fittedRef.current ? fitView(picture, size) : resizeViewport(v, picture, from, size)
     );
-  }, [pictureWidth, pictureHeight, ready, size, carriedAt]);
+  }, [pictureWidth, pictureHeight, ready, size, carriedAt, fitView]);
+
+  // The pair (#1641): where this viewer stands, and each move the collector makes in it — and the
+  // other viewer's moves, carried here, which are applied without being reported back.
+  const onPairLayout = pairing?.onLayout;
+  const onPairMove = pairing?.onMove;
+  const incoming = pairing?.incoming ?? null;
+  const pairPhotoId = current?.photoId ?? null;
+  useEffect(() => {
+    if (!onPairLayout) return;
+    onPairLayout(
+      ready && pairPhotoId
+        ? {
+            photoId: pairPhotoId,
+            picture: { width: pictureWidth, height: pictureHeight },
+            viewport: size,
+          }
+        : null
+    );
+  }, [onPairLayout, pairPhotoId, pictureHeight, pictureWidth, ready, size]);
+  useEffect(() => () => onPairLayout?.(null), [onPairLayout]);
+  useEffect(() => {
+    if (!movedRef.current) return;
+    movedRef.current = false;
+    onPairMove?.({ view, fitted });
+  }, [fitted, onPairMove, view]);
+  // Adjusted while rendering, as the marks are below, so the carried view is the first one drawn.
+  const [appliedSeq, setAppliedSeq] = useState(0);
+  if (incoming && incoming.seq !== appliedSeq && incoming.photoId === pairPhotoId) {
+    setAppliedSeq(incoming.seq);
+    setFitted(incoming.fitted);
+    setView(incoming.view);
+  }
+  // …and the ref the resize observer reads, once that render is committed.
+  useLayoutEffect(() => {
+    fittedRef.current = fitted;
+  }, [fitted]);
 
   const zoomStep = useCallback(
     (factor: number, anchor?: { x: number; y: number }) => {
       if (!ready) return;
       const picture = { width: pictureWidth, height: pictureHeight };
+      movedRef.current = true;
       setView((v) =>
         zoomBy(v, factor, anchor ?? { x: size.width / 2, y: size.height / 2 }, picture, size)
       );
@@ -916,12 +1001,14 @@ export function TileZoomView({
 
   const fit = useCallback(() => {
     if (!ready) return;
-    setView(fitViewport({ width: pictureWidth, height: pictureHeight }, size));
+    movedRef.current = true;
+    setView(fitView({ width: pictureWidth, height: pictureHeight }, size));
     markFitted(true);
-  }, [markFitted, pictureHeight, pictureWidth, ready, size]);
+  }, [fitView, markFitted, pictureHeight, pictureWidth, ready, size]);
 
   const actualSize = useCallback(() => {
     if (!ready) return;
+    movedRef.current = true;
     setView(actualSizeViewport({ width: pictureWidth, height: pictureHeight }, size));
     markFitted(false);
   }, [markFitted, pictureHeight, pictureWidth, ready, size]);
@@ -937,6 +1024,7 @@ export function TileZoomView({
       const rect = el.getBoundingClientRect();
       const anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      movedRef.current = true;
       setView((v) => zoomBy(v, Math.pow(ZOOM_STEP, -delta / 100), anchor, picture, size));
       markFitted(false);
     };
@@ -947,8 +1035,11 @@ export function TileZoomView({
   // The same keys as the editor, so the two surfaces are one habit. Not while a field has focus —
   // the settled tile's note is a textarea, and `-` is a character in it. Not while the large window
   // is open over this panel either (#1442): the keys are the window's then.
+  // Beside another viewer (#1641) the keys are the one viewer's the pointer was last over, or one
+  // press would zoom both.
+  const keysElsewhere = pairing ? !pairing.keys : false;
   useEffect(() => {
-    if (enlarged) return;
+    if (enlarged || keysElsewhere) return;
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -965,7 +1056,7 @@ export function TileZoomView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enlarged, fit, zoomStep]);
+  }, [enlarged, fit, keysElsewhere, zoomStep]);
 
   // ── Measuring (#598) ────────────────────────────────────────────────────────────────────────
 
@@ -1445,6 +1536,7 @@ export function TileZoomView({
     const last = pan.current;
     if (!last || !ready) return;
     const picture = { width: pictureWidth, height: pictureHeight };
+    movedRef.current = true;
     setView((v) => panBy(v, e.clientX - last.x, e.clientY - last.y, picture, size));
     pan.current = { x: e.clientX, y: e.clientY };
   };
@@ -1685,7 +1777,7 @@ export function TileZoomView({
             <ScanToolButton
               key={s.side}
               label={s.label}
-              hint={`Show the ${s.label.toLowerCase()} of this tile — the zoom and the position are kept`}
+              hint={`Show the ${s.label.toLowerCase()} of this ${noun} — the zoom and the position are kept`}
               active={s.side === current.side}
               onClick={() => showSide(s.side)}
             />

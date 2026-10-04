@@ -1957,16 +1957,29 @@ gives one number and this line splits it, because *hold* is a claim and the badg
 **Comparing with the copies you hold.** Often the question is not *do I need this* but *is this one
 better than mine* — better centred, fresher colour, full perforations, a cleaner cancel — and that is
 judged by looking, not by reading a condition code. So whenever the line says you hold something, it
-ends with **Compare with it…** (or **Compare with them…**). It opens a window over the step:
+ends with **Compare with it…** (or **Compare with them…**). It opens a window over the step, as
+large as your browser window, split into two equal halves:
 
 - **On the left, the piece you are identifying** — the scan tile, in the same viewer with its zoom,
-  or, when you are not working from a scan, the photos you have added under **Photos** in this step.
-  With no picture of it yet the left side just says so; the copies you hold are still shown.
-- **On the right, every copy you still hold of that stamp**, the ones **in your collection first**,
-  then the ones for sale, for trade and with no disposition, then any not filed yet (*being sorted*,
-  *in the post*, *on its way*). Each is labelled with its copy number, condition, certificate and
-  disposition — or, for a copy not filed yet, where it is. Its front and back are drawn large; click
-  any picture to open it full size.
+  or, when you are not working from a scan, the photos you have added under **Photos** in this step
+  (click one to open it full size). With no picture of it yet the left side just says so; the copies
+  you hold are still shown.
+- **On the right, a copy you hold**, in a viewer of the same size with the same **Front** / **Back**
+  switch, zoom and **Fit**. With several copies, a **strip above it** picks which one is shown: every
+  copy you still hold of that stamp, the ones **in your collection first**, then the ones for sale,
+  for trade and with no disposition, then any not filed yet (*being sorted*, *in the post*, *on its
+  way*), each with its copy number, condition and certificate chips, and its disposition — or, for a
+  copy not filed yet, where it is. A copy with more pictures than a front and a back has **All N
+  pictures of this copy…** under the viewer.
+- **Both are drawn at the same scale when both scan resolutions are known**, so a stamp that looks
+  larger on screen is larger on paper, and **Fit** fits the larger of the two. The piece's resolution
+  is its scan's; a copy's is known while its picture is still the crop of the scan it was identified
+  from — a photo you uploaded or replaced afterwards has none. When either is not known, each picture
+  fits its own viewer, and the bottom of the window says the two are **not to the same scale** and
+  which one is missing its resolution.
+- **Link zoom and pan**, at the bottom, makes a zoom or a drag in either viewer move the other to the
+  same place of its stamp, so you can look at the same corner of both. It is off until you tick it.
+  The **+**, **−** and **0** keys act on the viewer the pointer was last over.
 - A copy you hold **without a photo is still listed** and says *No picture of this copy*, because
   leaving it out would look as if you did not hold it.
 - Copies you **no longer hold** — sold, traded away, written off, never arrived — are not shown.
@@ -1975,7 +1988,7 @@ ends with **Compare with it…** (or **Compare with them…**). It opens a windo
 copies you hold in your collection** — only those: copies for sale, for trade, with no disposition or
 not filed yet are left to the line and the comparison. Each carries its condition chip, and its
 certificate chip when it has one; hover one to enlarge it, click it to open the comparison above
-**on that copy**, outlined, with the others still listed around it. Up to six are drawn, in your
+**on that copy**, with the others still in its strip. Up to six are drawn, in your
 conditions' own order; beyond that **+N more** opens the comparison on all of them. A copy with no
 photo shows the usual empty frame, so the number of thumbnails is the number of copies. With nothing
 in your collection, no thumbnails are drawn and the line reads as before.

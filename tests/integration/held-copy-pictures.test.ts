@@ -30,6 +30,7 @@ describe("the held copies of a stamp, as pictures to compare (#1207)", () => {
   let filedId: string, noPictureId: string, onItsWayId: string;
   let writtenOffId: string, damagedId: string, neighbourId: string;
   let frontId: string, backId: string, extraId: string;
+  let profileId: string;
 
   before(async () => {
     userId = `test-user-heldpics-${ts}`;
@@ -88,9 +89,58 @@ describe("the held copies of a stamp, as pictures to compare (#1207)", () => {
     extraId = (await photo(null, 0)).id;
     backId = (await photo("back", 5)).id;
     frontId = (await photo("front", 9)).id;
+
+    // The filed copy was made from a scan tile (#567) whose front box is the front photo's own
+    // 100 × 100 pixels, on a card scanned with a profile (#1641). The tile has no back, so the back
+    // photo — the same size — is not traced to anything.
+    profileId = (
+      await prisma.scanningProfile.create({
+        data: { collectionId, name: "V600", nominalDpi: 1200 },
+      })
+    ).id;
+    const purchaseId = (
+      await prisma.purchase.create({
+        data: { collectionId, purchaseNo: 1, purchasedAt: new Date(), currency: "EUR" },
+      })
+    ).id;
+    const sheet = await prisma.scanSheet.create({
+      data: {
+        collectionId,
+        purchaseId,
+        batchNo: 1,
+        side: "front",
+        storageKey: `test/heldpics-${ts}-sheet`,
+        mime: "image/png",
+        width: 2000,
+        height: 1000,
+        viewWidth: 2000,
+        viewHeight: 1000,
+        sizeBytes: 1,
+        scanningProfileId: profileId,
+      },
+    });
+    await prisma.scanTile.create({
+      data: {
+        collectionId,
+        purchaseId,
+        batchNo: 1,
+        position: 0,
+        state: "consumed",
+        itemId: filedId,
+        frontSheetId: sheet.id,
+        frontX: 0,
+        frontY: 0,
+        frontW: 100,
+        frontH: 100,
+      },
+    });
   });
 
   after(async () => {
+    await prisma.scanTile.deleteMany({ where: { collectionId } });
+    await prisma.scanSheet.deleteMany({ where: { collectionId } });
+    await prisma.purchase.deleteMany({ where: { collectionId } });
+    await prisma.scanningProfile.deleteMany({ where: { collectionId } });
     await prisma.photo.deleteMany({ where: { item: { collectionId } } });
     await prisma.item.deleteMany({ where: { collectionId } });
     await prisma.stamp.deleteMany({ where: { collectionId } });
@@ -130,6 +180,16 @@ describe("the held copies of a stamp, as pictures to compare (#1207)", () => {
         [extraId, null],
       ]
     );
+  });
+
+  it("traces a photo still a tile's crop to the card's profile, and no other (#1641)", async () => {
+    const copies = await listHeldCopyPictures(userId, collectionId, stampId, null);
+    const filed = copies.find((c) => c.id === filedId)!;
+    const byId = new Map(filed.photos.map((p) => [p.id, p]));
+    assert.deepEqual(byId.get(frontId)!.frame, { width: 100, height: 100 });
+    assert.deepEqual(byId.get(frontId)!.scan, { scanningProfileId: profileId });
+    assert.equal(byId.get(backId)!.scan, null, "the tile has no back to have cut it from");
+    assert.equal(byId.get(extraId)!.scan, null, "an extra photo is no tile's crop");
   });
 
   it("keeps a copy with no photo, saying so by an empty list rather than by leaving it out", async () => {
