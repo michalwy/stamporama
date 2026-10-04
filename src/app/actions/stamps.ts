@@ -47,11 +47,13 @@ import type { StampSelectionAnswer } from "@/lib/stamp-tree-selection";
 import type { StampPurchaseCosts } from "@/lib/purchase-costs";
 import type {
   CatalogPriceInput,
+  QuickCatalogPriceEntry,
   StampCatalogPriceDisplay,
   StampPriceDetails,
 } from "@/lib/stamps";
 import { enforceStampCatalogDuplicates } from "@/lib/duplicate-catalog";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { parsePriceCellInput } from "@/lib/catalog-price-mark";
 import { parseTranslationValues } from "@/lib/translations";
 import { parseStampAttributes, parseStampSizeInput } from "@/lib/stamp-attribute-kinds";
 import { setStampTagEntries } from "@/lib/tags";
@@ -121,14 +123,14 @@ export async function quickSetCatalogPricesAction(
   entries: Array<{ catalogNameId: string; amount: string }>
 ): Promise<StampActionState> {
   const session = await getSession();
-  const parsed: Array<{ catalogNameId: string; amount: number }> = [];
+  const parsed: QuickCatalogPriceEntry[] = [];
   for (const e of entries) {
-    if (!e.amount.trim()) continue;
-    const n = Number(normalizeDecimalInput(e.amount));
-    if (!Number.isFinite(n) || n < 0) {
-      return { status: "error", message: "Enter a valid non-negative amount." };
+    const cell = parseQuickPriceEntry(e.amount);
+    if (cell === null) continue;
+    if (cell === "invalid") {
+      return { status: "error", message: "Enter a valid non-negative amount, - or ?." };
     }
-    parsed.push({ catalogNameId: e.catalogNameId, amount: n });
+    parsed.push({ catalogNameId: e.catalogNameId, amount: cell });
   }
   if (parsed.length === 0) {
     return { status: "error", message: "Enter at least one catalog value." };
@@ -142,6 +144,15 @@ export async function quickSetCatalogPricesAction(
       message: e instanceof Error ? e.message : "Failed to set the catalog price.",
     };
   }
+}
+
+/** One quick-price input read: a figure, a mark (`-` does not exist, `?` not determinable — #1615),
+ *  null for a blank input, which submits nothing, or `"invalid"`. */
+function parseQuickPriceEntry(raw: string): QuickCatalogPriceEntry["amount"] | null | "invalid" {
+  const cell = parsePriceCellInput(raw);
+  if (cell.kind === "empty") return null;
+  if (cell.kind === "invalid") return "invalid";
+  return cell.kind === "mark" ? cell.mark : cell.amount;
 }
 
 /** Result of loading the bulk quick-price grid's context (#720): its columns and one row per
@@ -199,17 +210,20 @@ export async function quickSetCatalogPricesBulkAction(
   rows: BulkQuickPriceRowInput[]
 ): Promise<BulkQuickPriceSaveState> {
   const session = await getSession();
-  const parsed: Array<{ row: BulkQuickPriceRowInput; entries: Array<{ catalogNameId: string; amount: number }> }> =
-    [];
+  const parsed: Array<{ row: BulkQuickPriceRowInput; entries: QuickCatalogPriceEntry[] }> = [];
   for (const row of rows) {
-    const entries: Array<{ catalogNameId: string; amount: number }> = [];
+    const entries: QuickCatalogPriceEntry[] = [];
     for (const e of row.entries) {
-      if (!e.amount.trim()) continue;
-      const n = Number(normalizeDecimalInput(e.amount));
-      if (!Number.isFinite(n) || n < 0) {
-        return { status: "error", message: "Enter a valid non-negative amount.", savedRows: 0 };
+      const cell = parseQuickPriceEntry(e.amount);
+      if (cell === null) continue;
+      if (cell === "invalid") {
+        return {
+          status: "error",
+          message: "Enter a valid non-negative amount, - or ?.",
+          savedRows: 0,
+        };
       }
-      entries.push({ catalogNameId: e.catalogNameId, amount: n });
+      entries.push({ catalogNameId: e.catalogNameId, amount: cell });
     }
     if (entries.length > 0) parsed.push({ row, entries });
   }
@@ -251,19 +265,25 @@ function parseCatalogPrices(formData: FormData): CatalogPriceInput[] {
       .slice("catalogPrice_".length)
       .split("~");
     if (!catalogEditionId || !conditionId) continue;
-    const price = normalizeDecimalInput((value as string).trim());
-    if (!price) continue;
     const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
     if (!currency) continue;
-    if (isNaN(Number(price))) continue;
-    prices.push({
+    const axes = {
       catalogEditionId,
       conditionId,
       certificateStatusId: certRaw ? certRaw : null,
       formatId: formatRaw ? formatRaw : null,
-      price,
       currency,
-    });
+    };
+    // `-` and `?` record that the catalogue gives no price (#1615); blank records nothing.
+    const cell = parsePriceCellInput(value as string);
+    if (cell.kind === "mark") {
+      prices.push({ ...axes, price: null, mark: cell.mark });
+      continue;
+    }
+    const price = normalizeDecimalInput((value as string).trim());
+    if (!price) continue;
+    if (isNaN(Number(price))) continue;
+    prices.push({ ...axes, price });
   }
   return prices;
 }

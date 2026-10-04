@@ -6,6 +6,7 @@ import {
   normalizeDecimalInput,
   sanitizeDecimalInput,
 } from "@/lib/decimal-input";
+import { parsePriceCellInput, settlePriceMarkInput } from "@/lib/catalog-price-mark";
 
 /**
  * A decimal amount field that accepts both "," and "." as the decimal separator, regardless of
@@ -27,17 +28,30 @@ import {
  * Drop-in for the money `<input>`s across the app: it forwards every input prop and calls through
  * the given `onChange` after rewriting the DOM value, so it works both controlled
  * (`value`/`onChange`) and uncontrolled (`name`/`defaultValue`, read back via `FormData`).
+ *
+ * A **catalogue price** field passes `priceMark` (#1615): it also takes `-`, recording that the
+ * catalogue says the stamp does not exist there, and `?`, that its price cannot be determined —
+ * settled to the catalogue's own signs, `—` and `?`, when the field is left.
  */
 export const NumericInput = forwardRef<
   HTMLInputElement,
-  Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & { kind: "amount" | "number" }
->(function NumericInput({ kind, onChange, onBlur, onKeyDown, inputMode = "decimal", ...rest }, ref) {
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & {
+    kind: "amount" | "number";
+    /** Accept a catalogue price mark, `-` or `?`, as well as an amount (#1615). */
+    priceMark?: boolean;
+  }
+>(function NumericInput(
+  { kind, priceMark = false, onChange, onBlur, onKeyDown, inputMode = "decimal", ...rest },
+  ref
+) {
   // Rewrites the field to what leaving it means, and tells a controlled parent: a blur or key event
   // carries the same target, so the parent reads the new value off it exactly as it would from a
   // change — without this the state keeps the keystrokes while the DOM shows the result.
   const settle = (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
     const el = e.currentTarget;
-    const settled = kind === "amount" ? formatAmountInput(el.value) : normalizeDecimalInput(el.value);
+    const mark = priceMark ? settlePriceMarkInput(el.value) : null;
+    const settled =
+      mark ?? (kind === "amount" ? formatAmountInput(el.value) : normalizeDecimalInput(el.value));
     if (settled !== el.value) {
       el.value = settled;
       onChange?.(e as unknown as React.ChangeEvent<HTMLInputElement>);
@@ -52,6 +66,11 @@ export const NumericInput = forwardRef<
       inputMode={inputMode}
       onChange={(e) => {
         const el = e.currentTarget;
+        // A mark is the whole field — `-`, `?` or a pasted dash — and is left exactly as typed.
+        if (priceMark && parsePriceCellInput(el.value).kind === "mark") {
+          onChange?.(e);
+          return;
+        }
         const caret = el.selectionStart ?? el.value.length;
         const cleaned = sanitizeDecimalInput(el.value);
         if (cleaned !== el.value) {

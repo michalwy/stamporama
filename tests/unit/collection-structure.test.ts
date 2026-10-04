@@ -286,6 +286,7 @@ describe("the values beside each count (#1402)", () => {
     totalBaseAmount: "120.00",
     pricedCount: 5,
     unpricedCount: 2,
+    markedCount: 0,
     unconvertibleCount: 1,
     uncertainCount: 0,
     uncertainBaseAmount: "0.00",

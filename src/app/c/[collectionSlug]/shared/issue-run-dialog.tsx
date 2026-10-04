@@ -1869,13 +1869,14 @@ function RowValue({
         <>
           <NumericInput
             kind="amount"
+            priceMark
             ref={inputRef}
             aria-label={label}
             value={amount}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKeyDown}
             disabled={disabled}
-            placeholder="—"
+            placeholder=""
             autoComplete="off"
             style={{
               ...INPUT_STYLE,

@@ -1,4 +1,5 @@
 import "server-only";
+import type { CatalogPriceMark } from "./catalog-price-mark";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
@@ -91,6 +92,8 @@ export interface AnchorableLine {
   unitValue: string | null;
   /** No catalogue price for this stamp at that condition × certificate × format. */
   unpriced: boolean;
+  /** Unpriced because the catalogue gives no price on purpose (#1615): said, never asked for. */
+  mark: CatalogPriceMark | null;
   /** Priced, but in a currency with no rate to {@link currency}. */
   unconvertible: boolean;
 }
@@ -343,6 +346,7 @@ export async function valuateAuctionLotLines(
       unitValue: unitValue === null ? null : unitValue.toFixed(2),
       lineValue: unitValue === null ? null : (unitValue * quantity).toFixed(2),
       unpriced,
+      mark: value.mark,
       unconvertible,
       uncertain: value.uncertain,
     });
@@ -496,6 +500,7 @@ export async function valuateLineSpecs(
       issuedYear: stamp.issuedYear,
       unitValue: value.unitValue === null ? null : value.unitValue.toFixed(2),
       unpriced: value.unpriced,
+      mark: value.mark,
       unconvertible: value.unconvertible,
     };
   });

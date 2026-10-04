@@ -11,6 +11,9 @@
  * module with no imports cannot take part in a cycle.
  */
 
+import type { CatalogPriceMark } from "./catalog-price-mark";
+import { isMissingCatalogPrice } from "./valuation";
+
 /** The part of an `OfferPlatformItem` the gap rule reads. */
 export interface GapItem {
   stampId: string;
@@ -25,13 +28,14 @@ export interface GapItem {
 export interface GapCopy {
   stampId: string;
   conditionId: string;
-  value: { unpriced: boolean };
+  value: { unpriced: boolean; mark: CatalogPriceMark | null };
 }
 
 export interface ListingItemGaps {
   /** Rows whose entry was never matched to the platform's catalogue (#247). */
   unlinked: number;
-  /** Rows with no catalog value recorded for their `stamp × condition` (#720). */
+  /** Rows with no catalog value recorded for their `stamp × condition` (#720) — not counting one the
+   *  catalogue gives no price for (#1615), which has nothing to record. */
   unpriced: number;
 }
 
@@ -47,7 +51,7 @@ export interface ListingItemGaps {
 export function listingItemGaps(items: GapItem[], copies: GapCopy[]): ListingItemGaps {
   const unpricedKeys = new Set<string>();
   for (const copy of copies) {
-    if (copy.value.unpriced) unpricedKeys.add(`${copy.stampId}|${copy.conditionId}`);
+    if (isMissingCatalogPrice(copy.value)) unpricedKeys.add(`${copy.stampId}|${copy.conditionId}`);
   }
   let unlinked = 0;
   let unpriced = 0;

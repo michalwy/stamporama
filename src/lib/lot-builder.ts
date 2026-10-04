@@ -204,6 +204,7 @@ async function readLotPool(
     // Null **is not zero** (#378): an unpriced copy passes the ceiling, counts as a piece, and is
     // named rather than valued at nothing.
     catalogValue: valuations.get(row.id)?.baseAmount ?? null,
+    catalogMarked: valuations.get(row.id)?.mark != null,
     faultReduction: faultReductionOf(valuations.get(row.id)),
   }));
 
@@ -308,8 +309,9 @@ function summarize(pool: LotPool, criteria: LotBuilderCriteria, baseCurrency: st
   let faultReducedCopies = 0;
   let faultReduction = 0;
   for (const candidate of candidates) {
-    if (candidate.catalogValue === null) unpricedCopies += 1;
-    else catalogValue += candidate.catalogValue;
+    if (candidate.catalogValue === null) {
+      if (!candidate.catalogMarked) unpricedCopies += 1;
+    } else catalogValue += candidate.catalogValue;
     if (candidate.faultReduction) {
       faultReducedCopies += 1;
       faultReduction += candidate.faultReduction;

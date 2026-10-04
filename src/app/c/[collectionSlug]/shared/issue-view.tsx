@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import {
   formatIssuedDate,
   formatIssueCatalogNumber,
@@ -409,7 +410,16 @@ export function StampDetailLine({
       {/* The collector's own labels on this stamp (#152) — its own rows, never the issue's and
           never its parent's. */}
       <TagChips tags={node.tags} />
-      {!node.mainCatalogPrice && onSetPrice && (
+      {!node.mainCatalogPrice && node.mainCatalogPriceMark && (
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
+          <CatalogPriceMarkText
+            mark={node.mainCatalogPriceMark}
+            rolledUp={node.mainCatalogPriceUncertain}
+            align="end"
+          />
+        </span>
+      )}
+      {!node.mainCatalogPrice && !node.mainCatalogPriceMark && onSetPrice && (
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
           <Tooltip
             align="end"

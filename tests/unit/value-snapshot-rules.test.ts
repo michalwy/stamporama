@@ -40,6 +40,7 @@ describe("holdingsSnapshotFields", () => {
     totalBaseAmount: "120.50",
     pricedCount: 4,
     unpricedCount: 2,
+    markedCount: 0,
     unconvertibleCount: 1,
     uncertainCount: 1,
     uncertainBaseAmount: "10.00",

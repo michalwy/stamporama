@@ -1,5 +1,6 @@
 "use client";
 
+import { isMissingCatalogPrice } from "@/lib/valuation";
 import type { OfferPlatformItem } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -335,7 +336,8 @@ export function OfferPlatformItemsCard({
   const unpricedBy = useMemo(() => {
     const map = new Map<string, ItemListItem>();
     for (const copy of copies) {
-      if (!copy.value.unpriced) continue;
+      // A copy the catalogue gives no price for (#1615) is no gap: there is nothing to record.
+      if (!isMissingCatalogPrice(copy.value)) continue;
       const key = `${copy.stampId}|${copy.conditionId}`;
       if (!map.has(key)) map.set(key, copy);
     }

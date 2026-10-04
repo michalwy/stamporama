@@ -9,7 +9,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { formatAmountInput } from "@/lib/decimal-input";
+import { catalogPriceMarkInput } from "@/lib/catalog-price-mark";
 import { fillCertificateCell, formatPricePercent } from "@/lib/certificate-price-fill";
 import {
   factorFromSetPrices,
@@ -18,8 +18,12 @@ import {
   planConditionFill,
 } from "@/lib/condition-price-fill";
 import {
+  cellMark,
+  cellWriteValue,
   derivedCellAmount,
   lowestVariantAmount,
+  rolledUpCellMark,
+  settleCellInput,
   shownCellAmount,
   variantDescendantMap,
   variantPriceCellKey as cellKey,
@@ -239,7 +243,7 @@ function VariantPriceGrid({
     for (const p of grid.prices) {
       map.set(
         cellKey(p.stampId, p.catalogEditionId, p.conditionId, p.certificateStatusId, p.formatId),
-        p.amount
+        p.mark ? catalogPriceMarkInput(p.mark) : p.amount
       );
     }
     return map;
@@ -333,7 +337,9 @@ function VariantPriceGrid({
     if (!editionId) return false;
     const key = cellKey(stampId, editionId, conditionId, certId, formatId);
     const typed = raw.trim();
-    const normalized = typed === "" ? "" : formatAmountInput(typed);
+    // `-` records *does not exist* and `?` *not determinable* (#1615), settled to the catalogue's
+    // own signs; anything else is an amount, or blank to clear the cell.
+    const normalized = settleCellInput(typed);
     if (normalized !== typed) setIn(setValues, key, normalized);
     if (normalized === (saved.get(key) ?? "")) return true;
 
@@ -346,7 +352,7 @@ function VariantPriceGrid({
       conditionId,
       certificateStatusId: certId,
       formatId,
-      amount: normalized === "" ? null : Number(normalized),
+      amount: cellWriteValue(normalized),
     });
     setPending((prev) => {
       const next = new Set(prev);
@@ -537,9 +543,20 @@ function VariantPriceGrid({
    * sits above.
    */
   function rollupFor(stampId: string, conditionId: string): string | null {
-    return lowestVariantAmount(variantDescendants.get(stampId) ?? [], (id) =>
-      shownAmount(id, conditionId)
+    return (
+      lowestVariantAmount(variantDescendants.get(stampId) ?? [], (id) =>
+        shownAmount(id, conditionId)
+      ) ?? rolledUpCellMark(grid.rows, stampId, (id) => shownMark(id, conditionId))
     );
+  }
+
+  /** The mark a stamp's cell holds in this column as drawn (#1615): its own, or — empty on a format
+   *  tab — the one its single carries over. */
+  function shownMark(stampId: string, conditionId: string) {
+    if (!editionId) return null;
+    const own = values.get(cellKey(stampId, editionId, conditionId, certId, formatId)) ?? "";
+    if (own.trim() !== "") return cellMark(own);
+    return cellMark(derivedFor(stampId, conditionId) ?? "");
   }
 
   if (grid.rows.length === 0) {
@@ -587,7 +604,8 @@ function VariantPriceGrid({
       <p style={{ ...MUTED, margin: 0 }}>
         {grid.scopeLabel}. Every figure is saved as you leave the cell — there is nothing to submit,
         and <em>Done</em> only closes. Clear a cell to remove the price; an empty cell records
-        nothing. Tab moves down a condition column and off the last cell onto <em>Done</em>; Enter
+        nothing. Type <code>-</code> where the catalogue prints — and <code>?</code> where it prints
+        ?: neither is asked for again. Tab moves down a condition column and off the last cell onto <em>Done</em>; Enter
         saves the cell and closes. An <em>umbrella</em> row shows what its variants roll up to and
         is read-only until you unlock it.
       </p>
@@ -960,24 +978,28 @@ function VariantPriceGrid({
                   // `≈` rollup, muted and italic, #238's marking for inferred rather than recorded.
                   if (isLocked(row)) {
                     const rolled = value.trim() === "" ? rollupFor(row.stampId, cond.id) : null;
+                    const marked = cellMark(value.trim() !== "" ? value : (rolled ?? "")) !== null;
                     return (
                       <td key={cond.id} style={tdCellStyle}>
                         <Tooltip
                           content={
                             value.trim() !== ""
                               ? "Recorded on this umbrella directly, so it overrides the lowest-variant figure. Unlock the row to change it."
-                              : rolled
-                                ? "The lowest price among this stamp's variants on this edition — computed, not recorded."
-                                : "No variant of this stamp is priced at this condition yet."
+                              : rolled && marked
+                                ? "No variant of this stamp has a price here: the catalogue marks every one of them — or ? when any cannot be determined."
+                                : rolled
+                                  ? "The lowest price among this stamp's variants on this edition — computed, not recorded."
+                                  : "No variant of this stamp is priced at this condition yet."
                           }
                         >
                           <span
                             style={{
                               ...CELL_READONLY,
                               ...(rolled ? CELL_ROLLED_UP : null),
+                              ...(marked ? CELL_MARK : null),
                             }}
                           >
-                            {value.trim() !== "" ? value : rolled ? `≈${rolled}` : "—"}
+                            {value.trim() !== "" ? value : rolled ? `≈${rolled}` : ""}
                           </span>
                         </Tooltip>
                       </td>
@@ -991,6 +1013,7 @@ function VariantPriceGrid({
                       <Tooltip content={cellError ?? ""}>
                         <NumericInput
                           kind="amount"
+                          priceMark
                           ref={(el) => {
                             inputRefs.current.set(key, el);
                           }}
@@ -999,10 +1022,13 @@ function VariantPriceGrid({
                           onChange={(e) => setIn(setValues, key, e.target.value)}
                           onBlur={(e) => void commit(row.stampId, cond.id, e.currentTarget.value)}
                           onKeyDown={(e) => handleKeyDown(e, row.stampId, cond.id)}
-                          placeholder={derived ?? "—"}
+                          // Blank when empty: `—` is the catalogue's *does not exist* (#1615), and an
+                          // empty cell must not read as one.
+                          placeholder={derived ?? ""}
                           style={{
                             ...CELL_INPUT,
                             ...(derived && value.trim() === "" ? CELL_DERIVED : null),
+                            ...(cellMark(value) ? CELL_MARK : null),
                             ...(cellError ? CELL_ERROR : null),
                             opacity: pending.has(key) ? 0.6 : 1,
                           }}
@@ -1108,6 +1134,10 @@ const CELL_INPUT: React.CSSProperties = {
 
 /** A cell showing a derived value rather than a stored one — the per-stamp grid's own marking. */
 const CELL_DERIVED: React.CSSProperties = { borderStyle: "dashed" };
+
+/** A cell the catalogue marks as giving no price (#1615) — `—` or `?`, muted: a statement, not a
+ *  figure. */
+const CELL_MARK: React.CSSProperties = { color: "var(--color-text-muted)" };
 
 /** A locked umbrella cell (#627). Every box metric the input has, and a transparent border in place
  *  of its visible one: locking a row must not shift the columns beside it, or the grid jumps every

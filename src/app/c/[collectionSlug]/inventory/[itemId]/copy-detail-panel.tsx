@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -332,7 +333,11 @@ export function CopyDetailPanel({
                 {/* A piece carrying several stamps is priced by no catalog (#745); its figure is the
                     one recorded on it (#747), and the label must not say otherwise. */}
                 <Field label={item.multiStamp ? "Recorded value" : "Catalog value"}>
-                  {value.unpriced ? null : value.faultReduction ? (
+                  {value.unpriced ? (
+                    value.mark ? (
+                      <CatalogPriceMarkText mark={value.mark} full rolledUp={value.uncertain} />
+                    ) : null
+                  ) : value.faultReduction ? (
                     // Lowered for the copy's faults (#1560): the Copies row's mark, and the full
                     // figure in the hover, from the same valuation.
                     <Tooltip

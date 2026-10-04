@@ -1,5 +1,6 @@
 "use client";
 
+import { markedCopiesNote } from "@/lib/catalog-price-mark";
 import type { OffersSummary } from "@/lib/offers";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -205,6 +206,9 @@ function PlatformRow({ platform }: { platform: OffersSummary["platforms"][number
   if (platform.holdings.unpricedCount > 0) {
     notes.push(`${platform.holdings.unpricedCount} without catalog value`);
   }
+  if (platform.holdings.markedCount > 0) {
+    notes.push(markedCopiesNote(platform.holdings.markedCount));
+  }
   const note = notes.join(" · ");
 
   return (
@@ -253,6 +257,7 @@ export function OffersSummaryBar({
     );
   }
   if (holdings.unpricedCount > 0) valuationNotes.push(`${holdings.unpricedCount} unpriced`);
+  if (holdings.markedCount > 0) valuationNotes.push(markedCopiesNote(holdings.markedCount));
   if (holdings.unconvertibleCount > 0) {
     valuationNotes.push(
       `${holdings.unconvertibleCount} not convertible to ${holdings.baseCurrency}`

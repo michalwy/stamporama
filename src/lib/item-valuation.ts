@@ -93,6 +93,7 @@ export function copyValuationOf(
 
 const VALUATION_PRICE_SELECT = {
   price: true,
+  mark: true,
   currency: true,
   conditionId: true,
   certificateStatusId: true,

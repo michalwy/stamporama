@@ -2,9 +2,11 @@ import {
   pickFormatCatalogPrice,
   pickLowestByBase,
   baseValueOf,
+  rolledUpCatalogPriceMark,
   type PickedPrice,
   type RawCatalogPrice,
 } from "./catalog-price";
+import type { CatalogPriceMark } from "./catalog-price-mark";
 import type { CostBasisTotal } from "./cost-basis";
 
 // Pure copy-valuation domain logic (ADR-0007 §7). No Prisma / server-only, so it is
@@ -27,6 +29,10 @@ import type { CostBasisTotal } from "./cost-basis";
 //
 // Certificate matching is exact (null = none); there is no fall-back across
 // certificate levels. When no price matches, the copy is `unpriced`.
+//
+// A cell the catalogue marks as giving no price (#1615) leaves the copy `unpriced` too — there is no
+// figure, so nothing that adds or compares amounts has to learn a new case — but says why in `mark`.
+// Such a copy is not *missing* a price ({@link isMissingCatalogPrice}): there is nothing to enter.
 
 /** One descendant variant's catalog prices, with the stamp they belong to (#616). */
 export interface VariantPrices {
@@ -91,8 +97,18 @@ export interface CopyValuation {
   editionYear: number | null;
   /** True when the copy's variant is unknown → value is a lowest-variant estimate. */
   uncertain: boolean;
-  /** True when no catalog price matched (condition/cert/catalog). */
+  /** True when there is no figure — no catalog price matched (condition/cert/catalog), or the
+   *  catalogue gives none ({@link mark}). */
   unpriced: boolean;
+  /**
+   * Set when the copy is unpriced because the catalogue gives **no price on purpose** (#1615): the
+   * stamp does not exist in that condition (—) or its price cannot be determined (?). Null for every
+   * valuation with a figure and for a copy whose price has simply not been entered.
+   *
+   * For an unknown-variant umbrella it is the umbrella's own mark, or — when no variant is priced and
+   * every identified one is marked — the state they share.
+   */
+  mark: CatalogPriceMark | null;
   /** The **variant** this figure came from (#616), and null whenever the linked stamp's own price was
    *  used — including every identified copy and every unpriced one. It is the same answer read a
    *  second way: what the copy is valued at and what catalogue entry that figure describes. The
@@ -104,6 +120,9 @@ export interface CopyValuation {
    * The **fully identified** variants of an unknown-variant umbrella that carry no price at this key
    * (#617), in candidate order. Empty for an identified copy, for an umbrella priced directly (where
    * no rollup happens at all), and for one whose variants are all priced.
+   *
+   * A variant whose cell is marked (#1615) is not in it: it has nothing to enter, and does not stand
+   * in the way of a listing either.
    *
    * A report, never a rule of its own: the figure above is still the lowest of what *is* priced, and
    * it is flagged `uncertain` precisely because it is an estimate over incomplete information. What
@@ -153,6 +172,18 @@ export interface FaultReduction {
 export function reduceForFaults(amount: number, percent: number | null): number {
   if (!isFaultReduction(percent)) return amount;
   return (amount * (100 - percent)) / 100;
+}
+
+/**
+ * True when a valuation has no figure **and** one could be entered — the copy's catalogue price is
+ * missing rather than marked as giving none (#1615). Every count, mark, worklist and warning about
+ * missing prices reads this rather than `unpriced`.
+ */
+export function isMissingCatalogPrice(
+  valuation: Pick<CopyValuation, "unpriced"> & { mark?: CatalogPriceMark | null }
+): boolean {
+  // `mark` read loosely: a valuation frozen before #1615 (a trade's snapshot) carries none at all.
+  return valuation.unpriced && !valuation.mark;
 }
 
 /** True for a percentage that lowers anything: a whole number from 1 to 100. */
@@ -233,6 +264,7 @@ export function valuateExplicitValue(
     unpricedVariantIds: [],
     explicit: true,
     faultReduction: null,
+    mark: null,
   };
 }
 
@@ -247,33 +279,37 @@ export function valuateCopy(input: CopyValuationInput): CopyValuation {
       certificateStatusId,
       input.formatId ?? null,
       input.formatFactor ?? null
-    ).picked;
+    );
 
   const own = pick(input.ownPrices);
 
-  // Identified copy: its own price, certain.
+  // Identified copy: its own price, certain — or its own mark (#1615).
   if (!input.unknownVariant) {
-    return toValuation(own, false, baseCurrency, rates);
+    return toValuation(own.picked, false, baseCurrency, rates, null, [], own.mark);
   }
 
   // Unknown variant, base stamp priced directly: use it, flagged uncertain. No source stamp — the
   // figure is the umbrella's own, which is the same precedence the listing side gives its item-ID.
   // No variant coverage is reported either: nothing was rolled up, so there is no rollup to call
-  // incomplete (#617).
-  if (own) {
-    return toValuation(own, true, baseCurrency, rates);
+  // incomplete (#617). A mark recorded on the umbrella itself is its own answer the same way.
+  if (own.picked || own.mark) {
+    return toValuation(own.picked, true, baseCurrency, rates, null, [], own.mark);
   }
 
   // Unknown variant, base stamp unpriced: lowest descendant-variant price (in base currency). The
   // candidates carry the variant they came from, so the winner names it (#616) — and the identified
   // variants that priced *nothing* are collected as they go, which is what tells a listing that the
   // cheapest one is not actually known yet (#617).
+  // A marked variant (#1615) is neither a candidate nor a gap: it has nothing to enter.
   const candidates: (PickedPrice & { stampId: string })[] = [];
   const unpricedVariantIds: string[] = [];
+  const marks: { mark: CatalogPriceMark | null; identified: boolean }[] = [];
   for (const variant of input.variantPrices ?? []) {
-    const picked = pick(variant.prices);
-    if (picked) candidates.push({ ...picked, stampId: variant.stampId });
-    else if (variant.identified ?? true) unpricedVariantIds.push(variant.stampId);
+    const cell = pick(variant.prices);
+    const identified = variant.identified ?? true;
+    marks.push({ mark: cell.mark, identified });
+    if (cell.picked) candidates.push({ ...cell.picked, stampId: variant.stampId });
+    else if (!cell.mark && identified) unpricedVariantIds.push(variant.stampId);
   }
   const lowest = pickLowestByBase(candidates, baseCurrency, rates);
   return toValuation(
@@ -282,7 +318,8 @@ export function valuateCopy(input: CopyValuationInput): CopyValuation {
     baseCurrency,
     rates,
     lowest?.stampId ?? null,
-    unpricedVariantIds
+    unpricedVariantIds,
+    lowest ? null : rolledUpCatalogPriceMark(marks)
   );
 }
 
@@ -292,7 +329,8 @@ function toValuation(
   baseCurrency: string,
   rates: Map<string, number | null>,
   sourceStampId: string | null = null,
-  unpricedVariantIds: string[] = []
+  unpricedVariantIds: string[] = [],
+  mark: CatalogPriceMark | null = null
 ): CopyValuation {
   if (!picked) {
     return {
@@ -308,6 +346,7 @@ function toValuation(
       unpricedVariantIds,
       explicit: false,
       faultReduction: null,
+      mark,
     };
   }
   const baseAmount = baseValueOf(picked.amount, picked.currency, baseCurrency, rates);
@@ -324,6 +363,7 @@ function toValuation(
     unpricedVariantIds,
     explicit: false,
     faultReduction: null,
+    mark: null,
   };
 }
 
@@ -333,8 +373,11 @@ export interface HoldingsTotal {
   totalBaseAmount: string;
   /** Copies contributing a base amount to the total. */
   pricedCount: number;
-  /** Copies with no matching catalog price. */
+  /** Copies with no matching catalog price, where one could be entered. */
   unpricedCount: number;
+  /** Copies whose catalogue gives no price on purpose (#1615) — left out of the total like unpriced
+   *  ones, but counted apart, since there is nothing to enter for them. */
+  markedCount: number;
   /** Copies that have a price but in a currency with no available base rate. */
   unconvertibleCount: number;
   /** Priced copies whose value is variant-uncertain (unknown variant). */
@@ -430,13 +473,15 @@ export function aggregateHoldings(
   let uncertainTotal = 0;
   let pricedCount = 0;
   let unpricedCount = 0;
+  let markedCount = 0;
   let unconvertibleCount = 0;
   let uncertainCount = 0;
   let faultReducedCount = 0;
   let faultReductionTotal = 0;
   for (const v of valuations) {
     if (v.unpriced) {
-      unpricedCount++;
+      if (v.mark) markedCount++;
+      else unpricedCount++;
       continue;
     }
     if (v.baseAmount === null) {
@@ -459,6 +504,7 @@ export function aggregateHoldings(
     totalBaseAmount: total.toFixed(2),
     pricedCount,
     unpricedCount,
+    markedCount,
     unconvertibleCount,
     uncertainCount,
     uncertainBaseAmount: uncertainTotal.toFixed(2),

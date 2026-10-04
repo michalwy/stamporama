@@ -173,6 +173,7 @@ describe("catalogPriceCells", () => {
     certificateStatusId: null,
     formatId: null,
     amount,
+    mark: null,
     ...over,
   });
   const find = (cells: ReturnType<typeof catalogPriceCells>, stampId: string, over: Partial<RecordedPrice> = {}) =>

@@ -138,7 +138,8 @@ describe("deriveFormatPrice", () => {
 describe("pickCatalogPriceFor — format", () => {
   const edition = { year: 2026, catalogNameId: "michel" };
   const priceRow = (amount: number, formatId: string | null) => ({
-    price: amount as unknown as Parameters<typeof pickCatalogPriceFor>[0][number]["price"],
+    price: amount as unknown as NonNullable<Parameters<typeof pickCatalogPriceFor>[0][number]["price"]>,
+    mark: null,
     currency: "EUR",
     conditionId: "mnh",
     certificateStatusId: null,

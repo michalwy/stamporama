@@ -626,7 +626,7 @@ export function AuctionLotCardsView({
   );
   const lineFilterActive = onlyUnpriced || onlyNoPhoto || onlyUnknownVariant;
   const matches = (line: AuctionLotLineItem) =>
-    (!onlyUnpriced || line.unpriced) &&
+    (!onlyUnpriced || (line.unpriced && !line.mark)) &&
     (!onlyNoPhoto || line.photos.length === 0) &&
     (!onlyUnknownVariant || line.unknownVariant);
 
@@ -635,7 +635,8 @@ export function AuctionLotCardsView({
   // flat watchlist's facets read the same way. The lot asked for is among them (#1356): a line
   // filter narrows every card on screen, that one's included.
   const allLines = useMemo(() => shownLots.flatMap((lot) => lot.lines), [shownLots]);
-  const unpricedCount = allLines.filter((l) => l.unpriced).length;
+  // Missing, not marked (#1615): a line the catalogue gives no price for has nothing to enter.
+  const unpricedCount = allLines.filter((l) => l.unpriced && !l.mark).length;
   const noPhotoCount = allLines.filter((l) => l.photos.length === 0).length;
   const unknownVariantCount = allLines.filter((l) => l.unknownVariant).length;
   // Counted before *not described* is applied, for the same reason as the three above, and over

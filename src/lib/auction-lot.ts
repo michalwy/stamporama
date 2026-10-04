@@ -13,6 +13,8 @@
 // Money is handled as `number` internally and returned as a 2-dp string, the convention every other
 // pure money module here follows.
 
+import type { CatalogPriceMark } from "./catalog-price-mark";
+
 /** An amount as it arrives from the database (a Prisma `Decimal` serialises to a string), from a
  * form, or already as a number. Null/undefined/blank all mean "not recorded". */
 export type Amount = string | number | null | undefined;
@@ -413,6 +415,9 @@ export interface LotLineValue {
   /** No catalogue price at all for this stamp at that condition × format. A multiple with neither
    * an explicit price nor a factor lands here — never valued at the single's figure (ADR-0020). */
   unpriced: boolean;
+  /** The line is unpriced because its catalogue gives no price on purpose (#1615) — not a price to
+   *  go and enter, so it is not counted among the lot's unpriced lines. */
+  mark: CatalogPriceMark | null;
   /** Priced, but in a currency with no rate to the sale's. It exists and cannot be counted, which
    * is a different fact from having no price, and reporting it as unpriced would send the collector
    * off to enter a value that is already there. */
@@ -430,6 +435,8 @@ export interface LotLineValue {
  */
 export interface CatalogueLineValuation {
   unpriced: boolean;
+  /** Why it is unpriced, when the catalogue gives no price on purpose (#1615). Absent reads as none. */
+  mark?: CatalogPriceMark | null;
   /** The figure in the **collection's base** currency, or null when nothing priced it. */
   baseAmount: number | null;
   uncertain: boolean;
@@ -467,6 +474,7 @@ export function lotLineValueOf(
     quantity,
     unitValue: unpriced || unconvertible ? null : valuation!.baseAmount! * rate!,
     unpriced,
+    mark: unpriced ? (valuation?.mark ?? null) : null,
     unconvertible,
     uncertain: valuation?.uncertain ?? false,
   };
@@ -505,8 +513,11 @@ export interface LotCompositionValue {
    */
   catalogValue: string | null;
   /** Lines with no catalogue price. Reported rather than hidden, exactly as the sale summary
-   * reports its unvalued lots — a total that silently omits half the lot looks complete. */
+   * reports its unvalued lots — a total that silently omits half the lot looks complete. A line
+   * whose catalogue gives no price on purpose (#1615) is counted in {@link markedLines} instead. */
   unpricedLines: number;
+  /** Lines left out because their catalogue gives no price — *does not exist* or *not determinable*. */
+  markedLines: number;
   /** Lines priced in a currency that cannot be expressed in the sale's. */
   unconvertibleLines: number;
   /** Whether any line contributing to the total is a lowest-variant estimate. */
@@ -525,13 +536,15 @@ export function summarizeLotComposition(lines: LotLineValue[]): LotCompositionVa
   let total = 0;
   let valued = 0;
   let unpricedLines = 0;
+  let markedLines = 0;
   let unconvertibleLines = 0;
   let uncertain = false;
 
   for (const line of lines) {
     const count = Number.isFinite(line.quantity) ? Math.max(0, Math.trunc(line.quantity)) : 0;
     quantity += count;
-    if (line.unpriced) unpricedLines++;
+    if (line.unpriced && line.mark) markedLines++;
+    else if (line.unpriced) unpricedLines++;
     if (line.unconvertible) unconvertibleLines++;
     if (line.unitValue === null) continue;
     valued++;
@@ -544,6 +557,7 @@ export function summarizeLotComposition(lines: LotLineValue[]): LotCompositionVa
     quantity,
     catalogValue: valued > 0 ? money(total) : null,
     unpricedLines,
+    markedLines,
     unconvertibleLines,
     uncertain,
   };

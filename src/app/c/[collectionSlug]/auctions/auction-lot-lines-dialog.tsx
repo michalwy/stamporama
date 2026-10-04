@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useMemo, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { DialogShell, DialogBody, DialogFooter, DialogSecondaryButton } from "@/app/dialog-shell";
@@ -339,7 +340,9 @@ export function AuctionLotLinesDialog({
                   </span>
 
                   <div style={{ textAlign: "right" }}>
-                    {line.unpriced ? (
+                    {line.unpriced && line.mark ? (
+                      <CatalogPriceMarkText mark={line.mark} align="end" />
+                    ) : line.unpriced ? (
                       // The trigger lives in the price slot, as on every other list (#228, #341).
                       <button
                         type="button"
@@ -521,6 +524,7 @@ function CompositionTotals({
     quantity: number;
     catalogValue: string | null;
     unpricedLines: number;
+    markedLines: number;
     unconvertibleLines: number;
     uncertain: boolean;
     allIn: string | null;
@@ -568,10 +572,12 @@ function CompositionTotals({
           {data.headroom ?? "—"} {data.currency}
         </span>
       </div>
-      {(data.unpricedLines > 0 || data.unconvertibleLines > 0) && (
+      {(data.unpricedLines > 0 || data.markedLines > 0 || data.unconvertibleLines > 0) && (
         <p style={NOTE}>
           {data.unpricedLines > 0 &&
             `${data.unpricedLines} line${data.unpricedLines === 1 ? " has" : "s have"} no catalogue price at that condition and format — the total leaves them out. `}
+          {data.markedLines > 0 &&
+            `${data.markedLines} line${data.markedLines === 1 ? " is" : "s are"} left out because the catalogue gives no price there (— or ?). `}
           {data.unconvertibleLines > 0 &&
             `${data.unconvertibleLines} line${data.unconvertibleLines === 1 ? " is" : "s are"} priced in a currency with no rate into ${data.currency}.`}
         </p>

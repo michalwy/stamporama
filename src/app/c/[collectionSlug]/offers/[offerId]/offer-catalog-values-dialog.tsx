@@ -1,5 +1,7 @@
 "use client";
 
+import { isMissingCatalogPrice } from "@/lib/valuation";
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -345,7 +347,7 @@ function CatalogValuesGrid({
     );
   }
 
-  const missing = rows.filter((r) => r.copy.value.unpriced).length;
+  const missing = rows.filter((r) => isMissingCatalogPrice(r.copy.value)).length;
   /** The catalog every row is priced in, when they agree — then it is named once in the heading
    *  instead of on every row. A grid spanning areas names each row's own book beside its input. */
   const primaryIds = new Set(rows.map(primaryFor).filter((id): id is string => id !== null));
@@ -471,11 +473,12 @@ function CatalogValuesGrid({
                       )}
                       {/* The card's own gap, in the card's own amber — so the rows that are the
                           work read the same way in both places. */}
-                      {copy.value.unpriced && (
+                      {isMissingCatalogPrice(copy.value) && (
                         <Tooltip content="No catalog value reaches this copy yet. This is one of the rows the card marks with + CV.">
                           <span style={GAP_CHIP}>no value</span>
                         </Tooltip>
                       )}
+                      {copy.value.mark && <CatalogPriceMarkText mark={copy.value.mark} />}
                       {row.rollup && (
                         // The lock, and a toggle both ways: a row locked again is a row whose
                         // rolled-up figure is legible once more (#627).
@@ -538,6 +541,7 @@ function CatalogValuesGrid({
                       >
                         <NumericInput
                           kind="amount"
+                          priceMark
                           ref={(el) => {
                             inputRefs.current.set(key, el);
                           }}
@@ -548,7 +552,7 @@ function CatalogValuesGrid({
                           onChange={(e) => setValue(key, e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, key)}
                           disabled={isSaving}
-                          placeholder="—"
+                          placeholder=""
                           style={CELL_INPUT}
                         />
                         {/* Named per row only where the rows disagree — with one book for the whole

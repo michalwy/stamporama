@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useState } from "react";
 import { formatIssuedDate } from "@/app/stamp-display";
 import type { AuctionLotLineItem } from "@/lib/auction-lines";
@@ -82,6 +83,8 @@ function LineValue({
   line: AuctionLotLineItem;
   onSetPrice?: () => void;
 }) {
+  // The catalogue gives no price here (#1615): said, never asked for.
+  if (line.unpriced && line.mark) return <CatalogPriceMarkText mark={line.mark} align="end" />;
   if (line.unpriced) {
     if (onSetPrice) {
       return (

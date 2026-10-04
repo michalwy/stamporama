@@ -228,7 +228,7 @@ describe("catalogue prices through the agent API (#1540)", () => {
         orderBy: { price: "asc" },
       });
       assert.deepEqual(
-        rows.map((r) => [r.stampId, r.price.toFixed(2), r.currency, r.catalogEditionId]),
+        rows.map((r) => [r.stampId, r.price!.toFixed(2), r.currency, r.catalogEditionId]),
         [
           [stampIds["309B"], "2.50", "EUR", editionId],
           [stampIds["309A"], "4.00", "EUR", editionId],
@@ -320,6 +320,45 @@ describe("catalogue prices through the agent API (#1540)", () => {
       assert.equal(await priceCount(), before - 1);
       const rows = await read(`issue=${issueId}&format=single&condition=MNH`);
       assert.deepEqual(row(rows, "Mi 309").prices.map((p) => [p.amount, p.rolledUp ?? false]), [["2.50", true]]);
+    });
+  });
+
+  describe("a cell the catalogue gives no price for (#1615)", () => {
+    const usedCells = ["stamp=Mi 309A; condition=Used", "stamp=Mi 309B; condition=Used", "stamp=Mi 310; condition=Used"];
+
+    it("records - and ?, reads them back as marks, and rolls an all-marked umbrella up to their state", async () => {
+      await clear(usedCells);
+      const answer = await set([
+        "stamp=Mi 309A; condition=Used; price=-",
+        "stamp=Mi 309B; condition=Used; price=?",
+        "stamp=Mi 310; condition=Used; price=nonexistent",
+      ]);
+      assert.deepEqual(answer.cells.map((c) => [c.outcome, c.mark, c.amount]), [
+        ["written", "nonexistent", undefined],
+        ["written", "undeterminable", undefined],
+        ["written", "nonexistent", undefined],
+      ]);
+      assert.equal((await set(["stamp=Mi 309A; condition=Used; price=-"])).cells[0].outcome, "unchanged");
+
+      const rows = await read(`issue=${issueId}&format=single&condition=Used`);
+      assert.deepEqual(row(rows, "Mi 309A").prices.map((p) => [p.mark, p.amount]), [["nonexistent", undefined]]);
+      // No variant priced, every one marked, one of them not determinable: the umbrella cannot be.
+      assert.deepEqual(row(rows, "Mi 309").prices.map((p) => [p.mark, p.rolledUp ?? false]), [["undeterminable", true]]);
+    });
+
+    it("replaces a mark with a figure as an ordinary edit, and clears either back to empty", async () => {
+      const replaced = await set(["stamp=Mi 309B; condition=Used; price=3"]);
+      assert.deepEqual(replaced.cells.map((c) => [c.outcome, c.amount, c.replaced]), [["written", "3.00", "undeterminable"]]);
+      const rows = await read(`issue=${issueId}&format=single&condition=Used`);
+      // A marked variant does not stand in the way of the roll-up.
+      assert.deepEqual(row(rows, "Mi 309").prices.map((p) => [p.amount, p.rolledUp ?? false]), [["3.00", true]]);
+
+      const cleared = await clear(usedCells);
+      assert.deepEqual(cleared.cells.map((c) => [c.outcome, c.replaced]), [
+        ["cleared", "nonexistent"],
+        ["cleared", "3.00"],
+        ["cleared", "nonexistent"],
+      ]);
     });
   });
 

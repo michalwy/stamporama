@@ -5,6 +5,7 @@
 // `tile-photo-roles.ts` is separate from the list it filters: the rule is what must not drift, and
 // it is the thing worth a test rather than a screen.
 
+import { settlePriceMarkInput } from "./catalog-price-mark";
 import { normalizeDecimalInput } from "./decimal-input";
 import type { VariantPriceRestriction } from "./variant-prices";
 
@@ -51,6 +52,9 @@ export function catalogValueEntry(
   const amount = value.amount.trim();
   if (!value.catalogNameId || amount === "" || value.loading) return null;
   if (value.recorded != null) {
+    // A mark typed again (`-` over a recorded `—`, #1615) is unchanged too.
+    const mark = settlePriceMarkInput(amount);
+    if (mark !== null && mark === settlePriceMarkInput(value.recorded)) return null;
     const typed = Number(normalizeDecimalInput(amount));
     // An unparseable figure is *not* silently treated as unchanged — the action is the one place
     // that judges an amount, and it refuses with a message the collector can act on.

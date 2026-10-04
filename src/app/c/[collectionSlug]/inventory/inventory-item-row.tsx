@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useState, type ReactNode } from "react";
 import {
   formatIssuedDate,
@@ -271,6 +272,10 @@ export function CopyValue({
    * "+ price" link when unpriced, and a click-to-edit affordance when priced. */
   onSetPrice?: () => void;
 }) {
+  // The catalogue gives no price here (#1615): said, never asked for.
+  if (v.unpriced && v.mark) {
+    return <CatalogPriceMarkText mark={v.mark} rolledUp={v.uncertain} align="end" />;
+  }
   if (v.unpriced) {
     if (onSetPrice) {
       return (

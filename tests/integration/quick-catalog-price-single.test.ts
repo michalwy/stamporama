@@ -100,7 +100,7 @@ describe("quick catalog price always lands on the single (#343)", () => {
     });
     assert.equal(rows.length, 1);
     assert.equal(rows[0].formatId, null);
-    assert.equal(rows[0].price.toFixed(2), "15.00");
+    assert.equal(rows[0].price!.toFixed(2), "15.00");
   });
 
   it("reads back the single's figure even when the caller is showing a block", async () => {
@@ -154,6 +154,6 @@ describe("quick catalog price always lands on the single (#343)", () => {
       where: { stampId, catalogEditionId: editionId, conditionId, formatId: block4Id },
       select: { price: true },
     });
-    assert.equal(block.price.toFixed(2), "40.00");
+    assert.equal(block.price!.toFixed(2), "40.00");
   });
 });

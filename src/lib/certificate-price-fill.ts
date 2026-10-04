@@ -12,11 +12,15 @@
 // - **A status with no percentage is left empty** — the fill never assumes 100%.
 // - **A row with no plain price is left alone.**
 // - **Half up, to the cent**, as a typed amount is (#1231).
+// - **A marked plain cell carries its mark over** (#1615): a stamp with or without a certificate is
+//   the same stamp, so if its plain price does not exist (`-`) or cannot be determined (`?`), the
+//   certified cell gets the same state. A marked certificate cell is not empty and stays as it is.
 //
 // It is a one-time copy: what it produces is an ordinary price, and nothing links it to the plain
 // price afterwards.
 
 import { formatAmountInput } from "./decimal-input";
+import { catalogPriceMarkInput, parsePriceCellInput } from "./catalog-price-mark";
 
 /** The lowest and highest percentage a certificate status may carry. */
 export const PRICE_PERCENT_MIN = 1;
@@ -65,7 +69,8 @@ export function certificatePrice(plain: string, percent: number): string | null 
 
 /**
  * What the fill writes into one certificate cell, or null when it leaves the cell as it is: the cell
- * already holds something, the status has no percentage, or the row has no plain price.
+ * already holds something, the status has no percentage, or the row has no plain price. A marked plain
+ * cell gives its mark, as typed (#1615).
  */
 export function fillCertificateCell(cell: {
   plain: string;
@@ -75,6 +80,8 @@ export function fillCertificateCell(cell: {
   if (cell.current.trim() !== "") return null;
   if (cell.percent === null) return null;
   if (cell.plain.trim() === "") return null;
+  const plain = parsePriceCellInput(cell.plain);
+  if (plain.kind === "mark") return catalogPriceMarkInput(plain.mark);
   return certificatePrice(cell.plain, cell.percent);
 }
 

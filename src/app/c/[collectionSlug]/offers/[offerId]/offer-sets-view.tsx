@@ -1,5 +1,7 @@
 "use client";
 
+import { markedCopiesNote } from "@/lib/catalog-price-mark";
+import { isMissingCatalogPrice } from "@/lib/valuation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -487,6 +489,7 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
       ? [`~${holdings.uncertainBaseAmount} ${holdings.baseCurrency} uncertain (${holdings.uncertainCount} unknown-variant)`]
       : []),
     ...(holdings.unpricedCount > 0 ? [`${holdings.unpricedCount} unpriced`] : []),
+    ...(holdings.markedCount > 0 ? [markedCopiesNote(holdings.markedCount)] : []),
     ...(holdings.unconvertibleCount > 0
       ? [`${holdings.unconvertibleCount} not convertible to ${holdings.baseCurrency}`]
       : []),
@@ -1020,12 +1023,13 @@ export function OfferSetsView({
   const [onlyUnknownVariant, setOnlyUnknownVariant] = useState(false);
   const filterActive = onlyUnpriced || onlyNoPhoto || onlyUnknownVariant;
   const matches = (c: ItemListItem) =>
-    (!onlyUnpriced || c.value.unpriced) &&
+    (!onlyUnpriced || isMissingCatalogPrice(c.value)) &&
     (!onlyNoPhoto || c.photos.length === 0) &&
     (!onlyUnknownVariant || c.unknownVariant);
 
   // Totals across the offer's copies (unfiltered), for the count badges on each filter.
-  const unpricedCount = copies.filter((c) => c.value.unpriced).length;
+  // Missing, not marked (#1615): a copy the catalogue gives no price for has nothing to enter.
+  const unpricedCount = copies.filter((c) => isMissingCatalogPrice(c.value)).length;
   const noPhotoCount = copies.filter((c) => c.photos.length === 0).length;
   const unknownVariantCount = copies.filter((c) => c.unknownVariant).length;
 

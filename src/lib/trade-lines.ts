@@ -324,6 +324,7 @@ const RECEIVE_SELECT = {
  *  which the CHECK constraints make impossible but which a read must not crash on. Unpriced rather
  *  than absent: the row still draws, and the value slot says what it says everywhere else. */
 const UNPRICED: CopyValuation = {
+  mark: null,
   amount: null,
   currency: null,
   baseAmount: null,

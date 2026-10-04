@@ -338,7 +338,7 @@ export function QuickPriceDialog({
                       {p.formatAbbreviation ? ` · ${p.formatAbbreviation}` : ""}
                     </span>
                     <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      {p.price} {p.currency}
+                      {p.mark ? p.price : `${p.price} ${p.currency}`}
                       {p.isTarget ? " ←" : ""}
                     </span>
                   </div>
@@ -370,6 +370,9 @@ export function QuickPriceDialog({
               >
                 Catalog value
               </div>
+              <p style={{ margin: "0 0 0.5rem", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                Type - where the catalogue prints —, ? where it prints ?.
+              </p>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 {context!.catalogs.map((c) => (
                   <div
@@ -418,6 +421,7 @@ export function QuickPriceDialog({
                     </label>
                     <NumericInput
                       kind="amount"
+                      priceMark
                       id={`quick-price-${c.catalogNameId}`}
                       ref={c.isPrimary ? primaryInputRef : undefined}
                       name={`amount-${c.catalogNameId}`}

@@ -1,5 +1,6 @@
 "use client";
 
+import { markedCopiesNote } from "@/lib/catalog-price-mark";
 import { useState } from "react";
 import { costBasisCopyCount, type HoldingsSummary } from "@/lib/valuation";
 import type { CostBasisTotal } from "@/lib/cost-basis";
@@ -648,7 +649,7 @@ function CatalogValueRow({
   const figure = stateFigure(
     total.totalBaseAmount,
     total.pricedCount,
-    total.unpricedCount + total.unconvertibleCount
+    total.unpricedCount + total.markedCount + total.unconvertibleCount
   );
   const valuationNotes: string[] = [];
   if (total.uncertainCount > 0) {
@@ -659,6 +660,7 @@ function CatalogValueRow({
   if (total.unpricedCount > 0) {
     valuationNotes.push(`${total.unpricedCount} unpriced`);
   }
+  if (total.markedCount > 0) valuationNotes.push(markedCopiesNote(total.markedCount));
   if (total.unconvertibleCount > 0) {
     valuationNotes.push(`${total.unconvertibleCount} not convertible to ${total.baseCurrency}`);
   }

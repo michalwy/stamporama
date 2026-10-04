@@ -36,6 +36,9 @@ export interface LotCandidate {
   formatId: string | null;
   /** Base-currency catalog value, or null when the copy is unpriced. */
   catalogValue: number | null;
+  /** The copy's catalogue gives no price on purpose (#1615): it adds nothing, like an unpriced copy,
+   *  but is not named among the unpriced ones — there is no price to go and enter. */
+  catalogMarked?: boolean;
   /** What the copy's faults took off {@link catalogValue} (#1560), in base currency; absent or 0
    *  when nothing was. The value above is already the lowered one — this is only for saying so. */
   faultReduction?: number;
@@ -493,7 +496,9 @@ function take(state: PickState, candidate: LotCandidate, phase: LotPickPhase, ch
   const key = duplicateKey(candidate);
   state.perPile.set(key, (state.perPile.get(key) ?? 0) + 1);
   state.value += valueOf(candidate);
-  if (candidate.catalogValue === null) state.unpricedItemIds.push(candidate.itemId);
+  if (candidate.catalogValue === null && !candidate.catalogMarked) {
+    state.unpricedItemIds.push(candidate.itemId);
+  }
   if (candidate.faultReduction) {
     state.faultReducedItemIds.push(candidate.itemId);
     state.faultReduction += candidate.faultReduction;

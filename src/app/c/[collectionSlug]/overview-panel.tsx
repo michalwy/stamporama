@@ -290,7 +290,10 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
   const { holdings, market, realized, purchases } = data;
   const ccy = data.baseCurrency;
   const heldCount =
-    holdings.pricedCount + holdings.unpricedCount + holdings.unconvertibleCount;
+    holdings.pricedCount +
+    holdings.unpricedCount +
+    holdings.markedCount +
+    holdings.unconvertibleCount;
   // Surplus is what the holdings are worth over their whole cost basis — purchase cost and opening
   // value together, since it is a result and not money spent (#1324). The cost line names each.
   const opening = holdings.openingValue;
@@ -339,6 +342,7 @@ function ValueTiles({ data, base }: { data: OverviewValue; base: string }) {
             <ValueCaveats
               parts={[
                 count(holdings.unpricedCount, "unpriced"),
+                count(holdings.markedCount, "with no catalogue price"),
                 count(holdings.unconvertibleCount, "unconvertible"),
                 count(holdings.cost.pendingCount, "cost pending"),
                 count(holdings.cost.noneCount, "no cost recorded"),

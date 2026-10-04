@@ -12,6 +12,7 @@
 // rather than invented, and that a figure never travels without the coverage counts that say how
 // much of the collection is behind it.
 
+import type { CatalogPriceMark } from "../catalog-price-mark";
 import { agentPhotoUrl } from "./photo-url";
 import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
 
@@ -554,6 +555,9 @@ export interface AgentCopyValue {
   readonly baseAmount?: string;
   /** No catalogue price matched this copy's condition × certificate × format. */
   readonly unpriced?: boolean;
+  /** Beside `unpriced`, when the catalogue gives no price on purpose (#1615): `nonexistent` where it
+   *  prints —, `undeterminable` where it prints ?. Such a copy is not missing a price. */
+  readonly catalogueMark?: CatalogPriceMark;
   /** The copy links to a base stamp with variants, so the figure is the **lowest** of its priced
    *  variants rather than a price for this piece (#238/#616) — an estimate, and marked as one. */
   readonly uncertain?: boolean;
@@ -572,6 +576,9 @@ export interface CopyValueRow {
   readonly currency: string | null;
   readonly baseAmountDisplay: string | null;
   readonly unpriced: boolean;
+  /** Why it is unpriced, when the catalogue gives no price on purpose (#1615). Optional for the
+   *  frozen trade figure's reason below. */
+  readonly mark?: CatalogPriceMark | null;
   readonly uncertain: boolean;
   /** Optional because a trade's frozen figure is shaped like this too and records no such flag. */
   readonly explicit?: boolean;
@@ -585,6 +592,7 @@ export function copyValue(row: CopyValueRow): AgentCopyValue {
     currency: row.currency ?? undefined,
     baseAmount: row.baseAmountDisplay ?? undefined,
     unpriced: row.unpriced || undefined,
+    catalogueMark: row.mark ?? undefined,
     uncertain: row.uncertain || undefined,
     recorded: row.explicit || undefined,
     faultReductionPercent: row.faultReduction?.percent,
@@ -804,6 +812,8 @@ export interface AgentCatalogueTotal {
   readonly total: string;
   readonly pricedCount: number;
   readonly unpricedCount: number;
+  /** Copies left out because their catalogue gives no price on purpose (#1615). */
+  readonly markedCount: number;
   readonly unconvertibleCount: number;
   readonly uncertainCount: number;
   /** The share of {@link total} contributed by the uncertain copies. */
@@ -876,6 +886,7 @@ export interface HoldingsSummaryRow {
   readonly totalBaseAmount: string;
   readonly pricedCount: number;
   readonly unpricedCount: number;
+  readonly markedCount: number;
   readonly unconvertibleCount: number;
   readonly uncertainCount: number;
   readonly uncertainBaseAmount: string;
@@ -922,6 +933,7 @@ export function valuationSummary(row: HoldingsSummaryRow): AgentValuationSummary
       total: row.totalBaseAmount,
       pricedCount: row.pricedCount,
       unpricedCount: row.unpricedCount,
+      markedCount: row.markedCount,
       unconvertibleCount: row.unconvertibleCount,
       uncertainCount: row.uncertainCount,
       uncertainTotal: row.uncertainBaseAmount,

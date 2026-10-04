@@ -41,6 +41,7 @@ function price(
 ): RawCatalogPrice {
   return {
     price: D(amount),
+    mark: null,
     currency: opts.currency ?? "EUR",
     conditionId: opts.conditionId ?? MNH,
     certificateStatusId: opts.certificateStatusId ?? null,
@@ -347,6 +348,7 @@ describe("aggregateHoldings", () => {
     unpricedVariantIds: [],
     explicit: false,
     faultReduction: null,
+    mark: null,
   });
   const uncertain = (baseAmount: number): CopyValuation => ({
     ...certain(baseAmount),
@@ -560,6 +562,7 @@ describe("applyFaultReduction", () => {
     ownPrices: [
       {
         price: D(50),
+        mark: null,
         currency: "USD",
         conditionId: MNH,
         certificateStatusId: null,
