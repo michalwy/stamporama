@@ -1,0 +1,43 @@
+name: Renovate rules
+
+# Does `renovate.json` still automerge only what it says it does? (#818)
+# `scripts/check-renovate-automerge.mjs` carries the reasoning; this file only decides when it runs.
+#
+# **Advisory. Never a required status context**, decided by the user on 2026-10-04. Red here says a
+# change to the rules would let a never-alone dependency or a major merge unread; it does not block
+# the merge, and the person merging is expected to read it.
+#
+# **Its own workflow, because `Unit tests` cannot see the change.** `renovate.json` is inside the
+# `Detect changes` safe list (`scripts/detect-changes.sh`, #970), so a pull request that touches only
+# that file skips every application suite — `tests/unit/renovate-automerge.test.ts` and
+# `renovate-never-alone.test.ts` are backstops for that reason. Taking the file out of the safe list
+# to make them run is not the fix; the comment there says why.
+#
+# **`paths:` at the workflow level is what `ci.yml` must never carry**: a workflow that does not start
+# reports no context, and a required context that never arrives leaves a pull request pending for
+# ever. It is safe here only because nothing in this file is required, and stops being safe the
+# moment somebody makes it so.
+
+on:
+  pull_request:
+    paths:
+      - "renovate.json"
+      - "scripts/check-renovate-automerge.mjs"
+      - ".github/workflows/renovate-rules.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  automerge:
+    name: Renovate automerge rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      # No `setup-node` and no install: the script has no dependencies and the runner ships Node.
+      - name: Check what renovate.json automerges
+        run: node scripts/check-renovate-automerge.mjs
