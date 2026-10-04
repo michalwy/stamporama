@@ -417,6 +417,7 @@ export function albumPreviewEntries(): AlbumEntryData[] {
     id: checklist.id,
     checklistId: checklist.id,
     checklistName: checklist.name,
+    checklistKind: "standard",
     checklistNameByLanguage: {},
     issueId: checklist.issueId,
     issueName: checklist.issueName,

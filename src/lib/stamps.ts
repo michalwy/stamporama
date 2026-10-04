@@ -54,6 +54,7 @@ import {
   type StampCopyCounts,
 } from "./copy-counts";
 import { putStampOnChecklists } from "./checklists";
+import { asChecklistKind, shownChecklists, type ChecklistKind } from "./checklist-kind";
 import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
 import type { UmbrellaPricesPolicy } from "./umbrella-prices-question";
 import {
@@ -404,7 +405,7 @@ export interface StampIssueMembership {
    *  is on it. All of them rather than only the ones it is on, because the stamp form's picker has
    *  to offer the boxes it is *not* ticked for. None ticked = an optional extra of the issue,
    *  which is what `requiredForCompleteness = false` used to say. */
-  checklists: { id: string; name: string; on: boolean }[];
+  checklists: { id: string; name: string; kind: ChecklistKind; on: boolean }[];
 }
 
 export interface StampListItem {
@@ -502,7 +503,12 @@ const STAMP_LIST_SELECT = {
       // The issue's own checklists, so the row can say which sets claim this stamp (#531). Paired
       // with `checklistEntries` below, which says which of them it is actually on.
       issue: {
-        select: { name: true, year: true, checklists: { select: { id: true, name: true } } },
+        select: {
+          name: true,
+          year: true,
+          // Every kind; the specialised ones are dropped in the mapper unless switched on (#1617).
+          checklists: { select: { id: true, name: true, kind: true } },
+        },
       },
     },
   },
@@ -539,7 +545,7 @@ function toStampListItem(
       issue: {
         name: string | null;
         year: number | null;
-        checklists: { id: string; name: string }[];
+        checklists: { id: string; name: string; kind: string }[];
       };
     }[];
     checklistEntries: { checklistId: string }[];
@@ -557,7 +563,9 @@ function toStampListItem(
   displayFormatId: string | null,
   factorFor: (areaId: string | null, issueId: string | null) => number | null,
   copyCounts: StampCopyCountMaps,
-  wantsByStamp: Map<string, StampWantSummary>
+  wantsByStamp: Map<string, StampWantSummary>,
+  /** Whether a membership lists its issue's specialised checklists too (#1617). */
+  includeSpecialised: boolean
 ): StampListItem {
   const primaryLink = stamp.stampAreaLinks.find((l) => l.isPrimary);
   const areaId = primaryLink?.collectionAreaId ?? stamp.stampAreaLinks[0]?.collectionAreaId ?? null;
@@ -599,7 +607,12 @@ function toStampListItem(
         issueYear: m.issue.year,
         // Each membership answers for its own issue: a stamp on two issues is on each one's
         // checklists separately, exactly as the old per-membership boolean was.
-        checklists: m.issue.checklists.map((c) => ({ ...c, on: onChecklist.has(c.id) })),
+        checklists: shownChecklists(m.issue.checklists, includeSpecialised).map((c) => ({
+          id: c.id,
+          name: c.name,
+          kind: asChecklistKind(c.kind),
+          on: onChecklist.has(c.id),
+        })),
       }))
       // Sorted so `issues[0]` is a **rule** and not whatever Postgres handed back. Several readers
       // already call it *the first membership* and act on it — the stamp edit dialog picks the
@@ -649,7 +662,8 @@ async function buildStampListItems(
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
   displayConditionId: string | null,
-  displayFormatId: string | null
+  displayFormatId: string | null,
+  includeSpecialised: boolean
 ): Promise<StampListItem[]> {
   const [latestYearByName, factorFor, copyCounts, wantsByStamp] = await Promise.all([
     getLatestEditionYearByName(collectionId),
@@ -668,7 +682,8 @@ async function buildStampListItems(
       displayFormatId,
       factorFor,
       copyCounts,
-      wantsByStamp
+      wantsByStamp,
+      includeSpecialised
     )
   );
   const currencies = items
@@ -687,6 +702,8 @@ async function buildStampListItems(
 export type StampSortBy = "issueDate" | "catalogNumber" | "name" | "issueName";
 
 export interface StampListFilterOpts {
+  /** List the memberships' specialised checklists too (#1617). Off by default. */
+  includeSpecialised?: boolean;
   areaIds?: string[];
   offset?: number;
   pageSize?: number;
@@ -922,7 +939,8 @@ export async function listStampsPaginated(
       primaryCatalogByArea,
       baseCurrency,
       displayConditionId,
-      displayFormatId
+      displayFormatId,
+      opts.includeSpecialised ?? false
     );
     return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
   }
@@ -958,7 +976,8 @@ export async function listStampsPaginated(
     primaryCatalogByArea,
     baseCurrency,
     displayConditionId,
-    displayFormatId
+    displayFormatId,
+    opts.includeSpecialised ?? false
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
@@ -973,7 +992,12 @@ export async function listStampsPaginated(
 export async function getStampListItem(
   ownerId: string,
   stampId: string,
-  opts?: { displayConditionId?: string | null; displayFormatId?: string | null }
+  opts?: {
+    displayConditionId?: string | null;
+    displayFormatId?: string | null;
+    /** List the memberships' specialised checklists too (#1617). Off by default. */
+    includeSpecialised?: boolean;
+  }
 ): Promise<StampListItem> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -989,7 +1013,8 @@ export async function getStampListItem(
     primaryCatalogByArea,
     baseCurrency,
     displayConditionId,
-    opts?.displayFormatId ?? null
+    opts?.displayFormatId ?? null,
+    opts?.includeSpecialised ?? false
   );
   return item;
 }
@@ -1037,7 +1062,11 @@ export interface StampRelatives {
 export async function getStampRelatives(
   ownerId: string,
   stampId: string,
-  opts?: { displayConditionId?: string | null; displayFormatId?: string | null }
+  opts?: {
+    displayConditionId?: string | null;
+    displayFormatId?: string | null;
+    includeSpecialised?: boolean;
+  }
 ): Promise<StampRelatives> {
   const collectionId = await resolveStampCollection(stampId);
   await assertCollectionOwner(ownerId, collectionId);
@@ -1091,7 +1120,8 @@ export async function getStampRelatives(
     primaryCatalogByArea,
     baseCurrency,
     displayConditionId,
-    opts?.displayFormatId ?? null
+    opts?.displayFormatId ?? null,
+    opts?.includeSpecialised ?? false
   );
   const sortOrderByStamp = new Map(memberOrder.map((m) => [m.stampId, m.sortOrder]));
   /** The catalogue order the query returned, used as the tiebreak — and as the whole answer for a
@@ -1383,6 +1413,9 @@ export async function updateStampWithCatalog(
     checklistIds?: string[];
     /** The issue whose checklists {@link checklistIds} names. */
     checklistIssueId?: string | null;
+    /** Whether the form offered the issue's specialised checklists (#1617). Without them, the
+     *  stamp's places on those are left as they are — the form could not see them. */
+    checklistsIncludeSpecialised?: boolean;
     // Child-only subtype classification (ADR-0010). `undefined` leaves the current
     // value untouched; for a child, `subtypeId: null` falls back to the collection
     // default. Top-level stamps are always forced back to null on both fields.
@@ -1469,7 +1502,8 @@ export async function updateStampWithCatalog(
         collectionId,
         data.checklistIssueId,
         stampId,
-        data.checklistIds
+        data.checklistIds,
+        data.checklistsIncludeSpecialised ?? false
       );
     }
     await tx.stampCatalogNumber.deleteMany({ where: { stampId } });

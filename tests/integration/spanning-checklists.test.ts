@@ -187,7 +187,7 @@ describe("checklists spanning issues (#1416)", () => {
   });
 
   it("lists only the checklists spanning issues, with the issues they reach", async () => {
-    const overview = await getSpanningChecklistOverview(userId, collectionId);
+    const overview = await getSpanningChecklistOverview(userId, collectionId, false);
     assert.deepEqual(
       overview.map((o) => o.id),
       [spanningId]
@@ -197,7 +197,7 @@ describe("checklists spanning issues (#1416)", () => {
   });
 
   it("values each stamp through its own area's catalogue, in the base currency when they differ", async () => {
-    const [row] = await getSpanningChecklistOverview(userId, collectionId);
+    const [row] = await getSpanningChecklistOverview(userId, collectionId, false);
     // 10 EUR at 4 PLN/EUR, plus 20 PLN; `b` has no price.
     assert.equal(row.priceTotal?.currency, "PLN");
     assert.equal(row.priceTotal?.amount, "60.00");
@@ -212,7 +212,7 @@ describe("checklists spanning issues (#1416)", () => {
       inCollection: true,
       deliveryState: "delivered",
     });
-    const [row] = await getSpanningChecklistOverview(userId, collectionId);
+    const [row] = await getSpanningChecklistOverview(userId, collectionId, false);
     assert.equal(row.completeness.owned, 1);
     assert.equal(row.completeness.completeSets, 0);
   });
@@ -238,14 +238,14 @@ describe("checklists spanning issues (#1416)", () => {
     assert.deepEqual(await getChecklistUsage(userId, spanningId), {
       albums: [{ id: albumId, name: "Binder" }],
     });
-    const [row] = await getSpanningChecklistOverview(userId, collectionId);
+    const [row] = await getSpanningChecklistOverview(userId, collectionId, false);
     assert.deepEqual(row.albums, [{ id: albumId, name: "Binder" }]);
   });
 
   it("orders the checklists spanning issues among themselves", async () => {
     const second = await createChecklist(userId, collectionId, { issueId: null, name: "Second" });
     await reorderChecklists(userId, collectionId, null, [second, spanningId, issueChecklistId]);
-    const overview = await getSpanningChecklistOverview(userId, collectionId);
+    const overview = await getSpanningChecklistOverview(userId, collectionId, false);
     assert.deepEqual(
       overview.map((o) => o.id),
       [second, spanningId]

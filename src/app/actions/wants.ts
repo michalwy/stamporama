@@ -24,6 +24,7 @@ import {
   type WantPriority,
 } from "@/lib/wants";
 import { isWantDepth, type WantDepth } from "@/lib/want-depth-rules";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 // Server actions for the want list (#532; ADR-0032).
 //
@@ -166,7 +167,8 @@ export async function previewIssueMissingWantsAction(
     collectionId,
     issueId,
     acceptance,
-    isWantDepth(depth) ? depth : "main"
+    isWantDepth(depth) ? depth : "main",
+    await readIncludeSpecialised(collectionId)
   );
 }
 

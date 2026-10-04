@@ -49,6 +49,12 @@ import {
 } from "./copy-counts";
 import { allocateEntityNumber } from "./items";
 import { assertIssueChecklist, ensureIssueChecklist, putStampOnChecklists } from "./checklists";
+import {
+  asChecklistKind,
+  shownChecklists,
+  shownChecklistWhere,
+  type ChecklistKind,
+} from "./checklist-kind";
 import { parseEntityNoSearch } from "./quick-jump";
 import { checkSiblingGroup, sortOrderAssignments } from "./issue-member-order";
 import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
@@ -211,6 +217,9 @@ export interface IssueCatalogPrefixData {
 export interface IssueChecklistSummary {
   id: string;
   name: string;
+  /** Standard or specialised (#1617) — a specialised one is listed only with the switch on, and
+   *  marked when it is. */
+  kind: ChecklistKind;
   /** How many stamps it carries — the denominator of every completeness figure. */
   stampCount: number;
 }
@@ -416,6 +425,7 @@ function toStampNode(
 interface ChecklistRow {
   id: string;
   name: string;
+  kind: string;
   sortOrder: number;
   createdAt: Date;
   stamps: { stampId: string }[];
@@ -481,7 +491,9 @@ export interface IssueHeader {
 export async function getIssueHeadersByIds(
   ownerId: string,
   collectionId: string,
-  issueIds: string[]
+  issueIds: string[],
+  /** Whether specialised checklists count towards `requiredCount` (#1617). */
+  includeSpecialised: boolean
 ): Promise<IssueHeader[]> {
   await assertCollectionOwner(ownerId, collectionId);
   if (issueIds.length === 0) return [];
@@ -496,7 +508,10 @@ export async function getIssueHeadersByIds(
         select: { catalogVendorId: true, firstNumber: true, lastNumber: true },
       },
       members: { select: { stampId: true } },
-      checklists: { select: { stamps: { select: { stampId: true } } } },
+      checklists: {
+        where: shownChecklistWhere(includeSpecialised),
+        select: { stamps: { select: { stampId: true } } },
+      },
     },
   });
   return rows.map((r) => ({
@@ -606,8 +621,17 @@ const ISSUE_LIST_SELECT = {
   // Ordered in the mapper rather than by the query: this select is `as const`, and a readonly
   // `orderBy` tuple is not assignable to Prisma's mutable input type. An issue carries a handful
   // of checklists, so sorting them in memory costs nothing.
+  // Every kind is read and the specialised ones dropped in `buildIssueListItems` (#1617): this select
+  // is a constant, and the switch is a request's.
   checklists: {
-    select: { id: true, name: true, sortOrder: true, createdAt: true, stamps: { select: { stampId: true } } },
+    select: {
+      id: true,
+      name: true,
+      kind: true,
+      sortOrder: true,
+      createdAt: true,
+      stamps: { select: { stampId: true } },
+    },
   },
   // The collector's own labels on the issue itself (#152). The issue's tags are the issue's: they
   // say nothing about its stamps, which carry their own.
@@ -827,6 +851,9 @@ function toIssueListItem(
       };
     }[];
     checklists: ChecklistRow[];
+    /** The checklists the declared range is read against — the standard ones, whatever the switch
+     *  says (#1617). Absent means `checklists`. */
+    rangeChecklists?: ChecklistRow[];
     tags: { tag: { id: string; name: string; color: string | null } }[];
   },
   primaryCatalogByArea: Map<string, string | null>,
@@ -867,6 +894,7 @@ function toIssueListItem(
     return {
       id: c.id,
       name: c.name,
+      kind: asChecklistKind(c.kind),
       stampCount: c.stamps.length,
       priceTotal,
       priceStale: priceTotal?.usesOlderEdition ?? false,
@@ -884,10 +912,17 @@ function toIssueListItem(
 
   // Declared-range coverage: only stamps on a checklist define the range — optional extras
   // (blocks, varieties) never widen it. Read against the union, because an issue publishes one
-  // range of catalog numbers however many goals are collected inside it.
+  // range of catalog numbers however many goals are collected inside it — the union of the
+  // **standard** checklists (#1617): the declared range is stored, and the grid recomputes it from
+  // those, so a suggestion read from anything else would be undone by the next edit.
+  const rangeStampIds = new Set(
+    (issue.rangeChecklists ?? issue.checklists).flatMap((c) => c.stamps.map((s) => s.stampId))
+  );
   const rangeSuggestions = computeIssueRangeSuggestions(
     issue.catalogNumbers,
-    requiredMembers.flatMap((m) => m.stamp.catalogNumbers),
+    issue.members
+      .filter((m) => rangeStampIds.has(m.stampId))
+      .flatMap((m) => m.stamp.catalogNumbers),
     vendorAbbrev
   );
 
@@ -914,13 +949,22 @@ function toIssueListItem(
 
 /** Map issues to list items and attach base-currency conversions in one batched rate fetch. */
 async function buildIssueListItems(
-  issues: Parameters<typeof toIssueListItem>[0][],
+  rows: Parameters<typeof toIssueListItem>[0][],
   collectionId: string,
   primaryCatalogByArea: Map<string, string | null>,
   baseCurrency: string,
   displayConditionId: string | null,
-  displayFormatId: string | null
+  displayFormatId: string | null,
+  /** Whether the rows list, count and value their specialised checklists too (#1617). Without them
+   *  a row reads as if they did not exist: its badge, its totals, its gallery and its range
+   *  suggestions are all the standard checklists'. */
+  includeSpecialised: boolean
 ): Promise<IssueListItem[]> {
+  const issues = rows.map((i) => ({
+    ...i,
+    checklists: shownChecklists(i.checklists, includeSpecialised),
+    rangeChecklists: i.checklists.filter((c) => c.kind === "standard"),
+  }));
   const [latestYearByName, vendors, factorFor] = await Promise.all([
     getLatestEditionYearByName(collectionId),
     prisma.catalogVendor.findMany({
@@ -1004,6 +1048,8 @@ export interface IssueListFilterOpts {
    *  it and never on what is hung on its stamps. */
   tagIds?: string[];
   tagMode?: TagFilterMode;
+  /** List, count and value the issues' specialised checklists too (#1617). Off by default. */
+  includeSpecialised?: boolean;
 }
 
 /** Build the Prisma `where` for the issue list from the active filters.
@@ -1199,7 +1245,8 @@ export async function listIssuesPaginated(
     primaryCatalogByArea,
     baseCurrency,
     displayConditionId,
-    displayFormatId
+    displayFormatId,
+    opts.includeSpecialised ?? false
   );
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
@@ -1215,7 +1262,12 @@ export async function getIssueListItem(
   ownerId: string,
   collectionId: string,
   issueId: string,
-  opts?: { displayConditionId?: string | null; displayFormatId?: string | null }
+  opts?: {
+    displayConditionId?: string | null;
+    displayFormatId?: string | null;
+    /** As the list's own option (#1617). Off by default. */
+    includeSpecialised?: boolean;
+  }
 ): Promise<IssueListItem | null> {
   await assertCollectionOwner(ownerId, collectionId);
   const [primaryCatalogByArea, baseCurrency, displayConditionId, issue] = await Promise.all([
@@ -1231,7 +1283,8 @@ export async function getIssueListItem(
     primaryCatalogByArea,
     baseCurrency,
     displayConditionId,
-    opts?.displayFormatId ?? null
+    opts?.displayFormatId ?? null,
+    opts?.includeSpecialised ?? false
   );
   return item;
 }
@@ -1272,7 +1325,10 @@ export async function listIssueMembers(
   requestedDisplayConditionId?: string | null,
   /** Format whose price fills each member's headline price, tracking the list's format switcher
    *  (#343). Null is the single. */
-  displayFormatId: string | null = null
+  displayFormatId: string | null = null,
+  /** Whether a node names the issue's specialised checklists too (#1617). Without them a stamp on
+   *  none but specialised ones reads as on no checklist, and the tree files it so. */
+  includeSpecialised = false
 ): Promise<StampNodeData[]> {
   const { collectionId: issueCollection, collectionAreaId } = await resolveIssueArea(issueId);
   if (issueCollection !== collectionId) throw new Error("Issue not found.");
@@ -1285,7 +1341,10 @@ export async function listIssueMembers(
       // this select can never disagree about a group whose members share a seeded value.
       orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
     }),
-    prisma.checklist.findMany({ where: { collectionId, issueId }, select: { id: true } }),
+    prisma.checklist.findMany({
+      where: { collectionId, issueId, ...shownChecklistWhere(includeSpecialised) },
+      select: { id: true },
+    }),
   ]);
   const issueChecklistIds = new Set(issueChecklists.map((c) => c.id));
 
@@ -2424,7 +2483,10 @@ export async function getIssueRangeSuggestions(
         // needed this function to work: it went away with #531, and Prisma rejects the query
         // outright, so every suggestion this ever offered was an exception the action swallowed.
         // Same leftover `moveStampNode` carried until #549's tests reached it.
+        // The standard checklists only (#1617): the declared range is stored, and every reader of it —
+        // the list row, the catalogue-number grid's recompute, a catalogue import — reads those.
         checklists: {
+          where: { kind: "standard" },
           select: {
             stamps: {
               select: {
@@ -2698,7 +2760,9 @@ export async function addStampToIssue(
       data: { issueId, stampId: stamp.id, sortOrder: await nextIssueSortOrder(tx, issueId) },
     });
 
-    await putStampOnChecklists(tx, collectionId, issueId, stamp.id, data.checklistIds);
+    // Every kind (#1617): a new stamp is on nothing yet, so there is no hidden place to keep, and
+    // the form names only what it offered.
+    await putStampOnChecklists(tx, collectionId, issueId, stamp.id, data.checklistIds, true);
 
     if (data.catalogNumbers.length > 0) {
       await tx.stampCatalogNumber.createMany({

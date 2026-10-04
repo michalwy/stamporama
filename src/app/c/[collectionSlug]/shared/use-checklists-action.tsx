@@ -18,8 +18,10 @@ import {
   reorderChecklistsAction,
   reorderChecklistStampsAction,
   setChecklistStampsAction,
+  setChecklistKindAction,
   type ChecklistActionState,
 } from "@/app/actions/checklists";
+import type { ChecklistKind } from "@/lib/checklist-kind";
 import type { ChecklistData } from "@/lib/checklists";
 import type { StampNodeData } from "@/lib/issues";
 import type { RowAction } from "./row-actions-menu";
@@ -41,6 +43,7 @@ import type { TranslationValueMap } from "@/lib/translations";
 import { ChecklistNameDialog } from "./checklist-name-dialog";
 import { ChecklistUsageNote } from "./checklist-usage-note";
 import { useInvalidateStampsAndIssues } from "./use-invalidate-stamps-and-issues";
+import { SpecialisedChecklistsToggle, SpecialisedMark } from "./specialised-checklists";
 
 // The checklists of one issue, edited from that issue's row (#531; ADR-0031). The anchor is never a
 // field: the screen this was opened from already answered "which issue", which is ADR-0020 §7's
@@ -49,6 +52,25 @@ import { useInvalidateStampsAndIssues } from "./use-invalidate-stamps-and-issues
 // Order is the collector's, and it is load-bearing rather than cosmetic — the **first** checklist is
 // the one a single-checklist row shows its badge and total for, and the one a new stamp joins when
 // the stamp form's box is ticked. So the list is drag-reorderable through the shared kit.
+//
+// A checklist is standard or specialised (#1617). The editor lists the specialised ones only while
+// they are switched on — the switch sits in its header — and a reorder with them off leaves them in
+// the places they hold (`reorderChecklists`).
+
+/** The row-menu entry flipping a checklist's type (#1617), the quick way beside the name form's. */
+export function checklistKindAction(
+  checklist: { kind: ChecklistKind },
+  onSelect: (kind: ChecklistKind) => void
+): RowAction {
+  return checklist.kind === "specialised"
+    ? { key: "make-standard", label: "Make standard", icon: "list", onSelect: () => onSelect("standard") }
+    : {
+        key: "make-specialised",
+        label: "Make specialised",
+        icon: "list",
+        onSelect: () => onSelect("specialised"),
+      };
+}
 
 const FORM_STYLE: React.CSSProperties = {
   display: "flex",
@@ -159,13 +181,13 @@ export function ChecklistsDialog({
 
   const drag = useReorderList(checklists.length > 1 && !isPending, move, { handleOnly: true });
 
-  function submitName(name: string, translations: TranslationValueMap) {
+  function submitName(name: string, translations: TranslationValueMap, kind: ChecklistKind) {
     const current = editing;
     run(
       () =>
         current?.kind === "rename"
-          ? renameChecklistAction(current.checklist.id, name, translations)
-          : createChecklistAction(collectionId, issueId, name, translations),
+          ? renameChecklistAction(current.checklist.id, name, translations, kind)
+          : createChecklistAction(collectionId, issueId, name, translations, kind),
       () => setEditing(null)
     );
   }
@@ -192,6 +214,9 @@ export function ChecklistsDialog({
             specialized one, perforated beside imperforate. The <strong>first</strong> checklist is
             the one this issue&apos;s row shows, and the one a new stamp joins by default.
           </p>
+          <div style={{ margin: "0 0 1rem" }}>
+            <SpecialisedChecklistsToggle />
+          </div>
 
           {isLoading ? (
             <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>Loading…</p>
@@ -232,11 +257,15 @@ export function ChecklistsDialog({
                     <span
                       style={{
                         flex: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
                         fontSize: "0.9375rem",
                         color: "var(--color-text-primary)",
                       }}
                     >
                       {checklist.name}
+                      <SpecialisedMark kind={checklist.kind} />
                     </span>
                     <span style={COUNT_BADGE}>{checklist.stampIds.length}</span>
                     <RowActionsMenu
@@ -266,6 +295,9 @@ export function ChecklistsDialog({
                           icon: "edit",
                           onSelect: () => setEditing({ kind: "rename", checklist }),
                         },
+                        checklistKindAction(checklist, (kind) =>
+                          run(() => setChecklistKindAction(checklist.id, kind), () => {})
+                        ),
                         {
                           key: "delete",
                           label: "Delete",
@@ -512,9 +544,9 @@ export function useChecklistEditActions(
           isPending={isPending}
           error={error}
           onCancel={close}
-          onSubmit={(name, translations) =>
+          onSubmit={(name, translations, kind) =>
             run(
-              () => renameChecklistAction(checklist.id, name, translations),
+              () => renameChecklistAction(checklist.id, name, translations, kind),
               () => setEditing(null)
             )
           }

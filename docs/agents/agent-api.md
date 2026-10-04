@@ -1739,10 +1739,10 @@ this one*. What a checklist is, and how completeness and gaps are computed, did 
 
 | operation | writes | what it is for |
 | --- | --- | --- |
-| `list_checklists` | no | the checklists, spanning ones first, then each issue's by year; narrowed by `issue_id`, `spanning`, `name` (`GET /checklists`) |
+| `list_checklists` | no | the checklists, spanning ones first, then each issue's by year; narrowed by `issue_id`, `spanning`, `name`, `type`; standard only unless `include_specialised` (`GET /checklists`) |
 | `list_checklist_stamps` | no | one checklist's stamps in their order, paged, with the checklist (`GET /checklists/{checklist_id}/stamps`) |
-| `create_checklist` | yes | an empty checklist on an issue, or without `issue_id` spanning issues |
-| `update_checklist` | yes | its name and translated names, only what is sent |
+| `create_checklist` | yes | an empty checklist on an issue, or without `issue_id` spanning issues, of the `type` sent (standard by default) |
+| `update_checklist` | yes | its name, translated names and `type`, only what is sent |
 | `add_checklist_stamps` | yes | stamps appended in the order sent |
 | `remove_checklist_stamps` | yes | stamps taken off, the stamps kept (`POST …/stamps/remove`) |
 | `set_checklist_order` | yes | the stamps sent first, the rest after them as they were (`POST …/order`) |
@@ -1789,6 +1789,39 @@ album is the one thing there is to refuse on.
 **A printed card is not touched.** The divergence report (#778) compares a snapshot with what the
 collection would now produce, at read time, so a membership or order change made here shows up on a
 printed card exactly as one made on the screen, and nothing is reprinted.
+
+### A checklist's type (#1617)
+
+**Every checklist an operation returns carries its `type`, `standard` or `specialised`** — ADR-0031
+§11's `Checklist.kind` under the word the collector's form shows. `list_checklists` and the checklist
+writes state it on the row (`agentChecklist`); `get_issue` on each of its `checklists`;
+`find_checklist_gaps` on each gap; `get_stamp_size` on each `inherited` row as `checklistType`.
+`get_stamp` names a stamp's checklists as **strings**, and `/api/v1` only grows, so it does not turn
+them into rows: `specialisedChecklists` beside `checklists` names the specialised ones among them, and
+every other one is standard.
+
+**`create_checklist` and `update_checklist` take `type`**, through `createChecklist` and
+`renameChecklist` — the name form's own write, which carries the type since #1617 — so no new write
+crosses the boundary below. Their descriptions say what the type is for
+(`CHECKLIST_TYPE_MEANING`), so an assistant making a checklist of one stamp's colour variants makes
+it specialised.
+
+**Every read that lists, offers or counts checklists takes `include_specialised`, false by default** —
+the screens' switch, stated per call, and the app's default: `list_checklists`, `get_issue`,
+`get_stamp`, `find_checklist_gaps`, `get_stamp_size` and `find_missing_translations` (outside an
+`album`, which names what it prints). The domain functions take the answer as a boolean and never read
+the screens' cookie, so the two transports cannot disagree about a rule. **`type` on
+`list_checklists` narrows to one type, and asking for `specialised` is itself the request for them** —
+refusing `type=specialised` without the flag would be a refusal of exactly what was asked.
+
+**A checklist named by id answers whatever its type** — `list_checklist_stamps`, every write, the
+trade lines and size applies that take a `checklist_id`. Hiding is about what is offered, never about
+what exists. The two parameters live in `operations/checklist-type-params.ts`, one spelling for every
+operation; `tests/integration/agent-api-checklist-types.test.ts` holds the *Done when* as calls.
+
+**This narrowed existing answers, and it is not a break.** Every checklist that existed when #1617
+landed became standard, so no answer changed then; what changes is what a collector later marks
+specialised, which is the collector's decision about their own data rather than a change of meaning.
 
 **The boundary moved by exactly these operations.** `CHECKLIST_WRITES` in
 `tests/unit/agent-api-operation-boundary.test.ts` pins the checklist writes `operations/checklists.ts`

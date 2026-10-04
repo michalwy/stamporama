@@ -13,6 +13,7 @@
 // much of the collection is behind it.
 
 import { agentPhotoUrl } from "./photo-url";
+import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
 
 /**
  * Drop the keys that carry nothing.
@@ -319,6 +320,9 @@ export interface AgentStampIssue {
   /** The checklists of that issue this stamp is **on**. An issue's other checklists are the stamp
    *  form's business (#531) and say nothing about this stamp. */
   readonly checklists: string[];
+  /** Which of {@link checklists} are specialised (#1617) — every other one is standard. Absent when
+   *  none is, which is always the case without `include_specialised`. */
+  readonly specialisedChecklists?: string[];
 }
 
 export interface AgentStampDetail {
@@ -370,7 +374,7 @@ export interface StampDetailRow {
     readonly issueId: string;
     readonly issueName: string | null;
     readonly issueYear: number | null;
-    readonly checklists: readonly { readonly name: string; readonly on: boolean }[];
+    readonly checklists: readonly { readonly name: string; readonly kind?: string; readonly on: boolean }[];
   }[];
   readonly mainCatalogPrice: MoneyRow | null;
   readonly mainCatalogPriceStale: boolean;
@@ -388,6 +392,12 @@ export interface StampDetailRow {
     readonly printing: string | null;
   };
   readonly size: { readonly widthMm: number | null; readonly heightMm: number | null };
+}
+
+/** A list only when it has something in it — `compact` keeps an empty array, which would say "none"
+ *  where the field means to say nothing. */
+function nonEmpty<T>(list: T[]): T[] | undefined {
+  return list.length > 0 ? list : undefined;
 }
 
 export function stampDetail(
@@ -413,6 +423,11 @@ export function stampDetail(
         name: issue.issueName ?? undefined,
         year: issue.issueYear ?? undefined,
         checklists: issue.checklists.filter((list) => list.on).map((list) => list.name),
+        specialisedChecklists: nonEmpty(
+          issue.checklists
+            .filter((list) => list.on && list.kind === "specialised")
+            .map((list) => list.name)
+        ),
       })
     ),
     catalogPrice: row.mainCatalogPrice ? money(row.mainCatalogPrice) : undefined,
@@ -445,6 +460,8 @@ export function stampDetail(
 export interface AgentIssueChecklist {
   readonly checklistId: string;
   readonly name: string;
+  /** `standard` or `specialised` (#1617). */
+  readonly type: ChecklistKind;
   readonly stampCount: number;
   readonly catalogTotal?: AgentMoney;
 }
@@ -487,6 +504,7 @@ export interface IssueDetailRow {
   readonly checklists: readonly {
     readonly id: string;
     readonly name: string;
+    readonly kind: string;
     readonly stampCount: number;
     readonly priceTotal: MoneyRow | null;
   }[];
@@ -517,6 +535,7 @@ export function issueDetail(
       compact({
         checklistId: list.id,
         name: list.name,
+        type: asChecklistKind(list.kind),
         stampCount: list.stampCount,
         // **Per checklist, never over the union** (#531): summing the union would count a stamp on
         // both a basic and a specialized list once, for a total answering neither question.

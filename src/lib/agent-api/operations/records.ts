@@ -15,6 +15,7 @@ import { collectionPath, loadCatalogLabelling, loadCollectionHeader, loadLocatio
 import type { AgentCopyDetail, AgentIssueDetail, AgentStampDetail } from "../collection-reads";
 import type { Operation, OperationContext, ParsedParams } from "../types";
 import { stampIdFromRef } from "./stamp-refs";
+import { includeSpecialisedParam, INCLUDE_SPECIALISED_PARAMETER } from "./checklist-type-params";
 
 // One thing in full — a stamp, an issue, a copy (#710).
 //
@@ -73,7 +74,7 @@ export async function readStamp(
   await assertStampInCollection(stampId, context.collectionId);
 
   const [stamp, labelling] = await Promise.all([
-    getStampListItem(context.ownerId, stampId),
+    getStampListItem(context.ownerId, stampId, { includeSpecialised: includeSpecialisedParam(params) }),
     loadCatalogLabelling(context.collectionId),
   ]);
 
@@ -93,7 +94,9 @@ export async function readIssue(
 ): Promise<AgentIssueDetail> {
   const issueId = requiredString(params, "issue_id");
   const header = await loadCollectionHeader(context);
-  const issue = await getIssueListItem(context.ownerId, context.collectionId, issueId);
+  const issue = await getIssueListItem(context.ownerId, context.collectionId, issueId, {
+    includeSpecialised: includeSpecialisedParam(params),
+  });
   if (!issue) throw notFoundRecord("issue", issueId, "search_collection");
 
   // The declared range is a **span** per vendor rather than a number, so it does not go through the
@@ -198,11 +201,12 @@ export const getStampOperation: Operation = {
       required: true,
       description: "The stamp's id, as `search_collection` or `get_copy` reports it. A stamp may also be named by its short number, `st 123`.",
     },
+    INCLUDE_SPECIALISED_PARAMETER,
   ],
   result: {
     kind: "object",
     description:
-      "One stamp. `copies` is how many are held of this stamp exactly and `variantCopies` how many under its variants — two answers to two questions, never added together. `catalogPrice` is the headline figure for the collection's leading condition; on a stamp whose variant is unknown it rolls up from the cheapest priced variant, so treat it as an estimate. `catalogNumbers` lead with the area's primary catalogue. Every field the stamp does not state is absent rather than null.",
+      "One stamp. `copies` is how many are held of this stamp exactly and `variantCopies` how many under its variants — two answers to two questions, never added together. `catalogPrice` is the headline figure for the collection's leading condition; on a stamp whose variant is unknown it rolls up from the cheapest priced variant, so treat it as an estimate. `catalogNumbers` lead with the area's primary catalogue. Each of `issues` names the `checklists` of that issue the stamp is on — standard ones only unless `include_specialised` is sent, and then `specialisedChecklists` says which of them are specialised. Every field the stamp does not state is absent rather than null.",
   },
   handler: async (context, params) => readStamp(context, params),
 };
@@ -222,11 +226,12 @@ export const getIssueOperation: Operation = {
       required: true,
       description: "The issue's id, as `search_collection` or `get_stamp` reports it.",
     },
+    INCLUDE_SPECIALISED_PARAMETER,
   ],
   result: {
     kind: "object",
     description:
-      "One issue. `memberCount` is every stamp filed under it, variants included; `requiredCount` is the distinct stamps on any of its checklists — a stamp on two checklists is counted once, so the checklist sizes do not add up to it. `catalogTotal` is stated per checklist for the same reason. `catalogues` states each catalogue its area keeps twice: `own`, as the issue sets it — `\"Mi: GG\"` where it has a prefix of its own, `\"Mi\"` where it follows its area, the spelling `update_issue` takes in `prefixes` — and `resolved`, the prefix its stamps' numbers actually carry (`Mi·GG`). To find out what is held from it, call `list_holdings` with this `issue_id`.",
+      "One issue. Its `checklists` each carry their `type` (`standard` or `specialised`), and only the standard ones are listed and counted unless `include_specialised` is sent. `memberCount` is every stamp filed under it, variants included; `requiredCount` is the distinct stamps on any of its checklists — a stamp on two checklists is counted once, so the checklist sizes do not add up to it. `catalogTotal` is stated per checklist for the same reason. `catalogues` states each catalogue its area keeps twice: `own`, as the issue sets it — `\"Mi: GG\"` where it has a prefix of its own, `\"Mi\"` where it follows its area, the spelling `update_issue` takes in `prefixes` — and `resolved`, the prefix its stamps' numbers actually carry (`Mi·GG`). To find out what is held from it, call `list_holdings` with this `issue_id`.",
   },
   handler: async (context, params) => readIssue(context, params),
 };

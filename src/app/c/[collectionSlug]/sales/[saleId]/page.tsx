@@ -8,6 +8,7 @@ import { getSaleDetail, getSaleIssueIds } from "@/lib/sales";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { getCarriers } from "@/lib/carriers";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
@@ -47,7 +48,12 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
     // Short list, and the shipment dialog needs it the moment the header renders (#491).
     getCarriers(session.user.id, collection.id),
   ]);
-  const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
+  const issueHeaders = await getIssueHeadersByIds(
+    session.user.id,
+    collection.id,
+    issueIds,
+    await readIncludeSpecialised(collection.id)
+  );
   const issueHeaderById: Record<string, IssueHeader> = {};
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 

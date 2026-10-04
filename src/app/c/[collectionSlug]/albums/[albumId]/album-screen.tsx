@@ -62,6 +62,10 @@ import {
 } from "@/lib/album-print-mode";
 import { albumYearAloneName } from "@/lib/album-print-rules";
 import { CELL_GLYPH } from "@/app/c/[collectionSlug]/shared/cell-target";
+import {
+  SpecialisedChecklistsToggle,
+  SpecialisedMark,
+} from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 
 // One album (#767): what it prints, in what order, and how that falls onto sheets.
 //
@@ -679,8 +683,18 @@ export function AlbumScreen({
           <Icon name="dragGrip" size="sm" />
         </span>
         <span style={{ ...MUTED, width: "3rem" }}>{entry.year ?? "—"}</span>
-        <span style={{ flex: 1, fontSize: "0.9375rem", color: "var(--color-text-primary)" }}>
+        <span
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            fontSize: "0.9375rem",
+            color: "var(--color-text-primary)",
+          }}
+        >
           {entry.checklistName}
+          <SpecialisedMark kind={entry.checklistKind} />
         </span>
         {entry.ordersItsOwn && (
           <Tooltip content="This album prints these stamps in its own order, not the checklist's">
@@ -1139,12 +1153,15 @@ export function AlbumScreen({
               <button
                 type="button"
                 disabled={isPending}
-                onClick={() => run(() => gatherAlbumEntriesAction(album.id))}
+                onClick={() => run(() => gatherAlbumEntriesAction(album.id, album.collectionId))}
                 style={{ ...DOWNLOAD_BTN, cursor: isPending ? "default" : "pointer" }}
               >
                 Gather new checklists
               </button>
             </Tooltip>
+            {/* Whether gathering takes specialised checklists too (#1617). An entry already on one
+                stays listed and printed either way. */}
+            <SpecialisedChecklistsToggle />
             <span style={{ marginLeft: "auto", display: "flex", gap: "1rem" }}>
               <Tooltip
                 align="end"

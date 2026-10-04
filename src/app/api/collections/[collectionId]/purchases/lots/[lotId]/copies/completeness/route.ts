@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getIntakeIssueIds } from "@/lib/items";
 import { getLotSetCompleteness } from "@/lib/lot-set-completeness";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 /** Per-checklist for-sale completeness for the issue groups of one lot (#563). Its own route rather
  * than a field on the copies summary: the figure is only drawn in the *by issue* view, and folding
@@ -19,9 +20,13 @@ export async function GET(
   const { collectionId, lotId } = await params;
   try {
     const issueIds = await getIntakeIssueIds(session.user.id, collectionId, { lotId });
-    const byIssue = await getLotSetCompleteness(session.user.id, collectionId, issueIds, {
-      lotId,
-    });
+    const byIssue = await getLotSetCompleteness(
+      session.user.id,
+      collectionId,
+      issueIds,
+      { lotId },
+      await readIncludeSpecialised(collectionId)
+    );
     return NextResponse.json(byIssue);
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

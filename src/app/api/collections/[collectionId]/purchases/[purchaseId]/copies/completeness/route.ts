@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getIntakeIssueIds } from "@/lib/items";
 import { getLotSetCompleteness } from "@/lib/lot-set-completeness";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 /** The same figure for the order-level *by issue* view, whose groups are merged across every lot of
  * the purchase (#563) — so *from here* means "arrived in this parcel" rather than "in this lot",
@@ -19,9 +20,13 @@ export async function GET(
   const { collectionId, purchaseId } = await params;
   try {
     const issueIds = await getIntakeIssueIds(session.user.id, collectionId, { purchaseId });
-    const byIssue = await getLotSetCompleteness(session.user.id, collectionId, issueIds, {
-      purchaseId,
-    });
+    const byIssue = await getLotSetCompleteness(
+      session.user.id,
+      collectionId,
+      issueIds,
+      { purchaseId },
+      await readIncludeSpecialised(collectionId)
+    );
     return NextResponse.json(byIssue);
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

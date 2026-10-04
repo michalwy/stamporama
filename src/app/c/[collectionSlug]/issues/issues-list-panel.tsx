@@ -28,6 +28,7 @@ import {
 import { MoveIssueAreaDialog } from "./move-issue-area-dialog";
 import { AddStampRangeDialog } from "./add-stamp-range-dialog";
 import { ChecklistDisplaySwitcher, useChecklistDisplayMode } from "./checklist-display-switcher";
+import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import {
   AddVariantRangeDialog,
   type AddVariantRangeParent,
@@ -788,6 +789,8 @@ export function IssuesListPanel({
             onChange={setDisplayFormatId}
           />
           <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
+          {/* Specialised checklists (#1617): out of every chip, branch, badge and total until on. */}
+          <SpecialisedChecklistsToggle />
           {/* The collector's own labels (#1182). The **issue's** tags: nothing is inherited, so an
               issue matches on what is hung on it and never on what is hung on the stamps inside
               it — and the expanded tree under a matching row is left exactly as it was, because a
@@ -1024,6 +1027,7 @@ export function IssuesListPanel({
                     checklists: issue.checklists.map((c) => ({
                       id: c.id,
                       name: c.name,
+                      kind: c.kind,
                       on: stamp.checklistIds.includes(c.id),
                     })),
                   },

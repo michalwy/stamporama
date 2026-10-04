@@ -39,6 +39,7 @@ import {
   type WantPriority,
 } from "./want-rules";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
+import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 
 // The priority vocabulary lives in the pure module, since the form and the list toolbar render it
 // and this one is `server-only`. Re-exported here so a server caller has one import.
@@ -1758,6 +1759,8 @@ async function mapChecklistsToDepth<T extends { stamps: { stampId: string }[] }>
 export interface IssueWantGapChecklist {
   checklistId: string;
   name: string;
+  /** Standard or specialised (#1617). */
+  kind: ChecklistKind;
   /** Stamps of this checklist with no counted copy — at the run's depth (#1240), so under *variants*
    *  an umbrella's variants rather than the umbrella the checklist names. */
   missingStampIds: string[];
@@ -1781,14 +1784,17 @@ export async function previewIssueMissingWants(
   /** Null reads the checklists that span issues (#1416) — one of which the dialog then narrows to. */
   issueId: string | null,
   acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
-  depth: WantDepth | null = null
+  depth: WantDepth | null = null,
+  /** Whether the specialised checklists are offered too (#1617). The run itself names its checklists
+   *  by id and takes them whatever their kind. */
+  includeSpecialised = false
 ): Promise<IssueWantGapChecklist[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const terms = await validateAcceptance(collectionId, acceptance);
   const checklists = await prisma.checklist.findMany({
-    where: { collectionId, issueId },
+    where: { collectionId, issueId, ...shownChecklistWhere(includeSpecialised) },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, stamps: { select: { stampId: true } } },
+    select: { id: true, name: true, kind: true, stamps: { select: { stampId: true } } },
   });
 
   const targets = await mapChecklistsToDepth(collectionId, checklists, depth);
@@ -1800,6 +1806,7 @@ export async function previewIssueMissingWants(
       return {
         checklistId: c.id,
         name: c.name,
+        kind: asChecklistKind(c.kind),
         missingStampIds: gap.missing,
         toCreateStampIds: gap.toCreate,
       };

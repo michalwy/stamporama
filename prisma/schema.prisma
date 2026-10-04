@@ -6390,6 +6390,12 @@ model Checklist {
   issueId      String?
   name         String
   sortOrder    Int      @default(0)
+  // `standard` or `specialised` (#1617, ADR-0031 §11). A standard checklist is a set collected in
+  // everyday work; a specialised one is a finer goal — every colour variant of one stamp — kept for
+  // album building and specialised collecting. Every read that lists, offers or counts checklists
+  // leaves specialised ones out unless the collector has switched them on (`checklist-kind.ts`);
+  // a read naming one by id answers whatever its kind.
+  kind         String   @default("standard")
   createdAt    DateTime @default(now())
 
   collection Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)

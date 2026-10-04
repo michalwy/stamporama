@@ -31,7 +31,7 @@ describe("checklist completeness rolls variant children up (#661)", () => {
   let lotId: string;
 
   async function checklist(id: string) {
-    const { checklists } = await getIssueCompleteness(userId, collectionId, issueId);
+    const { checklists } = await getIssueCompleteness(userId, collectionId, issueId, false);
     const found = checklists.find((c) => c.checklistId === id);
     assert.ok(found, "checklist missing from the grid");
     return found;

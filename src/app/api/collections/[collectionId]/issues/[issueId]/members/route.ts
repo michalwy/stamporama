@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listIssueMembers } from "@/lib/issues";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 export async function GET(
   request: Request,
@@ -23,7 +24,8 @@ export async function GET(
       collectionId,
       issueId,
       displayConditionId,
-      displayFormatId
+      displayFormatId,
+      await readIncludeSpecialised(collectionId)
     );
     return NextResponse.json({ members });
   } catch {

@@ -27,6 +27,8 @@ import {
 import { resolveVocabularyValue } from "../vocabulary";
 import { loadStampLabels } from "./stamp-refs";
 import type { Operation, OperationContext, ParsedParams } from "../types";
+import { includeSpecialisedParam, INCLUDE_SPECIALISED_PARAMETER } from "./checklist-type-params";
+import { shownChecklistWhere } from "../../checklist-kind";
 
 // Translating the collection's texts through the agent API (#1452): finding the texts a language is
 // missing, and filling them.
@@ -54,6 +56,9 @@ interface Scope {
   readonly language: string;
   /** The area subtree to stay inside, or null for the whole collection. */
   readonly areaIds: readonly string[] | null;
+  /** Whether specialised checklists are listed too (#1617). An album's own list ignores it: what an
+   *  album prints is named by the album. */
+  readonly includeSpecialised: boolean;
 }
 
 interface GapRow {
@@ -172,6 +177,7 @@ async function handNamedChecklistGaps(scope: Scope): Promise<GapRow[]> {
       collectionId: scope.collectionId,
       translations: { none: { language: scope.language, ...filled("name") } },
       ...(scope.areaIds ? { issue: { collectionAreaId: { in: [...scope.areaIds] } } } : {}),
+      ...shownChecklistWhere(scope.includeSpecialised),
     },
     select: { id: true, name: true, issue: { select: { name: true } } },
     orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -370,7 +376,12 @@ async function findMissing(context: OperationContext, params: ParsedParams) {
   const kinds = kind !== null ? [kind] : TRANSLATION_KINDS.filter((k) => areaIds === null || AREA_BOUND_KINDS.has(k));
   const { targets, total } = await pageSources(
     gapSources(kinds),
-    { collectionId: context.collectionId, language, areaIds },
+    {
+      collectionId: context.collectionId,
+      language,
+      areaIds,
+      includeSpecialised: includeSpecialisedParam(params),
+    },
     window
   );
   return listResponse(await describe(context, targets), total, window);
@@ -415,6 +426,11 @@ export const findMissingTranslationsOperation: Operation = {
       required: false,
       description:
         "Only what this album's pages not yet printed would print untranslated. Takes the album's name or id; `language` must be the album's own.",
+    },
+    {
+      ...INCLUDE_SPECIALISED_PARAMETER,
+      description:
+        "true to list specialised checklists' names too. Left out, only standard checklists are listed, as the app shows them by default; an `album` lists what it prints whatever its type.",
     },
   ],
   result: {

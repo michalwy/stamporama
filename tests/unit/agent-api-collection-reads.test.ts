@@ -276,6 +276,29 @@ describe("one stamp in full", () => {
     assert.deepEqual(row.issues[0].checklists, ["Basic"]);
   });
 
+  it("says which of its checklists are specialised, and nothing when none is (#1617)", () => {
+    assert.equal("specialisedChecklists" in row.issues[0], false);
+    const withSpecialised = stampDetail(
+      "col1",
+      {
+        ...STAMP_DETAIL,
+        issues: [
+          {
+            ...STAMP_DETAIL.issues[0],
+            checklists: [
+              { name: "Basic", kind: "standard", on: true },
+              { name: "Colour shades", kind: "specialised", on: true },
+              { name: "Perforations", kind: "specialised", on: false },
+            ],
+          },
+        ],
+      },
+      { catalogNumbers: CATALOG, area: "Poland", path: "/c/pl/stamps/s1" }
+    );
+    assert.deepEqual(withSpecialised.issues[0].checklists, ["Basic", "Colour shades"]);
+    assert.deepEqual(withSpecialised.issues[0].specialisedChecklists, ["Colour shades"]);
+  });
+
   it("publishes a price flag only when it is true", () => {
     // `false` survives `compact`, so a `false` here would be a field present on every stamp saying
     // nothing on all but a few.
@@ -346,6 +369,7 @@ const ISSUE_DETAIL: IssueDetailRow = {
     {
       id: "c1",
       name: "Basic",
+      kind: "standard",
       stampCount: 5,
       priceTotal: {
         amount: "40.00",
@@ -354,7 +378,7 @@ const ISSUE_DETAIL: IssueDetailRow = {
         baseCurrency: "PLN",
       },
     },
-    { id: "c2", name: "Specialized", stampCount: 6, priceTotal: null },
+    { id: "c2", name: "Specialized", kind: "specialised", stampCount: 6, priceTotal: null },
   ],
   photos: [],
 };
@@ -381,6 +405,13 @@ describe("one issue in full", () => {
     assert.equal(row.checklists[0].catalogTotal?.amount, "40.00");
     assert.equal(row.checklists[0].catalogTotal?.baseAmount, "170.00");
     assert.equal("catalogTotal" in row.checklists[1], false);
+  });
+
+  it("states each checklist's type (#1617)", () => {
+    assert.deepEqual(
+      row.checklists.map((list) => list.type),
+      ["standard", "specialised"]
+    );
   });
 });
 

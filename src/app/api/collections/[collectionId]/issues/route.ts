@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listIssuesPaginated, type IssueSortBy } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 const VALID_SORT_BY = new Set<IssueSortBy>(["year", "name", "catalogNumber"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -60,6 +61,7 @@ export async function GET(
       sortBy,
       sortDir,
       pageSize: 50,
+      includeSpecialised: await readIncludeSpecialised(collectionId),
     });
     return NextResponse.json(result);
   } catch {

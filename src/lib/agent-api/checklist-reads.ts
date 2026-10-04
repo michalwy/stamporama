@@ -10,6 +10,7 @@
 import { invalidRequest, type ApiError } from "./errors";
 import { compact } from "./collection-reads";
 import type { AgentCatalogResolution } from "./catalog-resolve";
+import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
 
 /** An issue a checklist belongs to or reaches. */
 export interface AgentChecklistIssue {
@@ -22,6 +23,8 @@ export interface AgentChecklistIssue {
 export interface AgentChecklist {
   readonly checklistId: string;
   readonly name: string;
+  /** `standard` or `specialised` (#1617) — always stated, so an agent never has to infer it. */
+  readonly type: ChecklistKind;
   /** The name in other languages, language → name (#1308). Absent when it has none of its own. */
   readonly translatedNames?: Readonly<Record<string, string>>;
   /** Anchored to no issue (#1416). */
@@ -39,6 +42,7 @@ export interface AgentChecklist {
 export interface ChecklistRow {
   readonly id: string;
   readonly name: string;
+  readonly kind: string;
   readonly nameByLanguage: Readonly<Record<string, string>>;
   readonly issue: { readonly id: string; readonly name: string | null; readonly year: number | null } | null;
   readonly coversIssues: readonly { readonly id: string; readonly name: string | null; readonly year: number | null }[];
@@ -54,6 +58,7 @@ export function agentChecklist(row: ChecklistRow, path: string): AgentChecklist 
   return compact({
     checklistId: row.id,
     name: row.name,
+    type: asChecklistKind(row.kind),
     translatedNames: Object.keys(row.nameByLanguage).length > 0 ? { ...row.nameByLanguage } : undefined,
     spansIssues: row.issue === null,
     issue: row.issue ? issueOf(row.issue) : undefined,

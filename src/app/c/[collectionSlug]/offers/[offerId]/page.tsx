@@ -8,6 +8,7 @@ import { getOfferDetail, getOfferIssueIds } from "@/lib/offers";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { OfferDetailPanel } from "./offer-detail-panel";
 import { OfferListNav } from "./offer-list-nav";
@@ -52,7 +53,12 @@ export default async function OfferDetailPage({ params, searchParams }: OfferDet
   // "Today" at request time, for the quick-sell flow's new-sale step (#390) — mirrors the list page.
   const today = new Date().toISOString().slice(0, 10);
 
-  const issueHeaders = await getIssueHeadersByIds(session.user.id, collection.id, issueIds);
+  const issueHeaders = await getIssueHeadersByIds(
+    session.user.id,
+    collection.id,
+    issueIds,
+    await readIncludeSpecialised(collection.id)
+  );
   const issueHeaderById: Record<string, IssueHeader> = {};
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 

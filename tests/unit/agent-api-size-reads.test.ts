@@ -77,9 +77,15 @@ describe("presets", () => {
 describe("stampSizeReading", () => {
   const stamp = { stampId: "b", stampNo: 2, catalogNumbers: ["Mi 2"], name: null, path: "/c/x/stamps/b" };
   const none = { widthMm: null, heightMm: null };
-  const list = (id: string, name: string, entries: [string, number | null, number | null][]) => ({
+  const list = (
+    id: string,
+    name: string,
+    entries: [string, number | null, number | null][],
+    kind = "standard"
+  ) => ({
     checklistId: id,
     name,
+    kind,
     entries: entries.map(([stampId, widthMm, heightMm]) => ({ stampId, widthMm, heightMm })),
   });
 
@@ -96,15 +102,15 @@ describe("stampSizeReading", () => {
       none,
       [
         list("c1", "Basic", [["a", 21, 25], ["b", null, null]]),
-        list("c2", "Colour shades", [["b", null, null], ["z", 22, 26]]),
+        list("c2", "Colour shades", [["b", null, null], ["z", 22, 26]], "specialised"),
         list("c3", "Unmeasured", [["b", null, null], ["y", null, null]]),
       ],
       (id) => ({ a: "Mi 1", z: "Mi 9" })[id]
     );
     assert.equal(reading.source, "inherited");
     assert.deepEqual(reading.inherited, [
-      { checklistId: "c1", checklist: "Basic", widthMm: 21, heightMm: 25, fromStampId: "a", fromCatalogNumber: "Mi 1" },
-      { checklistId: "c2", checklist: "Colour shades", widthMm: 22, heightMm: 26, fromStampId: "z", fromCatalogNumber: "Mi 9" },
+      { checklistId: "c1", checklist: "Basic", checklistType: "standard", widthMm: 21, heightMm: 25, fromStampId: "a", fromCatalogNumber: "Mi 1" },
+      { checklistId: "c2", checklist: "Colour shades", checklistType: "specialised", widthMm: 22, heightMm: 26, fromStampId: "z", fromCatalogNumber: "Mi 9" },
     ]);
   });
 

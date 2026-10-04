@@ -9,6 +9,8 @@ import type { TranslationValueMap } from "@/lib/translations";
 import { useToast } from "@/app/toast-provider";
 import { ChecklistNameDialog } from "./checklist-name-dialog";
 import { useInvalidateStampsAndIssues } from "./use-invalidate-stamps-and-issues";
+import { SpecialisedChecklistsToggle, SpecialisedMark } from "./specialised-checklists";
+import type { ChecklistKind } from "@/lib/checklist-kind";
 
 const FORM_STYLE: React.CSSProperties = {
   display: "flex",
@@ -63,8 +65,14 @@ export function AddToChecklistDialog({
       return listSpanningChecklistsAction(collectionId);
     },
   });
-  // Opened on the first one when there are any, on *new* when there are none.
-  const choice = picked ?? (checklists && checklists.length > 0 ? checklists[0].id : NEW_CHECKLIST);
+  // Opened on the first one when there are any, on *new* when there are none — and back there when
+  // the one picked has just been hidden by the specialised-checklists switch (#1617).
+  const pickedShown =
+    picked === NEW_CHECKLIST || (picked !== null && (checklists ?? []).some((c) => c.id === picked))
+      ? picked
+      : null;
+  const choice =
+    pickedShown ?? (checklists && checklists.length > 0 ? checklists[0].id : NEW_CHECKLIST);
 
   function finish(checklistName: string, added: number) {
     void queryClient.invalidateQueries({ queryKey: ["checklists", collectionId] });
@@ -98,13 +106,13 @@ export function AddToChecklistDialog({
     });
   }
 
-  function createAndAdd(name: string, translations: TranslationValueMap) {
+  function createAndAdd(name: string, translations: TranslationValueMap, kind: ChecklistKind) {
     startTransition(async () => {
       setError(undefined);
       const { createSpanningChecklistAction, addStampsToSpanningChecklistAction } = await import(
         "@/app/actions/checklists"
       );
-      const created = await createSpanningChecklistAction(collectionId, name, translations);
+      const created = await createSpanningChecklistAction(collectionId, name, translations, kind);
       if (created.status === "error") {
         setError(created.message);
         return;
@@ -170,6 +178,9 @@ export function AddToChecklistDialog({
             variants a tick brings along, since a copy of a variant already counts for the stamp it
             is a variant of.
           </p>
+          <div style={{ margin: "0 0 0.75rem" }}>
+            <SpecialisedChecklistsToggle />
+          </div>
           {isLoading ? (
             <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>Loading…</p>
           ) : (
@@ -198,7 +209,10 @@ export function AddToChecklistDialog({
                       onChange={() => setPicked(c.id)}
                       disabled={isPending}
                     />
-                    <span style={{ flex: 1, minWidth: 0 }}>{c.name}</span>
+                    <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      {c.name}
+                      <SpecialisedMark kind={c.kind} />
+                    </span>
                     <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
                       {c.stampIds.length} stamp{c.stampIds.length !== 1 ? "s" : ""}
                       {already > 0 && ` · ${already} of these already on it`}

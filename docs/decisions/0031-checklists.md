@@ -3,6 +3,7 @@
 ## Status
 
 Accepted (#531). Supersedes the `IssueMember.requiredForCompleteness` flag, which is dropped.
+Amended by #1617: a checklist is standard or specialised (§11).
 
 ## Context
 
@@ -164,6 +165,45 @@ The visible cost of a duplicate is real but local — the badge tooltip, the tre
 form's boxes and the price-details entries would each show two indistinguishable rows — which is
 what the warning names.
 
+### 11. A checklist is standard or specialised, and one switch shows the specialised (#1617)
+
+> **Added by #1617.** Settled with the collector on 2026-10-04.
+
+The collector uses checklists for two things: **standard** ones, the sets collected in everyday work
+(a series perforated and imperforate as two checklists), and **specialised** ones, finer goals kept
+for album building or a specialised collection — one checklist holding every colour variant of one
+stamp. The second kind is many and rarely needed day to day, and it showed everywhere the first did:
+chips, branches, completeness, pickers, choices.
+
+- **Every checklist has a kind**, `Checklist.kind`, `standard` or `specialised`, and existing ones
+  became standard. Rejected: checklists of a stamp's variants **generated** automatically, alone or
+  beside the kind — the collector builds those sets, the app only needs to know what they are.
+- **By default only standard checklists are shown and taken into account; one switch includes the
+  specialised ones**, the same switch everywhere and no place that always includes them — not albums,
+  not want-list completing, not the Checklists screen. It is remembered per collection and per
+  browser, offered wherever checklists are listed or offered, and flipping it in one place flips it in
+  all. With it on, a specialised checklist wears a *specialised* mark so the kinds stay apart.
+- **What already uses a specialised checklist keeps working with the switch off.** A read naming a
+  checklist by id answers whatever its kind — an album entry prints, a run goes on, a want stays — and
+  that thing's own screen names the checklist and marks it specialised. Hiding is about what is
+  offered, never about what exists.
+- **A save that could not see the specialised checklists leaves them alone.** The stamp form's
+  *Counts towards* list without them, and the checklist editor's reorder without them, change only
+  what they showed.
+- **The issue's default set is its first standard checklist.** §5's "first checklist is the one a new
+  stamp joins" now reads "first *standard* checklist": a specialised checklist is never what *the
+  issue's set* means, even on an issue that has nothing else.
+- **The declared catalogue range is read from the standard checklists only**, whatever the switch
+  says — the range is stored, and §6's *union* is the union of the everyday sets.
+- **The agent API states the kind as `type`** on every checklist it returns, takes it on
+  `create_checklist` and `update_checklist`, filters `list_checklists` by it, and takes
+  `include_specialised` — false by default, the app's default — on every read that lists, offers or
+  counts checklists (`agent-api.md`).
+
+The switch lives in a **cookie** rather than `localStorage`, unlike the screens' other remembered
+choices, because the server counts by it. Domain functions take it as a boolean argument; only pages,
+routes and actions read the cookie (`catalog-and-stamps.md`).
+
 ## Schema
 
 ```prisma
@@ -173,6 +213,7 @@ model Checklist {
   issueId      String?  // null = spans issues
   name         String
   sortOrder    Int      @default(0)
+  kind         String   @default("standard") // "standard" | "specialised" (#1617, §11)
   createdAt    DateTime @default(now())
 
   collection Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)

@@ -35,6 +35,7 @@ import type { CollectionVocabulary } from "../vocabulary";
 import type { ListResponse } from "../list";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
 import { stampIdFromRef, stampIdsFromRefs } from "./stamp-refs";
+import { includeSpecialisedParam, INCLUDE_SPECIALISED_PARAMETER } from "./checklist-type-params";
 
 // Wants and checklists (#712) — the reading half of the third agent workflow: *what am I looking
 // for, what would a counterparty's material answer, and what is this set still missing*.
@@ -453,9 +454,18 @@ export async function readChecklistGaps(
     );
   }
 
+  // The specialised checklists only when asked (#1617) — the app's default, and both reads by it.
+  const includeSpecialised = includeSpecialisedParam(params);
   const [checklists, gaps, header, labelling] = await Promise.all([
-    getChecklistsForIssue(context.ownerId, context.collectionId, issue.id),
-    previewIssueMissingWants(context.ownerId, context.collectionId, issue.id),
+    getChecklistsForIssue(context.ownerId, context.collectionId, issue.id, includeSpecialised),
+    previewIssueMissingWants(
+      context.ownerId,
+      context.collectionId,
+      issue.id,
+      undefined,
+      null,
+      includeSpecialised
+    ),
     loadCollectionHeader(context),
     loadCatalogLabelling(context.collectionId),
   ]);
@@ -483,6 +493,7 @@ export async function readChecklistGaps(
       return checklistGap({
         checklistId: gap.checklistId,
         name: gap.name,
+        kind: gap.kind,
         required: sizeById.get(gap.checklistId) ?? gap.missingStampIds.length,
         missing: gap.missingStampIds.map((stampId) => {
           const stamp = byId.get(stampId);
@@ -514,7 +525,7 @@ export const findChecklistGapsOperation: Operation = {
   method: "GET",
   path: "/issues/{issueId}/checklist-gaps",
   description:
-    "What a series' checklists are still missing. A checklist is a named set of stamps that counts as one complete unit, and a series may carry several — a basic set beside a specialized one — so the gap is stated per checklist and never over their union. Each missing stamp says whether an open want already covers it.",
+    "What a series' checklists are still missing. A checklist is a named set of stamps that counts as one complete unit, and a series may carry several — a basic set beside a specialized one — so the gap is stated per checklist and never over their union. Only its standard checklists are read unless `include_specialised` is sent. Each missing stamp says whether an open want already covers it.",
   writes: false,
   parameters: [
     {
@@ -524,11 +535,12 @@ export const findChecklistGapsOperation: Operation = {
       required: true,
       description: "The series' id, from `search_collection` or `get_issue`.",
     },
+    INCLUDE_SPECIALISED_PARAMETER,
   ],
   result: {
     kind: "object",
     description:
-      "The series' checklists with their gaps. `required` is how many stamps the checklist names and `held` how many the collection has a copy of — read **through the variant tree**, so a copy filed under a variant of a listed stamp counts as a copy of it, exactly as the completeness card on the same screen counts it. `missing` names the rest; `alreadyWanted` marks the ones an open, unnarrowed want already covers, so what is left is the shopping list. A *narrower* want for the same stamp does not count as covering it, which is the app's own rule: wanting a mint copy and wanting any copy are two different intents about one stamp. Which copies answer the held ones is `list_holdings` with this same `issue_id` — each of its rows states its own copy id, grade and filing place.",
+      "The series' checklists with their gaps, each with its `type` (`standard` or `specialised`). `required` is how many stamps the checklist names and `held` how many the collection has a copy of — read **through the variant tree**, so a copy filed under a variant of a listed stamp counts as a copy of it, exactly as the completeness card on the same screen counts it. `missing` names the rest; `alreadyWanted` marks the ones an open, unnarrowed want already covers, so what is left is the shopping list. A *narrower* want for the same stamp does not count as covering it, which is the app's own rule: wanting a mint copy and wanting any copy are two different intents about one stamp. Which copies answer the held ones is `list_holdings` with this same `issue_id` — each of its rows states its own copy id, grade and filing place.",
   },
   handler: async (context, params) => readChecklistGaps(context, params),
 };

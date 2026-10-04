@@ -17,6 +17,7 @@ import {
 const ROW: ChecklistRow = {
   id: "cl1",
   name: "Grosik 1928–1932",
+  kind: "standard",
   nameByLanguage: {},
   issue: null,
   coversIssues: [
@@ -32,6 +33,7 @@ describe("agentChecklist", () => {
     assert.deepEqual(agentChecklist(ROW, "/c/x/checklists"), {
       checklistId: "cl1",
       name: "Grosik 1928–1932",
+      type: "standard",
       spansIssues: true,
       coversIssues: [{ issueId: "i1", name: "Grosik", year: 1928 }, { issueId: "i2" }],
       stampCount: 12,

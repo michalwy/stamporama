@@ -106,6 +106,7 @@ import { TextInput } from "./text-input";
 import { usePersistedFlag } from "./use-persisted-flag";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { markedChecklistName } from "@/lib/checklist-kind";
 
 /**
  * A ticked run of scan tiles identified **as the stamps of a checklist, in turn** (#1220, #1225).
@@ -304,11 +305,13 @@ export function IssueRunDialog({
     });
   };
   const ownIssue = coveredIssues[0] ?? issue;
+  // A run built on a specialised checklist works whatever the switch says (#1617), and its title
+  // says what it is built on.
   const runTitle = !checklist
     ? "a checklist"
     : checklist.issueId
-      ? `“${checklist.name}” — ${issueLabel(ownIssue.name, ownIssue.year)}`
-      : `“${checklist.name}” — spanning ${coveredIssues.length} ${coveredIssues.length === 1 ? "issue" : "issues"}`;
+      ? `“${markedChecklistName(checklist)}” — ${issueLabel(ownIssue.name, ownIssue.year)}`
+      : `“${markedChecklistName(checklist)}” — spanning ${coveredIssues.length} ${coveredIssues.length === 1 ? "issue" : "issues"}`;
   /** A stamp added during the run joins the checklist, which only the checklist's own issue can do. */
   const canAddStamp = checklist?.issueId != null && checklist.issueId === issue.id;
 

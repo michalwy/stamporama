@@ -1,6 +1,12 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
 import { DEFAULT_CHECKLIST } from "./checklist-vocabulary";
+import {
+  asChecklistKind,
+  DEFAULT_CHECKLIST_KIND,
+  shownChecklistWhere,
+  type ChecklistKind,
+} from "./checklist-kind";
 import type { RunChecklist } from "./issue-run";
 import {
   syncEntityTranslations,
@@ -17,6 +23,10 @@ import {
 //
 // Membership **is** required-ness. A stamp that is an optional extra is an `IssueMember` in no
 // checklist, which is exactly what the old `requiredForCompleteness = false` said.
+//
+// A checklist is *standard* or *specialised* (#1617, `checklist-kind.ts`): every read here that
+// lists checklists takes `includeSpecialised` and leaves specialised ones out without it, and a read
+// naming one by id answers whatever its kind.
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
   const col = await prisma.collection.findUnique({
@@ -43,6 +53,8 @@ export interface ChecklistData {
   id: string;
   issueId: string | null;
   name: string;
+  /** Standard or specialised (#1617). */
+  kind: ChecklistKind;
   /** The name in other languages, language → name (#1308) — what an album printing `{checklistName}`
    *  in its own language reads. */
   nameByLanguage: Record<string, string>;
@@ -56,6 +68,7 @@ const CHECKLIST_SELECT = {
   id: true,
   issueId: true,
   name: true,
+  kind: true,
   translations: { select: { language: true, name: true } },
   sortOrder: true,
   stamps: { select: { stampId: true, sortOrder: true } },
@@ -108,6 +121,7 @@ function toChecklistData(row: {
   id: string;
   issueId: string | null;
   name: string;
+  kind: string;
   translations: { language: string; name: string | null }[];
   sortOrder: number;
   stamps: { stampId: string; sortOrder: number }[];
@@ -116,6 +130,7 @@ function toChecklistData(row: {
     id: row.id,
     issueId: row.issueId,
     name: row.name,
+    kind: asChecklistKind(row.kind),
     nameByLanguage: translationsByLanguage(row.translations, (t) => t.name),
     sortOrder: row.sortOrder,
     stampIds: orderedChecklistStampIds(row.stamps),
@@ -133,15 +148,17 @@ export const CHECKLIST_STAMP_ORDER = [{ sortOrder: "asc" }, { stampId: "asc" }] 
  *  one a badge falls back to and the one a new stamp joins by default, so it must be stable. */
 const CHECKLIST_ORDER = [{ sortOrder: "asc" }, { createdAt: "asc" }] as const;
 
-/** The checklists anchored to one issue, in display order. */
+/** The checklists anchored to one issue, in display order — the specialised ones only when
+ *  `includeSpecialised` (#1617). */
 export async function getChecklistsForIssue(
   ownerId: string,
   collectionId: string,
-  issueId: string
+  issueId: string,
+  includeSpecialised: boolean
 ): Promise<ChecklistData[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.checklist.findMany({
-    where: { collectionId, issueId },
+    where: { collectionId, issueId, ...shownChecklistWhere(includeSpecialised) },
     orderBy: [...CHECKLIST_ORDER],
     select: CHECKLIST_SELECT,
   });
@@ -157,12 +174,13 @@ export async function getChecklistsForIssue(
  */
 export async function listChecklistsForIssues(
   collectionId: string,
-  issueIds: string[]
+  issueIds: string[],
+  includeSpecialised: boolean
 ): Promise<Map<string, ChecklistData[]>> {
   const byIssue = new Map<string, ChecklistData[]>();
   if (issueIds.length === 0) return byIssue;
   const rows = await prisma.checklist.findMany({
-    where: { collectionId, issueId: { in: issueIds } },
+    where: { collectionId, issueId: { in: issueIds }, ...shownChecklistWhere(includeSpecialised) },
     orderBy: [...CHECKLIST_ORDER],
     select: CHECKLIST_SELECT,
   });
@@ -244,6 +262,7 @@ export async function getRunChecklist(
   return {
     id: data.id,
     name: data.name,
+    kind: data.kind,
     issueId: data.issueId,
     stampIds: data.stampIds,
     issues: issues.map(({ id, name, year, collectionAreaId }) => ({
@@ -259,6 +278,7 @@ export async function getRunChecklist(
 export interface SpanningChecklistSummary {
   id: string;
   name: string;
+  kind: ChecklistKind;
   stampIds: string[];
   /** Every issue one of its stamps is on. */
   issueIds: string[];
@@ -271,11 +291,12 @@ export interface SpanningChecklistSummary {
  */
 export async function listSpanningChecklists(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  includeSpecialised: boolean
 ): Promise<SpanningChecklistSummary[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.checklist.findMany({
-    where: { collectionId, issueId: null },
+    where: { collectionId, issueId: null, ...shownChecklistWhere(includeSpecialised) },
     orderBy: [...CHECKLIST_ORDER],
     select: CHECKLIST_SELECT,
   });
@@ -292,6 +313,7 @@ export async function listSpanningChecklists(
     return {
       id: data.id,
       name: data.name,
+      kind: data.kind,
       stampIds: data.stampIds,
       issueIds: [...new Set(data.stampIds.flatMap((id) => issuesOf.get(id) ?? []))],
     };
@@ -302,12 +324,16 @@ export async function listSpanningChecklists(
  *  chips on the stamp list and the stamp tree's bolding, in one query for the whole page. */
 export async function listChecklistIdsByStamp(
   collectionId: string,
-  stampIds: string[]
+  stampIds: string[],
+  includeSpecialised: boolean
 ): Promise<Map<string, string[]>> {
   const byStamp = new Map<string, string[]>();
   if (stampIds.length === 0) return byStamp;
   const rows = await prisma.checklistStamp.findMany({
-    where: { stampId: { in: stampIds }, checklist: { collectionId } },
+    where: {
+      stampId: { in: stampIds },
+      checklist: { collectionId, ...shownChecklistWhere(includeSpecialised) },
+    },
     select: { stampId: true, checklistId: true },
   });
   for (const row of rows) {
@@ -334,7 +360,13 @@ export function defaultChecklistName(issueName: string | null): string {
 export async function createChecklist(
   ownerId: string,
   collectionId: string,
-  input: { issueId: string | null; name: string; translations?: TranslationValueMap }
+  input: {
+    issueId: string | null;
+    name: string;
+    translations?: TranslationValueMap;
+    /** Standard unless the collector chose otherwise (#1617). */
+    kind?: ChecklistKind;
+  }
 ): Promise<string> {
   await assertCollectionOwner(ownerId, collectionId);
   const name = input.name.trim();
@@ -357,6 +389,7 @@ export async function createChecklist(
         collectionId,
         issueId: input.issueId,
         name,
+        kind: input.kind ?? DEFAULT_CHECKLIST_KIND,
         sortOrder: (last?.sortOrder ?? -1) + 1,
       },
       select: { id: true },
@@ -372,16 +405,34 @@ export async function renameChecklist(
   ownerId: string,
   checklistId: string,
   name: string,
-  translations?: TranslationValueMap
+  translations?: TranslationValueMap,
+  /** Its type (#1617), when the form carried one; absent leaves it as it is. */
+  kind?: ChecklistKind
 ): Promise<void> {
   const collectionId = await resolveChecklistCollection(checklistId);
   await assertCollectionOwner(ownerId, collectionId);
   const trimmed = name.trim();
   if (!trimmed) throw new Error("A checklist needs a name.");
   await prisma.$transaction(async (tx) => {
-    await tx.checklist.update({ where: { id: checklistId }, data: { name: trimmed } });
+    await tx.checklist.update({
+      where: { id: checklistId },
+      data: { name: trimmed, ...(kind !== undefined ? { kind } : {}) },
+    });
     await syncChecklistTranslations(tx, checklistId, translations);
   });
+}
+
+/** Make a checklist standard or specialised (#1617) — its editor, the Checklists screen and the
+ *  agent API. Nothing else about it changes: its stamps, its order and every album entry, series
+ *  run and want built on it stay as they are. */
+export async function setChecklistKind(
+  ownerId: string,
+  checklistId: string,
+  kind: ChecklistKind
+): Promise<void> {
+  const collectionId = await resolveChecklistCollection(checklistId);
+  await assertCollectionOwner(ownerId, collectionId);
+  await prisma.checklist.update({ where: { id: checklistId }, data: { kind } });
 }
 
 export async function deleteChecklist(ownerId: string, checklistId: string): Promise<void> {
@@ -395,6 +446,12 @@ export async function deleteChecklist(ownerId: string, checklistId: string): Pro
  * single-checklist badge shows and which one a new stamp joins by default, so it is the
  * collector's to set. Ids not belonging to the issue are ignored rather than rejected — a stale
  * client list must not be able to renumber somebody else's rows.
+ *
+ * **The ids sent take the places they held among themselves** (#1617): an editor with specialised
+ * checklists switched off sends only the standard ones, and the hidden ones must keep their places
+ * rather than be pushed to whichever end a renumbering of the visible ones leaves them. So the
+ * current order is read, the positions the sent ids occupy are refilled in the order sent, and the
+ * whole list is renumbered densely.
  */
 export async function reorderChecklists(
   ownerId: string,
@@ -406,10 +463,15 @@ export async function reorderChecklists(
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.checklist.findMany({
     where: { collectionId, issueId },
+    orderBy: [...CHECKLIST_ORDER],
     select: { id: true },
   });
-  const own = new Set(rows.map((r) => r.id));
-  const ordered = checklistIds.filter((id) => own.has(id));
+  const current = rows.map((r) => r.id);
+  const own = new Set(current);
+  const sent = checklistIds.filter((id, i) => own.has(id) && checklistIds.indexOf(id) === i);
+  const sentSet = new Set(sent);
+  let next = 0;
+  const ordered = current.map((id) => (sentSet.has(id) ? sent[next++] : id));
   await prisma.$transaction(
     ordered.map((id, index) =>
       prisma.checklist.update({ where: { id }, data: { sortOrder: index } })
@@ -633,10 +695,15 @@ export async function putStampOnChecklists(
   collectionId: string,
   issueId: string,
   stampId: string,
-  checklistIds: string[]
+  checklistIds: string[],
+  /** Whether the form showed the issue's specialised checklists (#1617). Without them, the stamp's
+   *  places on those are left exactly as they are: the form could not see them, so its answer is
+   *  not about them. */
+  includeSpecialised: boolean
 ): Promise<void> {
+  const shown = shownChecklistWhere(includeSpecialised);
   const own = await tx.checklist.findMany({
-    where: { collectionId, issueId },
+    where: { collectionId, issueId, ...shown },
     select: { id: true },
   });
   const ownIds = own.map((c) => c.id);
@@ -650,7 +717,7 @@ export async function putStampOnChecklists(
   // `IssueMember` follows, and the only position that cannot be wrong.
   const [before, ends] = await Promise.all([
     tx.checklistStamp.findMany({
-      where: { stampId, checklist: { collectionId, issueId } },
+      where: { stampId, checklist: { collectionId, issueId, ...shown } },
       select: { checklistId: true, sortOrder: true },
     }),
     wanted.size > 0
@@ -664,7 +731,7 @@ export async function putStampOnChecklists(
   const heldAt = new Map(before.map((r) => [r.checklistId, r.sortOrder]));
   const lastAt = new Map(ends.map((r) => [r.checklistId, r._max.sortOrder ?? -1]));
   await tx.checklistStamp.deleteMany({
-    where: { stampId, checklist: { collectionId, issueId } },
+    where: { stampId, checklist: { collectionId, issueId, ...shown } },
   });
   if (wanted.size > 0) {
     await tx.checklistStamp.createMany({
@@ -684,19 +751,24 @@ export async function setStampChecklistsForIssue(
   collectionId: string,
   issueId: string,
   stampId: string,
-  checklistIds: string[]
+  checklistIds: string[],
+  includeSpecialised: boolean
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.$transaction((tx) =>
-    putStampOnChecklists(tx, collectionId, issueId, stampId, checklistIds)
+    putStampOnChecklists(tx, collectionId, issueId, stampId, checklistIds, includeSpecialised)
   );
 }
 
 /**
- * The issue's first checklist, creating it from the issue's name when there is none. Runs on the
- * caller's transaction client, since the write paths that need it (auto-created ranges, the stamp
- * form) are already inside one — and **not** owner-checked: every caller has authorized the
- * collection before opening its transaction.
+ * The issue's first **standard** checklist, creating it from the issue's name when there is none.
+ * Runs on the caller's transaction client, since the write paths that need it (auto-created ranges,
+ * the stamp form) are already inside one — and **not** owner-checked: every caller has authorized
+ * the collection before opening its transaction.
+ *
+ * Standard whatever the switch says (#1617): the default a stamp joins is the issue's everyday set,
+ * and a specialised checklist — every colour variant of one stamp — is never what *the issue's set*
+ * means, even when it happens to be the only one the issue has.
  */
 export async function ensureIssueChecklist(
   tx: DbTransaction,
@@ -704,7 +776,7 @@ export async function ensureIssueChecklist(
   issueId: string
 ): Promise<string> {
   const existing = await tx.checklist.findFirst({
-    where: { collectionId, issueId },
+    where: { collectionId, issueId, kind: "standard" },
     orderBy: [...CHECKLIST_ORDER],
     select: { id: true },
   });
@@ -714,12 +786,18 @@ export async function ensureIssueChecklist(
     select: { name: true },
   });
   if (!issue) throw new Error("Issue not found.");
+  // Ahead of any specialised checklist the issue already has: the everyday set reads first.
+  const first = await tx.checklist.findFirst({
+    where: { collectionId, issueId },
+    orderBy: [...CHECKLIST_ORDER],
+    select: { sortOrder: true },
+  });
   const created = await tx.checklist.create({
     data: {
       collectionId,
       issueId,
       name: defaultChecklistName(issue.name),
-      sortOrder: 0,
+      sortOrder: first ? first.sortOrder - 1 : 0,
     },
     select: { id: true },
   });

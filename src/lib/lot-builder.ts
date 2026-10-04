@@ -38,6 +38,7 @@ import {
 import { findCommittedCopies } from "./trade-reservations";
 import type { CommittedCopy } from "./trade-reservation-rules";
 import { createOffer, syncGeneratedTexts } from "./offers";
+import { shownChecklistWhere } from "./checklist-kind";
 
 // The server half of the bulk-lot builder (#759; #756's design, #758's rules).
 //
@@ -172,7 +173,8 @@ function faultReductionOf(valuation: CopyValuation | undefined): number {
 
 async function readLotPool(
   collectionId: string,
-  criteria: LotBuilderCriteria
+  criteria: LotBuilderCriteria,
+  includeSpecialised: boolean
 ): Promise<LotPool> {
   const where = await buildItemFilterWhere(collectionId, await poolFilters(collectionId, criteria));
   const rows = await prisma.item.findMany({ where, select: POOL_ROW_SELECT });
@@ -205,7 +207,10 @@ async function readLotPool(
     faultReduction: faultReductionOf(valuations.get(row.id)),
   }));
 
-  return { candidates, checklists: await loadPoolChecklists(collectionId, candidates) };
+  return {
+    candidates,
+    checklists: await loadPoolChecklists(collectionId, candidates, includeSpecialised),
+  };
 }
 
 /**
@@ -222,14 +227,20 @@ async function readLotPool(
  */
 export async function loadPoolChecklists(
   collectionId: string,
-  candidates: readonly CoverageCopy[]
+  candidates: readonly CoverageCopy[],
+  /** Whether specialised checklists are sets a pool may complete too (#1617). Off, a set is only
+   *  ever a standard checklist — the switch is the collector's say over what counts as a set. */
+  includeSpecialised: boolean
 ): Promise<LotChecklist[]> {
   const chainIds = new Set<string>();
   for (const candidate of candidates) for (const id of candidate.variantChain) chainIds.add(id);
   if (chainIds.size === 0) return [];
 
   const touched = await prisma.checklistStamp.findMany({
-    where: { stampId: { in: [...chainIds] }, checklist: { collectionId } },
+    where: {
+      stampId: { in: [...chainIds] },
+      checklist: { collectionId, ...shownChecklistWhere(includeSpecialised) },
+    },
     select: { checklistId: true },
     distinct: ["checklistId"],
   });
@@ -321,11 +332,12 @@ function summarize(pool: LotPool, criteria: LotBuilderCriteria, baseCurrency: st
 export async function getLotPoolSummary(
   ownerId: string,
   collectionId: string,
-  criteria: LotBuilderCriteria
+  criteria: LotBuilderCriteria,
+  includeSpecialised = false
 ): Promise<LotPoolSummary> {
   await assertCollectionOwner(ownerId, collectionId);
   const [pool, baseCurrency] = await Promise.all([
-    readLotPool(collectionId, criteria),
+    readLotPool(collectionId, criteria, includeSpecialised),
     getCollectionBaseCurrency(collectionId),
   ]);
   return summarize(pool, criteria, baseCurrency);
@@ -395,12 +407,14 @@ export interface LotProposal {
 export async function buildLotProposal(
   ownerId: string,
   collectionId: string,
-  request: LotBuilderRequest
+  request: LotBuilderRequest,
+  /** Whether specialised checklists count as sets the lot may complete (#1617). */
+  includeSpecialised = false
 ): Promise<LotProposal> {
   await assertCollectionOwner(ownerId, collectionId);
   const { criteria } = request;
   const [pool, baseCurrency] = await Promise.all([
-    readLotPool(collectionId, criteria),
+    readLotPool(collectionId, criteria, includeSpecialised),
     getCollectionBaseCurrency(collectionId),
   ]);
 
@@ -661,9 +675,10 @@ export interface LotCommitResult {
 export async function commitLotProposal(
   ownerId: string,
   collectionId: string,
-  input: LotCommitInput
+  input: LotCommitInput,
+  includeSpecialised = false
 ): Promise<LotCommitResult> {
-  const proposal = await buildLotProposal(ownerId, collectionId, input);
+  const proposal = await buildLotProposal(ownerId, collectionId, input, includeSpecialised);
   if (proposal.plan.itemIds.length === 0) {
     throw new Error("That lot came out empty — widen the criteria or the targets and try again.");
   }

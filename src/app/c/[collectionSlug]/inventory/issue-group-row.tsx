@@ -21,6 +21,7 @@ import {
 } from "./inventory-copy-list";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
 import type { InventoryItemFilters } from "./use-inventory-query";
+import { markedChecklistName } from "@/lib/checklist-kind";
 
 const MUTED: React.CSSProperties = {
   fontSize: "0.8125rem",
@@ -108,7 +109,7 @@ function ChecklistCompletenessChips({
   return (
     <>
       {named && (
-        <span style={{ ...MUTED, fontSize: "0.75rem" }}>{entry.name}</span>
+        <span style={{ ...MUTED, fontSize: "0.75rem" }}>{markedChecklistName(entry)}</span>
       )}
       {entry.conditions.map((c) => {
         const complete = c.owned === entry.requiredCount;
@@ -118,7 +119,7 @@ function ChecklistCompletenessChips({
             content={
               <>
                 <div style={TIP_TITLE}>
-                  {entry.name} · {c.name} ({c.abbreviation})
+                  {markedChecklistName(entry)} · {c.name} ({c.abbreviation})
                 </div>
                 <div style={TIP_GRID}>
                   <span style={TIP_LABEL}>Held</span>

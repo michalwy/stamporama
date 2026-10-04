@@ -5,6 +5,7 @@ import { listStampsPaginated, type StampSortBy } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { readSearchParam } from "@/lib/text-input";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 const VALID_SORT_BY = new Set<StampSortBy>(["issueDate", "catalogNumber", "name", "issueName"]);
 const VALID_SORT_DIR = new Set(["asc", "desc"]);
@@ -45,6 +46,7 @@ export async function GET(
 
   try {
     const result = await listStampsPaginated(session.user.id, collectionId, {
+      includeSpecialised: await readIncludeSpecialised(collectionId),
       offset,
       areaIds,
       search,

@@ -8,6 +8,8 @@ import { QueryProvider } from "@/app/query-provider";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
 import { CollectionSidebar } from "./collection-sidebar";
 import { UmbrellaPricesQuestionProvider } from "./shared/umbrella-prices-question";
+import { SpecialisedChecklistsProvider } from "./shared/specialised-checklists";
+import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 interface CollectionLayoutProps {
   children: React.ReactNode;
@@ -50,31 +52,36 @@ export default async function CollectionLayout({
   // no longer loads the owner's other collections on every screen.
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
+  // The specialised-checklists switch (#1617), read from the same cookie every route reads, so the
+  // toggles' first paint agrees with the data drawn under them.
+  const includeSpecialised = await readIncludeSpecialised(collection.id);
 
   return (
     // The provider wraps the **whole** shell rather than only the page: the sidebar's notification
     // centre (#367) is a query too, and one client is also one cache — a screen and the badge above
     // it read the same collection.
     <QueryProvider>
-      {/* #1573's question, asked from whichever screen gives a priced stamp its first variant. */}
-      <UmbrellaPricesQuestionProvider>
-        <div
-          style={{
-            display: "flex",
-            minHeight: "100vh",
-            background: "var(--color-bg-page)",
-          }}
-        >
-          <CollectionSidebar
-            collectionSlug={collectionSlug}
-            collectionId={collection.id}
-            collectionName={collection.name}
-            appVersion={getAppVersionLabel()}
-            appReleaseDate={getAppReleaseDate()}
-          />
-          <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
-        </div>
-      </UmbrellaPricesQuestionProvider>
+      <SpecialisedChecklistsProvider collectionId={collection.id} initial={includeSpecialised}>
+        {/* #1573's question, asked from whichever screen gives a priced stamp its first variant. */}
+        <UmbrellaPricesQuestionProvider>
+          <div
+            style={{
+              display: "flex",
+              minHeight: "100vh",
+              background: "var(--color-bg-page)",
+            }}
+          >
+            <CollectionSidebar
+              collectionSlug={collectionSlug}
+              collectionId={collection.id}
+              collectionName={collection.name}
+              appVersion={getAppVersionLabel()}
+              appReleaseDate={getAppReleaseDate()}
+            />
+            <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+          </div>
+        </UmbrellaPricesQuestionProvider>
+      </SpecialisedChecklistsProvider>
     </QueryProvider>
   );
 }

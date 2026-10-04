@@ -32,6 +32,7 @@ import {
   type PurchaseRecoupTally,
 } from "./overview-rules";
 import { buildValueHistory, type ValueHistory } from "./value-history-rules";
+import { shownChecklistWhere } from "./checklist-kind";
 
 /**
  * The Overview screen's two reads (#649–#651; decided in #397): a financial and a progress
@@ -322,7 +323,9 @@ export interface OverviewProgress {
 
 export async function getOverviewProgress(
   ownerId: string,
-  collectionId: string
+  collectionId: string,
+  /** Whether specialised checklists count towards the coverage too (#1617). */
+  includeSpecialised = false
 ): Promise<OverviewProgress> {
   await assertCollectionOwner(ownerId, collectionId);
 
@@ -330,7 +333,7 @@ export async function getOverviewProgress(
     readCollectionAreas(collectionId),
     readOverviewAreaIds(collectionId),
     prisma.issue.findMany({
-      where: { collectionId, checklists: { some: {} } },
+      where: { collectionId, checklists: { some: shownChecklistWhere(includeSpecialised) } },
       select: { id: true, collectionAreaId: true },
     }),
   ]);
@@ -341,7 +344,8 @@ export async function getOverviewProgress(
       ownerId,
       collectionId,
       issues.map((i) => i.id),
-      { excludeGone: true }
+      { excludeGone: true },
+      includeSpecialised
     ),
     growthSeries(collectionId),
     openWantGapSummary(ownerId, collectionId),
