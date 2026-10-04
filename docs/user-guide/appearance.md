@@ -74,6 +74,8 @@ than slowing it down.
   message, not the movement.
 - When the app takes you somewhere — a lot you clicked through to, the first line that needs
   attention on a trade — the page **jumps** to it rather than gliding.
+- The browser extension follows the same setting: the progress bar in its popup steps forward
+  instead of sliding. It is the only thing in the extension that moves.
 
 There is nothing to configure here: Stamporama reads the setting your system already has, and
 follows it as soon as you change it.
