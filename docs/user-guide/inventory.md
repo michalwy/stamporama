@@ -416,8 +416,8 @@ straight to the **lot the copy is in**: the lot's card opens and scrolls into vi
 once** as it arrives — a tint and a brief outline — then reads like every other card on the screen.
 If you had that order's copies grouped some other way, the order screen puts its **Group by** back
 on **Lot** for the visit, since that is the only view with a lot card to point at; your remembered
-choice is left alone (*Grouping the copies view*, in the
-[purchase order guide](purchases.md)). There is nothing to close and
+choice is left alone ([Grouping the copies view](purchases.md#grouping-filtering-and-sorting-the-copies),
+in the purchase order guide). There is nothing to close and
 nothing left behind: the flash says how you got here, which stops being useful the moment you have
 got here. The address bar drops the lot from it too, so reloading the page gives you the order and
 no flash. (If your system is set to reduce motion, the tint and outline hold still for the same moment
