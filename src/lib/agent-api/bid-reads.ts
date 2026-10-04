@@ -87,10 +87,47 @@ export interface AgentBidLine {
    *  ratio that cannot be argued with cannot be trusted (ADR-0029 §8). */
   readonly ratioBucket?: string;
   readonly ratioPercent?: number;
+  /**
+   * Set when the certificate asked about has **no catalogue price of its own** and there is one
+   * without a certificate (#1636). With `percent`, the catalogue figure the ratio multiplies is that
+   * price × the status's percentage — *derived from None × 120%*, never a figure the catalogue
+   * printed. Without it, the status has no percentage, nothing was derived, and that is why the line
+   * is unanchored.
+   */
+  readonly derivation?: AgentBidDerivation;
   /** Copies of this `stamp × condition` the collection already holds. **Evidence and never
    *  arithmetic** (ADR-0029 §7): it does not move a figure, because duplicates are bought
    *  deliberately for trade and a system-applied haircut would under-bid exactly that material. */
   readonly owned: number;
+}
+
+/** How a certified line's catalogue figure was derived (#1636) — see {@link AgentBidLine.derivation}. */
+export interface AgentBidDerivation {
+  /** The certificate as it is named. */
+  readonly certificate: string;
+  /** The status's percentage of the price without a certificate; absent when it has none. */
+  readonly percent?: number;
+  /** One without a certificate, in the answer's currency — what the percentage was applied to. */
+  readonly plainValue?: string;
+  /** The derivation in one sentence, to quote rather than rephrase. */
+  readonly statement: string;
+}
+
+/** The derivation as the agent reads it: the figures, and the sentence that states them. */
+function derivationOf(derivation: {
+  certificate: string;
+  percent: number | null;
+  plainUnitValue: string | null;
+}): AgentBidDerivation {
+  return compact({
+    certificate: derivation.certificate,
+    percent: derivation.percent ?? undefined,
+    plainValue: derivation.plainUnitValue ?? undefined,
+    statement:
+      derivation.percent === null
+        ? `No ${derivation.certificate} price, and ${derivation.certificate} has no percentage to derive one from None.`
+        : `Derived from None × ${derivation.percent}% — no ${derivation.certificate} price is recorded.`,
+  }) as AgentBidDerivation;
 }
 
 /** What `recommend_bid` answers with. */
@@ -171,6 +208,8 @@ export function bidLine(
     unconvertible: boolean;
     market: { n: number } | null;
     ratio: { ratio: number; bucketLabel: string } | null;
+    /** #1636's derived catalogue figure; absent reads as none. */
+    derivation?: { certificate: string; percent: number | null; plainUnitValue: string | null } | null;
     owned: number;
   },
   naming: LineNaming
@@ -204,6 +243,7 @@ export function bidLine(
       anchor.source === "catalogue" && anchor.ratio
         ? Math.round(anchor.ratio.ratio * 100)
         : undefined,
+    derivation: anchor.derivation ? derivationOf(anchor.derivation) : undefined,
     owned: anchor.owned,
   }) as AgentBidLine;
 }

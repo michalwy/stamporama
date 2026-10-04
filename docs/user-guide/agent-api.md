@@ -380,6 +380,10 @@ Three things about that answer are worth knowing before you act on one:
   is, and reading it as zero would be the opposite of what it means.
 - **Ask about one grade at a time.** A lot that is half mint and half used cannot be answered in one
   question, and two answers do not add up — a flat lot fee is charged once, not twice.
+- **A certificate with no price of its own is worked out, and said.** When the lot carries a
+  certificate your catalogue has no price for, the figure comes from the price without one times
+  that certificate's percentage, exactly as on the lots screen, and the answer says *derived from
+  None × 120%*. A certificate without a percentage derives nothing, and the answer says that is why.
 
 **It can also read the auctions you are already following**, which is what lets it tell a listing in
 this morning's mail from one it told you about yesterday. It can list your open lots — when each

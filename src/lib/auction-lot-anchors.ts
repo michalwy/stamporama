@@ -2,6 +2,7 @@ import "server-only";
 import {
   baseToSaleRates,
   valuateAuctionLotLines,
+  type AnchorableDerivation,
   type AnchorableLine,
   type AuctionLotComposition,
 } from "./auction-lines";
@@ -32,7 +33,16 @@ import { loadRealizationRatios, type RealizationRatio } from "./realization-rati
 //
 //     anchor(line) = marketMedian(key)                 when the key has any datapoint
 //                  | catalogueValue × learnedRatio     when the catalogue prices it
+//                  | plain × certificate% × learnedRatio  when it prices it only without the certificate
 //                  | none
+//
+// **The third rung is #1636's.** Catalogues print one price per condition and a certified copy is
+// worth that times the percentage the collector states on the status (#1242), so a certified line
+// whose certificate has no price of its own is anchored on the price without it × that percentage,
+// **marked derived** (`LineAnchor.derivation`) wherever the figure is shown. A recorded price at the
+// certificate always wins, a status with no percentage derives nothing and the line says why, and
+// the market side is never derived this way: a median is what results at that exact key fetched
+// (ADR-0022), and there is no result to scale.
 //
 // **Per line, never per lot.** A single lot routinely mixes a well-recorded key with one that has
 // never been seen; a lot-level "use market if we have enough of it" switch would throw away
@@ -122,6 +132,11 @@ export interface LineAnchor {
   /** The ladder #520 resolved for this line's `stamp × condition`. Carried only for a line the
    * catalogue anchors, since that is the only figure it multiplies. */
   ratio: RealizationRatio | null;
+  /** Set when the line's certificate has no catalogue price of its own and one exists without it
+   * (#1636): {@link catalogueValue} is then that price × the status's percentage — *derived from None
+   * × 120%* — or, with `percent` null, the reason the line is unanchored. Null for a line anchored on
+   * the market or on a recorded price. */
+  derivation: AnchorableDerivation | null;
   /** Copies already held of this `stamp × condition` — shown, never computed with. */
   owned: number;
 }
@@ -212,6 +227,7 @@ export function anchorLine(line: AnchorableLine, context: AnchorContext): LineAn
       unpriced: condition.unpriced,
       mark: condition.mark,
       unconvertible: condition.unconvertible,
+      derivation: condition.derivation,
     };
     return resolveLine(atCondition, {
       baseCurrency: context.baseCurrency,
@@ -283,12 +299,16 @@ function emptyAnswer(line: AnchorableLine): LineAnchor {
     market: null,
     catalogueValue: null,
     ratio: null,
+    derivation: null,
     owned: 0,
   };
 }
 
 /** A line at one condition — what the anchoring rule itself reads. */
-type SettledLine = Omit<AnchorableLine, "conditionId"> & { conditionId: string };
+type SettledLine = Omit<AnchorableLine, "conditionId"> & {
+  conditionId: string;
+  derivation: AnchorableDerivation | null;
+};
 
 /**
  * Resolve the anchors for a whole page of lots.
@@ -415,6 +435,7 @@ function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor
         market,
         catalogueValue,
         ratio: null,
+        derivation: null,
       };
     }
     return {
@@ -425,11 +446,18 @@ function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor
       market,
       catalogueValue,
       ratio: null,
+      derivation: null,
     };
   }
 
-  if (line.unpriced) {
-    // Neither route: counted and reported, never treated as zero (ADR-0029 §1).
+  // No price at the certificate, one without it (#1636): the derived figure stands in for the
+  // catalogue's, marked as such. Only ever for an unpriced line — a recorded price, even one with no
+  // rate, never reaches here (`deriveCertifiedValue`).
+  const derivation = line.unpriced ? line.derivation : null;
+
+  if (line.unpriced && (derivation === null || derivation.percent === null)) {
+    // Neither route: counted and reported, never treated as zero (ADR-0029 §1). A status with no
+    // percentage is one of these, and the derivation stays on the line to say so.
     return {
       ...identity,
       anchor: null,
@@ -438,6 +466,7 @@ function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor
       market: null,
       catalogueValue: null,
       ratio: null,
+      derivation,
     };
   }
 
@@ -447,7 +476,8 @@ function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor
     issuedYear: line.issuedYear,
   });
 
-  if (line.unconvertible || catalogueValue === null) {
+  const derivedValue = derivation ? derivation.unitValue : catalogueValue;
+  if ((derivation ? derivation.unconvertible : line.unconvertible) || derivedValue === null) {
     // Priced by the catalogue, in a currency with no rate to the sale's. The ratio is still stated:
     // it is what the figure *would* be multiplied by, and hiding it would make the line look
     // unpriceable rather than unconvertible.
@@ -459,17 +489,19 @@ function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor
       market: null,
       catalogueValue: null,
       ratio,
+      derivation,
     };
   }
 
   return {
     ...identity,
-    anchor: Number(catalogueValue) * ratio.ratio,
+    anchor: Number(derivedValue) * ratio.ratio,
     source: "catalogue",
     unconvertible: false,
     market: null,
-    catalogueValue,
+    catalogueValue: derivedValue,
     ratio,
+    derivation,
   };
 }
 

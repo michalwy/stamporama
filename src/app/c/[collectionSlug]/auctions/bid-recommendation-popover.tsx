@@ -26,7 +26,8 @@ import {
 //   - for a market anchor: the median with `n`, the span of results and ADR-0022's confidence badge
 //   - for a catalogue anchor: **the ratio, the bucket it was learned from, and its `n`** — naming
 //     the bucket is the whole point (*"55% — Polska Ludowa, MNH, 1945–1949, n = 6"* can be argued
-//     with, *"55%"* cannot)
+//     with, *"55%"* cannot) — and, where the certificate has no price of its own, that the figure
+//     was **derived** from the price without it × the status's percentage (#1636)
 //   - how many copies of each line are **already held** — evidence, never arithmetic (ADR-0029 §7)
 //   - the unanchored and unconvertible line counts, so a partial total never reads as complete
 //
@@ -208,12 +209,29 @@ function LineEvidence({
       </span>
     );
   }
+  // A certificate with no price of its own (#1636): the figure is the one without it × the status's
+  // percentage, and says so — a derived figure must never read as one the catalogue printed.
+  const derivation = line.derivation;
   if (line.source === "catalogue" && line.ratio) {
     return (
       <span style={MUTED}>
         catalogue {line.catalogueValue ?? "—"} × {percent(line.ratio.ratio)} —{" "}
         {line.ratio.bucketLabel}
         {line.ratio.n > 0 ? `, n = ${line.ratio.n}` : ", nothing learned yet"}
+        {derivation && derivation.percent !== null && (
+          <>
+            {" "}· derived: no {derivation.certificate} price, None{" "}
+            {derivation.plainUnitValue ?? "—"} × {derivation.percent}%
+          </>
+        )}
+      </span>
+    );
+  }
+  if (derivation && derivation.percent === null) {
+    return (
+      <span style={MUTED}>
+        no {derivation.certificate} price, and {derivation.certificate} has no percentage to derive
+        one from None — not counted into the figures above
       </span>
     );
   }
