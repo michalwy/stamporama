@@ -21,7 +21,7 @@ import { buildAreaPath } from "../area-path";
 import { effectivePrimaryVendorId, effectiveVendorsForArea } from "../area-vendor";
 import { resolveEffectivePrimaryCatalogNameId } from "../area-inheritance";
 import type { CollectionAreaData } from "../areas";
-import { compact } from "./collection-reads";
+import { compact, type AgentIssueCatalogues } from "./collection-reads";
 import { invalidRequest, type ApiError } from "./errors";
 
 /** The catalogue and book names an area's configuration is stated in. */
@@ -170,6 +170,27 @@ export function resolvedCatalogues(
     catalogues,
     valuingBook: valuing ? (names.books.get(valuing) ?? valuing) : undefined,
   });
+}
+
+/**
+ * An issue's catalogues, stated twice so an override can be told from an inherited prefix. Only the
+ * catalogues the area keeps are stated: an issue's prefix decorates one of them, and a stored one for
+ * a catalogue the area no longer keeps resolves nowhere (`buildAreaVendorMaps`).
+ */
+export function issueCatalogues(
+  areas: CollectionAreaData[],
+  areaId: string,
+  names: AreaNames,
+  issuePrefixes: ReadonlyMap<string, string>
+): AgentIssueCatalogues {
+  const own = effectiveVendorsForArea(areas, areaId)
+    .map((entry) => {
+      const abbreviation = names.catalogues.get(entry.catalogVendorId) ?? entry.vendorAbbreviation;
+      const prefix = issuePrefixes.get(entry.catalogVendorId);
+      return prefix ? `${abbreviation}: ${prefix}` : abbreviation;
+    })
+    .sort((a, b) => a.localeCompare(b));
+  return { own, resolved: resolvedCatalogues(areas, areaId, names, issuePrefixes).catalogues };
 }
 
 export function sameResolvedCatalogues(a: AgentAreaResolvedCatalogues, b: AgentAreaResolvedCatalogues): boolean {

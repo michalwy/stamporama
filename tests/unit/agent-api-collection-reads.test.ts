@@ -362,6 +362,7 @@ const ISSUE_DETAIL: IssueDetailRow = {
 describe("one issue in full", () => {
   const row = issueDetail("col1", ISSUE_DETAIL, {
     catalogRanges: ["Mi·PL 1–14"],
+    catalogues: { own: ["Mi"], resolved: ["Mi·PL"] },
     area: "Poland",
     path: "/c/pl/issues/iss1",
   });

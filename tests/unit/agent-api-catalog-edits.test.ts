@@ -4,8 +4,10 @@ import {
   checkDatePart,
   checkTranslationLanguage,
   duplicateCatalogNumbers,
+  parseIssuePrefixes,
   parseKeyedEntries,
   parseTranslatedNames,
+  prefixCollisions,
 } from "../../src/lib/agent-api/catalog-edits";
 import { ApiError } from "../../src/lib/agent-api/errors";
 
@@ -109,5 +111,42 @@ describe("duplicateCatalogNumbers", () => {
     assert.doesNotMatch(err.message, /202/);
     assert.match(err.message, /Nothing was written/);
     assert.deepEqual(err.accepted, ["s1", "s2"]);
+  });
+});
+
+describe("an issue's own prefixes (#1606)", () => {
+  it("reads a prefix of its own and a hand-back to the area", () => {
+    assert.deepEqual(parseIssuePrefixes(["Mi: GG", " Fi "], "prefixes"), [
+      { key: "Mi", prefix: "GG" },
+      { key: "Fi", prefix: null },
+    ]);
+  });
+
+  it("refuses *no prefix*, which an issue cannot state, and says where it can be said", () => {
+    const err = refusal(() => parseIssuePrefixes(["Mi: -"], "prefixes"));
+    assert.equal(err.code, "invalid_request");
+    assert.match(err.message, /an issue cannot state that/);
+    assert.match(err.message, /update_area/);
+  });
+
+  it("refuses a catalogue named twice", () => {
+    const err = refusal(() => parseIssuePrefixes(["Mi: GG", "mi"], "prefixes"));
+    assert.match(err.message, /twice/);
+  });
+
+  it("names the issue's stamp and the stamp already holding the number, and hands the holders back", () => {
+    const err = prefixCollisions([
+      {
+        label: "Mi·GG 5",
+        issueStampIds: ["own1"],
+        holders: [{ stampId: "h1", name: "Krakow", issueName: "Views", issueYear: 1940 }],
+      },
+      { label: "Mi·GG 6", issueStampIds: ["own2"], holders: [] },
+    ]);
+    assert.equal(err.code, "invalid_request");
+    assert.match(err.message, /Mi·GG 5 would be this issue's stamp \(id own1\) and is already "Krakow" in Views, 1940 \(id h1\)/);
+    assert.doesNotMatch(err.message, /Mi·GG 6/);
+    assert.match(err.message, /Nothing was written/);
+    assert.deepEqual(err.accepted, ["h1"]);
   });
 });

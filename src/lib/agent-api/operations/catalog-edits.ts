@@ -26,12 +26,17 @@ import { getStampAttributeLists } from "../../stamp-attributes";
 import { getStampSizePresets } from "../../stamp-size-presets";
 import { getStampCatalogNumber, updateStampWithCatalog } from "../../stamps";
 import type { TranslationValueMap } from "../../translations";
+import { resolvedCatalogues } from "../area-reads";
 import {
   checkDatePart,
   checkTranslationLanguage,
   duplicateCatalogNumbers,
+  parseIssuePrefixes,
   parseKeyedEntries,
   parseTranslatedNames,
+  prefixCollisions,
+  type DuplicateHolder,
+  type PrefixCollision,
 } from "../catalog-edits";
 import { invalidRequest, notFound } from "../errors";
 import { optionalBoolean, optionalInteger, optionalString, requiredString, stringList } from "../params";
@@ -63,6 +68,13 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // the name, the year and — for a stamp — every catalogue number, because that is what an edit dialog
 // submits. So each edit reads the record first and sends back whatever the agent left alone: only
 // what is sent changes.
+//
+// **An issue's own prefix per catalogue (#377) is set the same way** (#1606): `prefixes` takes
+// `"Mi: GG"` for a prefix of its own and `"Mi"` to follow the area's again, only the catalogues sent
+// change, and `updateIssue` is handed the whole set back, since it replaces it. A prefix that would
+// give one of the issue's stamps a number the collection already has is refused before anything is
+// written — the issue form checks only the stamps it is about to generate, and an agent that
+// re-prefixes a whole series has no warning to read.
 
 // ── The collection's side ──────────────────────────────────────────────────
 
@@ -90,6 +102,13 @@ async function loadCatalogueWorld(context: OperationContext): Promise<CatalogueW
 function areaCatalogues(world: CatalogueWorld, areaId: string): VocabularyEntry[] {
   const kept = new Set(effectiveVendorsForArea(world.areas, areaId).map((entry) => entry.catalogVendorId));
   return world.vendors.filter((vendor) => kept.has(vendor.id));
+}
+
+function catalogueNames(world: CatalogueWorld) {
+  return {
+    catalogues: new Map(world.vendors.map((vendor) => [vendor.id, vendor.abbreviation ?? vendor.name])),
+    books: new Map<string, string>(),
+  };
 }
 
 function areaName(world: CatalogueWorld, areaId: string): string {
@@ -199,6 +218,99 @@ function candidatesOf(input: AutoCreateStampsInput): { catalogVendorId: string; 
   );
 }
 
+/**
+ * The issue-level prefixes sent in `prefixes`, by catalogue id among those the area keeps: a string
+ * gives the catalogue a prefix of its own, null hands it back to the area. Null when none was sent.
+ */
+function prefixWrites(
+  world: CatalogueWorld,
+  areaId: string,
+  params: ParsedParams
+): Map<string, string | null> | null {
+  const entries = stringList(params, "prefixes");
+  if (entries.length === 0) return null;
+  const out = new Map<string, string | null>();
+  for (const { key, prefix } of parseIssuePrefixes(entries, "prefixes")) {
+    const vendorId = resolveAreaCatalogue(world, areaId, key, "prefixes");
+    if (out.has(vendorId)) {
+      throw invalidRequest(`"prefixes" names the catalogue "${key}" twice. Send one entry per catalogue.`);
+    }
+    out.set(vendorId, prefix);
+  }
+  return out;
+}
+
+/** The catalogue prefix one of the area's catalogues resolves to under an issue's own set. */
+function resolvedPrefix(
+  entry: { catalogVendorId: string; prefix: string | null },
+  own: ReadonlyMap<string, string>
+): string | null {
+  return own.get(entry.catalogVendorId) || entry.prefix || null;
+}
+
+/**
+ * Refuse an issue prefix change that would give one of the issue's stamps a catalogue identity —
+ * catalogue, prefix, number (#85) — another stamp of the collection already has. Only the catalogues
+ * whose resolved prefix actually changes are checked, so a duplicate the collection already carries
+ * does not block an unrelated change; the issue's own stamps are never counted against each other,
+ * since they all take the new prefix together.
+ */
+async function refusePrefixCollisions(
+  context: OperationContext,
+  world: CatalogueWorld,
+  issue: { id: string; collectionAreaId: string },
+  current: ReadonlyMap<string, string>,
+  next: ReadonlyMap<string, string>
+): Promise<void> {
+  const changed = effectiveVendorsForArea(world.areas, issue.collectionAreaId)
+    .filter((entry) => resolvedPrefix(entry, current) !== resolvedPrefix(entry, next))
+    .map((entry) => entry.catalogVendorId);
+  if (changed.length === 0) return;
+  const members = await prisma.stamp.findMany({
+    where: { collectionId: context.collectionId, issueMemberships: { some: { issueId: issue.id } } },
+    select: {
+      id: true,
+      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      catalogNumbers: { where: { catalogVendorId: { in: changed } }, select: { catalogVendorId: true, number: true } },
+    },
+  });
+  const memberIds = new Set(members.map((stamp) => stamp.id));
+  // A stamp's identity resolves through its own primary area, as duplicate detection reads it, so
+  // the candidates are checked once per area the issue's stamps sit in — in practice the issue's.
+  const byArea = new Map<string | null, typeof members>();
+  for (const stamp of members) {
+    const areaId = (stamp.stampAreaLinks.find((link) => link.isPrimary) ?? stamp.stampAreaLinks[0])?.collectionAreaId ?? null;
+    byArea.set(areaId, [...(byArea.get(areaId) ?? []), stamp]);
+  }
+  const prefixes = Object.fromEntries(next);
+  const collisions: PrefixCollision[] = [];
+  for (const [areaId, stamps] of byArea) {
+    const candidates = stamps.flatMap((stamp) => stamp.catalogNumbers);
+    if (candidates.length === 0) continue;
+    const groups = await findCatalogDuplicatesForCandidates(
+      context.ownerId,
+      context.collectionId,
+      { areaId, prefixes },
+      candidates,
+      null
+    );
+    for (const group of groups) {
+      const holders: DuplicateHolder[] = group.stamps.filter((stamp) => !memberIds.has(stamp.stampId));
+      if (holders.length === 0) continue;
+      const issueStampIds = stamps
+        .filter((stamp) =>
+          stamp.catalogNumbers.some((row) => row.catalogVendorId === group.catalogVendorId && row.number.trim() === group.number)
+        )
+        .map((stamp) => stamp.id);
+      collisions.push({ label: group.label, issueStampIds, holders });
+    }
+  }
+  if (collisions.length > 0) throw prefixCollisions(collisions);
+}
+
+const PREFIXES_SYNTAX =
+  '`"catalogue: prefix"` gives the issue a prefix of its own in that catalogue — `"Mi: GG"` — and the bare catalogue, `"Mi"`, has it follow its area\'s prefix again. An issue cannot state *no prefix*: `"Mi: -"` is refused, and is the area\'s to say with `update_area`.';
+
 async function resolveSizePreset(context: OperationContext, ref: string): Promise<string> {
   const presets = await getStampSizePresets(context.ownerId, context.collectionId);
   return resolveVocabularyValue(ref, presets.map(presetVocabularyEntry), {
@@ -276,6 +388,10 @@ export const CLEAR_NAMES_PARAMETER: ParameterSpec = {
   description: 'Languages whose translated name to take off — `["de"]`. The name then reads in the collection\'s own language there.',
 };
 
+function prefixesParameter(description: string): ParameterSpec {
+  return { name: "prefixes", in: "body", type: "string[]", required: false, description };
+}
+
 function catalogNumbersParameter(description: string, required = false): ParameterSpec {
   return { name: "catalog_numbers", in: "body", type: "string[]", required, description };
 }
@@ -343,6 +459,10 @@ export async function createIssueFromParams(
     }
   }
   const autoCreateStamps = generating.length > 0 ? generatedStamps(generating, "catalog_numbers") : undefined;
+  // On a new issue a bare catalogue in `prefixes` is what it would do anyway: follow the area.
+  const ownPrefixes = [...(prefixWrites(world, areaId, params) ?? [])].flatMap(([catalogVendorId, areaPrefix]) =>
+    areaPrefix === null ? [] : [{ catalogVendorId, areaPrefix }]
+  );
 
   const presetRef = optionalString(params, "size_preset");
   if (presetRef !== null && !autoCreateStamps) {
@@ -350,7 +470,14 @@ export async function createIssueFromParams(
   }
   const sizePresetId = presetRef !== null ? await resolveSizePreset(context, presetRef) : null;
 
-  if (autoCreateStamps) await refuseDuplicates(context, { areaId }, candidatesOf(autoCreateStamps));
+  // The prefixes sent decide the generated stamps' identity, as the create form's typed fields do (#377).
+  if (autoCreateStamps) {
+    await refuseDuplicates(
+      context,
+      { areaId, prefixes: Object.fromEntries(ownPrefixes.map((row) => [row.catalogVendorId, row.areaPrefix])) },
+      candidatesOf(autoCreateStamps)
+    );
+  }
 
   const created = await createIssue(context.ownerId, context.collectionId, areaId, {
     name,
@@ -360,6 +487,7 @@ export async function createIssueFromParams(
       firstNumber: entry.spec.declared.firstNumber,
       lastNumber: entry.spec.declared.lastNumber,
     })),
+    catalogPrefixes: ownPrefixes,
     translations,
     autoCreateStamps,
     sizePresetId,
@@ -372,7 +500,7 @@ export const createIssueOperation: Operation = {
   name: "create_issue",
   method: "POST",
   path: "/issues",
-  description: `Create an issue — a series — in an area, the way the collector's Add issue form does: a year, a name, and each catalogue's numbers ${NUMBERS_SYNTAX} Those numbers declare the issue's range in each catalogue and generate its stamps, one per number, matched across catalogues by position and put on the issue's checklist. A catalogue number this collection already has — the same catalogue and prefix — is refused with the stamp that has it: call \`resolve_catalog_numbers\` first, and never create what it finds. Nothing created here can be deleted through this API.`,
+  description: `Create an issue — a series — in an area, the way the collector's Add issue form does: a year, a name, each catalogue's numbers ${NUMBERS_SYNTAX} and, where a catalogue files this series under another prefix than the rest of its area, the issue's own prefix there. Those numbers declare the issue's range in each catalogue and generate its stamps, one per number, matched across catalogues by position and put on the issue's checklist. A catalogue number this collection already has — the same catalogue and prefix — is refused with the stamp that has it: call \`resolve_catalog_numbers\` first, and never create what it finds. Nothing created here can be deleted through this API.`,
   writes: true,
   parameters: [
     {
@@ -404,6 +532,9 @@ export const createIssueOperation: Operation = {
       description: "Send false to create the issue with its declared ranges and no stamps. Defaults to true.",
     },
     SIZE_PRESET_PARAMETER,
+    prefixesParameter(
+      `The issue's own prefix in a catalogue its area keeps, one entry per catalogue: ${PREFIXES_SYNTAX} A catalogue not named follows the area. The prefix applies to the stamps generated here.`
+    ),
   ],
   result: {
     kind: "object",
@@ -424,6 +555,7 @@ async function loadIssue(context: OperationContext, issueId: string) {
       year: true,
       collectionAreaId: true,
       catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
+      catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true } },
     },
   });
   if (!issue) {
@@ -662,10 +794,17 @@ function refuseSentAndCleared(field: string, sent: boolean, cleared: Set<string>
   }
 }
 
+/** The issue's resolved catalogues before and after a prefix change, as `move_issue_to_area` states them. */
+export interface AgentPrefixChange {
+  readonly changed: boolean;
+  readonly before: readonly string[];
+  readonly after: readonly string[];
+}
+
 export async function updateIssueFromParams(
   context: OperationContext,
   params: ParsedParams
-): Promise<AgentIssueDetail> {
+): Promise<AgentIssueDetail & { prefixChange?: AgentPrefixChange }> {
   const issue = await loadIssue(context, requiredString(params, "issue_id"));
   const cleared = clearList(params);
   const name = optionalString(params, "name");
@@ -675,13 +814,37 @@ export async function updateIssueFromParams(
   const year = yearValue === null ? null : checkDatePart(yearValue, "year", "year");
   const translations = await translationWrites(context, params);
   const entries = stringList(params, "catalog_numbers");
-  if (name === null && yearValue === null && cleared.size === 0 && !translations && entries.length === 0) {
-    throw invalidRequest('Nothing to change: send "name", "year", "names", "clear_names", "catalog_numbers" or "clear".');
+  const prefixEntries = stringList(params, "prefixes");
+  if (name === null && yearValue === null && cleared.size === 0 && !translations && entries.length === 0 && prefixEntries.length === 0) {
+    throw invalidRequest('Nothing to change: send "name", "year", "names", "clear_names", "catalog_numbers", "prefixes" or "clear".');
+  }
+  const world = entries.length > 0 || prefixEntries.length > 0 ? await loadCatalogueWorld(context) : null;
+
+  let catalogPrefixes: { catalogVendorId: string; areaPrefix: string }[] | undefined;
+  let prefixChange: AgentPrefixChange | undefined;
+  const sentPrefixes = world ? prefixWrites(world, issue.collectionAreaId, params) : null;
+  if (world && sentPrefixes) {
+    const current = new Map(issue.catalogPrefixes.map((row) => [row.catalogVendorId, row.areaPrefix]));
+    const next = new Map(current);
+    for (const [vendorId, prefix] of sentPrefixes) {
+      if (prefix === null) next.delete(vendorId);
+      else next.set(vendorId, prefix);
+    }
+    await refusePrefixCollisions(context, world, issue, current, next);
+    // `updateIssue` replaces the whole set, so the catalogues not sent are handed back as they are.
+    catalogPrefixes = [...next].map(([catalogVendorId, areaPrefix]) => ({ catalogVendorId, areaPrefix }));
+    const names = catalogueNames(world);
+    const before = resolvedCatalogues(world.areas, issue.collectionAreaId, names, current).catalogues;
+    const after = resolvedCatalogues(world.areas, issue.collectionAreaId, names, next).catalogues;
+    prefixChange = {
+      changed: before.length !== after.length || before.some((label, i) => label !== after[i]),
+      before,
+      after,
+    };
   }
 
   let catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[] | undefined;
-  if (entries.length > 0) {
-    const world = await loadCatalogueWorld(context);
+  if (world && entries.length > 0) {
     const specs = parseCatalogueSpecs(world, issue.collectionAreaId, entries, "catalog_numbers");
     const byVendor = new Map(issue.catalogNumbers.map((row) => [row.catalogVendorId, row]));
     for (const entry of specs) {
@@ -699,16 +862,18 @@ export async function updateIssueFromParams(
     name: cleared.has("name") ? null : (name ?? issue.name),
     year: cleared.has("year") ? null : (year ?? issue.year),
     catalogNumbers,
+    catalogPrefixes,
     translations,
   });
-  return readIssue(context, Object.freeze({ issue_id: issue.id }));
+  const updated = await readIssue(context, Object.freeze({ issue_id: issue.id }));
+  return prefixChange ? { ...updated, prefixChange } : updated;
 }
 
 export const updateIssueOperation: Operation = {
   name: "update_issue",
   method: "PATCH",
   path: "/issues/{issue_id}",
-  description: `Correct an issue: its name, its year, its translated names, or the range it declares in a catalogue — only what is sent changes. A range is written ${NUMBERS_SYNTAX} It restates the declared range only; it creates, renames and renumbers no stamp. Nothing here deletes an issue or moves it to another area.`,
+  description: `Correct an issue: its name, its year, its translated names, the range it declares in a catalogue, or its own prefix in a catalogue — only what is sent changes. A range is written ${NUMBERS_SYNTAX} It restates the declared range only; it creates, renames and renumbers no stamp. A prefix changes how every one of its stamps' numbers in that catalogue reads, so one that would give a stamp a number the collection already has — the same catalogue and prefix — is refused, naming both stamps, and nothing is written. Nothing here deletes an issue or moves it to another area.`,
   writes: true,
   parameters: [
     { name: "issue_id", in: "path", type: "string", required: true, description: "The issue's id, as `search_collection` or `get_stamp` reports it." },
@@ -719,6 +884,9 @@ export const updateIssueOperation: Operation = {
     catalogNumbersParameter(
       "The declared range in each catalogue named, `\"catalogue: numbers\"`, among the catalogues the issue's area keeps. A catalogue not named keeps its range."
     ),
+    prefixesParameter(
+      `The issue's own prefix in each catalogue named, among those its area keeps: ${PREFIXES_SYNTAX} A catalogue not named keeps what it has. \`get_issue\` states the current ones in \`catalogues.own\`.`
+    ),
     {
       name: "clear",
       in: "body",
@@ -728,7 +896,11 @@ export const updateIssueOperation: Operation = {
       values: ["name", "year"],
     },
   ],
-  result: { kind: "object", description: "The issue as `get_issue` now reads it." },
+  result: {
+    kind: "object",
+    description:
+      "The issue as `get_issue` now reads it. When `prefixes` was sent, `prefixChange` states the issue's resolved catalogues with their prefixes `before` and `after`, and whether they `changed`.",
+  },
   handler: async (context, params) => updateIssueFromParams(context, params),
 };
 
