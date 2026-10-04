@@ -117,7 +117,8 @@ there before working against one.
 **UI** → `ui-shell.md`, `ui-patterns.md`, `inventory-lists.md`, `offers.md`
 
 - Dialogs are built from `src/app/dialog-shell.tsx` — never re-implement the header, close, viewport
-  constraint or height behavior. Buttons are one shape (`baseBtn`).
+  constraint or height behavior. Buttons are one shape: `baseBtn`, imported from
+  `src/app/button-style.ts`, never redeclared. There is **no** shared input style (#792).
 - Every dismissable overlay registers with `useEscapeLayer`; Escape closes the topmost surface only.
 - Every icon comes from `src/app/icons.tsx` — the only file that may import `lucide-react` — drawn as
   `<Icon name="…" />` (ADR-0030).
