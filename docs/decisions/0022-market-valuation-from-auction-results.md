@@ -7,7 +7,9 @@ by #602 — the explicitly-labelled estimate it left open has been added, as a s
 **Amended by [ADR-0063](0063-price-observations.md)** (#1633): an exact price observation recorded from
 someone else's auction is a datapoint too, whole, at its hammer in the base currency at the rate of
 its sale's day — so §2's "every closed lot with a final price" is now "every closed lot with a final
-price, and every exact observation". Everything else here holds for both.
+price, and every exact observation". Everything else here holds for both. **Amended by
+[ADR-0064](0064-markets-and-anchoring.md)** (#1634): every datapoint has a market, read off its contacts,
+and only one from a market anchoring its stamp's area enters a figure; the rest are listed as hints.
 
 ## Context
 

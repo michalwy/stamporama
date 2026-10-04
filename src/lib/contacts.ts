@@ -6,6 +6,7 @@ import { normalizePhotoSides } from "./offer-photo-config";
 import { normalizeDescriptionFormat } from "./description-format";
 import { isOfferListingType } from "./offer-rules";
 import { normalizeFacebookProfileUrl } from "./facebook-result-rules";
+import { normalizeMarketCode } from "./market-anchoring";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
@@ -74,6 +75,16 @@ function profileUrlData(raw: string | null | undefined): string | null | undefin
   return result.value;
 }
 
+/** A market as written (#1634): blank is none, anything else must be a two-letter country code.
+ * `undefined` passes through, so an update that does not mention it leaves it alone. */
+function marketData(raw: string | null | undefined): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw.trim() === "") return null;
+  const code = normalizeMarketCode(raw);
+  if (!code) throw new ContactFieldError("A market is a two-letter country code, such as DE.");
+  return code;
+}
+
 /** Raised when a delete is blocked because the contact is still referenced by one or
  * more purchases (as supplier or platform). The `Purchase` FKs are `onDelete: Restrict`
  * (ADR-0008/0009), so the contact must be detached from those purchases first. */
@@ -111,6 +122,9 @@ export interface ContactData extends ContactRoles {
   /** The person's Facebook profile link, normalised (#1545) — what a Facebook auction's winner is
    * recognised by. Null on nearly every contact. */
   facebookProfileUrl: string | null;
+  /** The country this contact sells in (#1634; ADR-0064), ISO 3166-1 alpha-2 — where its auction
+   * results count. Null is *not known*, which counts as the collection's home market. */
+  market: string | null;
   /** The platform's fixed transaction currency (#196), or null when unset. Only meaningful for
    * contacts carrying the `platform` role. */
   platformCurrency: string | null;
@@ -197,6 +211,7 @@ const CONTACT_SELECT = {
   email: true,
   phone: true,
   facebookProfileUrl: true,
+  market: true,
   buyer: true,
   seller: true,
   exchangePartner: true,
@@ -316,6 +331,9 @@ export interface ContactCreateInput {
   /** The Facebook profile link (#1545), as typed — normalised on write, refused when it is not one.
    * Omitted on an update leaves it as it is. */
   facebookProfileUrl?: string | null;
+  /** The market (#1634), as typed — normalised on write, refused when it is not a two-letter code.
+   * Omitted on an update leaves it as it is. */
+  market?: string | null;
   buyer?: boolean;
   seller?: boolean;
   exchangePartner?: boolean;
@@ -543,6 +561,7 @@ export async function createContact(
         email: data.email ?? null,
         phone: data.phone ?? null,
         facebookProfileUrl: profileUrlData(data.facebookProfileUrl) ?? null,
+        market: marketData(data.market) ?? null,
         buyer: data.buyer ?? false,
         seller: data.seller ?? false,
         exchangePartner: data.exchangePartner ?? false,
@@ -600,6 +619,7 @@ export async function updateContact(
         email: data.email ?? null,
         phone: data.phone ?? null,
         facebookProfileUrl: profileUrlData(data.facebookProfileUrl),
+        market: marketData(data.market),
         buyer: data.buyer ?? false,
         seller: data.seller ?? false,
         exchangePartner: data.exchangePartner ?? false,

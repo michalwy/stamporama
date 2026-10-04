@@ -17,9 +17,12 @@ import {
 } from "./price-matrix";
 import type {
   StampMarketValue,
+  StampMarketEvidence,
+  MarketValueHint,
   ChecklistMarketValue,
   ChecklistMarketCell,
 } from "@/lib/market-values";
+import { formatMarketCounts, type MarketCode } from "@/lib/market-anchoring";
 import {
   StampPriceObservationList,
   observationSource,
@@ -148,6 +151,7 @@ function LotList({ value, collectionSlug }: { value: StampMarketValue; collectio
             <span style={{ fontSize: "0.8125rem" }}>{observationSource(o)}</span>
           )}
           <span style={mutedSmallStyle}>observed</span>
+          <MarketTag market={o.market} />
           <span style={mutedSmallStyle}>{soldOnLabel(o.soldOn)}</span>
           <span style={{ ...mutedSmallStyle, marginLeft: "auto", whiteSpace: "nowrap" }}>
             {o.amount} {value.baseCurrency}
@@ -173,6 +177,7 @@ function LotList({ value, collectionSlug }: { value: StampMarketValue; collectio
             {lot.lotNo ? `Lot ${lot.lotNo}` : `Lot #${lot.auctionLotNo}`}
           </a>
           <span style={mutedSmallStyle}>{lot.saleName}</span>
+          <MarketTag market={lot.market} />
           <span style={mutedSmallStyle}>{day(lot.endsAt)}</span>
           <span style={{ ...mutedSmallStyle, marginLeft: "auto", whiteSpace: "nowrap" }}>
             {lot.amount} {value.baseCurrency}
@@ -195,6 +200,74 @@ function LotList({ value, collectionSlug }: { value: StampMarketValue; collectio
           catalogue value.
         </span>
       )}
+    </div>
+  );
+}
+
+/** Where a result was sold (#1634), as a short code beside it; *market not known* when its contacts
+ * name none, which counts as the home market. */
+function MarketTag({ market }: { market: MarketCode | null }) {
+  return (
+    <span style={{ ...mutedSmallStyle, fontFamily: "monospace" }}>
+      {market ?? "—"}
+    </span>
+  );
+}
+
+/** What a stamp's market value counts, in one line — the markets anchoring its area (#1634). */
+function anchoringSentence(evidence: StampMarketEvidence): string {
+  const markets = evidence.anchoringMarkets.join(", ");
+  const home = evidence.anchoringMarkets.includes(evidence.homeMarket)
+    ? ` A result whose seller has no market set counts as ${evidence.homeMarket}, the home market.`
+    : "";
+  return `Counts results sold in ${markets}, the markets anchoring this stamp's area.${home}`;
+}
+
+/**
+ * The collector's own lots from markets that do not anchor this stamp (#1634) — listed, never
+ * counted. The observations among the hints are in the observation list below with the same
+ * reason, where they are recorded and corrected, so they are not listed twice.
+ */
+function OtherMarketLots({
+  hints,
+  baseCurrency,
+  collectionSlug,
+}: {
+  hints: MarketValueHint[];
+  baseCurrency: string;
+  collectionSlug: string;
+}) {
+  const lots = hints.flatMap((h) => (h.kind === "lot" ? [{ hint: h, lot: h.lot }] : []));
+  if (lots.length === 0) return null;
+  return (
+    <div style={{ marginTop: "0.75rem" }}>
+      <div style={{ ...mutedSmallStyle, fontWeight: 600, marginBottom: "0.25rem" }}>
+        Lots from other markets — not counted
+      </div>
+      {lots.map(({ hint, lot }) => (
+        <div
+          key={`${lot.lotId}~${hint.conditionId}~${hint.certificateStatusId ?? ""}~${hint.formatId ?? ""}`}
+          style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}
+        >
+          <a
+            href={`/c/${collectionSlug}/auctions/sales/${lot.saleId}?lot=${lot.lotId}`}
+            style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
+          >
+            {lot.lotNo ? `Lot ${lot.lotNo}` : `Lot #${lot.auctionLotNo}`}
+          </a>
+          <span style={mutedSmallStyle}>{lot.saleName}</span>
+          <MarketTag market={lot.market} />
+          <span style={mutedSmallStyle}>
+            {[hint.conditionAbbreviation, hint.certificateStatusAbbreviation, hint.formatAbbreviation]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span style={mutedSmallStyle}>{day(lot.endsAt)}</span>
+          <span style={{ ...mutedSmallStyle, marginLeft: "auto", whiteSpace: "nowrap" }}>
+            {lot.amount} {baseCurrency}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -257,6 +330,11 @@ function MedianDetails({ value }: { value: StampMarketValue }) {
           {value.splitCount > 0 ? `, ${value.splitCount} split` : ""}
         </DetailRow>
         <DetailRow label="Span">{span(value.earliestAt, value.latestAt)}</DetailRow>
+        {/* What the figure stands on, by market (#1634), and what it left out. */}
+        <DetailRow label="Markets">{formatMarketCounts(value.markets)}</DetailRow>
+        {value.hintMarkets.length > 0 && (
+          <DetailRow label="Not counted">{formatMarketCounts(value.hintMarkets)}</DetailRow>
+        )}
         {/* A key can carry evidence and no catalogue price — a single-line lot needs none to yield a
             datapoint — and that reads as no row rather than as a ratio of nothing. */}
         {value.catalogueValue !== null && (
@@ -335,14 +413,15 @@ export function StampMarketValueSection({
   onMenuOpenChange,
 }: {
   stampId: string;
-  query: UseQueryResult<StampMarketValue[]>;
+  query: UseQueryResult<StampMarketEvidence>;
   certificates: CertColumn[];
   /** Raised by the observation rows' menus, so the dialog can hold off its own Escape (#361). */
   onMenuOpenChange?: (open: boolean) => void;
 }) {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const values = query.data ?? [];
+  const evidence = query.data;
+  const values = evidence?.values ?? [];
   const keyOf = (v: { conditionId: string; certificateStatusId: string | null; formatId: string | null }) =>
     `${v.conditionId}~${v.certificateStatusId ?? ""}~${v.formatId ?? ""}`;
   const open = values.find((v) => keyOf(v) === openKey) ?? null;
@@ -352,7 +431,26 @@ export function StampMarketValueSection({
       query={query}
       empty={values.length === 0}
       emptySubject="this stamp"
-      footer={<StampPriceObservationList stampId={stampId} onMenuOpenChange={onMenuOpenChange} />}
+      emptyNote={
+        evidence && evidence.hints.length > 0
+          ? `No results from ${evidence.anchoringMarkets.join(", ")} recorded for this stamp yet — the ones below are from other markets and are not counted.`
+          : undefined
+      }
+      footer={
+        <>
+          {evidence && (evidence.values.length > 0 || evidence.hints.length > 0) && (
+            <>
+              <OtherMarketLots
+                hints={evidence.hints}
+                baseCurrency={evidence.baseCurrency}
+                collectionSlug={collectionSlug}
+              />
+              <p style={{ ...mutedSmallStyle, margin: "0.5rem 0 0" }}>{anchoringSentence(evidence)}</p>
+            </>
+          )}
+          <StampPriceObservationList stampId={stampId} onMenuOpenChange={onMenuOpenChange} />
+        </>
+      }
     >
       <FormatTables
         values={values.map((value) => ({ ...value, ...axesOf(value) }))}
@@ -474,7 +572,7 @@ function ChecklistCell({ cell, data }: { cell: ChecklistMarketCell; data: Checkl
  * Nothing is stored server-side (ADR-0022 §7), so there is nothing to invalidate: a lot's final
  * price edited on the auctions screen changes the next answer this asks for. */
 export function useStampMarketValue(stampId: string) {
-  return useQuery<StampMarketValue[]>({
+  return useQuery<StampMarketEvidence>({
     queryKey: ["stampMarketValue", stampId],
     staleTime: 30_000,
     queryFn: async () => {
@@ -510,12 +608,15 @@ function MarketSection({
   query,
   empty,
   emptySubject,
+  emptyNote,
   footer,
   children,
 }: {
   query: { isLoading: boolean; isError: boolean };
   empty: boolean;
   emptySubject: string;
+  /** Said instead of the no-results sentence when there are results, only none that count (#1634). */
+  emptyNote?: string;
   /** Drawn under the answer whatever it is — the stamp's price observations (#1633), which are the
    * way to fill an empty section as well as the evidence of a full one. */
   footer?: React.ReactNode;
@@ -526,7 +627,8 @@ function MarketSection({
       {query.isLoading && <Muted>Working out what the market paid…</Muted>}
       {query.isError && <Muted>The market value could not be worked out just now.</Muted>}
 
-      {!query.isLoading && !query.isError && empty && (
+      {!query.isLoading && !query.isError && empty && emptyNote && <Muted>{emptyNote}</Muted>}
+      {!query.isLoading && !query.isError && empty && !emptyNote && (
         <Muted>
           No auction results recorded for {emptySubject} yet. Market value is worked out from closed
           lots on the Auctions screen — a lot added purely to watch what it fetched counts too — and

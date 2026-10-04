@@ -27,6 +27,9 @@ model Collection {
   slug         String
   name         String
   baseCurrency String
+  // The country whose results anchor every area that names no anchoring markets of its own, and the
+  // market a result counts as when its contacts name none (#1634; ADR-0064) — ISO 3166-1 alpha-2.
+  homeMarket   String   @default("PL")
   // The language the collection's own entity text is written in (#293) — a free ISO 639-1 code.
   // `CollectionArea.titleName` and the other default-language columns hold text in this language,
   // so a platform listing in it needs no translation: it is excluded from the per-language inputs
@@ -3107,6 +3110,11 @@ model CollectionArea {
   // `catalogPrefix`), the vendor row winning inside that one area. ADR-0020's rule: *where* outranks
   // *for which*. Null means this area says nothing and the question passes to its parent.
   catalogPrefix        String?
+  // The markets whose results this area's valuations rest on (#1634; ADR-0064) — ISO 3166-1 alpha-2
+  // codes. Results from any other market are shown as hints and never enter a figure. Empty means
+  // this area says nothing and the question passes to its parent, the **whole list** inheriting as
+  // the price sources do (#675); a tree that says nothing anchors on `Collection.homeMarket`.
+  anchorMarkets        String[] @default([])
   // Optional name to use for this area in auto-generated listing titles (#210), independent of the
   // internal `name`. When blank, the `{area}` token walks up the tree and uses the nearest ancestor
   // that sets one, else the area's own `name` — so internal grouping levels (e.g. "Second Republic")
@@ -6146,6 +6154,12 @@ model Contact {
   // looks a winner up by it first and by name second, and fills it in on a contact that has none.
   // Optional, and stored normalised (`normalizeFacebookProfileUrl`) so the comparison is an equality.
   facebookProfileUrl String?
+  // The market this contact sells on — a country, as its ISO 3166-1 alpha-2 code (#1634; ADR-0064).
+  // It is where a result's market comes from: an observation's from its house or else its platform,
+  // one of the collector's own lots from its sale's seller or else the sale's platform. Never copied
+  // onto a result, so a market set here reaches every result already recorded. Null is *not known*,
+  // and a result whose contacts say nothing counts as the collection's `homeMarket`.
+  market           String?
   // Roles are independent, combinable boolean flags (a contact can be several at
   // once), mirroring the disposition flags on `Item` (ADR-0007 §4, ADR-0008).
   buyer            Boolean  @default(false)

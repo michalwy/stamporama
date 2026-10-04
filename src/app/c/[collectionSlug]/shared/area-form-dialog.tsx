@@ -131,6 +131,8 @@ interface CollectionAreaFormProps {
   defaultPrimaryCatalogNameId?: string | null;
   defaultPrimaryCatalogVendorId?: string | null;
   defaultCatalogPrefix?: string | null;
+  /** The markets anchoring this area's valuations, as set on it (#1634). */
+  defaultAnchorMarkets?: string[];
   defaultCatalogEntries?: AreaCatalogEntry[];
   defaultVendorEntries?: AreaVendorEntry[];
   defaultAssignable?: boolean;
@@ -160,6 +162,7 @@ export function CollectionAreaForm({
   defaultPrimaryCatalogNameId,
   defaultPrimaryCatalogVendorId,
   defaultCatalogPrefix,
+  defaultAnchorMarkets,
   defaultCatalogEntries,
   defaultVendorEntries,
   defaultAssignable = true,
@@ -196,8 +199,14 @@ export function CollectionAreaForm({
   // as a placeholder rather than copying it in (#377's idiom, #675). Resolved off the parent chosen
   // in the picker, not the one the dialog opened on (#954): a placeholder claims "this is what you
   // inherit", and one left over from the previous parent is believed.
-  const { inheritedPrimaryId, inheritedPrimaryVendorId, inheritedCatalogPrefix, inheritedPrefixes } =
-    useMemo(() => resolveInheritedAreaValues(areas, parentId), [areas, parentId]);
+  const {
+    inheritedPrimaryId,
+    inheritedPrimaryVendorId,
+    inheritedCatalogPrefix,
+    inheritedPrefixes,
+    inheritedAnchorMarkets,
+  } = useMemo(() => resolveInheritedAreaValues(areas, parentId), [areas, parentId]);
+  const [anchorMarkets, setAnchorMarkets] = useState((defaultAnchorMarkets ?? []).join(", "));
 
   // Name and title name (#210) are edited together: the title name mirrors the name while the two
   // are equal (the common case — every area's title defaults to its own name), and stops mirroring
@@ -692,6 +701,35 @@ export function CollectionAreaForm({
             A valuing volume is required for top-level areas (or set one on a parent area).
           </p>
         )}
+      </div>
+
+      {/* **Valuation** (#1634): whose auction results this area's market value and bid
+          recommendations rest on. Results from any other market are shown as hints, never counted. */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <SectionHeading
+          title="Valuation"
+          hint="Whose auction results count for this area's market value."
+        />
+        <LabelWithError htmlFor="f-area-anchor-markets">Anchoring markets</LabelWithError>
+        <TextInput
+          id="f-area-anchor-markets"
+          name="anchorMarkets"
+          value={anchorMarkets}
+          onChange={(e) => setAnchorMarkets(e.target.value)}
+          disabled={isPending}
+          placeholder={inheritedAnchorMarkets.length > 0 ? inheritedAnchorMarkets.join(", ") : "home market"}
+          {...NO_AUTOFILL}
+          style={{ ...INPUT_STYLE, width: "16rem", fontFamily: "monospace" }}
+        />
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+          Country codes, e.g. <code>DE, AT, CH</code>. Leave blank to inherit
+          {inheritedAnchorMarkets.length > 0 ? (
+            <> from the parent area (<code>{inheritedAnchorMarkets.join(", ")}</code>)</>
+          ) : (
+            <> the collection&rsquo;s home market</>
+          )}
+          .
+        </p>
       </div>
 
       {/* Everything the two sections above decide rides to the action as hidden fields, so the

@@ -156,8 +156,10 @@ describe("the schema this rule was reasoned about", () => {
     // An array under a column's name is left alone, because it is either a `Json` array or one of
     // these. All of them hold ids, which have no whitespace to remove — and `apiReviewFields` (twice:
     // an auction sale's and a lot's, #1626) holds field keys the code writes, never typed text.
+    // `anchorMarkets` (#1634) holds two-letter country codes, normalised by the domain on write.
     const found = [...schema.matchAll(/^\s+(\w+)\s+String\[\]/gm)].map((m) => m[1]).sort();
     assert.deepEqual(found, [
+      "anchorMarkets",
       "apiReviewFields",
       "apiReviewFields",
       "conditionIds",

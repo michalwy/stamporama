@@ -37,8 +37,8 @@ import {
   type EditablePhotoSummary,
   type PhotoRole,
 } from "@/lib/photos";
-import { getStampMarketValueByStamp } from "@/lib/market-values";
-import type { StampMarketValue } from "@/lib/market-values";
+import { getStampMarketEvidenceByStamp } from "@/lib/market-values";
+import type { StampMarketEvidence } from "@/lib/market-values";
 import { getStampEstimatedValue } from "@/lib/estimated-values";
 import type { StampEstimatedValue } from "@/lib/estimated-values";
 import { getStampPurchaseCosts } from "@/lib/purchase-costs";
@@ -606,12 +606,12 @@ export async function getStampPriceDetailsAction(
 }
 
 /** What the market paid for this stamp, per `condition × certificate × format` key with evidence
- * (#457; ADR-0022 §8). Read on demand beside the catalogue prices in the Valuation dialog —
- * nothing is stored, so a lot's final price edited on the auctions screen changes the next answer.
- * Empty for a stamp with no closed lots behind it. */
-export async function getStampMarketValueAction(stampId: string): Promise<StampMarketValue[]> {
+ * (#457; ADR-0022 §8), with the markets it was judged by and the results from other markets left
+ * out of it (#1634). Read on demand beside the catalogue prices in the Valuation dialog — nothing
+ * is stored, so a lot's final price edited on the auctions screen changes the next answer. */
+export async function getStampMarketValueAction(stampId: string): Promise<StampMarketEvidence> {
   const session = await getSession();
-  return getStampMarketValueByStamp(session.user.id, stampId);
+  return getStampMarketEvidenceByStamp(session.user.id, stampId);
 }
 
 /** What this stamp is **likely** worth where nothing has been recorded for it: catalogue value ×

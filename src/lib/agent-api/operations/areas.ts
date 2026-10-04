@@ -40,6 +40,7 @@ import { invalidRequest, notFound } from "../errors";
 import { listResponse, parseListWindow, type ListResponse } from "../list";
 import { optionalBoolean, optionalString, requiredString, stringList } from "../params";
 import { resolveVocabularyValue, type VocabularyEntry } from "../vocabulary";
+import { normalizeMarketCode, normalizeMarketList } from "../../market-anchoring";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
 
@@ -165,7 +166,7 @@ export async function listAreasFromParams(
 }
 
 const AREA_ROW =
-  "`areaId`, `name`, `areaPath` from the root, `parentId`, `position` among its siblings (1 is first), `assignable` (false on a grouping-only area), `description`, `titleName` and `translatedTitleNames` (the names listing titles use), `issueCount` and `stampCount` filed directly under it, `childCount`, `own` — the catalogue configuration it sets itself, in the spelling `create_area` and `update_area` take — and `resolved`, what its issues actually get after walking up the tree: `leadingCatalogue`, every catalogue with the prefix it resolves to (`Mi·PL`), and `valuingBook`.";
+  "`areaId`, `name`, `areaPath` from the root, `parentId`, `position` among its siblings (1 is first), `assignable` (false on a grouping-only area), `description`, `titleName` and `translatedTitleNames` (the names listing titles use), `issueCount` and `stampCount` filed directly under it, `childCount`, `own` — the catalogue configuration it sets itself, in the spelling `create_area` and `update_area` take — `resolved`, what its issues actually get after walking up the tree: `leadingCatalogue`, every catalogue with the prefix it resolves to (`Mi·PL`), and `valuingBook` — and `anchorMarkets` (set on it) and `anchoringMarkets` (in force after walking up; absent means the collection's home market), the countries whose auction results its valuations rest on.";
 
 export const listAreasOperation: Operation = {
   name: "list_areas",
@@ -228,6 +229,7 @@ const CLEARABLE = [
   "leading_catalogue",
   "price_books",
   "valuing_book",
+  "anchor_markets",
 ] as const;
 
 function refuseSentAndCleared(field: string, sent: boolean, cleared: ReadonlySet<string>): void {
@@ -350,6 +352,7 @@ export async function createAreaFromParams(context: OperationContext, params: Pa
     catalogPrefix: config.prefix,
     // The form fills the title name with the name and keeps it there until it is given its own.
     titleName: optionalString(params, "title_name")?.trim() || name,
+    anchorMarkets: anchorMarketsParam(params, new Set()),
     translations,
     assignable,
   });
@@ -396,6 +399,34 @@ const CATALOGUE_PARAMETERS: ParameterSpec[] = [
   },
 ];
 
+/**
+ * The anchoring markets as sent (#1634): `undefined` when neither sent nor cleared, so the area keeps
+ * what it has; `[]` when cleared, so it inherits again. Each must be a two-letter country code.
+ */
+function anchorMarketsParam(params: ParsedParams, cleared: ReadonlySet<string>): string[] | undefined {
+  const sent = stringList(params, "anchor_markets");
+  refuseSentAndCleared("anchor_markets", sent.length > 0, cleared);
+  if (cleared.has("anchor_markets")) return [];
+  if (sent.length === 0) return undefined;
+  const codes = normalizeMarketList(sent);
+  const bad = sent.filter((code) => normalizeMarketCode(code) === null);
+  if (bad.length > 0) {
+    throw invalidRequest(
+      `"anchor_markets" takes two-letter country codes such as "DE"; ${bad.map((code) => `"${code}"`).join(", ")} is not one.`
+    );
+  }
+  return codes;
+}
+
+const ANCHOR_MARKETS_PARAMETER: ParameterSpec = {
+  name: "anchor_markets",
+  in: "body",
+  type: "string[]",
+  required: false,
+  description:
+    'The markets whose auction results this area\'s market value and bid recommendations rest on, as two-letter country codes — `["DE", "AT"]` — replacing the list. Results from any other market are shown as hints and never counted. Left out, the parent\'s apply, and with none set above, the collection\'s home market.',
+};
+
 const TITLE_NAMES_PARAMETER: ParameterSpec = {
   name: "title_names",
   in: "body",
@@ -420,6 +451,7 @@ export const createAreaOperation: Operation = {
     { name: "title_name", in: "body", type: "string", required: false, description: "The name listing titles use for it. Defaults to `name`, as on the form." },
     TITLE_NAMES_PARAMETER,
     ...CATALOGUE_PARAMETERS,
+    ANCHOR_MARKETS_PARAMETER,
   ],
   result: { kind: "object", description: "The area as `list_areas` states it." },
   handler: async (context, params) => createAreaFromParams(context, params),
@@ -466,6 +498,7 @@ export async function updateAreaFromParams(context: OperationContext, params: Pa
     primaryCatalogNameId: config.valuingBookId,
     primaryCatalogVendorId: config.leadingVendorId,
     catalogPrefix: config.prefix,
+    anchorMarkets: anchorMarketsParam(params, cleared),
     titleName: nextTitleName,
     translations,
     assignable,
@@ -499,13 +532,14 @@ export const updateAreaOperation: Operation = {
       description: 'Languages whose title name to take off — `["de"]`. The title then reads in the collection\'s own language there.',
     },
     ...CATALOGUE_PARAMETERS,
+    ANCHOR_MARKETS_PARAMETER,
     {
       name: "clear",
       in: "body",
       type: "string[]",
       required: false,
       description:
-        "Fields to empty, so the area inherits them from its parent: `title_name`, `prefix`, `catalogues`, `leading_catalogue`, `price_books`, `valuing_book`, and `description`.",
+        "Fields to empty, so the area inherits them from its parent: `title_name`, `prefix`, `catalogues`, `leading_catalogue`, `price_books`, `valuing_book`, `anchor_markets`, and `description`.",
       values: [...CLEARABLE],
     },
   ],

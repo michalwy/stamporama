@@ -38,6 +38,7 @@ function area(id: string, parentId: string | null, sortOrder: number, extra: Par
     primaryCatalogNameId: null,
     primaryCatalogVendorId: null,
     catalogPrefix: null,
+    anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
     assignable: true,

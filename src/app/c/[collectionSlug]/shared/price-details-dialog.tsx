@@ -238,7 +238,7 @@ function StampSections({
   const certColumns = collectCertColumns([
     data.averageCells,
     ...data.editions.map((e) => e.cells),
-    marketCertCells(market.data, undefined),
+    marketCertCells(market.data?.values, undefined),
     estimatedValueCertCells(estimate.data),
     purchaseCostCertCells(purchases.data),
   ]);

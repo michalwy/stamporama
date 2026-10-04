@@ -116,6 +116,14 @@ export async function getAreaFormOptionsAction(
   };
 }
 
+/** The anchoring markets as typed (#1634): codes separated by commas or spaces. Always present, so
+ * clearing the field clears them and the area inherits again. */
+function parseMarketList(formData: FormData): string[] {
+  return str(formData, "anchorMarkets")
+    .split(/[\s,;]+/)
+    .filter((code) => code !== "");
+}
+
 export async function createCollectionAreaAction(
   collectionId: string,
   formData: FormData
@@ -131,6 +139,7 @@ export async function createCollectionAreaAction(
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       primaryCatalogVendorId: optionalStr(formData, "primaryCatalogVendorId"),
       catalogPrefix: optionalStr(formData, "catalogPrefix"),
+      anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
@@ -161,6 +170,7 @@ export async function updateCollectionAreaAction(
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       primaryCatalogVendorId: optionalStr(formData, "primaryCatalogVendorId"),
       catalogPrefix: optionalStr(formData, "catalogPrefix"),
+      anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),

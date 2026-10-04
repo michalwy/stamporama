@@ -181,6 +181,7 @@ describe("aggregateMarketDatapoints", () => {
         amount: Number(p),
         at: RECENT,
         split: false,
+        market: null,
       }))
     )[0];
     // 8 · 11 · 12 · 14 · 40 — the median ignores the wild one the mean is dragged by.
@@ -194,6 +195,7 @@ describe("aggregateMarketDatapoints", () => {
         amount,
         at: RECENT,
         split: false,
+        market: null,
       }))
     )[0];
     assert.equal(even.median, 25);
@@ -234,6 +236,7 @@ function aggregate(overrides: Partial<MarketAggregate> = {}): MarketAggregate {
     splitCount: 0,
     wholeCount: 5,
     datapoints: [],
+    markets: [],
     ...overrides,
   };
 }

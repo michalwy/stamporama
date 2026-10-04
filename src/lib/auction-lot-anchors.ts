@@ -9,7 +9,12 @@ import {
 import type { BidLine } from "./bid-recommendation";
 import { countCopiesByStampAndCondition, stampConditionKey } from "./copy-counts";
 import { marketKeyOf, type MarketConfidenceBadge } from "./market-value";
-import { readStampMarketValues, type StampMarketValue } from "./market-values";
+import {
+  readStampMarketEvidence,
+  type MarketValueHint,
+  type StampMarketValue,
+} from "./market-values";
+import { countByMarket, type MarketCode, type MarketCount } from "./market-anchoring";
 import { getCollectionBaseCurrency } from "./pricing";
 import { loadRealizationRatios, type RealizationRatio } from "./realization-ratios";
 
@@ -84,6 +89,28 @@ export interface AnchorMarketEvidence {
   latestAt: Date;
   earliestAt: Date;
   confidence: { score: number; badge: MarketConfidenceBadge };
+  /** What the median stands on, by market (#1634; ADR-0064 §5). */
+  markets: MarketCount[];
+  /** The results themselves, newest first — what `recommend_bid` lists with their source and
+   * market so an agent can say what it rests on. */
+  results: AnchorResult[];
+}
+
+/** One result behind a market anchor (#1634): where it was sold, and what it counted as. */
+export interface AnchorResult {
+  /** One of the collector's own closed lots, or a price observation from someone else's auction. */
+  kind: "lot" | "observation";
+  /** `Köhler 412 lot 1234 · via Philasearch`, or `Lot 12 · Allegro March` — the source as a reader
+   * would look it up. */
+  source: string;
+  /** Null when its contacts name no market, which counts as the home market. */
+  market: MarketCode | null;
+  /** Per unit, base currency, 2-dp — what the median is over. */
+  amount: string;
+  /** The day it was sold. */
+  soldAt: Date;
+  /** Where it can be read: an observation's address. */
+  url: string | null;
 }
 
 /** One line, resolved: what anchors it, in what currency, and what is known about it. Carries no
@@ -125,6 +152,9 @@ export interface LineAnchor {
 
   /** ADR-0022's figures for this key, or null when nothing has ever been recorded against it. */
   market: AnchorMarketEvidence | null;
+  /** Results at this key from markets that do not anchor the stamp's area (#1634), by market — left
+   * out of every figure, and said so. Empty when there are none. */
+  hintMarkets: MarketCount[];
   /** The catalogue rollup for this line, in {@link currency}, 2-dp. Null when the catalogue prices
    * it at nothing — or prices it in a currency with no rate to this one, which
    * {@link unconvertible} is what says. */
@@ -172,6 +202,8 @@ export interface AnchorContext {
    * which is what makes a line *unconvertible* rather than unanchored. */
   rates: Map<string, number | null>;
   marketByStamp: Map<string, StampMarketValue[]>;
+  /** The results left out of {@link marketByStamp} as from other markets (#1634). */
+  hintsByStamp: Map<string, MarketValueHint[]>;
   ratios: {
     resolve(subject: {
       areaId: string | null;
@@ -196,13 +228,15 @@ export async function loadAnchorContext(
   currencies: string[]
 ): Promise<AnchorContext> {
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [marketByStamp, rates, ratios, owned] = await Promise.all([
-    readStampMarketValues(collectionId, stampIds),
+  const [evidence, rates, ratios, owned] = await Promise.all([
+    readStampMarketEvidence(collectionId, stampIds),
     baseToSaleRates(collectionId, baseCurrency, currencies),
     loadRealizationRatios(collectionId),
     countCopiesByStampAndCondition(collectionId, stampIds),
   ]);
-  return { baseCurrency, rates, marketByStamp, ratios, owned };
+  const marketByStamp = new Map([...evidence].map(([stampId, e]) => [stampId, e.values]));
+  const hintsByStamp = new Map([...evidence].map(([stampId, e]) => [stampId, e.hints]));
+  return { baseCurrency, rates, marketByStamp, hintsByStamp, ratios, owned };
 }
 
 /**
@@ -229,13 +263,14 @@ export function anchorLine(line: AnchorableLine, context: AnchorContext): LineAn
       unconvertible: condition.unconvertible,
       derivation: condition.derivation,
     };
-    return resolveLine(atCondition, {
+    const answer = resolveLine(atCondition, {
       baseCurrency: context.baseCurrency,
       rate: context.rates.get(line.currency) ?? null,
       market: findMarketValue(context.marketByStamp.get(line.stampId), atCondition),
       ratios: context.ratios,
       owned: context.owned.get(stampConditionKey(line.stampId, condition.conditionId)) ?? 0,
     });
+    return { ...answer, hintMarkets: hintMarketsAt(context.hintsByStamp.get(line.stampId), atCondition) };
   });
   if (line.conditionId !== null && each.length === 1) return each[0];
   return rangeOf(line, each);
@@ -297,6 +332,7 @@ function emptyAnswer(line: AnchorableLine): LineAnchor {
     source: null,
     unconvertible: false,
     market: null,
+    hintMarkets: [],
     catalogueValue: null,
     ratio: null,
     derivation: null,
@@ -365,6 +401,45 @@ export async function resolveAuctionLotAnchors(
   return out;
 }
 
+/** The other-market results at a line's exact key (#1634), counted by market. */
+function hintMarketsAt(hints: MarketValueHint[] | undefined, line: SettledLine): MarketCount[] {
+  if (!hints) return [];
+  const wanted = marketKeyOf(line);
+  return countByMarket(
+    hints
+      .filter((hint) => marketKeyOf(hint) === wanted)
+      .map((hint) => (hint.kind === "lot" ? hint.lot.market : hint.observation.market))
+  );
+}
+
+/** A market value's results as a bid anchor states them: source, market, amount and day. */
+function anchorResults(value: StampMarketValue): AnchorResult[] {
+  return [
+    ...value.observations.map<AnchorResult>((o) => ({
+      kind: "observation",
+      source: [
+        [o.auctionHouseName ?? o.platformName, o.auctionName].filter(Boolean).join(" "),
+        o.lotNo ? `lot ${o.lotNo}` : null,
+        o.auctionHouseName && o.auctionHouseName !== o.platformName ? `via ${o.platformName}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      market: o.market,
+      amount: o.amount,
+      soldAt: o.soldOn,
+      url: o.url,
+    })),
+    ...value.lots.map<AnchorResult>((lot) => ({
+      kind: "lot",
+      source: [lot.lotNo ? `Lot ${lot.lotNo}` : `Lot #${lot.auctionLotNo}`, lot.saleName].join(" · "),
+      market: lot.market,
+      amount: lot.amount,
+      soldAt: lot.endsAt,
+      url: null,
+    })),
+  ].sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime());
+}
+
 /** The market value recorded for a line's **exact** key. Nulls are matched exactly, with no
  * fall-back across levels (ADR-0022 §1): folding a certificate or a format away would anchor a bid
  * on a figure describing something that was never sold. */
@@ -388,10 +463,15 @@ interface LineContext {
 
 function resolveLine(line: SettledLine, context: LineContext): LineAnchor {
   const answer = resolveLineAt(line, context);
-  return { ...answer, anchorHigh: answer.anchor };
+  // The hints are the caller's to fill: they are read off the other-market results, not off the
+  // figure this resolves.
+  return { ...answer, anchorHigh: answer.anchor, hintMarkets: [] };
 }
 
-function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor, "anchorHigh"> {
+function resolveLineAt(
+  line: SettledLine,
+  context: LineContext
+): Omit<LineAnchor, "anchorHigh" | "hintMarkets"> {
   const identity = {
     conditions: null,
     stampId: line.stampId,
@@ -415,6 +495,8 @@ function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor
         latestAt: context.market.latestAt,
         earliestAt: context.market.earliestAt,
         confidence: context.market.confidence,
+        markets: context.market.markets,
+        results: anchorResults(context.market),
       }
     : null;
 

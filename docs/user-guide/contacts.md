@@ -40,6 +40,16 @@ contact that has none.
 recording a result fills it in on a contact that has none. Any form of the link works — the phone's,
 the desktop's — and it is kept in one form. The contact's row links to the profile.
 
+### Market
+
+A **platform**, **seller** or **auction house** has a **Market** — the country it sells in. It is
+where its auction results count: a result from a German house is evidence for areas that anchor on
+Germany and a hint everywhere else (see
+[Markets — which results count](collections.md#markets--which-results-count)). Left as *not known*,
+its results count as the collection's home market. A price observation takes its house's market, or
+its platform's when there is no house; one of your own lots takes its sale's seller's, or the sale's
+platform's. Changing it re-judges every result already recorded — nothing is stored on the results.
+
 ### Tabs follow the roles
 
 A plain address-book contact is one short form. Tick **Platform**, or **Seller** / **Auction house**,

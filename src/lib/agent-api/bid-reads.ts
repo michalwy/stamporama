@@ -83,6 +83,17 @@ export interface AgentBidLine {
   readonly unconvertible?: true;
   /** Datapoints behind a market anchor, so a figure resting on one result is not read as a market. */
   readonly marketSampleSize?: number;
+  /**
+   * The results a market anchor rests on (#1634), newest first: each with its source, the market it
+   * was sold in, and what it counted as per unit. Only results from markets that **anchor** the
+   * stamp's area are here — the rest are {@link notCounted}.
+   */
+  readonly marketResults?: readonly AgentBidResult[];
+  /**
+   * Results at this exact key from markets that do **not** anchor the stamp's area (#1634), counted
+   * per market — left out of every figure. A market absent here is one whose seller names none.
+   */
+  readonly notCounted?: readonly AgentMarketCount[];
   /** The bucket a learned ratio came from, named — `Polska Ludowa, MNH, 1945–1949` — because a
    *  ratio that cannot be argued with cannot be trusted (ADR-0029 §8). */
   readonly ratioBucket?: string;
@@ -99,6 +110,35 @@ export interface AgentBidLine {
    *  arithmetic** (ADR-0029 §7): it does not move a figure, because duplicates are bought
    *  deliberately for trade and a system-applied haircut would under-bid exactly that material. */
   readonly owned: number;
+}
+
+/** One result behind a market anchor (#1634). */
+export interface AgentBidResult {
+  /** `lot` — one of the collector's own closed lots; `observation` — a realised price recorded from
+   *  someone else's auction. */
+  readonly kind: "lot" | "observation";
+  /** Where it was sold, as a reader would look it up — `Köhler 412 · lot 1234 · via Philasearch`. */
+  readonly source: string;
+  /** The country it was sold in; absent when its seller, house or platform names none, which counts
+   *  as the collection's home market. */
+  readonly market?: string;
+  /** What one copy counted as: the hammer, in {@link currency}. */
+  readonly amount: string;
+  readonly currency: string;
+  /** `YYYY-MM-DD`. */
+  readonly soldOn: string;
+  readonly url?: string;
+}
+
+/** How many results one market contributed (#1634). */
+export interface AgentMarketCount {
+  /** Absent for results whose seller names no market. */
+  readonly market?: string;
+  readonly results: number;
+}
+
+function marketCounts(counts: readonly { market: string | null; count: number }[]): AgentMarketCount[] {
+  return counts.map((c) => compact({ market: c.market ?? undefined, results: c.count }) as AgentMarketCount);
 }
 
 /** How a certified line's catalogue figure was derived (#1636) — see {@link AgentBidLine.derivation}. */
@@ -206,7 +246,22 @@ export function bidLine(
     anchorHigh?: number | null;
     source: "market" | "catalogue" | null;
     unconvertible: boolean;
-    market: { n: number } | null;
+    market: {
+      n: number;
+      /** #1634's results behind the median; absent reads as none listed. */
+      results?: readonly {
+        kind: "lot" | "observation";
+        source: string;
+        market: string | null;
+        amount: string;
+        soldAt: Date | string;
+        url: string | null;
+      }[];
+    } | null;
+    /** What {@link market}'s amounts are in. */
+    baseCurrency?: string;
+    /** #1634's other-market results at this key; absent reads as none. */
+    hintMarkets?: readonly { market: string | null; count: number }[];
     ratio: { ratio: number; bucketLabel: string } | null;
     /** #1636's derived catalogue figure; absent reads as none. */
     derivation?: { certificate: string; percent: number | null; plainUnitValue: string | null } | null;
@@ -238,6 +293,23 @@ export function bidLine(
     unitValueHigh: high,
     unconvertible: anchor.unconvertible ? (true as const) : undefined,
     marketSampleSize: anchor.market?.n,
+    marketResults:
+      anchor.market?.results && anchor.market.results.length > 0
+        ? anchor.market.results.map(
+            (r) =>
+              compact({
+                kind: r.kind,
+                source: r.source,
+                market: r.market ?? undefined,
+                amount: r.amount,
+                currency: anchor.baseCurrency ?? "",
+                soldOn: new Date(r.soldAt).toISOString().slice(0, 10),
+                url: r.url ?? undefined,
+              }) as AgentBidResult
+          )
+        : undefined,
+    notCounted:
+      anchor.hintMarkets && anchor.hintMarkets.length > 0 ? marketCounts(anchor.hintMarkets) : undefined,
     ratioBucket: anchor.source === "catalogue" ? anchor.ratio?.bucketLabel : undefined,
     ratioPercent:
       anchor.source === "catalogue" && anchor.ratio

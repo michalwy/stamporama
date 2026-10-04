@@ -127,6 +127,7 @@ export function prefixAreasAsClientData(): CollectionAreaData[] {
     primaryCatalogNameId: null,
     primaryCatalogVendorId: null,
     catalogPrefix: a.catalogPrefix,
+    anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
     assignable: true,
@@ -151,6 +152,7 @@ export function prefixAreasAsServerRows(): Array<{
     name: a.name,
     parentId: a.parentId,
     catalogPrefix: a.catalogPrefix,
+    anchorMarkets: [],
     collectionAreaVendors: a.vendorRows.map(([catalogVendorId, areaPrefix]) => ({
       catalogVendorId,
       areaPrefix,

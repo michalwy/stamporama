@@ -93,6 +93,8 @@ interface SettingsScreenProps {
   baseCurrency: string;
   /** The collection's default language (#293), edited on Collection. */
   defaultLanguage: string;
+  /** The collection's home market (#1634). */
+  homeMarket: string;
   collectionSlug: string;
   initialAreas: CollectionAreaData[];
   /** Listing languages in use across the collection's platforms (#293); drives the per-language
@@ -711,6 +713,7 @@ function SettingsEntryBody({
   collectionName,
   baseCurrency,
   defaultLanguage,
+  homeMarket,
   collectionSlug,
   initialAreas,
   titleLanguages,
@@ -768,6 +771,7 @@ function SettingsEntryBody({
           collectionName={collectionName}
           baseCurrency={baseCurrency}
           defaultLanguage={defaultLanguage}
+          homeMarket={homeMarket}
           itemNoPad={itemNoPad}
         />
       );
