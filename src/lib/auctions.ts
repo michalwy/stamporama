@@ -2978,14 +2978,32 @@ export async function recordAuctionLotTransition(
 ): Promise<void> {
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
+  await prisma.auctionLot.update({
+    where: { id: lotId },
+    data: await lotTransitionData(lot.collectionId, lotId, transition),
+  });
+}
 
-  if (transition.status !== "closed") {
-    await prisma.auctionLot.update({
-      where: { id: lotId },
-      data: { status: transition.status, finalPrice: null, fxRateToBase: null, wonTie: null },
-    });
-    return;
-  }
+/** What `cancelled` and `open` write: no result, so no price, no rate and no tie-break. */
+const NO_LOT_RESULT = { finalPrice: null, fxRateToBase: null, wonTie: null } as const;
+
+/**
+ * The columns a move along the lifecycle writes, with both of its judgements made —
+ * {@link recordAuctionLotTransition}'s rules, kept in one place so the agent API's
+ * {@link recordAuctionLotOutcomeThroughApi} (#1628) closes a lot exactly as the row's ⋮ menu does,
+ * and the outcome derived from the same figures cannot differ between the two.
+ */
+async function lotTransitionData(
+  collectionId: string,
+  lotId: string,
+  transition: AuctionLotTransition
+): Promise<{
+  status: AuctionLotTransition["status"];
+  finalPrice: string | null;
+  fxRateToBase: Prisma.Decimal | null;
+  wonTie: boolean | null;
+}> {
+  if (transition.status !== "closed") return { status: transition.status, ...NO_LOT_RESULT };
 
   const row = await prisma.auctionLot.findUniqueOrThrow({
     where: { id: lotId },
@@ -3021,21 +3039,18 @@ export async function recordAuctionLotTransition(
     transition.finalPrice === null
       ? null
       : await freezeLotFxRate(
-          lot.collectionId,
+          collectionId,
           row.auctionSale.currency,
           row.auctionSale.collection.baseCurrency
         );
 
-  await prisma.auctionLot.update({
-    where: { id: lotId },
-    // Re-freezing on a corrected price is intended: the rate travels with the figure it converts.
-    data: {
-      status: "closed",
-      finalPrice: transition.finalPrice,
-      fxRateToBase,
-      wonTie: tie ? transition.wonTie : null,
-    },
-  });
+  // Re-freezing on a corrected price is intended: the rate travels with the figure it converts.
+  return {
+    status: "closed",
+    finalPrice: transition.finalPrice,
+    fxRateToBase,
+    wonTie: tie ? transition.wonTie : null,
+  };
 }
 
 // ── Composition (#353) ──────────────────────────────────────────────────────
@@ -3567,7 +3582,8 @@ export async function confirmAuctionSaleReview(ownerId: string, saleId: string):
 // The register an assistant keeps through the agent API: a lot added with its sale, corrected, its
 // lines replaced, its ceiling set, the auction's bid recorded, a sale's terms edited. **It never
 // bids** — nothing here writes `myBid`, the bid the collector placed by hand on the platform, and
-// nothing reaches a platform. Outcomes are #1628.
+// nothing reaches a platform. It records how an auction ended (#1628) by the app's own closing rules,
+// and never settles a won lot.
 //
 // Each function is one transaction that **sets the *to review* marker (#1626) on what it touched**,
 // so a write cannot land unmarked: the operation modules may import these and none of the writers
@@ -4013,6 +4029,45 @@ export async function setAuctionLotCeilingThroughApi(
     });
     await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: ["ceiling"] });
   });
+}
+
+/** What `record_auction_lot_outcome` records (#1628): the lot closed with what it went for, or
+ * cancelled. Never `open` — a closed lot is reopened only in the app. */
+export type AuctionLotApiOutcome = Exclude<AuctionLotTransition, { status: "open" }>;
+
+/**
+ * Record how a lot's auction ended through the agent API (#1628): **closing it as the row's ⋮ menu
+ * does** — the same two judgements, through {@link lotTransitionData}, so won or lost is derived
+ * from the money exactly as the app derives it and is never sent — or cancelling it. Closing a lot
+ * already closed corrects its price; nothing here reopens one.
+ *
+ * It sets the *to review* marker with `outcome`, so the collector confirms the result, and it does
+ * not settle a won lot: settling asks what only the collector answers, and stays in the app. A call
+ * that records what is already recorded writes and marks nothing.
+ */
+export async function recordAuctionLotOutcomeThroughApi(
+  ownerId: string,
+  collectionId: string,
+  lotId: string,
+  outcome: AuctionLotApiOutcome
+): Promise<{ changed: string[] }> {
+  const lot = await assertApiLot(ownerId, collectionId, lotId);
+  assertLotEditable(lot);
+  const data = await lotTransitionData(lot.collectionId, lotId, outcome);
+  const current = await prisma.auctionLot.findUniqueOrThrow({
+    where: { id: lotId },
+    select: { status: true, finalPrice: true, wonTie: true },
+  });
+  const same =
+    current.status === data.status &&
+    money(current.finalPrice) === (data.finalPrice === null ? null : money(new Prisma.Decimal(data.finalPrice))) &&
+    current.wonTie === data.wonTie;
+  if (same) return { changed: [] };
+  await prisma.$transaction(async (tx) => {
+    await tx.auctionLot.update({ where: { id: lotId }, data });
+    await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: ["outcome"] });
+  });
+  return { changed: ["outcome"] };
 }
 
 /** A sale's terms as `update_auction_sale` changes them; an absent key is left as it is. */

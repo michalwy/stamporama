@@ -420,10 +420,17 @@ with a writing token, instead of you typing it in. It can:
 - **record what the auction stands at**, with when it looked, and **correct** the lot's title,
   number, address, closing time, starting price and tags, and a sale's name, address, closing time,
   currency, premium and shipping.
+- **record how it ended** — the lot closed with what it went for, or cancelled, exactly as **Close
+  the lot** and **Mark as cancelled** do. It never says *won* or *lost*: that follows from the final
+  price against your own bid, as it does when you close a lot yourself, so a lot reads the same
+  whichever of you closed it. A lot you bid on needs its final price — if the result was never seen,
+  it stays open for you; one you only watched can be closed without one. Sending a different price
+  later corrects it.
 
 A listing you already track is never added twice: it is refused, and the assistant is told which lot
 has it. **It never bids**: it does not touch *my bid* — the bid you place by hand on the platform —
-and it does not close, cancel or settle a lot. **Every lot and sale it writes is marked
+and it does not reopen a lot or settle one into a purchase — a won lot waits for you to settle the
+parcel, as before. **Every lot and sale it writes is marked
 *To review · API* until you confirm it.** A seller you have never bought from is not created by
 adding a lot; the assistant adds them as a contact first, as it does for a purchase.
 

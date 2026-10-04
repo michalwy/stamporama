@@ -16,7 +16,7 @@ import type {
 import type { ListResponse } from "../../src/lib/agent-api/list";
 
 // **The auction reads (#1036), driven through the real route with a real `read` token** — and, at
-// the bottom, the boundary as #1627 narrowed it: three reads and five writes, and no bid. The writes
+// the bottom, the boundary as #1627 and #1628 narrowed it: three reads and six writes, and no bid. The writes
 // themselves are `agent-api-auction-writes.test.ts`.
 //
 // `tests/unit/agent-api-auction-reads.test.ts` holds every projection and
@@ -402,7 +402,9 @@ describe("auction reads (#1036)", () => {
     // operation exists in the registry*; the collector has since let the agent keep the register —
     // add, correct, describe, cap and edit a sale's terms — and never bid, close or settle. So the
     // question is now an exact list rather than an empty one, and every other write-shaped name is
-    // still caught: `place_bid`, `close_lot` and `settle_auction_sale` stay red. #1628 adds outcomes.
+    // still caught: `place_bid`, `close_lot` and `settle_auction_sale` stay red. #1628 added the
+    // sixth, recording how an auction ended — closed with its price, or cancelled — and nothing that
+    // reopens or settles a lot.
     const READS = ["find_tracked_auction_lots", "list_auction_watchlist", "summarize_auction_exposure"];
     const OPENED_BY_1627 = [
       "add_auction_lot",
@@ -411,21 +413,23 @@ describe("auction reads (#1036)", () => {
       "update_auction_lot",
       "update_auction_sale",
     ];
+    const OPENED_BY_1628 = ["record_auction_lot_outcome"];
+    const OPENED = [...OPENED_BY_1627, ...OPENED_BY_1628].sort();
 
-    it("carries the three reads and #1627's five writes, checked against the registry rather than asserted", () => {
+    it("carries the three reads, #1627's five writes and #1628's one, checked against the registry rather than asserted", () => {
       // Two questions, because each misses what the other catches: what the auction operations
       // declare, and a write-shaped name bound anywhere.
       const auctionOperations = OPERATIONS.filter((operation) => operation.path.startsWith("/auctions"));
       assert.deepEqual(
         auctionOperations.map((operation) => operation.name).sort(),
-        [...READS, ...OPENED_BY_1627].sort()
+        [...READS, ...OPENED].sort()
       );
       for (const operation of auctionOperations) {
-        const opened = OPENED_BY_1627.includes(operation.name);
+        const opened = OPENED.includes(operation.name);
         assert.equal(operation.method === "GET", !opened, operation.name);
         assert.equal(operation.writes, opened, operation.name);
       }
-      assert.deepEqual(OPERATIONS.map((operation) => operation.name).filter(writeShaped).sort(), OPENED_BY_1627);
+      assert.deepEqual(OPERATIONS.map((operation) => operation.name).filter(writeShaped).sort(), OPENED);
     });
 
     it("takes no bid of the collector's anywhere — the API keeps the register and never bids", () => {
@@ -456,7 +460,7 @@ describe("auction reads (#1036)", () => {
       assert.ok(writeShaped("add_purchase_auction_lot"), "a purchase name about an auction must be caught");
     });
 
-    it("refuses a read-only token on each of #1627's writes", async () => {
+    it("refuses a read-only token on each of the auction writes", async () => {
       // #707's rule on the wire: `writes: true` is what a `read` token is refused on, before any
       // parameter is read — so an empty body is enough to ask.
       const { POST, PATCH } = await import("../../src/app/api/v1/[...path]/route");
@@ -465,6 +469,7 @@ describe("auction reads (#1036)", () => {
         [PATCH, "PATCH", `/auctions/lots/${lot.A}`],
         [POST, "POST", `/auctions/lots/${lot.A}/lines`],
         [POST, "POST", `/auctions/lots/${lot.A}/ceiling`],
+        [POST, "POST", `/auctions/lots/${lot.A}/outcome`],
         [PATCH, "PATCH", "/auctions/sales/whatever"],
       ];
       for (const [handler, method, path] of calls) {

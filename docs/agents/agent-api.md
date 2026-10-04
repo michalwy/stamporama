@@ -9,11 +9,11 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas and #1627 the auction register; both wrappers exist and the registry carries **seventy-nine operations** — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register and #1628 auction outcomes; both wrappers exist and the registry carries **eighty operations** — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1168's bid recommendation, and #1037's catalog-number
-resolver. Eleven counts are quoted
+operations, #1438's five catalogue writes, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1168's bid recommendation, and #1037's catalog-number
+resolver. Twelve counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
 #1037), *the registry carries twenty-seven operations* (from #1037 until #1036), *the registry
@@ -21,10 +21,10 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 (from #1390 until #1415), *the registry carries forty-eight operations* (from #1415 until #1438),
 *the registry carries fifty-three operations* (from #1438 until #1445), *the registry carries
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
-#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539) and *the registry carries seventy-four operations* (from #1539 until #1627).
+#1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627) and *the registry carries seventy-nine operations* (from #1627 until #1628).
 
-**Forty-six of them write** since #1627 added five; *forty-one of them write* was the count from
-#1539 until then, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
+**Forty-seven of them write** since #1628 added one; *forty-six of them write* was the count from
+#1627 until then, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
 nothing, and #1036's three reads store nothing either — for them that was a boundary the collector
@@ -139,7 +139,7 @@ src/lib/agent-api/
   checklist-reads.ts  the checklist row, the order they are listed in, the refusals (#1512)
   catalog-prices.ts  naming an edition, the cell grammar, the grid's figures, the per-cell answer (#1540)
   area-reads.ts     the area row, the tree order, the catalogue spelling, the refusals (#1539)
-  auction-writes.ts the lot-line grammar, amounts, instants, tags, a written line read back (#1627)
+  auction-writes.ts the lot-line grammar, amounts, instants, tags, a written line read back (#1627, #1628)
   openapi.ts        buildOpenApiDocument + validateOperations + parameterSchema
   mcp.ts            the MCP protocol: tool generation and JSON-RPC dispatch (#709)
   registry.ts       the operations array and the path lookup
@@ -164,7 +164,7 @@ src/lib/agent-api/
     checklists.ts   the eight checklist operations (#1512)              ← server-side
     catalog-prices.ts  the editions, the price read, set and clear (#1540)  ← server-side
     areas.ts        the six area operations (#1539)                     ← server-side
-    auction-writes.ts  the five auction writes (#1627)                  ← server-side
+    auction-writes.ts  the five auction writes and the outcome (#1627, #1628)  ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
@@ -1354,8 +1354,9 @@ range has no meaning without the figure it is a range of.
 ### Read only, and the boundary is a third one
 
 **#1627 opened this boundary for the register, and only for it** — see *Keeping the auction register*
-below. What follows is #1036's reasoning as it stood, kept because the half about bidding, closing
-and settling still holds: those stay closed, and `AUCTION_WRITES` still names every screen writer.
+below — and #1628 opened recording how an auction ended, through a writer of its own. What follows
+is #1036's reasoning as it stood, kept because the half about bidding, reopening and settling still
+holds: those stay closed, and `AUCTION_WRITES` still names every screen writer.
 
 **No lot is created, and nothing is bid, edited or closed** (the collector, 2026-09-10: *the agent
 only reads from Stamporama — it does not create auctions automatically, at least at this stage*).
@@ -1458,7 +1459,7 @@ is.
 
 ## Keeping the auction register
 
-**Five operations, and all five write** (#1627): once the collector decides to bid on a listing the
+**Six operations, and all six write** (#1627, #1628): once the collector decides to bid on a listing the
 assistant found, the assistant enters the lot instead of the collector retyping it — the sale, the
 lot, its stamps, its tags and its ceiling — and keeps it current.
 
@@ -1469,16 +1470,18 @@ lot, its stamps, its tags and its ceiling — and keeps it current.
 | `set_auction_lot_lines` | yes | replace what a lot holds |
 | `set_auction_lot_ceiling` | yes | set or clear the ceiling set apart, with a note on how it was reached |
 | `update_auction_sale` | yes | a sale's terms: name, address, closing time, currency, premium, shipping |
+| `record_auction_lot_outcome` | yes | close a lot with its final price, or without one, or cancel it (#1628) |
 
 **The API keeps the register and never bids** (the collector, 2026-10-04). Nothing writes `myBid` —
 the bid the collector places by hand on the platform — and nothing reaches a platform; outcomes are
-#1628. That is held three ways: the integration suite pins the exact list of auction writes and fails
+recorded by #1628's rules, below. That is held three ways: the integration suite pins the exact list of auction writes and fails
 on any parameter named for a bid, and `tests/unit/agent-api-operation-boundary.test.ts` reads each
 writer's body and fails if it mentions `myBid`.
 
 **The writers are the API's own, and each marks what it touched.** `auctions.ts` carries
 `addAuctionLotThroughApi`, `updateAuctionLotThroughApi`, `replaceAuctionLotLinesThroughApi`,
-`setAuctionLotCeilingThroughApi` and `updateAuctionSaleThroughApi` — `AUCTION_API_WRITES` in the
+`setAuctionLotCeilingThroughApi`, `updateAuctionSaleThroughApi` and (#1628)
+`recordAuctionLotOutcomeThroughApi` — `AUCTION_API_WRITES` in the
 boundary test, reachable from `operations/auction-writes.ts` alone — and every one sets the *to review*
 marker (#1626) **in its own transaction**, which the boundary test checks by reading each body for a
 `markAuction…WrittenByApi(tx,` call. **No screen writer left `AUCTION_WRITES`**, which is not what
@@ -1542,6 +1545,39 @@ and must be one word, as that field takes it.
 through `getAuctionLotDetail` — `listAuctionLots`' row building for one lot — so an answer and
 `list_auction_watchlist` cannot disagree. The watchlist row gained `saleId` (what
 `update_auction_sale` takes), `ceilingNote` and `toReview` with it.
+
+### Recording how an auction ended (#1628)
+
+**`record_auction_lot_outcome` does what *Close the lot* and *Mark as cancelled* do in the app, and
+nothing past them.** It sends `status` — `closed` or `cancelled` — and for a closed lot the
+`final_price` and, on a tie, `won_tie`. **Won or lost is never sent**: it is `lotOutcome` off the
+money (`auctions.md`), and the answer reports the `outcome` read back through `getAuctionLotDetail`,
+the row the lots screen draws, so the agent and the screen cannot disagree about one lot.
+
+**The closing rules are the app's, by construction rather than by copy.** `recordAuctionLotTransition`'s
+body was split into `lotTransitionData` — the two judgements (a price is required unless no bid was
+placed, and a tie must be answered), the rate frozen with a recorded price, and `cancelled` clearing
+price, rate and tie — and both the ⋮ menu's writer and `recordAuctionLotOutcomeThroughApi` call it.
+That helper reads `myBid` to judge; the API writer's own body does not mention it, so the boundary
+test's *never writes the collector's bid* still reads the writer and still holds. The integration
+suite closes twin lots, one each way, over the same figures and compares the two outcomes.
+
+**A lot that vanished from view is closed without a price only where the app allows it**: a lot the
+collector never bid on (it reads `observed`). One they bid on is refused with `"final_price" is
+required`, because the app refuses it — that outcome could not be read at all — and the refusal tells
+the agent to leave the lot open, or that the collector clears their bid in the app. The API cannot
+clear `myBid`, which is the *never bids* rule, so that way out stays the collector's.
+
+**`open` is not a value it takes.** A closed lot is corrected — closing it again replaces its price
+and re-freezes the rate, as the dialog's *Edit the final price* does — but reopened only in the app.
+`won_tie` is ignored away from a tie, as the domain ignores it, and refused with `cancelled`, as is a
+price. It marks `outcome` (already a key of `AUCTION_LOT_REVIEW_FIELD_LABEL` since #1626), and a call
+recording what is already recorded writes and marks nothing, answering `changed: []`.
+
+**It settles nothing.** A won lot stays won and unsettled: settling is per parcel, reviews the money
+against the seller's invoice and asks each unsettled line's condition (#1623), and all three are the
+collector's. `settleAuctionSale` stays on `AUCTION_WRITES`, as does `recordAuctionLotTransition`
+itself, since it reopens. A settled lot is refused, as every API write to one is.
 
 ## Entering purchases
 
@@ -2124,10 +2160,11 @@ exist cannot be.
   lifecycle, record what actually arrived, close a trade, or claim a Colnect list is in step.
   **Since #712 this is checked rather than asserted**, by the same pair of tests failing on
   different things — see *Working on trades* above.
-- **The agent never bids, and never closes or settles a lot** (#1036, narrowed by #1627). *The agent
-  never writes to the auction watchlist* stood here until #1627, which opened the register — adding,
-  describing, capping and correcting lots and a sale's terms. Bidding, closing, cancelling, settling
-  and deleting stay closed — see *Keeping the auction register* above.
+- **The agent never bids, and never reopens or settles a lot** (#1036, narrowed by #1627 and #1628).
+  *The agent never writes to the auction watchlist* stood here until #1627, which opened the register
+  — adding, describing, capping and correcting lots and a sale's terms — and *never closes or settles
+  a lot* until #1628, which opened closing and cancelling. Bidding, reopening, settling and deleting
+  stay closed — see *Keeping the auction register* above.
 - **The agent never touches a copy through a purchase, never does anything to one that cannot be
   undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
@@ -2140,7 +2177,7 @@ exist cannot be.
 - **The agent never deletes an area** (#1539).
 
 Do not add a publish-shaped, send-shaped, bid-shaped or copy-touching operation to the
-registry, whatever it is called, nor an auction write beyond #1627's five (#1628's outcomes aside), nor one that deletes a size preset, deletes an area, or deletes,
+registry, whatever it is called, nor an auction write beyond #1627's five and #1628's outcome, nor one that deletes a size preset, deletes an area, or deletes,
 moves or reorders an issue or a stamp beyond moving an issue to another area. *Two boundaries* was this
 section's count until #1036 and *three* until #1390, and both are quoted rather than deleted.
 
@@ -2366,7 +2403,7 @@ name that is not snake_case, two operations sharing a name, two sharing a method
 `{param}` with nothing declaring it, a declared path parameter the path does not carry, a body
 parameter on `GET`, and a list operation redeclaring `limit` or `cursor`.
 
-**The document carries seventy-nine operations.** It was empty on #706, which shipped none; #708
+**The document carries eighty operations.** It was empty on #706, which shipped none; #708
 added `get_collection_vocabulary`; #710 added `search_collection`, `get_stamp`, `get_issue`,
 `get_copy`, `list_holdings` and `summarize_valuation`; #711 added `find_unlisted_copies`,
 `list_offers`, `get_offer`, `draft_offer`, `set_offer_price` and `set_offer_text`; #712 added
@@ -2384,9 +2421,10 @@ added `create_issue`, `add_issue_stamps`, `add_stamp_variants`, `update_issue` a
 #1512 added the eight checklist operations; #1540 added `list_catalog_editions`, `get_catalog_prices`,
 `set_catalog_prices` and `clear_catalog_prices`; #1539 added `list_areas`, `create_area`,
 `update_area`, `move_area`, `set_area_order` and `move_issue_to_area`; #1627 added `add_auction_lot`,
-`update_auction_lot`, `set_auction_lot_lines`, `set_auction_lot_ceiling` and `update_auction_sale`.
+`update_auction_lot`, `set_auction_lot_lines`, `set_auction_lot_ceiling` and `update_auction_sale`;
+#1628 added `record_auction_lot_outcome`.
 *The document carries thirty operations* stood here from #1036 until #1390, *forty-one* from #1390
-until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, and *seventy-four* from #1539 until #1627. Six earlier sentences are quoted rather than deleted because each stood
+until #1415, *forty-eight* from #1415 until #1438, *fifty-three* from #1438 until #1445, *fifty-four* from #1445 until #1452, and *fifty-six* from #1452 until #1540 — #1512 took it to sixty-four without saying so here — and *sixty-eight* from #1540 until #1539, *seventy-four* from #1539 until #1627, and *seventy-nine* from #1627 until #1628. Six earlier sentences are quoted rather than deleted because each stood
 in several files and will go on arriving in anything copied from them: *#706 ships no domain
 operation, so `paths` is `{}` — valid OpenAPI 3.1, and the honest state of the surface until #710*,
 *the document carries one operation*, *the document carries seven operations*, *the document carries
