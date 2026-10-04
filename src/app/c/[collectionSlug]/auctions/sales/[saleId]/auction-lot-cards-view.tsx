@@ -490,7 +490,12 @@ function LotCard({
 
       {expanded && (
         <div style={{ borderTop: "1px solid var(--color-border)" }}>
-          {lines.length === 0 ? (
+          {lot.notStamps ? (
+            <div style={MUTED_BOX}>
+              Not stamps{lot.notStampsDescription ? ` — ${lot.notStampsDescription}` : ""}. Nothing
+              here has a catalogue value; won, it settles into the purchase as an expense.
+            </div>
+          ) : lines.length === 0 ? (
             <div style={MUTED_BOX}>
               Nothing described yet. Saying what this lot holds is what makes its catalogue value
               computable — and what turns a lot you lose into a usable price record.
@@ -505,7 +510,8 @@ function LotCard({
             />
           )}
 
-          {editable && (
+          {/* A lot marked not stamps (#1624) takes no lines — a line is a stamp. */}
+          {editable && !lot.notStamps && (
             <div style={{ padding: "0.625rem 1.25rem", borderTop: "1px solid var(--color-border)" }}>
               <button
                 type="button"
@@ -613,8 +619,10 @@ export function AuctionLotCardsView({
     notDescribed: onlyNotDescribed,
   } = view;
   // *Not described* is the one filter here that hides a whole **lot** (#1353) — a lot with nothing
-  // recorded in its composition (#353), which is the worklist of what is left to describe.
-  const filteredLots = onlyNotDescribed ? lots.filter((lot) => lot.lines.length === 0) : lots;
+  // recorded in its composition (#353), which is the worklist of what is left to describe. A lot
+  // marked *not stamps* (#1624) has nothing to describe and is never on it.
+  const isNotDescribed = (lot: AuctionLotDetailView) => lot.lines.length === 0 && !lot.notStamps;
+  const filteredLots = onlyNotDescribed ? lots.filter(isNotDescribed) : lots;
   // **The lot a link asked for is on screen whatever the filters say** (#1356), in its own place in
   // the parcel, and everything else stays narrowed. `exception` is that lot only where the filters
   // would have hidden it — the band names it, and the band's figure stays the filters' own.
@@ -641,7 +649,7 @@ export function AuctionLotCardsView({
   const unknownVariantCount = allLines.filter((l) => l.unknownVariant).length;
   // Counted before *not described* is applied, for the same reason as the three above, and over
   // the filters' own lots — it is a count of lots, like the band's.
-  const notDescribedCount = lots.filter((lot) => lot.lines.length === 0).length;
+  const notDescribedCount = lots.filter(isNotDescribed).length;
 
   // What is narrowing the parcel right now, decided by the pure rule in `sale-view-params.ts` so
   // that a control added to this toolbar cannot slip past the band without somebody having said

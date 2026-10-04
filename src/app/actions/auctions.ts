@@ -19,6 +19,7 @@ import {
   setAuctionLotMaxBid,
   setAuctionLotMyBid,
   setAuctionLotMyBidAndCeiling,
+  setAuctionLotNotStamps,
   setAuctionSaleStatus,
   settleAuctionSale,
   touchAuctionLotChecked,
@@ -447,6 +448,24 @@ export async function setAuctionLotStatusAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to record the lot.");
+  }
+}
+
+/** Mark a lot *not stamps* with what it is, restate that, or remove the mark (#1624). */
+export async function setAuctionLotNotStampsAction(
+  lotId: string,
+  notStamps: boolean,
+  description = ""
+): Promise<AuctionActionState> {
+  const session = await getSession();
+  try {
+    await setAuctionLotNotStamps(session.user.id, lotId, {
+      notStamps,
+      description: description.trim() || null,
+    });
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to update this lot.");
   }
 }
 

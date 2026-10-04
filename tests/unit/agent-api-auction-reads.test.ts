@@ -51,6 +51,8 @@ function rowOf(overrides: Partial<WatchlistLotRow> = {}): WatchlistLotRow {
     myBidOverCeiling: false,
     premiumPercent: "10.00",
     premiumFixed: "1.00",
+    notStamps: false,
+    notStampsDescription: null,
     ...overrides,
   };
 }
@@ -85,6 +87,19 @@ describe("watchlistLot", () => {
     );
     assert.equal(follows.ceiling, "56.00");
     assert.equal(follows.ceilingSetApart, false);
+  });
+
+  it("says whether the lot is not stamps, and what it is when the collector said (#1624)", () => {
+    const stamps = watchlistLot(rowOf(), NOW, PATH);
+    assert.equal(stamps.notStamps, false);
+    assert.equal("notStampsDescription" in stamps, false);
+    const book = watchlistLot(
+      rowOf({ notStamps: true, notStampsDescription: "Michel Europe 2019" }),
+      NOW,
+      PATH
+    );
+    assert.equal(book.notStamps, true);
+    assert.equal(book.notStampsDescription, "Michel Europe 2019");
   });
 
   it("carries exactly the signals the lots toolbar's own predicate gives the row", () => {
@@ -225,6 +240,8 @@ describe("trackedListings", () => {
     title: "Fi 348-357",
     saleName: "Philkam · Allegro",
     outcome: "pending",
+    notStamps: false,
+    notStampsDescription: null,
     path: PATH,
     matchedBy: "lot-no",
   };
@@ -259,6 +276,7 @@ describe("trackedListings", () => {
       name: "Fi 348-357",
       sale: "Philkam · Allegro",
       outcome: "pending",
+      notStamps: false,
       matchedBy: "lot-no",
       path: PATH,
     });
@@ -268,5 +286,14 @@ describe("trackedListings", () => {
       offerNumber: "17000000001",
     });
     assert.deepEqual(unrecognized, { listing: "Lot 42", verdict: "unrecognized" });
+  });
+
+  it("says a tracked lot is not stamps, and what it is (#1624)", () => {
+    const [tracked] = trackedListings(
+      ["18795065609"],
+      [{ ...match, notStamps: true, notStampsDescription: "Fischer 2020" }]
+    );
+    assert.equal(tracked.notStamps, true);
+    assert.equal(tracked.notStampsDescription, "Fischer 2020");
   });
 });

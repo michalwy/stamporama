@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { settlementLinePrice } from "@/lib/auction-lot";
-import { auctionLotName } from "@/lib/auction-rules";
+import { auctionLotName, notStampsExpenseLabel } from "@/lib/auction-rules";
 import type { AuctionLotDetailView, AuctionSaleDetailView } from "../../use-auctions-query";
 import { formatDay } from "../../auction-format";
 import { CELL_GLYPH } from "@/app/c/[collectionSlug]/shared/cell-target";
@@ -51,6 +51,8 @@ const NOTE: React.CSSProperties = {
 /** What a lot is called on the line it becomes. Mirrors the watchlist's own fallback order, so the
  * purchase line reads as the lot the collector was bidding on. */
 function lotLabel(lot: AuctionLotDetailView): string {
+  // A *not stamps* lot (#1624) is written as an expense, under the label the server gives it.
+  if (lot.notStamps) return notStampsExpenseLabel(lot);
   return auctionLotName(lot) ?? "Untitled lot";
 }
 
@@ -110,7 +112,9 @@ export function AuctionSettleDialog({
   const linesTotal = chosen.reduce((sum, lot) => sum + (Number(prices[lot.id]) || 0), 0);
   const total = linesTotal + (Number(shippingCost) || 0);
   const copies = chosen.reduce((n, lot) => n + copyCount(lot), 0);
-  const undescribed = chosen.filter((lot) => copyCount(lot) === 0).length;
+  // A *not stamps* lot (#1624) is neither: it becomes an expense, and has nothing to describe.
+  const expenses = chosen.filter((lot) => lot.notStamps).length;
+  const undescribed = chosen.filter((lot) => !lot.notStamps && copyCount(lot) === 0).length;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -219,9 +223,11 @@ export function AuctionSettleDialog({
                         {lotLabel(lot)}
                       </div>
                       <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                        {n > 0
-                          ? `${n} cop${n === 1 ? "y" : "ies"} · closed ${formatDay(lot.endsAt)}`
-                          : `nothing described · closed ${formatDay(lot.endsAt)}`}
+                        {lot.notStamps
+                          ? `not stamps — an expense · closed ${formatDay(lot.endsAt)}`
+                          : n > 0
+                            ? `${n} cop${n === 1 ? "y" : "ies"} · closed ${formatDay(lot.endsAt)}`
+                            : `nothing described · closed ${formatDay(lot.endsAt)}`}
                       </div>
                     </Td>
                     <Td align="right">
@@ -282,6 +288,13 @@ export function AuctionSettleDialog({
               The lots&rsquo; contents become {copies} identified cop{copies === 1 ? "y" : "ies"} on
               the purchase, still to be sorted — you described them to decide the bid, so there is
               nothing to retype. Their cost is frozen when you close each lot, as with any purchase.
+            </p>
+          )}
+          {expenses > 0 && (
+            <p style={NOTE}>
+              {expenses === 1 ? "The lot" : `${expenses} lots`} marked not stamps{" "}
+              {expenses === 1 ? "becomes an expense" : "become expenses"} on the purchase, with no
+              copies, and take their share of the shipping like any line.
             </p>
           )}
           {undescribed > 0 && (

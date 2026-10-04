@@ -175,6 +175,14 @@ describe("summarizeAuctionSale", () => {
     assert.equal(s.catalogTotal, "400.00");
   });
 
+  it("does not count a not-stamps lot as missing a catalogue value (#1624)", () => {
+    const s = summarizeAuctionSale([lot(), lot({ catalogValue: null, notStamps: true })]);
+    assert.equal(s.payableCount, 2);
+    assert.equal(s.unvaluedCount, 0);
+    // It is still money the parcel costs.
+    assert.equal(s.bidTotal, "200.00");
+  });
+
   it("reports the parcel's headroom against its all-in cost", () => {
     // 400 catalogue − (242 premium-inclusive + 15 shipping).
     const s = summarizeAuctionSale([lot(), lot()], FEES);
@@ -631,17 +639,23 @@ describe("summarizeLotComposition", () => {
 describe("lotNeedsComposition", () => {
   it("flags a lot with no lines, whatever became of it", () => {
     for (const status of ["open", "closed"] as const) {
-      assert.equal(lotNeedsComposition({ status, lineCount: 0 }), true, status);
+      assert.equal(lotNeedsComposition({ status, lineCount: 0, notStamps: false }), true, status);
     }
   });
 
   it("never flags a cancelled lot — describing it buys nothing", () => {
-    assert.equal(lotNeedsComposition({ status: "cancelled", lineCount: 0 }), false);
+    assert.equal(lotNeedsComposition({ status: "cancelled", lineCount: 0, notStamps: false }), false);
   });
 
   it("says nothing once a single line is entered", () => {
     for (const status of ["open", "closed", "cancelled"] as const) {
-      assert.equal(lotNeedsComposition({ status, lineCount: 1 }), false, status);
+      assert.equal(lotNeedsComposition({ status, lineCount: 1, notStamps: false }), false, status);
+    }
+  });
+
+  it("never flags a lot marked not stamps — it has nothing a line could describe (#1624)", () => {
+    for (const status of ["open", "closed", "cancelled"] as const) {
+      assert.equal(lotNeedsComposition({ status, lineCount: 0, notStamps: true }), false, status);
     }
   });
 });

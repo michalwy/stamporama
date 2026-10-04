@@ -333,6 +333,16 @@ what settlement wrote and what the lot reads back would disagree. `assertLotEdit
 settled lot's figures, so once true it stays true — which is what made deriving the outcome safe on
 this side of the fork at all.
 
+**Amended by #1624: a lot that is not stamps settles as an expense.** The collector bids on
+catalogues, literature and accessories too. Such a lot is marked `AuctionLot.notStamps`, with an
+optional description; it carries no lines (the mark and a line refuse each other), so it has no
+catalogue value or recommendation and is never *Not described*. A won one is transcribed into a
+`PurchaseExpense` — ADR-0009 §1's non-inventory line — at its confirmed price, labelled with the
+description, else the lot's name, else its number, and writes no copy; shipping reaches it through
+ADR-0009 §3 like any line. `AuctionLot.purchaseExpenseId` is the counterpart of `purchaseLotId`,
+unique and `SetNull`, and `assertLotEditable` freezes a lot on either link, so deleting the expense
+is its undo. The mark is removed only while the lot is `open`.
+
 ### 8. Data entry is manual, plus one assisted capture path
 
 Manual entry, plus Stamporama Assistant support for `allegro.pl` (#355; ADR-0015/ADR-0017): a click

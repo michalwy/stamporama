@@ -4250,6 +4250,8 @@ model PurchaseExpense {
   price      Decimal @db.Decimal(10, 2)
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  // The won *not stamps* auction lot this expense was settled from, when it came from one (#1624).
+  auctionLot AuctionLot?
 
   @@index([purchaseId])
   @@map("purchase_expense")
@@ -4387,13 +4389,26 @@ model AuctionLot {
   // `AuctionSale.purchaseId`.
   purchaseLotId  String?
   notes          String?
+  // The lot is **not stamps** (#1624) — a catalogue, literature, an accessory — bid on and tracked
+  // like any lot. It then carries no lines (a line is a stamp), never reads as *Not described*, has
+  // no catalogue value and no recommendation, and a won one settles into the purchase as an
+  // **expense** rather than a lot (ADR-0009 §1). A forgery is a stamp (#1000) and is not this.
+  // `notStampsDescription` says what it is, optionally; the expense is labelled with it.
+  notStamps            Boolean @default(false)
+  notStampsDescription String?
+  // Set when a *not stamps* lot is settled (#1624): the purchase expense it became. The counterpart
+  // of `purchaseLotId`, unique and `SetNull` for the same reasons — deleting the expense or its
+  // purchase leaves the bidding record standing, which is also the undo.
+  purchaseExpenseId String?
 
-  auctionSale AuctionSale      @relation(fields: [auctionSaleId], references: [id], onDelete: Cascade)
-  purchaseLot PurchaseLot?     @relation(fields: [purchaseLotId], references: [id], onDelete: SetNull)
-  lines       AuctionLotLine[]
-  createdAt   DateTime         @default(now())
+  auctionSale     AuctionSale      @relation(fields: [auctionSaleId], references: [id], onDelete: Cascade)
+  purchaseLot     PurchaseLot?     @relation(fields: [purchaseLotId], references: [id], onDelete: SetNull)
+  purchaseExpense PurchaseExpense? @relation(fields: [purchaseExpenseId], references: [id], onDelete: SetNull)
+  lines           AuctionLotLine[]
+  createdAt       DateTime         @default(now())
 
   @@unique([purchaseLotId])
+  @@unique([purchaseExpenseId])
   @@index([auctionSaleId])
   @@index([auctionLotNo])
   @@map("auction_lot")
