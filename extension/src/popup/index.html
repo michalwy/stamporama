@@ -91,6 +91,12 @@
 
       .progress { height: 4px; border-radius: 999px; background: var(--sunk); overflow: hidden; margin-bottom: 8px; }
       .progress .bar { height: 100%; width: 0%; background: var(--primary); transition: width 0.15s ease; }
+      /* The only motion in the extension (#1038). The glide is decoration and the width is the
+         message, so under reduced motion the bar steps to each new width and still says how far the
+         run has got — the app's rule for its flashes and toast (ui-patterns.md, #877). */
+      @media (prefers-reduced-motion: reduce) {
+        .progress .bar { transition: none; }
+      }
       .status { color: var(--muted); min-height: 16px; margin: 4px 0 8px; }
       .status.err { color: var(--danger); }
       .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
