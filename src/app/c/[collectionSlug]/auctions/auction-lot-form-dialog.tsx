@@ -31,6 +31,8 @@ import {
 } from "./auction-format";
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
+import type { TagEntry } from "@/lib/tag-entry";
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -148,6 +150,14 @@ export function AuctionLotFormDialog({
   const [myBid, setMyBid] = useState(lot?.myBid ?? "");
   const [maxBid, setMaxBid] = useState(lot?.maxBid ?? "");
   const [notes, setNotes] = useState(lot?.notes ?? "");
+  // The collector's own labels (#1625). The lot's tags ride on its row, so the field opens on them at
+  // once; `undefined` until the field reports a change, which is what keeps an untouched edit from
+  // writing them at all.
+  const initialTags = useMemo<TagEntry[]>(
+    () => (lot?.tags ?? []).map((t) => ({ id: t.id, name: t.name, color: t.color })),
+    [lot]
+  );
+  const [tags, setTags] = useState<TagEntry[] | undefined>(undefined);
 
   // The composition, built in memory and written **with** the lot (#353). Capturing a listing and
   // saying what is in it is one act — the collector is reading the description as they type — so
@@ -286,6 +296,7 @@ export function AuctionLotFormDialog({
       maxBid,
       notes,
       lines: composing ? lines.map((l) => l.raw) : undefined,
+      tags,
     };
     startTransition(async () => {
       const actions = await import("@/app/actions/auctions");
@@ -762,6 +773,18 @@ export function AuctionLotFormDialog({
               </p>
             </div>
           )}
+
+          <div style={FIELD_GAP}>
+            <LabelWithError htmlFor="auction-lot-tags">Tags</LabelWithError>
+            <TagEntryField
+              collectionId={collectionId}
+              name={null}
+              inputId="auction-lot-tags"
+              initialTags={initialTags}
+              disabled={isPending}
+              onChange={setTags}
+            />
+          </div>
 
           <div style={FIELD_GAP}>
             <LabelWithError htmlFor="auction-notes">Notes</LabelWithError>

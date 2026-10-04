@@ -284,6 +284,7 @@ describe("tags on issues and stamps (#152)", () => {
       issueCount: 2,
       stampCount: 2,
       copyCount: 0,
+      lotCount: 0,
     });
     const listed = (await getTags(userId, collectionId)).find((t) => t.id === checkId)!;
     assert.equal(listed.issueCount, 2);
@@ -500,6 +501,7 @@ describe("tags on copies (#1181)", () => {
       issueCount: 0,
       stampCount: 0,
       copyCount: 2,
+      lotCount: 0,
     });
     assert.equal((await getTags(userId, collectionId)).find((t) => t.id === doomed)!.copyCount, 2);
 

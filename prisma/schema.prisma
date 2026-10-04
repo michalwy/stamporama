@@ -898,6 +898,8 @@ model Tag {
   copies     ItemTag[]
   /** Tiles marked with this tag before they were identified (#1599). */
   tileMarks  ScanTileTag[]
+  /** Auction lots carrying it (#1625) — labels on a lot being bid on, before it is anything else. */
+  auctionLots AuctionLotTag[]
 
   // Names are unique within a collection and a duplicate is refused with a message rather than
   // silently merged (#152). A tag is found by reading its name, so two rows spelled the same are
@@ -962,6 +964,23 @@ model ItemTag {
   @@id([itemId, tagId])
   @@index([tagId])
   @@map("item_tag")
+}
+
+// A tag hung on an **auction lot** (#1625) — *for the Danzig album*, *agent-found*, *ask about the
+// gum*. `ItemTag`'s rules exactly: cascade at both ends, `tagId` indexed for the filter and the
+// delete count. **Nothing is inherited and nothing travels**: a lot's tags are not its sale's, and
+// settling a won lot (#28) does not hand them to the copies it becomes — a label on a lot being bid
+// on is a statement about the bidding, and the copies take their own.
+model AuctionLotTag {
+  auctionLotId String
+  tagId        String
+
+  auctionLot AuctionLot @relation(fields: [auctionLotId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([auctionLotId, tagId])
+  @@index([tagId])
+  @@map("auction_lot_tag")
 }
 
 // A fault a copy can carry (#1557): a thin, a thinned gum, a missing tooth, a crease, a hinge
@@ -4405,6 +4424,8 @@ model AuctionLot {
   purchaseLot     PurchaseLot?     @relation(fields: [purchaseLotId], references: [id], onDelete: SetNull)
   purchaseExpense PurchaseExpense? @relation(fields: [purchaseExpenseId], references: [id], onDelete: SetNull)
   lines           AuctionLotLine[]
+  /** The collector's own labels on this lot (#1625). See {@link AuctionLotTag}. */
+  tags            AuctionLotTag[]
   createdAt       DateTime         @default(now())
 
   @@unique([purchaseLotId])

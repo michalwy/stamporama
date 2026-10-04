@@ -1,6 +1,7 @@
 import type { AuctionClosingWindow } from "@/lib/auctions";
 import type { LotSignal } from "@/lib/auction-lot";
 import type { AuctionLotOutcome } from "@/lib/auction-rules";
+import { DEFAULT_TAG_FILTER_MODE, type TagFilterMode } from "@/lib/tag-filter";
 
 /**
  * What the lot list is narrowed to, as the client holds it (#351/#352). A mirror of the server-side
@@ -24,6 +25,10 @@ export interface AuctionLotFilters {
   search?: string;
   sellerId?: string;
   platformId?: string;
+  /** The collector's own labels (#1625) — `tag-filter.ts`' two fields, under its own param names. */
+  tagIds?: string[];
+  /** Meaningless without {@link tagIds}, and only sent with them. */
+  tagMode?: TagFilterMode;
 }
 
 /**
@@ -47,14 +52,31 @@ const LOT_PARAM: {
   search: (value) => value,
   sellerId: (value) => value,
   platformId: (value) => value,
+  // `tag-filter.ts`' own spelling — `appendTagFilterParams` writes the same two keys the same way —
+  // so the route reads it back with `tagFilterFromParams` like every other tag filter's.
+  tagIds: (value) => value.join(","),
+  tagMode: (value) => value,
 };
+
+/** Whether a filter value says nothing — the empty states of every shape this filter set has. */
+function isUnset(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === false ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
 
 /** The query string the lot list and its facet counts are requested with. */
 export function lotParams(filters: AuctionLotFilters): URLSearchParams {
   const params = new URLSearchParams();
   for (const key of Object.keys(LOT_PARAM) as (keyof AuctionLotFilters)[]) {
     const value = filters[key];
-    if (value === undefined || value === false || value === "") continue;
+    if (isUnset(value)) continue;
+    // The mode rides only with the ids, and the default is never sent — `appendTagFilterParams`'
+    // rule, so an untouched tag filter's cache key does not depend on the last mode set.
+    if (key === "tagMode" && (isUnset(filters.tagIds) || value === DEFAULT_TAG_FILTER_MODE)) continue;
     params.set(key, (LOT_PARAM[key] as (value: unknown) => string)(value));
   }
   return params;
@@ -106,6 +128,10 @@ const LOT_NARROWS: {
   search: (value) => (value.trim() ? value : null),
   sellerId: (value) => value,
   platformId: (value) => value,
+  // The ids narrow; the mode only qualifies them, so the band names it inside the tags' own label
+  // rather than as a filter of its own.
+  tagIds: (value) => (value.length > 0 ? value.join(",") : null),
+  tagMode: null,
 };
 
 /** Every filter currently narrowing the list, in the order the toolbar reads. */
@@ -115,7 +141,7 @@ export function lotNarrowings(filters: AuctionLotFilters): LotNarrowing[] {
     const describe = LOT_NARROWS[key];
     if (!describe) continue;
     const value = filters[key];
-    if (value === undefined || value === false || value === "") continue;
+    if (isUnset(value)) continue;
     const described = (describe as (value: unknown) => string | null)(value);
     if (described !== null) out.push({ key, value: described });
   }

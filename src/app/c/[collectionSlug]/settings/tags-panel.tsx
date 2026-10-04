@@ -12,6 +12,7 @@ import {
 } from "@/app/actions/tags";
 import type { TagData } from "@/lib/tags";
 import { TagColorPicker } from "@/app/c/[collectionSlug]/shared/tag-color-picker";
+import { auctionKeys } from "@/app/c/[collectionSlug]/auctions/use-auctions-query";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { tagKeys } from "@/app/c/[collectionSlug]/shared/use-tags";
@@ -58,11 +59,14 @@ function describeUsage(usage: {
   issueCount: number;
   stampCount: number;
   copyCount: number;
+  lotCount: number;
 }): string | null {
   const parts = [
     usage.issueCount > 0 ? `${usage.issueCount} issue${usage.issueCount === 1 ? "" : "s"}` : null,
     usage.stampCount > 0 ? `${usage.stampCount} stamp${usage.stampCount === 1 ? "" : "s"}` : null,
     usage.copyCount > 0 ? `${usage.copyCount} cop${usage.copyCount === 1 ? "y" : "ies"}` : null,
+    // Auction lots (#1625), the fourth thing a tag hangs on.
+    usage.lotCount > 0 ? `${usage.lotCount} auction lot${usage.lotCount === 1 ? "" : "s"}` : null,
   ].filter(Boolean);
   if (parts.length === 0) return null;
   if (parts.length === 1) return parts[0]!;
@@ -96,6 +100,8 @@ export function TagsPanel({
     void queryClient.invalidateQueries({ queryKey: tagKeys.all(collectionId) });
     void invalidateStampsAndIssues(collectionId);
     void invalidateInventory(collectionId);
+    // …and the auction lots' (#1625), whose rows carry their tags the same way.
+    void queryClient.invalidateQueries({ queryKey: auctionKeys.all(collectionId) });
     router.refresh();
   }
 
@@ -227,6 +233,7 @@ function DeleteTagMessage({ tag }: { tag: TagData }) {
     issueCount: tag.issueCount,
     stampCount: tag.stampCount,
     copyCount: tag.copyCount,
+    lotCount: tag.lotCount,
   });
   useEffect(() => {
     let cancelled = false;

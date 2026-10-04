@@ -564,6 +564,9 @@ Finally:
   **All sellers** counts the list with the seller filter dropped and everything else left standing:
   with Köhler selected and three of their lots showing, it reads the whole watchlist, which is what
   you get back by picking it.
+- **All tags**, last on the bar, narrows to lots carrying your own [tags](tags.md) — any of the
+  ticked ones, or with the switch in its panel all of them. It appears once the collection has a tag.
+
 **Group by sale** sits on the right, beside **Add lot**, rather than among the filters: it turns the
 flat list into sections, off by default, and it changes how the rows are arranged rather than which
 lots are in them.
@@ -593,6 +596,25 @@ is left as it is, because that is how the rows are arranged rather than which lo
 
 **Show closed** is never named in that line. It shows you *more* lots rather than fewer, so there is
 nothing being hidden for it to warn you about.
+
+### Tagging lots
+
+A lot can carry your own [tags](tags.md) — *for the Danzig album*, *agent-found*, *ask about the
+gum*. They show as chips at the end of the lot's line, here and on the sale's screen, and the **All
+tags** filter finds them again.
+
+- **One lot:** the lot dialog has a **Tags** field above **Notes**. Type a name and a space; a name
+  you have not used yet becomes a new tag when you save.
+- **Several lots:** tick them — the box at the start of each row, or the one in the bar above the
+  rows for every lot loaded so far — and press **Tags…** in that bar. Name the tags to add and the
+  tags to remove; every other tag on each lot is left as it is.
+
+The bar counts and acts on the **ticked lots you can see**. Changing a filter unticks nothing: a
+ticked lot the filter hides stays ticked, the bar says how many, and it comes back when the filter
+is released. **Clear** unticks all of them, hidden ones included.
+
+A tag is a label only. It is not the sale's, and settling a won lot does not put it on the copies
+the lot becomes.
 
 ## Sales — paying for a parcel
 
@@ -828,6 +850,9 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
   **Not described** is offered only while **Group by Lot** is on, because it is a question about
   lots and the flat view has none on screen — a lot with nothing in it puts nothing into a list of
   stamps. Turning the grouping off switches it back off with it.
+- **All tags**, at the end of the status chips, narrows to the lots carrying your own
+  [tags](tags.md), exactly as on the watchlist. Like the status chips it takes whole lots off the
+  screen.
 - **Sort lines** orders them by the same keys copies are sorted by — order added, year, catalog
   number, price, name — with a direction toggle.
 - **Collapse all** / **Expand all** for the cards themselves. Lot cards start **collapsed**: a
@@ -835,8 +860,8 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
   by themselves — the one you arrived at by clicking a lot on the watchlist (the card that
   flashed), and one added while the screen is open. Either can be closed by hand afterwards.
 
-**The whole toolbar is remembered, and a refresh does not reset it.** The status chips, the
-grouping, all four **Only** filters and the sort field and direction are kept in the address bar, so
+**The whole toolbar is remembered, and a refresh does not reset it.** The status chips, the tag
+filter, the grouping, all four **Only** filters and the sort field and direction are kept in the address bar, so
 a reload, the Back button and a copied link all show the same view — and a link you follow wins over
 what was remembered, so an address that names a filter means exactly what it says. They are
 remembered **per collection, not per sale**: how you look at a parcel is a way of working you carry

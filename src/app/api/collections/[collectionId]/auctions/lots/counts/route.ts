@@ -6,6 +6,7 @@ import { isAuctionLotOutcome } from "@/lib/auction-rules";
 import type { AuctionClosingWindow } from "@/lib/auctions";
 import { LOT_SIGNALS, type LotSignal } from "@/lib/auction-lot";
 import { readSearchParam } from "@/lib/text-input";
+import { tagFilterFromParams } from "@/lib/tag-filter";
 
 /** A derived-state filter (`bid-possible`, `outbid`, …), ignored when it says anything else. */
 function lotSignal(raw: string | null): LotSignal | undefined {
@@ -44,6 +45,8 @@ export async function GET(
       sellerId: sp.get("sellerId") || undefined,
       platformId: sp.get("platformId") || undefined,
       saleId: sp.get("saleId") || undefined,
+      // The collector's own labels (#1625), in the one spelling every tag filter reads.
+      ...tagFilterFromParams(sp),
     });
     return NextResponse.json(counts);
   } catch {

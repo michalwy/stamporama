@@ -61,6 +61,15 @@ export interface WatchlistLotRow {
   readonly premiumFixed: string | null;
   readonly notStamps: boolean;
   readonly notStampsDescription: string | null;
+  /** The collector's own labels on the lot (#1625), already in the dictionary's order. */
+  readonly tags: readonly { readonly name: string }[];
+}
+
+/** A lot's tags as the agent reads them (#1625): the names, in the order the app lists them. A tag's
+ *  colour is how a chip is drawn and says nothing to a model, and its id names nothing the agent can
+ *  act on — no operation takes one. */
+function tagNames(tags: readonly { readonly name: string }[]): string[] {
+  return tags.map((tag) => tag.name);
 }
 
 /** One open lot as the agent reads it. Every amount is in {@link currency}, the sale's. */
@@ -113,6 +122,8 @@ export interface AgentWatchlistLot {
   readonly notStamps: boolean;
   /** What a {@link notStamps} lot is, when the collector said. */
   readonly notStampsDescription?: string;
+  /** The collector's own labels on the lot (#1625), by name. Always present — empty when it has none. */
+  readonly tags: readonly string[];
   /** Where the lot is in the app, relative to this instance: its sale's screen, focused on it. */
   readonly path: string;
 }
@@ -171,6 +182,7 @@ export function watchlistLot(row: WatchlistLotRow, now: Date, path: string): Age
     premiumFixed: row.premiumFixed,
     notStamps: row.notStamps,
     notStampsDescription: row.notStampsDescription,
+    tags: tagNames(row.tags),
     path,
   }) as AgentWatchlistLot;
 }
@@ -249,6 +261,7 @@ export interface ListingMatchRow {
   readonly notStampsDescription: string | null;
   readonly path: string;
   readonly matchedBy: "lot-no" | "url";
+  readonly tags: readonly { readonly name: string }[];
 }
 
 /**
@@ -276,6 +289,8 @@ export interface AgentTrackedListing {
   readonly notStampsDescription?: string;
   /** Whether the platform's number stored on the lot answered, or its stored address. */
   readonly matchedBy?: "lot-no" | "url";
+  /** The collector's own labels on the lot (#1625), by name. Present on `tracked` alone. */
+  readonly tags?: readonly string[];
   readonly path?: string;
 }
 
@@ -308,6 +323,7 @@ export function trackedListings(
       notStamps: match.notStamps,
       ...(match.notStampsDescription ? { notStampsDescription: match.notStampsDescription } : {}),
       matchedBy: match.matchedBy,
+      tags: tagNames(match.tags),
       path: match.path,
     };
   });

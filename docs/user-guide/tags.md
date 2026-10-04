@@ -7,10 +7,11 @@ Areas, subtypes, catalogue attributes, dispositions and wants each answer one fi
 own reason for putting things together is not one of them, and that is what a tag is for: a short
 word you define once, hang on things, and find them by later.
 
-Tags go on **issues**, on **stamps** and on **copies** — the pieces you actually hold. A tag is
-worth most on a copy: *to check*, *for expertising*, *duplicate for the swap box*, *from the box
-grandfather left* are all things you say about a piece in your hand rather than about a catalogue
-entry.
+Tags go on **issues**, on **stamps**, on **copies** — the pieces you actually hold — and on
+**auction lots** you are following. A tag is worth most on a copy: *to check*, *for expertising*,
+*duplicate for the swap box*, *from the box grandfather left* are all things you say about a piece in
+your hand rather than about a catalogue entry. On a lot it is what you say about the bidding: *for
+the Danzig album*, *agent-found*, *ask about the gum*.
 
 ## Making tags
 
@@ -36,7 +37,8 @@ in an order you state, because each holds a handful of entries whose sequence me
 condition scale reads best to worst). Your tags are a vocabulary you keep inventing, so the only
 order that stays useful as it grows is the one nobody has to maintain.
 
-Each row says what the tag is on — *On 3 issues, 12 stamps and 40 copies*, or *Not used yet*. Click
+Each row says what the tag is on — *On 3 issues, 12 stamps, 40 copies and 2 auction lots*, or *Not
+used yet*. Click
 one and its name and colour open beside the list, where you change them in place — see
 [Pages with a list](collections.md#pages-with-a-list); **Add tag** at the top right of the page makes
 one ahead of time.
@@ -47,8 +49,8 @@ A tag's pane changes the name and the colour together, with **Save**. A rename r
 once; that is the point of a tag being a dictionary entry rather than a word typed onto forty
 stamps.
 
-**Delete**, in the same pane, takes the tag off everything carrying it. The confirmation says how many issues, stamps
-and copies that is, and nothing else about them changes — no copy, price, checklist or catalogue
+**Delete**, in the same pane, takes the tag off everything carrying it. The confirmation says how many issues, stamps,
+copies and auction lots that is, and nothing else about them changes — no copy, price, checklist or catalogue
 number is touched. Unlike conditions or certificate statuses, a tag in use is **not** blocked from
 being deleted: taking the label off is exactly what deleting it means. A tag marked on a scan tile that is still
 to be identified comes off it too.
@@ -61,6 +63,7 @@ the one you add it with:
 - an **issue** — the issue dialog, from the Issues list or the issue's own page
 - a **stamp** — the stamp dialog, on its **Details** tab
 - a **copy** — the copy dialog, under **Notes**
+- an **auction lot** — the lot dialog (**Add lot**, or **Edit** in the lot's `⋮` menu), above **Notes**
 
 A new copy can also be tagged **while it is identified** from a scan tile, and a tile can be marked
 with tags before that, with the card in hand — see
@@ -98,6 +101,13 @@ It reaches exactly the copies you can see and have ticked, and nothing else.
 There is deliberately no *tag this one* entry in a row's `⋮` menu: the bulk edit covers the many and
 the copy's own screen covers the one.
 
+**Auction lots** work the same way. Tick lots on the **Auctions** list — the box at the start of each
+row, or the one in the bar above the rows for every lot loaded — and press **Tags…** in that bar.
+Name the tags to **add** and the tags to **remove**; every other tag on each lot stays as it is, and
+only the ticked lots you can see are reached. Ticks survive a change of filter, exactly as on the
+Copies list. This pass picks tags you already have; a new one is typed into a lot's own dialog, or
+made in Settings.
+
 ## Where tags show
 
 A tag is drawn as a chip in its own colour **wherever the thing carrying it is drawn**:
@@ -107,13 +117,16 @@ A tag is drawn as a chip in its own colour **wherever the thing carrying it is d
 - on the flat **Stamps list**
 - on the **Copies list**, on the copy's own line of chips
 - on the **issue's**, the **stamp's** and the **copy's** own screens, on the line that names them
+- on an **auction lot**, at the end of its line of chips — on the Auctions list and on the sale's
+  own screen alike
 
 A thing with no tags shows nothing at all — no empty marker.
 
 ## Finding things by tag
 
-The **Issues list**, the **Stamps list** and the **Copies list** each have an **All tags** filter on
-their toolbar, offering your whole dictionary. Tick the tags you are after and the list narrows to
+The **Issues list**, the **Stamps list**, the **Copies list** and the **Auctions list** each have an
+**All tags** filter on their toolbar, offering your whole dictionary — and so does an auction sale's
+own screen, over that sale's lots. Tick the tags you are after and the list narrows to
 what carries them. The filter appears only once the collection has at least one tag — there is
 nothing to filter by before that.
 
@@ -132,7 +145,8 @@ switch has nothing to say and is greyed out: *any of it* and *all of it* are the
 
 The selection and the switch are part of the **address**, like every other filter on these lists, so
 a reload brings back what you were looking at and a copied link shows somebody else the same thing.
-On the Copies list the filter is also remembered between visits, as the filters beside it are.
+On the Copies list, the Auctions list and a sale's screen the filter is also remembered between
+visits, as the filters beside it are.
 
 **Ticking rows and filtering are independent.** Changing the tag filter on the Copies list unticks
 nothing — whatever you had selected stays selected, even the rows the new filter has hidden, and an
@@ -151,6 +165,8 @@ This is the rule worth knowing before you start:
 - a tag on a **variant** is **not** on its parent
 - a tag on a **stamp** is **not** on the copies of it — and a copy carrying several stamps takes
   tags of its own rather than any of theirs
+- a tag on an **auction lot** is **not** on its sale, and does **not** travel to the copies the lot
+  becomes when you settle it — the copies take tags of their own
 
 A tag means exactly what you put where you put it. This is the same answer Stamporama gives for
 catalogue attributes: a variant is its own stamp, and states its own facts. If you want the whole

@@ -5,6 +5,7 @@ import { prisma } from "../../src/lib/db";
 import { createAssistantToken } from "../../src/lib/api-tokens";
 import { setAllegroPlatform } from "../../src/lib/allegro";
 import { auctionLotExposure, listAuctionLots } from "../../src/lib/auctions";
+import { setAuctionLotTags } from "../../src/lib/tags";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
 import { GET } from "../../src/app/api/v1/[...path]/route";
 import type {
@@ -283,6 +284,36 @@ describe("auction reads (#1036)", () => {
         outpricedLots: 1,
         unconvertibleLots: 0,
       });
+    });
+  });
+
+  // ── Tags (#1625) ───────────────────────────────────────────────────────────
+
+  describe("a lot's tags", () => {
+    it("are reported by name on the watchlist and on a tracked listing, and as nothing on an untagged lot", async () => {
+      const [first, second] = await Promise.all([
+        prisma.tag.create({ data: { collectionId, name: "agent-found" } }),
+        prisma.tag.create({ data: { collectionId, name: "ask about the gum" } }),
+      ]);
+      await setAuctionLotTags(userId, lot.A, [second.id, first.id]);
+      try {
+        const page = await get<ListResponse<AgentWatchlistLot>>(readToken, "/auctions/lots");
+        const byId = new Map(page.items.map((row) => [row.lotId, row]));
+        // The dictionary's order, whatever order they were written in.
+        assert.deepEqual(byId.get(lot.A)?.tags, ["agent-found", "ask about the gum"]);
+        assert.deepEqual(byId.get(lot.B)?.tags, []);
+
+        const { listings } = await get<{ listings: AgentTrackedListing[] }>(
+          readToken,
+          "/auctions/tracked?listings=18795065609,18795077777"
+        );
+        assert.deepEqual(
+          listings.map((l) => l.tags),
+          [["agent-found", "ask about the gum"], []]
+        );
+      } finally {
+        await prisma.tag.deleteMany({ where: { id: { in: [first.id, second.id] } } });
+      }
     });
   });
 

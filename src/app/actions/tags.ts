@@ -43,7 +43,7 @@ export async function listTagsAction(collectionId: string): Promise<TagSummary[]
 
 export async function getTagUsageAction(
   tagId: string
-): Promise<{ issueCount: number; stampCount: number; copyCount: number }> {
+): Promise<{ issueCount: number; stampCount: number; copyCount: number; lotCount: number }> {
   const session = await getSession();
   return getTagUsage(session.user.id, tagId);
 }

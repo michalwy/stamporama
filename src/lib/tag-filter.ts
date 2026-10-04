@@ -1,6 +1,7 @@
 // Narrowing a list to the collector's own labels (#1182). A tag nobody can search by is a
-// decoration: #152 gave the vocabulary and hung it on issues and stamps, #1181 on copies, and this
-// is the one module all three lists ask *show me the ones tagged like this* through.
+// decoration: #152 gave the vocabulary and hung it on issues and stamps, #1181 on copies, #1625 on
+// auction lots, and this is the one module every one of those lists asks *show me the ones tagged
+// like this* through.
 //
 // Pure — no Prisma, no React, no `server-only` — for the reason `stamp-attribute-kinds.ts` is: the
 // URL is where this filter lives, so the panel that writes the query string, the route that reads it
@@ -94,9 +95,9 @@ export function appendTagFilterParams(params: URLSearchParams, filter: TagFilter
  */
 export const NO_TAGS = "none";
 
-/** One `some` over a thing's own tag join table. The relation is called `tags` on `Issue`, `Stamp`
- *  and `Item` alike, and the join row's column is `tagId` on all three, which is what lets one
- *  builder serve the three lists. */
+/** One `some` over a thing's own tag join table. The relation is called `tags` on `Issue`, `Stamp`,
+ *  `Item` and `AuctionLot` alike, and the join row's column is `tagId` on all four, which is what
+ *  lets one builder serve every list. */
 interface TagSomeWhere {
   tags: { some: { tagId: string | { in: string[] } } };
 }
@@ -150,6 +151,26 @@ function tagIdsWhere(ids: string[], tagMode: TagFilterMode | undefined): TagIdsW
   return ids.length === 1
     ? { tags: { some: { tagId: ids[0] } } }
     : { tags: { some: { tagId: { in: ids } } } };
+}
+
+/**
+ * {@link tagFilterWhere}'s question asked of one thing's tags **in memory** — for a screen that holds
+ * every row already and narrows them client-side, as a sale's own screen does with its lots (#1625).
+ *
+ * The same three readings, so a lot shown on the flat list under a filter is shown on its sale's
+ * screen under the same one: off with nothing ticked, *any* or *all* over the real ids, and
+ * {@link NO_TAGS} ORed beside them for the things carrying none.
+ */
+export function tagsMatchFilter(tagIds: readonly string[], opts: TagFilterOpts): boolean {
+  const unique = [...new Set(opts.tagIds ?? [])];
+  if (unique.length === 0) return true;
+  const ids = unique.filter((id) => id !== NO_TAGS);
+  if (ids.length < unique.length && tagIds.length === 0) return true;
+  if (ids.length === 0) return false;
+  const carried = new Set(tagIds);
+  return (opts.tagMode ?? DEFAULT_TAG_FILTER_MODE) === "all"
+    ? ids.every((id) => carried.has(id))
+    : ids.some((id) => carried.has(id));
 }
 
 /**

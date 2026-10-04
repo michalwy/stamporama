@@ -52,6 +52,8 @@ import {
 } from "./auction-rules";
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import { roundAmount } from "./decimal-input";
+import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
+import { tagFilterWhere, type TagFilterOpts } from "./tag-filter";
 
 // Server-side domain logic for **auction tracking** (ADR-0021, #350–#352): a bidding watchlist with
 // a fork at the end. `AuctionSale` ⊃ `AuctionLot` ⊃ `AuctionLotLine`, where the sale is one
@@ -398,6 +400,9 @@ export interface AuctionLotListItem {
   /** Whether the lot has been transcribed into a purchase (#28) — as a lot, or as an expense when it
    * is *not stamps* (#1624) — it is then read-only here. */
   settled: boolean;
+  /** The collector's own labels on the lot (#1625), in the dictionary's order. Nothing inherited
+   *  from the sale, and the empty list is the normal case. */
+  tags: TagSummary[];
   createdAt: Date;
 }
 
@@ -438,6 +443,7 @@ const LOT_SELECT = {
     },
   },
   _count: { select: { lines: true } },
+  tags: TAG_SUMMARY_SELECT,
 } satisfies Prisma.AuctionLotSelect;
 
 type LotRow = Prisma.AuctionLotGetPayload<{ select: typeof LOT_SELECT }>;
@@ -535,6 +541,7 @@ function toLotListItem(
     premiumPercent: fees.premiumPercent,
     premiumFixed: fees.premiumFixed,
     settled: row.purchaseLotId !== null || row.purchaseExpenseId !== null,
+    tags: orderTagSummaries(row.tags),
     createdAt: row.createdAt,
   };
 }
@@ -630,7 +637,9 @@ async function recommendationsFor(
  * so this is how the collector goes and finds them to record what happened. */
 export type AuctionClosingWindow = "ended" | "today" | "week";
 
-export interface AuctionLotFilters {
+/** The tag filter (#1625) rides on {@link TagFilterOpts}' own two fields — `tagIds` and `tagMode` —
+ *  so the lots list reads it exactly as the Issues, Stamps and Copies lists do. */
+export interface AuctionLotFilters extends TagFilterOpts {
   /** How the bidding went — **derived**, so this is a set of predicates over the money rather than
    * one column (see {@link outcomeWhere}). The list filters by outcome and not by the recorded
    * lifecycle because that is what the collector is looking for: "what did I win", "what did I only
@@ -694,6 +703,11 @@ function lotListWhere(
   // several columns, and a second `OR` on the object would replace the outcome's rather than narrow
   // alongside it.
   if (filters.search?.trim()) and.push(lotSearchWhere(filters.search));
+  // The collector's own labels (#1625) — `tag-filter.ts`' one spelling, an `AND` entry of its own
+  // for the reason the search above is: *all* is an `AND`, *no tags* an `OR`, and either as a sibling
+  // key would collide with the outcome's.
+  const tagged = tagFilterWhere(filters);
+  if (tagged) and.push(tagged);
 
   return {
     ...(derivedIds ? { id: { in: derivedIds } } : {}),
@@ -2423,6 +2437,8 @@ export interface AuctionLotListingMatch {
    *  own address for one), since a lot has no page of its own. */
   path: string;
   matchedBy: "lot-no" | "url";
+  /** The collector's own labels on the lot (#1625) — what the agent API reports beside the rest. */
+  tags: TagSummary[];
 }
 
 /** How many listings one lookup answers for. A listing page asks about itself, so this is a ceiling
@@ -2489,6 +2505,7 @@ export async function findLotsForListings(
         notStampsDescription: true,
         _count: { select: { lines: true } },
         auctionSale: { select: { id: true, name: true, platformId: true } },
+        tags: TAG_SUMMARY_SELECT,
       },
     }),
   ]);
@@ -2538,6 +2555,7 @@ export async function findLotsForListings(
       notStampsDescription: lot.notStampsDescription,
       path: `/c/${encodeURIComponent(collection.slug)}/auctions/sales/${lot.auctionSale.id}?lot=${lot.id}`,
       matchedBy,
+      tags: orderTagSummaries(lot.tags),
     });
   }
   return matches;

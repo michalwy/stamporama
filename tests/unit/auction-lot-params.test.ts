@@ -5,6 +5,7 @@ import {
   lotNarrowings,
   type AuctionLotFilters,
 } from "../../src/app/c/[collectionSlug]/auctions/lot-params";
+import { tagFilterFromParams } from "../../src/lib/tag-filter";
 
 /**
  * What the lot list actually asks the API for (#450). The regression these guard is a filter the
@@ -27,6 +28,8 @@ describe("auction lot params", () => {
     search: "köhler",
     sellerId: "seller-1",
     platformId: "platform-1",
+    tagIds: ["tag-a", "tag-b"],
+    tagMode: "all",
   };
 
   it("serialises every filter the interface carries", () => {
@@ -47,6 +50,19 @@ describe("auction lot params", () => {
     assert.equal(params.get("search"), "köhler");
     assert.equal(params.get("sellerId"), "seller-1");
     assert.equal(params.get("platformId"), "platform-1");
+    assert.equal(params.get("tagIds"), "tag-a,tag-b");
+    assert.equal(params.get("tagMode"), "all");
+  });
+
+  it("writes the tag filter the way `tagFilterFromParams` reads it back (#1625)", () => {
+    const params = lotParams({ tagIds: ["a", "b"], tagMode: "all" });
+    assert.deepEqual(tagFilterFromParams(params), { tagIds: ["a", "b"], tagMode: "all" });
+  });
+
+  it("sends the tag mode only with tags, and never the default", () => {
+    assert.equal(lotParams({ tagMode: "all" }).toString(), "");
+    assert.equal(lotParams({ tagIds: [], tagMode: "all" }).toString(), "");
+    assert.equal(lotParams({ tagIds: ["a"], tagMode: "any" }).toString(), "tagIds=a");
   });
 
   it("sends the outcome chip's filter", () => {
@@ -86,12 +102,15 @@ describe("auction lot narrowings", () => {
     search: "köhler",
     sellerId: "seller-1",
     platformId: "platform-1",
+    tagIds: ["tag-a"],
+    tagMode: "all",
   };
 
   it("announces every filter that narrows the list", () => {
     const keys = lotNarrowings(every).map((n) => n.key);
     for (const key of Object.keys(every) as (keyof AuctionLotFilters)[]) {
-      if (key === "includeClosed") continue;
+      // The one that widens, and the tag mode, which only qualifies the tags beside it.
+      if (key === "includeClosed" || key === "tagMode") continue;
       assert.ok(keys.includes(key), `${key} narrows the list and the band never says so`);
     }
   });
@@ -117,5 +136,14 @@ describe("auction lot narrowings", () => {
     // narrowed by it, so a band saying it is would be wrong for as long as the pause lasted.
     assert.deepEqual(lotNarrowings({ search: "   " }), []);
     assert.deepEqual(lotNarrowings({ search: "köhler" }), [{ key: "search", value: "köhler" }]);
+  });
+});
+
+describe("auction lot tag narrowing (#1625)", () => {
+  it("announces the tags, and not the mode on its own", () => {
+    assert.deepEqual(lotNarrowings({ tagIds: ["a", "b"], tagMode: "all" }), [
+      { key: "tagIds", value: "a,b" },
+    ]);
+    assert.deepEqual(lotNarrowings({ tagIds: [], tagMode: "all" }), []);
   });
 });

@@ -1361,6 +1361,12 @@ comparison is absent, which is the row's own three states. `notStamps` (#1624) i
 is literature or an accessory and has nothing to describe, not a lot still to be described.
 `find_tracked_auction_lots` carries the same mark on a `tracked` answer.
 
+**A lot's tags are reported by name** (#1625), on a watchlist row and on a `tracked` listing alike —
+`tags: string[]`, always present on the row, empty when there are none, as `signals` is. Names and
+not ids: no operation takes a tag id, and a colour is how a chip is drawn. They come off the same
+`TagSummary[]` the lot row carries for the screens, in the dictionary's order. No tag filter is
+published on the watchlist, on the argument the paragraph above makes for every filter.
+
 **The exposure counts travel with the totals, zeros included** (`valuation.md`): `uncappedLots`
 reads the totals low, `outpricedLots` is correctly costed at nothing (#600), and
 `unconvertibleLots` is left out rather than added at par.
