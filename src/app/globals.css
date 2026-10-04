@@ -234,6 +234,15 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   outline: -webkit-focus-ring-color auto 1px;
 }
 
+/* A list row's caret and checkbox are clickable across their whole cell (#1589, `CaretCell` /
+   `CheckCell` in `shared/cell-target.tsx`), and the cell says so: hovering anywhere in it lights the
+   glyph, so the larger target is found rather than stumbled on. A rule rather than a hover state per
+   row, since one `:hover` here reaches every list that draws the cells. */
+.cell-target:hover .cell-target-glyph {
+  background: var(--color-bg-strong);
+  color: var(--color-text-primary);
+}
+
 /* One-shot highlight applied to a row/card right after it is added (#158), so the user can
    confirm the action landed without scanning the list. Fades from a warm tint back to the
    surface colour. Under reduced motion the tint holds still and then goes, rather than fading

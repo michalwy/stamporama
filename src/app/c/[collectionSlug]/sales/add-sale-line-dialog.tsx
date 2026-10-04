@@ -24,6 +24,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { useSellableOffers, useSellableCopies } from "./use-sales-query";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 
 /** Maps + lookups the expandable copy rows need, bundled so they pass through one prop. */
@@ -644,12 +645,16 @@ function QuantityGroup({
   return (
     <div style={{ borderBottom: isLast && !open ? undefined : "1px solid var(--color-border)" }}>
       <div onClick={onToggleExpand} style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 1rem", cursor: "pointer" }}>
-        <span
-          aria-hidden
-          style={{ width: "0.9rem", flexShrink: 0, color: MUTED, fontSize: "0.75rem", transform: open ? "rotate(90deg)" : undefined, transition: "transform 0.12s ease" }}
+        {/* The whole header expands; the caret's cell is the part that lights (#1589). */}
+        <CaretCell
+          expanded={open}
+          onToggle={onToggleExpand}
+          bleed={{ top: "0.625rem", bottom: "0.625rem", left: "1rem", right: "0.3125rem" }}
         >
-          <Icon name="expand" size="sm" />
-        </span>
+          <span style={{ display: "inline-flex", transform: open ? "rotate(90deg)" : undefined, transition: "transform 0.12s ease" }}>
+            <Icon name="expand" size="sm" />
+          </span>
+        </CaretCell>
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* The listing's own title leads, spelled `name ?? label` as every other offer surface
               spells it (#209/#1026); the label derived from its sets sits beneath, so a collector

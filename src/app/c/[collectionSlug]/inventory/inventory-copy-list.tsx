@@ -10,6 +10,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { InventoryItemRow } from "./inventory-item-row";
 import type { RowsInView } from "./use-rows-in-view";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 const EMPTY_LOCATIONS: LocationData[] = [];
 
@@ -26,7 +27,9 @@ const DIFFERS_CHIP: React.CSSProperties = {
 };
 
 /**
- * The gutter a copy's selection checkbox lives in — the whole strip is the control, not the box.
+ * The gutter a copy's selection checkbox lives in — the whole strip is the control, not the box: it
+ * is the width of a `CheckCell` (`shared/cell-target.tsx`, #1589), which supplies the target, the
+ * hover and the hand.
  * Full row height (the parent stretches it) with the box centred in it: a copy row is four lines
  * tall, so a top-aligned box reads as belonging to the first line rather than to the row, and a
  * 13-pixel hit area is a poor target for a list one works through by ticking.
@@ -42,7 +45,6 @@ export const SELECT_STRIP: React.CSSProperties = {
   justifyContent: "center",
   width: "2.5rem",
   flexShrink: 0,
-  cursor: "pointer",
 };
 
 /**
@@ -216,8 +218,8 @@ function SelectableCopyRow({
     >
       {eligible ? (
         <div style={{ position: "relative", display: "flex" }}>
-          {/* A `<label>`, so the whole strip is the hit area rather than the 13px box in it. */}
-          <label style={SELECT_STRIP}>
+          {/* The whole strip is the hit area rather than the 13px box in it (#1589). */}
+          <CheckCell style={SELECT_STRIP}>
             <input
               type="checkbox"
               checked={checked}
@@ -225,7 +227,7 @@ function SelectableCopyRow({
               aria-label="Select this copy"
               style={{ cursor: "pointer" }}
             />
-          </label>
+          </CheckCell>
           {showMenu && (
             <div style={SELECTION_MENU_SLOT}>
               <RowActionsMenu

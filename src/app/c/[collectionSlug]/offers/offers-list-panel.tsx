@@ -44,6 +44,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 type DialogState =
   | { kind: "none" }
@@ -814,8 +815,10 @@ export function OffersListPanel({
                     ? "Deselect all"
                     : `Select the ${rows.length} offer${rows.length === 1 ? "" : "s"} loaded so far`
                 }
-                style={SELECT_STRIP}
+                style={{ ...SELECT_STRIP, alignSelf: "stretch" }}
               >
+                {/* The whole strip, to the bar's top and bottom edges, toggles it (#1589). */}
+                <CheckCell bleed={{ top: "0.5rem", bottom: "0.5rem" }} style={{ flex: 1 }}>
                 <input
                   type="checkbox"
                   checked={allLoadedSelected}
@@ -832,6 +835,7 @@ export function OffersListPanel({
                   aria-label="Select all loaded offers"
                   style={{ cursor: "pointer" }}
                 />
+                </CheckCell>
               </Tooltip>
               {selectedOffers.length > 0 ? (
                 <>

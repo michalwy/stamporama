@@ -29,6 +29,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FormatFactorsDialog } from "@/app/c/[collectionSlug]/shared/use-format-factors-action";
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
 import { Icon } from "@/app/icons";
+import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 // Persisted collapse state for the area management tree, consistent with the area
 // filter tree (#81). Distinct key so the two trees collapse independently (#237).
@@ -470,33 +471,16 @@ export function AreasPanel({
                 </button>
 
                 {/* Expand/collapse toggle for nodes with children; a reserved spacer
-                    otherwise so every row's name lines up (#237). */}
+                    otherwise so every row's name lines up (#237). The caret's cell runs the
+                    row's full height (#1589). */}
                 {hasChildren ? (
-                  <button
-                    type="button"
-                    onClick={() => toggle(area.id)}
-                    aria-label={isCollapsed ? "Expand" : "Collapse"}
-                    aria-expanded={!isCollapsed}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: "1rem",
-                      height: "1rem",
-                      flexShrink: 0,
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "var(--color-text-muted)",
-                      fontSize: "0.625rem",
-                      padding: 0,
-                      lineHeight: 1,
-                    }}
-                  >
-                    <Icon name={isCollapsed ? "expand" : "collapse"} size="sm" />
-                  </button>
+                  <CaretCell
+                    expanded={!isCollapsed}
+                    onToggle={() => toggle(area.id)}
+                    bleed={{ top: "0.75rem", bottom: "0.75rem", left: "0.375rem", right: "0.375rem" }}
+                  />
                 ) : (
-                  <span style={{ width: "1rem", flexShrink: 0 }} />
+                  <span style={{ width: CARET_GLYPH_WIDTH, flexShrink: 0 }} />
                 )}
 
                 <a

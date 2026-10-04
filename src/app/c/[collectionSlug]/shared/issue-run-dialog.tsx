@@ -98,6 +98,7 @@ import {
 import { TextInput } from "./text-input";
 import { usePersistedFlag } from "./use-persisted-flag";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
+import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 /**
  * A ticked run of scan tiles identified **as the stamps of a checklist, in turn** (#1220, #1225).
@@ -1994,27 +1995,11 @@ function StampChoice({
     <div
       style={{ display: "flex", alignItems: "center", gap: "0.25rem", marginLeft: `${depth * 1.25}rem` }}
     >
+      {/* The caret's cell runs the row's full height (#1589). */}
       {fold ? (
-        <button
-          type="button"
-          onClick={fold.onToggle}
-          aria-label={fold.folded ? "Expand" : "Collapse"}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            padding: "0.125rem",
-            flexShrink: 0,
-            lineHeight: 1,
-            width: "0.875rem",
-            textAlign: "center",
-          }}
-        >
-          <Icon name={fold.folded ? "expand" : "collapse"} size="sm" />
-        </button>
+        <CaretCell expanded={!fold.folded} onToggle={fold.onToggle} />
       ) : (
-        <span style={{ width: "0.875rem", flexShrink: 0 }} />
+        <span style={{ width: CARET_GLYPH_WIDTH, flexShrink: 0 }} />
       )}
       <button
         type="button"

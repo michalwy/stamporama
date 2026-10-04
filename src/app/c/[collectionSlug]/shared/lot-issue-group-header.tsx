@@ -12,6 +12,7 @@ import {
 import { IssueTitle, IssueCatalogChips, StampCountBadge } from "./issue-view";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -217,128 +218,119 @@ export function LotIssueGroupHeader({
       onMouseLeave={() => setHovered(false)}
       onClick={onToggle}
       style={{
+        // The box and the caret are cells running the header's full height (#1589), so they lead a
+        // row of their own and the header's lines sit in a column beside them.
+        display: "flex",
+        alignItems: "stretch",
+        gap: "0.5rem",
         padding: "0.75rem 1.25rem",
         background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
         transition: "background 0.1s ease",
         cursor: "pointer",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        {select && (
+      {select && (
+        <CheckCell bleed={{ top: "0.75rem", bottom: "0.75rem", left: "1.25rem", right: "0.25rem" }}>
           <Tooltip content={select.label}>
-            {/* Stops the click reaching the header, whose own job is collapsing the group. */}
-            <label
-              onClick={(e) => e.stopPropagation()}
-              style={{ display: "flex", alignItems: "center", cursor: "pointer", flexShrink: 0 }}
-            >
-              <input
-                type="checkbox"
-                checked={select.state === "on"}
-                ref={(el) => {
-                  // "Some of them" is a third state the DOM only exposes as a property.
-                  if (el) el.indeterminate = select.state === "partial";
-                }}
-                onChange={select.onChange}
-                aria-label={select.label}
-                style={{ cursor: "pointer" }}
-              />
-            </label>
+            <input
+              type="checkbox"
+              checked={select.state === "on"}
+              ref={(el) => {
+                // "Some of them" is a third state the DOM only exposes as a property.
+                if (el) el.indeterminate = select.state === "partial";
+              }}
+              onChange={select.onChange}
+              aria-label={select.label}
+              style={{ margin: 0, cursor: "pointer" }}
+            />
           </Tooltip>
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-          aria-label={collapsed ? "Expand" : "Collapse"}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-            padding: "0.25rem",
-            flexShrink: 0,
-            lineHeight: 1,
-          }}
-        >
-          <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
-        </button>
+        </CheckCell>
+      )}
+      <CaretCell
+        expanded={!collapsed}
+        onToggle={onToggle}
+        bleed={{
+          top: "0.75rem",
+          bottom: "0.75rem",
+          left: select ? "0.25rem" : "1.25rem",
+          right: "0.25rem",
+        }}
+      />
 
-        {areaName && (
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {areaName && (
+            <span
+              style={{
+                fontSize: "0.75rem",
+                color: "var(--color-text-muted)",
+                background: "var(--color-bg-page)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "0.25rem",
+                padding: "0.1rem 0.4rem",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              {areaName}
+            </span>
+          )}
+
           <span
             style={{
-              fontSize: "0.75rem",
-              color: "var(--color-text-muted)",
-              background: "var(--color-bg-page)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "0.25rem",
-              padding: "0.1rem 0.4rem",
+              flex: 1,
+              fontSize: "0.9375rem",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
               whiteSpace: "nowrap",
-              flexShrink: 0,
             }}
           >
-            {areaName}
+            {header ? <IssueTitle name={header.name} year={header.year} /> : fallbackLabel}
           </span>
-        )}
 
-        <span
-          style={{
-            flex: 1,
-            fontSize: "0.9375rem",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {header ? <IssueTitle name={header.name} year={header.year} /> : fallbackLabel}
-        </span>
+          <Tooltip content="Copies from this issue in the lot" align="end">
+            <span style={{ ...CHIP, flexShrink: 0 }}>
+              {copyCount} {countLabel}
+            </span>
+          </Tooltip>
 
-        <Tooltip content="Copies from this issue in the lot" align="end">
-          <span style={{ ...CHIP, flexShrink: 0 }}>
-            {copyCount} {countLabel}
-          </span>
-        </Tooltip>
-
-      </div>
-
-      {header &&
-        (header.catalogNumbers.length > 0 ||
-          header.memberCount > 0 ||
-          (completeness?.length ?? 0) > 0) && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.375rem",
-            // Lines up under the title, which the selection checkbox pushes across when present.
-            paddingLeft: select ? "3rem" : "1.75rem",
-            marginTop: "0.3rem",
-            flexWrap: "wrap",
-          }}
-        >
-          <IssueCatalogChips
-            catalogNumbers={header.catalogNumbers}
-            vendorMap={vendorMap}
-            primaryVendorId={primaryVendorId}
-          />
-          {header.memberCount > 0 && (
-            <StampCountBadge required={header.requiredCount} total={header.memberCount} />
-          )}
-          {/* One per checklist, never over their union (ADR-0031). An empty checklist is skipped:
-              `0/0` is not an achievement and not a gap either. */}
-          {completeness
-            ?.filter((c) => c.requiredCount > 0)
-            .map((c) => (
-              <SetCompletenessLine
-                key={c.checklistId}
-                entry={c}
-                named={completeness.length > 1}
-              />
-            ))}
         </div>
-      )}
+
+        {header &&
+          (header.catalogNumbers.length > 0 ||
+            header.memberCount > 0 ||
+            (completeness?.length ?? 0) > 0) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.375rem",
+              marginTop: "0.3rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <IssueCatalogChips
+              catalogNumbers={header.catalogNumbers}
+              vendorMap={vendorMap}
+              primaryVendorId={primaryVendorId}
+            />
+            {header.memberCount > 0 && (
+              <StampCountBadge required={header.requiredCount} total={header.memberCount} />
+            )}
+            {/* One per checklist, never over their union (ADR-0031). An empty checklist is skipped:
+                `0/0` is not an achievement and not a gap either. */}
+            {completeness
+              ?.filter((c) => c.requiredCount > 0)
+              .map((c) => (
+                <SetCompletenessLine
+                  key={c.checklistId}
+                  entry={c}
+                  named={completeness.length > 1}
+                />
+              ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -41,6 +41,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Segmented } from "@/app/c/[collectionSlug]/shared/segmented";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 const MUTED = "var(--color-text-muted)";
 
@@ -782,26 +783,17 @@ function OfferGroup({
     <div style={{ borderBottom: isLast && !open ? undefined : "1px solid var(--color-border)", opacity: disabled ? 0.6 : 1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.625rem 1rem" }}>
         {hasSets ? (
-          <button
-            type="button"
-            onClick={onToggleExpand}
-            aria-label={open ? "Collapse" : "Expand"}
-            style={{
-              width: "1.1rem",
-              flexShrink: 0,
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: MUTED,
-              fontSize: "0.75rem",
-              transform: open ? "rotate(90deg)" : undefined,
-              transition: "transform 0.12s ease",
-            }}
+          <CaretCell
+            expanded={open}
+            onToggle={onToggleExpand}
+            bleed={{ top: "0.625rem", bottom: "0.625rem", left: "1rem", right: "0.25rem" }}
           >
-            <Icon name="expand" size="sm" />
-          </button>
+            <span style={{ display: "inline-flex", transform: open ? "rotate(90deg)" : undefined, transition: "transform 0.12s ease" }}>
+              <Icon name="expand" size="sm" />
+            </span>
+          </CaretCell>
         ) : (
-          <span style={{ width: "1.1rem", flexShrink: 0 }} />
+          <span style={{ width: CARET_GLYPH_WIDTH, flexShrink: 0 }} />
         )}
 
         <div style={{ flex: 1, minWidth: 0 }}>

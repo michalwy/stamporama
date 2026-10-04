@@ -32,6 +32,7 @@ import type { OfferTitlePreview } from "@/lib/offers";
 import { useComposableCopies, useOfferCollisions } from "../use-offers-query";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -319,7 +320,7 @@ export function ComposeSetDialog({
                       background: checked ? "var(--color-accent-soft)" : undefined,
                     }}
                   >
-                    <label style={SELECT_STRIP}>
+                    <CheckCell style={SELECT_STRIP}>
                       <input
                         type="checkbox"
                         checked={checked}
@@ -327,7 +328,7 @@ export function ComposeSetDialog({
                         aria-label="Select this copy"
                         style={{ cursor: "pointer" }}
                       />
-                    </label>
+                    </CheckCell>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <InventoryItemRow
                         collectionId={collectionId}

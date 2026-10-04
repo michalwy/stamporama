@@ -32,6 +32,7 @@ import { attachCopiesToLotAction } from "@/app/actions/purchases";
 import { useInvalidateInventory } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",
@@ -339,7 +340,7 @@ export function AttachCopiesDialog({
                       background: checked ? "var(--color-accent-soft)" : undefined,
                     }}
                   >
-                    <label style={SELECT_STRIP}>
+                    <CheckCell style={SELECT_STRIP}>
                       <input
                         type="checkbox"
                         checked={checked}
@@ -347,7 +348,7 @@ export function AttachCopiesDialog({
                         aria-label="Select this copy"
                         style={{ cursor: "pointer" }}
                       />
-                    </label>
+                    </CheckCell>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <InventoryItemRow
                         collectionId={collectionId}

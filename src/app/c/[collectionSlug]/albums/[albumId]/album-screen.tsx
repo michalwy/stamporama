@@ -61,6 +61,7 @@ import {
   type AlbumPrintMode,
 } from "@/lib/album-print-mode";
 import { albumYearAloneName } from "@/lib/album-print-rules";
+import { CELL_GLYPH } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 // One album (#767): what it prints, in what order, and how that falls onto sheets.
 //
@@ -745,10 +746,12 @@ export function AlbumScreen({
       const attention = chapterAttention.get(run.id) ?? 0;
       return (
         <div key={run.id} style={{ ...CARD_STYLE, marginBottom: "0.75rem" }}>
+          {/* The whole heading folds the chapter, and hovering it anywhere lights the caret (#1589). */}
           <button
             type="button"
             aria-expanded={open}
             onClick={() => toggleChapter(run.id)}
+            className="cell-target"
             style={{
               display: "flex",
               alignItems: "center",
@@ -763,7 +766,7 @@ export function AlbumScreen({
               color: "var(--color-text-primary)",
             }}
           >
-            <span style={{ display: "inline-flex", color: "var(--color-text-muted)" }}>
+            <span className="cell-target-glyph" style={{ ...CELL_GLYPH, color: "var(--color-text-muted)" }}>
               <Icon name={open ? "collapse" : "expand"} size="sm" />
             </span>
             <span style={{ fontSize: "0.9375rem", fontWeight: 600 }}>{run.key || "No year"}</span>

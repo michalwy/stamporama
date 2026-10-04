@@ -71,9 +71,9 @@ import { useIssueMembers, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, pickedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
 import { PhotoThumb } from "./photo-thumb";
-import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
+import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
  * area, a new stamp / variant (parent set) in an issue, or a whole lettered run of variants
@@ -1107,28 +1107,12 @@ function PickIssueRow({
           gap: "0.75rem",
         }}
       >
-        {/* Expand/collapse toggle sits first, before the photo. */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleIssue();
-          }}
-          aria-label={isExpanded ? "Collapse" : "Expand"}
-          style={{
-            alignSelf: "center",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-            padding: "0.25rem",
-            flexShrink: 0,
-            lineHeight: 1,
-          }}
-        >
-          <Icon name={isExpanded ? "collapse" : "expand"} size="sm" />
-        </button>
+        {/* Expand/collapse toggle sits first, before the photo, in a full-height cell (#1589). */}
+        <CaretCell
+          expanded={isExpanded}
+          onToggle={toggleIssue}
+          bleed={{ top: "0.875rem", bottom: "0.875rem", left: "1.25rem", right: "0.375rem" }}
+        />
 
         {/* Issue-level gallery as a left column, matching the inventory list. Reserved even when
             empty for alignment. Stop propagation so opening a thumbnail's lightbox doesn't toggle

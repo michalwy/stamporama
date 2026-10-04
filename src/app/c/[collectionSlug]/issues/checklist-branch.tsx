@@ -7,6 +7,7 @@ import type { TagColorTokens } from "@/lib/tag-colors";
 import type { ChecklistHeadline } from "@/app/actions/checklists";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { CELL_GLYPH, cellBleedStyle } from "@/app/c/[collectionSlug]/shared/cell-target";
 import {
   SET_COMPLETENESS_CHIP,
   SET_COMPLETENESS_CHIP_COMPLETE,
@@ -112,27 +113,32 @@ export function ChecklistBranch({
           transition: "background 0.1s ease",
         }}
       >
+        {/* The caret and the name are one toggle, run to the heading's full height and left edge
+            (#1589); hovering it anywhere lights the caret. */}
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
           aria-label={open ? `Collapse ${name}` : `Expand ${name}`}
+          className="cell-target"
           style={{
             display: "flex",
             alignItems: "center",
             gap: "0.5rem",
             flex: 1,
             minWidth: 0,
+            alignSelf: "stretch",
             background: "none",
             border: "none",
             padding: 0,
+            ...cellBleedStyle({ top: "0.45rem", bottom: "0.45rem", left: "0.5rem" }),
             cursor: "pointer",
             textAlign: "left",
             color: "inherit",
             fontSize: "inherit",
           }}
         >
-          <span style={{ color: "var(--color-text-muted)", width: "0.875rem", flexShrink: 0, lineHeight: 1 }}>
+          <span className="cell-target-glyph" style={{ ...CELL_GLYPH, color: "var(--color-text-muted)" }}>
             <Icon name={open ? "collapse" : "expand"} size="sm" />
           </span>
           <span

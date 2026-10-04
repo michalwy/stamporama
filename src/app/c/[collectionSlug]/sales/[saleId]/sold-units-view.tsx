@@ -28,6 +28,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { useSaleLineCopies, useSaleCopies, useInvalidateSales } from "../use-sales-query";
 import { Icon } from "@/app/icons";
+import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
 
 // The sales packing view adds "Location ref" to the shared copy sort keys — the in-location
@@ -487,9 +488,11 @@ function LocationCard({ group, byIssue, ctx }: { group: CopyGroup; byIssue: bool
           boxShadow: stuck ? STUCK_SHADOW : undefined,
         }}
       >
-        <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          <Icon name={collapsed ? "expand" : "collapse"} size="sm" />
-        </span>
+        <CaretCell
+          expanded={!collapsed}
+          onToggle={() => setCollapsed((c) => !c)}
+          bleed={{ top: "0.625rem", bottom: "0.625rem", left: "1rem", right: "0.25rem" }}
+        />
         <span style={{ flex: 1, minWidth: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <Icon name="location" size="sm" /> {group.label}
         </span>
@@ -958,9 +961,11 @@ function SoldUnitCard({
           boxShadow: stuck ? STUCK_SHADOW : undefined,
         }}
       >
-        <span aria-hidden style={{ width: "0.9rem", flexShrink: 0, color: "var(--color-text-muted)", fontSize: "0.75rem", lineHeight: 1 }}>
-          <Icon name={expanded ? "collapse" : "expand"} size="sm" />
-        </span>
+        <CaretCell
+          expanded={expanded}
+          onToggle={onToggle}
+          bleed={{ top: "0.75rem", bottom: "0.75rem", left: "1rem", right: "0.3125rem" }}
+        />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {line.setLabel}
