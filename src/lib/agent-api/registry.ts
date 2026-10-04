@@ -15,7 +15,8 @@
 // taking it to fifty-six; #1512 added the eight checklist operations, six of which write, taking it
 // to sixty-four; #1540 added the four catalogue-price operations, two of which write, taking it to
 // sixty-eight; #1539 added the six area operations, five of which write, taking it to
-// seventy-four; #1627 added the five auction writes, taking it to **seventy-nine**. Each one is an entry here
+// seventy-four; #1627 added the five auction writes, taking it to seventy-nine; #1628 added
+// `record_auction_lot_outcome`, taking it to **eighty**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -98,6 +99,7 @@ import {
 } from "./operations/auctions";
 import {
   addAuctionLotOperation,
+  recordAuctionLotOutcomeOperation,
   setAuctionLotCeilingOperation,
   setAuctionLotLinesOperation,
   updateAuctionLotOperation,
@@ -207,6 +209,7 @@ export const OPERATIONS: readonly Operation[] = [
   updateAuctionLotOperation,
   setAuctionLotLinesOperation,
   setAuctionLotCeilingOperation,
+  recordAuctionLotOutcomeOperation,
   updateAuctionSaleOperation,
   listPurchasesOperation,
   getPurchaseOperation,

@@ -256,8 +256,10 @@ describe("the agent API's operation modules (#711, #712)", () => {
  * **#1627 opened the auction writes without taking a row off this map.** What the agent may write
  * goes through writers of its own — {@link AUCTION_API_WRITES} — each of which sets the *to review*
  * marker in its own transaction and none of which writes the collector's bid. So every writer here
- * stays closed: the screen's writers do not mark, and `setAuctionLotMyBid`, `recordAuctionLotTransition`
- * (#1628's), `settleAuctionSale` and the deletes are acts the collector kept.
+ * stays closed: the screen's writers do not mark, and `setAuctionLotMyBid`, `recordAuctionLotTransition`,
+ * `settleAuctionSale` and the deletes are acts the collector kept. #1628 recorded outcomes the same way,
+ * through `recordAuctionLotOutcomeThroughApi`, which shares the transition's closing rules but marks,
+ * and cannot reopen a lot; `recordAuctionLotTransition` stays here.
  */
 const AUCTION_WRITES = new Map<string, string>([
   ["createAuctionSale", "creates a sale"],
@@ -287,7 +289,7 @@ const AUCTION_WRITES = new Map<string, string>([
 ]);
 
 /**
- * The writers #1627 opened to the agent, and the one module that may reach them.
+ * The writers #1627 and #1628 opened to the agent, and the one module that may reach them.
  *
  * **A map of what is allowed, where every other map in this file is what is not**, because the rule
  * here is a property of the writers rather than of their callers: each one sets the *to review*
@@ -301,6 +303,7 @@ const AUCTION_API_WRITES = new Map<string, string>([
   ["updateAuctionLotThroughApi", "corrects a lot and records the auction's current bid"],
   ["replaceAuctionLotLinesThroughApi", "replaces what a lot holds"],
   ["setAuctionLotCeilingThroughApi", "sets or clears a lot's ceiling, with its note"],
+  ["recordAuctionLotOutcomeThroughApi", "closes a lot with its final price, or cancels it (#1628)"],
   ["updateAuctionSaleThroughApi", "edits a sale's terms"],
 ]);
 

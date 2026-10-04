@@ -5,14 +5,17 @@ import {
   AuctionActionBlockedError,
   addAuctionLotThroughApi,
   getAuctionLotDetail,
+  recordAuctionLotOutcomeThroughApi,
   replaceAuctionLotLinesThroughApi,
   setAuctionLotCeilingThroughApi,
   updateAuctionLotThroughApi,
   updateAuctionSaleThroughApi,
+  type AuctionLotApiOutcome,
   type AuctionLotApiPatch,
   type AuctionSaleApiPatch,
 } from "../../auctions";
 import type { AuctionLotLineInput } from "../../auction-lines";
+import type { AuctionLotOutcome } from "../../auction-lot";
 import type { TagEntry } from "../../tag-entry";
 import { watchlistLot, type AgentWatchlistLot } from "../auction-reads";
 import {
@@ -44,9 +47,15 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 //
 // The collector, 2026-10-04: *the API writes the register and never bids.* Nothing here writes the
 // collector's own bid (`myBid`) — that records a bid placed by hand on the platform — and nothing
-// reaches a platform. Outcomes are #1628. It is held by what this module may import: the five
-// `…ThroughApi` writers in `auctions.ts` and nothing else that writes there
-// (`tests/unit/agent-api-operation-boundary.test.ts`).
+// reaches a platform. It is held by what this module may import: the six `…ThroughApi` writers in
+// `auctions.ts` and nothing else that writes there (`tests/unit/agent-api-operation-boundary.test.ts`).
+//
+// ## It records how an auction ended, and settles nothing (#1628)
+//
+// `record_auction_lot_outcome` closes a lot with what it went for, or cancels it, through the app's
+// own closing rules — so won or lost is derived from the money exactly as the app derives it, and is
+// never sent. Settling a won lot into its purchase asks what only the collector answers, and a closed
+// lot is reopened only in the app.
 //
 // ## Every write waits for review
 //
@@ -86,6 +95,14 @@ function blocked(err: unknown): never {
     case "settled":
       throw invalidRequest(
         "This lot has been settled into a purchase, so it is a record of what was paid and is not changed from here — only its tags are. Nothing was written."
+      );
+    case "no-price":
+      throw invalidRequest(
+        `"final_price" is required: the collector bid on this lot, and a lot they bid on is closed with what it went for — that is what says whether they won it. If the result is not known, leave the lot open. If they never really bid, they clear their bid in the app first. Nothing was written.`
+      );
+    case "tie-unresolved":
+      throw invalidRequest(
+        `"won_tie" is required: the lot went for exactly the collector's own bid, so the figures cannot say whose it is — whoever bid that amount first won it. Send "won_tie": true if it was the collector, false if not. Nothing was written.`
       );
     default:
       throw invalidRequest(`${err.message} Nothing was written.`);
@@ -666,6 +683,90 @@ export const setAuctionLotCeilingOperation: Operation = {
       "`lot` as it now stands, in `add_auction_lot`'s shape: `ceiling` and `ceilingSetApart`, `ceilingNote`, `ceilingBid` (the highest hammer price that fits inside the ceiling) and `toReview`.",
   },
   handler: async (context, params) => setAuctionLotCeiling(context, params),
+};
+
+// ── record_auction_lot_outcome ───────────────────────────────────────────────
+
+const LOT_END_STATUSES = ["closed", "cancelled"] as const;
+
+/** A lot after its outcome is recorded: the lot, and how it ended as the app reads it. */
+export interface AgentLotOutcome extends AgentLotChange {
+  /** `closed` or `cancelled` — what was recorded. */
+  readonly status: string;
+  /** Derived from the figures, as the app derives it: `won` or `lost` where the collector bid,
+   *  `observed` where they never did, `cancelled`. */
+  readonly outcome: AuctionLotOutcome;
+  /** What the lot went for, in the sale's currency. Absent when it was closed without one, or cancelled. */
+  readonly finalPrice?: string;
+}
+
+export async function recordAuctionLotOutcome(context: OperationContext, params: ParsedParams): Promise<AgentLotOutcome> {
+  const lotId = requiredString(params, "lotId");
+  await assertLot(context, lotId);
+  const status = requiredString(params, "status") as (typeof LOT_END_STATUSES)[number];
+  const price = optionalString(params, "final_price");
+  const wonTie = optionalBoolean(params, "won_tie");
+  if (status === "cancelled" && (price !== null || wonTie !== null)) {
+    throw invalidRequest(`A cancelled lot has no result, so it takes no "final_price" or "won_tie". Send "status": "cancelled" alone.`);
+  }
+  const outcome: AuctionLotApiOutcome =
+    status === "closed"
+      ? { status, finalPrice: price !== null ? parseAuctionAmount(price, "final_price") : null, wonTie }
+      : { status };
+  const { changed } = await runBlocked(() =>
+    recordAuctionLotOutcomeThroughApi(context.ownerId, context.collectionId, lotId, outcome)
+  );
+  const lot = await getAuctionLotDetail(context.ownerId, context.collectionId, lotId);
+  if (!lot) throw new Error(`Lot ${lotId} was written but cannot be read back.`);
+  return compact({
+    lot: await loadLot(context, lotId),
+    status: lot.status,
+    outcome: lot.outcome,
+    finalPrice: lot.finalPrice ?? undefined,
+    changed,
+  }) as AgentLotOutcome;
+}
+
+export const recordAuctionLotOutcomeOperation: Operation = {
+  name: "record_auction_lot_outcome",
+  method: "POST",
+  path: "/auctions/lots/{lotId}/outcome",
+  description:
+    "Record how a tracked lot's auction ended, as closing it in the app does: `closed` with what it went for, or `cancelled` when the listing was withdrawn. Won or lost is never sent — the app works it out from the final price against the collector's own bid, so the answer's `outcome` is what the app shows. A lot the collector bid on needs its final price; one they only watched can be closed without one, when it vanished from view before the result was seen. Recording it again corrects the price. It does not reopen a lot and does not settle a won one into a purchase — both stay with the collector in the app. The result waits for the collector to confirm it in the app.",
+  writes: true,
+  parameters: [
+    LOT_ID_PARAMETER,
+    {
+      name: "status",
+      in: "body",
+      type: "string",
+      required: true,
+      description: "`closed` — the auction ended, with or without a final price seen; `cancelled` — it ended with no result.",
+      values: LOT_END_STATUSES,
+    },
+    {
+      name: "final_price",
+      in: "body",
+      type: "string",
+      required: false,
+      description:
+        "What the lot went for — the hammer price on the listing, without the premium — in the sale's currency, as \"45.00\". Required when the collector bid on the lot. Leave it out only when the result was never seen. Only with `closed`.",
+    },
+    {
+      name: "won_tie",
+      in: "body",
+      type: "boolean",
+      required: false,
+      description:
+        "Only when `final_price` equals the collector's own bid, where the figures cannot say whose the lot is: `true` if the collector's bid came first and won, `false` if not. Required there and ignored anywhere else. Only with `closed`.",
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "`lot` in `add_auction_lot`'s shape with its `toReview`; `status` as recorded; `outcome` — `won`, `lost`, `observed` (the collector never bid) or `cancelled`, derived as the app derives it; `finalPrice` when one was recorded; and `changed` — `[\"outcome\"]`, or empty when the same result was already recorded and nothing was marked.",
+  },
+  handler: async (context, params) => recordAuctionLotOutcome(context, params),
 };
 
 // ── update_auction_sale ──────────────────────────────────────────────────────
