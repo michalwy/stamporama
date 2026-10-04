@@ -265,6 +265,7 @@ const AUCTION_WRITES = new Map<string, string>([
   ["touchAuctionLotChecked", "stamps a bid as freshly checked"],
   ["setAuctionLotMyBid", "records a bid the collector placed"],
   ["setAuctionLotMaxBid", "sets the collector's ceiling"],
+  ["setAuctionLotNotStamps", "marks a lot as not stamps, or removes the mark (#1624)"],
   ["recordAuctionLotTransition", "closes, cancels or reopens a lot, recording its result"],
   ["createAuctionLotLine", "describes what a lot holds"],
   ["updateAuctionLotLine", "edits what a lot holds"],

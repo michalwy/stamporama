@@ -325,6 +325,20 @@ export function auctionLotName(lot: {
   return lot.title || lot.derivedTitle || (lot.lotNo ? `Lot ${lot.lotNo}` : null);
 }
 
+/**
+ * The label a won *not stamps* lot's purchase expense is written with (#1624): what the collector
+ * said the thing is, else what the lot is called, else our own number for it — an expense always
+ * has a label, so the chain ends on something every lot has.
+ */
+export function notStampsExpenseLabel(lot: {
+  notStampsDescription: string | null;
+  title: string | null;
+  lotNo: string | null;
+  auctionLotNo: number;
+}): string {
+  return lot.notStampsDescription || auctionLotName(lot) || `Auction lot ${lot.auctionLotNo}`;
+}
+
 /** Past this, a collapsed number list has stopped identifying the lot and started being a wall of
  * digits — the count says more. Truncating mid-range would print a span the lot does not hold. */
 const MAX_LABEL_NUMBERS = 48;

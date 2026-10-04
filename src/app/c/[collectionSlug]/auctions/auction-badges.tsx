@@ -185,6 +185,21 @@ export function NotDescribedChip() {
   );
 }
 
+/**
+ * Not stamps (#1624) — a catalogue, literature, an accessory, bid on like any lot. Stands where
+ * *Not described* would, since it is the answer to the same question: nothing a line could describe
+ * is in this lot. Untinted, because it names what the lot is rather than work outstanding.
+ */
+export function NotStampsChip({ description }: { description: string | null }) {
+  return tinted(
+    null,
+    "Not stamps",
+    description
+      ? `${description} — not stamps, so it has no catalogue value; won, it becomes a purchase expense`
+      : "Not stamps, so it has no catalogue value; won, it becomes a purchase expense"
+  );
+}
+
 /** Over the collector's ceiling — measured against the **all-in** cost, not the hammer price
  * (ADR-0021 §6), which is the whole reason the column exists. */
 export function OverCeilingChip() {

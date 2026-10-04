@@ -40,6 +40,7 @@ import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE, captureModuleRules } from "./platform-modules";
 import {
   auctionLotName,
+  notStampsExpenseLabel,
   deriveAuctionLotLabel,
   deriveAuctionSaleName,
   isAuctionLotStatus,
@@ -82,6 +83,10 @@ export type AuctionBlockReason =
   | "bad-line"
   | "settled"
   | "has-lots"
+  // A lot marked *not stamps* (#1624) refuses a line, and a lot holding lines refuses the mark: a
+  // line is a stamp, so the two cannot both be true of one lot.
+  | "not-stamps"
+  | "has-lines"
   // Settlement (#28): the parcel's outcome is not fully recorded yet, and nothing was picked to go
   // into it. Distinct because the first is answered on the lots and the second in the dialog.
   | "unresolved"
@@ -148,13 +153,24 @@ async function assertSaleOwner(
 async function assertLotOwner(
   ownerId: string,
   lotId: string
-): Promise<{ id: string; auctionSaleId: string; collectionId: string; purchaseLotId: string | null }> {
+): Promise<{
+  id: string;
+  auctionSaleId: string;
+  collectionId: string;
+  status: string;
+  notStamps: boolean;
+  purchaseLotId: string | null;
+  purchaseExpenseId: string | null;
+}> {
   const lot = await prisma.auctionLot.findFirst({
     where: { id: lotId, auctionSale: { collection: { ownerId } } },
     select: {
       id: true,
       auctionSaleId: true,
+      status: true,
+      notStamps: true,
       purchaseLotId: true,
+      purchaseExpenseId: true,
       auctionSale: { select: { collectionId: true } },
     },
   });
@@ -163,17 +179,34 @@ async function assertLotOwner(
     id: lot.id,
     auctionSaleId: lot.auctionSaleId,
     collectionId: lot.auctionSale.collectionId,
+    status: lot.status,
+    notStamps: lot.notStamps,
     purchaseLotId: lot.purchaseLotId,
+    purchaseExpenseId: lot.purchaseExpenseId,
   };
 }
 
 /** A lot already transcribed into a purchase (#28) is history: the purchase lot carries the price
- * that was actually paid, and rewriting the bid here would leave the two disagreeing. */
-function assertLotEditable(lot: { purchaseLotId: string | null }): void {
-  if (lot.purchaseLotId) {
+ * that was actually paid, and rewriting the bid here would leave the two disagreeing. A *not stamps*
+ * lot settles as an expense instead (#1624), and is frozen by it in exactly the same way. */
+function assertLotEditable(lot: {
+  purchaseLotId: string | null;
+  purchaseExpenseId: string | null;
+}): void {
+  if (lot.purchaseLotId || lot.purchaseExpenseId) {
     throw new AuctionActionBlockedError(
       "settled",
       "This lot has been settled into a purchase. Edit the purchase instead, or undo the settlement first."
+    );
+  }
+}
+
+/** A line is a stamp, so a lot marked *not stamps* (#1624) takes none until the mark is removed. */
+function assertHoldsStamps(lot: { notStamps: boolean }): void {
+  if (lot.notStamps) {
+    throw new AuctionActionBlockedError(
+      "not-stamps",
+      "This lot is marked as not stamps. Remove the mark before adding stamps to it."
     );
   }
 }
@@ -299,6 +332,11 @@ export interface AuctionLotListItem {
   myBidOverCeiling: boolean | null;
   /** Composition lines entered so far (#353). Zero is the normal state while bidding. */
   lineCount: number;
+  /** The lot is **not stamps** (#1624) — literature, an accessory. It then has no lines, is never
+   * *Not described*, carries no value or recommendation, and a won one settles as an expense. */
+  notStamps: boolean;
+  /** What a *not stamps* lot is, when the collector said. Null on every other lot. */
+  notStampsDescription: string | null;
   /**
    * What the lot's composition is worth at catalogue, in the **sale's currency** (#353).
    *
@@ -357,7 +395,8 @@ export interface AuctionLotListItem {
    */
   premiumPercent: string | null;
   premiumFixed: string | null;
-  /** Whether the lot has been transcribed into a purchase (#28) — it is then read-only here. */
+  /** Whether the lot has been transcribed into a purchase (#28) — as a lot, or as an expense when it
+   * is *not stamps* (#1624) — it is then read-only here. */
   settled: boolean;
   createdAt: Date;
 }
@@ -379,7 +418,10 @@ const LOT_SELECT = {
   status: true,
   wonTie: true,
   notes: true,
+  notStamps: true,
+  notStampsDescription: true,
   purchaseLotId: true,
+  purchaseExpenseId: true,
   createdAt: true,
   auctionSale: {
     select: {
@@ -477,6 +519,8 @@ function toLotListItem(
     myAllIn,
     myBidOverCeiling: myAllIn !== null && ceiling !== null ? Number(myAllIn) > Number(ceiling) : null,
     lineCount: row._count.lines,
+    notStamps: row.notStamps,
+    notStampsDescription: row.notStampsDescription,
     catalogValue: composition?.catalogValue ?? null,
     catalogUncertain: composition?.uncertain ?? false,
     // Same inverse, same fees, same omission of shipping as `bidRoom` above — catalogue value is an
@@ -490,7 +534,7 @@ function toLotListItem(
     headroom: headroom(composition?.catalogValue ?? null, money(costed), fees),
     premiumPercent: fees.premiumPercent,
     premiumFixed: fees.premiumFixed,
-    settled: row.purchaseLotId !== null,
+    settled: row.purchaseLotId !== null || row.purchaseExpenseId !== null,
     createdAt: row.createdAt,
   };
 }
@@ -752,6 +796,7 @@ function lotSearchWhere(search: string): Prisma.AuctionLotWhereInput {
 const UNDESCRIBED_WHERE: Prisma.AuctionLotWhereInput = {
   lines: { none: {} },
   status: { not: "cancelled" },
+  notStamps: false,
 };
 
 /** The rows a signal is computed over: every live lot the rest of the filters admit. Bounded by
@@ -1427,6 +1472,8 @@ const SALE_SELECT = {
       // parcel to its ceilings would cost from `maxBid`.
       maxBid: true,
       wonTie: true,
+      // A *not stamps* lot (#1624) has no catalogue value to miss, so it is not counted undescribed.
+      notStamps: true,
       // What the parcel's catalogue total is summed from (#353); the ids of the lots that have one
       // are what the batched valuation is asked for.
       _count: { select: { lines: true } },
@@ -1474,6 +1521,7 @@ function toSaleListItem(
         // Already in this sale's currency (#353) — the conversion happens once per sale currency in
         // `auction-lines.ts`, precisely so the parcel's totals never mix two.
         catalogValue: compositions.get(lot.id)?.catalogValue ?? null,
+        notStamps: lot.notStamps,
       })),
       fees
     ),
@@ -2107,6 +2155,7 @@ async function findCapturedLot(
       currentBid: true,
       myBid: true,
       purchaseLotId: true,
+      purchaseExpenseId: true,
       auctionSale: { select: { id: true, name: true, currency: true } },
     },
   });
@@ -2367,6 +2416,9 @@ export interface AuctionLotListingMatch {
    *  be re-read long after it closed, and "this is the lot you lost" is a different answer from
    *  "this is the lot you are bidding on". */
   outcome: AuctionLotOutcome;
+  /** The lot is marked *not stamps* (#1624), with what it is when the collector said. */
+  notStamps: boolean;
+  notStampsDescription: string | null;
   /** Where the lot is on the instance, **relative**: the sale's screen, focused on the lot (#431's
    *  own address for one), since a lot has no page of its own. */
   path: string;
@@ -2433,6 +2485,8 @@ export async function findLotsForListings(
         myBid: true,
         finalPrice: true,
         wonTie: true,
+        notStamps: true,
+        notStampsDescription: true,
         _count: { select: { lines: true } },
         auctionSale: { select: { id: true, name: true, platformId: true } },
       },
@@ -2480,6 +2534,8 @@ export async function findLotsForListings(
         finalPrice: money(lot.finalPrice),
         wonTie: lot.wonTie,
       }),
+      notStamps: lot.notStamps,
+      notStampsDescription: lot.notStampsDescription,
       path: `/c/${encodeURIComponent(collection.slug)}/auctions/sales/${lot.auctionSale.id}?lot=${lot.id}`,
       matchedBy,
     });
@@ -2524,6 +2580,56 @@ export async function updateAuctionLot(
       maxBid: input.maxBid,
       notes: input.notes,
     },
+  });
+}
+
+/** What marking a lot *not stamps* (#1624) writes: the mark, and what the thing is. */
+export interface AuctionLotNotStampsInput {
+  notStamps: boolean;
+  /** A short description of what the lot is — *Michel Europe catalogue 2019*. Optional, and the
+   * label of the expense a won lot settles into; without one the lot's own name stands in. Ignored
+   * (and cleared) when the mark is removed. */
+  description: string | null;
+}
+
+/**
+ * Mark a lot as **not stamps**, restate what it is, or remove the mark (#1624).
+ *
+ * The collector bids on catalogues, literature and accessories too, and tracks them like any lot.
+ * Such a lot carries no lines, so without the mark it reads as *Not described* for ever, as if its
+ * stamps were still to be entered. Marked, it carries **no lines** — the mark is refused while the
+ * lot holds any, and a line is refused while it is marked, so the two never meet — and has no
+ * catalogue value or recommendation, which follow from the lines. A won one settles as a purchase
+ * expense ({@link settleAuctionSale}). A forgery is a stamp (#1000) and does not take this mark.
+ *
+ * The mark is set at any point before settlement; it is **removed only while the lot is open**, as
+ * #1624 settles it — once the bidding is over the lot is what it was bid on as.
+ */
+export async function setAuctionLotNotStamps(
+  ownerId: string,
+  lotId: string,
+  input: AuctionLotNotStampsInput
+): Promise<void> {
+  const lot = await assertLotOwner(ownerId, lotId);
+  assertLotEditable(lot);
+  if (input.notStamps) {
+    const lines = await prisma.auctionLotLine.count({ where: { auctionLotId: lotId } });
+    if (lines > 0) {
+      throw new AuctionActionBlockedError(
+        "has-lines",
+        `This lot has ${lines} stamp${lines === 1 ? "" : "s"} entered. Remove ${lines === 1 ? "it" : "them"} before marking the lot as not stamps.`
+      );
+    }
+  } else if (lot.notStamps && lot.status !== "open") {
+    throw new AuctionActionBlockedError(
+      "not-stamps",
+      "The not-stamps mark can only be removed while the lot is open."
+    );
+  }
+  const description = input.notStamps ? input.description?.trim() || null : null;
+  await prisma.auctionLot.update({
+    where: { id: lotId },
+    data: { notStamps: input.notStamps, notStampsDescription: description },
   });
 }
 
@@ -3049,6 +3155,7 @@ export async function createAuctionLotLine(
 ): Promise<string> {
   const lot = await assertLotOwner(ownerId, lotId);
   assertLotEditable(lot);
+  assertHoldsStamps(lot);
   await assertLineTargets(lot.collectionId, input);
   const line = await prisma.auctionLotLine.create({
     data: {
@@ -3068,14 +3175,24 @@ export async function createAuctionLotLine(
 async function assertLineOwner(
   ownerId: string,
   lineId: string
-): Promise<{ id: string; auctionLotId: string; collectionId: string; purchaseLotId: string | null }> {
+): Promise<{
+  id: string;
+  auctionLotId: string;
+  collectionId: string;
+  purchaseLotId: string | null;
+  purchaseExpenseId: string | null;
+}> {
   const line = await prisma.auctionLotLine.findFirst({
     where: { id: lineId, auctionLot: { auctionSale: { collection: { ownerId } } } },
     select: {
       id: true,
       auctionLotId: true,
       auctionLot: {
-        select: { purchaseLotId: true, auctionSale: { select: { collectionId: true } } },
+        select: {
+          purchaseLotId: true,
+          purchaseExpenseId: true,
+          auctionSale: { select: { collectionId: true } },
+        },
       },
     },
   });
@@ -3085,6 +3202,7 @@ async function assertLineOwner(
     auctionLotId: line.auctionLotId,
     collectionId: line.auctionLot.auctionSale.collectionId,
     purchaseLotId: line.auctionLot.purchaseLotId,
+    purchaseExpenseId: line.auctionLot.purchaseExpenseId,
   };
 }
 
@@ -3155,6 +3273,12 @@ const SETTLEMENT_LOT_SELECT = {
   finalPrice: true,
   wonTie: true,
   purchaseLotId: true,
+  // A *not stamps* lot (#1624) settles as an expense rather than a lot, labelled from what it is;
+  // the lot's own number is the label's last resort.
+  notStamps: true,
+  notStampsDescription: true,
+  auctionLotNo: true,
+  purchaseExpenseId: true,
   _count: { select: { lines: true } },
   lines: {
     select: {
@@ -3256,7 +3380,7 @@ export async function settleAuctionSale(
     // Won-ness is read off the money like everywhere else (ADR-0021 §4). A settled lot's figures are
     // then frozen by `assertLotEditable`, so what settlement wrote and what the lot derives to stay
     // in step — which is the constraint that made deriving it safe here in the first place.
-    if (settlementOutcome(lot) !== "won" || lot.purchaseLotId) {
+    if (settlementOutcome(lot) !== "won" || lot.purchaseLotId || lot.purchaseExpenseId) {
       throw new AuctionActionBlockedError(
         "bad-sale",
         "Only won lots that have not been settled yet can go into a purchase."
@@ -3322,6 +3446,25 @@ export async function settleAuctionSale(
     let nextNo = 0;
 
     for (const { lot, price } of selected) {
+      // A *not stamps* lot (#1624) is bought, not collected: it becomes one of the purchase's
+      // non-inventory lines (ADR-0009 §1) at its confirmed price, and no copy. Its share of the
+      // shipping follows from that, since §3 spreads shipping over lots and expenses alike.
+      if (lot.notStamps) {
+        const expense = await tx.purchaseExpense.create({
+          data: {
+            purchaseId: purchase.id,
+            label: notStampsExpenseLabel(lot),
+            price: new Prisma.Decimal(roundAmount(price)),
+          },
+          select: { id: true },
+        });
+        await tx.auctionLot.update({
+          where: { id: lot.id },
+          data: { purchaseExpenseId: expense.id },
+        });
+        continue;
+      }
+
       const purchaseLot = await tx.purchaseLot.create({
         data: {
           purchaseId: purchase.id,

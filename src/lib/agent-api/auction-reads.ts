@@ -59,6 +59,8 @@ export interface WatchlistLotRow {
   readonly myBidOverCeiling: boolean | null;
   readonly premiumPercent: string | null;
   readonly premiumFixed: string | null;
+  readonly notStamps: boolean;
+  readonly notStampsDescription: string | null;
 }
 
 /** One open lot as the agent reads it. Every amount is in {@link currency}, the sale's. */
@@ -106,6 +108,11 @@ export interface AgentWatchlistLot {
   readonly signals: readonly LotSignal[];
   readonly premiumPercent?: string;
   readonly premiumFixed?: string;
+  /** The lot is not stamps (#1624) — literature, an accessory: it has no stamps listed and no
+   * catalogue value, and a won one becomes an expense on the purchase. */
+  readonly notStamps: boolean;
+  /** What a {@link notStamps} lot is, when the collector said. */
+  readonly notStampsDescription?: string;
   /** Where the lot is in the app, relative to this instance: its sale's screen, focused on it. */
   readonly path: string;
 }
@@ -162,6 +169,8 @@ export function watchlistLot(row: WatchlistLotRow, now: Date, path: string): Age
     signals,
     premiumPercent: row.premiumPercent,
     premiumFixed: row.premiumFixed,
+    notStamps: row.notStamps,
+    notStampsDescription: row.notStampsDescription,
     path,
   }) as AgentWatchlistLot;
 }
@@ -236,6 +245,8 @@ export interface ListingMatchRow {
   readonly title: string;
   readonly saleName: string;
   readonly outcome: AuctionLotOutcome;
+  readonly notStamps: boolean;
+  readonly notStampsDescription: string | null;
   readonly path: string;
   readonly matchedBy: "lot-no" | "url";
 }
@@ -260,6 +271,9 @@ export interface AgentTrackedListing {
   readonly sale?: string;
   /** `pending` while it is still being bid on; `won`, `lost`, `observed` or `cancelled` once it is not. */
   readonly outcome?: AuctionLotOutcome;
+  /** The lot is not stamps (#1624). Present on `tracked` only. */
+  readonly notStamps?: boolean;
+  readonly notStampsDescription?: string;
   /** Whether the platform's number stored on the lot answered, or its stored address. */
   readonly matchedBy?: "lot-no" | "url";
   readonly path?: string;
@@ -291,6 +305,8 @@ export function trackedListings(
       name: match.title,
       sale: match.saleName,
       outcome: match.outcome,
+      notStamps: match.notStamps,
+      ...(match.notStampsDescription ? { notStampsDescription: match.notStampsDescription } : {}),
       matchedBy: match.matchedBy,
       path: match.path,
     };

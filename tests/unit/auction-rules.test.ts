@@ -16,6 +16,7 @@ import {
   parseAuctionAmount,
   parseAuctionInstant,
   auctionLotName,
+  notStampsExpenseLabel,
   deriveAuctionLotLabel,
   parseLotQuantity,
   parsePremiumPercent,
@@ -354,6 +355,28 @@ describe("deriveAuctionLotLabel", () => {
 });
 
 // auctionLotName -------------------------------------------------------------
+
+describe("notStampsExpenseLabel", () => {
+  const base = { notStampsDescription: null, title: null, lotNo: null, auctionLotNo: 41 };
+
+  it("labels the expense with what the collector said the thing is", () => {
+    assert.equal(
+      notStampsExpenseLabel({
+        ...base,
+        notStampsDescription: "Michel Europe 2019",
+        title: "Katalog",
+        lotNo: "385",
+      }),
+      "Michel Europe 2019"
+    );
+  });
+
+  it("falls back to the lot's own name, then to our number for it", () => {
+    assert.equal(notStampsExpenseLabel({ ...base, title: "Katalog", lotNo: "385" }), "Katalog");
+    assert.equal(notStampsExpenseLabel({ ...base, lotNo: "385" }), "Lot 385");
+    assert.equal(notStampsExpenseLabel(base), "Auction lot 41");
+  });
+});
 
 describe("auctionLotName", () => {
   it("prefers the name the collector gave the lot", () => {

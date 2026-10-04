@@ -41,6 +41,7 @@ import {
   ArrowUpRight,
   ArrowUpToLine,
   Ban,
+  BookOpen,
   Banknote,
   Bell,
   Boxes,
@@ -413,6 +414,9 @@ const GLYPHS = {
   bidCeiling: ArrowUpToLine,
   /** …and a catalogue value, downwards. */
   bidCatalog: ArrowDownToLine,
+
+  /** An auction lot that is **not stamps** — a catalogue, literature, an accessory (#1624). */
+  notStamps: BookOpen,
 } satisfies Record<string, LucideIcon>;
 
 /** Every meaning the app has an icon for. An unknown name is a type error, deliberately. */

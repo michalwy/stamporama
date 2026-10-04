@@ -163,6 +163,21 @@ composition is where every lot starts, and the chip is there because the **Recom
 blank until it is filled in. Cancelled lots never carry it. The **Not described** filter
 below collects them.
 
+### Lots that are not stamps
+
+Not everything worth bidding on is stamps — a catalogue, a run of a philatelic magazine, a
+stockbook, a magnifier. Track it like any lot, then choose **Mark as not stamps…** from its **⋮**
+menu and, if you like, say what it is (*Michel Europe catalogue 2019*). The row then carries a
+plain **Not stamps** chip instead of **Not described**, has no catalogue value and no
+recommendation, and stays out of the **Not described** filter and count — there is nothing in it
+for a line to describe. Bidding, the ceiling, closing and the cost bar work exactly as for any
+other lot.
+
+A lot marked this way takes no stamps: **Contents** is closed on it, and a lot that already has
+stamps entered has to lose them before it can be marked. A forgery is still a stamp — enter it on
+an ordinary line. The same menu entry changes the description later, and **It is stamps** removes
+the mark while the lot is still open; once it has closed, it stays what it was bid on as.
+
 Shipping is deliberately in none of them. It belongs to the parcel, so it is added once on the
 sale, not once per lot.
 
@@ -528,7 +543,7 @@ the bidding:
 - **Not described** — lots with nothing recorded as being in them, with a count. These are the lots
   with no catalogue value to bid against and nothing to file if you win, so this chip is how you sit
   down and clear the backlog of them. *Cancelled* lots are never included: describing one buys
-  nothing. A **lost** lot is, though — what it held and what it went for is a price record worth
+  nothing, and neither are lots marked **not stamps**, which hold nothing to describe. A **lost** lot is, though — what it held and what it went for is a price record worth
   keeping.
 - **Duplicate** — lots holding a stamp another lot you are **winning** also holds, at the same
   condition and format, with a count. It is the standing version of the warning the contents editor
@@ -808,7 +823,7 @@ One toolbar governs all of them, and it is the toolbar the purchase-order and of
   photo**, **unknown variant** — the lot card stays, its contents are narrowed. The fourth,
   **not described**, is about the **lots**: it shows exactly the lots with nothing recorded in them
   at all, which is the list of what is still to be described. A lot described only in part is not
-  one of them.
+  one of them, and nor is a lot marked **not stamps**.
 
   **Not described** is offered only while **Group by Lot** is on, because it is a question about
   lots and the flat view has none on screen — a lot with nothing in it puts nothing into a list of
@@ -879,6 +894,12 @@ closing each lot, freezing the cost basis.
 
 A lot with nothing described becomes a priced line with no copies, which you can identify on the
 purchase in the usual way.
+
+A won lot marked **not stamps** becomes an **expense** on the purchase instead of a line — at the
+price you confirm in the dialog, labelled with what you said it is (else with the lot's name), and
+with no copies. It takes its share of the shipping like any line, so the stamps in the same parcel
+are not costed for it. Deleting that expense on the purchase undoes its settlement, as deleting the
+purchase does for the whole parcel.
 
 Each line is **named the way the lot was**: the title you gave it, or the name derived from what it
 holds, or — for a lot you bid on sight-unseen, with neither — the house's own **lot number**, as

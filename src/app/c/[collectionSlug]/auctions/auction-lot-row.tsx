@@ -32,11 +32,13 @@ import {
   BidStandingChip,
   LotOutcomeChip,
   NotDescribedChip,
+  NotStampsChip,
   OverCeilingChip,
 } from "./auction-badges";
 import { useLotOutcomeActions } from "./use-lot-outcome-actions";
 import { formatBase, formatInstant, formatRelative } from "./auction-format";
 import { useSeparateCeiling } from "./use-separate-ceiling";
+import { useNotStampsAction } from "./use-not-stamps-action";
 import { useToast } from "@/app/toast-provider";
 import { formatAmountInput } from "@/lib/decimal-input";
 import { AmountWithBase } from "./auction-base-amount";
@@ -304,9 +306,13 @@ interface QuickFill {
 
 const SETTLED_HINT = "Settled into a purchase — edit the purchase instead";
 
+/** Why a lot marked *not stamps* (#1624) has no catalogue value and no recommendation. */
+const NOT_STAMPS_HINT = "Not stamps — there is no catalogue value to go by";
+
 /** Why catalogue value cannot be a source: nothing described, or nothing described carries a price.
  * Named apart from a bare "no catalogue value", because the two are fixed in different places. */
 function noCatalogValueHint(lot: AuctionLotView): string {
+  if (lot.notStamps) return NOT_STAMPS_HINT;
   return lot.lineCount === 0
     ? "Describe what the lot holds first — its catalogue value follows from that"
     : "Nothing described in this lot carries a catalogue price yet";
@@ -418,7 +424,9 @@ function bidFromRecommendation(
   if (lot.recommendation === null) {
     return {
       level: null,
-      hint: "Describe what the lot holds first — a recommendation follows from that",
+      hint: lot.notStamps
+        ? NOT_STAMPS_HINT
+        : "Describe what the lot holds first — a recommendation follows from that",
     };
   }
   const level = lot.recommendation[which];
@@ -699,6 +707,7 @@ export function AuctionLotRow({
     { currency: lot.currency, myBid, ceiling },
     applyMaxBid
   );
+  const notStamps = useNotStampsAction(lot, onOutcomeRecorded);
 
   /** Where the row's own click goes (#374): the parcel this lot settles in, with the lot named so
    * the sale screen can scroll to it and flash it. */
@@ -835,11 +844,15 @@ export function AuctionLotRow({
       key: "contents",
       separatorBefore: true,
       // Readable whether or not anything has been entered — the same entry either way, because
-      // "what is in this lot?" is the question in both cases.
+      // "what is in this lot?" is the question in both cases. A lot marked *not stamps* (#1624)
+      // holds nothing a line could describe, so the entry stays and says why it is closed.
       label: lot.lineCount === 0 ? "Describe contents" : `Contents (${lot.lineCount})`,
       icon: "contents",
+      disabled: lot.notStamps,
+      hint: lot.notStamps ? "Marked as not stamps" : undefined,
       onSelect: () => onEditComposition(lot),
     },
+    notStamps.action,
     // What became of it (#354), set apart from the bidding entries above: those are what you do
     // *while* a lot runs, these are what you do once it has stopped.
     ...outcome.actions.map((action, idx) =>
@@ -1002,6 +1015,7 @@ export function AuctionLotRow({
               {/* Last of the chips: the composition is work outstanding, not news about the
                   bidding, so it never stands between the status and what the price is doing. */}
               {lotNeedsComposition(lot) && <NotDescribedChip />}
+              {lot.notStamps && <NotStampsChip description={lot.notStampsDescription} />}
 
             </div>
             </div>
@@ -1259,44 +1273,50 @@ export function AuctionLotRow({
                   {" · "}
                 </>
               )}
-              <Tooltip
-                content={catalogHint(
-                  lot,
-                  baseAmounts === "full"
-                    ? formatBase(lot.catalogValue, lot.baseRate, lot.baseCurrency)
-                    : null
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onEditComposition(lot)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    font: "inherit",
-                    color: "inherit",
-                  }}
-                >
-                  {lot.catalogValue === null ? (
-                    <span style={{ color: "var(--color-accent)", textDecoration: "underline" }}>
-                      {lot.lineCount === 0 ? "+ contents" : "+ catalog value"}
-                    </span>
-                  ) : (
-                    <>
-                      catalogue{" "}
-                      <span
-                        // The one vocabulary for *inferred, not recorded* (#238): a `~` and italics.
-                        style={lot.catalogUncertain ? { fontStyle: "italic" } : undefined}
-                      >
-                        {lot.catalogUncertain ? "~" : ""}
-                        {lot.catalogValue}
-                      </span>
-                    </>
+              {/* A lot marked not stamps (#1624) has no contents to describe and no catalogue
+                  value, so the way in to the composition editor gives way to saying so. */}
+              {lot.notStamps ? (
+                <span>no catalogue value</span>
+              ) : (
+                <Tooltip
+                  content={catalogHint(
+                    lot,
+                    baseAmounts === "full"
+                      ? formatBase(lot.catalogValue, lot.baseRate, lot.baseCurrency)
+                      : null
                   )}
-                </button>
-              </Tooltip>
+                >
+                  <button
+                    type="button"
+                    onClick={() => onEditComposition(lot)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      font: "inherit",
+                      color: "inherit",
+                    }}
+                  >
+                    {lot.catalogValue === null ? (
+                      <span style={{ color: "var(--color-accent)", textDecoration: "underline" }}>
+                        {lot.lineCount === 0 ? "+ contents" : "+ catalog value"}
+                      </span>
+                    ) : (
+                      <>
+                        catalogue{" "}
+                        <span
+                          // The one vocabulary for *inferred, not recorded* (#238): a `~` and italics.
+                          style={lot.catalogUncertain ? { fontStyle: "italic" } : undefined}
+                        >
+                          {lot.catalogUncertain ? "~" : ""}
+                          {lot.catalogValue}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </Tooltip>
+              )}
             </span>
 
             {/* A ceiling **set apart** from the bid (#1515), under it — the only ceiling the row
@@ -1392,6 +1412,7 @@ export function AuctionLotRow({
           would otherwise trap a fixed dialog in the row's own stacking context. */}
       {outcome.dialog}
       {separateCeiling.dialog}
+      {notStamps.dialog}
     </div>
   );
 }

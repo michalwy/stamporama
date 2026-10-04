@@ -1356,7 +1356,10 @@ valuation, already all-in) — which is `auctions.md`'s rule that the three are 
 must not be merged. `ceiling` is the one the lot is **held to** (#1515): unless `ceilingSetApart`, it follows the bid and is `myBidAllIn`. `ceilingBid` is the screen's `bidRoom`. `ended` says the closing time has passed
 with nothing recorded, and there `standing` is where the bidding was last seen rather than a result —
 the screen's *Won?* with its question mark. `overCeiling: false` survives and an unrecorded
-comparison is absent, which is the row's own three states.
+comparison is absent, which is the row's own three states. `notStamps` (#1624) is always present,
+`false` included, because a lot with no stamps listed means something different with it set: the lot
+is literature or an accessory and has nothing to describe, not a lot still to be described.
+`find_tracked_auction_lots` carries the same mark on a `tracked` answer.
 
 **The exposure counts travel with the totals, zeros included** (`valuation.md`): `uncappedLots`
 reads the totals low, `outpricedLots` is correctly costed at nothing (#600), and

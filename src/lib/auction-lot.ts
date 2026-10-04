@@ -494,8 +494,14 @@ export function lotLineValueOf(
  * `observed` lot is the same argument at full strength, since recording the price is the only
  * reason that lot exists at all.
  */
-export function lotNeedsComposition(lot: { status: AuctionLotStatus; lineCount: number }): boolean {
-  return lot.lineCount === 0 && lot.status !== "cancelled";
+export function lotNeedsComposition(lot: {
+  status: AuctionLotStatus;
+  lineCount: number;
+  notStamps: boolean;
+}): boolean {
+  // A lot marked *not stamps* (#1624) — a catalogue, literature, an accessory — holds nothing a line
+  // could describe, so its empty composition is the whole answer rather than work left.
+  return lot.lineCount === 0 && lot.status !== "cancelled" && !lot.notStamps;
 }
 
 /** What a lot's composition is worth, and how much of it could be answered. */
@@ -583,6 +589,9 @@ export interface AuctionLotSummaryRow {
   finalPrice?: Amount;
   /** Catalogue value of the lot's composition, when its lines have been entered. */
   catalogValue?: Amount;
+  /** The lot is *not stamps* (#1624): it has no catalogue value to miss, so it is never counted in
+   * {@link AuctionSaleSummary.unvaluedCount}. */
+  notStamps?: boolean;
 }
 
 /** Sale-level totals over the lots that cost money. */
@@ -602,7 +611,8 @@ export interface AuctionSaleSummary {
   /** Payable lots with no bid recorded yet — they contribute nothing, and a total that silently
    * omits them would otherwise look complete. */
   unbidCount: number;
-  /** Payable lots whose composition has no catalogue value, for the same reason. */
+  /** Payable lots whose composition has no catalogue value, for the same reason. A lot marked *not
+   * stamps* (#1624) is not one of them: it has no catalogue value by nature, not for want of a line. */
   unvaluedCount: number;
   /** Sum of the payable lots' bids, before any fees. */
   bidTotal: string;
@@ -741,7 +751,7 @@ export function summarizeAuctionSale(
     const bid = lotBid(lot);
     const cv = num(lot.catalogValue);
     if (bid === null) unbidCount++;
-    if (cv === null) unvaluedCount++;
+    if (cv === null && !lot.notStamps) unvaluedCount++;
     if (bid !== null && cv !== null) comparableCount++;
 
     if (bid !== null) {
