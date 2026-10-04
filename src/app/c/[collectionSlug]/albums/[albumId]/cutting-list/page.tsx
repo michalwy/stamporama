@@ -125,7 +125,7 @@ export default async function AlbumCuttingListPage({ params }: CuttingListPagePr
             textDecoration: "none",
           }}
         >
-          ← Back to the album
+          ← {album.name}
         </Link>
         <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
           For page numbers, enable “Headers and footers” in the print dialog.

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
@@ -86,16 +85,6 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
         >
           Lot builder
         </h2>
-        <Link
-          href={`/c/${collectionSlug}/offers`}
-          style={{
-            fontSize: "0.8125rem",
-            color: "var(--color-accent)",
-            textDecoration: "none",
-          }}
-        >
-          ← Back to offers
-        </Link>
       </div>
       <LotBuilderPanel
         collectionId={collection.id}

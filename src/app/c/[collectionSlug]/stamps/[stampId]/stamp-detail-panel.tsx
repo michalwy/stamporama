@@ -8,7 +8,6 @@ import type { IssueListItem } from "@/lib/issues";
 import type { CollectionAreaData } from "@/lib/areas";
 import { formatIssuedDate, moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import {
-  DetailBackLink,
   DetailCard,
   DetailFullRow,
   DetailLayout,
@@ -119,7 +118,6 @@ export function StampDetailPanel({
 
   return (
     <>
-      <DetailBackLink href={`/c/${collectionSlug}/stamps`} label="Back to stamps" />
 
       <DetailLayout>
         <DetailFullRow style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>

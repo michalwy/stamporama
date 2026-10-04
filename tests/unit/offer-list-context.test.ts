@@ -2,7 +2,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   offerListContextQuery,
-  offerListHref,
   parseOfferListContext,
   type OfferListContext,
 } from "../../src/app/c/[collectionSlug]/offers/list-context";
@@ -111,7 +110,6 @@ describe("offer list context", () => {
       includeClosed: false,
       search: undefined,
     });
-    assert.equal(offerListHref("mine", { bidding: true }), "/c/mine/offers?bidding=1");
   });
 
   it("carries the ended-auction narrowing the notification centre links to (#490)", () => {
@@ -126,10 +124,6 @@ describe("offer list context", () => {
       includeClosed: false,
       search: undefined,
     });
-    assert.equal(
-      offerListHref("mine", { endedAuction: true }),
-      "/c/mine/offers?endedAuction=1"
-    );
   });
 
   it("carries the changed-since-listed narrowing a re-listing session walks (#542)", () => {
@@ -144,10 +138,6 @@ describe("offer list context", () => {
       includeClosed: false,
       search: undefined,
     });
-    assert.equal(
-      offerListHref("mine", { listingOutOfDate: true }),
-      "/c/mine/offers?listingOutOfDate=1"
-    );
   });
 
   it("has no context without the marker: a deep link is not a walk", () => {
@@ -178,19 +168,5 @@ describe("offer list context", () => {
       includeClosed: false,
       search: undefined,
     });
-  });
-
-  it("points the way back at the list as it was, without the remembered toggle", () => {
-    assert.equal(
-      offerListHref("mine", { platformId: "p1", states: ["ready"], includeClosed: true }),
-      "/c/mine/offers?platform=p1&state=ready"
-    );
-    assert.equal(
-      offerListHref("mine", { states: ["ready", "active"] }),
-      "/c/mine/offers?state=ready%2Cactive"
-    );
-    assert.equal(offerListHref("mine", { needsAction: true }), "/c/mine/offers?needsAction=1");
-    assert.equal(offerListHref("mine", {}), "/c/mine/offers");
-    assert.equal(offerListHref("mine", null), "/c/mine/offers");
   });
 });

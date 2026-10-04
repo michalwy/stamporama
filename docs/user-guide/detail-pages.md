@@ -43,9 +43,10 @@ issues, the copies listed on either, the copies of an offer, a purchase, a sale 
 stepping from record to record never needs the lists in between. The **pickers**, where clicking a
 row chooses it, are the exception: there a click still picks.
 
-Each page carries a back link to the list it came from. The three pages also link to each other: a
-copy links to its stamp, a stamp links to its issues and its variants, an issue links to every
-stamp in it.
+The pages carry no *Back to …* link: a page can be reached from many places, so a link to one
+fixed list would mislead more often than it helped. The sidebar goes to any list, and the browser's
+**back** returns to wherever you came from. The three pages also link to each other: a copy links to
+its stamp, a stamp links to its issues and its variants, an issue links to every stamp in it.
 
 ## Opening things in a new tab
 

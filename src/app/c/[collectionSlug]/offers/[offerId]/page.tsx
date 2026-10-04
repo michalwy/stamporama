@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getOfferDetail, getOfferIssueIds } from "@/lib/offers";
@@ -12,7 +11,7 @@ import { getIssueHeadersByIds, type IssueHeader } from "@/lib/issues";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { OfferDetailPanel } from "./offer-detail-panel";
 import { OfferListNav } from "./offer-list-nav";
-import { offerListHref, parseOfferListContext } from "../list-context";
+import { parseOfferListContext } from "../list-context";
 
 interface OfferDetailPageProps {
   params: Promise<{ collectionSlug: string; offerId: string }>;
@@ -60,40 +59,19 @@ export default async function OfferDetailPage({ params, searchParams }: OfferDet
 
   return (
     <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      {/* Back on the left, the walk through the list on the right: the two answer different
-          questions — leaving this screen, and staying on it for the next offer — and the step
-          controls are pressed repeatedly, so they sit at the edge rather than shifting with the
-          length of the link beside them. */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
-          marginBottom: "1rem",
-        }}
-      >
-        <Link
-          href={offerListHref(collectionSlug, listContext)}
-          style={{
-            fontSize: "0.8125rem",
-            color: "var(--color-text-secondary)",
-            textDecoration: "none",
-          }}
-        >
-          ← Offers
-        </Link>
-        {/* Step through the filtered list without returning to it (#429). */}
-        {listContext && (
+      {/* The walk through the filtered list (#429), at the right edge: the step controls are pressed
+          repeatedly, so they stay put. There is no link back to the list (#1595) — the sidebar and
+          the browser's back do that — so an offer opened from anywhere else has no row here at all. */}
+      {listContext && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1rem" }}>
           <OfferListNav
             collectionId={collection.id}
             collectionSlug={collectionSlug}
             offerId={offerId}
             context={listContext}
           />
-        )}
-      </div>
+        </div>
+      )}
       <RecordRecentVisit
         collectionId={collection.id}
         kind="offer"
