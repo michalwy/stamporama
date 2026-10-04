@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -70,6 +70,7 @@ import type { CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-t
 import { useIssueMembers, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, pickedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
+import { usePickerTreeState, type PickerTree } from "./use-picker-tree-state";
 import { PhotoThumb } from "./photo-thumb";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
@@ -243,6 +244,9 @@ export function StampPickerBrowser({
     enabled: !!issueRun,
   });
   const [justCreatedIssueId, setJustCreatedIssueId] = useState<string | null>(null);
+  // Which issues and checklist branches are open, and the issue last picked from (#1616): one
+  // remembered state for every use of the picker, so reopening it shows the tree it was left on.
+  const pickerTree = usePickerTreeState(collectionId);
   const [isPending, startTransition] = useTransition();
   const askUmbrella = useUmbrellaPricesQuestion();
   const { invalidatePickerData } = useInvalidateInventory();
@@ -380,7 +384,12 @@ export function StampPickerBrowser({
     startTransition(async () => {
       const result = await createIssueAction(collectionId, newAreaId, fd);
       if (result.status === "success") {
-        if (result.issueId) setJustCreatedIssueId(result.issueId);
+        if (result.issueId) {
+          setJustCreatedIssueId(result.issueId);
+          // A new issue opens on its (empty) tree, where its first stamp is added — and, like any
+          // issue opened, it stays open the next time the picker is.
+          pickerTree.setIssueExpanded(result.issueId, true);
+        }
         setCreate(null);
         setCreateError(undefined);
         invalidatePickerData(collectionId);
@@ -493,6 +502,7 @@ export function StampPickerBrowser({
               isFetchingMore={isFetchingNextPage}
               onLoadMore={fetchNextPage}
               justCreatedIssueId={justCreatedIssueId}
+              pickerTree={pickerTree}
               onPick={onPick}
               onPickIssue={onPickIssue}
               issueRun={issueRun}
@@ -626,6 +636,7 @@ function IssueBrowser({
   isFetchingMore,
   onLoadMore,
   justCreatedIssueId,
+  pickerTree,
   onPick,
   onPickIssue,
   issueRun,
@@ -654,6 +665,8 @@ function IssueBrowser({
   isFetchingMore: boolean;
   onLoadMore: () => void;
   justCreatedIssueId: string | null;
+  /** The remembered tree (#1616): what is open, and the issue last picked from. */
+  pickerTree: PickerTree;
   onPick: (picked: PickedStamp) => void;
   onPickIssue?: (picked: PickedIssue) => void;
   /** Browsing for the checklist a run of tiles is identified as (#1220, #1225). */
@@ -682,6 +695,52 @@ function IssueBrowser({
   // choice (#1520), so it is made once and read the same on both.
   const [checklistDisplay, setChecklistDisplay] = useChecklistDisplayMode(collectionId);
 
+  const expandedIds = useMemo(
+    () => new Set(pickerTree.state.expanded),
+    [pickerTree.state.expanded]
+  );
+
+  // **The picker opens on the issue last picked from** (#1616), so the branch left open is on screen
+  // rather than somewhere down the list. Once per open, on the first rows drawn: an issue not among
+  // them (filtered out, or on a page not loaded yet) is not chased — jumping there later, as the
+  // collector scrolls, would move the list under them.
+  //
+  // The issues above it may still be loading the trees they were left open on, and each one that
+  // arrives pushes the row down; the browser's scroll anchoring holds it where it is, but not every
+  // browser anchors, so the row is also **pinned** while the list settles — until the collector
+  // touches the list, after which where it is scrolled is theirs.
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollSpent = useRef(false);
+  const releasePin = useRef<(() => void) | null>(null);
+  const lastPickedIssueId = pickerTree.state.lastPickedIssueId;
+  useEffect(() => {
+    if (isLoading || scrollSpent.current) return;
+    scrollSpent.current = true;
+    const list = listRef.current;
+    const row =
+      list && lastPickedIssueId
+        ? list.querySelector<HTMLElement>(`[data-picker-issue="${CSS.escape(lastPickedIssueId)}"]`)
+        : null;
+    if (!list || !row) return;
+    const observer = new ResizeObserver(() => pin());
+    const release = () => {
+      observer.disconnect();
+      releasePin.current = null;
+      for (const type of RELEASE_EVENTS) list.removeEventListener(type, release);
+    };
+    function pin() {
+      if (!row!.isConnected) return release();
+      list!.scrollTop += row!.getBoundingClientRect().top - list!.getBoundingClientRect().top;
+    }
+    pin();
+    if (list.firstElementChild) observer.observe(list.firstElementChild);
+    for (const type of RELEASE_EVENTS) list.addEventListener(type, release, { passive: true });
+    releasePin.current = release;
+    return release;
+  }, [isLoading, lastPickedIssueId]);
+  // A new search or area is the collector moving on too: the list is theirs from there.
+  useEffect(() => () => releasePin.current?.(), [filter, selectedAreaId]);
+
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) {
     // Browsing for a checklist (#1225): the stamp pressed picks one only where that says which — the
     // row's only checklist, or the only one of the row's that holds this stamp. Otherwise the press
@@ -694,9 +753,13 @@ function IssueBrowser({
           : node.checklistIds.includes(c.id)
       );
       const picked = options.length === 1 ? options[0] : holding.length === 1 ? holding[0] : null;
-      if (picked) issueRun.onPick(picked.id, issue);
+      if (picked) {
+        pickerTree.setLastPickedIssue(issue.id);
+        issueRun.onPick(picked.id, issue);
+      }
       return;
     }
+    pickerTree.setLastPickedIssue(issue.id);
     const vm = vendorMapFor(issue.collectionAreaId, issue.id);
     const labels = pickedCatalogLabels(
       node.catalogNumbers,
@@ -748,7 +811,7 @@ function IssueBrowser({
           + New issue
         </button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+      <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
         {isLoading ? (
           <p style={HINT_STYLE}>Loading issues…</p>
         ) : issues.length === 0 ? (
@@ -756,7 +819,7 @@ function IssueBrowser({
             {search ? "No issues match your filter." : "No issues here yet."}
           </p>
         ) : (
-          <>
+          <div>
           {issues.map((issue, i) => (
             <PickIssueRow
               key={issue.id}
@@ -767,7 +830,10 @@ function IssueBrowser({
               vendorMap={vendorMapFor(issue.collectionAreaId, issue.id)}
               primaryVendorId={primaryVendorByArea.get(issue.collectionAreaId) ?? null}
               isLast={i === issues.length - 1 && !hasMore}
-              defaultExpanded={issue.id === justCreatedIssueId}
+              userExpanded={expandedIds.has(issue.id)}
+              onSetExpanded={(open) => pickerTree.setIssueExpanded(issue.id, open)}
+              branchToggles={pickerTree.state.branches[issue.id] ?? NO_BRANCH_TOGGLES}
+              onSetBranch={(key, open) => pickerTree.setBranchOpen(issue.id, key, open)}
               justAdded={issue.id === justCreatedIssueId}
               search={search}
               checklistDisplay={checklistDisplay}
@@ -779,14 +845,18 @@ function IssueBrowser({
                   ? {
                       tileCount: issueRun.tileCount,
                       checklists: runChecklistOptions(issue, spanningChecklists),
-                      onPick: (checklistId) => issueRun.onPick(checklistId, issue),
+                      onPick: (checklistId) => {
+                        pickerTree.setLastPickedIssue(issue.id);
+                        issueRun.onPick(checklistId, issue);
+                      },
                       onNewChecklist: () => onNewChecklist(issue),
                     }
                   : undefined
               }
               onPickIssue={
                 onPickIssue
-                  ? (checklist) =>
+                  ? (checklist) => {
+                      pickerTree.setLastPickedIssue(issue.id);
                       onPickIssue({
                         checklistId: checklist.id,
                         label:
@@ -794,7 +864,8 @@ function IssueBrowser({
                             ? `${issueLabel(issue.name, issue.year)} — ${checklist.name}`
                             : issueLabel(issue.name, issue.year),
                         requiredCount: checklist.stampCount,
-                      })
+                      });
+                    }
                   : undefined
               }
               onNewStamp={() => onNewStamp(issue)}
@@ -807,7 +878,7 @@ function IssueBrowser({
             hasMore={hasMore}
             isLoading={isFetchingMore}
           />
-          </>
+          </div>
         )}
       </div>
     </>
@@ -827,6 +898,12 @@ const RUN_BUTTON_STYLE: React.CSSProperties = {
   cursor: "pointer",
   whiteSpace: "nowrap",
 };
+
+/** What ends the scroll-to-last-picked pin (#1616): the collector's own hand on the list. */
+const RELEASE_EVENTS = ["wheel", "pointerdown", "keydown", "touchstart"] as const;
+
+/** No branch toggled by hand — one object, so a row's props hold across renders. */
+const NO_BRANCH_TOGGLES: Record<string, boolean> = {};
 
 /** No checklist narrowing — one array, so the tree's memo holds across renders. */
 const NO_CHECKLIST_IDS: string[] = [];
@@ -910,7 +987,10 @@ function PickIssueRow({
   vendorMap,
   primaryVendorId,
   isLast,
-  defaultExpanded,
+  userExpanded,
+  onSetExpanded,
+  branchToggles,
+  onSetBranch,
   justAdded,
   search,
   checklistDisplay,
@@ -930,7 +1010,12 @@ function PickIssueRow({
   vendorMap: VendorMap;
   primaryVendorId: string | null;
   isLast: boolean;
-  defaultExpanded: boolean;
+  /** Whether the collector has this issue open (#1616) — remembered across opens of the picker. */
+  userExpanded: boolean;
+  onSetExpanded: (open: boolean) => void;
+  /** The branches opened or closed by hand, by checklist id (`none` for the off-checklist one). */
+  branchToggles: Record<string, boolean>;
+  onSetBranch: (key: string, open: boolean) => void;
   /** Flash this row once right after the issue is created inline (#158). */
   justAdded: boolean;
   /** The search the page was fetched with, empty when there is none. The row decides for itself
@@ -957,7 +1042,6 @@ function PickIssueRow({
   onNewVariant: (parent: StampNodeData) => void;
   onNewVariantRange: (parent: StampNodeData) => void;
 }) {
-  const [userExpanded, setUserExpanded] = useState(defaultExpanded);
   const [hovered, setHovered] = useState(false);
   // Where the row's own name/year/number does not account for the search that returned it, the hit
   // must have come from a stamp inside — so this row reads its stamps even while collapsed, which
@@ -1012,12 +1096,20 @@ function PickIssueRow({
 
   // Which branches are open: collapsed by default, open while the search narrowed the tree (#631's
   // reason — a match behind a collapsed arrow is a match nobody sees). The collector's own toggle
-  // wins either way, and lasts while the issue stays open.
-  const [branchToggles, setBranchToggles] = useState<Record<string, boolean>>({});
-  const branchOpen = (key: string) => branchToggles[key] ?? !!matchedStampIds;
+  // wins either way, and lasts while the issue stays open — across opens of the picker since #1616;
+  // folding the issue forgets them.
+  // A row only the search opened is not the collector's to remember, so its branches are held here,
+  // for as long as the row is on screen, as every branch was before.
+  const [searchBranchToggles, setSearchBranchToggles] = useState<Record<string, boolean>>({});
+  const toggles = userExpanded ? branchToggles : searchBranchToggles;
+  const branchOpen = (key: string) => toggles[key] ?? !!matchedStampIds;
+  const toggleBranch = (key: string) => {
+    if (userExpanded) onSetBranch(key, !branchOpen(key));
+    else setSearchBranchToggles((prev) => ({ ...prev, [key]: !branchOpen(key) }));
+  };
   const toggleIssue = () => {
-    if (isExpanded) setBranchToggles({});
-    setUserExpanded(!isExpanded);
+    if (isExpanded) setSearchBranchToggles({});
+    onSetExpanded(!isExpanded);
   };
 
   // The branch headings' completeness, the Issues list's own read under its own key, so the two
@@ -1091,7 +1183,10 @@ function PickIssueRow({
   );
 
   return (
-    <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
+    <div
+      data-picker-issue={issue.id}
+      style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}
+    >
       <div
         className={justAdded ? "just-added-flash" : undefined}
         onMouseEnter={() => setHovered(true)}
@@ -1286,9 +1381,7 @@ function PickIssueRow({
                         tokens={checklist ? checklistColors.get(checklist.id) : undefined}
                         headline={checklist ? checklistHeadlines?.[checklist.id] : undefined}
                         open={branchOpen(key)}
-                        onToggle={() =>
-                          setBranchToggles((prev) => ({ ...prev, [key]: !branchOpen(key) }))
-                        }
+                        onToggle={() => toggleBranch(key)}
                         // The picker's own checklist presses, not the Issues list's `⋮`: the
                         // picker is for choosing (#1585).
                         actions={

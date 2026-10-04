@@ -624,6 +624,13 @@ beside **Add copy**. Both are gone; what you had on that screen is now on an ope
      matched on its **own** name, year or number shows its whole tree, so nothing is ever hidden
      from a plain browse.
 
+     The picker also remembers **which issues you had open**, and which of their checklist
+     branches, so it reopens on the tree you left — scrolled to the issue you last picked from.
+     That memory is one for every place the picker opens (identifying a scan tile, adding a copy,
+     a lot, a trade or an auction lot), kept per collection in this browser, and it survives a
+     reload. A search leaves it alone: an issue the search opened for you is not remembered, and
+     clearing the search shows the tree as it was. Folding an issue forgets its branches.
+
      The issue list loads **as you scroll**, like the Issues screen, and the area, year and
      search filters all narrow it before it is fetched — so the picker opens just as quickly on
      a collection of thousands of issues as on a small one. An issue's stamps are read when you
