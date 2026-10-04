@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { TagSummary } from "@/lib/tags";
 import { tagColorTokens } from "@/lib/tag-colors";
 import {
   addTagEntry,
@@ -151,28 +150,51 @@ export function TagEntryField({
   inputId,
   initialTags,
   disabled,
+  onChange,
+  hint = "Separate tags with a space. A name that is not a tag yet becomes one when you save.",
 }: {
   collectionId: string;
   /** The hidden field the save action reads — `issueTags`, `stampTags` or `copyTags`, so no action
-   *  can ever pick up another dialog's chips from a form it was handed. */
-  name: string;
+   *  can ever pick up another dialog's chips from a form it was handed. Null for a field whose
+   *  caller reads it through `onChange` — one of several in a form, as a run's are (#1599). */
+  name: string | null;
   inputId?: string;
-  /** The tags on the thing now: empty when adding. `undefined` while they are still loading, and
-   *  then **no field is submitted at all**, so a save made before they arrive leaves them alone. */
-  initialTags: TagSummary[] | undefined;
+  /** The tags on the thing now: empty when adding — or, identifying a scan tile, the tags marked on
+   *  it (#1599). `undefined` while they are still loading, and then **no field is submitted at
+   *  all**, so a save made before they arrive leaves them alone. */
+  initialTags: readonly TagEntry[] | undefined;
   disabled: boolean;
+  /** Raised when what a Save would carry changes — never for the tags the field opened on. */
+  onChange?: (entries: TagEntry[]) => void;
+  /** The line under the field, or null for none — a run's per-tile field sits under its own. */
+  hint?: string | null;
 }) {
   const queryClient = useQueryClient();
   const { data: dictionary = [] } = useCollectionTags(collectionId);
-  const [entries, setEntries] = useState<TagEntry[] | undefined>(initialTags);
+  const [entries, setEntries] = useState<TagEntry[] | undefined>(() =>
+    initialTags === undefined ? undefined : [...initialTags]
+  );
   // Seeded once, when the stored tags arrive — never re-synced after that, or a background refresh
   // of the row would throw away what the collector has typed so far.
-  if (entries === undefined && initialTags !== undefined) setEntries(initialTags);
+  if (entries === undefined && initialTags !== undefined) setEntries([...initialTags]);
   const [text, setText] = useState("");
 
   // What a Save carries: the chips plus whatever is still in the text field, so a last name typed
   // with no space after it is not lost to the Save button.
   const submitted = entries === undefined ? undefined : commitTagInput(entries, text, dictionary);
+
+  // Reported to a caller that reads the field rather than its form, on a change only.
+  const submittedJson = JSON.stringify(submitted);
+  const reported = useRef(submittedJson);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+  useEffect(() => {
+    if (reported.current === submittedJson) return;
+    reported.current = submittedJson;
+    if (submittedJson !== undefined) onChangeRef.current?.(JSON.parse(submittedJson) as TagEntry[]);
+  }, [submittedJson]);
 
   // A tag born by this dialog's save is in the dictionary every other surface reads — the next
   // dialog's suggestions, the tag filters, the bulk edit — and they read it through one cached query.
@@ -301,11 +323,9 @@ export function TagEntryField({
             disabled={disabled}
           />
         </div>
-        <input type="hidden" name={name} value={JSON.stringify(submitted)} />
+        {name && <input type="hidden" name={name} value={submittedJson} />}
       </div>
-      <p style={HINT_STYLE}>
-        Separate tags with a space. A name that is not a tag yet becomes one when you save.
-      </p>
+      {hint && <p style={HINT_STYLE}>{hint}</p>}
     </div>
   );
 }

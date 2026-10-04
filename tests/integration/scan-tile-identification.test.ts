@@ -1466,6 +1466,35 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.deepEqual(await faultIdsOf(outcomes[1].itemId), [], "a tile without faults gets none");
   });
 
+  it("gives each copy of a run the tags it was handed, a typed tag born once (#1599)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const { checklistId, stampIds } = await issueWithStamps(["Tagged 1", "Tagged 2"]);
+    const shared = await prisma.tag.create({ data: { collectionId, name: `run-${Math.random()}` } });
+    const typed = `typed-${Math.random()}`;
+    const outcomes = await identifyTilesAsChecklistStamps(userId, {
+      checklistId,
+      shared: runShared(),
+      tiles: [
+        {
+          tileId: tileIds[0],
+          stampId: stampIds[0],
+          tags: [
+            { id: shared.id, name: shared.name, color: null },
+            { id: null, name: typed, color: null },
+          ],
+        },
+        { tileId: tileIds[1], stampId: stampIds[1], tags: [{ id: null, name: typed, color: null }] },
+      ],
+    });
+    const tagNamesOf = async (itemId: string) =>
+      (await prisma.itemTag.findMany({ where: { itemId }, select: { tag: { select: { name: true } } } }))
+        .map((t) => t.tag.name)
+        .sort();
+    assert.deepEqual(await tagNamesOf(outcomes[0].itemId), [shared.name, typed].sort());
+    assert.deepEqual(await tagNamesOf(outcomes[1].itemId), [typed], "the tile dropped the run's tag");
+    assert.equal(await prisma.tag.count({ where: { collectionId, name: typed } }), 1);
+  });
+
   it("refuses the whole run before creating anything when any tile cannot be worked (#1220)", async () => {
     const { tileIds } = await orderWithTiles();
     const { checklistId, stampIds } = await issueWithStamps(["Only"]);

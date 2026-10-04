@@ -17,6 +17,8 @@ import {
   sameMark,
   seedFaults,
   seedField,
+  seedTags,
+  tagTogglePatch,
   unmarkedCounts,
   type TileMark,
 } from "../../src/lib/tile-marks";
@@ -379,5 +381,115 @@ describe("seedFaults — what the faults field opens on (#1558)", () => {
     assert.deepEqual(answers, [{ tileId: "t1", faultIds: ["a"] }]);
     assert.deepEqual(parseTileOwnAnswers(JSON.stringify(answers)), answers);
     assert.deepEqual(parseTileOwnAnswers(JSON.stringify([{ tileId: "t1", faultIds: [1, ""] }])), []);
+  });
+});
+
+// ── Tags (#1599) ────────────────────────────────────────────────────────────────────────────────
+
+const tagged = (conditionId: string | null, tagIds: string[]): TileMark => ({
+  conditionId,
+  certificateStatusId: null,
+  tagIds,
+});
+
+describe("tags in a mark (#1599)", () => {
+  it("are a mark on their own, and absent rather than empty on a mark without any", () => {
+    assert.deepEqual(normalizeMark({ tagIds: ["check"] }), tagged(null, ["check"]));
+    assert.deepEqual(normalizeMark({ conditionId: "mnh", tagIds: [] }), mark("mnh"));
+    assert.equal(normalizeMark({ tagIds: [""] }), null);
+  });
+  it("sit beside the faults without either replacing the other", () => {
+    assert.deepEqual(normalizeMark({ faultIds: ["crease"], tagIds: ["check"] }), {
+      conditionId: null,
+      certificateStatusId: null,
+      faultIds: ["crease"],
+      tagIds: ["check"],
+    });
+  });
+  it("are compared as a set", () => {
+    assert.equal(sameMark(tagged("mnh", ["a", "b"]), tagged("mnh", ["b", "a"])), true);
+    assert.equal(sameMark(tagged("mnh", ["a"]), mark("mnh")), false);
+  });
+  it("are added and removed by a patch, leaving everything else alone", () => {
+    assert.deepEqual(applyMarkPatch(tagged("mnh", ["a"]), { addTagIds: ["b"] }), tagged("mnh", ["a", "b"]));
+    assert.deepEqual(applyMarkPatch(tagged("mnh", ["a", "b"]), { removeTagIds: ["a"] }), tagged("mnh", ["b"]));
+    assert.equal(applyMarkPatch(tagged(null, ["a"]), { removeTagIds: ["a"] }), null);
+    assert.deepEqual(applyMarkPatch(tagged("mnh", ["a"]), { addFaultIds: ["crease"] }), {
+      ...tagged("mnh", ["a"]),
+      faultIds: ["crease"],
+    });
+  });
+  it("toggle: on every target lacking it, off when all carry it", () => {
+    assert.deepEqual(tagTogglePatch("a", [tagged(null, ["a"]), null]), { addTagIds: ["a"] });
+    assert.deepEqual(tagTogglePatch("a", [tagged(null, ["a"]), tagged("mh", ["a", "b"])]), {
+      removeTagIds: ["a"],
+    });
+  });
+  it("are cleared with the mark", () => {
+    const patch = clearMarkPatch([tagged("mnh", ["a"]), tagged(null, ["b"])]);
+    assert.deepEqual(patch, { conditionId: null, certificateStatusId: null, removeTagIds: ["a", "b"] });
+    assert.equal(applyMarkPatch(tagged("mnh", ["a"]), patch), null);
+  });
+  it("are never part of a fill", () => {
+    assert.deepEqual(fillPatch(null, { conditionId: "mnh", addTagIds: ["a"] }), { conditionId: "mnh" });
+  });
+  it("merge and pair as the union", () => {
+    assert.deepEqual(mergedMark([tagged("mng", ["a"]), tagged("mh", ["b"])]), tagged(null, ["a", "b"]));
+    const paired = pairedMark(
+      { mark: tagged(null, ["check"]), markedAt: at("2026-10-04T10:00:00Z") },
+      { mark: tagged(null, ["box"]), markedAt: null }
+    );
+    assert.deepEqual(paired.mark, tagged(null, ["check", "box"]));
+    assert.equal(paired.replaced, null);
+    assert.equal(paired.markedAt, null, "given just now beats the stored time");
+  });
+});
+
+describe("seedTags — what the tags field opens on (#1599)", () => {
+  it("opens on one tile's marked tags", () => {
+    assert.deepEqual(seedTags([{ tileId: "t1", tagIds: ["a", "b"] }]), {
+      tagIds: ["a", "b"],
+      origin: "marked",
+      keepers: [],
+    });
+  });
+  it("opens empty without marks — never on the last used", () => {
+    assert.deepEqual(seedTags([{ tileId: "t1", tagIds: [] }]), { tagIds: [], origin: null, keepers: [] });
+    assert.deepEqual(seedTags([]), { tagIds: [], origin: null, keepers: [] });
+  });
+  it("opens on the tags every tile shares, the tiles marked with more keeping those too", () => {
+    assert.deepEqual(
+      seedTags([
+        { tileId: "t1", tagIds: ["a", "b"] },
+        { tileId: "t2", tagIds: ["a"] },
+        { tileId: "t3", tagIds: ["c", "a"] },
+      ]),
+      {
+        tagIds: ["a"],
+        origin: "marked",
+        keepers: [
+          { tileId: "t1", tagIds: ["b"] },
+          { tileId: "t3", tagIds: ["c"] },
+        ],
+      }
+    );
+    assert.deepEqual(
+      seedTags([
+        { tileId: "t1", tagIds: ["a"] },
+        { tileId: "t2", tagIds: [] },
+      ]),
+      { tagIds: [], origin: null, keepers: [{ tileId: "t1", tagIds: ["a"] }] }
+    );
+  });
+  it("hands the keepers to the write, and the form carries them back", () => {
+    const none = { value: "", origin: null, keepers: [] };
+    const answers = keeperAnswers(none, none, undefined, {
+      tagIds: [],
+      origin: null,
+      keepers: [{ tileId: "t1", tagIds: ["a"] }],
+    });
+    assert.deepEqual(answers, [{ tileId: "t1", tagIds: ["a"] }]);
+    assert.deepEqual(parseTileOwnAnswers(JSON.stringify(answers)), answers);
+    assert.deepEqual(parseTileOwnAnswers(JSON.stringify([{ tileId: "t1", tagIds: [1, ""] }])), []);
   });
 });

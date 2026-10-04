@@ -723,7 +723,7 @@ export function ScanCutEditor({
               targets={selectedRegions.map((r) => r.mark)}
               disabled={selectedRegions.length === 0}
               ariaLabel="Mark the selected boxes"
-              hint="Mark the condition, certificate and faults of the selected boxes from the card in hand — or type the abbreviation"
+              hint="Mark the condition, certificate, faults and tags of the selected boxes from the card in hand — or type the abbreviation"
               triggerStyle={scanToolButtonStyle({ disabled: selectedRegions.length === 0 })}
               onPatch={markSelected}
               onOpenChange={setMarkMenuOpen}

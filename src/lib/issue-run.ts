@@ -4,6 +4,7 @@ import {
   type IntakeCatalogValue,
 } from "./intake-catalog-value";
 import type { FaultEntry } from "./fault-entry";
+import { tagEntryKey, type TagEntry } from "./tag-entry";
 
 /**
  * *Identify ticked tiles as the stamps of a checklist, in turn* (#1220, #1225) — the pure half.
@@ -495,6 +496,66 @@ export interface IssueRunTile {
    * one piece. The copy dialog's chips, so a typed name becomes a fault; opened on the tile's marks.
    */
   faults?: readonly FaultEntry[] | null;
+  /**
+   * The copy's tags (#1599), **as decided**: the run's shared tags, with the ones the tile dropped
+   * taken off and its own added ({@link runTileTags}). The copy dialog's chips, so a typed name
+   * becomes a tag.
+   */
+  tags?: readonly TagEntry[] | null;
+}
+
+/**
+ * A tile's own tags in a run (#1599): the tags it **adds** to the run's shared ones, and the shared
+ * ones it **drops** for itself. Kept as a difference rather than as the tile's whole list, so a shared
+ * tag set after the tile was edited still reaches it.
+ */
+export interface RunTileOwnTags {
+  add: readonly TagEntry[];
+  drop: readonly string[];
+}
+
+/** The tags a run tile's copy is created with: the shared ones it did not drop, then its own. */
+export function runTileTags(
+  shared: readonly TagEntry[],
+  own: RunTileOwnTags | null | undefined
+): TagEntry[] {
+  const drop = new Set(own?.drop ?? []);
+  const out = shared.filter((t) => !drop.has(tagEntryKey(t)));
+  for (const t of own?.add ?? []) {
+    if (!out.some((o) => tagEntryKey(o) === tagEntryKey(t))) out.push(t);
+  }
+  return out;
+}
+
+/**
+ * The difference a tile's tag field makes against the run's shared tags (#1599) — what it adds and
+ * which shared ones it drops — when the collector edits the tile's own field, which shows its whole
+ * list.
+ */
+export function ownTagsFrom(
+  shared: readonly TagEntry[],
+  tileTags: readonly TagEntry[]
+): RunTileOwnTags {
+  const sharedKeys = new Set(shared.map(tagEntryKey));
+  const tileKeys = new Set(tileTags.map(tagEntryKey));
+  return {
+    add: tileTags.filter((t) => !sharedKeys.has(tagEntryKey(t))),
+    drop: [...sharedKeys].filter((k) => !tileKeys.has(k)),
+  };
+}
+
+/** Whether a tile's own tags still change anything against the shared ones — its row then says
+ * *own tags*. A tag it adds that the run has since been given, or drops that the run no longer
+ * has, changes nothing. */
+export function hasOwnTags(
+  shared: readonly TagEntry[],
+  own: RunTileOwnTags | null | undefined
+): boolean {
+  if (!own) return false;
+  const sharedKeys = new Set(shared.map(tagEntryKey));
+  return (
+    own.add.some((t) => !sharedKeys.has(tagEntryKey(t))) || own.drop.some((k) => sharedKeys.has(k))
+  );
 }
 
 export interface IssueRunIdentification {

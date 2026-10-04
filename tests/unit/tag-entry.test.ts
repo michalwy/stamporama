@@ -7,6 +7,8 @@ import {
   parseTagEntries,
   splitTagInput,
   suggestTags,
+  tagEntriesFrom,
+  tagEntryKey,
   type TagEntry,
 } from "../../src/lib/tag-entry";
 
@@ -146,5 +148,23 @@ describe("parseTagEntries", () => {
       { id: "t-birds", name: "Birds", color: "red" },
       { id: null, name: "swap", color: null },
     ]);
+  });
+});
+
+describe("tagEntriesFrom — a run's per-tile tags (#1599)", () => {
+  it("reads a JSON argument the way the form field is read", () => {
+    assert.equal(tagEntriesFrom("x"), undefined);
+    assert.equal(tagEntriesFrom(null), undefined);
+    assert.deepEqual(
+      tagEntriesFrom([{ id: "t1", name: "" }, { id: null, name: " Check ", color: "nope" }, {}]),
+      [
+        { id: "t1", name: "", color: null },
+        { id: null, name: "Check", color: null },
+      ]
+    );
+  });
+  it("keys a chip by its id, or by its lower-cased name when it is new", () => {
+    assert.equal(tagEntryKey({ id: "t1", name: "Check" }), "t1");
+    assert.equal(tagEntryKey({ id: null, name: "Check" }), "new:check");
   });
 });

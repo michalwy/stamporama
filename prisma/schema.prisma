@@ -896,6 +896,8 @@ model Tag {
   // The third thing a tag hangs on (#1181) — the physical piece, where the collector's own labels
   // are worth most. Nothing is inherited from the stamp a copy is linked to.
   copies     ItemTag[]
+  /** Tiles marked with this tag before they were identified (#1599). */
+  tileMarks  ScanTileTag[]
 
   // Names are unique within a collection and a duplicate is refused with a message rather than
   // silently merged (#152). A tag is found by reading its name, so two rows spelled the same are
@@ -4016,6 +4018,9 @@ model ScanTile {
   /** The faults marked on the tile before it is identified (#1558) — the third part of the mark
    * above, and seeding the identification dialogs the same way. */
   markFaults ScanTileFault[]
+  /** The tags marked on the tile before it is identified (#1599) — the mark's fourth part, seeding
+   * the identification dialogs as the faults do. */
+  markTags   ScanTileTag[]
 
   // The "a tile has at least one side" CHECK is declared in the migration SQL — Prisma cannot
   // express check constraints.
@@ -4048,6 +4053,24 @@ model ScanTileFault {
   @@id([tileId, faultId])
   @@index([faultId])
   @@map("scan_tile_fault")
+}
+
+// A tag marked on a tile before it is identified (#1599), beside its marked condition, certificate
+// and faults: *to check*, *for expertising*, *from the box grandfather left* are often known with the
+// card in hand. Like the rest of the mark it only seeds the identification dialogs.
+//
+// Cascade at both ends, as `ScanTileFault`: a mark is owed to nobody, so a tag deleted from the
+// dictionary takes its marks with it.
+model ScanTileTag {
+  tileId String
+  tagId  String
+
+  tile ScanTile @relation(fields: [tileId], references: [id], onDelete: Cascade)
+  tag  Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([tileId, tagId])
+  @@index([tagId])
+  @@map("scan_tile_tag")
 }
 
 // What a parked tile **could be** (#607) — the narrowing that discovering "this cannot be

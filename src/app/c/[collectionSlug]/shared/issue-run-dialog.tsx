@@ -29,10 +29,13 @@ import {
   overriddenFields,
   repeatedStamps,
   resolveRunCopyDetails,
+  hasOwnTags,
+  ownTagsFrom,
   runBlockers,
   runChoices,
   runPriceSubjects,
   runStart,
+  runTileTags,
   runValueSlots,
   runValueTabTarget,
   tilesOnUmbrella,
@@ -46,6 +49,7 @@ import {
   type RunCorrections,
   type RunDetailField,
   type RunRow,
+  type RunTileOwnTags,
 } from "@/lib/issue-run";
 import {
   useCollectionFormats,
@@ -66,10 +70,13 @@ import { catalogValueSubjectKey } from "@/lib/intake-catalog-value";
 import { HeldCopiesCompareDialog } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/held-copies-compare-dialog";
 import { IntakeHoldingsLine } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/intake-holdings-line";
 import { CREATE_LINK_STYLE, ROW_CHIP } from "./chip-styles";
-import { markFaultIds, sameFaults } from "@/lib/tile-marks";
+import { markFaultIds, markTagIds, sameFaults } from "@/lib/tile-marks";
 import type { FaultEntry } from "@/lib/fault-entry";
+import { tagEntryKey, type TagEntry } from "@/lib/tag-entry";
 import { FaultEntryField } from "./fault-entry-field";
+import { TagEntryField } from "./tag-entry-field";
 import { useCollectionFaults } from "./use-faults";
+import { useCollectionTags } from "./use-tags";
 import { CatalogNumberChips } from "./catalog-number-chips";
 import { CertificateStatusChip, ConditionChip } from "./dictionary-chip";
 import { NumericInput } from "./numeric-input";
@@ -343,6 +350,42 @@ export function IssueRunDialog({
   /** The faults a tile's copy is created with: the collector's, or the ones marked on the tile. */
   const faultsOf = (piece: IdentifiedPiece): FaultEntry[] =>
     faults.get(piece.tileId) ?? markFaultIds(piece.mark).map((id) => ({ id, name: "" }));
+  /**
+   * The run's tags (#1599) — reaching every tile, and starting empty: tags are never carried over
+   * from the previous identification (settled with the collector).
+   */
+  const [sharedTags, setSharedTags] = useState<TagEntry[]>([]);
+  /**
+   * A tile's own tags (#1599): what it adds to the run's and which of the run's it drops. **A tile's
+   * marked tags start here**, as its marked condition does in `overrides`, so its row says *own tags*.
+   */
+  const [ownTags, setOwnTags] = useState<ReadonlyMap<string, RunTileOwnTags>>(() => {
+    const seeded = new Map<string, RunTileOwnTags>();
+    for (const p of pieces) {
+      const marked = markTagIds(p.mark);
+      if (marked.length > 0) {
+        seeded.set(p.tileId, { add: marked.map((id) => ({ id, name: "", color: null })), drop: [] });
+      }
+    }
+    return seeded;
+  });
+  /** Tiles whose tags the collector has changed — until then a tile's own tags are its marks. */
+  const [tagsTouched, setTagsTouched] = useState<ReadonlySet<string>>(new Set());
+  /** Bumped by *As for all*, so the tile's field opens afresh on the run's tags. Never by an edit in
+   * the field itself, which reports half-typed words and must keep its text. */
+  const [tagResets, setTagResets] = useState(0);
+  const { data: tagDictionary } = useCollectionTags(collectionId);
+  /** The tags a tile's copy is created with: the run's, less what it drops, plus its own. */
+  const tagsOf = (piece: IdentifiedPiece): TagEntry[] =>
+    runTileTags(sharedTags, ownTags.get(piece.tileId));
+  /** Chips named and coloured from the dictionary — a marked tag arrives as its id alone, and one
+   * deleted since is left out. */
+  const namedTags = (entries: readonly TagEntry[]): TagEntry[] =>
+    entries.flatMap((t) => {
+      if (t.id === null) return [t];
+      const tag = tagDictionary?.find((d) => d.id === t.id);
+      return tag ? [{ id: tag.id, name: tag.name, color: tag.color }] : [];
+    });
   const inRun = pieces.filter((p) => !removed.has(p.tileId));
   const assignments = assignInTurn(
     inRun.map((p) => p.tileId),
@@ -696,6 +739,7 @@ export function IssueRunDialog({
         stampId: a.stampId,
         overrides: overrides.get(a.tileId) ?? null,
         faults: faultsOf(inRun[i]),
+        tags: tagsOf(inRun[i]),
       })),
     });
   }
@@ -1013,6 +1057,19 @@ export function IssueRunDialog({
                   />
                 </div>
               </div>
+              {/* The run's tags (#1599): every tile takes them, and a tile can add its own or drop
+                  one of these under its own details. Empty to start — never the last run's. */}
+              <div>
+                <LabelWithError htmlFor="run-tags">Tags (optional)</LabelWithError>
+                <TagEntryField
+                  collectionId={collectionId}
+                  name={null}
+                  inputId="run-tags"
+                  initialTags={[]}
+                  disabled={isPending}
+                  onChange={setSharedTags}
+                />
+              </div>
             </section>
 
             <section style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
@@ -1113,12 +1170,16 @@ export function IssueRunDialog({
                     tileFaults.map((f) => f.id ?? `new:${f.name}`),
                     markedFaults
                   );
+                const ownTagsHere = hasOwnTags(sharedTags, ownTags.get(piece.tileId));
+                const tagsFromMarks =
+                  ownTagsHere && !tagsTouched.has(piece.tileId) && markTagIds(piece.mark).length > 0;
                 const fromMarks =
                   (ownDetails?.conditionId !== undefined &&
                     ownDetails.conditionId === piece.mark?.conditionId) ||
                   (ownDetails?.certificateStatusId !== undefined &&
                     ownDetails.certificateStatusId === piece.mark?.certificateStatusId) ||
-                  faultsFromMarks;
+                  faultsFromMarks ||
+                  tagsFromMarks;
                 const isActive = piece.tileId === active?.tileId;
                 const sameAs = a.stampId
                   ? assignments
@@ -1131,7 +1192,12 @@ export function IssueRunDialog({
                 const notes = [
                   // A cleared tile says *No stamp*, which is the whole of it.
                   a.corrected && a.stampId ? "corrected" : null,
-                  own.length > 0 ? `own ${own.map((f) => FIELD_LABEL[f].toLowerCase()).join(", ")}` : null,
+                  own.length > 0 || ownTagsHere
+                    ? `own ${[
+                        ...own.map((f) => FIELD_LABEL[f].toLowerCase()),
+                        ...(ownTagsHere ? ["tags"] : []),
+                      ].join(", ")}`
+                    : null,
                   tileFaults.length > 0
                     ? `${tileFaults.length} ${tileFaults.length === 1 ? "fault" : "faults"}`
                     : null,
@@ -1537,8 +1603,8 @@ export function IssueRunDialog({
                     Everything follows <em>For all tiles</em> unless this tile has its own value — and
                     its own value stays when the shared one changes.
                   </p>
-                  {/* What describes the piece first, then its faults with it, then where it goes
-                      (#1593). */}
+                  {/* What describes the piece first, then its faults and tags with it, then where it
+                      goes (#1593, #1599). */}
                   {fields
                     .filter((f) => RUN_PIECE_FIELDS.includes(f))
                     .map((field) => ownField(field, active.tileId))}
@@ -1588,6 +1654,87 @@ export function IssueRunDialog({
                       <p style={MUTED}>Loading…</p>
                     )}
                   </div>
+                  {/* The tile's tags (#1599): the run's, with its own added and any of the run's
+                      dropped — the field shows the whole of what the copy gets. Opened on the run's
+                      tags and the ones marked on the tile. */}
+                  {(() => {
+                    const tileId = active.tileId;
+                    const isOwn = hasOwnTags(sharedTags, ownTags.get(tileId));
+                    return (
+                      <div
+                        style={{
+                          padding: "0.375rem 0.5rem",
+                          borderRadius: "0.375rem",
+                          border: `1px solid ${isOwn ? "var(--color-accent)" : "var(--color-border)"}`,
+                          background: isOwn ? "var(--color-accent-soft)" : "transparent",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "baseline",
+                            gap: "0.375rem",
+                            fontSize: "0.8125rem",
+                            color: "var(--color-text-secondary)",
+                            marginBottom: "0.375rem",
+                          }}
+                        >
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <strong>Tags</strong>
+                            <span style={{ color: "var(--color-text-muted)" }}>
+                              {isOwn ? " — this tile's own" : " — as for all"}
+                            </span>
+                            <SeedOriginNote
+                              origin={
+                                isOwn && !tagsTouched.has(tileId) && markTagIds(active.mark).length > 0
+                                  ? "marked"
+                                  : null
+                              }
+                            />
+                          </span>
+                          {isOwn && (
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() => {
+                                setOwnTags((prev) => {
+                                  const next = new Map(prev);
+                                  next.delete(tileId);
+                                  return next;
+                                });
+                                setTagsTouched((prev) => new Set(prev).add(tileId));
+                                setTagResets((n) => n + 1);
+                              }}
+                              style={{ ...CREATE_LINK_STYLE, border: "none", padding: 0 }}
+                            >
+                              As for all
+                            </button>
+                          )}
+                        </div>
+                        {tagDictionary ? (
+                          <TagEntryField
+                            // Opened afresh when the run's tags change, so it always shows what
+                            // this tile's copy gets.
+                            key={`${tileId}|${sharedTags.map(tagEntryKey).join(",")}|${tagResets}`}
+                            collectionId={collectionId}
+                            name={null}
+                            inputId={`run-tags-${tileId}`}
+                            initialTags={namedTags(tagsOf(active))}
+                            disabled={isPending}
+                            hint={null}
+                            onChange={(entries) => {
+                              setOwnTags((prev) =>
+                                new Map(prev).set(tileId, ownTagsFrom(sharedTags, entries))
+                              );
+                              setTagsTouched((prev) => new Set(prev).add(tileId));
+                            }}
+                          />
+                        ) : (
+                          <p style={MUTED}>Loading…</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {fields
                     .filter((f) => !RUN_PIECE_FIELDS.includes(f))
                     .map((field) => ownField(field, active.tileId))}
