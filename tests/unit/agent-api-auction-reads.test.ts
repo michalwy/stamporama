@@ -54,6 +54,11 @@ function rowOf(overrides: Partial<WatchlistLotRow> = {}): WatchlistLotRow {
     notStamps: false,
     notStampsDescription: null,
     tags: [],
+    catalogValue: null,
+    catalogValueHigh: null,
+    recommendation: null,
+    conditionToSettle: false,
+    unsettledLines: [],
     ...overrides,
   };
 }

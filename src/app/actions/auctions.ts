@@ -30,6 +30,7 @@ import {
   type AuctionSettlementInput,
 } from "@/lib/auctions";
 import { resolvePurchaseContact } from "@/lib/contacts";
+import { normalizeLineCondition } from "@/lib/auction-line-condition";
 import {
   applyAuctionLotTagChanges,
   setAuctionLotTagEntries,
@@ -545,7 +546,14 @@ export interface AuctionLotLineRaw {
    * offers: it expands here into one line per stamp on it. Blank for a plain
    * stamp pick, and never set when editing — an edit turning one line into twelve is not an edit. */
   checklistId?: string;
+  /** The condition the line is settled at. Blank while it is not (#1623) — then one of
+   * {@link possibleConditionIds}, or unknown when {@link conditionUnknown} says so. */
   conditionId: string;
+  /** *MNH or MH*: the conditions the line may be in. A set of one is that condition. */
+  possibleConditionIds?: string[];
+  /** The listing does not say, and the line stands for any of the collection's conditions. Said
+   * explicitly, so a condition simply not picked is still refused rather than read as unknown. */
+  conditionUnknown?: boolean;
   /** Blank is **no certificate** — the unmarked default, as on a copy (ADR-0006 §2). */
   certificateStatusId: string;
   /** Blank is the single, which is not a dictionary row (ADR-0020). */
@@ -564,7 +572,11 @@ async function resolveLine(collectionId: string, raw: AuctionLotLineRaw) {
   if (!stampId && !checklistId) {
     return { ok: false as const, message: "Pick the stamp this line is about." };
   }
-  if (!raw.conditionId.trim()) {
+  const condition = normalizeLineCondition({
+    conditionId: raw.conditionId,
+    possibleConditionIds: raw.possibleConditionIds,
+  });
+  if (condition.conditionId === null && condition.possibleConditionIds.length === 0 && !raw.conditionUnknown) {
     return { ok: false as const, message: "Pick the condition this line is described in." };
   }
   const quantity = parseLotQuantity(raw.quantity);
@@ -587,7 +599,8 @@ async function resolveLine(collectionId: string, raw: AuctionLotLineRaw) {
     ok: true as const,
     inputs: stampIds.map((id) => ({
       stampId: id,
-      conditionId: raw.conditionId.trim(),
+      conditionId: condition.conditionId,
+      possibleConditionIds: condition.possibleConditionIds,
       certificateStatusId: raw.certificateStatusId.trim() || null,
       formatId: raw.formatId.trim() || null,
       quantity: quantity.value,

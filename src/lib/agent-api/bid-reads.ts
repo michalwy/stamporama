@@ -58,7 +58,10 @@ export interface AgentBidLine {
   readonly stampId: string;
   readonly stamp?: string;
   readonly catalogNumber?: string;
+  /** The grade, or — while it is not settled (#1623) — `MNH or MH` / `any grade`. */
   readonly condition: string;
+  /** The grades the line may be in when its grade is not settled; absent when it is one grade. */
+  readonly possibleConditions?: readonly string[];
   readonly certificate?: string;
   readonly format?: string;
   readonly quantity: number;
@@ -70,8 +73,11 @@ export interface AgentBidLine {
    */
   readonly anchoredOn?: "market" | "catalogue";
   /** What **one** of them is worth, in the answer's currency. Absent when the line is unanchored or
-   *  unconvertible — the two are told apart by {@link unconvertible}. */
+   *  unconvertible — the two are told apart by {@link unconvertible}. The **low** end while the grade
+   *  is not settled (#1623). */
   readonly unitValue?: string;
+  /** The top of that range — the highest grade's figure; absent when the line is one figure. */
+  readonly unitValueHigh?: string;
   /** There is a figure for this line and no rate carries it into the answer's currency. It is
    *  **not** unpriced: the value exists and cannot be summed. */
   readonly unconvertible?: true;
@@ -93,6 +99,16 @@ export interface AgentBidRecommendation {
   readonly currency: string;
   /** Below this the lot is a bargain. Absent exactly when {@link fair} is. */
   readonly floor?: AgentBidLevel;
+  /**
+   * The same three figures at the **top** of the range, when the grade is not settled (#1623) —
+   * every line at its highest grade, where {@link floor}, {@link fair} and {@link walkAway} take the
+   * lowest. Absent when the answer is one figure. Compare and bid against the low end.
+   */
+  readonly high?: {
+    readonly floor?: AgentBidLevel;
+    readonly fair?: AgentBidLevel;
+    readonly walkAway?: AgentBidLevel;
+  };
   /** What the recorded evidence says it is worth. */
   readonly fair?: AgentBidLevel;
   /** Past this it belongs to somebody else. */
@@ -127,6 +143,8 @@ function level(value: { allIn: string; bid: string | null } | null): AgentBidLev
  *  very vocabulary the agent sends values from. */
 export interface LineNaming {
   readonly condition: string;
+  /** The grades an unsettled line may be in (#1623); absent for one grade. */
+  readonly possibleConditions?: readonly string[];
   readonly certificate: string | null;
   readonly format: string | null;
 }
@@ -147,6 +165,8 @@ export function bidLine(
     catalogLabel: string | null;
     quantity: number;
     anchor: number | null;
+    /** The highest anchor over the grades the line may be in (#1623); absent reads as {@link anchor}. */
+    anchorHigh?: number | null;
     source: "market" | "catalogue" | null;
     unconvertible: boolean;
     market: { n: number } | null;
@@ -156,11 +176,19 @@ export function bidLine(
   naming: LineNaming
 ): AgentBidLine {
   const anchored = anchor.anchor !== null && !anchor.unconvertible;
+  const high =
+    anchored && anchor.anchorHigh != null && anchor.anchorHigh.toFixed(2) !== anchor.anchor!.toFixed(2)
+      ? anchor.anchorHigh.toFixed(2)
+      : undefined;
   return compact({
     stampId: anchor.stampId,
     stamp: anchor.stampName ?? undefined,
     catalogNumber: anchor.catalogLabel ?? undefined,
     condition: naming.condition,
+    possibleConditions:
+      naming.possibleConditions && naming.possibleConditions.length > 0
+        ? naming.possibleConditions
+        : undefined,
     certificate: naming.certificate ?? undefined,
     format: naming.format ?? undefined,
     quantity: anchor.quantity,
@@ -168,6 +196,7 @@ export function bidLine(
     // unanchored line carries a route it never took.
     anchoredOn: anchored && anchor.source !== null ? anchor.source : undefined,
     unitValue: anchored ? anchor.anchor!.toFixed(2) : undefined,
+    unitValueHigh: high,
     unconvertible: anchor.unconvertible ? (true as const) : undefined,
     marketSampleSize: anchor.market?.n,
     ratioBucket: anchor.source === "catalogue" ? anchor.ratio?.bucketLabel : undefined,
@@ -193,6 +222,11 @@ export function bidRecommendation(
       catalogueLines: number;
       unanchoredLines: number;
       unconvertibleLines: number;
+      high?: {
+        fair: { allIn: string; bid: string | null };
+        floor: { allIn: string; bid: string | null };
+        walkAway: { allIn: string; bid: string | null };
+      } | null;
     };
     unknownStampIds: readonly string[];
   },
@@ -212,6 +246,13 @@ export function bidRecommendation(
     floor: level(source.recommendation.floor),
     fair: level(source.recommendation.fair),
     walkAway: level(source.recommendation.walkAway),
+    high: source.recommendation.high
+      ? {
+          floor: level(source.recommendation.high.floor),
+          fair: level(source.recommendation.high.fair),
+          walkAway: level(source.recommendation.high.walkAway),
+        }
+      : undefined,
     floorPercent: source.band.bidFloorPercent,
     walkAwayPercent: source.band.bidCeilingPercent,
     premiumPercent: Number.isFinite(percent) ? percent : undefined,

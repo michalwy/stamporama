@@ -9,6 +9,7 @@ import { formatDay } from "./auction-format";
 import {
   useAuctionLotBidEvidence,
   type AuctionLotBidEvidenceView,
+  type LineAnchorView,
 } from "./use-auctions-query";
 
 // **Why a lot is worth what the recommendation says** (#511; ADR-0029 §8).
@@ -113,6 +114,7 @@ function LevelRow({
   label,
   hint,
   level,
+  high = null,
   emphasis,
   onPick,
 }: {
@@ -120,6 +122,8 @@ function LevelRow({
   /** The percentage of `fair` this level was taken at; absent on `fair` itself. */
   hint?: string;
   level: { allIn: string; bid: string | null } | null;
+  /** The top of the range while a line's condition is not settled (#1623) — stated, never bid. */
+  high?: { allIn: string; bid: string | null } | null;
   emphasis?: boolean;
   onPick?: (level: { allIn: string; bid: string }) => void;
 }) {
@@ -131,7 +135,10 @@ function LevelRow({
         {label}
         {hint && <span style={{ marginLeft: "0.3rem", opacity: 0.75 }}>{hint}</span>}
       </span>
-      <span style={emphasis ? AMOUNT : { ...AMOUNT, fontWeight: 500 }}>{level?.allIn ?? "—"}</span>
+      <span style={emphasis ? AMOUNT : { ...AMOUNT, fontWeight: 500 }}>
+        {level?.allIn ?? "—"}
+        {high && level ? <span style={{ fontWeight: 500, color: "var(--color-text-muted)" }}>–{high.allIn}</span> : null}
+      </span>
       <span style={{ ...AMOUNT, fontWeight: 500, color: "var(--color-text-muted)" }}>
         {level?.bid ?? "—"}
       </span>
@@ -183,7 +190,7 @@ function LineEvidence({
   line,
   baseCurrency,
 }: {
-  line: AuctionLotBidEvidenceView["lines"][number];
+  line: LineAnchorView;
   baseCurrency: string;
 }) {
   if (line.market) {
@@ -228,7 +235,11 @@ function LineRow({
   baseCurrency: string;
 }) {
   const name = line.catalogLabel ?? line.stampName ?? "Unnamed stamp";
-  const total = line.anchor === null ? null : (line.anchor * line.quantity).toFixed(2);
+  const low = line.anchor === null ? null : (line.anchor * line.quantity).toFixed(2);
+  // A range while the line's condition is not settled (#1623): lowest to highest over its conditions.
+  const high =
+    line.anchorHigh === null || line.anchor === null ? null : (line.anchorHigh * line.quantity).toFixed(2);
+  const total = low === null ? null : high !== null && high !== low ? `${low}–${high}` : low;
   return (
     <div style={{ display: "flex", gap: "0.75rem", alignItems: "baseline" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -237,7 +248,9 @@ function LineRow({
             {name}
           </span>
           <span style={MUTED}>
-            {line.conditionAbbreviation}
+            <span style={line.conditionId === null ? { color: "var(--color-warning)" } : undefined}>
+              {line.conditionAbbreviation}
+            </span>
             {line.formatAbbreviation ? ` · ${line.formatAbbreviation}` : ""}
             {line.quantity > 1 ? ` · ×${line.quantity}` : ""}
           </span>
@@ -252,7 +265,21 @@ function LineRow({
             </Tooltip>
           )}
         </div>
-        <LineEvidence line={line} baseCurrency={baseCurrency} />
+        {line.conditions === null ? (
+          <LineEvidence line={line} baseCurrency={baseCurrency} />
+        ) : (
+          // Unknown or one of several (#1623): the rule is applied at each condition the line may be
+          // in, so the evidence is listed per condition — the range is the lowest and the highest.
+          line.conditions.map((answer) => (
+            <div key={answer.conditionId ?? answer.conditionAbbreviation} style={{ display: "flex", gap: "0.375rem" }}>
+              <span style={{ ...MUTED, flexShrink: 0 }}>{answer.conditionAbbreviation}:</span>
+              <LineEvidence line={answer} baseCurrency={baseCurrency} />
+              <span style={{ ...MUTED, marginLeft: "auto", whiteSpace: "nowrap" }}>
+                {answer.anchor === null ? "—" : (answer.anchor * answer.quantity).toFixed(2)}
+              </span>
+            </div>
+          ))
+        )}
       </div>
       <span
         style={{
@@ -481,11 +508,13 @@ export function BidRecommendationPopover({
                     label="floor"
                     hint={`${data.band.bidFloorPercent}%`}
                     level={data.recommendation.floor}
+                    high={data.recommendation.high?.floor ?? null}
                     onPick={pick?.("floor")}
                   />
                   <LevelRow
                     label="fair"
                     level={data.recommendation.fair}
+                    high={data.recommendation.high?.fair ?? null}
                     emphasis
                     onPick={pick?.("fair")}
                   />
@@ -493,6 +522,7 @@ export function BidRecommendationPopover({
                     label="walk-away"
                     hint={`${data.band.bidCeilingPercent}%`}
                     level={data.recommendation.walkAway}
+                    high={data.recommendation.high?.walkAway ?? null}
                     onPick={pick?.("walkAway")}
                   />
                 </div>
@@ -501,6 +531,12 @@ export function BidRecommendationPopover({
                     one decision, and three copies of the same sentence would read as three. */}
                 {pick && data.recommendation.fair !== null && (
                   <span style={MUTED}>Click a figure to bid it — your ceiling follows the bid.</span>
+                )}
+                {data.recommendation.high && (
+                  <span style={MUTED}>
+                    Some line&rsquo;s condition is still to settle, so each figure is a range from its
+                    lowest condition to its highest. A click bids the low end.
+                  </span>
                 )}
 
                 <div style={RULE} />

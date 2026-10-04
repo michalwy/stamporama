@@ -84,7 +84,10 @@ export interface LineAnchor {
   /** The leading catalog number, prefix-formatted (`Mi·PL 12`) — how a line is named on screen. */
   catalogLabel: string | null;
   stampName: string | null;
-  conditionId: string;
+  /** Null while the line's condition is not settled (#1623); {@link conditions} then holds an
+   * answer per condition it may be in. */
+  conditionId: string | null;
+  /** `MNH`, or `MNH or MH` / `Cond. ?` while unsettled. */
   conditionAbbreviation: string;
   certificateStatusId: string | null;
   formatId: string | null;
@@ -97,8 +100,14 @@ export interface LineAnchor {
   baseCurrency: string;
 
   /** What **one** of them is worth, in {@link currency} — the figure #509 sums. Null when the line
-   * is unanchored or unconvertible. */
+   * is unanchored or unconvertible. The **lowest** anchor over the possible conditions while the
+   * condition is not settled (#1623) — the cautious end, which is what is bid. */
   anchor: number | null;
+  /** The highest anchor over the possible conditions; equal to {@link anchor} on a settled line. */
+  anchorHigh: number | null;
+  /** The answer at each condition an unsettled line may be in, in the collection's order — what
+   * the popover lists under the line. Null on a settled line, which is its own one answer. */
+  conditions: LineAnchor[] | null;
   /** Which route produced it; null when neither could. */
   source: "market" | "catalogue" | null;
   /** An anchor exists and cannot be stated in {@link currency}. */
@@ -191,14 +200,95 @@ export async function loadAnchorContext(
  * and the lot screen's would diverge and nothing would ever go red over it.
  */
 export function anchorLine(line: AnchorableLine, context: AnchorContext): LineAnchor {
-  return resolveLine(line, {
-    baseCurrency: context.baseCurrency,
-    rate: context.rates.get(line.currency) ?? null,
-    market: findMarketValue(context.marketByStamp.get(line.stampId), line),
-    ratios: context.ratios,
-    owned: context.owned.get(stampConditionKey(line.stampId, line.conditionId)) ?? 0,
+  // The rule is applied **at each condition the line may be in**, never to the line's range as a
+  // whole (#1623): the market median is keyed on one condition and the ratio ladder buckets by one,
+  // so an unsettled line is several settled ones that are then stated as a range.
+  const each = line.conditions.map((condition) => {
+    const atCondition: SettledLine = {
+      ...line,
+      conditionId: condition.conditionId,
+      conditionAbbreviation: condition.conditionAbbreviation,
+      unitValue: condition.unitValue,
+      unpriced: condition.unpriced,
+      mark: condition.mark,
+      unconvertible: condition.unconvertible,
+    };
+    return resolveLine(atCondition, {
+      baseCurrency: context.baseCurrency,
+      rate: context.rates.get(line.currency) ?? null,
+      market: findMarketValue(context.marketByStamp.get(line.stampId), atCondition),
+      ratios: context.ratios,
+      owned: context.owned.get(stampConditionKey(line.stampId, condition.conditionId)) ?? 0,
+    });
   });
+  if (line.conditionId !== null && each.length === 1) return each[0];
+  return rangeOf(line, each);
 }
+
+/**
+ * An unsettled line's answers stated as one (#1623): the lowest anchor and the highest, over the
+ * possible conditions that could be anchored at all. A condition with no anchor is left out of the
+ * range rather than emptying it, the same rule the catalogue range follows; only when none is
+ * anchored is the line unanchored — or unconvertible, which is one fact for every condition.
+ *
+ * The rest of the line reads off the condition that set the **low** end, since that is the figure
+ * the recommendation is bid from and the evidence has to be the evidence for it. Copies already
+ * held are counted across every possible condition — shown, never computed with.
+ */
+function rangeOf(line: AnchorableLine, each: LineAnchor[]): LineAnchor {
+  const anchored = each.filter((answer): answer is LineAnchor & { anchor: number } => answer.anchor !== null);
+  const owned = each.reduce((sum, answer) => sum + answer.owned, 0);
+  const identity = {
+    conditionId: null,
+    conditionAbbreviation: line.conditionAbbreviation,
+    owned,
+    conditions: each,
+  };
+  if (anchored.length === 0) {
+    const unconvertible = each.some((answer) => answer.unconvertible);
+    const lead = each.find((answer) => answer.unconvertible) ?? each[0];
+    return {
+      ...(lead ?? emptyAnswer(line)),
+      ...identity,
+      anchor: null,
+      anchorHigh: null,
+      source: unconvertible ? (lead?.source ?? null) : null,
+      unconvertible,
+    };
+  }
+  const low = anchored.reduce((a, b) => (b.anchor < a.anchor ? b : a));
+  const high = anchored.reduce((a, b) => (b.anchor > a.anchor ? b : a));
+  return { ...low, ...identity, anchorHigh: high.anchor };
+}
+
+/** A line with no possible condition at all — a collection with no conditions configured. */
+function emptyAnswer(line: AnchorableLine): LineAnchor {
+  return {
+    stampId: line.stampId,
+    catalogLabel: line.catalogLabel,
+    stampName: line.stampName,
+    conditionId: null,
+    conditionAbbreviation: line.conditionAbbreviation,
+    certificateStatusId: line.certificateStatusId,
+    formatId: line.formatId,
+    formatAbbreviation: line.formatAbbreviation,
+    quantity: line.quantity,
+    currency: line.currency,
+    baseCurrency: line.currency,
+    anchor: null,
+    anchorHigh: null,
+    conditions: null,
+    source: null,
+    unconvertible: false,
+    market: null,
+    catalogueValue: null,
+    ratio: null,
+    owned: 0,
+  };
+}
+
+/** A line at one condition — what the anchoring rule itself reads. */
+type SettledLine = Omit<AnchorableLine, "conditionId"> & { conditionId: string };
 
 /**
  * Resolve the anchors for a whole page of lots.
@@ -260,7 +350,7 @@ export async function resolveAuctionLotAnchors(
  * on a figure describing something that was never sold. */
 function findMarketValue(
   values: StampMarketValue[] | undefined,
-  line: AnchorableLine
+  line: SettledLine
 ): StampMarketValue | null {
   if (!values) return null;
   const wanted = marketKeyOf(line);
@@ -276,8 +366,14 @@ interface LineContext {
   owned: number;
 }
 
-function resolveLine(line: AnchorableLine, context: LineContext): LineAnchor {
+function resolveLine(line: SettledLine, context: LineContext): LineAnchor {
+  const answer = resolveLineAt(line, context);
+  return { ...answer, anchorHigh: answer.anchor };
+}
+
+function resolveLineAt(line: SettledLine, context: LineContext): Omit<LineAnchor, "anchorHigh"> {
   const identity = {
+    conditions: null,
     stampId: line.stampId,
     catalogLabel: line.catalogLabel,
     stampName: line.stampName,
@@ -388,6 +484,7 @@ export function toBidLines(lines: LineAnchor[]): BidLine[] {
   return lines.map((line) => ({
     quantity: line.quantity,
     anchor: line.anchor,
+    anchorHigh: line.anchorHigh,
     source: line.source ?? "catalogue",
     unconvertible: line.unconvertible,
   }));

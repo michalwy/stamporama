@@ -25,6 +25,11 @@ import {
   type AuctionLotLineItem,
 } from "./auction-lines";
 import { collidingLotIds, type AtRiskLine } from "./auction-duplicates";
+import {
+  lineConditionCandidates,
+  lineConditionLabel,
+  normalizeLineCondition,
+} from "./auction-line-condition";
 import { offerUrlMatchClauses, urlNamesPlatformOffer } from "./platform-offer-url";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { readCollectionAreas } from "./areas";
@@ -93,6 +98,9 @@ export type AuctionBlockReason =
   // into it. Distinct because the first is answered on the lots and the second in the dialog.
   | "unresolved"
   | "no-lots"
+  // Settlement (#1623): a line in a lot going into the parcel still has its condition unknown or
+  // one of several, and no condition was picked for it.
+  | "condition-unsettled"
   // Capture (#355): no platform of this collection is marked as the marketplace the page came from.
   // Distinct from `no-platform`, which is a lot being written without one — here the collector named
   // nothing and nothing is missing from the page; a setting has simply not been made yet.
@@ -346,9 +354,23 @@ export interface AuctionLotListItem {
    * which would make the headroom below read as a catastrophic overbid on a lot nobody has priced.
    */
   catalogValue: string | null;
+  /**
+   * The top of the catalogue value's range when a line's condition is not settled (#1623), shown
+   * as *from–to* beside {@link catalogValue}, which is the low end. Null when the value is one
+   * figure. Nothing is bid from or compared against it — the low end is the cautious one.
+   */
+  catalogValueHigh: string | null;
   /** The value leans on a lowest-variant estimate (#238) — *inferred, not recorded*, and rendered
    * with the same `~` + italics vocabulary the issue list uses. */
   catalogUncertain: boolean;
+  /** Lines whose condition is unknown or one of several (#1623). */
+  unsettledLineCount: number;
+  /** The lot is **condition to settle** (#1623): some line's condition is unknown or one of several,
+   * so its figures are ranges, and it cannot be settled into a purchase until each line has one. */
+  conditionToSettle: boolean;
+  /** Those lines, named, with the conditions each may be in — what the agent's watchlist reports
+   * (#1623). `unknown` lines may be in any of the collection's conditions and list none. */
+  unsettledLines: { stamp: string; possibleConditions: string[]; unknown: boolean }[];
   /**
    * The highest hammer price whose all-in cost still fits inside {@link catalogValue} — what
    * *Bid catalogue value* (#371) actually places.
@@ -387,6 +409,8 @@ export interface AuctionLotListItem {
    * parcel and the sale's own total adds it once ({@link AuctionSaleSummary.headroom}).
    */
   headroom: string | null;
+  /** {@link headroom} at the top of the catalogue range (#1623); null when the value is one figure. */
+  headroomHigh: string | null;
   /**
    * The seller's premium as the sale carries it (ADR-0021 §1) — percentage and flat fee.
    *
@@ -528,7 +552,20 @@ function toLotListItem(
     notStamps: row.notStamps,
     notStampsDescription: row.notStampsDescription,
     catalogValue: composition?.catalogValue ?? null,
+    catalogValueHigh: composition?.catalogValueHigh ?? null,
     catalogUncertain: composition?.uncertain ?? false,
+    unsettledLineCount: composition?.unsettledLines ?? 0,
+    conditionToSettle: (composition?.unsettledLines ?? 0) > 0,
+    unsettledLines: (composition?.lines ?? [])
+      .filter((line) => line.conditionUnsettled)
+      .map((line) => ({
+        stamp: [line.catalogLabel, line.stampName].filter(Boolean).join(" ") || "Unnamed stamp",
+        possibleConditions:
+          line.possibleConditionIds.length === 0
+            ? []
+            : line.conditions.map((c) => c.conditionAbbreviation || c.conditionName),
+        unknown: line.possibleConditionIds.length === 0,
+      })),
     // Same inverse, same fees, same omission of shipping as `bidRoom` above — catalogue value is an
     // all-in figure and a bid box is not.
     catalogBidRoom: maxBidWithin(composition?.catalogValue ?? null, fees),
@@ -538,6 +575,10 @@ function toLotListItem(
     // Against the same costed figure `allIn` used — the settled price once the lot closed, else the
     // last observed bid — so the two figures on the row are always about the same money.
     headroom: headroom(composition?.catalogValue ?? null, money(costed), fees),
+    headroomHigh:
+      composition?.catalogValueHigh == null
+        ? null
+        : headroom(composition.catalogValueHigh, money(costed), fees),
     premiumPercent: fees.premiumPercent,
     premiumFixed: fees.premiumFixed,
     settled: row.purchaseLotId !== null || row.purchaseExpenseId !== null,
@@ -660,6 +701,9 @@ export interface AuctionLotFilters extends TagFilterOpts {
    * Expressible as a `where` (unlike a signal) because it asks nothing of the arithmetic: it is a
    * relation being empty, which is exactly what the badge on the row reads off `lineCount`. */
   undescribed?: boolean;
+  /** Only lots whose condition is still to settle (#1623) — some line unknown or one of several.
+   * A relation test like {@link undescribed}, so a `where` rather than a derived id list. */
+  conditionToSettle?: boolean;
   /** Only lots holding a stamp another lot **being won** also holds (#369). Derived like a signal
    * and for the same reason — it is a comparison across lots' compositions, which no `where` can
    * express — and hard matches only, so the chip means "on course to buy this twice" rather than
@@ -699,6 +743,7 @@ function lotListWhere(
   if (filters.outcome) and.push(outcomeWhere(filters.outcome));
   else if (!filters.includeClosed && !filters.saleId) and.push(outcomeWhere("pending"));
   if (filters.undescribed) and.push(UNDESCRIBED_WHERE);
+  if (filters.conditionToSettle) and.push(CONDITION_TO_SETTLE_WHERE);
   // Its own `AND` entry rather than a sibling key, for the same reason: the search is an `OR` over
   // several columns, and a second `OR` on the object would replace the outcome's rather than narrow
   // alongside it.
@@ -811,6 +856,12 @@ const UNDESCRIBED_WHERE: Prisma.AuctionLotWhereInput = {
   lines: { none: {} },
   status: { not: "cancelled" },
   notStamps: false,
+};
+
+/** The stored side of the *condition to settle* marker (#1623): a line with no settled condition,
+ * which is what the row's badge reads off its composition. */
+const CONDITION_TO_SETTLE_WHERE: Prisma.AuctionLotWhereInput = {
+  lines: { some: { conditionId: null } },
 };
 
 /** The rows a signal is computed over: every live lot the rest of the filters admit. Bounded by
@@ -1154,6 +1205,8 @@ export interface AuctionLotFilterCounts {
   closing: Record<AuctionClosingWindow, number>;
   /** Lots with nothing described yet (#442), under everything else selected. */
   undescribed: number;
+  /** Lots whose condition is still to settle (#1623), under everything else selected. */
+  conditionToSettle: number;
   /** Lots holding a stamp another lot being won also holds (#369), under everything else selected. */
   duplicate: number;
   /** Rows the list is actually showing — **every** filter applied, the derived ones included. */
@@ -1243,6 +1296,7 @@ export async function auctionLotFilterCounts(
     closingCounts,
     signalIds,
     undescribed,
+    conditionToSettle,
     duplicateCount,
     total,
     unfiltered,
@@ -1283,6 +1337,17 @@ export async function auctionLotFilterCounts(
         platformId,
         closing,
         undescribed: true,
+      }),
+    }),
+    // The same for *condition to settle* (#1623): ignoring its own selection.
+    prisma.auctionLot.count({
+      where: lotListWhere(collectionId, {
+        ...rest,
+        outcome,
+        sellerId,
+        platformId,
+        closing,
+        conditionToSettle: true,
       }),
     }),
     // Likewise ignoring its own selection. The collision set is resolved over every lot being won
@@ -1347,6 +1412,7 @@ export async function auctionLotFilterCounts(
       LOT_SIGNALS.map((s) => [s, signalIds[s].length])
     ) as Record<LotSignal, number>,
     undescribed,
+    conditionToSettle,
     duplicate: duplicateCount,
     total,
     allSellers: sumCounts(sellers),
@@ -1536,6 +1602,7 @@ function toSaleListItem(
         // `auction-lines.ts`, precisely so the parcel's totals never mix two.
         catalogValue: compositions.get(lot.id)?.catalogValue ?? null,
         notStamps: lot.notStamps,
+        catalogValueHigh: compositions.get(lot.id)?.catalogValueHigh ?? null,
       })),
       fees
     ),
@@ -2027,7 +2094,7 @@ export async function createAuctionLot(
               lines: {
                 create: lines.map((line) => ({
                   stampId: line.stampId,
-                  conditionId: line.conditionId,
+                  ...lineConditionCreate(line),
                   certificateStatusId: line.certificateStatusId,
                   formatId: line.formatId,
                   quantity: line.quantity,
@@ -2890,7 +2957,9 @@ async function lotCostingContext(
 export async function getAuctionLotComposition(
   ownerId: string,
   lotId: string
-): Promise<AuctionLotComposition & { allIn: string | null; headroom: string | null }> {
+): Promise<
+  AuctionLotComposition & { allIn: string | null; headroom: string | null; headroomHigh: string | null }
+> {
   const lot = await assertLotOwner(ownerId, lotId);
   const [context, compositions] = await Promise.all([
     lotCostingContext(lotId),
@@ -2903,6 +2972,10 @@ export async function getAuctionLotComposition(
     // from can never disagree about what the lot costs.
     allIn: allIn(context.costed, context.fees),
     headroom: headroom(composition.catalogValue, context.costed, context.fees),
+    headroomHigh:
+      composition.catalogValueHigh === null
+        ? null
+        : headroom(composition.catalogValueHigh, context.costed, context.fees),
   };
 }
 
@@ -2980,6 +3053,9 @@ const AT_RISK_SELECT = {
       certificateStatusId: true,
       formatId: true,
       condition: { select: { name: true, abbreviation: true } },
+      possibleConditions: {
+        select: { conditionId: true, condition: { select: { name: true, abbreviation: true } } },
+      },
       certificateStatus: { select: { name: true, abbreviation: true } },
       format: { select: { name: true, abbreviation: true } },
       stamp: {
@@ -3078,7 +3154,13 @@ async function atRiskLotLines(collectionId: string): Promise<AtRiskLine[]> {
         // through to a dash rather than the warning falling through to silence.
         stampLabel: catalogLabel ?? line.stamp.name ?? "—",
         conditionId: line.conditionId,
-        conditionLabel: line.condition.abbreviation || line.condition.name,
+        // `MNH or MH`, or unknown, while the line's condition is not settled (#1623).
+        conditionLabel: line.condition
+          ? line.condition.abbreviation || line.condition.name
+          : lineConditionLabel(
+              { conditionId: null, possibleConditionIds: line.possibleConditions.map((p) => p.conditionId) },
+              line.possibleConditions.map((p) => ({ id: p.conditionId, ...p.condition }))
+            ).short,
         formatId: line.formatId,
         formatLabel: line.format ? line.format.abbreviation || line.format.name : null,
         certificateStatusId: line.certificateStatusId,
@@ -3090,15 +3172,38 @@ async function atRiskLotLines(collectionId: string): Promise<AtRiskLine[]> {
   );
 }
 
+/** A line's condition as it is written (#1623): settled, or the set it may be in — empty for
+ * unknown. A set of one is that condition (`normalizeLineCondition`). */
+function lineConditionCreate(input: AuctionLotLineInput) {
+  const { conditionId, possibleConditionIds } = normalizeLineCondition(input);
+  return {
+    conditionId,
+    possibleConditions: { create: possibleConditionIds.map((id) => ({ conditionId: id })) },
+  };
+}
+
+/** The same for an edit, which replaces whatever set the line held. */
+function lineConditionUpdate(input: AuctionLotLineInput) {
+  const { conditionId, possibleConditionIds } = normalizeLineCondition(input);
+  return {
+    conditionId,
+    possibleConditions: {
+      deleteMany: {},
+      create: possibleConditionIds.map((id) => ({ conditionId: id })),
+    },
+  };
+}
+
 /** Verify the dictionary rows a line points at belong to this collection. Both FKs are `Restrict`,
  * and a stamp from another collection would otherwise be caught only by the database. */
 async function assertLineTargets(collectionId: string, input: AuctionLotLineInput): Promise<void> {
-  const [stamp, condition, certificate, format] = await Promise.all([
+  const { conditionId, possibleConditionIds } = normalizeLineCondition(input);
+  const conditionIds = conditionId !== null ? [conditionId] : possibleConditionIds;
+  const [stamp, conditions, certificate, format] = await Promise.all([
     prisma.stamp.findFirst({ where: { id: input.stampId, collectionId }, select: { id: true } }),
-    prisma.stampCondition.findFirst({
-      where: { id: input.conditionId, collectionId },
-      select: { id: true },
-    }),
+    conditionIds.length > 0
+      ? prisma.stampCondition.count({ where: { id: { in: conditionIds }, collectionId } })
+      : Promise.resolve(0),
     input.certificateStatusId
       ? prisma.certificateStatus.findFirst({
           where: { id: input.certificateStatusId, collectionId },
@@ -3113,8 +3218,10 @@ async function assertLineTargets(collectionId: string, input: AuctionLotLineInpu
       : Promise.resolve(null),
   ]);
   if (!stamp) throw new AuctionActionBlockedError("bad-line", "Pick the stamp this line is about.");
-  if (!condition) {
-    throw new AuctionActionBlockedError("bad-line", "Pick the condition this line is described in.");
+  // No condition at all is *unknown* (#1623), a real answer; a condition that resolved to nothing
+  // is not.
+  if (conditions !== conditionIds.length) {
+    throw new AuctionActionBlockedError("bad-line", "That condition no longer exists.");
   }
   // Null is "none" and needs no row (ADR-0006 §2 / ADR-0020); a non-null id that resolved to
   // nothing does.
@@ -3179,7 +3286,7 @@ export async function createAuctionLotLine(
     data: {
       auctionLotId: lotId,
       stampId: input.stampId,
-      conditionId: input.conditionId,
+      ...lineConditionCreate(input),
       certificateStatusId: input.certificateStatusId,
       formatId: input.formatId,
       quantity: input.quantity,
@@ -3237,7 +3344,7 @@ export async function updateAuctionLotLine(
     where: { id: lineId },
     data: {
       stampId: input.stampId,
-      conditionId: input.conditionId,
+      ...lineConditionUpdate(input),
       certificateStatusId: input.certificateStatusId,
       formatId: input.formatId,
       quantity: input.quantity,
@@ -3275,6 +3382,12 @@ export interface AuctionSettlementInput {
   shippingCost: number | null;
   /** The won lots going into this parcel, each at its confirmed line price. */
   lots: { lotId: string; price: number }[];
+  /**
+   * The condition each **unsettled** line of those lots turned out to be in (#1623) — one per line
+   * whose condition is unknown or one of several. A copy is one condition, so settling asks for it;
+   * the line is settled at it in the same transaction, which is what the copies are written from.
+   */
+  lineConditions?: { lineId: string; conditionId: string }[];
 }
 
 const SETTLEMENT_LOT_SELECT = {
@@ -3299,9 +3412,13 @@ const SETTLEMENT_LOT_SELECT = {
   purchaseExpenseId: true,
   _count: { select: { lines: true } },
   lines: {
+    // The order the composition editor shows — the copies are numbered in it.
+    orderBy: { id: "asc" },
     select: {
+      id: true,
       stampId: true,
       conditionId: true,
+      possibleConditions: { select: { conditionId: true } },
       certificateStatusId: true,
       formatId: true,
       quantity: true,
@@ -3410,6 +3527,46 @@ export async function settleAuctionSale(
     return { lot, price: line.price };
   });
 
+  // Every line going into the parcel needs one condition (#1623): a copy is one piece in one
+  // condition. A line that is still *MNH or MH*, or unknown, takes the one the dialog picked — and
+  // that pick must be among the conditions the line said it might be in.
+  const picked = new Map((input.lineConditions ?? []).map((p) => [p.lineId, p.conditionId]));
+  const collectionConditionIds = (
+    await prisma.stampCondition.findMany({
+      where: { collectionId: sale.collectionId },
+      select: { id: true },
+    })
+  ).map((condition) => condition.id);
+  const settledAt = new Map<string, string>();
+  let unsettled = 0;
+  for (const { lot } of selected) {
+    for (const line of lot.lines) {
+      if (line.conditionId !== null) continue;
+      const choice = picked.get(line.id);
+      const allowed = lineConditionCandidates(
+        { conditionId: null, possibleConditionIds: line.possibleConditions.map((p) => p.conditionId) },
+        collectionConditionIds
+      );
+      if (!choice) {
+        unsettled++;
+        continue;
+      }
+      if (!allowed.includes(choice)) {
+        throw new AuctionActionBlockedError(
+          "condition-unsettled",
+          "Pick one of the conditions that line was described as possibly being in."
+        );
+      }
+      settledAt.set(line.id, choice);
+    }
+  }
+  if (unsettled > 0) {
+    throw new AuctionActionBlockedError(
+      "condition-unsettled",
+      `${unsettled} line${unsettled === 1 ? " has" : "s have"} no settled condition yet. Pick the condition each stamp actually came in before settling.`
+    );
+  }
+
   const purchasedAt = new Date(`${input.purchasedAt}T00:00:00.000Z`);
   if (Number.isNaN(purchasedAt.getTime())) throw new Error("Invalid purchase date.");
 
@@ -3463,6 +3620,15 @@ export async function settleAuctionSale(
     const itemNos = await allocateItemNumbers(tx, sale.collectionId, copyCount);
     let nextNo = 0;
 
+    // The lines are settled at the conditions picked, so the lot reads afterwards exactly as what
+    // was bought — and leaves *condition to settle* behind.
+    for (const [lineId, conditionId] of settledAt) {
+      await tx.auctionLotLine.update({
+        where: { id: lineId },
+        data: { conditionId, possibleConditions: { deleteMany: {} } },
+      });
+    }
+
     for (const { lot, price } of selected) {
       // A *not stamps* lot (#1624) is bought, not collected: it becomes one of the purchase's
       // non-inventory lines (ADR-0009 §1) at its confirmed price, and no copy. Its share of the
@@ -3500,7 +3666,8 @@ export async function settleAuctionSale(
           collectionId: sale.collectionId,
           itemNo: itemNos[nextNo++],
           stampId: line.stampId,
-          conditionId: line.conditionId,
+          // Checked above: every line is settled, or has a condition picked for it.
+          conditionId: line.conditionId ?? settledAt.get(line.id)!,
           certificateStatusId: line.certificateStatusId,
           formatId: line.formatId,
           lotId: purchaseLot.id,

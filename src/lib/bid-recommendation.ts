@@ -87,6 +87,9 @@ export interface BidLine {
    * which is a different fact from having no price — reporting it as unanchored would send the
    * collector off to enter a value that is already there. */
   unconvertible: boolean;
+  /** The top of the line's range when its condition is not settled (#1623) — the highest anchor
+   * over its possible conditions, where {@link anchor} is the lowest. Absent on a settled line. */
+  anchorHigh?: number | null;
 }
 
 /** One of the three figures: the all-in valuation, and the bid to type to stay inside it. */
@@ -115,6 +118,13 @@ export interface BidRecommendation {
   unanchoredLines: number;
   /** Lines whose anchor cannot be expressed in the sale's currency. */
   unconvertibleLines: number;
+  /**
+   * The three figures at the **top** of the range when a line's condition is not settled (#1623) —
+   * every such line at its highest anchor, where {@link fair}, {@link floor} and {@link walkAway} take
+   * the lowest. Null when the recommendation is one figure. Everything that bids or compares reads
+   * the low end, the cautious one; this is shown beside it as *from–to*.
+   */
+  high: { fair: BidLevel; floor: BidLevel; walkAway: BidLevel } | null;
 }
 
 /** Round to cents once, at the end. Rounding each component separately would drift by a cent on a
@@ -147,6 +157,7 @@ export function recommendBid(
   fees: AuctionFees = {}
 ): BidRecommendation {
   let total = 0;
+  let totalHigh = 0;
   let marketLines = 0;
   let catalogueLines = 0;
   let unanchoredLines = 0;
@@ -166,6 +177,8 @@ export function recommendBid(
     if (line.source === "market") marketLines++;
     else catalogueLines++;
     total += line.anchor * count(line.quantity);
+    const high = line.anchorHigh ?? line.anchor;
+    totalHigh += (Number.isFinite(high) ? high : line.anchor) * count(line.quantity);
   }
 
   const anchored = marketLines + catalogueLines;
@@ -184,5 +197,13 @@ export function recommendBid(
     catalogueLines,
     unanchoredLines,
     unconvertibleLines,
+    high:
+      anchored > 0 && money(totalHigh) !== money(total)
+        ? {
+            fair: level(totalHigh, perLotFees),
+            floor: level((totalHigh * band.bidFloorPercent) / 100, perLotFees),
+            walkAway: level((totalHigh * band.bidCeilingPercent) / 100, perLotFees),
+          }
+        : null,
   };
 }

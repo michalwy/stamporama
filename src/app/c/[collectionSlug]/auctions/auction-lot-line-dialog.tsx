@@ -77,6 +77,13 @@ export interface LineSelectionSummary {
   label: string;
 }
 
+/** The condition select's two entries that are not a condition (#1623). */
+const ONE_OF = "__one-of";
+const UNKNOWN = "__unknown";
+
+/** Which of the three a line's condition is being entered as (#1623). */
+type ConditionMode = "one" | "oneOf" | "unknown";
+
 /** What the picker handed back: one stamp, or a whole checklist to expand into its stamps (#531). */
 type LineSelection =
   | { kind: "stamp"; stampId: string; picked: PickedStamp }
@@ -138,8 +145,14 @@ export function AuctionLotLineDialog({
   // remembered pair every add-copy entry point reads (#121, #234) — a collector describing a parcel
   // and one taking it in are answering the same question about the same material.
   const [conditionId, setConditionId] = useState(
-    () => line?.conditionId ?? readLast(LS_LAST_CONDITION, collectionId)
+    () => line?.conditionId ?? (line ? "" : readLast(LS_LAST_CONDITION, collectionId))
   );
+  // A listing often does not say (#1623): *Czysty* is MNH or MH. The line can then hold the set it
+  // may be in, or say it is unknown, rather than a guess — and is valued as a range.
+  const [conditionMode, setConditionMode] = useState<ConditionMode>(() =>
+    !line || line.conditionId !== null ? "one" : line.possibleConditionIds.length > 0 ? "oneOf" : "unknown"
+  );
+  const [possibleIds, setPossibleIds] = useState<string[]>(() => line?.possibleConditionIds ?? []);
   const [certificateStatusId, setCertificateStatusId] = useState(
     () => line?.certificateStatusId ?? readLast(LS_LAST_CERT, collectionId)
   );
@@ -148,6 +161,13 @@ export function AuctionLotLineDialog({
 
   // A remembered id that no longer exists in this collection must not silently select nothing.
   const validCondition = conditions.some((c) => c.id === conditionId) ? conditionId : "";
+  const validPossible = possibleIds.filter((id) => conditions.some((c) => c.id === id));
+  const conditionAnswered =
+    conditionMode === "one"
+      ? validCondition !== ""
+      : conditionMode === "oneOf"
+        ? validPossible.length >= 2
+        : true;
   const validCertificate = certificateStatuses.some((c) => c.id === certificateStatusId)
     ? certificateStatusId
     : "";
@@ -194,14 +214,17 @@ export function AuctionLotLineDialog({
     // their own form.
     e.stopPropagation();
     if (!selection) return;
-    writeLast(LS_LAST_CONDITION, collectionId, validCondition);
+    // Only a settled condition is remembered: *one of several* is about this listing, not a habit.
+    if (conditionMode === "one") writeLast(LS_LAST_CONDITION, collectionId, validCondition);
     writeLast(LS_LAST_CERT, collectionId, validCertificate);
     onSubmit(
       {
         stampId: selection.kind === "stamp" ? selection.stampId : "",
         checklistId:
           selection.kind === "checklist" ? selection.checklist.checklistId : undefined,
-        conditionId: validCondition,
+        conditionId: conditionMode === "one" ? validCondition : "",
+        possibleConditionIds: conditionMode === "oneOf" ? validPossible : [],
+        conditionUnknown: conditionMode === "unknown",
         certificateStatusId: validCertificate,
         formatId,
         quantity,
@@ -304,8 +327,16 @@ export function AuctionLotLineDialog({
               <LabelWithError htmlFor="lot-line-condition">Condition</LabelWithError>
               <select
                 id="lot-line-condition"
-                value={validCondition}
-                onChange={(e) => setConditionId(e.target.value)}
+                value={conditionMode === "oneOf" ? ONE_OF : conditionMode === "unknown" ? UNKNOWN : validCondition}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === ONE_OF) setConditionMode("oneOf");
+                  else if (value === UNKNOWN) setConditionMode("unknown");
+                  else {
+                    setConditionMode("one");
+                    setConditionId(value);
+                  }
+                }}
                 disabled={isPending}
                 style={{ ...INPUT_STYLE, cursor: "pointer" }}
               >
@@ -315,6 +346,8 @@ export function AuctionLotLineDialog({
                     {c.name} ({c.abbreviation})
                   </option>
                 ))}
+                <option value={ONE_OF}>One of several…</option>
+                <option value={UNKNOWN}>Unknown</option>
               </select>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -336,6 +369,47 @@ export function AuctionLotLineDialog({
               </select>
             </div>
           </div>
+
+          {conditionMode === "oneOf" && (
+            <fieldset
+              style={{ border: "none", margin: "0.75rem 0 0", padding: 0 }}
+              aria-label="Possible conditions"
+            >
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem 1rem" }}>
+                {conditions.map((c) => (
+                  <label
+                    key={c.id}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-primary)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={possibleIds.includes(c.id)}
+                      disabled={isPending}
+                      onChange={(e) =>
+                        setPossibleIds((ids) =>
+                          e.target.checked ? [...ids, c.id] : ids.filter((id) => id !== c.id)
+                        )
+                      }
+                    />
+                    {c.name} ({c.abbreviation})
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          {conditionMode !== "one" && (
+            <p style={{ ...NOTE, marginTop: "0.5rem" }}>
+              {conditionMode === "oneOf" ? "Tick at least two. " : "Any of your conditions. "}
+              Valued as a range, and the lot is marked <em>condition to settle</em> until each line has one.
+            </p>
+          )}
 
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -381,7 +455,7 @@ export function AuctionLotLineDialog({
 
         <DialogActions
           actionLabel={actionLabel}
-          disabled={isPending || !validCondition}
+          disabled={isPending || !conditionAnswered}
           error={error}
           onCancel={onClose}
           leading={

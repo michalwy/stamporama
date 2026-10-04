@@ -12,6 +12,7 @@ import {
 import { valuateItemRows, type ValuationRow } from "./item-valuation";
 import { getCollectionBaseCurrency } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { onlySettledLots, type SettledConditionLot } from "./auction-line-condition";
 
 // **What a stamp fetches, read out of the lots already recorded** (#456; ADR-0022 §7).
 //
@@ -138,7 +139,9 @@ const MARKET_LOT_SELECT = {
   },
 } satisfies Prisma.AuctionLotSelect;
 
-type MarketLotRow = Prisma.AuctionLotGetPayload<{ select: typeof MARKET_LOT_SELECT }>;
+type MarketLotPayload = Prisma.AuctionLotGetPayload<{ select: typeof MARKET_LOT_SELECT }>;
+/** A lot whose every line has its condition settled — the only kind that is evidence (#1623). */
+type MarketLotRow = SettledConditionLot<MarketLotPayload>;
 type MarketLineRow = MarketLotRow["lines"][number];
 
 /** How a key sorts on screen: the collector's own condition order first, then certificate, then
@@ -177,17 +180,24 @@ export async function readStampMarketValues(
   const wanted = new Set(stampIds);
   if (wanted.size === 0) return new Map();
 
-  const lots = await prisma.auctionLot.findMany({
-    where: {
-      // The filter is the lifecycle plus a price, and nothing else (ADR-0022 §2): the derived
-      // outcome is not consulted, so a lot that was won, lost or merely observed all count.
-      status: "closed",
-      finalPrice: { not: null },
-      auctionSale: { collectionId },
-      lines: { some: { stampId: { in: [...wanted] } } },
-    },
-    select: MARKET_LOT_SELECT,
-  });
+  const lots = onlySettledLots(
+    await prisma.auctionLot.findMany({
+      where: {
+        // The filter is the lifecycle plus a price, and nothing else (ADR-0022 §2): the derived
+        // outcome is not consulted, so a lot that was won, lost or merely observed all count — once
+        // every line's condition is settled (#1623), since a price cannot be attributed to a key a
+        // line has not committed to.
+        status: "closed",
+        finalPrice: { not: null },
+        auctionSale: { collectionId },
+        AND: [
+          { lines: { some: { stampId: { in: [...wanted] } } } },
+          { lines: { none: { conditionId: null } } },
+        ],
+      },
+      select: MARKET_LOT_SELECT,
+    })
+  );
   if (lots.length === 0) return new Map();
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);

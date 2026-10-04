@@ -61,6 +61,18 @@ export interface WatchlistLotRow {
   readonly premiumFixed: string | null;
   readonly notStamps: boolean;
   readonly notStampsDescription: string | null;
+  readonly catalogValue: string | null;
+  readonly catalogValueHigh: string | null;
+  readonly recommendation: {
+    readonly fair: { readonly allIn: string; readonly bid: string | null } | null;
+    readonly high: { readonly fair: { readonly allIn: string; readonly bid: string | null } } | null;
+  } | null;
+  readonly conditionToSettle: boolean;
+  readonly unsettledLines: readonly {
+    readonly stamp: string;
+    readonly possibleConditions: readonly string[];
+    readonly unknown: boolean;
+  }[];
   /** The collector's own labels on the lot (#1625), already in the dictionary's order. */
   readonly tags: readonly { readonly name: string }[];
 }
@@ -124,8 +136,35 @@ export interface AgentWatchlistLot {
   readonly notStampsDescription?: string;
   /** The collector's own labels on the lot (#1625), by name. Always present — empty when it has none. */
   readonly tags: readonly string[];
+  /** What the lot's described contents list at in the catalogue — the **low** end while a line's
+   *  condition is to settle (#1623). Absent until something is described, or nothing is priced. */
+  readonly catalogueValue?: string;
+  /** The top of that range; absent when the value is one figure. */
+  readonly catalogueValueHigh?: string;
+  /** The lots screen's recommended figure (`recommend_bid`'s `fair`), all-in, with the hammer price
+   *  that fits inside it — the low end while a condition is to settle. */
+  readonly recommended?: { readonly allIn: string; readonly bid?: string };
+  /** The same at the top of the range; absent when the recommendation is one figure. */
+  readonly recommendedHigh?: { readonly allIn: string; readonly bid?: string };
+  /** Some line's condition is unknown or one of several (#1623): the figures above are ranges, and
+   *  a won lot cannot be settled into its purchase until each line has one condition. */
+  readonly conditionToSettle: boolean;
+  /** Those lines: the stamp, and the conditions it may be in — or `conditionUnknown` for any. */
+  readonly unsettledLines?: readonly {
+    readonly stamp: string;
+    readonly possibleConditions?: readonly string[];
+    readonly conditionUnknown?: true;
+  }[];
   /** Where the lot is in the app, relative to this instance: its sale's screen, focused on it. */
   readonly path: string;
+}
+
+/** A recommendation level as the agent reads it: `bid` dropped when the fees consume the figure. */
+function levelOf(
+  value: { readonly allIn: string; readonly bid: string | null } | null | undefined
+): { allIn: string; bid?: string } | undefined {
+  if (!value) return undefined;
+  return compact({ allIn: value.allIn, bid: value.bid ?? undefined }) as { allIn: string; bid?: string };
 }
 
 /** A watchlist row's own last resort, as the lots screen spells it (`auctionLotName`). */
@@ -183,6 +222,22 @@ export function watchlistLot(row: WatchlistLotRow, now: Date, path: string): Age
     notStamps: row.notStamps,
     notStampsDescription: row.notStampsDescription,
     tags: tagNames(row.tags),
+    catalogueValue: row.catalogValue,
+    catalogueValueHigh: row.catalogValueHigh,
+    recommended: levelOf(row.recommendation?.fair),
+    recommendedHigh: levelOf(row.recommendation?.high?.fair),
+    conditionToSettle: row.conditionToSettle,
+    unsettledLines:
+      row.unsettledLines.length === 0
+        ? undefined
+        : row.unsettledLines.map(
+            (line) =>
+              compact({
+                stamp: line.stamp,
+                possibleConditions: line.unknown ? undefined : line.possibleConditions,
+                conditionUnknown: line.unknown ? (true as const) : undefined,
+              }) as { stamp: string; possibleConditions?: string[]; conditionUnknown?: true }
+          ),
     path,
   }) as AgentWatchlistLot;
 }

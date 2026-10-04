@@ -3,6 +3,7 @@ import type { CatalogPriceMark } from "./catalog-price-mark";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
+  lotLineRangeOf,
   lotLineValueOf,
   summarizeLotComposition,
   type LotCompositionValue,
@@ -17,6 +18,13 @@ import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { isUnknownVariantStamp, subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
+import {
+  lineConditionCandidates,
+  lineConditionLabel,
+  normalizeLineCondition,
+  type LineConditionValue,
+  type NamedCondition,
+} from "./auction-line-condition";
 
 // **What an auction lot contains, and what that is worth** (#353; ADR-0021 §7).
 //
@@ -67,9 +75,18 @@ export interface AnchorableLine {
   stampName: string | null;
   /** The leading catalog number, prefix-formatted (`Mi·PL 12`). */
   catalogLabel: string | null;
-  conditionId: string;
+  /** The condition the line is settled at; **null while it is not** (#1623) — unknown, or one of
+   * {@link possibleConditionIds}. */
+  conditionId: string | null;
+  /** The condition as it is named — `MNH`, or `MNH or MH` / `Condition unknown` while unsettled. */
   conditionName: string;
   conditionAbbreviation: string;
+  /** The conditions an unsettled line may be in; empty when settled, and empty when unknown. */
+  possibleConditionIds: string[];
+  /** Every condition the line may be in, each valued — one entry for a settled line, the
+   * collection's every condition for an unknown one (#1623). The anchoring rule is applied to each
+   * of them, never to the line's range as a whole. */
+  conditions: AnchorableCondition[];
   /** The certificate the line is described as carrying; null is **none**, the unmarked default a
    * copy uses (ADR-0006 §2). Matching is exact — a line with an Attest is unpriced until a price
    * exists at that level, exactly as a copy is. */
@@ -87,14 +104,34 @@ export interface AnchorableLine {
   areaId: string | null;
   /** The stamp's own year of issue, which that ladder's period bucket is centred on. */
   issuedYear: number | null;
-  /** Catalogue value of **one** of them, in {@link currency}, 2-dp. Null when the line contributes
-   * nothing, for either of the two reasons below. */
+  /** Catalogue value of **one** of them, in {@link currency}, 2-dp — the **low** end of the range
+   * while the condition is not settled (#1623). Null when the line contributes nothing, for either
+   * of the two reasons below. */
   unitValue: string | null;
+  /** The top of that range; equal to {@link unitValue} on a settled line. */
+  unitValueHigh: string | null;
+  /** The line's condition is unknown or one of several (#1623). */
+  conditionUnsettled: boolean;
+  /** Possible conditions the catalogue gives no figure for, left out of the range. */
+  unpricedConditions: number;
   /** No catalogue price for this stamp at that condition × certificate × format. */
   unpriced: boolean;
   /** Unpriced because the catalogue gives no price on purpose (#1615): said, never asked for. */
   mark: CatalogPriceMark | null;
   /** Priced, but in a currency with no rate to {@link currency}. */
+  unconvertible: boolean;
+}
+
+/** One condition a line may be in, valued at it (#1623) — what the anchoring rule reads per
+ * condition. A settled line has exactly one. */
+export interface AnchorableCondition {
+  conditionId: string;
+  conditionName: string;
+  conditionAbbreviation: string;
+  /** Catalogue value of one at this condition, in the line's currency, 2-dp. */
+  unitValue: string | null;
+  unpriced: boolean;
+  mark: CatalogPriceMark | null;
   unconvertible: boolean;
 }
 
@@ -132,6 +169,8 @@ export interface AuctionLotLineItem extends AnchorableLine {
   certificateStatusAbbreviation: string | null;
   /** `unitValue × quantity`. */
   lineValue: string | null;
+  /** `unitValueHigh × quantity` — the top of the line's range (#1623). */
+  lineValueHigh: string | null;
   /** The figure is a lowest-variant estimate (#238) — *inferred, not recorded*. */
   uncertain: boolean;
   /** The open wants recorded for this stamp (#532), or null for none. On a lot being bid on this
@@ -149,7 +188,11 @@ export interface AuctionLotComposition extends LotCompositionValue {
 /** The line fields a form submits. */
 export interface AuctionLotLineInput {
   stampId: string;
-  conditionId: string;
+  /** The condition the line is settled at, or null while it is not (#1623). */
+  conditionId: string | null;
+  /** The conditions an unsettled line may be in; empty for unknown. Ignored when
+   * {@link conditionId} is set, and a set of one is that condition (`normalizeLineCondition`). */
+  possibleConditionIds?: string[];
   /** Null is no certificate (ADR-0006 §2). */
   certificateStatusId: string | null;
   /** Null is the single (ADR-0020). */
@@ -165,7 +208,7 @@ const LINE_SELECT = {
   certificateStatusId: true,
   formatId: true,
   quantity: true,
-  condition: { select: { name: true, abbreviation: true } },
+  possibleConditions: { select: { conditionId: true } },
   certificateStatus: { select: { name: true, abbreviation: true } },
   format: { select: { name: true, abbreviation: true } },
   stamp: {
@@ -226,6 +269,91 @@ export async function baseToSaleRates(
   return out;
 }
 
+/** The collection's conditions in their own order — what an unknown condition ranges over and what
+ * every label is drawn from. Read once per pass. */
+async function readCollectionConditions(collectionId: string): Promise<NamedCondition[]> {
+  return prisma.stampCondition.findMany({
+    where: { collectionId },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, abbreviation: true },
+  });
+}
+
+/** One line to value at each of its possible conditions. */
+interface CandidateLine extends LineConditionValue {
+  key: string;
+  stampId: string;
+  certificateStatusId: string | null;
+  formatId: string | null;
+  unknownVariant: boolean;
+  quantity: number;
+}
+
+/** What {@link valueAcrossConditions} hands back for one line. */
+interface CandidateLineValue {
+  value: LotLineValue;
+  conditions: AnchorableCondition[];
+  label: { short: string; long: string };
+}
+
+/**
+ * Value every line at **each of its possible conditions** in one `valuateItemRows` pass (#1623).
+ *
+ * A settled line is one row, exactly as before; an unsettled one is one row per possible condition,
+ * and `lotLineRangeOf` turns those into the line's range. Nothing about valuing a condition is
+ * decided here — each row is the same `stamp × condition × certificate × format` a copy is valued as.
+ */
+async function valueAcrossConditions(
+  collectionId: string,
+  lines: CandidateLine[],
+  rateOf: (line: CandidateLine) => number | null,
+  conditions: NamedCondition[]
+): Promise<Map<string, CandidateLineValue>> {
+  const conditionIds = conditions.map((condition) => condition.id);
+  const conditionById = new Map(conditions.map((condition) => [condition.id, condition]));
+  const candidates = new Map(lines.map((line) => [line.key, lineConditionCandidates(line, conditionIds)]));
+  const valuations = await valuateItemRows(
+    collectionId,
+    lines.flatMap((line) =>
+      candidates.get(line.key)!.map<ValuationRow>((conditionId) => ({
+        id: `${line.key}\u0000${conditionId}`,
+        stampId: line.stampId,
+        conditionId,
+        certificateStatusId: line.certificateStatusId,
+        formatId: line.formatId,
+        unknownVariant: line.unknownVariant,
+        carrier: null,
+        faultReductionPercent: null,
+      }))
+    )
+  );
+
+  const out = new Map<string, CandidateLineValue>();
+  for (const line of lines) {
+    const rate = rateOf(line);
+    const ids = candidates.get(line.key)!;
+    const each = ids.map((conditionId) => valuations.get(`${line.key}\u0000${conditionId}`));
+    out.set(line.key, {
+      value: lotLineRangeOf(line.quantity, each, rate, line.conditionId === null),
+      conditions: ids.map((conditionId, index) => {
+        const value = lotLineValueOf(line.quantity, each[index], rate);
+        const condition = conditionById.get(conditionId);
+        return {
+          conditionId,
+          conditionName: condition?.name ?? conditionId,
+          conditionAbbreviation: condition?.abbreviation ?? "",
+          unitValue: value.unitValue === null ? null : value.unitValue.toFixed(2),
+          unpriced: value.unpriced,
+          mark: value.mark,
+          unconvertible: value.unconvertible,
+        };
+      }),
+      label: lineConditionLabel(line, conditions),
+    });
+  }
+  return out;
+}
+
 /**
  * Value the composition of every given lot in one pass.
  *
@@ -248,21 +376,8 @@ export async function valuateAuctionLotLines(
   if (rows.length === 0) return new Map();
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [valuations, rates, areas, issuePrefixes, wantsByStamp] = await Promise.all([
-    // One batched valuation over every line of every lot — the point of the whole module.
-    valuateItemRows(
-      collectionId,
-      rows.map<ValuationRow>((row) => ({
-        id: row.id,
-        stampId: row.stampId,
-        conditionId: row.conditionId,
-        certificateStatusId: row.certificateStatusId,
-        formatId: row.formatId,
-        unknownVariant: isUnknownVariantStamp(row.stamp),
-        carrier: null,
-        faultReductionPercent: null,
-      }))
-    ),
+  const [conditions, rates, areas, issuePrefixes, wantsByStamp] = await Promise.all([
+    readCollectionConditions(collectionId),
     baseToSaleRates(
       collectionId,
       baseCurrency,
@@ -279,20 +394,37 @@ export async function valuateAuctionLotLines(
     loadStampWantSummaries(collectionId, rows.map((r) => r.stampId)),
   ]);
   const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
+  const currencyByLine = new Map(rows.map((row) => [row.id, row.auctionLot.auctionSale.currency]));
+  // One batched valuation over every line of every lot, at each condition it may be in — the point
+  // of the whole module.
+  const valued = await valueAcrossConditions(
+    collectionId,
+    rows.map<CandidateLine>((row) => ({
+      key: row.id,
+      stampId: row.stampId,
+      conditionId: row.conditionId,
+      possibleConditionIds: row.possibleConditions.map((p) => p.conditionId),
+      certificateStatusId: row.certificateStatusId,
+      formatId: row.formatId,
+      unknownVariant: isUnknownVariantStamp(row.stamp),
+      quantity: row.quantity,
+    })),
+    (line) => rates.get(currencyByLine.get(line.key)!) ?? null,
+    conditions
+  );
 
   const byLot = new Map<string, { currency: string; lines: AuctionLotLineItem[]; values: LotLineValue[] }>();
   for (const row of rows) {
     const currency = row.auctionLot.auctionSale.currency;
-    const valuation = valuations.get(row.id);
-    const rate = rates.get(currency) ?? null;
     // Three outcomes, kept apart on purpose: no price at all, a price that cannot be expressed in
     // the sale's currency, and a figure. The rule is `lotLineValueOf` in the pure module and is
     // **not** restated here — a lot-free caller resolves a line the same way (#1168), and two
     // copies of this is how one surface comes to call a line unpriced while the other calls it
-    // unconvertible.
+    // unconvertible. An unsettled condition is that rule at each possible condition (#1623).
     const quantity = row.quantity;
-    const value = lotLineValueOf(quantity, valuation, rate);
+    const { value, conditions: lineConditions, label } = valued.get(row.id)!;
     const { unpriced, unconvertible, unitValue } = value;
+    const unitValueHigh = value.unitValueHigh ?? unitValue;
 
     const link = row.stamp.stampAreaLinks.find((l) => l.isPrimary) ?? row.stamp.stampAreaLinks[0];
     const areaId = link?.collectionAreaId ?? null;
@@ -333,8 +465,10 @@ export async function valuateAuctionLotLines(
       unknownVariant: isUnknownVariantStamp(row.stamp),
       wants: wantsByStamp.get(row.stampId) ?? null,
       conditionId: row.conditionId,
-      conditionName: row.condition.name,
-      conditionAbbreviation: row.condition.abbreviation,
+      conditionName: label.long,
+      conditionAbbreviation: label.short,
+      possibleConditionIds: row.conditionId === null ? row.possibleConditions.map((p) => p.conditionId) : [],
+      conditions: lineConditions,
       certificateStatusId: row.certificateStatusId,
       certificateStatusName: row.certificateStatus?.name ?? null,
       certificateStatusAbbreviation: row.certificateStatus?.abbreviation ?? null,
@@ -344,11 +478,15 @@ export async function valuateAuctionLotLines(
       quantity,
       currency,
       unitValue: unitValue === null ? null : unitValue.toFixed(2),
+      unitValueHigh: unitValueHigh === null ? null : unitValueHigh.toFixed(2),
       lineValue: unitValue === null ? null : (unitValue * quantity).toFixed(2),
+      lineValueHigh: unitValueHigh === null ? null : (unitValueHigh * quantity).toFixed(2),
       unpriced,
       mark: value.mark,
       unconvertible,
       uncertain: value.uncertain,
+      conditionUnsettled: value.conditionUnsettled ?? false,
+      unpricedConditions: value.unpricedConditions ?? 0,
     });
     entry.values.push(value);
     byLot.set(row.auctionLotId, entry);
@@ -367,11 +505,14 @@ export async function valuateAuctionLotLines(
   );
 }
 
-/** A line as a caller describes one that does not exist here: the same five fields an
+/** A line as a caller describes one that does not exist here: the same fields an
  * `AuctionLotLine` row carries, and nothing about a lot. */
 export interface LineSpec {
   stampId: string;
-  conditionId: string;
+  /** Null while the condition is not settled (#1623) — one of {@link possibleConditionIds}, or any
+   * of the collection's conditions when that is empty. */
+  conditionId: string | null;
+  possibleConditionIds?: string[];
   /** Null is no certificate (ADR-0006 §2). */
   certificateStatusId: string | null;
   /** Null is the single (ADR-0020). */
@@ -420,10 +561,7 @@ export async function valuateLineSpecs(
         ...VARIANT_FLAG_SELECT,
       },
     }),
-    prisma.stampCondition.findMany({
-      where: { collectionId },
-      select: { id: true, name: true, abbreviation: true },
-    }),
+    readCollectionConditions(collectionId),
     prisma.stampFormat.findMany({
       where: { collectionId },
       select: { id: true, name: true, abbreviation: true },
@@ -431,7 +569,6 @@ export async function valuateLineSpecs(
   ]);
 
   const stampById = new Map(stamps.map((stamp) => [stamp.id, stamp]));
-  const conditionById = new Map(conditions.map((row) => [row.id, row]));
   const formatById = new Map(formats.map((row) => [row.id, row]));
 
   // Only the specs whose stamp is really in this collection. A spec keyed to somebody else's stamp
@@ -440,32 +577,33 @@ export async function valuateLineSpecs(
   if (known.length === 0) return [];
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [valuations, rates, areas, issuePrefixes] = await Promise.all([
-    // The same batched call the lot path makes, so the format-factor table and the area tree load
-    // once for the whole question rather than per line.
-    valuateItemRows(
-      collectionId,
-      known.map<ValuationRow>((spec, index) => ({
-        id: String(index),
-        stampId: spec.stampId,
-        conditionId: spec.conditionId,
-        certificateStatusId: spec.certificateStatusId,
-        formatId: spec.formatId,
-        unknownVariant: isUnknownVariantStamp(stampById.get(spec.stampId)!),
-        carrier: null,
-        faultReductionPercent: null,
-      }))
-    ),
+  const [rates, areas, issuePrefixes] = await Promise.all([
     baseToSaleRates(collectionId, baseCurrency, [currency]),
     readCollectionAreas(collectionId),
     loadIssuePrefixMap(collectionId),
   ]);
   const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
   const rate = rates.get(currency) ?? null;
+  // The same batched call the lot path makes, so the format-factor table and the area tree load
+  // once for the whole question rather than per line — at each condition a line may be in.
+  const valued = await valueAcrossConditions(
+    collectionId,
+    known.map<CandidateLine>((spec, index) => ({
+      key: String(index),
+      stampId: spec.stampId,
+      ...normalizeLineCondition(spec),
+      certificateStatusId: spec.certificateStatusId,
+      formatId: spec.formatId,
+      unknownVariant: isUnknownVariantStamp(stampById.get(spec.stampId)!),
+      quantity: spec.quantity,
+    })),
+    () => rate,
+    conditions
+  );
 
   return known.map((spec, index) => {
     const stamp = stampById.get(spec.stampId)!;
-    const condition = conditionById.get(spec.conditionId) ?? null;
+    const condition = normalizeLineCondition(spec);
     const format = spec.formatId === null ? null : (formatById.get(spec.formatId) ?? null);
 
     const link = stamp.stampAreaLinks.find((l) => l.isPrimary) ?? stamp.stampAreaLinks[0];
@@ -480,16 +618,19 @@ export async function valuateLineSpecs(
     const leading = ordered[0] ?? null;
     const vendorMap = vendorMapFor(areaId, stamp.issueMemberships[0]?.issueId ?? null);
 
-    const value = lotLineValueOf(spec.quantity, valuations.get(String(index)), rate);
+    const { value, conditions: lineConditions, label } = valued.get(String(index))!;
+    const unitValueHigh = value.unitValueHigh ?? value.unitValue;
     return {
       stampId: spec.stampId,
       stampName: stamp.name,
       catalogLabel: leading
         ? formatStampCN(leading.number, vendorMap.get(leading.catalogVendorId))
         : null,
-      conditionId: spec.conditionId,
-      conditionName: condition?.name ?? spec.conditionId,
-      conditionAbbreviation: condition?.abbreviation ?? "",
+      conditionId: condition.conditionId,
+      conditionName: label.long,
+      conditionAbbreviation: label.short,
+      possibleConditionIds: condition.possibleConditionIds,
+      conditions: lineConditions,
       certificateStatusId: spec.certificateStatusId,
       formatId: spec.formatId,
       formatName: format?.name ?? null,
@@ -499,9 +640,12 @@ export async function valuateLineSpecs(
       areaId,
       issuedYear: stamp.issuedYear,
       unitValue: value.unitValue === null ? null : value.unitValue.toFixed(2),
+      unitValueHigh: unitValueHigh === null ? null : unitValueHigh.toFixed(2),
       unpriced: value.unpriced,
       mark: value.mark,
       unconvertible: value.unconvertible,
+      conditionUnsettled: value.conditionUnsettled ?? false,
+      unpricedConditions: value.unpricedConditions ?? 0,
     };
   });
 }

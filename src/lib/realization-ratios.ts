@@ -12,6 +12,7 @@ import {
   type ResolvedRatio,
 } from "./realization-ratio";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { onlySettledLots, type SettledConditionLot } from "./auction-line-condition";
 
 // **The learned realization ratio, read out of the lots already recorded** (#520; ADR-0029 §2).
 //
@@ -73,7 +74,9 @@ const RATIO_LOT_SELECT = {
   },
 } satisfies Prisma.AuctionLotSelect;
 
-type RatioLotRow = Prisma.AuctionLotGetPayload<{ select: typeof RATIO_LOT_SELECT }>;
+type RatioLotPayload = Prisma.AuctionLotGetPayload<{ select: typeof RATIO_LOT_SELECT }>;
+/** A lot whose every line has its condition settled — the only kind that is evidence (#1623). */
+type RatioLotRow = SettledConditionLot<RatioLotPayload>;
 type RatioLineRow = RatioLotRow["lines"][number];
 
 /** The area a stamp is priced under: its primary link, else whichever link it has. The same
@@ -156,9 +159,12 @@ export async function loadRealizationRatios(
         status: "closed",
         finalPrice: { not: null },
         auctionSale: { collectionId },
+        // …once every line's condition is settled (#1623): a share of the price cannot be stated as
+        // a fraction of a catalogue value the line has not committed to.
+        lines: { none: { conditionId: null } },
       },
       select: RATIO_LOT_SELECT,
-    }),
+    }).then(onlySettledLots),
   ]);
   const fallbackPercent = collection?.bidFallbackPercent ?? 100;
 

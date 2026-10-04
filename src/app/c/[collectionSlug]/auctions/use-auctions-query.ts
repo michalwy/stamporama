@@ -3,7 +3,11 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AuctionLotComposition } from "@/lib/auction-lines";
 import type { AtRiskLine } from "@/lib/auction-duplicates";
-import type { AnchorMarketEvidence, AuctionLotLineAnchor } from "@/lib/auction-lot-anchors";
+import type {
+  AnchorMarketEvidence,
+  AuctionLotLineAnchor,
+  LineAnchor,
+} from "@/lib/auction-lot-anchors";
 import type { AuctionLotBidEvidence } from "@/lib/bid-recommendations";
 import type {
   AuctionLotDetailItem,
@@ -200,6 +204,8 @@ export type AuctionLotCompositionView = AuctionLotComposition & {
   allIn: string | null;
   /** `catalogValue − allIn`. */
   headroom: string | null;
+  /** The same at the top of the catalogue range (#1623); null when the value is one figure. */
+  headroomHigh: string | null;
 };
 
 /**
@@ -231,10 +237,15 @@ export function useAuctionLotComposition(collectionId: string, lotId: string | n
  *
  * `null` is a real answer — a lot with no composition has nothing to recommend.
  */
+/** One line's anchor as the popover receives it — with an answer per possible condition while the
+ * line's condition is not settled (#1623), each of the same shape. */
+export type LineAnchorView = Serialized<Omit<LineAnchor, "market" | "conditions">> & {
+  market: Serialized<AnchorMarketEvidence> | null;
+  conditions: LineAnchorView[] | null;
+};
+
 export type AuctionLotBidEvidenceView = Serialized<Omit<AuctionLotBidEvidence, "lines">> & {
-  lines: (Serialized<Omit<AuctionLotLineAnchor, "market">> & {
-    market: Serialized<AnchorMarketEvidence> | null;
-  })[];
+  lines: (LineAnchorView & Pick<AuctionLotLineAnchor, "lineId" | "auctionLotId">)[];
 };
 
 export function useAuctionLotBidEvidence(collectionId: string, lotId: string | null) {

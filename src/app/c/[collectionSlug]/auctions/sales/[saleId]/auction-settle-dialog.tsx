@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { Fragment, useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -107,7 +107,14 @@ export function AuctionSettleDialog({
     return latest ? toDateInput(latest) : new Date().toISOString().slice(0, 10);
   });
 
+  // A copy is one piece in one condition (#1623), so a line still *MNH or MH* — or unknown — has to
+  // be told which it turned out to be. Asked here, beside the lot, because the parcel in hand is
+  // where the answer is; the line is settled at it in the same step.
+  const [lineConditions, setLineConditions] = useState<Record<string, string>>({});
+
   const chosen = won.filter((lot) => included[lot.id]);
+  const unsettledLines = chosen.flatMap((lot) => lot.lines.filter((line) => line.conditionId === null));
+  const conditionsMissing = unsettledLines.filter((line) => !lineConditions[line.id]).length;
   const excluded = won.length - chosen.length;
   const linesTotal = chosen.reduce((sum, lot) => sum + (Number(prices[lot.id]) || 0), 0);
   const total = linesTotal + (Number(shippingCost) || 0);
@@ -125,6 +132,9 @@ export function AuctionSettleDialog({
         purchasedAt,
         shippingCost: shippingCost.trim() ? Number(shippingCost) : null,
         lots: chosen.map((lot) => ({ lotId: lot.id, price: Number(prices[lot.id]) || 0 })),
+        lineConditions: unsettledLines
+          .filter((line) => lineConditions[line.id])
+          .map((line) => ({ lineId: line.id, conditionId: lineConditions[line.id] })),
       });
       if (result.status !== "success") {
         setError(result.message);
@@ -199,8 +209,10 @@ export function AuctionSettleDialog({
               {won.map((lot) => {
                 const on = included[lot.id];
                 const n = copyCount(lot);
+                const toSettle = lot.lines.filter((line) => line.conditionId === null);
                 return (
-                  <tr key={lot.id} style={{ opacity: on ? 1 : 0.5 }}>
+                  <Fragment key={lot.id}>
+                  <tr style={{ opacity: on ? 1 : 0.5 }}>
                     <Td
                       // The whole cell toggles the box, not the box alone (#1589). A table cell
                       // cannot hold a full-height label, so the cell takes the click itself.
@@ -249,6 +261,47 @@ export function AuctionSettleDialog({
                       />
                     </Td>
                   </tr>
+                  {on && toSettle.length > 0 && (
+                    <tr>
+                      <Td />
+                      <td colSpan={3} style={{ padding: "0 0.5rem 0.625rem", borderBottom: "1px solid var(--color-border)" }}>
+                        <div style={{ fontSize: "0.75rem", color: "var(--color-warning)", marginBottom: "0.375rem" }}>
+                          Condition to settle — pick what each stamp came in:
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                          {toSettle.map((line) => (
+                            <label
+                              key={line.id}
+                              style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8125rem" }}
+                            >
+                              <span style={{ flex: 1, minWidth: 0, color: "var(--color-text-primary)" }}>
+                                {[line.catalogLabel, line.stampName].filter(Boolean).join(" · ") || "(unnamed stamp)"}
+                                {line.quantity > 1 ? ` ×${line.quantity}` : ""}
+                                <span style={{ color: "var(--color-text-muted)" }}> — {line.conditionName}</span>
+                              </span>
+                              <select
+                                value={lineConditions[line.id] ?? ""}
+                                aria-label={`Condition of ${line.catalogLabel ?? line.stampName ?? "this stamp"}`}
+                                onChange={(e) =>
+                                  setLineConditions((prev) => ({ ...prev, [line.id]: e.currentTarget.value }))
+                                }
+                                style={{ ...INPUT_STYLE, width: "12rem", cursor: "pointer" }}
+                              >
+                                <option value="">— Select —</option>
+                                {line.conditions.map((condition) => (
+                                  <option key={condition.conditionId} value={condition.conditionId}>
+                                    {condition.conditionName}
+                                    {condition.conditionAbbreviation ? ` (${condition.conditionAbbreviation})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -304,6 +357,12 @@ export function AuctionSettleDialog({
               with no copies. You can identify {undescribed === 1 ? "it" : "them"} on the purchase.
             </p>
           )}
+          {conditionsMissing > 0 && (
+            <p style={{ ...NOTE, color: "var(--color-warning)" }}>
+              {conditionsMissing} line{conditionsMissing === 1 ? " still needs" : "s still need"} a
+              condition. A copy is one condition, so the parcel is settled once each line has one.
+            </p>
+          )}
           {excluded > 0 && (
             <p style={{ ...NOTE, color: "var(--color-warning)" }}>
               {excluded} won lot{excluded === 1 ? "" : "s"} left out. {excluded === 1 ? "It stays" : "They stay"}{" "}
@@ -314,7 +373,7 @@ export function AuctionSettleDialog({
         </DialogBody>
         <DialogActions
           actionLabel={isPending ? "Settling…" : "Settle"}
-          disabled={isPending || chosen.length === 0}
+          disabled={isPending || chosen.length === 0 || conditionsMissing > 0}
           cancelDisabled={isPending}
           error={error}
           onCancel={onClose}
