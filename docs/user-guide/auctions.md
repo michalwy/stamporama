@@ -260,6 +260,11 @@ There is no *Bid this* on a lot with nothing to recommend. A lot not yet describ
 says so; a described lot nothing could price opens the recommendation panel to say why. On a closed
 or settled lot there is nothing left to bid on, so the button is not offered either.
 
+On a lot whose condition is still to settle the recommendation is a range — `52.00–104.00` — and
+*Bid this* bids the **low end**, the cautious one: if the stamps turn out to be the cheaper
+condition, that is all they were worth. The panel lists each line's figure at every condition it may
+be in, so you can see where the range comes from.
+
 The **bargain floor** and the **walk-away** figure are bid the same way: from the row's ⋮ menu
 (*Bid the bargain floor*, *Bid the walk-away figure*), or by clicking a level in the
 [recommendation panel](#the-three-figures).
@@ -537,9 +542,12 @@ each is now a single control that says what it is set to without being opened:
 
 Both remember what you left them on, like everything else here.
 
-Then, on its own, the one that asks what is **missing from the record** rather than anything about
-the bidding:
+Then, on their own, the chips that ask what is **missing from the record** rather than anything
+about the bidding:
 
+- **Condition to settle** — lots where some line's condition is unknown or one of several, with a
+  count. Their figures are ranges, and a won one cannot be settled into its purchase until each line
+  has one condition, so this is how you find the lots waiting for that answer.
 - **Not described** — lots with nothing recorded as being in them, with a count. These are the lots
   with no catalogue value to bid against and nothing to file if you win, so this chip is how you sit
   down and clear the backlog of them. *Cancelled* lots are never included: describing one buys
@@ -625,7 +633,9 @@ filters do, so coming back to the screen finds it as you left it. Each row shows
 every bid you would actually pay for — *open* and *won* lots — plus the premium on each, plus
 shipping once. Lots you lost, watched or cancelled cost nothing and are left out of the total. Beside it is the parcel's
 **catalogue total** over the same lots, and the headroom between the two — this time with shipping
-included, because that is what the parcel actually costs. A parcel priced in another currency shows
+included, because that is what the parcel actually costs. Where a lot's condition is still to settle,
+its catalogue value is a range and both figures take its **low end**; the sale's own screen says so
+under its totals, with what the total comes to at the high end. A parcel priced in another currency shows
 its all-in total in your collection's currency too, and its own screen does the same under every
 figure on the terms-and-totals card.
 
@@ -706,6 +716,24 @@ Either way:
 - **Qty** is how many of *that* the lot holds — three of one stamp at one condition is one line with
   a quantity of 3, not three lines.
 
+### When the listing does not say the condition
+
+A listing often does not say what condition its stamps are in: *Czysty* (unused) can be MNH or MH,
+and the two can differ twofold in value. Rather than guess, the **Condition** select offers two more
+answers below the conditions themselves:
+
+- **One of several…** — tick the conditions it may be in, at least two: *MNH or MH*.
+- **Unknown** — the listing says nothing; the line stands for any of your conditions.
+
+Such a line is valued as a **range**, from its lowest possible condition to its highest — see
+[What each line is worth](#what-each-line-is-worth) — and the lot is marked **Condition to settle**
+on its row and its card until every line has one condition. Edit the line and pick the condition once
+you know it. A won lot cannot be [settled into its purchase](#settling-a-parcel-into-a-purchase)
+before then: settling asks for it.
+
+Only a single condition is remembered for the next line; *one of several* is about this listing, not
+a habit.
+
 This is deliberately structured rather than a free-text description. It is what makes a catalogue
 value computable at all, and it is what turns a lot you **lose** into a usable record of what the
 material fetched.
@@ -778,6 +806,15 @@ the same rules, so the two can never disagree:
   is the **single's** value, as it is everywhere that dialog opens; when the line is a multiple, the
   dialog shows what that comes to with the format's multiplier — and says so when there is no
   multiplier to apply, which is the case where filling this in leaves the line unpriced.
+
+- **A line whose condition is not settled is a range.** It is valued at each condition it may be in,
+  and shows the lowest figure to the highest, `20.00–40.00`; the lot's catalogue value, its
+  recommendation and its headroom become ranges the same way. A possible condition the catalogue has
+  no price for is left out of the range rather than emptying it — the hint on the figure says how
+  many were — and only a line none of whose conditions is priced is unpriced. Everything that
+  **compares or bids** uses the **low end**, the cautious one, and says so: the headroom, *Bid this*,
+  the levels in the recommendation panel, *Ceiling = catalogue value*, and the parcel's totals. A
+  catalogue value can only be added from the line once it has one condition.
 
 Unpriced lines are **counted and reported**, never dropped silently: the totals footer says how many
 there are, so a value that is only half the lot never looks like a finished answer. A lot with lines
@@ -908,6 +945,10 @@ everything in it is filled in and everything can be corrected:
 - **which won lots are in this parcel at all**. Unticking one leaves it recorded here as won and
   unsettled — nothing about it is lost, it is simply not part of this purchase. That is for the lot
   the seller is shipping separately.
+- **the condition of every line still to settle**. A copy is one piece in one condition, so a line
+  recorded as *MNH or MH* — or unknown — gets a select under its lot with the conditions it may be
+  in, and **Settle** stays off until each has one. The line is settled at what you pick, so the lot
+  reads afterwards as what was actually bought.
 
 What you get is a purchase with one line per won lot, and — this is the part that saves the
 typing — **the lots' contents already identified as copies on those lines**. You described them to

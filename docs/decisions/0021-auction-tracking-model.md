@@ -192,6 +192,16 @@ and its value rolls up from the cheapest variant child exactly as the issue list
 lot's catalogue value is therefore a sum over its lines using machinery already in place; there is
 no auction pricing engine.
 
+**Amended by #1623 (2026-10-04): a line's condition can be unknown, or one of several.** A listing
+often does not say it — *Czysty* is MNH or MH — and a guessed condition makes every headroom and
+recommendation quietly wrong. `conditionId` is nullable; a separate `AuctionLotLineCondition` set
+holds *MNH or MH*, and null with no set is *unknown*, any of the collection's conditions. The line is
+valued **as a range** by the same machinery run at each possible condition, so there is still no
+auction pricing engine: the low end is what is compared and bid, the high end is stated beside it. A
+won lot is not transcribed (§7) until each line has one condition — settling asks for it — and a
+closed lot with an unsettled line is not a market datapoint until it is settled. The reasoning is in
+`docs/agents/auctions.md`.
+
 The arithmetic that *is* new is small and pure (`src/lib/auction-lot.ts`, no Prisma, unit-tested,
 mirroring `offer-summary.ts`):
 

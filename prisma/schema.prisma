@@ -219,6 +219,8 @@ model StampCondition {
   translations  StampConditionTranslation[]
   formatFactors StampFormatFactor[]
   auctionLotLines AuctionLotLine[]
+  /** Lot lines that may be in this condition, their condition not yet settled (#1623). */
+  auctionLotLinePossibilities AuctionLotLineCondition[]
   colnectMapping ColnectConditionMapping?
   platformCategoryLessons PlatformCategoryLesson[]
   wantAcceptance WantCondition[]
@@ -4444,7 +4446,12 @@ model AuctionLotLine {
   id           String @id @default(cuid())
   auctionLotId String
   stampId      String
-  conditionId  String
+  // The condition the line is **settled** at. Null while it is not (#1623): a listing often does not
+  // say — *Czysty* can be MNH or MH — and a composition that is quietly wrong is worse than one left
+  // open. Null with rows in `possibleConditions` is *one of these*; null with none is *unknown*, which
+  // means any of the collection's conditions. Valued as a range over them, and a won lot cannot be
+  // settled into its purchase until every line has one.
+  conditionId  String?
   // Certificate the lot is described as carrying. Null means **none**, the same unmarked default
   // `Item.certificateStatusId` uses (ADR-0006 §2) — a house lot sold with a Fotoattest is worth a
   // different figure from the same stamp without one, and catalogue prices are keyed on
@@ -4455,9 +4462,12 @@ model AuctionLotLine {
 
   auctionLot AuctionLot     @relation(fields: [auctionLotId], references: [id], onDelete: Cascade)
   stamp      Stamp          @relation(fields: [stampId], references: [id], onDelete: Restrict)
-  condition  StampCondition @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+  condition  StampCondition? @relation(fields: [conditionId], references: [id], onDelete: Restrict)
   certificateStatus CertificateStatus? @relation(fields: [certificateStatusId], references: [id], onDelete: Restrict)
   format     StampFormat?   @relation(fields: [formatId], references: [id], onDelete: Restrict)
+  /** The conditions an unsettled line may be in (#1623) — *MNH or MH*. Empty on a settled line, and
+   *  empty on an unknown one, which is any of the collection's conditions. */
+  possibleConditions AuctionLotLineCondition[]
 
   @@index([auctionLotId])
   @@index([stampId])
@@ -4465,6 +4475,20 @@ model AuctionLotLine {
   @@index([certificateStatusId])
   @@index([formatId])
   @@map("auction_lot_line")
+}
+
+// One condition an unsettled lot line may be in (#1623). Two or more of these make *MNH or MH*; a
+// line settled at one condition carries none, and so does a line whose condition is unknown.
+model AuctionLotLineCondition {
+  auctionLotLineId String
+  conditionId      String
+
+  auctionLotLine AuctionLotLine @relation(fields: [auctionLotLineId], references: [id], onDelete: Cascade)
+  condition      StampCondition @relation(fields: [conditionId], references: [id], onDelete: Restrict)
+
+  @@id([auctionLotLineId, conditionId])
+  @@index([conditionId])
+  @@map("auction_lot_line_condition")
 }
 
 // A listing on one platform (ADR-0013, supersedes ADR-0012 §1–§2). The offer **owns its

@@ -180,6 +180,10 @@ export function AuctionLotsPanel({
     "auction-tag-mode",
     collectionId
   );
+  const [storedConditionToSettle, rememberConditionToSettle] = usePersistedCollectionValue(
+    "auction-condition-to-settle",
+    collectionId
+  );
 
   const outcomeRaw = searchParams.has("outcome")
     ? (searchParams.get("outcome") ?? "")
@@ -240,6 +244,13 @@ export function AuctionLotsPanel({
     (searchParams.has("duplicate") ? searchParams.get("duplicate") : storedDuplicate) === "1" ||
     undefined;
 
+  // "Which lots still have a condition to settle?" (#1623) — remembered like every filter here
+  // (#1018), the URL winning where it names one.
+  const conditionToSettle =
+    (searchParams.has("conditionToSettle")
+      ? searchParams.get("conditionToSettle")
+      : storedConditionToSettle) === "1" || undefined;
+
   // "Which lot was that?" (#484) — remembered like the outcome and the two parties, and overridden
   // by the URL whenever it carries one, so a link to a searched list still means what it says.
   const search = (searchParams.has("search") ? searchParams.get("search") : storedSearch) || "";
@@ -284,6 +295,7 @@ export function AuctionLotsPanel({
       closing,
       signal,
       undescribed,
+      conditionToSettle,
       duplicate,
       search: search || undefined,
       sellerId,
@@ -297,6 +309,7 @@ export function AuctionLotsPanel({
       closing,
       signal,
       undescribed,
+      conditionToSettle,
       duplicate,
       search,
       sellerId,
@@ -432,6 +445,8 @@ export function AuctionLotsPanel({
         return SIGNALS.find((s) => s.value === value)?.label ?? value;
       case "undescribed":
         return "Not described";
+      case "conditionToSettle":
+        return "Condition to settle";
       case "duplicate":
         return "Duplicate";
       case "search":
@@ -475,6 +490,7 @@ export function AuctionLotsPanel({
     rememberClosing("");
     rememberSignal("");
     rememberUndescribed("");
+    rememberConditionToSettle("");
     rememberDuplicate("");
     rememberTagIds("");
     rememberTagMode("");
@@ -490,6 +506,7 @@ export function AuctionLotsPanel({
       closing: "",
       signal: "",
       undescribed: "",
+      conditionToSettle: "",
       duplicate: "",
       [TAG_FILTER_PARAM]: "",
       [TAG_MODE_PARAM]: "",
@@ -502,6 +519,7 @@ export function AuctionLotsPanel({
     rememberClosing,
     rememberSignal,
     rememberUndescribed,
+    rememberConditionToSettle,
     rememberDuplicate,
     rememberTagIds,
     rememberTagMode,
@@ -715,6 +733,22 @@ export function AuctionLotsPanel({
                 const next = undescribed ? "" : "1";
                 rememberUndescribed(next);
                 updateParams({ undescribed: next });
+              }}
+            />
+          </Tooltip>
+          {/* The same kind of question about the description (#1623): lots where some line's
+              condition is unknown or one of several, whose figures are therefore ranges and which
+              cannot be settled into a purchase until each line has one. A boolean, so a chip. */}
+          <Tooltip content="Lots where a line's condition is unknown or one of several — their values are ranges, and a won one cannot be settled into its purchase until each line has one condition.">
+            <FilterChip
+              label="Condition to settle"
+              count={counts ? counts.conditionToSettle : undefined}
+              active={!!conditionToSettle}
+              toggle
+              onClick={() => {
+                const next = conditionToSettle ? "" : "1";
+                rememberConditionToSettle(next);
+                updateParams({ conditionToSettle: next });
               }}
             />
           </Tooltip>

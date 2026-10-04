@@ -676,7 +676,7 @@ export function AuctionLotCardsView({
     null
   );
   const [formError, setFormError] = useState<string | undefined>();
-  const [pricing, setPricing] = useState<AuctionLotLineItem | null>(null);
+  const [pricing, setPricing] = useState<(AuctionLotLineItem & { conditionId: string }) | null>(null);
   const [priceError, setPriceError] = useState<string | undefined>();
   /** Which line's stamp the Valuation dialog is open on (#601). */
   const [valuationStampId, setValuationStampId] = useState<string | null>(null);
@@ -710,7 +710,8 @@ export function AuctionLotCardsView({
     areaNameById,
     onSetPrice: (line) => {
       setPriceError(undefined);
-      setPricing(line);
+      // A price is entered at one condition, so a line still *MNH or MH* (#1623) is not offered it.
+      if (line.conditionId !== null) setPricing({ ...line, conditionId: line.conditionId });
     },
     onShowValuation: (line) => setValuationStampId(line.stampId),
     onEditLine: (line) => {

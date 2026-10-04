@@ -31,6 +31,7 @@ import {
   BidFreshnessChip,
   BidStandingChip,
   LotOutcomeChip,
+  ConditionToSettleChip,
   NotDescribedChip,
   NotStampsChip,
   OverCeilingChip,
@@ -261,6 +262,11 @@ function catalogHint(lot: AuctionLotView, inBase: string | null): string {
   }
   if (lot.unconvertibleLineCount > 0) {
     gaps.push(`${lot.unconvertibleLineCount} in a currency with no rate`);
+  }
+  if (lot.conditionToSettle) {
+    gaps.push(
+      `${lot.unsettledLineCount} with the condition to settle — a range from the lowest condition to the highest, and the headroom and every bid use the low end`
+    );
   }
   const base = lot.catalogUncertain
     ? "Catalogue value; part of it is the cheapest of an unidentified variant — inferred, not recorded."
@@ -666,6 +672,13 @@ export function AuctionLotRow({
    * passes it — the same subtraction, same costed figure, as the catalogue headroom. */
   const recommendedFair = lot.recommendation?.fair?.allIn ?? null;
   const recommendedHeadroom = headroom(recommendedFair, lot.finalPrice ?? lot.currentBid, fees);
+  // A range while some line's condition is not settled (#1623): the low end is what is bid and
+  // compared, the high end is only stated beside it.
+  const recommendedFairHigh = lot.recommendation?.high?.fair.allIn ?? null;
+  const recommendedHeadroomHigh =
+    recommendedFairHigh === null
+      ? null
+      : headroom(recommendedFairHigh, lot.finalPrice ?? lot.currentBid, fees);
 
   // Every write to *My bid* or to the ceiling goes through these: they carry the same pending
   // override an inline edit does, so the figure appears at once — in **both** cells, since the
@@ -1053,6 +1066,7 @@ export function AuctionLotRow({
                   bidding, so it never stands between the status and what the price is doing. */}
               {lotNeedsComposition(lot) && <NotDescribedChip />}
               {lot.notStamps && <NotStampsChip description={lot.notStampsDescription} />}
+              {lot.conditionToSettle && <ConditionToSettleChip lines={lot.unsettledLineCount} />}
               {/* The collector's own labels (#1625), after everything the app says about the lot —
                   the order the Copies row reads its chips in. Nothing at all when it has none. */}
               <TagChips tags={lot.tags} />
@@ -1215,7 +1229,14 @@ export function AuctionLotRow({
                       {recommendedFair === null ? (
                         <span style={MUTED_AMOUNT}>—</span>
                       ) : (
-                        <span style={PROMINENT_AMOUNT}>{recommendedFair}</span>
+                        <span style={PROMINENT_AMOUNT}>
+                          {recommendedFair}
+                          {/* The top of the range while a line's condition is not settled (#1623):
+                              shown, never bid — *Bid this* takes the low end. */}
+                          {recommendedFairHigh !== null && (
+                            <span style={{ ...MUTED_AMOUNT, fontSize: "0.8125rem" }}>–{recommendedFairHigh}</span>
+                          )}
+                        </span>
                       )}
                     </BidRecommendationPopover>
                   )
@@ -1307,7 +1328,7 @@ export function AuctionLotRow({
                     >
                       {Number(recommendedHeadroom) < 0
                         ? `${recommendedHeadroom.replace(/^-/, "")} over`
-                        : `${recommendedHeadroom} left`}
+                        : `${recommendedHeadroom}${recommendedHeadroomHigh !== null ? `–${recommendedHeadroomHigh}` : ""} left`}
                     </span>
                   </Tooltip>
                   {" · "}
@@ -1351,6 +1372,7 @@ export function AuctionLotRow({
                         >
                           {lot.catalogUncertain ? "~" : ""}
                           {lot.catalogValue}
+                          {lot.catalogValueHigh !== null ? `–${lot.catalogValueHigh}` : ""}
                         </span>
                       </>
                     )}

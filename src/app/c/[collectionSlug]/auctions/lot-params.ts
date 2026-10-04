@@ -19,6 +19,8 @@ export interface AuctionLotFilters {
   signal?: LotSignal;
   /** Only lots with nothing described yet (#442). */
   undescribed?: boolean;
+  /** Only lots whose condition is still to settle (#1623). */
+  conditionToSettle?: boolean;
   /** Only lots holding a stamp another lot being won also holds (#369). */
   duplicate?: boolean;
   /** Free-text search over the lot, its notes and the sale it belongs to (#484). */
@@ -48,6 +50,7 @@ const LOT_PARAM: {
   closing: (value) => value,
   signal: (value) => value,
   undescribed: () => "1",
+  conditionToSettle: () => "1",
   duplicate: () => "1",
   search: (value) => value,
   sellerId: (value) => value,
@@ -123,6 +126,7 @@ const LOT_NARROWS: {
   closing: (value) => value,
   signal: (value) => value,
   undescribed: () => "1",
+  conditionToSettle: () => "1",
   duplicate: () => "1",
   // A blank-but-present search narrows nothing, and the box routinely holds one mid-edit.
   search: (value) => (value.trim() ? value : null),

@@ -83,6 +83,8 @@ function LineValue({
   line: AuctionLotLineItem;
   onSetPrice?: () => void;
 }) {
+  // A line whose condition is not settled is valued as a range (#1623).
+  const ranged = line.lineValueHigh !== null && line.lineValueHigh !== line.lineValue;
   // The catalogue gives no price here (#1615): said, never asked for.
   if (line.unpriced && line.mark) return <CatalogPriceMarkText mark={line.mark} align="end" />;
   if (line.unpriced) {
@@ -135,7 +137,7 @@ function LineValue({
       {/* Only worth showing when it differs from the line's own figure. */}
       {line.quantity > 1 && (
         <span style={PRICE_CONVERTED}>
-          {line.quantity} × {line.unitValue}
+          {line.quantity} × {ranged ? `${line.unitValue}–${line.unitValueHigh}` : line.unitValue}
         </span>
       )}
       <span
@@ -145,13 +147,25 @@ function LineValue({
             : PRICE_MAIN
         }
       >
-        {line.lineValue} {line.currency}
+        {ranged ? `${line.lineValue}–${line.lineValueHigh}` : line.lineValue} {line.currency}
       </span>
     </span>
   );
-  const title = line.uncertain
-    ? "Estimated from the cheapest variant of this stamp — which one the lot holds is not recorded."
-    : `Catalogue value, in the sale's currency`;
+  const title = [
+    line.uncertain
+      ? "Estimated from the cheapest variant of this stamp — which one the lot holds is not recorded."
+      : `Catalogue value, in the sale's currency`,
+    // #1623: from the lowest to the highest value over the conditions the line may be in.
+    line.conditionUnsettled
+      ? `${ranged ? "From–to over" : "The same at"} ${line.possibleConditionIds.length === 0 ? "every condition" : line.conditionName}${
+          line.unpricedConditions > 0
+            ? ` (${line.unpricedConditions} condition${line.unpricedConditions === 1 ? "" : "s"} without a catalogue price left out)`
+            : ""
+        }.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
   if (onSetPrice) {
     return (
       <Tooltip content={`${title} — click to edit`} align="end">
@@ -361,12 +375,18 @@ export function AuctionLotLineRow({
             <WantChip
               collectionId={collectionId}
               wants={line.wants}
-              copy={{
-                stampId: line.stampId,
-                conditionId: line.conditionId,
-                certificateStatusId: line.certificateStatusId,
-                formatId: line.formatId,
-              }}
+              // Whether the line would satisfy a want needs its condition; while that is not
+              // settled (#1623) the chip answers only "the stamp is wanted".
+              copy={
+                line.conditionId === null
+                  ? undefined
+                  : {
+                      stampId: line.stampId,
+                      conditionId: line.conditionId,
+                      certificateStatusId: line.certificateStatusId,
+                      formatId: line.formatId,
+                    }
+              }
             />
             {!hasCatalog && !line.stampName && (
               <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
@@ -385,7 +405,9 @@ export function AuctionLotLineRow({
               </Tooltip>
             )}
             <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
-              <LineValue line={line} onSetPrice={onSetPrice} />
+              {/* A price is entered at one condition, so a line still *MNH or MH* (#1623) has no
+                  single cell to fill — it is priced once it is settled, or on the stamp's own page. */}
+              <LineValue line={line} onSetPrice={line.conditionId === null ? undefined : onSetPrice} />
             </span>
           </div>
 
@@ -400,12 +422,28 @@ export function AuctionLotLineRow({
               flexWrap: "wrap",
             }}
           >
-            <ConditionChip
-              collectionId={collectionId}
-              conditionId={line.conditionId}
-              label={line.conditionAbbreviation}
-              tooltip={line.conditionName}
-            />
+            {line.conditionId !== null ? (
+              <ConditionChip
+                collectionId={collectionId}
+                conditionId={line.conditionId}
+                label={line.conditionAbbreviation}
+                tooltip={line.conditionName}
+              />
+            ) : (
+              // Unknown, or one of several (#1623): said in the warning tone, because the line's value
+              // is a range until it is settled and the lot cannot be settled into a purchase before.
+              <Tooltip content={`${line.conditionName} — condition to settle. Valued as a range until it is.`}>
+                <span
+                  style={{
+                    ...CHIP,
+                    color: "var(--color-warning)",
+                    borderColor: "var(--color-warning-border, var(--color-border))",
+                  }}
+                >
+                  {line.conditionAbbreviation}
+                </span>
+              </Tooltip>
+            )}
             {/* No certificate is the unmarked default (ADR-0006 §2) and renders nothing — most
                 material carries none, and chipping it would badge nearly every line. */}
             {line.certificateStatusAbbreviation && (

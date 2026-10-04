@@ -619,6 +619,8 @@ describe("summarizeLotComposition", () => {
       markedLines: 0,
       unconvertibleLines: 0,
       uncertain: false,
+      catalogValueHigh: null,
+      unsettledLines: 0,
     });
   });
 

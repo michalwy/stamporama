@@ -1258,6 +1258,23 @@ missing*. It also cannot be worked around by calling twice and adding: **a fixed
 once per lot, so two answers are not additive.** Both sentences are in the result description,
 because that is what a model actually reads.
 
+### A grade the description does not settle is a range, never a guess (#1623)
+
+A listing often does not say the grade: *Czysty* (unused) is MNH or MH, and the two can differ
+twofold. So the grade can be said **one of three ways, and exactly one**: `condition` (one grade),
+`possible_conditions` (two or more — a set of one is that grade) or `condition_unknown=true` (any of
+the collection's grades). Neither is refused for being vague; sending none, or two, is.
+`condition` went from required to optional for it — a loosening, so every call that worked still
+works, which is `/api/v1`'s only-grows rule.
+
+**The answer is the lot screen's own range** (`lotLineRangeOf` in `auction-lot.ts`, `anchorLine`):
+each line is anchored **at each grade it may be in**, by the one anchoring rule, and the plain
+`floor` / `fair` / `walkAway` are the **low end** — the cautious figure an opening price is compared
+with — while `high` holds the same three at the top. Each line names its `possibleConditions` and
+carries `unitValueHigh`. A grade nothing prices is left out of the range rather than emptying it,
+the rule the collector chose for the catalogue range on 2026-10-04. `high` is absent when the answer
+is one figure, so a caller that never sends a set sees exactly the shape it always did.
+
 ### The three unanswerable cases stay three answers
 
 This is the requirement the whole response shape is built around, and `BidRecommendation` already
@@ -1302,7 +1319,7 @@ as the first because it did not know what was already committed.
 
 | operation | writes | what it is for |
 | --- | --- | --- |
-| `list_auction_watchlist` | no | the open lots: closing time, the auction's bid, the collector's bid and ceiling, leading or outbid |
+| `list_auction_watchlist` | no | the open lots: closing time, the auction's bid, the collector's bid and ceiling, leading or outbid, and whether a condition is still to settle |
 | `summarize_auction_exposure` | no | what those lots can cost — *Committed* and *At ceiling*, in the base currency |
 | `find_tracked_auction_lots` | no | links or offer numbers in; *tracked*, *not tracked* or *unrecognized*, and which lot, out |
 
@@ -1319,6 +1336,18 @@ still agree.
 **Its fixture keeps every exposure count distinct, and that was found rather than planned.** With one
 uncapped lot and one outpriced one, crossing the two counts over in the projection left every
 assertion green; a fifth lot was added so the swap turns the suite red, which it now does.
+
+### The range on the watchlist (#1623)
+
+A lot line's condition can be unknown or one of several, and such a lot is **condition to settle**.
+`list_auction_watchlist` reports it so the assistant can tell a lot it valued on a guess from one it
+valued on a description: `conditionToSettle` on every lot, `unsettledLines` naming each such line
+with its `possibleConditions` (or `conditionUnknown`), and the two figures a range touches —
+`catalogueValue` and `recommended` (the row's own `fair`, all-in with its bid) at the **low end**,
+`catalogueValueHigh` and `recommendedHigh` at the top. They are `AuctionLotListItem`'s own fields,
+named, so the agent and the row cannot disagree. Adding the recommendation here is not a reversal of
+#1036's narrowing: that issue dropped it from scope because #1168 had delivered `recommend_bid`, and a
+range has no meaning without the figure it is a range of.
 
 ### Read only, and the boundary is a third one
 

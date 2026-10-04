@@ -200,6 +200,20 @@ export function NotStampsChip({ description }: { description: string | null }) {
   );
 }
 
+/**
+ * Condition to settle (#1623) — some line's condition is unknown or one of several (*MNH or MH*),
+ * so the lot's catalogue value, recommendation and headroom are ranges, and a won lot cannot be
+ * settled into its purchase until each line has one. `warning`, like {@link NotDescribedChip}: work
+ * outstanding on the description, not news about the bidding.
+ */
+export function ConditionToSettleChip({ lines }: { lines: number }) {
+  return tinted(
+    "warning",
+    "Condition to settle",
+    `${lines} line${lines === 1 ? "'s" : "s'"} condition is unknown or one of several, so its figures are ranges from the lowest condition to the highest`
+  );
+}
+
 /** Over the collector's ceiling — measured against the **all-in** cost, not the hammer price
  * (ADR-0021 §6), which is the whole reason the column exists. */
 export function OverCeilingChip() {

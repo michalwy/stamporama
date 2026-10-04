@@ -64,10 +64,13 @@ type Draft =
  */
 function Money({
   amount,
+  high = null,
   uncertain,
   hint,
 }: {
   amount: string | null;
+  /** The top of a range (#1623), printed as *from–to* when it differs from {@link amount}. */
+  high?: string | null;
   uncertain: boolean;
   hint?: string;
 }) {
@@ -82,6 +85,7 @@ function Money({
     >
       {uncertain ? "~" : ""}
       {amount}
+      {high !== null && high !== amount ? `–${high}` : ""}
     </span>
   );
   return hint ? <Tooltip content={hint}>{value}</Tooltip> : value;
@@ -123,7 +127,7 @@ export function AuctionLotLinesDialog({
   const [error, setError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   /** The line whose missing catalogue value is being filled in. */
-  const [pricing, setPricing] = useState<AuctionLotLineItem | null>(null);
+  const [pricing, setPricing] = useState<(AuctionLotLineItem & { conditionId: string }) | null>(null);
   const [priceError, setPriceError] = useState<string | undefined>();
   /** Which line's stamp the Valuation dialog is open on (#601) — one dialog for the whole list,
    * since a hook cannot be called per row. */
@@ -319,8 +323,23 @@ export function AuctionLotLinesDialog({
                     </div>
                   </div>
 
-                  <Tooltip content={line.conditionName}>
-                    <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                  <Tooltip
+                    content={
+                      line.conditionId === null
+                        ? `${line.conditionName} — condition to settle. Valued as a range until it is.`
+                        : line.conditionName
+                    }
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.8125rem",
+                        // Unknown or one of several (#1623): in the warning tone, like the lot's marker.
+                        color:
+                          line.conditionId === null
+                            ? "var(--color-warning)"
+                            : "var(--color-text-secondary)",
+                      }}
+                    >
                       {line.conditionAbbreviation}
                     </span>
                   </Tooltip>
@@ -342,14 +361,18 @@ export function AuctionLotLinesDialog({
                   <div style={{ textAlign: "right" }}>
                     {line.unpriced && line.mark ? (
                       <CatalogPriceMarkText mark={line.mark} align="end" />
-                    ) : line.unpriced ? (
+                    ) : line.unpriced && line.conditionId === null ? (
+                      // A price is entered at one condition; a line still *MNH or MH* (#1623) has
+                      // no single cell to fill until it is settled.
+                      <span style={{ ...AMOUNT, color: "var(--color-text-muted)" }}>—</span>
+                    ) : line.unpriced && line.conditionId !== null ? (
                       // The trigger lives in the price slot, as on every other list (#228, #341).
                       <button
                         type="button"
                         style={QUICK_PRICE_LINK}
                         onClick={() => {
                           setPriceError(undefined);
-                          setPricing(line);
+                          if (line.conditionId !== null) setPricing({ ...line, conditionId: line.conditionId });
                         }}
                       >
                         + catalog value
@@ -361,6 +384,7 @@ export function AuctionLotLinesDialog({
                     ) : (
                       <Money
                         amount={line.unitValue}
+                        high={line.unitValueHigh}
                         uncertain={line.uncertain}
                         hint={
                           line.uncertain
@@ -371,7 +395,7 @@ export function AuctionLotLinesDialog({
                     )}
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <Money amount={line.lineValue} uncertain={line.uncertain} />
+                    <Money amount={line.lineValue} high={line.lineValueHigh} uncertain={line.uncertain} />
                   </div>
                   <RowActionsMenu actions={actions} ariaLabel="Line actions" />
                 </div>
@@ -523,12 +547,15 @@ function CompositionTotals({
     lineCount: number;
     quantity: number;
     catalogValue: string | null;
+    catalogValueHigh: string | null;
     unpricedLines: number;
     markedLines: number;
     unconvertibleLines: number;
+    unsettledLines: number;
     uncertain: boolean;
     allIn: string | null;
     headroom: string | null;
+    headroomHigh: string | null;
   };
 }) {
   const headroom = data.headroom === null ? null : Number(data.headroom);
@@ -550,7 +577,7 @@ function CompositionTotals({
         <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
           Catalogue
         </span>
-        <Money amount={data.catalogValue} uncertain={data.uncertain} />
+        <Money amount={data.catalogValue} high={data.catalogValueHigh} uncertain={data.uncertain} />
         <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>All-in</span>
         <Money amount={data.allIn} uncertain={false} />
         <Tooltip content="Catalogue value less what the lot costs at the price it stands at — the seller's premium included, shipping added once on the sale.">
@@ -569,9 +596,16 @@ function CompositionTotals({
                   : "var(--color-success)",
           }}
         >
-          {data.headroom ?? "—"} {data.currency}
+          {data.headroom ?? "—"}
+          {data.headroomHigh !== null && data.headroomHigh !== data.headroom ? `–${data.headroomHigh}` : ""}{" "}
+          {data.currency}
         </span>
       </div>
+      {data.unsettledLines > 0 && (
+        <p style={NOTE}>
+          {`${data.unsettledLines} line${data.unsettledLines === 1 ? "'s" : "s'"} condition is unknown or one of several, so the value is a range — from its lowest condition to its highest. Comparisons and bids use the low end.`}
+        </p>
+      )}
       {(data.unpricedLines > 0 || data.markedLines > 0 || data.unconvertibleLines > 0) && (
         <p style={NOTE}>
           {data.unpricedLines > 0 &&

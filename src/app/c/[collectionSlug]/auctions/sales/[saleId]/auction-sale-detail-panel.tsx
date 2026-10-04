@@ -474,6 +474,17 @@ export function AuctionSaleDetailPanel({
         />
       </div>
 
+      {/* A lot whose condition is still to settle (#1623) is valued as a range, and the parcel's
+          figures above take each at its low end — the cautious one — which is said rather than
+          left for the collector to infer. */}
+      {summary.rangeLotCount > 0 && summary.catalogTotalHigh !== null && (
+        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-warning)" }}>
+          {summary.rangeLotCount} lot{summary.rangeLotCount === 1 ? " has its" : "s have their"}{" "}
+          condition to settle, so <strong>Catalogue</strong> and <strong>Headroom</strong> are at the
+          low end — up to {summary.catalogTotalHigh} {sale.currency} at the high end.
+        </p>
+      )}
+
       {summary.unbidCount > 0 && (
         <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-warning)" }}>
           {summary.unbidCount} payable lot{summary.unbidCount === 1 ? " has" : "s have"} no bid

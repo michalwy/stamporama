@@ -425,6 +425,15 @@ export interface LotLineValue {
   /** The figure came from the cheapest variant child of an unknown-variant umbrella (#238) — an
    * estimate, rendered with the same `~` + italics vocabulary the issue list uses. */
   uncertain: boolean;
+  /** The top of the line's range when its condition is not settled (#1623) — the highest value over
+   * its possible conditions, where {@link unitValue} is the lowest. Absent or equal to
+   * {@link unitValue} on a settled line. */
+  unitValueHigh?: number | null;
+  /** The line's condition is unknown or one of several (#1623). */
+  conditionUnsettled?: boolean;
+  /** Possible conditions the catalogue gives no figure for — left out of the range rather than
+   * emptying it, and said. Zero on a settled line. */
+  unpricedConditions?: number;
 }
 
 /**
@@ -481,6 +490,61 @@ export function lotLineValueOf(
 }
 
 /**
+ * The same three outcomes for a line whose condition is **not settled** (#1623): valued at each of
+ * its possible conditions, and stated as a range from the lowest figure to the highest.
+ *
+ * `valuations` holds one entry per possible condition — exactly one for a settled line, which then
+ * reads exactly as {@link lotLineValueOf} does.
+ *
+ * A possible condition the catalogue gives no figure for is **left out of the range and counted**
+ * (`unpricedConditions`) rather than emptying it: an unknown condition is any of the collection's,
+ * and almost every stamp has one the catalogue does not price, so the stricter rule would leave
+ * nearly every such line unvalued. Only when none of them is priced is the line unpriced — and
+ * marked (#1615) only when every one of them is. Unconvertible is the same fact for every condition,
+ * the rate being the sale's.
+ */
+export function lotLineRangeOf(
+  quantity: number,
+  valuations: (CatalogueLineValuation | undefined)[],
+  rate: number | null,
+  unsettled: boolean
+): LotLineValue {
+  const each = valuations.map((valuation) => lotLineValueOf(quantity, valuation, rate));
+  if (!unsettled && each.length === 1) return each[0];
+  const unpricedConditions = unsettled ? each.filter((value) => value.unpriced).length : 0;
+  const priced = each.filter(
+    (value): value is LotLineValue & { unitValue: number } => value.unitValue !== null
+  );
+  if (priced.length === 0) {
+    const unconvertible = each.some((value) => value.unconvertible);
+    const marks = each.map((value) => value.mark);
+    return {
+      quantity,
+      unitValue: null,
+      unitValueHigh: null,
+      unpriced: !unconvertible,
+      mark: !unconvertible && marks.length > 0 && marks.every((mark) => mark !== null) ? marks[0] : null,
+      unconvertible,
+      uncertain: each.some((value) => value.uncertain),
+      conditionUnsettled: unsettled,
+      unpricedConditions,
+    };
+  }
+  const figures = priced.map((value) => value.unitValue);
+  return {
+    quantity,
+    unitValue: Math.min(...figures),
+    unitValueHigh: Math.max(...figures),
+    unpriced: false,
+    mark: null,
+    unconvertible: false,
+    uncertain: priced.some((value) => value.uncertain),
+    conditionUnsettled: unsettled,
+    unpricedConditions,
+  };
+}
+
+/**
  * Does this lot still need saying what it holds (#442)?
  *
  * Zero lines is the normal state while a lot is merely being watched, so this is not an error — it
@@ -528,6 +592,15 @@ export interface LotCompositionValue {
   unconvertibleLines: number;
   /** Whether any line contributing to the total is a lowest-variant estimate. */
   uncertain: boolean;
+  /**
+   * The top of the range when a line's condition is not settled (#1623) — the sum of each line's
+   * highest figure, where {@link catalogValue} sums the lowest. **Null when the value is one figure**,
+   * which is every lot whose lines are settled and any lot whose possible conditions happen to be
+   * priced alike; everything compared or summed reads {@link catalogValue}, the cautious end.
+   */
+  catalogValueHigh: string | null;
+  /** Lines whose condition is unknown or one of several — the lot is *condition to settle*. */
+  unsettledLines: number;
 }
 
 /**
@@ -545,27 +618,35 @@ export function summarizeLotComposition(lines: LotLineValue[]): LotCompositionVa
   let markedLines = 0;
   let unconvertibleLines = 0;
   let uncertain = false;
+  let totalHigh = 0;
+  let unsettledLines = 0;
 
   for (const line of lines) {
     const count = Number.isFinite(line.quantity) ? Math.max(0, Math.trunc(line.quantity)) : 0;
     quantity += count;
+    if (line.conditionUnsettled) unsettledLines++;
     if (line.unpriced && line.mark) markedLines++;
     else if (line.unpriced) unpricedLines++;
     if (line.unconvertible) unconvertibleLines++;
     if (line.unitValue === null) continue;
     valued++;
     total += line.unitValue * count;
+    totalHigh += (line.unitValueHigh ?? line.unitValue) * count;
     if (line.uncertain) uncertain = true;
   }
 
+  const catalogValue = valued > 0 ? money(total) : null;
+  const high = valued > 0 ? money(totalHigh) : null;
   return {
     lineCount: lines.length,
     quantity,
-    catalogValue: valued > 0 ? money(total) : null,
+    catalogValue,
     unpricedLines,
     markedLines,
     unconvertibleLines,
     uncertain,
+    catalogValueHigh: high !== null && high !== catalogValue ? high : null,
+    unsettledLines,
   };
 }
 
@@ -587,11 +668,14 @@ export interface AuctionLotSummaryRow {
   /** What the lot fetched once it closed. Preferred over `currentBid` when present: it is the
    * settled figure, and the last observed bid is only ever an approximation of it. */
   finalPrice?: Amount;
-  /** Catalogue value of the lot's composition, when its lines have been entered. */
+  /** Catalogue value of the lot's composition, when its lines have been entered — the **low** end
+   * when a line's condition is not settled (#1623). */
   catalogValue?: Amount;
   /** The lot is *not stamps* (#1624): it has no catalogue value to miss, so it is never counted in
    * {@link AuctionSaleSummary.unvaluedCount}. */
   notStamps?: boolean;
+  /** The top of that range, when there is one. Summed beside the total, never into it. */
+  catalogValueHigh?: Amount;
 }
 
 /** Sale-level totals over the lots that cost money. */
@@ -653,8 +737,13 @@ export interface AuctionSaleSummary {
    * ceiling is raised. Counted for the same reason every other gap here is: the totals are lower
    * than the lot list is long, and a figure that quietly omits rows reads as complete. */
   outpricedCount: number;
-  /** Catalogue value across the payable lots. */
+  /** Catalogue value across the payable lots — each at the **low** end of its range when a line's
+   * condition is not settled (#1623), the cautious figure the headroom below is taken against. */
   catalogTotal: string;
+  /** The same total at the top of every range; null when no payable lot has one. */
+  catalogTotalHigh: string | null;
+  /** Payable lots whose catalogue value is a range — the screens say the total is their low end. */
+  rangeLotCount: number;
   /** `catalogTotal − allInTotal`. Null when nothing in the parcel carries both a bid and a
    * catalogue value, since the comparison would then be between two different sets of lots. */
   headroom: string | null;
@@ -728,6 +817,8 @@ export function summarizeAuctionSale(
   let uncappedCount = 0;
   let outpricedCount = 0;
   let catalogTotal = 0;
+  let catalogTotalHigh = 0;
+  let rangeLotCount = 0;
   // Headroom compares like with like: only lots carrying both a bid and a catalogue value.
   let comparableCount = 0;
   // Every per-lot figure carries the premium and not the shipping; the parcel's shipping is added
@@ -759,7 +850,12 @@ export function summarizeAuctionSale(
       // Shipping is deliberately excluded here and added once below.
       allInTotal += allInValue(bid, perLotFees);
     }
-    if (cv !== null) catalogTotal += cv;
+    if (cv !== null) {
+      catalogTotal += cv;
+      const high = num(lot.catalogValueHigh);
+      if (high !== null) rangeLotCount++;
+      catalogTotalHigh += high ?? cv;
+    }
 
     // Exposure (#523). A won lot is settled money — what it fetched, all-in — and its ceiling has
     // nothing left to say about it, so it enters both totals at the same figure.
@@ -819,6 +915,8 @@ export function summarizeAuctionSale(
     uncappedCount,
     outpricedCount,
     catalogTotal: money(catalogTotal),
+    catalogTotalHigh: rangeLotCount > 0 ? money(catalogTotalHigh) : null,
+    rangeLotCount,
     headroom: comparableCount > 0 ? money(catalogTotal - allInTotal) : null,
   };
 }

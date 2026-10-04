@@ -24,6 +24,7 @@ describe("auction lot params", () => {
     closing: "week",
     signal: "outbid",
     undescribed: true,
+    conditionToSettle: true,
     duplicate: true,
     search: "köhler",
     sellerId: "seller-1",
@@ -46,6 +47,7 @@ describe("auction lot params", () => {
     assert.equal(params.get("closing"), "week");
     assert.equal(params.get("signal"), "outbid");
     assert.equal(params.get("undescribed"), "1");
+    assert.equal(params.get("conditionToSettle"), "1");
     assert.equal(params.get("duplicate"), "1");
     assert.equal(params.get("search"), "köhler");
     assert.equal(params.get("sellerId"), "seller-1");
@@ -98,6 +100,7 @@ describe("auction lot narrowings", () => {
     closing: "ended",
     signal: "outbid",
     undescribed: true,
+    conditionToSettle: true,
     duplicate: true,
     search: "köhler",
     sellerId: "seller-1",

@@ -36,7 +36,9 @@ export interface AtRiskLine {
   familyIds: string[];
   /** `Mi·PL 12`, the stamp's name, or a plain dash — what the banner calls it. */
   stampLabel: string;
-  conditionId: string;
+  /** Null while the line's condition is not settled (#1623); {@link conditionLabel} then says
+   * `MNH or MH` or that it is unknown. */
+  conditionId: string | null;
   conditionLabel: string;
   formatId: string | null;
   formatLabel: string | null;
@@ -49,7 +51,8 @@ export interface AtRiskLine {
 /** A line of the lot being composed — pending in the add dialog, stored in the composition one. */
 export interface ComposedLine {
   stampId: string;
-  conditionId: string;
+  /** Null while the line's condition is not settled (#1623). */
+  conditionId: string | null;
   formatId: string | null;
   certificateStatusId: string | null;
 }
@@ -89,13 +92,20 @@ export function sameStamp(stampId: string, candidate: AtRiskLine): boolean {
  * single and a block of four are two different things to own — worth mentioning, not worth an
  * alarm. Certificate is not, for the opposite reason: it prices a copy differently but does not
  * make it a different copy.
+ *
+ * A condition **not settled** on either side (#1623) cannot be said to agree, so the pair is soft:
+ * the same stamp, possibly in another condition — worth mentioning, and no more than that is known.
  */
 function pairStrength(
   line: ComposedLine,
   candidate: AtRiskLine
 ): { strength: DuplicateStrength; certificateDiffers: boolean } | null {
   if (!sameStamp(line.stampId, candidate)) return null;
-  if (line.conditionId !== candidate.conditionId || line.formatId !== candidate.formatId) {
+  if (
+    line.conditionId === null ||
+    line.conditionId !== candidate.conditionId ||
+    line.formatId !== candidate.formatId
+  ) {
     return { strength: "soft", certificateDiffers: false };
   }
   return {

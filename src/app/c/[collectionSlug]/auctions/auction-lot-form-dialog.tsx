@@ -6,6 +6,7 @@ import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purcha
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-display-condition";
+import { lineConditionLabel } from "@/lib/auction-line-condition";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { STAMP_SECONDARY_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
@@ -184,7 +185,8 @@ export function AuctionLotFormDialog({
         .filter((entry) => entry.raw.stampId)
         .map((entry) => ({
           stampId: entry.raw.stampId,
-          conditionId: entry.raw.conditionId,
+          // Blank while the condition is unknown or one of several (#1623) — a soft match at most.
+          conditionId: entry.raw.conditionId || null,
           formatId: entry.raw.formatId || null,
           certificateStatusId: entry.raw.certificateStatusId || null,
         })),
@@ -719,7 +721,15 @@ export function AuctionLotFormDialog({
                         </div>
                         <div style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
                           {[
-                            nameById(conditions, entry.raw.conditionId),
+                            entry.raw.conditionId
+                              ? nameById(conditions, entry.raw.conditionId)
+                              : lineConditionLabel(
+                                  {
+                                    conditionId: null,
+                                    possibleConditionIds: entry.raw.possibleConditionIds ?? [],
+                                  },
+                                  conditions
+                                ).long,
                             entry.raw.certificateStatusId
                               ? nameById(certificateStatuses, entry.raw.certificateStatusId)
                               : null,

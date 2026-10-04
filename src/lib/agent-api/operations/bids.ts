@@ -3,7 +3,7 @@ import { COMMON_CURRENCIES } from "../../currencies";
 import { recommendBidForLines } from "../../bid-recommendations";
 import { bidLine, bidRecommendation } from "../bid-reads";
 import { invalidRequest, notFound } from "../errors";
-import { optionalInteger, optionalString, requiredString, stringList } from "../params";
+import { optionalBoolean, optionalInteger, optionalString, stringList } from "../params";
 import { resolveOptionalVocabularyValue, resolveVocabularyValue } from "../vocabulary";
 import { readCollectionVocabulary } from "./vocabulary";
 import type { AgentBidRecommendation } from "../bid-reads";
@@ -93,9 +93,25 @@ const PARAMETERS: readonly ParameterSpec[] = [
     name: "condition",
     in: "query",
     type: "string",
-    required: true,
+    required: false,
     description:
-      "The grade the lot is described as being in. Required, and not for tidiness: a catalogue prices each grade separately and a market median is kept per grade, so what a lot is worth is unanswerable about material whose grade is unstated. Takes a name or abbreviation from `get_collection_vocabulary` (`MNH` works) or an id.",
+      "The grade the lot is described as being in. Takes a name or abbreviation from `get_collection_vocabulary` (`MNH` works) or an id. A catalogue prices each grade separately and a market median is kept per grade, so the grade has to be said one of three ways: this, `possible_conditions`, or `condition_unknown` — exactly one of them. Never guess a grade the description does not state.",
+  },
+  {
+    name: "possible_conditions",
+    in: "query",
+    type: "string[]",
+    required: false,
+    description:
+      "The grades the lot may be in, when the description does not settle it — *Czysty* (unused) is `MNH,MH`. Two or more, each as `condition` takes them. The answer is then a range: the plain figures are the lowest grade's, the cautious end to compare an opening price with, and `high` holds the same figures at the highest grade.",
+  },
+  {
+    name: "condition_unknown",
+    in: "query",
+    type: "boolean",
+    required: false,
+    description:
+      "`true` when the description says nothing about the grade at all: every grade of the collection is then possible, and the answer is a range over them as for `possible_conditions`.",
   },
   {
     name: "certificate",
@@ -180,11 +196,39 @@ export async function readBidRecommendation(
     );
   }
 
-  const conditionId = resolveVocabularyValue(
-    requiredString(params, "condition"),
-    vocabulary.conditions,
-    { vocabulary: "condition", parameter: "condition" }
-  );
+  // The grade, said one of three ways (#1623): one grade, the grades it may be in, or unknown.
+  // Exactly one — a lot described two ways at once is a question with two answers.
+  const conditionRaw = optionalString(params, "condition");
+  const possibleRaw = stringList(params, "possible_conditions");
+  const unknown = optionalBoolean(params, "condition_unknown") === true;
+  const ways = [conditionRaw !== null, possibleRaw.length > 0, unknown].filter(Boolean).length;
+  if (ways !== 1) {
+    throw invalidRequest(
+      ways === 0
+        ? 'Say the grade the lot is in: "condition" for one grade, "possible_conditions" for the grades it may be in (`MNH,MH` for *Czysty*), or "condition_unknown=true" when the description says nothing. A lot\'s worth is unanswerable about material whose grade is unstated.'
+        : 'Send exactly one of "condition", "possible_conditions" and "condition_unknown".'
+    );
+  }
+  const possibleConditionIds = [
+    ...new Set(
+      possibleRaw.map((raw) =>
+        resolveVocabularyValue(raw, vocabulary.conditions, {
+          vocabulary: "condition",
+          parameter: "possible_conditions",
+        })
+      )
+    ),
+  ];
+  const conditionId =
+    conditionRaw !== null
+      ? resolveVocabularyValue(conditionRaw, vocabulary.conditions, {
+          vocabulary: "condition",
+          parameter: "condition",
+        })
+      : // A set of one is that grade.
+        possibleConditionIds.length === 1
+        ? possibleConditionIds[0]
+        : null;
   const certificateStatusId = resolveOptionalVocabularyValue(
     optionalString(params, "certificate"),
     vocabulary.certificateStatuses,
@@ -210,6 +254,7 @@ export async function readBidRecommendation(
     stampIds.map((stampId) => ({
       stampId,
       conditionId,
+      possibleConditionIds: conditionId === null ? possibleConditionIds : [],
       certificateStatusId,
       formatId,
       quantity,
@@ -231,8 +276,19 @@ export async function readBidRecommendation(
     );
   }
 
+  const nameOf = (id: string) => vocabulary.conditions.find((entry) => entry.id === id)?.name ?? id;
+  const possibleNames =
+    conditionId !== null
+      ? []
+      : possibleConditionIds.length > 0
+        ? possibleConditionIds.map(nameOf)
+        : vocabulary.conditions.map((entry) => entry.name);
   const conditionName =
-    vocabulary.conditions.find((entry) => entry.id === conditionId)?.name ?? conditionId;
+    conditionId !== null
+      ? nameOf(conditionId)
+      : possibleConditionIds.length > 0
+        ? possibleNames.join(" or ")
+        : "any grade";
   const certificateName =
     certificateStatusId === null
       ? null
@@ -248,6 +304,7 @@ export async function readBidRecommendation(
     result.lines.map((line) =>
       bidLine(line, {
         condition: conditionName,
+        possibleConditions: possibleNames,
         certificate: certificateName,
         format: formatName,
       })
@@ -260,13 +317,13 @@ export const recommendBidOperation: Operation = {
   method: "GET",
   path: "/bid-recommendation",
   description:
-    "What a lot would be worth bidding, for a lot nothing here records — an auction you are deciding whether to look at at all. Describe what the auctioneer says the lot holds (the stamps, the grade, the certificate, the format, how many of each) and get back three figures: a floor under which it is a bargain, a fair figure the recorded evidence supports, and a walk-away past which it belongs to somebody else. If the opening price is above the walk-away, drop it. Nothing is created and nothing is stored; this reads the collection's own price evidence and computes. Do **not** work this out yourself from `catalogValue` and `marketValue` — those are evidence and neither is a recommendation, and an arithmetic of your own would disagree with what the collector sees on their own screen.",
+    "What a lot would be worth bidding, for a lot nothing here records — an auction you are deciding whether to look at at all. Describe what the auctioneer says the lot holds (the stamps, the grade — or the grades it may be in when the description does not settle it — the certificate, the format, how many of each) and get back three figures: a floor under which it is a bargain, a fair figure the recorded evidence supports, and a walk-away past which it belongs to somebody else. If the opening price is above the walk-away, drop it. Nothing is created and nothing is stored; this reads the collection's own price evidence and computes. Do **not** work this out yourself from `catalogValue` and `marketValue` — those are evidence and neither is a recommendation, and an arithmetic of your own would disagree with what the collector sees on their own screen.",
   writes: false,
   parameters: PARAMETERS,
   result: {
     kind: "object",
     description:
-      "Three levels, each stated twice: `allIn` is what the lot is worth **including** the buyer's premium, and `bid` is the highest hammer price whose all-in still fits inside it — the figure a bid box takes. **`bid` is absent when the fees alone consume the level**, which is a real answer and not a zero: at that premium there is no hammer price that stays inside the figure. **All three levels are absent when nothing could price a single line** — a lot that cannot be valued is unanswered, not worthless — so `fair` missing is never `0.00`. Three unpriceable cases are kept apart and must stay apart when you report them: `unanchoredLines` counts lines nothing prices at all, `unconvertibleLines` counts lines that **have** a value which no rate carries into this currency (those are priced, and telling the collector to enter a value would be wrong), and a consumed level is the third. The figures cover only the lines that were anchored, so a non-zero count of either means the total is partial. Each line says what anchored it: `market` is a median of what copies of that exact key actually fetched, with its sample size; `catalogue` is the book's figure times the ratio this collection's own auction results have learned for that area, grade and period, with the bucket named so it can be argued with. `owned` is how many the collection already holds — evidence for you to weigh, never something that moved a figure. `floorPercent` and `walkAwayPercent` are the collector's own trading style rather than a measured spread. `premiumPercent` and `premiumFixed` echo the fees you sent; if they are absent, no fees were applied and every `bid` equals its `allIn`, which **overstates** what may actually be bid. The figures describe the one grade you asked about: a lot mixing grades cannot be answered in one call, and answers from two calls do not add, because a fixed premium is charged once per lot.",
+      "Three levels, each stated twice: `allIn` is what the lot is worth **including** the buyer's premium, and `bid` is the highest hammer price whose all-in still fits inside it — the figure a bid box takes. **`bid` is absent when the fees alone consume the level**, which is a real answer and not a zero: at that premium there is no hammer price that stays inside the figure. **All three levels are absent when nothing could price a single line** — a lot that cannot be valued is unanswered, not worthless — so `fair` missing is never `0.00`. Three unpriceable cases are kept apart and must stay apart when you report them: `unanchoredLines` counts lines nothing prices at all, `unconvertibleLines` counts lines that **have** a value which no rate carries into this currency (those are priced, and telling the collector to enter a value would be wrong), and a consumed level is the third. The figures cover only the lines that were anchored, so a non-zero count of either means the total is partial. Each line says what anchored it: `market` is a median of what copies of that exact key actually fetched, with its sample size; `catalogue` is the book's figure times the ratio this collection's own auction results have learned for that area, grade and period, with the bucket named so it can be argued with. `owned` is how many the collection already holds — evidence for you to weigh, never something that moved a figure. `floorPercent` and `walkAwayPercent` are the collector's own trading style rather than a measured spread. `premiumPercent` and `premiumFixed` echo the fees you sent; if they are absent, no fees were applied and every `bid` equals its `allIn`, which **overstates** what may actually be bid. When the grade was sent as `possible_conditions` or `condition_unknown`, the figures are a **range**: `floor`, `fair` and `walkAway` are at the lowest grade — compare the opening price with these, the cautious end — and `high` holds the same three at the highest grade; each line names its `possibleConditions` and carries `unitValueHigh` beside `unitValue`. A grade with no price at all is left out of the range rather than emptying it. The figures describe the one grade (or set of grades) you asked about: a lot mixing grades cannot be answered in one call, and answers from two calls do not add, because a fixed premium is charged once per lot.",
   },
   handler: async (context, params) => readBidRecommendation(context, params),
 };
