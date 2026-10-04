@@ -8,6 +8,7 @@ import {
   updateCollectionBidPercentsAction,
   updateCollectionClosedOfferPhotoTtlAction,
   updateCollectionDefaultLanguageAction,
+  updateCollectionHomeMarketAction,
   updateCollectionItemNoPadAction,
   updateCollectionScanSheetTtlAction,
   type ClearStorageCacheState,
@@ -22,6 +23,7 @@ import { RETENTION_FOREVER, parseRetentionSetting } from "@/lib/retention-ttl";
 import type { BidPercentPatch } from "@/lib/collections";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "@/lib/bid-recommendation";
 import { COMMON_LANGUAGES } from "@/lib/languages";
+import { COMMON_MARKETS } from "@/lib/market-anchoring";
 import {
   MAX_ITEM_NO_PAD,
   MIN_ITEM_NO_PAD,
@@ -43,6 +45,8 @@ interface CollectionSettingsPanelProps {
   baseCurrency: string;
   /** The language this collection's own entity text is written in (#293). */
   defaultLanguage: string;
+  /** The country whose auction results anchor valuations unless an area says otherwise (#1634). */
+  homeMarket: string;
   /** How many digits an internal copy number is padded to for display (#268). */
   itemNoPad: number;
 }
@@ -359,13 +363,16 @@ function StorageCacheCard({
 }
 
 /** Settings → Collection (#1469): what holds for the whole collection, and the reset. */
-export function CollectionSettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, itemNoPad }: CollectionSettingsPanelProps) {
+export function CollectionSettingsPanel({ collectionId, collectionName, baseCurrency, defaultLanguage, homeMarket, itemNoPad }: CollectionSettingsPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionState, setActionState] = useState<ResetToDemoState>({ status: "idle" });
   const [isPending, startTransition] = useTransition();
 
   const [language, setLanguage] = useState(defaultLanguage);
   const [languageError, setLanguageError] = useState<string | null>(null);
+
+  const [market, setMarket] = useState(homeMarket);
+  const [marketError, setMarketError] = useState<string | null>(null);
 
   const [pad, setPad] = useState(itemNoPad);
   const [padError, setPadError] = useState<string | null>(null);
@@ -379,6 +386,19 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
       if (result.status === "error") {
         setPad(previous);
         setPadError(result.message);
+      }
+    });
+  }
+
+  function handleMarketChange(next: string) {
+    const previous = market;
+    setMarket(next);
+    setMarketError(null);
+    startTransition(async () => {
+      const result = await updateCollectionHomeMarketAction(collectionId, next);
+      if (result.status === "error") {
+        setMarket(previous);
+        setMarketError(result.message);
       }
     });
   }
@@ -440,6 +460,30 @@ export function CollectionSettingsPanel({ collectionId, collectionName, baseCurr
             {COMMON_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.label} ({l.code})
+              </option>
+            ))}
+          </select>
+        </SettingsFieldCard>
+
+        {/* Home market (#1634): whose auction results anchor valuations unless an area names its
+            own anchoring markets, and what a result counts as when its seller names no market. */}
+        <SettingsFieldCard
+          label="Home market"
+          hint="Whose auction results count unless an area says otherwise."
+          tooltip="An area can name its own anchoring markets — foreign results for German material, say. A result whose seller, house or platform has no market set counts as this one."
+          error={marketError}
+        >
+          <select
+            aria-label="Home market"
+            value={market}
+            onChange={(e) => handleMarketChange(e.target.value)}
+            disabled={isPending}
+            style={SETTINGS_FIELD_SELECT_STYLE}
+          >
+            {!COMMON_MARKETS.some((m) => m.code === market) && <option value={market}>{market}</option>}
+            {COMMON_MARKETS.map((m) => (
+              <option key={m.code} value={m.code}>
+                {m.label} ({m.code})
               </option>
             ))}
           </select>

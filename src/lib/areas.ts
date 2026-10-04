@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { recomputeSortKeysForAreas } from "./catalog-sort-key-recompute";
+import { normalizeMarketList } from "./market-anchoring";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -169,6 +170,9 @@ export interface CollectionAreaData {
   primaryCatalogVendorId: string | null;
   /** The area's own prefix for every vendor (#675); null when it says nothing at this level. */
   catalogPrefix: string | null;
+  /** The markets whose auction results this area's valuations rest on (#1634), as set **here** —
+   * empty when it names none and the question passes to its parent. */
+  anchorMarkets: string[];
   /** Optional name used for this area in auto-generated listing titles (#210); null when blank.
    * This is the **default-language** value; {@link titleNameByLanguage} overrides it per language. */
   titleName: string | null;
@@ -216,6 +220,7 @@ export async function readCollectionAreas(
       primaryCatalogNameId: true,
       primaryCatalogVendorId: true,
       catalogPrefix: true,
+      anchorMarkets: true,
       titleName: true,
       assignable: true,
       sortOrder: true,
@@ -255,6 +260,7 @@ export async function readCollectionAreas(
     primaryCatalogNameId: a.primaryCatalogNameId,
     primaryCatalogVendorId: a.primaryCatalogVendorId,
     catalogPrefix: a.catalogPrefix,
+    anchorMarkets: a.anchorMarkets,
     titleName: a.titleName,
     titleNameByLanguage: translationsByLanguage(a.translations, (t) => t.titleName),
     assignable: a.assignable,
@@ -286,6 +292,18 @@ export async function readCollectionAreas(
   }));
 }
 
+/** Anchoring markets as written (#1634): each a two-letter country code, refused otherwise, stored
+ * deduplicated and sorted. `undefined` passes through so an update can leave them alone. */
+function anchorMarketsData(raw: string[] | undefined): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const typed = raw.map((m) => m.trim()).filter((m) => m !== "");
+  const codes = normalizeMarketList(typed);
+  if (codes.length !== new Set(typed.map((m) => m.toUpperCase())).size) {
+    throw new Error("An anchoring market is a two-letter country code, such as DE.");
+  }
+  return codes;
+}
+
 export async function createCollectionArea(
   ownerId: string,
   collectionId: string,
@@ -299,6 +317,8 @@ export async function createCollectionArea(
     primaryCatalogVendorId?: string | null;
     /** The area's prefix for every vendor (#675); blank means "inherit" and stores null. */
     catalogPrefix?: string | null;
+    /** The markets anchoring this area's valuations (#1634); empty or omitted inherits. */
+    anchorMarkets?: string[];
     titleName?: string | null;
     /** Per-language `titleName` overrides (#293), keyed by ISO 639-1 code then field key. A blank
      * / null value removes that language's row. Languages absent from the record are left
@@ -333,6 +353,7 @@ export async function createCollectionArea(
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
       primaryCatalogVendorId: await resolvePrimaryVendorId(data),
       catalogPrefix: blankToNull(data.catalogPrefix),
+      anchorMarkets: anchorMarketsData(data.anchorMarkets) ?? [],
       titleName: data.titleName ?? null,
       assignable: data.assignable ?? true,
       // Append to the end of the sibling group (#78).
@@ -395,6 +416,10 @@ export async function updateCollectionArea(
     primaryCatalogVendorId?: string | null;
     /** The area's prefix for every vendor (#675); blank means "inherit" and stores null. */
     catalogPrefix?: string | null;
+    /** The markets anchoring this area's valuations (#1634); empty inherits, and **omitted leaves
+     * them as they are** — unlike the fields around it, so a caller restating an area for another
+     * reason (a move) cannot clear them by not knowing about them. */
+    anchorMarkets?: string[];
     titleName?: string | null;
     /** Per-language `titleName` overrides (#293); see {@link createCollectionArea}. */
     translations?: TranslationValueMap;
@@ -472,6 +497,7 @@ export async function updateCollectionArea(
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
       primaryCatalogVendorId: nextPrimaryVendorId,
       catalogPrefix: blankToNull(data.catalogPrefix),
+      ...(data.anchorMarkets !== undefined ? { anchorMarkets: anchorMarketsData(data.anchorMarkets) } : {}),
       titleName: data.titleName ?? null,
       ...(data.assignable !== undefined ? { assignable: data.assignable } : {}),
       ...(parentChanged

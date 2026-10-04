@@ -20,6 +20,8 @@ import {
   type PriceBasis,
 } from "./price-observation";
 import type { MarketObservationInput } from "./market-value";
+import { resultMarket, type AnchoringResolver, type MarketCode } from "./market-anchoring";
+import { loadAnchoring } from "./market-anchorings";
 
 // **Realised prices from other people's auctions** (#1633; ADR-0063) — recorded, corrected, deleted
 // and read back. The rules about what an observation *means* are in the pure `price-observation.ts`;
@@ -98,8 +100,13 @@ export interface PriceObservationView {
   countedAmount: string | null;
   /** Empty when the match is exact. */
   doubts: ObservationDoubt[];
-  /** Why an observation is not in the market value, when it is not. */
-  notCounted: null | "uncertain" | "no-rate" | "no-hammer";
+  /** Why an observation is not in the market value, when it is not. `other-market` is a market that
+   * does not anchor the stamp's area (#1634) — the last reason checked, so an observation that would
+   * not count anywhere says why it would not. */
+  notCounted: null | "uncertain" | "no-rate" | "no-hammer" | "other-market";
+  /** Its house's market, else its platform's (#1634); null when neither names one, which counts as
+   * the home market. */
+  market: MarketCode | null;
   platformId: string;
   platformName: string;
   auctionHouseId: string | null;
@@ -113,6 +120,9 @@ export interface PriceObservationView {
 export interface StampPriceObservations {
   collectionId: string;
   baseCurrency: string;
+  /** The markets an observation has to come from to count for this stamp (#1634). */
+  anchoringMarkets: MarketCode[];
+  homeMarket: MarketCode;
   /** The stamp is an unknown-variant umbrella: anything recorded on it is a hint (ADR-0063 §3). */
   umbrella: boolean;
   /** Counted ones first, then the hints; newest sale first in each. */
@@ -150,8 +160,8 @@ export const OBSERVATION_SELECT = {
   condition: { select: { name: true, abbreviation: true, sortOrder: true } },
   certificateStatus: { select: { name: true, abbreviation: true, sortOrder: true } },
   format: { select: { name: true, abbreviation: true, sortOrder: true } },
-  platform: { select: { name: true } },
-  auctionHouse: { select: { name: true } },
+  platform: { select: { name: true, market: true } },
+  auctionHouse: { select: { name: true, market: true } },
   stamp: { select: { ...VARIANT_FLAG_SELECT, variants: { select: VARIANT_FLAG_SELECT } } },
 } satisfies Prisma.PriceObservationSelect;
 
@@ -183,7 +193,13 @@ export function observationInput(row: ObservationRow, baseCurrency: string): Mar
     hammer: observationHammer(row.price.toString(), basisOf(row.priceBasis), premiumOf(row)),
     fxRateToBase: row.fxRateToBase?.toString() ?? null,
     inBaseCurrency: row.currency === baseCurrency,
+    market: observationMarket(row),
   };
+}
+
+/** Where an observation was sold: its house's market, else its platform's (#1634). */
+export function observationMarket(row: Pick<ObservationRow, "platform" | "auctionHouse">): MarketCode | null {
+  return resultMarket(row.auctionHouse, row.platform);
 }
 
 function basisOf(value: string): PriceBasis {
@@ -197,7 +213,11 @@ function premiumOf(row: { premiumPercent: Prisma.Decimal | null; premiumFixed: P
   };
 }
 
-function toView(row: ObservationRow, baseCurrency: string): PriceObservationView {
+function toView(
+  row: ObservationRow,
+  baseCurrency: string,
+  anchoring: AnchoringResolver
+): PriceObservationView {
   const basis = basisOf(row.priceBasis);
   const premium = premiumOf(row);
   const price = row.price.toString();
@@ -215,6 +235,7 @@ function toView(row: ObservationRow, baseCurrency: string): PriceObservationView
   if (doubts.length > 0) notCounted = "uncertain";
   else if (hammer === null) notCounted = "no-hammer";
   else if (!inBase && rate === null) notCounted = "no-rate";
+  else if (!anchoring.anchors(row.stampId, observationMarket(row))) notCounted = "other-market";
   else countedAmount = (Number(hammer) * (inBase ? 1 : rate!)).toFixed(2);
 
   return {
@@ -250,6 +271,7 @@ function toView(row: ObservationRow, baseCurrency: string): PriceObservationView
     auctionName: row.auctionName,
     lotNo: row.lotNo,
     url: row.url,
+    market: observationMarket(row),
   };
 }
 
@@ -277,7 +299,7 @@ export async function getStampPriceObservations(
   stampId: string
 ): Promise<StampPriceObservations> {
   const collectionId = await stampCollection(ownerId, stampId);
-  const [rows, baseCurrency, stamp] = await Promise.all([
+  const [rows, baseCurrency, stamp, anchoring] = await Promise.all([
     prisma.priceObservation.findMany({
       where: { stampId, collectionId },
       select: OBSERVATION_SELECT,
@@ -288,11 +310,14 @@ export async function getStampPriceObservations(
       where: { id: stampId },
       select: { ...VARIANT_FLAG_SELECT, variants: { select: VARIANT_FLAG_SELECT } },
     }),
+    loadAnchoring(collectionId, [stampId]),
   ]);
-  const views = rows.map((row) => toView(row, baseCurrency));
+  const views = rows.map((row) => toView(row, baseCurrency, anchoring));
   return {
     collectionId,
     baseCurrency,
+    anchoringMarkets: [...anchoring.anchorsOf(stampId)],
+    homeMarket: anchoring.homeMarket,
     umbrella: isUnknownVariantStamp(stamp),
     observations: [
       ...views.filter((v) => v.notCounted === null),

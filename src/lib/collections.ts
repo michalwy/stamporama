@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { nameToSlugBase } from "./slug";
 import { normalizeLanguage } from "./languages";
+import { normalizeMarketCode } from "./market-anchoring";
 import { MAX_ITEM_NO_PAD, MIN_ITEM_NO_PAD, parseItemNoPad } from "./item-number";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "./bid-recommendation";
 import { parseClosedOfferPhotoTtlSetting } from "./offer-photo-cleanup-rules";
@@ -134,6 +135,31 @@ export async function setCollectionDefaultLanguage(
   await prisma.collection.update({
     where: { id: collectionId },
     data: { defaultLanguage: code },
+  });
+}
+
+/**
+ * Set the collection's home market (#1634; ADR-0064): what every area naming no anchoring markets
+ * anchors on, and what a result whose contacts name no market counts as. Re-values nothing stored —
+ * market value is computed on demand, so the next read answers under the new market.
+ */
+export async function setCollectionHomeMarket(
+  ownerId: string,
+  collectionId: string,
+  market: string
+): Promise<void> {
+  const code = normalizeMarketCode(market);
+  if (!code) throw new Error("The home market is a two-letter country code, such as PL.");
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { homeMarket: code },
   });
 }
 
@@ -308,6 +334,7 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       slug: true,
       baseCurrency: true,
       defaultLanguage: true,
+      homeMarket: true,
       duplicateCatalogMode: true,
       itemNoPad: true,
       bidFloorPercent: true,

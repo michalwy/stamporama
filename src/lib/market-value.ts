@@ -25,6 +25,7 @@
 // division of labour `CopyValuation` makes between `baseAmount` and `baseAmountDisplay`.
 
 import type { Amount, AuctionLotStatus } from "./auction-lot";
+import { countByMarket, type AnchoringResolver, type MarketCode, type MarketCount } from "./market-anchoring";
 
 // ── The key (ADR-0022 §1) ───────────────────────────────────────────────────
 
@@ -92,6 +93,9 @@ export interface MarketLotInput {
    * stated in the base currency is not comparable with the ones that can.
    */
   inBaseCurrency: boolean;
+  /** The country it was sold in — its sale's seller's, else the sale's platform's (#1634). Null when
+   * neither names one, which counts as the home market. Absent is the same as null. */
+  market?: MarketCode | null;
   lines: MarketLotLineInput[];
 }
 
@@ -113,6 +117,9 @@ export interface MarketDatapoint {
   /** The figure was derived from a mixed lot's pro-rata split rather than taken whole (§3). An
    * estimate, so §5 down-weights it rather than hiding it. */
   split: boolean;
+  /** The country the result was sold in (#1634), null when its contacts name none. Whether it
+   * **counts** is the stamp's anchoring markets' to say ({@link partitionByAnchoring}). */
+  market: MarketCode | null;
 }
 
 /** Parse an amount the way the auction modules do: anything unparseable is absent, never zero. */
@@ -192,6 +199,7 @@ export function extractMarketDatapoints(lots: MarketLotInput[]): MarketDatapoint
         amount: amount / quantity,
         at: lot.endsAt,
         split: false,
+        market: lot.market ?? null,
       });
       continue;
     }
@@ -216,6 +224,7 @@ export function extractMarketDatapoints(lots: MarketLotInput[]): MarketDatapoint
         amount: (amount * share) / quantity,
         at: lot.endsAt,
         split: true,
+        market: lot.market ?? null,
       });
     }
   }
@@ -247,6 +256,8 @@ export interface MarketObservationInput {
   /** As on {@link MarketLotInput}: the only way to tell "no conversion needed" from "none could be
    * had" apart, since `fxRateToBase` is null for both. */
   inBaseCurrency: boolean;
+  /** Its house's market, else its platform's (#1634); null when neither names one. */
+  market?: MarketCode | null;
 }
 
 /**
@@ -281,6 +292,7 @@ export function extractObservationDatapoints(
       amount,
       at: observation.soldOn,
       split: false,
+      market: observation.market ?? null,
     });
   }
   return out;
@@ -316,6 +328,8 @@ export interface MarketAggregate {
    * because the score is only ever shown next to the facts that produced it (ADR-0022 §5), and
    * because a row expands into the lots behind it (§8). */
   datapoints: MarketDatapoint[];
+  /** The same datapoints counted by market (#1634) — what a figure says it stands on. */
+  markets: MarketCount[];
 }
 
 /** Median of a non-empty list: the middle value, or the mean of the two middle ones. */
@@ -356,6 +370,7 @@ export function aggregateMarketDatapoints(points: MarketDatapoint[]): MarketAggr
       splitCount,
       wholeCount: group.length - splitCount,
       datapoints: group,
+      markets: countByMarket(group.map((p) => p.market)),
     };
   });
 }
@@ -436,20 +451,57 @@ export interface MarketValuation extends MarketAggregate {
   confidence: MarketConfidence;
 }
 
+// ── Anchoring (#1634; ADR-0064) ─────────────────────────────────────────────
+
+/**
+ * Split datapoints into the ones that **count** — sold in one of their own stamp's anchoring markets
+ * — and the **hints**, from anywhere else. Each datapoint is judged by its own stamp, so a mixed lot
+ * from a German house can anchor its Danzig line and be a hint for its Polish one: the split itself
+ * is over the whole lot and is not touched.
+ */
+export function partitionByAnchoring(
+  points: readonly MarketDatapoint[],
+  anchoring: AnchoringResolver
+): { anchored: MarketDatapoint[]; hints: MarketDatapoint[] } {
+  const anchored: MarketDatapoint[] = [];
+  const hints: MarketDatapoint[] = [];
+  for (const point of points) {
+    (anchoring.anchors(point.key.stampId, point.market) ? anchored : hints).push(point);
+  }
+  return { anchored, hints };
+}
+
 /** Extraction → aggregation → score in one call, for the common case. Observations (#1633) join the
- * collector's own lots as datapoints of the same standing: a key's figures are over both. */
+ * collector's own lots as datapoints of the same standing: a key's figures are over both. With an
+ * anchoring resolver (#1634) the figures are over the anchoring markets' results alone. */
 export function valuateMarket(
   lots: MarketLotInput[],
   now: Date,
-  observations: MarketObservationInput[] = []
+  observations: MarketObservationInput[] = [],
+  anchoring?: AnchoringResolver
 ): MarketValuation[] {
-  return aggregateMarketDatapoints([
-    ...extractMarketDatapoints(lots),
-    ...extractObservationDatapoints(observations),
-  ]).map((aggregate) => ({
-    ...aggregate,
-    confidence: marketConfidence(aggregate, now),
-  }));
+  return valuateMarketWithHints(lots, now, observations, anchoring).valuations;
+}
+
+/** {@link valuateMarket}, with the results it left out as hints — what a surface that states its
+ * evidence needs beside the figure. Without a resolver every result counts and there are none. */
+export function valuateMarketWithHints(
+  lots: MarketLotInput[],
+  now: Date,
+  observations: MarketObservationInput[] = [],
+  anchoring?: AnchoringResolver
+): { valuations: MarketValuation[]; hints: MarketDatapoint[] } {
+  const points = [...extractMarketDatapoints(lots), ...extractObservationDatapoints(observations)];
+  const { anchored, hints } = anchoring
+    ? partitionByAnchoring(points, anchoring)
+    : { anchored: points, hints: [] };
+  return {
+    valuations: aggregateMarketDatapoints(anchored).map((aggregate) => ({
+      ...aggregate,
+      confidence: marketConfidence(aggregate, now),
+    })),
+    hints,
+  };
 }
 
 // ── Realization ratio (ADR-0022 §6) ─────────────────────────────────────────

@@ -275,6 +275,14 @@ away again.
 Changing it later does not rewrite anything — your existing text stays exactly as typed; you are only
 telling Stamporama what language that text is in.
 
+## Home market
+
+**Settings → Collection** also carries a **Home market** — the country whose auction results your
+valuations rest on unless an area says otherwise. It starts as **Poland**. A result whose seller,
+auction house or platform has no [market](contacts.md#market) set counts as sold in the home market,
+so nothing changes until you start telling Stamporama where results come from. See
+[Markets — which results count](#markets--which-results-count).
+
 ## Organizing collecting areas
 
 Areas are managed on the **Areas** screen, in the sidebar's **Catalog** section, where they form a tree: an area can have sub-areas nested underneath it. Two options control how that tree behaves. (Areas used to live under Settings, and then in the **Collection** section; the screen's address never changed with the second move, and the old Settings address still works and takes you to the screen.)
@@ -287,6 +295,14 @@ Some areas exist only to organize the ones inside them — for example a **Europ
 - **Uncheck** it for a grouping-only area. Grouping-only areas are shown with a **Grouping** badge in the area list, and they cannot be picked as the area for an issue — in the **Add issue** and **Move to another area** dialogs they appear for context but are not selectable; you choose one of the real areas nested inside them instead. Catalog settings (the area prefix, the numbering vendors, the price sources and both primaries) still pass down to their children as before.
 
 You cannot mark an area as grouping-only while issues or stamps are still assigned directly to it — move those into a child area first.
+
+### Anchoring markets
+
+The **Valuation** section of the **Add area** / **Edit area** dialog sets the area's **Anchoring
+markets** — the countries whose auction results its market value and bid recommendations rest on.
+Leave it blank to inherit from the area above (the placeholder shows what that is), or the
+[home market](#home-market) when nothing above sets any. See
+[Markets — which results count](#markets--which-results-count).
 
 ### Catalog settings: numbering and price sources
 
@@ -1744,9 +1760,36 @@ They are listed in the **Market value** section of a stamp's Valuation dialog, u
 
 **What counts.** Market value stays on hammer prices, so an all-in price is reduced by its premium first; with no premium the two are the same. A price in another currency is converted at the **ECB reference rate of the day it sold** — the last one published on or before it — fetched when you record it and kept from then on. An observation counts only when it is an **exact** match: the stamp itself (not one with variants where none is named), an established condition and an established certificate. Exact observations count in the stamp's market value beside your own lots — in its median, its confidence and its sample — and in the realization ratio behind [Estimated value](#estimated-value) and the bid recommendations.
 
-**Hints.** An observation that is not exact, or whose rate for the day could not be read, is listed under **Hints — not counted in the market value**, saying why. It never enters a figure. A price recorded on a stamp that has variants is always a hint — record it on the variant when the listing says which. A missing rate is read again when you edit the observation.
+**Hints.** An observation that is not exact, whose rate for the day could not be read, or that was sold in a market that does not anchor the stamp's area (see below), is listed under **Hints — not counted in the market value**, saying why. It never enters a figure. A price recorded on a stamp that has variants is always a hint — record it on the variant when the listing says which. A missing rate is read again when you edit the observation.
 
 Each row shows the price **as observed** (hover it for the other of hammer and all-in, the premium and the rate of the day) and **as counted** — the hammer in your collection currency.
+
+### Markets — which results count
+
+Prices differ between markets: a German auction is good evidence for German material — the Reich,
+Danzig, the occupations, the plebiscites — and only a hint for Polish. So every result has a
+**market**, the country it was sold in, and every area says which markets **anchor** its valuations.
+
+- **Where a result's market comes from.** You never type it on a result. A price observation takes
+  the market of its auction house, or of its platform when there is no house; one of your own lots
+  takes the market of its sale's seller, or of the sale's platform. Set it once on the
+  [contact](contacts.md#market) and every result already recorded follows. A result whose contacts
+  have none counts as your [home market](#home-market).
+- **Which markets count for an area.** Set **Anchoring markets** in the area's **Valuation** section on
+  the Areas screen — country codes such as `DE, AT, CH`. Sub-areas inherit the whole list from the
+  nearest area above that sets one; an area with none set anywhere above it anchors on the home
+  market. A stamp is judged by its primary area.
+- **What happens to the rest.** Results from other markets are **hints**: shown, never counted — not
+  in the median, the sample, the confidence, the realization ratio behind
+  [Estimated value](#estimated-value) and the bid recommendations, nor any total. A lot holding stamps
+  from two areas is still split as one lot; each stamp's share then counts or not by its own area.
+- **Every figure says what it stands on.** A market value's hover lists its results by market
+  (*Markets: 3 PL · 1 not known*) and how many from other markets were left out (*Not counted: 2 DE*).
+  Under the grid, your own lots from other markets are listed as **Lots from other markets — not
+  counted**, and observations from other markets appear among the hints, *sold in DE, which does not
+  anchor this area*. A line under them says which markets the stamp's area counts. The same counts
+  appear in the [bid recommendation's evidence](auctions.md#what-a-lot-is-worth-bidding), and
+  `recommend_bid` lists the results it used with their source and market.
 
 ### The market total on the summary bar
 

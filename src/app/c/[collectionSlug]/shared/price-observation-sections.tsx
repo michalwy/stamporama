@@ -265,6 +265,8 @@ function notCountedReason(o: PriceObservationView): string {
   if (o.notCounted === "uncertain") return o.doubts.map((d) => OBSERVATION_DOUBT_LABEL[d]).join(", ");
   if (o.notCounted === "no-rate") return `no ${o.currency} → ${o.baseCurrency} rate for that day`;
   if (o.notCounted === "no-hammer") return "the premium is more than the price";
+  // #1634: a market that does not anchor this stamp's area.
+  if (o.notCounted === "other-market") return `sold in ${o.market ?? "an unknown market"}, which does not anchor this area`;
   return "";
 }
 
@@ -309,6 +311,10 @@ function ObservationRow({
         ) : (
           observationSource(o)
         )}
+        {/* Where it was sold (#1634) — its house's market, else its platform's. */}
+        <span style={{ ...mutedSmallStyle, fontFamily: "monospace", marginLeft: "0.5rem" }}>
+          {o.market ?? "—"}
+        </span>
         {o.notCounted !== null && (
           <span style={{ ...mutedSmallStyle, color: "var(--color-warning)", marginLeft: "0.5rem" }}>
             {notCountedReason(o)}

@@ -5,7 +5,9 @@
 Accepted. Resolves the design question in #25. Builds directly on ADR-0021 (auction tracking) and
 ADR-0022 (market valuation); it decides nothing those two already decided. **Amended by
 [ADR-0063](0063-price-observations.md) §7** (#1633): the ratio is learned from exact price
-observations as well as from the collector's own lots.
+observations as well as from the collector's own lots. **Amended by
+[ADR-0064](0064-markets-and-anchoring.md) §4** (#1634): only from datapoints sold in a market anchoring
+their own stamp's area.
 
 ## Context
 

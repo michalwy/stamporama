@@ -95,6 +95,12 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     phone: str(formData, "phone") || null,
     // The Facebook profile link (#1545), normalised — or refused — by the domain on write.
     facebookProfileUrl: str(formData, "facebookProfileUrl") || null,
+    // The market (#1634) means something only for a contact that sells — a seller, a house or a
+    // platform — so a contact that is none of those keeps none.
+    market:
+      bool(formData, "seller") || bool(formData, "auctionHouse") || bool(formData, "platform")
+        ? str(formData, "market") || null
+        : null,
     buyer: bool(formData, "buyer"),
     seller: bool(formData, "seller"),
     exchangePartner: bool(formData, "exchangePartner"),

@@ -62,6 +62,7 @@ describe("effectiveVendorsForArea (#675)", () => {
       primaryCatalogNameId: null,
       primaryCatalogVendorId: null,
       catalogPrefix: null,
+      anchorMarkets: [],
       titleName: null,
       titleNameByLanguage: {},
       assignable: true,

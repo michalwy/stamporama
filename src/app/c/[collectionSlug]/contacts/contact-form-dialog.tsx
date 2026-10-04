@@ -9,6 +9,7 @@ import {
 } from "@/app/dialog-shell";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { COMMON_LANGUAGES } from "@/lib/languages";
+import { COMMON_MARKETS } from "@/lib/market-anchoring";
 import type { ContactListItem } from "@/lib/contacts";
 import {
   ListingTemplatesDialog,
@@ -413,6 +414,34 @@ export function ContactFormDialog({
                   ))}
                 </div>
               </div>
+
+              {/* Where this contact's auction results count (#1634): only a contact that sells has
+                  a market, so the field follows the roles. */}
+              {(isPlatform || isAuctionSide) && (
+                <div style={FIELD_GAP}>
+                  <LabelWithError htmlFor="contact-market">Market</LabelWithError>
+                  <select
+                    id="contact-market"
+                    name="market"
+                    defaultValue={contact?.market ?? ""}
+                    disabled={isPending}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                  >
+                    <option value="">— not known (home market) —</option>
+                    {contact?.market && !COMMON_MARKETS.some((m) => m.code === contact.market) && (
+                      <option value={contact.market}>{contact.market}</option>
+                    )}
+                    {COMMON_MARKETS.map((m) => (
+                      <option key={m.code} value={m.code}>
+                        {m.label} ({m.code})
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                    The country it sells in. Its auction results count only for areas this market anchors.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <LabelWithError htmlFor="contact-notes">Notes</LabelWithError>

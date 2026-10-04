@@ -23,6 +23,7 @@ import { resolveEffectivePrimaryCatalogNameId } from "../area-inheritance";
 import type { CollectionAreaData } from "../areas";
 import { compact, type AgentIssueCatalogues } from "./collection-reads";
 import { invalidRequest, type ApiError } from "./errors";
+import { resolveEffectiveAnchorMarkets } from "../area-inheritance";
 
 /** The catalogue and book names an area's configuration is stated in. */
 export interface AreaNames {
@@ -77,6 +78,11 @@ export interface AgentArea {
   readonly childCount: number;
   readonly own: AgentAreaOwnCatalogues;
   readonly resolved: AgentAreaResolvedCatalogues;
+  /** The markets anchoring its valuations as set **on it** (#1634); absent when it inherits. */
+  readonly anchorMarkets?: readonly string[];
+  /** The markets its valuations actually rest on after walking up the tree; absent when no area
+   * above names any and it anchors on the collection's home market. */
+  readonly anchoringMarkets?: readonly string[];
   readonly path: string;
 }
 
@@ -231,6 +237,11 @@ export function agentArea(
     childCount: area.childCount,
     own: ownCatalogues(area, names),
     resolved: resolvedCatalogues(areas, area.id, names),
+    anchorMarkets: area.anchorMarkets.length > 0 ? [...area.anchorMarkets] : undefined,
+    anchoringMarkets: (() => {
+      const resolved = resolveEffectiveAnchorMarkets(areas, area.id);
+      return resolved.length > 0 ? [...resolved] : undefined;
+    })(),
     path: extras.path,
   });
 }

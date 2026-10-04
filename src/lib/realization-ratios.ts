@@ -18,6 +18,8 @@ import {
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { onlySettledLots, type SettledConditionLot } from "./auction-line-condition";
 import { OBSERVATION_SELECT, observationInput } from "./price-observations";
+import { anchoringResolver, resultMarket } from "./market-anchoring";
+import { buildAnchoringMarketsMap, getCollectionHomeMarket } from "./market-anchorings";
 
 // **The learned realization ratio, read out of the lots already recorded** (#520; ADR-0029 §2).
 //
@@ -34,6 +36,10 @@ import { OBSERVATION_SELECT, observationInput } from "./price-observations";
 // **Exact price observations from other people's auctions count too** (#1633; ADR-0063 §7): each is
 // one stamp at one key, taken whole, read against its key's catalogue value exactly as a single-line
 // lot is. Uncertain ones never do — the same rule market value follows.
+//
+// **Only results from a stamp's own anchoring markets teach** (#1634; ADR-0064 §4): a ratio is a
+// datapoint over a catalogue value, and a datapoint its own stamp does not count is a hint there and
+// a hint here. Each is judged by the stamp it is about, never by the stamp being anchored.
 //
 // **The whole collection is read, not the stamps being anchored.** Bucket 4 is *every* ratio
 // recorded, and buckets 1–3 are ratios about other stamps by definition — the point of the ladder
@@ -59,7 +65,15 @@ const RATIO_LOT_SELECT = {
   endsAt: true,
   finalPrice: true,
   fxRateToBase: true,
-  auctionSale: { select: { id: true, name: true, currency: true } },
+  auctionSale: {
+    select: {
+      id: true,
+      name: true,
+      currency: true,
+      seller: { select: { market: true } },
+      platform: { select: { market: true } },
+    },
+  },
   lines: {
     orderBy: { id: "asc" },
     select: {
@@ -220,7 +234,8 @@ export async function loadRealizationRatios(
 
   if (lots.length === 0 && observationRows.length === 0) return emptyResolver(fallbackPercent);
 
-  const [baseCurrency, areas, conditions] = await Promise.all([
+  const homeMarket = await getCollectionHomeMarket(collectionId);
+  const [baseCurrency, areas, conditions, anchorsByArea] = await Promise.all([
     getCollectionBaseCurrency(collectionId),
     prisma.collectionArea.findMany({ where: { collectionId }, select: { id: true, name: true } }),
     prisma.stampCondition.findMany({
@@ -229,6 +244,7 @@ export async function loadRealizationRatios(
       // figure-beside-a-condition surface prints.
       select: { id: true, abbreviation: true },
     }),
+    buildAnchoringMarketsMap(collectionId, homeMarket),
   ]);
   const areaNames = new Map(areas.map((a) => [a.id, a.name]));
   const conditionNames = new Map(conditions.map((c) => [c.id, c.abbreviation]));
@@ -271,6 +287,7 @@ export async function loadRealizationRatios(
     finalPrice: lot.finalPrice?.toString() ?? null,
     fxRateToBase: lot.fxRateToBase?.toString() ?? null,
     inBaseCurrency: lot.auctionSale.currency === baseCurrency,
+    market: resultMarket(lot.auctionSale.seller, lot.auctionSale.platform),
     lines: lot.lines.map((line) => ({
       lineId: line.id,
       stampId: line.stampId,
@@ -289,7 +306,16 @@ export async function loadRealizationRatios(
     ...extractMarketDatapoints(input),
     ...extractObservationDatapoints(observationRows.map((row) => observationInput(row, baseCurrency))),
   ];
+  // The area each datapoint's stamp is valued in, read off the rows already loaded.
+  const areaOfStamp = new Map<string, string | null>();
+  for (const lot of lots) {
+    for (const line of lot.lines) areaOfStamp.set(line.stampId, primaryAreaIdOf(line.stamp.stampAreaLinks));
+  }
+  for (const row of observationRows) areaOfStamp.set(row.stampId, primaryAreaIdOf(row.stamp.stampAreaLinks));
+  const anchoring = anchoringResolver(homeMarket, areaOfStamp, anchorsByArea);
+
   for (const point of datapoints) {
+    if (!anchoring.anchors(point.key.stampId, point.market)) continue;
     // A datapoint whose key has no catalogue value yields a market value but no ratio — there is
     // nothing to state it as a fraction of.
     const valuedId = point.source.kind === "lot" ? point.source.lineId : point.source.observationId;

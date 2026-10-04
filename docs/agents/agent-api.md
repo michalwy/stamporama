@@ -2055,6 +2055,14 @@ take, so an agent can read it and send it back changed; and `resolved`, what an 
 (`effectiveVendorsForArea`, `effectivePrimaryVendorId`, `resolveEffectivePrimaryCatalogNameId`, the
 forms' own walks). Counts are direct: `issueCount` and `stampCount` filed under the area itself.
 
+**An area's anchoring markets ride on the same two operations** (#1634; ADR-0064): `anchor_markets`
+replaces the list, `clear: ["anchor_markets"]` hands it back to the parent, and a row reads it twice
+like the catalogues — `anchorMarkets` as set on the area, `anchoringMarkets` in force after the walk
+(absent meaning the home market). Omitted on `update_area`, the list is left as it is, which is also
+why `move_area` cannot clear it. `recommend_bid` lists the results a market anchor rests on
+(`marketResults`, each with its market) and counts the other markets' results it left out
+(`notCounted`). A contact's market has no operation — contacts have none here.
+
 **A catalogue's three states are one string each**: `"Mi"` declares the catalogue with its prefix
 inherited, `"Mi: GG"` gives it one here, and `"Mi: -"` states *no prefix here* — the column's null,
 text and `''` (#675). The read writes them the same way.

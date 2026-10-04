@@ -111,8 +111,8 @@ lots.
 Every observation will have a **market** — the country it was sold in — and each area will say which
 markets anchor its valuations. Decided with the collector: none of that is here. #1634 gives contacts
 a market and derives an observation's from its house or platform (and a lot's from its sale's
-seller), so there is no copy on the observation to drift from the contact. Until it lands every exact
-observation anchors, whatever its market.
+seller), so there is no copy on the observation to drift from the contact. **Decided in
+[ADR-0064](0064-markets-and-anchoring.md).**
 
 ## Consequences
 

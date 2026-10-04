@@ -25,6 +25,7 @@ function area(
     primaryCatalogNameId: null,
     primaryCatalogVendorId: null,
     catalogPrefix: null,
+    anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
     assignable: true,
@@ -99,6 +100,7 @@ describe("resolveInheritedAreaValues", () => {
         inheritedPrimaryVendorId: null,
         inheritedCatalogPrefix: null,
         inheritedPrefixes: [],
+        inheritedAnchorMarkets: [],
       });
     }
   });
@@ -112,6 +114,7 @@ describe("resolveInheritedAreaValues", () => {
       inheritedPrimaryVendorId: null,
       inheritedCatalogPrefix: null,
       inheritedPrefixes: [],
+      inheritedAnchorMarkets: [],
     });
   });
 });

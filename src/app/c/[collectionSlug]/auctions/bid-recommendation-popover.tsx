@@ -6,6 +6,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { MarketConfidenceChip } from "@/app/c/[collectionSlug]/shared/market-confidence-chip";
 import { Icon } from "@/app/icons";
 import { formatDay } from "./auction-format";
+import { formatMarketCounts } from "@/lib/market-anchoring";
 import {
   useAuctionLotBidEvidence,
   type AuctionLotBidEvidenceView,
@@ -194,6 +195,25 @@ function LineEvidence({
   line: LineAnchorView;
   baseCurrency: string;
 }) {
+  // Results from markets that do not anchor the stamp's area (#1634): never in the figure, and said
+  // so, so a line anchored on the catalogue does not hide that something was sold abroad.
+  const hints = line.hintMarkets;
+  if (hints.length === 0) return <AnchorEvidence line={line} baseCurrency={baseCurrency} />;
+  return (
+    <span style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
+      <AnchorEvidence line={line} baseCurrency={baseCurrency} />
+      <span style={MUTED}>not counted, other markets: {formatMarketCounts(hints)}</span>
+    </span>
+  );
+}
+
+function AnchorEvidence({
+  line,
+  baseCurrency,
+}: {
+  line: LineAnchorView;
+  baseCurrency: string;
+}) {
   if (line.market) {
     const span =
       line.market.earliestAt === line.market.latestAt
@@ -204,6 +224,7 @@ function LineEvidence({
         <span>
           market {line.market.median} {baseCurrency} · {line.market.n} result
           {line.market.n === 1 ? "" : "s"} · {span}
+          {line.market.markets.length > 0 ? ` · ${formatMarketCounts(line.market.markets)}` : ""}
         </span>
         <MarketConfidenceChip badge={line.market.confidence.badge} score={line.market.confidence.score} />
       </span>

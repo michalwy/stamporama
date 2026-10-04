@@ -67,6 +67,7 @@ const area = (over: Partial<CollectionAreaData> & { id: string }): CollectionAre
   primaryCatalogNameId: null,
   primaryCatalogVendorId: null,
   catalogPrefix: null,
+  anchorMarkets: [],
   titleName: null,
   titleNameByLanguage: {},
   assignable: true,

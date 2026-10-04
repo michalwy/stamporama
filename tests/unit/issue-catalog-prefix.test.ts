@@ -37,6 +37,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     primaryCatalogNameId: null,
     primaryCatalogVendorId: null,
     catalogPrefix: null,
+    anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
     assignable: true,

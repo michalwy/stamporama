@@ -16,6 +16,26 @@ export interface AreaInheritedValues {
   inheritedPrimaryVendorId: string | null;
   inheritedCatalogPrefix: string | null;
   inheritedPrefixes: AreaCatalogEntry[];
+  /** The nearest ancestor's anchoring markets (#1634); empty when no ancestor names any, and the
+   * area then anchors on the collection's home market. */
+  inheritedAnchorMarkets: string[];
+}
+
+/** The nearest ancestor-or-self area's anchoring markets (#1634) — the whole list, as the server's
+ * `resolveAnchoringMarkets` inherits it. Empty when the chain names none. */
+export function resolveEffectiveAnchorMarkets(
+  areas: CollectionAreaData[],
+  areaId: string
+): string[] {
+  const byId = new Map(areas.map((a) => [a.id, a]));
+  let current: CollectionAreaData | undefined = byId.get(areaId);
+  let depth = 0;
+  while (current && depth < 50) {
+    if (current.anchorMarkets.length > 0) return current.anchorMarkets;
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+    depth++;
+  }
+  return [];
 }
 
 /** The nearest ancestor-or-self value of the area-level prefix. `''` at any level is a stated
@@ -69,6 +89,7 @@ export function resolveInheritedAreaValues(
       inheritedPrimaryVendorId: null,
       inheritedCatalogPrefix: null,
       inheritedPrefixes: [],
+      inheritedAnchorMarkets: [],
     };
   }
   return {
@@ -76,5 +97,6 @@ export function resolveInheritedAreaValues(
     inheritedPrimaryVendorId: effectivePrimaryVendorId(areas, parentId),
     inheritedCatalogPrefix: resolveEffectiveCatalogPrefix(areas, parentId),
     inheritedPrefixes: effectiveVendorsForArea(areas, parentId),
+    inheritedAnchorMarkets: resolveEffectiveAnchorMarkets(areas, parentId),
   };
 }

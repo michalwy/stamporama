@@ -4,11 +4,14 @@ import { prisma } from "./db";
 import {
   marketKeyOf,
   realizationRatio,
-  valuateMarket,
+  valuateMarketWithHints,
   type MarketConfidenceBadge,
+  type MarketDatapoint,
   type MarketLotInput,
   type MarketValueKey,
 } from "./market-value";
+import { countByMarket, resultMarket, type MarketCode, type MarketCount } from "./market-anchoring";
+import { loadAnchoring } from "./market-anchorings";
 import { valuateItemRows, type ValuationRow } from "./item-valuation";
 import { getCollectionBaseCurrency } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
@@ -67,6 +70,9 @@ export interface MarketValueLot {
   amount: string;
   /** The figure was carved out of a mixed lot pro-rata rather than taken whole (ADR-0022 §3). */
   split: boolean;
+  /** Where it was sold (#1634): the sale's seller's market, else its platform's; null when neither
+   * names one, which counts as the home market. */
+  market: MarketCode | null;
 }
 
 /** One price observation behind a figure (#1633) — a realised price from someone else's auction. */
@@ -85,6 +91,8 @@ export interface MarketValueObservation {
   priceBasis: PriceBasis;
   /** What it counted as: the hammer, in the base currency at the rate of its day. */
   amount: string;
+  /** Its house's market, else its platform's (#1634); null when neither names one. */
+  market: MarketCode | null;
 }
 
 /** What the market paid for one `stamp × condition × certificate × format`, with its evidence. */
@@ -125,6 +133,33 @@ export interface StampMarketValue extends MarketValueKey {
   lots: MarketValueLot[];
   /** The price observations among the results (#1633), newest first. `n` counts both lists. */
   observations: MarketValueObservation[];
+  /** What the figure stands on (#1634; ADR-0064 §5): its results counted by market. */
+  markets: MarketCount[];
+  /** The results at this key from markets that do not anchor the stamp — left out of every figure
+   * above and counted here by market, so the figure can say what it did not use. */
+  hintMarkets: MarketCount[];
+}
+
+/** One result left out of a stamp's market value because its market does not anchor the stamp's area
+ * (#1634). Listed beside the figures, never in them. */
+export type MarketValueHint = KeyLabel &
+  MarketValueKey &
+  (
+    | { kind: "lot"; lot: MarketValueLot }
+    | { kind: "observation"; observation: MarketValueObservation }
+  );
+
+/** A stamp's market value with what it was judged by and what it left out. */
+export interface StampMarketEvidence {
+  /** The markets this stamp's results have to come from to count — its area's, inherited. */
+  anchoringMarkets: MarketCode[];
+  /** The collection's home market: what a result with no market of its own counts as. */
+  homeMarket: MarketCode;
+  /** Every amount here and in the hints is in this currency. */
+  baseCurrency: string;
+  values: StampMarketValue[];
+  /** Every result from another market, newest first, whatever its key. */
+  hints: MarketValueHint[];
 }
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
@@ -143,7 +178,15 @@ const MARKET_LOT_SELECT = {
   endsAt: true,
   finalPrice: true,
   fxRateToBase: true,
-  auctionSale: { select: { id: true, name: true, currency: true } },
+  auctionSale: {
+    select: {
+      id: true,
+      name: true,
+      currency: true,
+      seller: { select: { market: true } },
+      platform: { select: { market: true } },
+    },
+  },
   lines: {
     // Stable reading order, the same one the composition editor uses: a lot's lines are a list the
     // collector built, and the order they built it in is the only one that means anything.
@@ -170,7 +213,7 @@ type MarketLineRow = MarketLotRow["lines"][number];
 
 /** What a key is called and where it sorts, read off any line or observation carrying it — every
  * row with the same key resolves identically. */
-interface KeyLabel {
+export interface KeyLabel {
   conditionName: string;
   conditionAbbreviation: string;
   certificateStatusName: string | null;
@@ -243,6 +286,21 @@ export async function readStampMarketValues(
   collectionId: string,
   stampIds: string[]
 ): Promise<Map<string, StampMarketValue[]>> {
+  const evidence = await readStampMarketEvidence(collectionId, stampIds);
+  return new Map([...evidence].map(([stampId, e]) => [stampId, e.values]));
+}
+
+/**
+ * {@link readStampMarketValues} with what each stamp was judged by and what it left out (#1634): its
+ * anchoring markets, and the results from every other market as hints. One read, so the figure and
+ * the hints listed beside it are always over the same results.
+ *
+ * A stamp is present when it has any result at all, counted or not.
+ */
+export async function readStampMarketEvidence(
+  collectionId: string,
+  stampIds: string[]
+): Promise<Map<string, StampMarketEvidence>> {
   const wanted = new Set(stampIds);
   if (wanted.size === 0) return new Map();
 
@@ -271,7 +329,10 @@ export async function readStampMarketValues(
   ]);
   if (lots.length === 0 && observationRows.length === 0) return new Map();
 
-  const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  const [baseCurrency, anchoring] = await Promise.all([
+    getCollectionBaseCurrency(collectionId),
+    loadAnchoring(collectionId, [...wanted]),
+  ]);
   const observations = observationRows.filter(hasCondition);
   // Every line of every one of those lots, valued in one pass — the lines pointing elsewhere are
   // what the pro-rata split weighs this stamp's share against — and every observation with a key,
@@ -337,6 +398,7 @@ export async function readStampMarketValues(
     // `fxRateToBase` is null both when no conversion was needed and when none could be had; only
     // the sale's currency tells the two apart.
     inBaseCurrency: lot.auctionSale.currency === baseCurrency,
+    market: resultMarket(lot.auctionSale.seller, lot.auctionSale.platform),
     lines: lot.lines.map((line) => ({
       lineId: line.id,
       stampId: line.stampId,
@@ -349,11 +411,86 @@ export async function readStampMarketValues(
   }));
   const observationInputs = observationRows.map((row) => observationInput(row, baseCurrency));
 
+  const observationEvidenceOf = (
+    point: MarketDatapoint & { source: { kind: "observation" } }
+  ): MarketValueObservation => {
+    const row = observationById.get(point.source.observationId)!;
+    return {
+      observationId: row.id,
+      soldOn: row.soldOn,
+      platformName: row.platform.name,
+      auctionHouseName: row.auctionHouse?.name ?? null,
+      auctionName: row.auctionName,
+      lotNo: row.lotNo,
+      url: row.url,
+      price: row.price.toFixed(2),
+      currency: row.currency,
+      priceBasis: row.priceBasis === "all_in" ? "all_in" : "hammer",
+      amount: point.amount.toFixed(2),
+      market: point.market,
+    };
+  };
+  const lotEvidenceOf = (point: MarketDatapoint & { source: { kind: "lot" } }): MarketValueLot => {
+    const lot = lotRows.get(point.source.lotId)!;
+    const evidence = lineRows.get(point.source.lineId)!;
+    const finalPrice = Number(lot.finalPrice);
+    const rate = lot.fxRateToBase === null ? 1 : Number(lot.fxRateToBase);
+    return {
+      lotId: lot.id,
+      auctionLotNo: lot.auctionLotNo,
+      lotNo: lot.lotNo,
+      lotTitle: lot.title,
+      saleId: lot.auctionSale.id,
+      saleName: lot.auctionSale.name,
+      endsAt: lot.endsAt,
+      finalPrice: (finalPrice * rate).toFixed(2),
+      saleCurrency: lot.auctionSale.currency,
+      quantity: evidence.quantity,
+      amount: point.amount.toFixed(2),
+      split: point.split,
+      market: point.market,
+    };
+  };
+
   const now = new Date();
+  const { valuations: marketValuations, hints } = valuateMarketWithHints(
+    input,
+    now,
+    observationInputs,
+    anchoring
+  );
+
+  // The hints first, since a figure states how many it left out at its own key. Lots reach here
+  // because they mention a wanted stamp; their other lines were carried along for the split alone.
+  const hintsByStamp = new Map<string, MarketValueHint[]>();
+  const hintMarketsByKey = new Map<string, (MarketCode | null)[]>();
+  for (const point of hints) {
+    if (!wanted.has(point.key.stampId)) continue;
+    const id = marketKeyOf(point.key);
+    const hint: MarketValueHint =
+      point.source.kind === "observation"
+        ? {
+            ...point.key,
+            ...labels.get(id)!,
+            kind: "observation",
+            observation: observationEvidenceOf({ ...point, source: point.source }),
+          }
+        : {
+            ...point.key,
+            ...labels.get(id)!,
+            kind: "lot",
+            lot: lotEvidenceOf({ ...point, source: point.source }),
+          };
+    const list = hintsByStamp.get(point.key.stampId);
+    if (list) list.push(hint);
+    else hintsByStamp.set(point.key.stampId, [hint]);
+    const markets = hintMarketsByKey.get(id);
+    if (markets) markets.push(point.market);
+    else hintMarketsByKey.set(id, [point.market]);
+  }
+
   const byStamp = new Map<string, StampMarketValue[]>();
-  for (const value of valuateMarket(input, now, observationInputs)) {
-    // Lots reach here because they mention a wanted stamp; their other lines were carried along for
-    // the split alone and are not what was asked about.
+  for (const value of marketValuations) {
     if (!wanted.has(value.key.stampId)) continue;
 
     const id = marketKeyOf(value.key);
@@ -364,40 +501,10 @@ export async function readStampMarketValues(
     const observationEvidence: MarketValueObservation[] = [];
     for (const point of value.datapoints) {
       if (point.source.kind === "observation") {
-        const row = observationById.get(point.source.observationId)!;
-        observationEvidence.push({
-          observationId: row.id,
-          soldOn: row.soldOn,
-          platformName: row.platform.name,
-          auctionHouseName: row.auctionHouse?.name ?? null,
-          auctionName: row.auctionName,
-          lotNo: row.lotNo,
-          url: row.url,
-          price: row.price.toFixed(2),
-          currency: row.currency,
-          priceBasis: row.priceBasis === "all_in" ? "all_in" : "hammer",
-          amount: point.amount.toFixed(2),
-        });
-        continue;
+        observationEvidence.push(observationEvidenceOf({ ...point, source: point.source }));
+      } else {
+        lotEvidence.push(lotEvidenceOf({ ...point, source: point.source }));
       }
-      const lot = lotRows.get(point.source.lotId)!;
-      const evidence = lineRows.get(point.source.lineId)!;
-      const finalPrice = Number(lot.finalPrice);
-      const rate = lot.fxRateToBase === null ? 1 : Number(lot.fxRateToBase);
-      lotEvidence.push({
-        lotId: lot.id,
-        auctionLotNo: lot.auctionLotNo,
-        lotNo: lot.lotNo,
-        lotTitle: lot.title,
-        saleId: lot.auctionSale.id,
-        saleName: lot.auctionSale.name,
-        endsAt: lot.endsAt,
-        finalPrice: (finalPrice * rate).toFixed(2),
-        saleCurrency: lot.auctionSale.currency,
-        quantity: evidence.quantity,
-        amount: point.amount.toFixed(2),
-        split: point.split,
-      });
     }
 
     const entry: StampMarketValue = {
@@ -417,6 +524,8 @@ export async function readStampMarketValues(
       realizationRatio: realizationRatio(value.median, catalogueValue),
       lots: lotEvidence.sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime()),
       observations: observationEvidence.sort((a, b) => b.soldOn.getTime() - a.soldOn.getTime()),
+      markets: value.markets,
+      hintMarkets: countByMarket(hintMarketsByKey.get(id) ?? []),
     };
 
     const list = byStamp.get(value.key.stampId);
@@ -431,7 +540,24 @@ export async function readStampMarketValues(
       return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
     });
   }
-  return byStamp;
+
+  const result = new Map<string, StampMarketEvidence>();
+  for (const stampId of new Set([...byStamp.keys(), ...hintsByStamp.keys()])) {
+    result.set(stampId, {
+      anchoringMarkets: [...anchoring.anchorsOf(stampId)],
+      homeMarket: anchoring.homeMarket,
+      baseCurrency,
+      values: byStamp.get(stampId) ?? [],
+      hints: (hintsByStamp.get(stampId) ?? []).sort(
+        (a, b) => hintTime(b).getTime() - hintTime(a).getTime()
+      ),
+    });
+  }
+  return result;
+}
+
+function hintTime(hint: MarketValueHint): Date {
+  return hint.kind === "lot" ? hint.lot.endsAt : hint.observation.soldOn;
 }
 
 /**
@@ -458,6 +584,37 @@ export async function readMarketMedians(
     }
   }
   return medians;
+}
+
+/**
+ * One stamp's market evidence for a caller that holds only the stamp — what the Valuation dialog reads
+ * (#1634): the figures, what they were judged by, and the results from other markets left out of them.
+ * Owner-checked through the stamp's collection, exactly as {@link getStampMarketValueByStamp} is.
+ */
+export async function getStampMarketEvidenceByStamp(
+  ownerId: string,
+  stampId: string
+): Promise<StampMarketEvidence> {
+  const stamp = await prisma.stamp.findUnique({
+    where: { id: stampId },
+    select: { collectionId: true },
+  });
+  if (!stamp) throw new Error("Stamp not found");
+  await assertCollectionOwner(ownerId, stamp.collectionId);
+  const evidence = (await readStampMarketEvidence(stamp.collectionId, [stampId])).get(stampId);
+  if (evidence) return evidence;
+  // No result at all: still say what would have counted, so the empty state can name it.
+  const [anchoring, baseCurrency] = await Promise.all([
+    loadAnchoring(stamp.collectionId, [stampId]),
+    getCollectionBaseCurrency(stamp.collectionId),
+  ]);
+  return {
+    anchoringMarkets: [...anchoring.anchorsOf(stampId)],
+    homeMarket: anchoring.homeMarket,
+    baseCurrency,
+    values: [],
+    hints: [],
+  };
 }
 
 /** {@link getStampMarketValues} for one stamp. Empty when it has no evidence. */

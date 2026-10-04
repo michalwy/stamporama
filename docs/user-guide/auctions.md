@@ -1077,6 +1077,12 @@ have results for with one you have never seen:
 3. Otherwise **nothing**. The line is counted and named at the foot of the panel, never treated as
    worth zero: a lot half of which cannot be priced must not read as a finished answer.
 
+Only results from the **markets that anchor the stamp's area** count, at every step — the recorded
+result in 1 and the results the percentage in 2 is learned from
+([Markets — which results count](collections.md#markets--which-results-count)). A recorded result
+says which markets it stands on (*3 PL · 1 DE*), and any line with results from other markets says
+how many were left out: *not counted, other markets: 2 DE*.
+
 A line priced in a currency with no rate into the sale's is reported the same way — it has a value
 and it cannot be added up, which is a different fact from having none.
 

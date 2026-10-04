@@ -11,6 +11,7 @@ import {
   setCollectionBidPercents,
   setCollectionClosedOfferPhotoTtl,
   setCollectionDefaultLanguage,
+  setCollectionHomeMarket,
   setCollectionItemNoPad,
   setCollectionScanSheetTtl,
   type BidPercentPatch,
@@ -99,6 +100,29 @@ export async function updateCollectionDefaultLanguageAction(
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to save the default language.",
+    };
+  }
+}
+
+export type HomeMarketState =
+  | { status: "idle" }
+  | { status: "success"; market: string }
+  | { status: "error"; message: string };
+
+/** Set the collection's home market (#1634) from the Settings → Collection picker. */
+export async function updateCollectionHomeMarketAction(
+  collectionId: string,
+  market: string
+): Promise<HomeMarketState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect(await signInPath());
+  try {
+    await setCollectionHomeMarket(session.user.id, collectionId, market);
+    return { status: "success", market };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the home market.",
     };
   }
 }
