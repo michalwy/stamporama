@@ -30,8 +30,7 @@ export async function generateMetadata({ params }: OfferDetailPageProps): Promis
 
 export default async function OfferDetailPage({ params, searchParams }: OfferDetailPageProps) {
   const { collectionSlug, offerId } = await params;
-  // The filtered list this offer was opened from (#429) — the back link goes back to it as it was,
-  // and the walk through it is offered beside that link.
+  // The filtered list this offer was opened from (#429): the walk through it is offered at the top.
   const listContext = parseOfferListContext(await searchParams);
 
   const session = await auth.api.getSession({ headers: await headers() });
