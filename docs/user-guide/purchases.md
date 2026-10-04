@@ -880,7 +880,10 @@ belongs to one piece.
 
 #### Working through the tiles
 
-Click a tile. **The picture is the dialog**: the tile fills it, with the answer beside it. A crop
+Click a tile. **The picture is the dialog**: the dialog takes the whole browser window, less a narrow
+margin, and the tile fills all of it but the column with the answer beside it — on a large screen the
+piece opens large at **Fit**, without zooming, and on a small one the picture gives way before the
+answer does. The same goes for a ticked run of tiles. A crop
 that took half a stamp or a piece nobody could identify is visible at this size and nowhere else —
 the intake step that follows never shows the images — which is the whole reason for reviewing tiles
 rather than trusting the cut.
