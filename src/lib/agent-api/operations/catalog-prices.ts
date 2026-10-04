@@ -136,13 +136,13 @@ export const listCatalogEditionsOperation: Operation = {
 // -- Reading prices ----------------------------------------------------------------------
 
 /** The dictionaries a cell is named in, by id and as entries the resolver takes. */
-interface Axes {
+export interface Axes {
   readonly conditions: VocabularyEntry[];
   readonly certificates: VocabularyEntry[];
   readonly formats: VocabularyEntry[];
 }
 
-async function loadAxes(context: OperationContext): Promise<Axes> {
+export async function loadAxes(context: OperationContext): Promise<Axes> {
   const [conditions, certificates, formats] = await Promise.all([
     getStampConditions(context.ownerId, context.collectionId),
     getCertificateStatuses(context.ownerId, context.collectionId),

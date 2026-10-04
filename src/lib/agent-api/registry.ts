@@ -16,7 +16,8 @@
 // to sixty-four; #1540 added the four catalogue-price operations, two of which write, taking it to
 // sixty-eight; #1539 added the six area operations, five of which write, taking it to
 // seventy-four; #1627 added the five auction writes, taking it to seventy-nine; #1628 added
-// `record_auction_lot_outcome`, taking it to **eighty**. Each one is an entry here
+// `record_auction_lot_outcome`, taking it to eighty; #1635 added the four price-observation
+// operations, three of which write, taking it to **eighty-four**. Each one is an entry here
 // and nowhere else. The OpenAPI document at `/api/v1/openapi.json` and #709's MCP tool list are both
 // generated from this array.
 //
@@ -33,7 +34,9 @@
 // built one side at a time and read back as a verdict — then the auctions already followed (#1036),
 // in the order a morning's mail is read against them: what is open, what it can cost, and whether a
 // listing in the mail is one of them — then the register kept of them (#1627), in the order a lot
-// is entered: the lot, its corrections, its contents, its ceiling, and its sale's terms — then purchases (#1390), in the order an order confirmation
+// is entered: the lot, its corrections, its contents, its ceiling, and its sale's terms — then the realised prices
+// read off other people's auctions (#1635), in the order a results page is entered: what is already recorded, the
+// page, a correction, a deletion — then purchases (#1390), in the order an order confirmation
 // is entered: is it already here, who sold it, the purchase, its lots, its expenses — then the
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
 // their variants, the corrections, and last the Colnect ID a stamp is known by there (#1445) — then
@@ -138,6 +141,12 @@ import {
 } from "./operations/catalog-edits";
 import { setStampColnectIdOperation } from "./operations/colnect-ids";
 import {
+  deletePriceObservationOperation,
+  listPriceObservationsOperation,
+  recordPriceObservationsOperation,
+  updatePriceObservationOperation,
+} from "./operations/price-observations";
+import {
   clearCatalogPricesOperation,
   getCatalogPricesOperation,
   listCatalogEditionsOperation,
@@ -211,6 +220,10 @@ export const OPERATIONS: readonly Operation[] = [
   setAuctionLotCeilingOperation,
   recordAuctionLotOutcomeOperation,
   updateAuctionSaleOperation,
+  listPriceObservationsOperation,
+  recordPriceObservationsOperation,
+  updatePriceObservationOperation,
+  deletePriceObservationOperation,
   listPurchasesOperation,
   getPurchaseOperation,
   createSellerOperation,

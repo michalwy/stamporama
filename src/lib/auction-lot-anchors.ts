@@ -100,6 +100,8 @@ export interface AnchorMarketEvidence {
 export interface AnchorResult {
   /** One of the collector's own closed lots, or a price observation from someone else's auction. */
   kind: "lot" | "observation";
+  /** The lot's id, or the observation's — what `update_price_observation` takes (#1635). */
+  id: string;
   /** `Köhler 412 lot 1234 · via Philasearch`, or `Lot 12 · Allegro March` — the source as a reader
    * would look it up. */
   source: string;
@@ -417,6 +419,7 @@ function anchorResults(value: StampMarketValue): AnchorResult[] {
   return [
     ...value.observations.map<AnchorResult>((o) => ({
       kind: "observation",
+      id: o.observationId,
       source: [
         [o.auctionHouseName ?? o.platformName, o.auctionName].filter(Boolean).join(" "),
         o.lotNo ? `lot ${o.lotNo}` : null,
@@ -431,6 +434,7 @@ function anchorResults(value: StampMarketValue): AnchorResult[] {
     })),
     ...value.lots.map<AnchorResult>((lot) => ({
       kind: "lot",
+      id: lot.lotId,
       source: [lot.lotNo ? `Lot ${lot.lotNo}` : `Lot #${lot.auctionLotNo}`, lot.saleName].join(" · "),
       market: lot.market,
       amount: lot.amount,

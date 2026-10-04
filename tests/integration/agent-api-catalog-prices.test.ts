@@ -382,8 +382,13 @@ describe("catalogue prices through the agent API (#1540)", () => {
         (op) => `${op.method} ${op.path} ${op.name}`
       );
       assert.deepEqual(writes.sort(), ["POST /catalog-prices set_catalog_prices", "POST /catalog-prices/clear clear_catalog_prices"]);
+      // A price observation (#1635) is a realised price, not a catalogue's, and deleting one recorded by
+      // mistake is allowed by design (`agent-api.md`, *What is deliberately absent*).
       const removing = OPERATIONS.filter(
-        (op) => /catalog|price|edition/.test(op.name) && (op.method === "DELETE" || /^(delete|remove|clear)_/.test(op.name))
+        (op) =>
+          /catalog|price|edition/.test(op.name) &&
+          !/observation/.test(op.name) &&
+          (op.method === "DELETE" || /^(delete|remove|clear)_/.test(op.name))
       ).map((op) => op.name);
       assert.deepEqual(removing, ["clear_catalog_prices"]);
     });

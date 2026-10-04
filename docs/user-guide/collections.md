@@ -1764,6 +1764,8 @@ They are listed in the **Market value** section of a stamp's Valuation dialog, u
 
 Each row shows the price **as observed** (hover it for the other of hammer and all-in, the premium and the rate of the day) and **as counted** — the hammer in your collection currency.
 
+**One lot, one observation.** A result whose address, or whose lot number in the same auction at the same house (or on the same platform, when there is no house), is already recorded is refused with *This lot is already recorded*, so a result read twice cannot count twice. One with neither an address nor a lot number is never treated as a repeat. An [AI assistant](agent-api.md#what-it-can-do-and-what-it-will-not) can record observations for you, a page of results at a time.
+
 ### Markets — which results count
 
 Prices differ between markets: a German auction is good evidence for German material — the Reich,

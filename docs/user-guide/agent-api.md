@@ -149,7 +149,8 @@ auction invoice, a seller's email — so you do not retype it. It can:
   first, by the name they are filed under or their full name, and uses the contact you already have.
   If the name is close to somebody you already know — *Kowalsky* when you have a *Kowalski* — it is
   told so and must say it really is a different person before a new contact is made. A new contact
-  gets a name and, for a marketplace seller, their login, and nothing else.
+  gets a name and, for a marketplace seller, their login — and, for an auction house, that it is one
+  and the country it sells in — and nothing else.
 
 **What it cannot do on a purchase is anything about the stamps themselves, or anything you cannot
 take back.** It never adds, identifies, moves or removes a copy — the purchase arrives with empty
@@ -437,6 +438,36 @@ and it does not reopen a lot or settle one into a purchase — a won lot waits f
 parcel, as before. **Every lot and sale it writes is marked
 *To review · API* until you confirm it.** A seller you have never bought from is not created by
 adding a lot; the assistant adds them as a contact first, as it does for a purchase.
+
+**It can record what stamps fetched at other people's auctions**, with a writing token — the
+realised prices it reads off Philasearch or a house's results, often a whole page at a time. They are
+your [price observations](collections.md#price-observations), exactly as if you had typed them into
+a stamp's Valuation dialog, and they count in the same way: an exact one from a market that anchors
+the stamp's area moves its market value and the bid recommendations; anything else is kept as a
+hint. It can:
+
+- **record a page of results** in one go. Each one is answered on its own — recorded, already
+  recorded, or refused with the reason — and one it cannot place stops none of the others. For each
+  recorded one it is told at once whether it counts, and if not, why.
+- **list what is already recorded** — for a stamp, an area, a market, a platform, a house or a span
+  of days — and **correct** or **delete** one it misread.
+
+What it will not do with them:
+
+- **It never guesses a stamp.** A catalogue number that names several of your stamps, or none, is
+  refused. One that names only a stamp with variants is recorded on that stamp, as a hint, until it
+  is corrected onto the variant.
+- **It never records the same lot twice.** A result with the same address, or the same lot number in
+  the same auction at the same house, as one already recorded is answered *already recorded*. This
+  holds in the Valuation dialog too.
+- **It never makes up an auction house.** A house that is not in your Contacts is refused; the
+  assistant adds it first, with the country it sells in, so its results count in the right market. A
+  house you already have keeps whatever market you gave it — the assistant cannot change one.
+- **It cannot change your bids, lots or purchases from here** — a price observation is a fact about
+  the market, never something you did.
+
+When it explains a bid recommendation, each result it rests on comes with the observation's id, so a
+misread one can be corrected on the spot.
 
 **Everything it writes is on a screen you already know, and is undone there.**
 
