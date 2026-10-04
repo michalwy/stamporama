@@ -255,9 +255,11 @@ exactly what the [variant price grid](variant-prices.md) does, cell by cell. It 
   certificate and a format where the price is not for a plain single. They are stored as if you had
   typed them into the grid — rounded to cents, in the edition's currency — and valuation uses them
   straight away. A price on a stamp with variants is that stamp's own, as unlocking the grid's row
-  and typing one is;
+  and typing one is. Where the catalogue prints **—** or **?** instead of a price, it records that
+  too, as typing `-` or `?` into the grid does — and reads such cells back as *does not exist* or *not
+  determinable* rather than as missing prices;
 - **clear prices**, as emptying a grid cell does. The cell then records nothing, which is not the
-  same as a price of nought.
+  same as a price of nought — and not the same as **—** or **?** either.
 
 **Each cell is answered on its own**: written, unchanged because that figure was already there,
 cleared, or refused with the reason — a stamp number it cannot place, a condition you do not have, an

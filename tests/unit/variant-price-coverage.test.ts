@@ -27,6 +27,7 @@ function price(
 ): RawCatalogPrice {
   return {
     price: D(amount),
+    mark: null,
     currency: "EUR",
     conditionId: opts.conditionId ?? MNH,
     certificateStatusId: opts.certificateStatusId ?? null,

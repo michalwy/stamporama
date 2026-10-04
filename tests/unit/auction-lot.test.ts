@@ -547,6 +547,7 @@ describe("summarizeLotComposition", () => {
     quantity: 1,
     unitValue: 10,
     unpriced: false,
+    mark: null,
     unconvertible: false,
     uncertain: false,
     ...over,
@@ -607,9 +608,21 @@ describe("summarizeLotComposition", () => {
       quantity: 0,
       catalogValue: null,
       unpricedLines: 0,
+      markedLines: 0,
       unconvertibleLines: 0,
       uncertain: false,
     });
+  });
+
+  it("counts a line the catalogue gives no price for apart from the unpriced ones (#1615)", () => {
+    const s = summarizeLotComposition([
+      line({ unitValue: 10 }),
+      line({ unitValue: null, unpriced: true }),
+      line({ unitValue: null, unpriced: true, mark: "nonexistent" }),
+    ]);
+    assert.equal(s.catalogValue, "10.00");
+    assert.equal(s.unpricedLines, 1);
+    assert.equal(s.markedLines, 1);
   });
 });
 

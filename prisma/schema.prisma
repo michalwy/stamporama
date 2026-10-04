@@ -3318,7 +3318,11 @@ model StampCatalogPrice {
   // A row here is an **explicit** price that wins over anything `StampFormatFactor` would
   // derive — recording what a catalog actually prints for that multiple.
   formatId            String?
-  price               Decimal @db.Decimal(10, 2)
+  // Null exactly when `mark` is set (a CHECK in the migration): a row holds a price **or** says the
+  // catalogue gives none (#1615) — `nonexistent` where it prints —, `undeterminable` where it prints
+  // ?. No row at all is still *not entered yet*. Read through `catalog-price-mark.ts`.
+  price               Decimal? @db.Decimal(10, 2)
+  mark                String?
   currency            String
 
   stamp             Stamp              @relation(fields: [stampId], references: [id], onDelete: Cascade)

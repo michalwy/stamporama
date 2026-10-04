@@ -7,6 +7,7 @@ import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
 import { tagFilterWhere, type TagFilterMode } from "./tag-filter";
 import { getStampConditions } from "./conditions";
 import { getCertificateStatuses } from "./certificate-statuses";
+import type { CatalogPriceMark } from "./catalog-price-mark";
 import {
   childIsVariant,
   isUnknownVariantStamp,
@@ -171,6 +172,9 @@ export interface StampNodeData {
   /** True when the displayed main price was **derived** from the single's by a format multiplier
    *  rather than recorded for the displayed format (#343) — also an estimate. */
   mainCatalogPriceDerived: boolean;
+  /** Set instead of a price when the catalogue gives none on purpose (#1615) — the stamp's own cell,
+   *  or every variant of an umbrella (then {@link mainCatalogPriceUncertain} is true too). */
+  mainCatalogPriceMark: CatalogPriceMark | null;
   /** Effective actsAsVariant (ADR-0010 §3): override ?? subtype flag; false if none.
    *  A base stamp is an unknown-variant umbrella iff a child has this true. */
   actsAsVariant: boolean;
@@ -228,6 +232,7 @@ export interface IssueChecklistSummary {
  *  needs (amount, currency, condition/certificate, edition year + catalog name). */
 const HEADLINE_PRICE_SELECT = {
   price: true,
+  mark: true,
   currency: true,
   conditionId: true,
   certificateStatusId: true,
@@ -270,6 +275,9 @@ const MEMBER_SELECT = {
   },
 } as const;
 
+/** One umbrella's variant-kind descendants, each with its prices and whether it is fully identified. */
+type UmbrellaVariantPrices = { prices: RawCatalogPrice[]; identified: boolean }[];
+
 /** For a set of umbrella stamps (unknown-variant base stamps), the variant-kind descendants'
  *  prices, so the headline catalog price can roll up from the lowest variant (#238). Mirrors
  *  the copy-valuation descendant gather (ADR-0007 §7): only descendants whose effective
@@ -278,8 +286,8 @@ const MEMBER_SELECT = {
 async function loadVariantPricesForUmbrellas(
   collectionId: string,
   umbrellaStampIds: string[]
-): Promise<{ variantPricesByStamp: Map<string, RawCatalogPrice[][]>; currencies: string[] }> {
-  const variantPricesByStamp = new Map<string, RawCatalogPrice[][]>();
+): Promise<{ variantPricesByStamp: Map<string, UmbrellaVariantPrices>; currencies: string[] }> {
+  const variantPricesByStamp = new Map<string, UmbrellaVariantPrices>();
   const currencies: string[] = [];
   if (umbrellaStampIds.length === 0) return { variantPricesByStamp, currencies };
 
@@ -290,13 +298,23 @@ async function loadVariantPricesForUmbrellas(
 
   const stamps = await prisma.stamp.findMany({
     where: { id: { in: [...descendantIds] } },
-    select: { id: true, catalogPrices: { select: HEADLINE_PRICE_SELECT }, ...VARIANT_FLAG_SELECT },
+    select: {
+      id: true,
+      // Which descendants have variant children of their own — the intermediate umbrellas, valued by
+      // those children and never a gap themselves (#617). The whole subtree is in this result, so
+      // the parent edges are enough, as in `valuateItemRows`.
+      parentId: true,
+      catalogPrices: { select: HEADLINE_PRICE_SELECT },
+      ...VARIANT_FLAG_SELECT,
+    },
   });
   const pricesByStamp = new Map<string, RawCatalogPrice[]>();
   const isVariantByStamp = new Map<string, boolean>();
+  const umbrellaIds = new Set<string>();
   for (const s of stamps) {
     pricesByStamp.set(s.id, s.catalogPrices);
     isVariantByStamp.set(s.id, childIsVariant(s));
+    if (s.parentId && childIsVariant(s)) umbrellaIds.add(s.parentId);
     for (const p of s.catalogPrices) currencies.push(p.currency);
   }
 
@@ -306,7 +324,10 @@ async function loadVariantPricesForUmbrellas(
     ].filter((id) => isVariantByStamp.get(id) ?? false);
     variantPricesByStamp.set(
       stampId,
-      variantDescendants.map((id) => pricesByStamp.get(id) ?? [])
+      variantDescendants.map((id) => ({
+        prices: pricesByStamp.get(id) ?? [],
+        identified: !umbrellaIds.has(id),
+      }))
     );
   }
   return { variantPricesByStamp, currencies };
@@ -348,7 +369,7 @@ function toStampNode(
     formatFactor?: number | null;
     rates: Map<string, number | null>;
     /** Variant-kind descendant prices for umbrella members, keyed by stamp id (#238). */
-    variantPricesByStamp: Map<string, RawCatalogPrice[][]>;
+    variantPricesByStamp: Map<string, UmbrellaVariantPrices>;
   },
   /** Copies held per stamp — its own (#348) and its variant descendants' (#528). Absent stamps
    *  read as none; an absent map means the caller loaded no counts at all. */
@@ -371,7 +392,7 @@ function toStampNode(
         baseCurrency: pricing.baseCurrency,
         rates: pricing.rates,
       })
-    : { picked: null, uncertain: false, derived: false };
+    : { picked: null, mark: null, uncertain: false, derived: false };
   const main = headline.picked;
   const mainCatalogPriceStale =
     main && pricing
@@ -409,6 +430,7 @@ function toStampNode(
     mainCatalogPriceStale,
     mainCatalogPriceUncertain: headline.uncertain,
     mainCatalogPriceDerived: headline.derived,
+    mainCatalogPriceMark: headline.mark,
     actsAsVariant: childIsVariant(m.stamp),
     isUmbrella: isUnknownVariantStamp(m.stamp),
     subtype: subtypeLabel(m.stamp),
@@ -665,17 +687,18 @@ function computeChecklistPriceTotal(
   latestYearByName: Map<string, number>,
   displayConditionId: string | null,
   rates: Map<string, number | null>,
-  variantPricesByStamp: Map<string, RawCatalogPrice[][]>,
+  variantPricesByStamp: Map<string, UmbrellaVariantPrices>,
   displayFormatId: string | null = null,
   formatFactor: number | null | ((stampId: string) => number | null) = null
 ): IssuePriceTotal | null {
   const picks: ChecklistPricePick[] = [];
+  let markedCount = 0;
   for (const m of requiredMembers) {
     // Each required member's headline price applies the unknown-variant rollup (#238): an
     // umbrella with no own price contributes its lowest variant child's price instead. When a
     // format is on screen (#343) the same pick derives from the single where nothing explicit was
     // recorded, so a format column totals to something rather than to nothing.
-    const { picked: main, uncertain, derived } = pickHeadlineCatalogPrice({
+    const { picked: main, mark, uncertain, derived } = pickHeadlineCatalogPrice({
       ownPrices: m.stamp.catalogPrices,
       variantPrices: variantPricesByStamp.get(m.stampId),
       isUmbrella: isUnknownVariantStamp(m.stamp),
@@ -687,7 +710,10 @@ function computeChecklistPriceTotal(
       baseCurrency,
       rates,
     });
-    if (!main) continue;
+    if (!main) {
+      if (mark) markedCount++;
+      continue;
+    }
     picks.push({
       amount: main.amount,
       currency: main.currency,
@@ -696,7 +722,7 @@ function computeChecklistPriceTotal(
       derived,
     });
   }
-  return foldChecklistPrices(picks, requiredMembers.length, baseCurrency, rates);
+  return foldChecklistPrices(picks, requiredMembers.length, baseCurrency, rates, markedCount);
 }
 
 /** A checklist spanning issues, valued (#1416) — `IssueChecklistTotals`' two figures. */
@@ -862,7 +888,7 @@ function toIssueListItem(
   displayConditionId: string | null,
   vendorAbbrev: ReadonlyMap<string, string>,
   rates: Map<string, number | null>,
-  variantPricesByStamp: Map<string, RawCatalogPrice[][]>,
+  variantPricesByStamp: Map<string, UmbrellaVariantPrices>,
   displayFormatId: string | null,
   factorFor: (areaId: string | null, issueId: string | null) => number | null
 ): IssueListItem {
@@ -1492,7 +1518,10 @@ export async function getChecklistPriceDetails(
         select: {
           stamp: {
             select: {
+              // Figures only: a cell the catalogue marks as giving no price (#1615) adds nothing
+              // to a total and does not make a catalogue's sum complete.
               catalogPrices: {
+                where: { price: { not: null } },
                 select: {
                   price: true,
                   currency: true,
@@ -2676,7 +2705,10 @@ export interface AddStampData extends StampAttributeInput {
     catalogEditionId: string;
     conditionId: string;
     certificateStatusId: string | null;
-    price: string;
+    formatId?: string | null;
+    /** Null exactly when {@link mark} is set (#1615). */
+    price: string | null;
+    mark?: CatalogPriceMark | null;
     currency: string;
   }[];
   /** What becomes of the parent's own catalogue prices when this child is its first variant
@@ -2782,7 +2814,9 @@ export async function addStampToIssue(
           catalogEditionId: cp.catalogEditionId,
           conditionId: cp.conditionId,
           certificateStatusId: cp.certificateStatusId,
-          price: cp.price,
+          formatId: cp.formatId ?? null,
+          price: cp.mark ? null : cp.price,
+          mark: cp.mark ?? null,
           currency: cp.currency,
         })),
         skipDuplicates: true,

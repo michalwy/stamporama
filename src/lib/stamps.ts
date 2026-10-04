@@ -1,6 +1,11 @@
 import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import {
+  catalogPriceMarkInput,
+  catalogPriceMarkOf,
+  type CatalogPriceMark,
+} from "./catalog-price-mark";
+import {
   SCANNING_PROFILE_SELECT,
   stampSizeProfileWrite,
   toScanningProfileView,
@@ -434,6 +439,8 @@ export interface StampListItem {
   /** True when the displayed main price was **derived** from the single's by a format multiplier
    *  rather than recorded for the displayed format (#343) — an estimate, not a catalog figure. */
   mainCatalogPriceDerived: boolean;
+  /** Set instead of a price when the catalogue gives none on purpose (#1615). */
+  mainCatalogPriceMark: CatalogPriceMark | null;
   /** Catalog-level photos (#137), ordered front, back, then extras by sortOrder. Metadata only —
    * the collection-scoped serving route addresses variant bytes by photo id. */
   photos: PhotoSummary[];
@@ -487,6 +494,7 @@ const STAMP_LIST_SELECT = {
   catalogPrices: {
     select: {
       price: true,
+      mark: true,
       currency: true,
       conditionId: true,
       certificateStatusId: true,
@@ -573,7 +581,11 @@ function toStampListItem(
   const onChecklist = new Set(stamp.checklistEntries.map((e) => e.checklistId));
   // A format's price is explicit or derived (#343): the recorded row for the format wins, else the
   // single's price × the multiplier resolved for this stamp's area and issue.
-  const { picked: main, derived: mainCatalogPriceDerived } = pickFormatCatalogPrice(
+  const {
+    picked: main,
+    mark: mainCatalogPriceMark,
+    derived: mainCatalogPriceDerived,
+  } = pickFormatCatalogPrice(
     stamp.catalogPrices,
     primaryNameId,
     displayConditionId,
@@ -632,6 +644,7 @@ function toStampListItem(
       : null,
     mainCatalogPriceStale,
     mainCatalogPriceDerived,
+    mainCatalogPriceMark,
     photos: stamp.photos
       .map((p) => ({
         id: p.id,
@@ -1387,7 +1400,10 @@ export interface CatalogPriceInput {
   /** Physical format; null or absent = single, so a caller that predates formats stays valid.
    *  An explicit row here always wins over a value derived from a multiplier. */
   formatId?: string | null;
-  price: string;
+  /** The amount, or — with {@link mark} set — null (#1615). */
+  price: string | null;
+  /** The catalogue gives no price here: the cell is recorded as a mark rather than left empty. */
+  mark?: CatalogPriceMark | null;
   currency: string;
 }
 
@@ -1527,7 +1543,8 @@ export async function updateStampWithCatalog(
             conditionId: cp.conditionId,
             certificateStatusId: cp.certificateStatusId,
             formatId: cp.formatId ?? null,
-            price: cp.price,
+            price: cp.mark ? null : cp.price,
+            mark: cp.mark ?? null,
             currency: cp.currency,
           })),
           skipDuplicates: true,
@@ -1539,6 +1556,24 @@ export async function updateStampWithCatalog(
   await recomputeStampSortKeys(collectionId, [stampId]);
 }
 
+/** A recorded cell as an input shows it: the amount at 2 dp, or a mark as it is typed (`-`, `?`). */
+function priceCellInput(row: { price: Prisma.Decimal | null; mark: string | null }): string {
+  const mark = catalogPriceMarkOf(row.mark);
+  if (mark) return catalogPriceMarkInput(mark);
+  return row.price === null ? "" : row.price.toFixed(2);
+}
+
+/** The two columns a write sets for a figure or a mark — always both, so a cell turned from one into
+ *  the other never trips the price-or-mark CHECK (#1615). */
+export function priceCellWrite(value: number | CatalogPriceMark): {
+  price: string | null;
+  mark: CatalogPriceMark | null;
+} {
+  return typeof value === "number"
+    ? { price: roundAmount(value), mark: null }
+    : { price: null, mark: value };
+}
+
 /** One already-recorded catalog price shown for reference in the quick editor, so the user
  * can price a new (condition × certificate × edition) consistently with what's on file. */
 export interface QuickCatalogPriceReference {
@@ -1548,7 +1583,10 @@ export interface QuickCatalogPriceReference {
   certificateStatusName: string | null;
   /** Abbreviation of the format this price is for (#343), or null for the single. */
   formatAbbreviation: string | null;
+  /** The amount as a 2-dp string, or a mark's typed form (`-`, `?`) when {@link mark} is set. */
   price: string;
+  /** The catalogue gives no price here (#1615). */
+  mark: CatalogPriceMark | null;
   currency: string;
   /** True for the exact target the field writes to (primary catalog's latest edition ×
    * this condition × this certificate, at the **single**) — the value the amount field prefills
@@ -1713,6 +1751,7 @@ export async function getQuickCatalogPriceContext(
       certificateStatusId: true,
       formatId: true,
       price: true,
+      mark: true,
       currency: true,
       condition: { select: { abbreviation: true } },
       certificateStatus: { select: { name: true } },
@@ -1738,7 +1777,7 @@ export async function getQuickCatalogPriceContext(
         p.certificateStatusId === certId &&
         p.formatId === formatId
     );
-    return existing ? existing.price.toFixed(2) : null;
+    return existing ? priceCellInput(existing) : null;
   };
   const targetEditionIds = new Set(targets.map((t) => t.editionId));
 
@@ -1767,7 +1806,8 @@ export async function getQuickCatalogPriceContext(
       conditionAbbreviation: p.condition.abbreviation,
       certificateStatusName: p.certificateStatus?.name ?? null,
       formatAbbreviation: p.format?.abbreviation ?? null,
-      price: p.price.toFixed(2),
+      price: priceCellInput(p),
+      mark: catalogPriceMarkOf(p.mark),
       currency: p.currency,
       // A recorded price is a "target" (the value an input prefills from) when it sits on one
       // of the editable editions for this condition × certificate, at the single.
@@ -2009,6 +2049,7 @@ export async function getBulkQuickCatalogPriceContext(
       conditionId: true,
       certificateStatusId: true,
       price: true,
+      mark: true,
     },
   });
   const priceKey = (
@@ -2020,7 +2061,7 @@ export async function getBulkQuickCatalogPriceContext(
   const priceByKey = new Map(
     prices.map((p) => [
       priceKey(p.stampId, p.catalogEditionId, p.conditionId, p.certificateStatusId),
-      p.price.toFixed(2),
+      priceCellInput(p),
     ])
   );
 
@@ -2059,7 +2100,8 @@ export async function getBulkQuickCatalogPriceContext(
  * (by `catalogNameId`), which resolves to that catalog's latest edition and currency. */
 export interface QuickCatalogPriceEntry {
   catalogNameId: string;
-  amount: number;
+  /** A figure, or a mark saying the catalogue gives none (#1615). */
+  amount: number | CatalogPriceMark;
 }
 
 /**
@@ -2103,7 +2145,7 @@ export async function quickSetCatalogPrices(
   }
 
   for (const entry of entries) {
-    if (!Number.isFinite(entry.amount) || entry.amount < 0) {
+    if (typeof entry.amount === "number" && (!Number.isFinite(entry.amount) || entry.amount < 0)) {
       throw new Error("Enter a valid non-negative amount.");
     }
     const catalog = await prisma.catalogName.findFirst({
@@ -2116,7 +2158,7 @@ export async function quickSetCatalogPrices(
     if (!catalog) throw new Error("Catalog not found in this collection.");
     const edition = catalog.catalogEditions[0];
     if (!edition) throw new Error("That catalog has no editions yet.");
-    const priceStr = roundAmount(entry.amount);
+    const value = priceCellWrite(entry.amount);
     // The (stamp, edition, condition, cert, format) uniqueness uses NULLS NOT DISTINCT, which
     // Prisma can't target in `upsert`; find-then-write instead.
     const existing = await prisma.stampCatalogPrice.findFirst({
@@ -2132,7 +2174,7 @@ export async function quickSetCatalogPrices(
     if (existing) {
       await prisma.stampCatalogPrice.update({
         where: { id: existing.id },
-        data: { price: priceStr, currency: catalog.currency },
+        data: { ...value, currency: catalog.currency },
       });
     } else {
       await prisma.stampCatalogPrice.create({
@@ -2142,7 +2184,7 @@ export async function quickSetCatalogPrices(
           conditionId,
           certificateStatusId: certificateStatusId ?? null,
           formatId: null,
-          price: priceStr,
+          ...value,
           currency: catalog.currency,
         },
       });
@@ -2195,9 +2237,12 @@ export interface StampCatalogPriceDisplay {
   certificateStatusId: string | null;
   certificateStatusName: string | null;
   certificateStatusAbbreviation: string | null;
+  /** The amount at 2 dp, or a mark as it is typed (`-`, `?`) when {@link mark} is set. */
   price: string;
+  /** The catalogue gives no price here (#1615). */
+  mark: CatalogPriceMark | null;
   currency: string;
-  /** Price converted to the collection base currency, or null when same currency / no rate. */
+  /** Price converted to the collection base currency, or null when same currency / no rate / a mark. */
   convertedAmount: string | null;
   baseCurrency: string;
   editionYear: number;
@@ -2221,6 +2266,7 @@ export async function getStampCatalogPrices(
       certificateStatusId: true,
       formatId: true,
       price: true,
+      mark: true,
       currency: true,
       condition: { select: { name: true, abbreviation: true } },
       certificateStatus: { select: { name: true, abbreviation: true } },
@@ -2257,9 +2303,11 @@ export async function getStampCatalogPrices(
     certificateStatusName: p.certificateStatus?.name ?? null,
     certificateStatusAbbreviation: p.certificateStatus?.abbreviation ?? null,
     formatId: p.formatId,
-    price: Number(p.price).toFixed(2),
+    price: priceCellInput(p),
+    mark: catalogPriceMarkOf(p.mark),
     currency: p.currency,
-    convertedAmount: applyConversion(Number(p.price), p.currency, baseCurrency, rates),
+    convertedAmount:
+      p.price === null ? null : applyConversion(Number(p.price), p.currency, baseCurrency, rates),
     baseCurrency,
     editionYear: p.catalogEdition.year,
     catalogNameId: p.catalogEdition.catalogNameId,
@@ -2295,7 +2343,10 @@ export interface StampAverageCell extends StampCellAxes {
 
 /** One recorded price at a (condition × certificate) intersection of a single edition. */
 export interface StampPriceCell extends StampCellAxes {
+  /** The amount at 2 dp; empty when {@link mark} is set. */
   price: string;
+  /** The catalogue gives no price here (#1615). */
+  mark: CatalogPriceMark | null;
   currency: string;
   convertedAmount: string | null;
   baseCurrency: string;
@@ -2344,6 +2395,7 @@ export async function getStampPriceDetails(
       conditionId: true,
       certificateStatusId: true,
       price: true,
+      mark: true,
       currency: true,
       condition: { select: { name: true, abbreviation: true, sortOrder: true } },
       certificateStatus: { select: { name: true, abbreviation: true, sortOrder: true } },
@@ -2394,6 +2446,8 @@ export async function getStampPriceDetails(
     { sample: (typeof prices)[number]; values: number[]; excluded: number }
   >();
   for (const p of bestPerCatalogCombo.values()) {
+    // A catalogue whose newest edition marks the cell (#1615) gives no figure to average.
+    if (p.price === null) continue;
     const key = `${p.conditionId}~${p.certificateStatusId ?? ""}`;
     let g = comboGroups.get(key);
     if (!g) {
@@ -2434,9 +2488,11 @@ export async function getStampPriceDetails(
     }
     ed.cells.push({
       ...axesOf(p),
-      price: Number(p.price).toFixed(2),
+      price: p.price === null ? "" : Number(p.price).toFixed(2),
+      mark: catalogPriceMarkOf(p.mark),
       currency: p.currency,
-      convertedAmount: applyConversion(Number(p.price), p.currency, baseCurrency, rates),
+      convertedAmount:
+        p.price === null ? null : applyConversion(Number(p.price), p.currency, baseCurrency, rates),
       baseCurrency,
     });
   }
@@ -2470,7 +2526,8 @@ export async function findStaleCatalogPrices(
   await assertCollectionOwner(ownerId, collectionId);
 
   const prices = await prisma.stampCatalogPrice.findMany({
-    where: { stamp: { collectionId } },
+    // Prices only: a mark (#1615) has no figure to carry up to a newer edition.
+    where: { stamp: { collectionId }, price: { not: null } },
     select: {
       stampId: true,
       catalogEditionId: true,
@@ -2501,7 +2558,7 @@ export async function findStaleCatalogPrices(
       stale.push({
         stampId: p.stampId,
         catalogEditionId: p.catalogEditionId,
-        price: p.price,
+        price: p.price!,
         currency: p.currency,
         editionYear: p.catalogEdition.year,
         catalogNameId: p.catalogEdition.catalogNameId,

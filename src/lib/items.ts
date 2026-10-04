@@ -16,6 +16,7 @@ import {
   aggregateHoldings,
   aggregateMarketHoldings,
   isFaultReduction,
+  isMissingCatalogPrice,
   type CopyValuation,
   type HoldingsSummary,
 } from "./valuation";
@@ -1531,7 +1532,8 @@ async function withMissingCatalogFilter(
     collectionId,
     baseWhere,
     (valuation) =>
-      (!filters.missingCatalogValue || valuation.unpriced) &&
+      // A copy the catalogue gives no price for (#1615) is not missing one — nothing to enter.
+      (!filters.missingCatalogValue || isMissingCatalogPrice(valuation)) &&
       (!banded || valuationInBand(valuation, filters.catalogValueMin, filters.catalogValueMax))
   );
   return { AND: [baseWhere, { id: { in: ids } }] };
@@ -2310,6 +2312,7 @@ const GROUP_STAMP_SELECT = {
 function sameValuation(a: CopyValuation, b: CopyValuation): boolean {
   return (
     a.unpriced === b.unpriced &&
+    a.mark === b.mark &&
     a.uncertain === b.uncertain &&
     a.amount === b.amount &&
     a.currency === b.currency &&

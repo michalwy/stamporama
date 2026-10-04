@@ -5,8 +5,14 @@
 // variant price grid and the identification step's variant section (#1337). They must not disagree
 // about an umbrella's value, so neither computes it on its own.
 
-import { normalizeDecimalInput } from "./decimal-input";
+import { formatAmountInput, normalizeDecimalInput } from "./decimal-input";
 import { deriveFormatPrice } from "./format-factor";
+import { rolledUpCatalogPriceMark } from "./catalog-price";
+import {
+  catalogPriceMarkInput,
+  parsePriceCellInput,
+  type CatalogPriceMark,
+} from "./catalog-price-mark";
 
 /** How a cell is identified in a surface's own maps — every axis a `StampCatalogPrice` is keyed on.
  *  Nothing crosses the wire under it: a write names its axes in full. */
@@ -50,20 +56,66 @@ export function variantDescendantMap(rows: readonly VariantTreeRow[]): Map<strin
   return map;
 }
 
-/** A typed amount as a number, or null when there is none — blank, or not an amount at all. */
+/** A typed amount as a number, or null when there is none — blank, a mark (#1615), or not an amount
+ *  at all. */
 export function parseCellAmount(raw: string): number | null {
   const typed = raw.trim();
   if (typed === "") return null;
+  if (parsePriceCellInput(typed).kind === "mark") return null;
   const amount = Number(normalizeDecimalInput(typed));
   return Number.isFinite(amount) ? amount : null;
+}
+
+/** A cell as it settles when left: blank, a mark as its sign (`-` → `—`, #1615), or the amount at
+ *  two places (#1231). Shared by the two surfaces that write cells, so they settle alike. */
+export function settleCellInput(raw: string): string {
+  const cell = parsePriceCellInput(raw);
+  if (cell.kind === "empty") return "";
+  if (cell.kind === "mark") return catalogPriceMarkInput(cell.mark);
+  return formatAmountInput(raw.trim());
+}
+
+/** What a settled cell writes: a figure, a mark, or null to clear it. */
+export function cellWriteValue(settled: string): number | CatalogPriceMark | null {
+  const cell = parsePriceCellInput(settled);
+  if (cell.kind === "empty") return null;
+  if (cell.kind === "mark") return cell.mark;
+  return Number(settled);
+}
+
+/** The mark a cell holds as typed (`—`/`-`, `?`), or null (#1615). */
+export function cellMark(raw: string): CatalogPriceMark | null {
+  const cell = parsePriceCellInput(raw);
+  return cell.kind === "mark" ? cell.mark : null;
+}
+
+/**
+ * The state an umbrella cell takes when none of its variants is priced and every fully identified
+ * one is marked (#1615), as a cell shows it (`—`, `?`) — `rolledUpCatalogPriceMark`'s rule, read off
+ * the grid's own cells. Null otherwise.
+ */
+export function rolledUpCellMark(
+  rows: readonly VariantTreeRow[],
+  umbrellaId: string,
+  markOf: (stampId: string) => CatalogPriceMark | null
+): string | null {
+  const descendants = variantDescendantMap(rows).get(umbrellaId) ?? [];
+  const identified = new Set(rows.filter((r) => r.identified).map((r) => r.stampId));
+  const mark = rolledUpCatalogPriceMark(
+    descendants.map((id) => ({ mark: markOf(id), identified: identified.has(id) }))
+  );
+  return mark ? catalogPriceMarkInput(mark) : null;
 }
 
 /**
  * What an empty cell on a format tab is worth: the single's figure times the stamp's multiplier, as
  * a 2-dp string. Null with no multiplier and with no single price — a derived figure is an inference
- * from two facts and says nothing without both.
+ * from two facts and says nothing without both. A marked single (#1615) gives its mark instead,
+ * multiplier or not: a multiple of a stamp that does not exist does not exist either.
  */
 export function derivedCellAmount(single: string, factor: number | null | undefined): string | null {
+  const mark = cellMark(single);
+  if (mark) return catalogPriceMarkInput(mark);
   if (!factor) return null;
   const amount = parseCellAmount(single);
   if (amount === null) return null;
@@ -100,7 +152,8 @@ export interface UmbrellaCellSummary {
   rolledUp: boolean;
   /** The fully identified variants under it, at any depth — the ones a catalogue prices directly. */
   variantCount: number;
-  /** How many of those have no figure in this cell, typed or derived. */
+  /** How many of those have no figure in this cell, typed or derived, and are not marked as giving
+   *  none (#1615). */
   unpricedCount: number;
 }
 
@@ -123,16 +176,32 @@ export function summarizeUmbrellaCell(input: {
   own: string;
   /** What each stamp's cell is worth as drawn — see {@link shownCellAmount}. */
   amountOf: (stampId: string) => number | null;
+  /** The mark each stamp's cell holds, if any (#1615). Absent reads as none. */
+  markOf?: (stampId: string) => CatalogPriceMark | null;
 }): UmbrellaCellSummary {
+  const markOf = input.markOf ?? (() => null);
   const descendants = variantDescendantMap(input.rows).get(input.umbrellaId) ?? [];
   const identified = new Set(input.rows.filter((r) => r.identified).map((r) => r.stampId));
   const variants = descendants.filter((id) => identified.has(id));
-  const unpricedCount = variants.filter((id) => input.amountOf(id) === null).length;
+  const unpricedCount = variants.filter(
+    (id) => input.amountOf(id) === null && markOf(id) === null
+  ).length;
 
   const own = parseCellAmount(input.own);
   if (own !== null) {
     return { value: own.toFixed(2), rolledUp: false, variantCount: variants.length, unpricedCount };
   }
-  const rolled = lowestVariantAmount(descendants, input.amountOf);
+  const ownMark = cellMark(input.own);
+  if (ownMark) {
+    return {
+      value: catalogPriceMarkInput(ownMark),
+      rolledUp: false,
+      variantCount: variants.length,
+      unpricedCount,
+    };
+  }
+  const rolled =
+    lowestVariantAmount(descendants, input.amountOf) ??
+    rolledUpCellMark(input.rows, input.umbrellaId, markOf);
   return { value: rolled, rolledUp: rolled !== null, variantCount: variants.length, unpricedCount };
 }

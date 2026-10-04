@@ -70,9 +70,23 @@ describe("lotLineValueOf — one statement of the three catalogue outcomes (#116
       quantity: 2,
       unitValue: 40,
       unpriced: false,
+      mark: null,
       unconvertible: false,
       uncertain: false,
     });
+  });
+
+  it("carries a mark through on a line the catalogue gives no price for (#1615)", () => {
+    const marked = lotLineValueOf(
+      1,
+      { unpriced: true, baseAmount: null, uncertain: false, mark: "undeterminable" },
+      1
+    );
+    assert.equal(marked.unpriced, true);
+    assert.equal(marked.mark, "undeterminable");
+    assert.equal(marked.unitValue, null);
+    // A figure never carries one, whatever the valuation said.
+    assert.equal(lotLineValueOf(1, { unpriced: false, baseAmount: 5, uncertain: false }, 1).mark, null);
   });
 
   it("is unpriced when nothing valued the line, whatever the rate", () => {

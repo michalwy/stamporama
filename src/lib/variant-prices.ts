@@ -19,6 +19,7 @@ import { unpricedVariantCells, type CoverageVariant } from "./variant-price-cove
 import type { RawCatalogPrice } from "./catalog-price";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { roundAmount } from "./decimal-input";
+import { catalogPriceMarkOf, type CatalogPriceMark } from "./catalog-price-mark";
 import { withIssueAncestors } from "./checklist-branches";
 
 // The variant price grid (#618): a grid over a **tree**, because that is the shape of the source.
@@ -136,8 +137,10 @@ export interface VariantPriceRecord {
   conditionId: string;
   certificateStatusId: string | null;
   formatId: string | null;
-  /** 2-dp string, in the edition's own currency. */
+  /** 2-dp string, in the edition's own currency — or, with {@link mark} set, empty. */
   amount: string;
+  /** The catalogue gives no price here (#1615): drawn as — or ?, and not a gap. */
+  mark: CatalogPriceMark | null;
 }
 
 /** One resolved format multiplier (ADR-0020 §5). Only non-null ones are reported — an absent entry
@@ -386,6 +389,7 @@ export async function getVariantPriceGrid(
               certificateStatusId: true,
               formatId: true,
               price: true,
+              mark: true,
             },
           }),
       makeFormatFactorLookup(collectionId),
@@ -436,7 +440,8 @@ export async function getVariantPriceGrid(
       conditionId: p.conditionId,
       certificateStatusId: p.certificateStatusId,
       formatId: p.formatId,
-      amount: p.price.toFixed(2),
+      amount: p.price === null ? "" : p.price.toFixed(2),
+      mark: catalogPriceMarkOf(p.mark),
     })),
     formatFactors,
   };
@@ -538,7 +543,8 @@ export interface VariantPriceWrite {
   conditionId: string;
   certificateStatusId: string | null;
   formatId: string | null;
-  amount: number | null;
+  /** The figure, a mark saying the catalogue gives none (#1615), or null to clear the cell. */
+  amount: number | CatalogPriceMark | null;
 }
 
 /**
@@ -588,7 +594,10 @@ export async function setVariantCatalogPrice(
     });
     if (!format) throw new Error("Format not found in this collection.");
   }
-  if (write.amount != null && (!Number.isFinite(write.amount) || write.amount < 0)) {
+  if (
+    typeof write.amount === "number" &&
+    (!Number.isFinite(write.amount) || write.amount < 0)
+  ) {
     throw new Error("Enter a valid non-negative amount.");
   }
 
@@ -609,10 +618,12 @@ export async function setVariantCatalogPrice(
     if (existing) await prisma.stampCatalogPrice.delete({ where: { id: existing.id } });
     return;
   }
-  const data = {
-    price: roundAmount(write.amount),
-    currency: edition.catalogName.currency,
-  };
+  // Both columns every time, so a figure replacing a mark — or the other way round — is one ordinary
+  // edit that never trips the price-or-mark CHECK.
+  const data =
+    typeof write.amount === "number"
+      ? { price: roundAmount(write.amount), mark: null, currency: edition.catalogName.currency }
+      : { price: null, mark: write.amount, currency: edition.catalogName.currency };
   if (existing) {
     await prisma.stampCatalogPrice.update({ where: { id: existing.id }, data });
   } else {
@@ -736,6 +747,7 @@ export async function listUnpricedVariantTrees(
         catalogPrices: {
           select: {
             price: true,
+            mark: true,
             currency: true,
             conditionId: true,
             certificateStatusId: true,

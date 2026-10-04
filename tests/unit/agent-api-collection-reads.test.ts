@@ -575,6 +575,7 @@ const SUMMARY: HoldingsSummaryRow = {
   totalBaseAmount: "1200.00",
   pricedCount: 30,
   unpricedCount: 12,
+  markedCount: 0,
   unconvertibleCount: 1,
   uncertainCount: 4,
   uncertainBaseAmount: "300.00",

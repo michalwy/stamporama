@@ -33,6 +33,7 @@ const price = (
   over: Partial<RawCatalogPrice> = {}
 ): RawCatalogPrice => ({
   price: D(Number(amount)),
+  mark: null,
   currency: "EUR",
   conditionId,
   certificateStatusId: null,

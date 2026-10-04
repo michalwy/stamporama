@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useState } from "react";
 import { formatIssuedDate, moneyPrimaryText, moneySecondaryText } from "@/app/stamp-display";
 import type { StampListItem } from "@/lib/stamps";
@@ -322,6 +323,11 @@ export function StampRow({
           {/* The collector's own labels (#152), last of the chips because they are the one thing on
               the line the catalogue did not say. Nothing at all when there are none. */}
           <TagChips tags={stamp.tags} size="medium" />
+          {!stamp.mainCatalogPrice && stamp.mainCatalogPriceMark && (
+            <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
+              <CatalogPriceMarkText mark={stamp.mainCatalogPriceMark} align="end" />
+            </span>
+          )}
           {stamp.mainCatalogPrice && (
             <span
               style={{

@@ -1,5 +1,6 @@
 "use server";
 
+import { parsePriceCellInput, type CatalogPriceMark } from "@/lib/catalog-price-mark";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
@@ -467,7 +468,8 @@ export async function addStampToIssueAction(
     conditionId: string;
     certificateStatusId: string | null;
     formatId: string | null;
-    price: string;
+    price: string | null;
+    mark?: CatalogPriceMark;
     currency: string;
   }[] = [];
   for (const [key, value] of formData.entries()) {
@@ -476,18 +478,24 @@ export async function addStampToIssueAction(
       .slice("catalogPrice_".length)
       .split("~");
     if (!catalogEditionId || !conditionId) continue;
-    const price = (value as string).trim();
-    if (!price || isNaN(Number(price))) continue;
     const currency = ((formData.get(`catalogCurrency_${catalogEditionId}`) as string | null) ?? "").trim();
     if (!currency) continue;
-    catalogPrices.push({
+    const axes = {
       catalogEditionId,
       conditionId,
       certificateStatusId: certRaw ? certRaw : null,
       formatId: formatRaw ? formatRaw : null,
-      price,
       currency,
-    });
+    };
+    // `-` and `?` record that the catalogue gives no price (#1615).
+    const cell = parsePriceCellInput(value as string);
+    if (cell.kind === "mark") {
+      catalogPrices.push({ ...axes, price: null, mark: cell.mark });
+      continue;
+    }
+    const price = (value as string).trim();
+    if (!price || isNaN(Number(price))) continue;
+    catalogPrices.push({ ...axes, price });
   }
 
   // Block-mode duplicate guard (#85): the issue supplies the prefix context — its own overrides

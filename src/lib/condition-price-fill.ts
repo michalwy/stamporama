@@ -14,10 +14,14 @@
 // - **Only an empty cell is filled.** A figure already there may be the catalogue's own price.
 // - **A cell with no source price is left alone.**
 // - **Half up, to the cent**, as a typed amount is (#1231).
+// - **Marked cells are skipped** (#1615): a target cell marked as giving no price (`-`, `?`) is not
+//   empty and stays as it is, and a marked source cell gives its target nothing — a stamp that does
+//   not exist in one condition says nothing about its price in another.
 //
 // It is a one-time copy: what it produces is an ordinary price, and the set prices are not stored.
 
 import { formatAmountInput, normalizeDecimalInput } from "./decimal-input";
+import { parsePriceCellInput } from "./catalog-price-mark";
 
 /** A factor as an exact positive fraction. */
 export type PriceFactor = { numerator: bigint; denominator: bigint };
@@ -100,7 +104,8 @@ export function scaledPrice(source: string, factor: PriceFactor): string | null 
 
 /**
  * What the fill writes into one target cell, or null when it leaves the cell as it is: the cell
- * already holds something, or the same stamp has no price in the source condition.
+ * already holds something (a mark included), or the same stamp has no price in the source condition
+ * (a marked source has none).
  */
 export function fillConditionCell(cell: {
   source: string;
@@ -108,7 +113,7 @@ export function fillConditionCell(cell: {
   factor: PriceFactor;
 }): string | null {
   if (cell.current.trim() !== "") return null;
-  if (cell.source.trim() === "") return null;
+  if (parsePriceCellInput(cell.source).kind !== "amount") return null;
   return scaledPrice(cell.source, cell.factor);
 }
 

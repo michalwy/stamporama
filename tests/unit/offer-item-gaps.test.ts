@@ -13,7 +13,7 @@ const item = (over: Partial<GapItem> = {}): GapItem => ({
 const copy = (over: Partial<GapCopy> = {}): GapCopy => ({
   stampId: "s1",
   conditionId: "c1",
-  value: { unpriced: false },
+  value: { unpriced: false, mark: null },
   ...over,
 });
 
@@ -31,7 +31,7 @@ describe("listingItemGaps", () => {
   it("counts a row whose stamp x condition has an unpriced copy", () => {
     const gaps = listingItemGaps(
       [item(), item({ stampId: "s2" })],
-      [copy({ value: { unpriced: true } }), copy({ stampId: "s2" })]
+      [copy({ value: { unpriced: true, mark: null } }), copy({ stampId: "s2" })]
     );
     assert.equal(gaps.unpriced, 1);
   });
@@ -40,7 +40,7 @@ describe("listingItemGaps", () => {
     // The same stamp in two grades is two rows, and only the grade with no figure is a gap.
     const gaps = listingItemGaps(
       [item(), item({ conditionId: "c2" })],
-      [copy(), copy({ conditionId: "c2", value: { unpriced: true } })]
+      [copy(), copy({ conditionId: "c2", value: { unpriced: true, mark: null } })]
     );
     assert.equal(gaps.unpriced, 1);
   });
@@ -51,7 +51,7 @@ describe("listingItemGaps", () => {
     // can do.
     const gaps = listingItemGaps(
       [item({ unpricedVariantStampId: "s1" })],
-      [copy({ value: { unpriced: true } })]
+      [copy({ value: { unpriced: true, mark: null } })]
     );
     assert.equal(gaps.unpriced, 0);
   });
@@ -59,7 +59,7 @@ describe("listingItemGaps", () => {
   it("counts both gaps on the same rows independently", () => {
     const gaps = listingItemGaps(
       [item({ catalogUrl: null }), item({ stampId: "s2" })],
-      [copy({ stampId: "s2", value: { unpriced: true } })]
+      [copy({ stampId: "s2", value: { unpriced: true, mark: null } })]
     );
     assert.deepEqual(gaps, { unlinked: 1, unpriced: 1 });
   });

@@ -1,5 +1,6 @@
 "use client";
 
+import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -137,6 +138,9 @@ export function StampDetailPanel({
           {/* The collector's own labels (#152), on the line that says which stamp this is — the
               same chips the Stamps list draws, from the same source. */}
           <TagChips tags={stamp.tags} size="medium" />
+          {!price && stamp.mainCatalogPriceMark && (
+            <CatalogPriceMarkText mark={stamp.mainCatalogPriceMark} full />
+          )}
           {price && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
               <span style={PRICE_MAIN}>{moneyPrimaryText(price)}</span>

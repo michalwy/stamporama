@@ -404,7 +404,7 @@ describe("format on catalog prices", () => {
       select: { formatId: true, price: true },
     });
     assert.equal(prices.length, 2);
-    assert.equal(prices.find((p) => p.formatId === null)?.price.toString(), "20");
-    assert.equal(prices.find((p) => p.formatId === format.id)?.price.toString(), "95");
+    assert.equal(prices.find((p) => p.formatId === null)?.price?.toString(), "20");
+    assert.equal(prices.find((p) => p.formatId === format.id)?.price?.toString(), "95");
   });
 });

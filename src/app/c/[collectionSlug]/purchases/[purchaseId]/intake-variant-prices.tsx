@@ -1,5 +1,6 @@
 "use client";
 
+import { catalogPriceMarkInput } from "@/lib/catalog-price-mark";
 import {
   forwardRef,
   useCallback,
@@ -21,11 +22,14 @@ import {
   readLast,
   writeLast,
 } from "@/app/c/[collectionSlug]/shared/add-copy-defaults";
-import { formatAmountInput } from "@/lib/decimal-input";
 import { variantGridRestriction } from "@/lib/intake-catalog-value";
 import {
+  cellMark,
+  cellWriteValue,
   derivedCellAmount,
   lowestVariantAmount,
+  rolledUpCellMark,
+  settleCellInput,
   shownCellAmount,
   summarizeUmbrellaCell,
   variantDescendantMap,
@@ -140,7 +144,7 @@ export const IntakeVariantPricesSection = forwardRef<
           p.certificateStatusId,
           p.formatId
         ),
-        p.amount
+        p.mark ? catalogPriceMarkInput(p.mark) : p.amount
       );
     }
     setSeeded(grid);
@@ -182,6 +186,11 @@ export const IntakeVariantPricesSection = forwardRef<
     const own = values.get(keyOf(id, a)) ?? "";
     return shownCellAmount(own, own.trim() === "" ? derivedFor(id, a) : null);
   };
+  /** The mark a cell holds as drawn (#1615): its own, or a marked single's on a format. */
+  const markOf = (id: string, a: Axes) => {
+    const own = values.get(keyOf(id, a)) ?? "";
+    return cellMark(own.trim() === "" ? (derivedFor(id, a) ?? "") : own);
+  };
 
   const summary =
     grid && axes && editionId
@@ -190,6 +199,7 @@ export const IntakeVariantPricesSection = forwardRef<
           umbrellaId: stampId,
           own: values.get(keyOf(stampId, axes)) ?? "",
           amountOf: (id) => amountOf(id, axes),
+          markOf: (id) => markOf(id, axes),
         })
       : null;
 
@@ -208,7 +218,7 @@ export const IntakeVariantPricesSection = forwardRef<
     const key = keyOf(id, a);
     dirty.current.delete(key);
     const typed = raw.trim();
-    const normalized = typed === "" ? "" : formatAmountInput(typed);
+    const normalized = settleCellInput(typed);
     if (normalized !== typed) setIn(setValues, key, normalized);
     if (normalized === (saved.get(key) ?? "")) return true;
     setIn(setErrors, key, undefined);
@@ -229,8 +239,7 @@ export const IntakeVariantPricesSection = forwardRef<
       const ed = editionRef.current;
       if (!ed) return;
       for (const { stampId: id, axes: a, raw } of pending.values()) {
-        const typed = raw.trim();
-        void writeCell(id, ed, a, typed === "" ? "" : formatAmountInput(typed));
+        void writeCell(id, ed, a, settleCellInput(raw));
       }
     };
   }, []);
@@ -384,20 +393,22 @@ export const IntakeVariantPricesSection = forwardRef<
                               own={axes ? value : ""}
                               rolled={
                                 axes && value.trim() === ""
-                                  ? lowestVariantAmount(descendants.get(row.stampId) ?? [], (id) =>
+                                  ? (lowestVariantAmount(descendants.get(row.stampId) ?? [], (id) =>
                                       amountOf(id, axes)
-                                    )
+                                    ) ??
+                                    rolledUpCellMark(grid.rows, row.stampId, (id) => markOf(id, axes)))
                                   : null
                               }
                             />
                           ) : (
                             <NumericInput
                               kind="amount"
+                              priceMark
                               ref={row.stampId === firstEditable ? firstInput : undefined}
                               aria-label={`${row.label} ${subjectLabel}`}
                               value={value}
                               disabled={disabled || !axes}
-                              placeholder={(axes && derivedFor(row.stampId, axes)) ?? "—"}
+                              placeholder={(axes && derivedFor(row.stampId, axes)) ?? ""}
                               onChange={(e) => {
                                 if (!axes) return;
                                 const raw = e.target.value;
@@ -472,7 +483,7 @@ function UmbrellaCell({ own, rolled }: { own: string; rolled: string | null }) {
             : null),
         }}
       >
-        {recorded ? own : rolled ? `≈${rolled}` : "—"}
+        {recorded ? own : rolled ? `≈${rolled}` : ""}
       </span>
     </Tooltip>
   );
@@ -492,7 +503,7 @@ async function writeCell(
     conditionId: a.conditionId,
     certificateStatusId: a.certId,
     formatId: a.formatId,
-    amount: normalized === "" ? null : Number(normalized),
+    amount: cellWriteValue(normalized),
   });
   return r.status === "error" ? r.message : null;
 }

@@ -1721,6 +1721,18 @@ grid's three controls turned through in one pass. The rollup is taken within one
 takes it, and so may differ from the headline the lists print (#238's newest-with-a-price fallback) —
 the grid's own stated trade.
 
+**A cell may say the catalogue gives no price** (#1615): `StampCatalogPrice.mark` is `nonexistent`
+(the catalogue prints —) or `undeterminable` (?), with `price` null. It is written as `price=-` or
+`price=?` — or the marks' own names — through the same `setVariantCatalogPrice`, whose `amount` is a
+figure, a mark or null; it reads back as `mark` **in place of** `amount`, and a write's answer says
+`mark` where it would say `amount`, with `replaced` carrying a figure or a mark's name. A figure and a
+mark replace each other as an ordinary write, and a clear still means *not entered yet*. Inside
+`catalogPriceCells` a recorded mark is held as the grid holds it — its sign — so a marked single
+carries onto an empty format cell (`derived`) and an umbrella none of whose variants is priced and all
+of them marked reports their combined mark `rolledUp`, by the grid's own `rolledUpCellMark`. A copy's
+value carries `catalogueMark` beside `unpriced`, and `get_holdings_valuation`'s catalogue total a
+`markedCount` beside `unpricedCount`.
+
 **Clearing is the one catalogue delete on this surface**, amending #1438's *nothing is deleted*.
 `CATALOG_PRICE_WRITES` in `tests/unit/agent-api-operation-boundary.test.ts` pins the price writes to
 `setVariantCatalogPrice` from `operations/catalog-prices.ts` alone, keeps `quickSetCatalogPrices` out,

@@ -26,6 +26,7 @@ import {
   type EditionSource,
 } from "../catalog-prices";
 import { resolveVocabularyValue, type VocabularyEntry } from "../vocabulary";
+import { catalogPriceMarkOf, type CatalogPriceMark } from "../../catalog-price-mark";
 import { resolveCatalogStrings } from "./catalog";
 import { loadStampLabels, resolveStampRefs } from "./stamp-refs";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
@@ -160,7 +161,10 @@ export interface AgentCatalogPrice {
   readonly certificate?: string;
   /** Absent for *single*. */
   readonly format?: string;
-  readonly amount: string;
+  /** The figure; absent when the cell is a {@link mark}. */
+  readonly amount?: string;
+  /** The catalogue gives no price here (#1615): `nonexistent` (it prints —) or `undeterminable` (?). */
+  readonly mark?: CatalogPriceMark;
   readonly currency: string;
   /** An umbrella's lowest-variant figure, computed and not recorded (#238). */
   readonly rolledUp?: true;
@@ -252,7 +256,7 @@ async function readPrices(context: OperationContext, params: ParsedParams) {
       condition: nameOf(axes.conditions, cell.conditionId),
       ...(cell.certificateStatusId ? { certificate: nameOf(axes.certificates, cell.certificateStatusId) } : {}),
       ...(cell.formatId ? { format: nameOf(axes.formats, cell.formatId) } : {}),
-      amount: cell.amount,
+      ...(cell.mark ? { mark: cell.mark } : { amount: cell.amount }),
       currency: edition?.currency ?? "",
       ...(cell.source === "rolled_up" ? { rolledUp: true as const } : {}),
       ...(cell.source === "derived" ? { derived: true as const } : {}),
@@ -317,7 +321,7 @@ export const getCatalogPricesOperation: Operation = {
   method: "GET",
   path: "/catalog-prices",
   description:
-    "The catalogue prices of an issue's stamps, or of the whole stamp tree a stamp hangs in — the variant price grid, read in one call. Each stamp comes in tree order with its depth, and every price recorded on it in every edition, condition, certificate and format. A stamp marked `umbrella` has variants under it: with no price of its own it is worth the lowest of its variants', reported `rolledUp`; a price recorded on it outranks that. On a format, an empty cell may be the single's price times the format's multiplier, reported `derived`. Neither is recorded — `set_catalog_prices` records a figure. Narrow by edition, condition, certificate or format.",
+    "The catalogue prices of an issue's stamps, or of the whole stamp tree a stamp hangs in — the variant price grid, read in one call. Each stamp comes in tree order with its depth, and every price recorded on it in every edition, condition, certificate and format. A stamp marked `umbrella` has variants under it: with no price of its own it is worth the lowest of its variants', reported `rolledUp`; a price recorded on it outranks that. On a format, an empty cell may be the single's price times the format's multiplier, reported `derived`. Neither is recorded — `set_catalog_prices` records a figure. A cell where the catalogue gives no price on purpose carries a `mark` instead of an `amount`: `nonexistent` where it prints — (the stamp does not exist in that condition), `undeterminable` where it prints ?. Such a cell is not missing a price; an umbrella none of whose variants is priced, and all of them marked, reports their mark rolled up. Narrow by edition, condition, certificate or format.",
   writes: false,
   parameters: [
     {
@@ -340,7 +344,7 @@ export const getCatalogPricesOperation: Operation = {
   result: {
     kind: "list",
     description:
-      "One row per stamp of the tree: `stampId`, `stampNo` (its short number), `label`, `name`, `depth`, `umbrella` where it has variants, and `prices` — each with `edition`, `condition`, `certificate` and `format` (absent for none and single), `amount` and `currency`, and `rolledUp` or `derived` on a figure computed rather than recorded. A stamp with nothing recorded has empty `prices`.",
+      "One row per stamp of the tree: `stampId`, `stampNo` (its short number), `label`, `name`, `depth`, `umbrella` where it has variants, and `prices` — each with `edition`, `condition`, `certificate` and `format` (absent for none and single), `amount` and `currency` — or `mark` (`nonexistent`, `undeterminable`) in place of `amount` where the catalogue gives no price — and `rolledUp` or `derived` on a figure computed rather than recorded. A stamp with nothing recorded has empty `prices`.",
   },
   handler: async (context, params) => readPrices(context, params),
 };
@@ -355,8 +359,8 @@ type Resolved =
       readonly conditionId: string;
       readonly certificateStatusId: string | null;
       readonly formatId: string | null;
-      /** On a set: the figure, rounded as it will be stored. */
-      readonly amount: { value: number; text: string } | null;
+      /** On a set: the figure, rounded as it will be stored, or a mark (#1615) named by `text`. */
+      readonly amount: { value: number | CatalogPriceMark; text: string } | null;
     }
   | { readonly ok: false; readonly reason: string };
 
@@ -418,7 +422,7 @@ async function writeCells(context: OperationContext, params: ParsedParams, mode:
         parameter: "certificate",
       });
       const formatId = resolveAxisValue(p.cell.format, axes.formats, "single", { vocabulary: "format", parameter: "format" });
-      let amount: { value: number; text: string } | null = null;
+      let amount: { value: number | CatalogPriceMark; text: string } | null = null;
       if (p.cell.price !== null) {
         const price = parseCellPrice(p.cell.price);
         if (!price.ok) return { ok: false, reason: price.reason };
@@ -434,7 +438,7 @@ async function writeCells(context: OperationContext, params: ParsedParams, mode:
   const [existing, labels, flags] = await Promise.all([
     prisma.stampCatalogPrice.findMany({
       where: { stampId: { in: stampIds }, catalogEditionId: editionSource.id },
-      select: { stampId: true, conditionId: true, certificateStatusId: true, formatId: true, price: true },
+      select: { stampId: true, conditionId: true, certificateStatusId: true, formatId: true, price: true, mark: true },
     }),
     loadStampLabels(context, stampIds),
     prisma.stamp.findMany({
@@ -445,7 +449,8 @@ async function writeCells(context: OperationContext, params: ParsedParams, mode:
   const current = new Map(
     existing.map((row) => [
       variantPriceCellKey(row.stampId, editionSource.id, row.conditionId, row.certificateStatusId, row.formatId),
-      row.price.toFixed(2),
+      // A mark compares by its name, which is what `parseCellPrice` gives a mark sent back (#1615).
+      catalogPriceMarkOf(row.mark) ?? row.price?.toFixed(2) ?? "",
     ])
   );
   const umbrellas = new Set(flags.filter((stamp) => isUnknownVariantStamp(stamp)).map((stamp) => stamp.id));
@@ -482,8 +487,14 @@ async function writeCells(context: OperationContext, params: ParsedParams, mode:
 
     const before = current.get(key);
     const after = cell.amount?.text;
+    /** What the cell holds afterwards, as the answer names it: a figure or a mark. */
+    const holds = (text: string | undefined) => {
+      if (text === undefined) return {};
+      const mark = catalogPriceMarkOf(text);
+      return mark ? { mark } : { amount: text };
+    };
     if (before === after) {
-      answers.push({ entry, outcome: "unchanged", ...named, ...(after ? { amount: after } : {}) });
+      answers.push({ entry, outcome: "unchanged", ...named, ...holds(after) });
       continue;
     }
     try {
@@ -505,7 +516,7 @@ async function writeCells(context: OperationContext, params: ParsedParams, mode:
       entry,
       outcome: after !== undefined ? "written" : "cleared",
       ...named,
-      ...(after !== undefined ? { amount: after } : {}),
+      ...holds(after),
       ...(before !== undefined ? { replaced: before } : {}),
     });
   }
@@ -526,7 +537,7 @@ export const setCatalogPricesOperation: Operation = {
   method: "POST",
   path: "/catalog-prices",
   description:
-    "Record catalogue prices in one edition, many cells at a time — a catalogue page entered as a set. Each cell names a stamp, a condition and the price, and a certificate and a format where the price is not for a plain single. A figure is stored as the variant price grid stores one: rounded to cents, in the edition's currency, used for valuation from then on. A price on an umbrella is recorded on it and outranks the lowest of its variants'. Nothing is derived: a format multiplier or a certificate percentage is applied only by sending the resulting figure. Each cell is answered on its own — written, unchanged, or refused with the reason — and a refused cell does not stop the others.",
+    "Record catalogue prices in one edition, many cells at a time — a catalogue page entered as a set. Each cell names a stamp, a condition and the price, and a certificate and a format where the price is not for a plain single. A figure is stored as the variant price grid stores one: rounded to cents, in the edition's currency, used for valuation from then on. A price on an umbrella is recorded on it and outranks the lowest of its variants'. Nothing is derived: a format multiplier or a certificate percentage is applied only by sending the resulting figure. Where the catalogue prints — or ? instead of a price, send `price=-` or `price=?`: the cell then records that the catalogue gives none, and is no longer counted as missing. A figure replaces a mark, and a mark a figure, as an ordinary edit. Each cell is answered on its own — written, unchanged, or refused with the reason — and a refused cell does not stop the others.",
   writes: true,
   parameters: [
     EDITION_PARAMETER,
@@ -536,13 +547,13 @@ export const setCatalogPricesOperation: Operation = {
       type: "string[]",
       required: true,
       description:
-        "One cell per entry, at most 100, as `name=value` pairs separated by `;`: `stamp=Mi 309AP; condition=MNH; price=12.50`. `stamp` is an id or a catalogue number naming only that stamp; `condition` a name, abbreviation or id; `certificate` (default `none`) and `format` (default `single`) likewise; `price` a figure of zero or more, a comma or a point as the decimal mark.",
+        "One cell per entry, at most 100, as `name=value` pairs separated by `;`: `stamp=Mi 309AP; condition=MNH; price=12.50`. `stamp` is an id or a catalogue number naming only that stamp; `condition` a name, abbreviation or id; `certificate` (default `none`) and `format` (default `single`) likewise; `price` a figure of zero or more, a comma or a point as the decimal mark — or `-` (the catalogue prints —: the stamp does not exist there) or `?` (the catalogue prints ?: its price cannot be determined).",
     },
   ],
   result: {
     kind: "object",
     description:
-      "`edition` and `currency`, the counts `written`, `unchanged` and `refused`, and `cells` in the order sent — each with the `entry` as sent, its `outcome`, the `stampId`, `stamp`, `condition`, `certificate` and `format` it resolved to, `amount` as stored, `replaced` with the figure it replaced, `umbrella` on a stamp with variants, and `reason` on a refused cell.",
+      "`edition` and `currency`, the counts `written`, `unchanged` and `refused`, and `cells` in the order sent — each with the `entry` as sent, its `outcome`, the `stampId`, `stamp`, `condition`, `certificate` and `format` it resolved to, `amount` as stored or `mark` for a cell recorded as `-`/`?` (`nonexistent`, `undeterminable`), `replaced` with the figure or mark it replaced, `umbrella` on a stamp with variants, and `reason` on a refused cell.",
   },
   handler: async (context, params) => writeCells(context, params, "set"),
 };
@@ -552,7 +563,7 @@ export const clearCatalogPricesOperation: Operation = {
   method: "POST",
   path: "/catalog-prices/clear",
   description:
-    "Clear catalogue prices in one edition, as emptying a cell of the variant price grid does: the cell records nothing afterwards, which is not a price of zero — to record a zero, set one. Each cell names a stamp and a condition, and a certificate and a format where the price is not for a plain single. Clearing an umbrella's own price leaves it worth the lowest of its variants' again. Nothing else is removed. Each cell is answered on its own — cleared, unchanged when nothing was recorded, or refused with the reason — and a refused cell does not stop the others.",
+    "Clear catalogue prices in one edition, as emptying a cell of the variant price grid does: the cell records nothing afterwards, which is not a price of zero — to record a zero, set one. A cell recorded as `-` or `?` is cleared the same way, back to *not entered yet*. Each cell names a stamp and a condition, and a certificate and a format where the price is not for a plain single. Clearing an umbrella's own price leaves it worth the lowest of its variants' again. Nothing else is removed. Each cell is answered on its own — cleared, unchanged when nothing was recorded, or refused with the reason — and a refused cell does not stop the others.",
   writes: true,
   parameters: [
     EDITION_PARAMETER,
@@ -568,7 +579,7 @@ export const clearCatalogPricesOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "`edition` and `currency`, the counts `cleared`, `unchanged` and `refused`, and `cells` in the order sent — each with the `entry` as sent, its `outcome`, what it resolved to, `replaced` with the figure it cleared, and `reason` on a refused cell.",
+      "`edition` and `currency`, the counts `cleared`, `unchanged` and `refused`, and `cells` in the order sent — each with the `entry` as sent, its `outcome`, what it resolved to, `replaced` with the figure or mark it cleared, and `reason` on a refused cell.",
   },
   handler: async (context, params) => writeCells(context, params, "clear"),
 };

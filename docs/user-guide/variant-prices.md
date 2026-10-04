@@ -36,6 +36,41 @@ Typing:
 - There is **no Save**. Each figure is written when you leave the cell — **Done** only
   closes the grid, exactly as Enter on a cell does.
 - **Clearing a cell removes the price.** An empty cell records nothing — it is not a zero.
+- **Type `-` or `?` where the catalogue gives no price** — see below.
+
+### When the catalogue gives no price
+
+A catalogue often lists a stamp and still prints no price for it: **—** where the stamp does not
+exist in that condition, and **?** where its price cannot be determined, usually for a great rarity.
+Type the same thing into the cell:
+
+| You type | The cell shows | It means |
+| --- | --- | --- |
+| `-` | — | **does not exist** in this condition |
+| `?` | ? | **not determinable** — no price can be stated |
+
+Both are shown muted, and both are different from an empty cell, which still means *not entered
+yet*. Clearing the cell takes it back to empty; typing a figure over it replaces it, and `-` or `?`
+over a figure replaces the figure, as any edit does.
+
+Neither counts as a missing price, because there is nothing to enter:
+
+- the **worklist** below, unpriced counts, *unpriced* filters and *no value* marks leave them out,
+  and a listing is not held up by a variant that is marked;
+- an **umbrella** is worth the lowest of the variants that **have** a price — a marked variant does
+  not stand in its way. An umbrella none of whose variants has a price and every one of which is
+  marked takes their state with a `≈`: **—** when all of them do not exist, otherwise **?**;
+- a **copy** whose price is marked says so where its value would be — *does not exist* or *not
+  determinable* — in the Copies list, on the copy's page, in offers and in auction lots, instead of
+  showing an empty value. A total leaves such copies out and says how many: *2 copies with no
+  catalogue price*.
+
+On a format tab, an empty cell whose single is marked shows the same mark, greyed: a block of a
+stamp that does not exist does not exist either.
+
+The same `-` and `?` work wherever a single catalogue value is typed — the **Set catalog value**
+dialog, a card-scan tile's catalogue value, the offer's catalogue values, an issue run, and the
+stamp's own **Prices** tab.
 
 On a format tab, a greyed, dashed cell shows what that format would be worth from the
 single's price and this issue's multiplier. Nothing is stored until you type over it;
@@ -50,8 +85,11 @@ select), a **Fill from None at 120%** button appears next to the select. One pre
 same stamp and condition's **None** price at that percentage, and saves each one as typing it
 would.
 
-- A cell **already priced** for that certificate stays as it is.
+- A cell **already priced** for that certificate stays as it is — and so does one marked `—` or `?`.
 - A cell whose **None** price is empty stays empty.
+- A cell whose **None** price is marked `—` or `?` gets the same mark: a stamp with or without a
+  certificate is the same stamp, so if it does not exist, or cannot be priced, neither can the
+  certified one.
 - Locked **umbrella** rows are skipped, as Tab skips them.
 - Results are rounded to two decimal places, and they are ordinary prices: changing the None
   price afterwards does not change them.
@@ -77,8 +115,9 @@ The button then says what it is about to do — *Fill 12 empty MH cells from MNH
 press fills them, on this edition, certificate and format tab, saving each one as typing it would.
 
 - A cell **already priced** in the target condition stays as it is, so a price copied from the
-  catalogue is never replaced.
-- A cell whose **source** condition has no price stays empty.
+  catalogue is never replaced — and so does one marked `—` or `?`.
+- A cell whose **source** condition has no price stays empty, and so does one whose source is marked
+  `—` or `?`: a stamp that does not exist in one condition says nothing about its price in another.
 - Locked **umbrella** rows are skipped, as Tab skips them.
 - Results are rounded to two decimal places, and they are ordinary prices: changing a source
   price afterwards does not change them. The set prices are only used to work the factor out and
@@ -160,6 +199,8 @@ Two more things the list deliberately does *not* count:
   one is not a gap.
 - A variant priced only in an **older edition** still counts as priced. It has a figure;
   asking for it again on every new edition would leave every tree incomplete for ever.
+- A cell marked **—** or **?** is not a gap: the catalogue gives no price there, so there is
+  nothing to enter.
 
 ## Why a listing needs the whole tree
 

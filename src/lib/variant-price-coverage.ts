@@ -1,4 +1,4 @@
-import { pickCatalogPriceFor, type RawCatalogPrice } from "./catalog-price";
+import { pickCatalogCellFor, type RawCatalogPrice } from "./catalog-price";
 
 // Which cells of a variant tree are **not priced yet** (#618) — the rule behind the variant price
 // grid's worklist, and the same question `CopyValuation.unpricedVariantIds` (#617) asks of one copy,
@@ -20,6 +20,10 @@ import { pickCatalogPriceFor, type RawCatalogPrice } from "./catalog-price";
 //     latest edition carrying one, so a variant priced only in an older edition counts as priced:
 //     it *has* a figure, and asking for it again on every new edition would make every tree
 //     incomplete for ever.
+//
+// A cell the catalogue **marks** as giving no price (#1615) — *does not exist* or *not determinable*
+// — is not a gap: there is nothing to enter, and asking for it would keep the tree in the worklist for
+// ever. The newest edition recording anything at the key answers, as everywhere else.
 //
 // What it does vary over is the **condition**, and only over the conditions the collection actually
 // holds or lists at — never every row of the dictionary, or every tree is incomplete for ever. The
@@ -66,14 +70,14 @@ export function unpricedVariantCells(input: {
   for (const variant of input.variants) {
     if (!variant.identified) continue;
     for (const conditionId of input.conditionIds) {
-      const picked = pickCatalogPriceFor(
+      const cell = pickCatalogCellFor(
         variant.prices as RawCatalogPrice[],
         input.primaryCatalogNameId,
         conditionId,
         null,
         null
       );
-      if (!picked) cells.push({ stampId: variant.stampId, conditionId });
+      if (!cell.picked && !cell.mark) cells.push({ stampId: variant.stampId, conditionId });
     }
   }
   return cells;

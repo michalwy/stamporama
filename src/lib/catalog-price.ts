@@ -1,5 +1,10 @@
 import type { Decimal } from "@prisma/client/runtime/client";
 import { deriveFormatPrice } from "./format-factor";
+import {
+  catalogPriceMarkOf,
+  combineCatalogPriceMarks,
+  type CatalogPriceMark,
+} from "./catalog-price-mark";
 
 // Pure catalog-price helpers — no Prisma, no `server-only`, so they are safe to
 // import from unit-tested domain modules (see `valuation.ts`). Server-side pricing
@@ -29,11 +34,19 @@ export interface IssuePriceTotal extends MoneyDisplay {
   // Counted members whose price was derived from the single's by a format multiplier rather than
   // recorded for the displayed format (#343) — the other way a total becomes an estimate.
   derivedCount: number;
+  // Required members left out because their catalogue gives no price on purpose — *does not exist*
+  // or *not determinable* (#1615). Not missing prices: there is nothing to enter for them.
+  markedCount: number;
 }
 
 /** Raw catalog price shape needed to pick the main-catalog price. */
 export interface RawCatalogPrice {
-  price: Decimal;
+  /** Null exactly when {@link mark} is set (#1615). */
+  price: Decimal | null;
+  /** The catalogue gives no price on purpose — `nonexistent` (—) or `undeterminable` (?). Required
+   *  rather than optional for the reason `formatId` is: a producer that forgot to select it would
+   *  read a marked row as a missing price. */
+  mark: string | null;
   currency: string;
   conditionId: string;
   certificateStatusId: string | null;
@@ -51,11 +64,55 @@ export interface PickedPrice {
   editionYear: number;
 }
 
+/** What one cell holds on the edition that answers for it: a price, or a mark (#1615). */
+export interface PickedCell {
+  picked: PickedPrice | null;
+  /** Set when that edition's row says the catalogue gives no price; `picked` is then null. */
+  mark: CatalogPriceMark | null;
+}
+
+/**
+ * The cell a catalogue answers for: the row of the **latest edition** that records anything at the
+ * given key — a price or a mark (#1615). The newest edition is the catalogue's current word, so a
+ * mark there outranks a price an older edition printed, and the other way round. Matching is
+ * {@link pickCatalogPriceFor}'s.
+ */
+export function pickCatalogCellFor(
+  prices: RawCatalogPrice[],
+  primaryCatalogNameId: string | null,
+  conditionId: string | null,
+  certificateStatusId: string | null,
+  formatId: string | null = null
+): PickedCell {
+  if (!primaryCatalogNameId || !conditionId) return { picked: null, mark: null };
+  let best: RawCatalogPrice | null = null;
+  for (const p of prices) {
+    if (p.catalogEdition.catalogNameId !== primaryCatalogNameId) continue;
+    if (p.conditionId !== conditionId) continue;
+    if (p.certificateStatusId !== certificateStatusId) continue;
+    if (p.formatId !== formatId) continue;
+    if (!best || p.catalogEdition.year > best.catalogEdition.year) best = p;
+  }
+  if (!best) return { picked: null, mark: null };
+  const mark = catalogPriceMarkOf(best.mark);
+  if (mark || best.price === null) return { picked: null, mark };
+  return {
+    picked: {
+      amount: Number(best.price),
+      currency: best.currency,
+      catalogNameId: best.catalogEdition.catalogNameId,
+      editionYear: best.catalogEdition.year,
+    },
+    mark: null,
+  };
+}
+
 /**
  * Latest catalog edition (by year) with a recorded price for the primary catalog
  * name, at the given condition, certificate status and format. When `certificateStatusId`
  * is `null` the match is the no-certificate price; otherwise an exact certificate
- * match is required (no fall-back across certificate levels). `formatId` defaults to null —
+ * match is required (no fall-back across certificate levels). A cell whose latest edition is
+ * marked (#1615) has no price — see {@link pickCatalogCellFor}. `formatId` defaults to null —
  * the single — and matches exactly for the same reason: a block's price is a different figure,
  * not a variation of the single's, and must never stand in for it (ADR-0020). Returns null when
  * no condition/catalog is given or no matching price exists.
@@ -67,22 +124,13 @@ export function pickCatalogPriceFor(
   certificateStatusId: string | null,
   formatId: string | null = null
 ): PickedPrice | null {
-  if (!primaryCatalogNameId || !conditionId) return null;
-  let best: RawCatalogPrice | null = null;
-  for (const p of prices) {
-    if (p.catalogEdition.catalogNameId !== primaryCatalogNameId) continue;
-    if (p.conditionId !== conditionId) continue;
-    if (p.certificateStatusId !== certificateStatusId) continue;
-    if (p.formatId !== formatId) continue;
-    if (!best || p.catalogEdition.year > best.catalogEdition.year) best = p;
-  }
-  if (!best) return null;
-  return {
-    amount: Number(best.price),
-    currency: best.currency,
-    catalogNameId: best.catalogEdition.catalogNameId,
-    editionYear: best.catalogEdition.year,
-  };
+  return pickCatalogCellFor(
+    prices,
+    primaryCatalogNameId,
+    conditionId,
+    certificateStatusId,
+    formatId
+  ).picked;
 }
 
 /**
@@ -102,6 +150,10 @@ export function pickMainCatalogPrice(
 /** A price for a format, and whether it had to be **derived** from the single's (#343). */
 export interface FormatPricePick {
   picked: PickedPrice | null;
+  /** The catalogue gives no price here (#1615): the format's own row is marked, or — with no row of
+   *  its own — the single's is, since a multiple of a stamp that does not exist does not exist
+   *  either, and one of an unpriceable stamp cannot be priced. */
+  mark: CatalogPriceMark | null;
   /** True when no explicit row existed for the format and the single's price was multiplied by a
    * {@link https://github.com/michalwy/stamporama/issues/343 StampFormatFactor}. */
   derived: boolean;
@@ -126,15 +178,16 @@ export function pickFormatCatalogPrice(
   factor: number | null
 ): FormatPricePick {
   const pick = (fmt: string | null) =>
-    pickCatalogPriceFor(prices, primaryCatalogNameId, conditionId, certificateStatusId, fmt);
-  if (!formatId) return { picked: pick(null), derived: false };
+    pickCatalogCellFor(prices, primaryCatalogNameId, conditionId, certificateStatusId, fmt);
+  if (!formatId) return { ...pick(null), derived: false };
   const explicit = pick(formatId);
-  if (explicit) return { picked: explicit, derived: false };
-  if (factor === null) return { picked: null, derived: false };
+  if (explicit.picked || explicit.mark) return { ...explicit, derived: false };
   const single = pick(null);
-  if (!single) return { picked: null, derived: false };
+  if (single.mark) return { picked: null, mark: single.mark, derived: false };
+  if (factor === null || !single.picked) return { picked: null, mark: null, derived: false };
   return {
-    picked: { ...single, amount: deriveFormatPrice(single.amount, factor) },
+    picked: { ...single.picked, amount: deriveFormatPrice(single.picked.amount, factor) },
+    mark: null,
     derived: true,
   };
 }
@@ -179,8 +232,9 @@ export function pickLowestByBase<T extends { amount: number; currency: string }>
 export function pickHeadlineCatalogPrice(input: {
   ownPrices: RawCatalogPrice[];
   /** Per variant-child descendant: that variant's prices. Only consulted for an umbrella
-   *  with no own price. Each inner array is one descendant variant. */
-  variantPrices?: RawCatalogPrice[][];
+   *  with no own price. One entry is one descendant variant; `identified` is false for one with
+   *  variant children of its own (#617), which is valued by them and is never a gap itself. */
+  variantPrices?: { prices: RawCatalogPrice[]; identified: boolean }[];
   isUmbrella: boolean;
   primaryCatalogNameId: string | null;
   displayConditionId: string | null;
@@ -192,7 +246,7 @@ export function pickHeadlineCatalogPrice(input: {
   formatFactor?: number | null;
   baseCurrency: string;
   rates: Map<string, number | null>;
-}): { picked: PickedPrice | null; uncertain: boolean; derived: boolean } {
+}): HeadlineCatalogPrice {
   const pick = (prices: RawCatalogPrice[]) =>
     pickFormatCatalogPrice(
       prices,
@@ -203,22 +257,60 @@ export function pickHeadlineCatalogPrice(input: {
       input.formatFactor ?? null
     );
   const own = pick(input.ownPrices);
-  if (own.picked || !input.isUmbrella) {
-    return { picked: own.picked, uncertain: false, derived: own.derived };
+  if (own.picked || own.mark || !input.isUmbrella) {
+    return { picked: own.picked, mark: own.mark, uncertain: false, derived: own.derived };
   }
-  const candidates = (input.variantPrices ?? [])
-    .map(pick)
-    .filter((p): p is FormatPricePick & { picked: PickedPrice } => p.picked !== null);
+  const variants = (input.variantPrices ?? []).map((v) => ({ ...pick(v.prices), identified: v.identified }));
+  const candidates = variants.filter(
+    (p): p is (typeof variants)[number] & { picked: PickedPrice } => p.picked !== null
+  );
   const lowest = pickLowestByBase(
     candidates.map((c) => c.picked),
     input.baseCurrency,
     input.rates
   );
-  return {
-    picked: lowest,
-    uncertain: lowest !== null,
-    derived: lowest !== null && (candidates.find((c) => c.picked === lowest)?.derived ?? false),
-  };
+  if (lowest) {
+    return {
+      picked: lowest,
+      mark: null,
+      uncertain: true,
+      derived: candidates.find((c) => c.picked === lowest)?.derived ?? false,
+    };
+  }
+  const mark = rolledUpCatalogPriceMark(variants);
+  return { picked: null, mark, uncertain: mark !== null, derived: false };
+}
+
+/** A stamp's headline cell: a figure, a mark, or neither — see {@link pickHeadlineCatalogPrice}. */
+export interface HeadlineCatalogPrice {
+  picked: PickedPrice | null;
+  /** The catalogue gives no price (#1615) — the stamp's own cell, or every variant of an umbrella. */
+  mark: CatalogPriceMark | null;
+  /** The value — figure or mark — was rolled up from the variants rather than recorded on the stamp. */
+  uncertain: boolean;
+  derived: boolean;
+}
+
+/**
+ * The state an umbrella with **no priced variant** takes from its variants' marks (#1615): only when
+ * every fully identified variant is marked — one that is merely not entered yet leaves the umbrella
+ * not entered too. An intermediate umbrella (`identified: false`) is valued by its own children,
+ * which are in the list themselves, so it is skipped unless it carries a mark of its own. Null when
+ * there is no identified variant at all.
+ */
+export function rolledUpCatalogPriceMark(
+  variants: readonly { mark: CatalogPriceMark | null; identified: boolean }[]
+): CatalogPriceMark | null {
+  const marks: CatalogPriceMark[] = [];
+  let identifiedCount = 0;
+  for (const v of variants) {
+    if (v.identified) {
+      identifiedCount++;
+      if (!v.mark) return null;
+    }
+    if (v.mark) marks.push(v.mark);
+  }
+  return identifiedCount === 0 ? null : combineCatalogPriceMarks(marks);
 }
 
 /**
@@ -276,7 +368,9 @@ export function foldChecklistPrices(
   picks: readonly ChecklistPricePick[],
   requiredCount: number,
   baseCurrency: string,
-  rates: Map<string, number | null>
+  rates: Map<string, number | null>,
+  /** Required stamps whose catalogue gives no price on purpose (#1615) — left out, and said so. */
+  markedCount = 0
 ): IssuePriceTotal | null {
   const current = picks.filter((p) => !p.older);
   const usesOlderEdition = current.length === 0;
@@ -306,6 +400,7 @@ export function foldChecklistPrices(
     olderEditionExcludedCount: usesOlderEdition ? 0 : picks.length - current.length,
     estimatedCount: counted.filter((p) => p.estimated).length,
     derivedCount: counted.filter((p) => p.derived).length,
+    markedCount,
   };
 }
 

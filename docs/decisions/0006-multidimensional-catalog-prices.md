@@ -112,3 +112,29 @@ CREATE UNIQUE INDEX "stamp_catalog_price_unique"
   edition (#92). The list price column depends on a client-selected condition (#95).
 - Deleting a condition or certificate status that is in use is blocked at both the
   application layer and the database (`Restrict`).
+
+## Amendment (#1615): a cell may say the catalogue gives no price
+
+A catalogue lists a stamp and prints **—** where it does not exist in a condition, or **?** where its
+price cannot be determined. A cell that only knew *a price* or *no row* could not tell that apart from
+*not entered yet*, and every worklist kept asking for prices that do not exist.
+
+- `StampCatalogPrice.price` is **nullable**, and a new `mark` column holds `nonexistent` or
+  `undeterminable`. Two CHECKs in the migration: exactly one of `price` and `mark` is set, and `mark`
+  is one of the two words. **No row is still *not entered yet*.** `currency` stays required — a marked
+  row carries its book's currency like any other, so no reader of the column learns a null.
+- **The newest edition recording anything answers** (`pickCatalogCellFor`): a mark there outranks an
+  older edition's price, and a newer price an older mark. A marked single carries its mark onto a
+  format with no row of its own, factor or not.
+- **Neither mark is a missing price.** A copy whose cell is marked stays `unpriced` — there is no
+  figure, so nothing that adds or compares amounts learns a new case — and carries the reason in
+  `CopyValuation.mark`; everything that counts, flags or asks for missing prices reads
+  `isMissingCatalogPrice` instead. Totals count marked copies apart (`HoldingsTotal.markedCount`,
+  `IssuePriceTotal.markedCount`, `LotCompositionValue.markedLines`).
+- **An umbrella skips marked variants** in its lowest-variant roll-up (#238), and they are not among
+  `unpricedVariantIds`, so a listing is not held up by them (#617). An umbrella with no priced variant
+  whose identified variants are all marked takes their state: `nonexistent` when all are, otherwise
+  `undeterminable` (`rolledUpCatalogPriceMark`).
+- The write path writes **both columns every time**, so a figure replacing a mark, or a mark a figure,
+  is one ordinary update that never trips the CHECK.
+

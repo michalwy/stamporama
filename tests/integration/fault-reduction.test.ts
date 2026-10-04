@@ -148,7 +148,7 @@ describe("a copy's value lowered for its faults (#1560)", () => {
 
   it("leaves the stamp's catalogue price untouched", async () => {
     const price = await prisma.stampCatalogPrice.findFirstOrThrow({ where: { stampId: mi100 } });
-    assert.equal(price.price.toString(), "45");
+    assert.equal(price.price!.toString(), "45");
   });
 
   it("is edited on the copy, and cleared with null", async () => {

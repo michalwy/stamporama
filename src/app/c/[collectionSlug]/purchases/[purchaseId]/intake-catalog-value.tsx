@@ -283,6 +283,7 @@ export function IntakeCatalogValueField({
       >
         <NumericInput
           kind="amount"
+          priceMark
           id="intake-catalog-value"
           ref={inputRef}
           value={amount}

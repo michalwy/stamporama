@@ -1,5 +1,6 @@
 "use client";
 
+import { settlePriceMarkInput } from "@/lib/catalog-price-mark";
 import { useMemo, useRef, type KeyboardEvent } from "react";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -221,9 +222,12 @@ export function StampCatalogPricesTab({
     certId: string | null
   ): string | null {
     if (!activeFormatId) return null;
+    const single = (priceEdits.get(priceCellKey(editionId, conditionId, certId, null)) ?? "").trim();
+    // A marked single (#1615) carries its mark onto the format, factor or not — the valuation's rule.
+    const mark = settlePriceMarkInput(single);
+    if (mark) return mark;
     const factor = formatFactors[formatFactorKey(activeFormatId, conditionId)];
     if (!factor) return null;
-    const single = (priceEdits.get(priceCellKey(editionId, conditionId, certId, null)) ?? "").trim();
     if (single === "") return null;
     const amount = Number(normalizeDecimalInput(single));
     if (!Number.isFinite(amount)) return null;
@@ -449,6 +453,7 @@ export function StampCatalogPricesTab({
                             <td key={col.id ?? "none"} style={tdCellStyle}>
                               <NumericInput
                                 kind="amount"
+                                priceMark
                                 ref={(el) => {
                                   inputRefs.current.set(key, el);
                                 }}
@@ -456,8 +461,12 @@ export function StampCatalogPricesTab({
                                 onChange={(e) => onPriceChange(key, e.target.value)}
                                 onKeyDown={(e) => handleCellKeyDown(e, key)}
                                 disabled={disabled}
-                                placeholder={derived ?? "—"}
-                                style={derived && price.trim() === "" ? CELL_INPUT_DERIVED : CELL_INPUT}
+                                // Blank when empty: `—` is the catalogue's *does not exist* (#1615).
+                                placeholder={derived ?? ""}
+                                style={{
+                                  ...(derived && price.trim() === "" ? CELL_INPUT_DERIVED : CELL_INPUT),
+                                  ...(settlePriceMarkInput(price) ? { color: "var(--color-text-muted)" } : null),
+                                }}
                                 title={
                                   derived && price.trim() === ""
                                     ? "Derived from the single's price. Type a value to record this format's own price."
@@ -484,14 +493,16 @@ export function StampCatalogPricesTab({
                                   textAlign: "right",
                                 }}
                               >
-                                {price.trim() === "" ? "—" : price}
+                                {price}
                               </span>
                               {canCopy && (
                                 <Tooltip content="Copy this price into the newest edition to update it." align="end">
                                   <button
                                     type="button"
                                     disabled={disabled}
-                                    onClick={() => onPriceChange(newestKey, formatAmountInput(price))}
+                                    onClick={() =>
+                                      onPriceChange(newestKey, settlePriceMarkInput(price) ?? formatAmountInput(price))
+                                    }
                                     aria-label="Copy this price into the newest edition"
                                     // Auxiliary to the grid's price inputs (#446): tabbing a price
                                     // table should walk the figures, not the shortcuts beside them.

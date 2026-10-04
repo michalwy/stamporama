@@ -131,6 +131,7 @@ export interface WantListItem {
  *  spelled once here so a want and a stamp are priced off identical rows. */
 const CATALOG_PRICE_SELECT = {
   price: true,
+  mark: true,
   currency: true,
   conditionId: true,
   certificateStatusId: true,

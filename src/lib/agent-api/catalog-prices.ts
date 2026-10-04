@@ -20,12 +20,24 @@
 // `variant-price-cells.ts`, the module the grid and the identification step already share so that
 // they cannot disagree. A figure read here that is not recorded says so.
 //
+// **A cell may say the catalogue gives no price** (#1615) — `nonexistent` where it prints —,
+// `undeterminable` where it prints ?. It is read back as a `mark` in place of an `amount`, written as
+// `price=-` or `price=?`, and cleared like a figure; a clear still means *not entered yet*.
+//
 // Pure: no Prisma, so `pnpm test:unit` holds every rule here.
 
 import { formatAmountInput, roundAmount } from "../decimal-input";
 import {
+  catalogPriceMarkInput,
+  isCatalogPriceMark,
+  parsePriceCellInput,
+  type CatalogPriceMark,
+} from "../catalog-price-mark";
+import {
+  cellMark,
   derivedCellAmount,
   lowestVariantAmount,
+  rolledUpCellMark,
   shownCellAmount,
   variantDescendantMap,
   variantPriceCellKey,
@@ -151,8 +163,10 @@ export interface RecordedPrice {
   readonly conditionId: string;
   readonly certificateStatusId: string | null;
   readonly formatId: string | null;
-  /** 2-dp string, in the edition's currency. */
+  /** 2-dp string, in the edition's currency; empty for a mark. */
   readonly amount: string;
+  /** The catalogue gives no price here (#1615). */
+  readonly mark: CatalogPriceMark | null;
 }
 
 /** One resolved format multiplier — `VariantPriceFactor`'s fields, structurally. */
@@ -176,7 +190,11 @@ export interface PriceCell {
   readonly conditionId: string;
   readonly certificateStatusId: string | null;
   readonly formatId: string | null;
+  /** The figure, 2-dp; empty when the cell is a {@link mark}. */
   readonly amount: string;
+  /** The catalogue gives no price here (#1615) — recorded, rolled up from every variant, or carried
+   *  from a marked single onto a format. */
+  readonly mark: CatalogPriceMark | null;
   /**
    * `recorded` is a `StampCatalogPrice` row. `rolled_up` is an umbrella's lowest-variant figure, on
    * an umbrella with no price of its own (#238). `derived` is an empty format cell's single price
@@ -202,11 +220,13 @@ export function catalogPriceCells(input: {
   readonly prices: readonly RecordedPrice[];
   readonly factors: readonly FormatFactor[];
 }): PriceCell[] {
+  // As the grid holds them: a figure, or a mark as its sign — so the derivation and the rollup below
+  // read marks exactly as the grid's cells do.
   const recorded = new Map<string, string>();
   for (const p of input.prices) {
     recorded.set(
       variantPriceCellKey(p.stampId, p.catalogEditionId, p.conditionId, p.certificateStatusId, p.formatId),
-      p.amount
+      p.mark ? catalogPriceMarkInput(p.mark) : p.amount
     );
   }
   const factorFor = new Map(input.factors.map((f) => [`${f.stampId}~${f.formatId}~${f.conditionId}`, f.factor]));
@@ -244,22 +264,32 @@ export function catalogPriceCells(input: {
       const typed = own(stampId);
       return shownCellAmount(typed, typed.trim() === "" ? derived(stampId) : null);
     };
-    const cell = (stampId: string, amount: string, source: PriceCell["source"]): PriceCell => ({
-      stampId,
-      catalogEditionId: combo.editionId,
-      conditionId: combo.conditionId,
-      certificateStatusId: combo.certId,
-      formatId: combo.formatId,
-      amount,
-      source,
-    });
+    const shownMark = (stampId: string) => {
+      const typed = own(stampId);
+      return cellMark(typed.trim() === "" ? (derived(stampId) ?? "") : typed);
+    };
+    const cell = (stampId: string, value: string, source: PriceCell["source"]): PriceCell => {
+      const mark = cellMark(value);
+      return {
+        stampId,
+        catalogEditionId: combo.editionId,
+        conditionId: combo.conditionId,
+        certificateStatusId: combo.certId,
+        formatId: combo.formatId,
+        amount: mark ? "" : value,
+        mark,
+        source,
+      };
+    };
 
     for (const row of input.rows) {
       const typed = own(row.stampId);
       if (typed !== "") {
         cells.push(cell(row.stampId, typed, "recorded"));
       } else if (!row.identified) {
-        const rolled = lowestVariantAmount(descendants.get(row.stampId) ?? [], shown);
+        const rolled =
+          lowestVariantAmount(descendants.get(row.stampId) ?? [], shown) ??
+          rolledUpCellMark(input.rows, row.stampId, shownMark);
         if (rolled !== null) cells.push(cell(row.stampId, rolled, "rolled_up"));
       } else {
         const figure = derived(row.stampId);
@@ -359,11 +389,26 @@ export function parseCellSpec(
  * The price as typed, read the way the grid reads a cell when it is left (`formatAmountInput`: a
  * comma or a point, a sum such as `12+3`, rounded to cents), or the reason it is not one. The grid's
  * write refuses a negative figure; the column refuses one it cannot hold.
+ *
+ * `-` records that the catalogue says the stamp does not exist there, `?` that its price cannot be
+ * determined (#1615) — as the grid takes them — and so do the marks' own names, `nonexistent` and
+ * `undeterminable`. A mark's `text` is its name.
  */
-export function parseCellPrice(raw: string): { ok: true; amount: number; text: string } | { ok: false; reason: string } {
+export function parseCellPrice(
+  raw: string
+):
+  | { ok: true; amount: number | CatalogPriceMark; text: string }
+  | { ok: false; reason: string } {
+  const named = raw.trim().toLocaleLowerCase();
+  if (isCatalogPriceMark(named)) return { ok: true, amount: named, text: named };
+  const typed = parsePriceCellInput(raw);
+  if (typed.kind === "mark") return { ok: true, amount: typed.mark, text: typed.mark };
   const normalized = formatAmountInput(raw);
   if (!/^\d+(\.\d+)?$/.test(normalized)) {
-    return { ok: false, reason: `"${raw}" is not an amount. Send a figure of zero or more, such as 12.50.` };
+    return {
+      ok: false,
+      reason: `"${raw}" is not an amount. Send a figure of zero or more, such as 12.50 — or \`-\` where the catalogue prints — and \`?\` where it prints ?.`,
+    };
   }
   const amount = Number(normalized);
   if (!Number.isFinite(amount) || amount >= PRICE_CEILING) {
@@ -388,9 +433,11 @@ export interface AgentPriceCellAnswer {
   readonly certificate?: string;
   /** Absent for *single*. */
   readonly format?: string;
-  /** The figure the cell holds after the call; absent when it is empty. */
+  /** The figure the cell holds after the call; absent when it is empty or a mark. */
   readonly amount?: string;
-  /** The figure the call replaced or cleared. */
+  /** The mark the cell holds after the call (#1615): `nonexistent` or `undeterminable`. */
+  readonly mark?: CatalogPriceMark;
+  /** The figure — or the mark's name — the call replaced or cleared. */
   readonly replaced?: string;
   /** The stamp has variants: a price on it is its own and outranks their lowest (#616). */
   readonly umbrella?: true;
