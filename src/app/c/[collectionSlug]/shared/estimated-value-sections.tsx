@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Tooltip } from "./tooltip";
+import { observationSource, soldOnLabel } from "./price-observation-sections";
 import { CollapsibleSection } from "./collapsible-section";
 import {
   FormatTables,
@@ -157,7 +158,7 @@ function EstimateDetails({
       <span style={{ color: "var(--color-text-muted)" }}>
         Nothing has been recorded for this key. The figure is the catalogue value times a ratio
         learned from other results — an estimate, not a measurement.
-        {expandable && " Click for the lots the ratio came from."}
+        {expandable && " Click for the results the ratio came from."}
       </span>
     </div>
   );
@@ -191,6 +192,33 @@ function BucketLots({
         {row.bucketLabel ?? "The ratio's bucket"} — {row.n} result{row.n === 1 ? "" : "s"}
         {row.ratio !== null && <>, median {percent(row.ratio)} of catalogue</>}
       </div>
+      {row.observations.map((o) => (
+        <div
+          key={o.observationId}
+          style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", flexWrap: "wrap" }}
+        >
+          {/* A price observation from someone else's auction (#1633): named, linked out when an
+              address was recorded — there is no lot of ours to open. */}
+          {o.url ? (
+            <a
+              href={o.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: "0.8125rem", color: "var(--color-accent)", textDecoration: "none" }}
+            >
+              {observationSource(o)}
+            </a>
+          ) : (
+            <span style={{ fontSize: "0.8125rem" }}>{observationSource(o)}</span>
+          )}
+          <span style={mutedSmallStyle}>{o.stampName ?? "observed"}</span>
+          <span style={mutedSmallStyle}>{o.conditionAbbreviation}</span>
+          <span style={mutedSmallStyle}>{soldOnLabel(o.soldOn)}</span>
+          <span style={{ ...mutedSmallStyle, marginLeft: "auto", whiteSpace: "nowrap" }}>
+            {percent(o.ratio)}
+          </span>
+        </div>
+      ))}
       {row.lots.map((lot, index) => (
         <div
           key={`${lot.lotId}-${index}`}
@@ -267,7 +295,7 @@ export function StampEstimatedValueSection({
               // two printed side by side invite reading the gap between them as a signal.
               if (!cell) return <Dash />;
               const row = rowOf(cell.conditionId);
-              const expandable = (row?.lots.length ?? 0) > 0;
+              const expandable = (row?.lots.length ?? 0) + (row?.observations.length ?? 0) > 0;
               const selected = expandable && openCondition === cell.conditionId;
               const figure = (
                 <>

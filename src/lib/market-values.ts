@@ -13,8 +13,12 @@ import { valuateItemRows, type ValuationRow } from "./item-valuation";
 import { getCollectionBaseCurrency } from "./pricing";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { onlySettledLots, type SettledConditionLot } from "./auction-line-condition";
+import { observationInput, readObservationRows, type ObservationRow } from "./price-observations";
+import type { PriceBasis } from "./price-observation";
 
-// **What a stamp fetches, read out of the lots already recorded** (#456; ADR-0022 §7).
+// **What a stamp fetches, read out of the lots already recorded** (#456; ADR-0022 §7) — and out of
+// the exact price observations recorded from other people's auctions (#1633; ADR-0063), which are
+// datapoints of the same standing.
 //
 // Computed on demand, nothing stored: no `stamp_valuation` table, no queued recompute (ADR-0018),
 // no invalidation edges. Editing a lot's final price changes the next screen that asks. The data is
@@ -65,6 +69,24 @@ export interface MarketValueLot {
   split: boolean;
 }
 
+/** One price observation behind a figure (#1633) — a realised price from someone else's auction. */
+export interface MarketValueObservation {
+  observationId: string;
+  /** The day of the sale, which is the date the datapoint carries. */
+  soldOn: Date;
+  platformName: string;
+  auctionHouseName: string | null;
+  auctionName: string | null;
+  lotNo: string | null;
+  url: string | null;
+  /** As observed, in its own currency. */
+  price: string;
+  currency: string;
+  priceBasis: PriceBasis;
+  /** What it counted as: the hammer, in the base currency at the rate of its day. */
+  amount: string;
+}
+
 /** What the market paid for one `stamp × condition × certificate × format`, with its evidence. */
 export interface StampMarketValue extends MarketValueKey {
   conditionName: string;
@@ -101,6 +123,8 @@ export interface StampMarketValue extends MarketValueKey {
   realizationRatio: number | null;
   /** Newest result first — the order a collector reads evidence in. */
   lots: MarketValueLot[];
+  /** The price observations among the results (#1633), newest first. `n` counts both lists. */
+  observations: MarketValueObservation[];
 }
 
 async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
@@ -144,12 +168,54 @@ type MarketLotPayload = Prisma.AuctionLotGetPayload<{ select: typeof MARKET_LOT_
 type MarketLotRow = SettledConditionLot<MarketLotPayload>;
 type MarketLineRow = MarketLotRow["lines"][number];
 
-/** How a key sorts on screen: the collector's own condition order first, then certificate, then
- * format — the same axes the catalogue-price grid is laid out on, in the same order. */
-function sortRank(line: MarketLineRow): [number, number, number] {
+/** What a key is called and where it sorts, read off any line or observation carrying it — every
+ * row with the same key resolves identically. */
+interface KeyLabel {
+  conditionName: string;
+  conditionAbbreviation: string;
+  certificateStatusName: string | null;
+  certificateStatusAbbreviation: string | null;
+  formatName: string | null;
+  formatAbbreviation: string | null;
   // A null certificate is "none" and a null format is the single: both are the unmarked default,
   // so both sort ahead of anything configured.
-  return [line.condition.sortOrder, line.certificateStatus?.sortOrder ?? -1, line.format?.sortOrder ?? -1];
+  conditionSortOrder: number;
+  certificateSortOrder: number;
+  formatSortOrder: number;
+}
+
+function labelOf(row: {
+  condition: { name: string; abbreviation: string; sortOrder: number };
+  certificateStatus: { name: string; abbreviation: string; sortOrder: number } | null;
+  format: { name: string; abbreviation: string; sortOrder: number } | null;
+}): KeyLabel {
+  return {
+    conditionName: row.condition.name,
+    conditionAbbreviation: row.condition.abbreviation,
+    certificateStatusName: row.certificateStatus?.name ?? null,
+    certificateStatusAbbreviation: row.certificateStatus?.abbreviation ?? null,
+    formatName: row.format?.name ?? null,
+    formatAbbreviation: row.format?.abbreviation ?? null,
+    conditionSortOrder: row.condition.sortOrder,
+    certificateSortOrder: row.certificateStatus?.sortOrder ?? -1,
+    formatSortOrder: row.format?.sortOrder ?? -1,
+  };
+}
+
+/** How a key sorts on screen: the collector's own condition order first, then certificate, then
+ * format — the same axes the catalogue-price grid is laid out on, in the same order. */
+function sortRank(label: KeyLabel): [number, number, number] {
+  return [label.conditionSortOrder, label.certificateSortOrder, label.formatSortOrder];
+}
+
+/** An observation that names a condition — the only kind that can carry a key at all. */
+type KeyedObservationRow = ObservationRow & {
+  conditionId: string;
+  condition: NonNullable<ObservationRow["condition"]>;
+};
+
+function hasCondition(row: ObservationRow): row is KeyedObservationRow {
+  return row.conditionId !== null && row.condition !== null;
 }
 
 /**
@@ -180,32 +246,38 @@ export async function readStampMarketValues(
   const wanted = new Set(stampIds);
   if (wanted.size === 0) return new Map();
 
-  const lots = onlySettledLots(
-    await prisma.auctionLot.findMany({
-      where: {
-        // The filter is the lifecycle plus a price, and nothing else (ADR-0022 §2): the derived
-        // outcome is not consulted, so a lot that was won, lost or merely observed all count — once
-        // every line's condition is settled (#1623), since a price cannot be attributed to a key a
-        // line has not committed to.
-        status: "closed",
-        finalPrice: { not: null },
-        auctionSale: { collectionId },
-        AND: [
-          { lines: { some: { stampId: { in: [...wanted] } } } },
-          { lines: { none: { conditionId: null } } },
-        ],
-      },
-      select: MARKET_LOT_SELECT,
-    })
-  );
-  if (lots.length === 0) return new Map();
+  const [lots, observationRows] = await Promise.all([
+    prisma.auctionLot
+      .findMany({
+        where: {
+          // The filter is the lifecycle plus a price, and nothing else (ADR-0022 §2): the derived
+          // outcome is not consulted, so a lot that was won, lost or merely observed all count —
+          // once every line's condition is settled (#1623), since a price cannot be attributed to a
+          // key a line has not committed to.
+          status: "closed",
+          finalPrice: { not: null },
+          auctionSale: { collectionId },
+          AND: [
+            { lines: { some: { stampId: { in: [...wanted] } } } },
+            { lines: { none: { conditionId: null } } },
+          ],
+        },
+        select: MARKET_LOT_SELECT,
+      })
+      .then(onlySettledLots),
+    // Every observation of these stamps (#1633): the extraction is what drops the uncertain and the
+    // unconvertible ones, so they are not filtered here a second time.
+    readObservationRows(collectionId, [...wanted]),
+  ]);
+  if (lots.length === 0 && observationRows.length === 0) return new Map();
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
+  const observations = observationRows.filter(hasCondition);
   // Every line of every one of those lots, valued in one pass — the lines pointing elsewhere are
-  // what the pro-rata split weighs this stamp's share against.
-  const valuations = await valuateItemRows(
-    collectionId,
-    lots.flatMap((lot) =>
+  // what the pro-rata split weighs this stamp's share against — and every observation with a key,
+  // whose catalogue value is what its ratio is read against.
+  const valuations = await valuateItemRows(collectionId, [
+    ...lots.flatMap((lot) =>
       lot.lines.map<ValuationRow>((line) => ({
         id: line.id,
         stampId: line.stampId,
@@ -216,24 +288,43 @@ export async function readStampMarketValues(
         carrier: null,
         faultReductionPercent: null,
       }))
-    )
-  );
+    ),
+    ...observations.map<ValuationRow>((row) => ({
+      id: row.id,
+      stampId: row.stampId,
+      conditionId: row.conditionId,
+      certificateStatusId: row.certificateStatusId,
+      formatId: row.formatId,
+      unknownVariant: isUnknownVariantStamp(row.stamp),
+      carrier: null,
+      faultReductionPercent: null,
+    })),
+  ]);
 
   // What a key is *called*, what it is worth in the catalogue, and where it sorts — all read off
-  // any line carrying it, since every line with the same key resolves identically.
-  const labels = new Map<string, MarketLineRow>();
+  // any line or observation carrying it, since every row with the same key resolves identically.
+  const labels = new Map<string, KeyLabel>();
   const catalogueValues = new Map<string, number | null>();
   const lotRows = new Map<string, MarketLotRow>();
   const lineRows = new Map<string, MarketLineRow>();
+  const observationById = new Map<string, KeyedObservationRow>();
   for (const lot of lots) {
     lotRows.set(lot.id, lot);
     for (const line of lot.lines) {
       lineRows.set(line.id, line);
       const id = marketKeyOf(line);
       if (!labels.has(id)) {
-        labels.set(id, line);
+        labels.set(id, labelOf(line));
         catalogueValues.set(id, valuations.get(line.id)?.baseAmount ?? null);
       }
+    }
+  }
+  for (const row of observations) {
+    observationById.set(row.id, row);
+    const id = marketKeyOf(row);
+    if (!labels.has(id)) {
+      labels.set(id, labelOf(row));
+      catalogueValues.set(id, valuations.get(row.id)?.baseAmount ?? null);
     }
   }
 
@@ -256,29 +347,62 @@ export async function readStampMarketValues(
       unitCatalogueValue: valuations.get(line.id)?.baseAmount ?? null,
     })),
   }));
+  const observationInputs = observationRows.map((row) => observationInput(row, baseCurrency));
 
   const now = new Date();
   const byStamp = new Map<string, StampMarketValue[]>();
-  for (const value of valuateMarket(input, now)) {
+  for (const value of valuateMarket(input, now, observationInputs)) {
     // Lots reach here because they mention a wanted stamp; their other lines were carried along for
     // the split alone and are not what was asked about.
     if (!wanted.has(value.key.stampId)) continue;
 
     const id = marketKeyOf(value.key);
-    const line = labels.get(id)!;
+    const label = labels.get(id)!;
     const catalogueValue = catalogueValues.get(id) ?? null;
+
+    const lotEvidence: MarketValueLot[] = [];
+    const observationEvidence: MarketValueObservation[] = [];
+    for (const point of value.datapoints) {
+      if (point.source.kind === "observation") {
+        const row = observationById.get(point.source.observationId)!;
+        observationEvidence.push({
+          observationId: row.id,
+          soldOn: row.soldOn,
+          platformName: row.platform.name,
+          auctionHouseName: row.auctionHouse?.name ?? null,
+          auctionName: row.auctionName,
+          lotNo: row.lotNo,
+          url: row.url,
+          price: row.price.toFixed(2),
+          currency: row.currency,
+          priceBasis: row.priceBasis === "all_in" ? "all_in" : "hammer",
+          amount: point.amount.toFixed(2),
+        });
+        continue;
+      }
+      const lot = lotRows.get(point.source.lotId)!;
+      const evidence = lineRows.get(point.source.lineId)!;
+      const finalPrice = Number(lot.finalPrice);
+      const rate = lot.fxRateToBase === null ? 1 : Number(lot.fxRateToBase);
+      lotEvidence.push({
+        lotId: lot.id,
+        auctionLotNo: lot.auctionLotNo,
+        lotNo: lot.lotNo,
+        lotTitle: lot.title,
+        saleId: lot.auctionSale.id,
+        saleName: lot.auctionSale.name,
+        endsAt: lot.endsAt,
+        finalPrice: (finalPrice * rate).toFixed(2),
+        saleCurrency: lot.auctionSale.currency,
+        quantity: evidence.quantity,
+        amount: point.amount.toFixed(2),
+        split: point.split,
+      });
+    }
 
     const entry: StampMarketValue = {
       ...value.key,
-      conditionName: line.condition.name,
-      conditionAbbreviation: line.condition.abbreviation,
-      certificateStatusName: line.certificateStatus?.name ?? null,
-      certificateStatusAbbreviation: line.certificateStatus?.abbreviation ?? null,
-      formatName: line.format?.name ?? null,
-      formatAbbreviation: line.format?.abbreviation ?? null,
-      conditionSortOrder: line.condition.sortOrder,
-      certificateSortOrder: line.certificateStatus?.sortOrder ?? -1,
-      formatSortOrder: line.format?.sortOrder ?? -1,
+      ...label,
       baseCurrency,
       median: value.median.toFixed(2),
       mean: value.mean.toFixed(2),
@@ -291,28 +415,8 @@ export async function readStampMarketValues(
       confidence: { score: value.confidence.score, badge: value.confidence.badge },
       catalogueValue: catalogueValue === null ? null : catalogueValue.toFixed(2),
       realizationRatio: realizationRatio(value.median, catalogueValue),
-      lots: value.datapoints
-        .map((point) => {
-          const lot = lotRows.get(point.lotId)!;
-          const evidence = lineRows.get(point.lineId)!;
-          const finalPrice = Number(lot.finalPrice);
-          const rate = lot.fxRateToBase === null ? 1 : Number(lot.fxRateToBase);
-          return {
-            lotId: lot.id,
-            auctionLotNo: lot.auctionLotNo,
-            lotNo: lot.lotNo,
-            lotTitle: lot.title,
-            saleId: lot.auctionSale.id,
-            saleName: lot.auctionSale.name,
-            endsAt: lot.endsAt,
-            finalPrice: (finalPrice * rate).toFixed(2),
-            saleCurrency: lot.auctionSale.currency,
-            quantity: evidence.quantity,
-            amount: point.amount.toFixed(2),
-            split: point.split,
-          };
-        })
-        .sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime()),
+      lots: lotEvidence.sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime()),
+      observations: observationEvidence.sort((a, b) => b.soldOn.getTime() - a.soldOn.getTime()),
     };
 
     const list = byStamp.get(value.key.stampId);

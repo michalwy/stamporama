@@ -30,8 +30,10 @@ interface PurchaseContactSelectProps {
   inputId?: string;
   placeholder: string;
   /** Narrows suggestions to contacts carrying this role, and (server-side) tags a newly
-   * created contact with it: `seller` for suppliers, `platform` for platforms. */
-  role: "platform" | "seller" | "buyer";
+   * created contact with it: `seller` for suppliers, `platform` for platforms. Omitted, every
+   * contact is suggested — a price observation's auction house (#1633) may be filed under `seller`
+   * from the collector's own bidding, and the role it gets on creation is the server's to set. */
+  role?: "platform" | "seller" | "buyer";
   disabled?: boolean;
   /** Notified whenever the selection changes: the picked contact id (`""` when the text was
    * edited to a name that has not been matched to a suggestion), the current text, and — when a

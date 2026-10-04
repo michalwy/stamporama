@@ -8,7 +8,8 @@
 // The whole feature is three steps, and this module is all three of them:
 //
 //   1. **Extraction.** Every closed lot with a final price yields one datapoint per line, at the
-//      hammer and in the base currency. A mixed lot is split pro-rata by catalogue value.
+//      hammer and in the base currency. A mixed lot is split pro-rata by catalogue value. Every
+//      **exact** price observation from someone else's auction (#1633) yields one more, whole.
 //   2. **Aggregation.** Datapoints group on `stamp × condition × certificate × format` — the
 //      catalogue-price key minus the edition axis (ADR-0022 §1) — and become a small statistics
 //      block whose headline is the **median**.
@@ -94,11 +95,16 @@ export interface MarketLotInput {
   lines: MarketLotLineInput[];
 }
 
+/** Where a datapoint came from: a line of one of the collector's own closed lots, or a price
+ * observation recorded from someone else's auction (#1633). The evidence list points back at it. */
+export type MarketDatapointSource =
+  | { kind: "lot"; lotId: string; lineId: string }
+  | { kind: "observation"; observationId: string };
+
 /** One result the market produced, for one key, per unit, in the base currency. */
 export interface MarketDatapoint {
   key: MarketValueKey;
-  lotId: string;
-  lineId: string;
+  source: MarketDatapointSource;
   /** What **one** of them fetched: the hammer share of this line divided by its quantity. Premium
    * and shipping are excluded — they are the seller's terms, not the stamp's worth (ADR-0022 §2). */
   amount: number;
@@ -182,8 +188,7 @@ export function extractMarketDatapoints(lots: MarketLotInput[]): MarketDatapoint
       const { line, quantity } = lines[0];
       out.push({
         key: keyOf(line),
-        lotId: lot.lotId,
-        lineId: line.lineId,
+        source: { kind: "lot", lotId: lot.lotId, lineId: line.lineId },
         amount: amount / quantity,
         at: lot.endsAt,
         split: false,
@@ -207,8 +212,7 @@ export function extractMarketDatapoints(lots: MarketLotInput[]): MarketDatapoint
       const share = (line.unitCatalogueValue! * quantity) / total;
       out.push({
         key: keyOf(line),
-        lotId: lot.lotId,
-        lineId: line.lineId,
+        source: { kind: "lot", lotId: lot.lotId, lineId: line.lineId },
         amount: (amount * share) / quantity,
         at: lot.endsAt,
         split: true,
@@ -216,6 +220,69 @@ export function extractMarketDatapoints(lots: MarketLotInput[]): MarketDatapoint
     }
   }
 
+  return out;
+}
+
+/**
+ * A realised price from someone else's auction (#1633; ADR-0063), as the extraction reads it.
+ *
+ * Already reduced to the **hammer** by the caller (`observationHammer`) and already judged: `exact`
+ * is false whenever the variant, the condition or the certificate was not established, and an
+ * observation that is not exact yields nothing — it is a hint, never evidence (ADR-0063 §3).
+ */
+export interface MarketObservationInput {
+  observationId: string;
+  stampId: string;
+  /** Null exactly when the condition was not established, which also makes `exact` false. */
+  conditionId: string | null;
+  certificateStatusId: string | null;
+  formatId: string | null;
+  exact: boolean;
+  /** The day of the sale — the date the datapoint carries. */
+  soldOn: Date;
+  /** The hammer, in the observation's own currency. */
+  hammer: Amount;
+  /** The ECB rate of `soldOn`, frozen on the observation. */
+  fxRateToBase: Amount;
+  /** As on {@link MarketLotInput}: the only way to tell "no conversion needed" from "none could be
+   * had" apart, since `fxRateToBase` is null for both. */
+  inBaseCurrency: boolean;
+}
+
+/**
+ * The datapoints a set of observations produces: one each, taken **whole** — an observation is one
+ * stamp at one key, so there is nothing to split — at the hammer in the base currency.
+ *
+ * An uncertain observation, one with no readable hammer, and a foreign-currency one with no frozen
+ * rate yield nothing, exactly as a lot in the same state does.
+ */
+export function extractObservationDatapoints(
+  observations: MarketObservationInput[]
+): MarketDatapoint[] {
+  const out: MarketDatapoint[] = [];
+  for (const observation of observations) {
+    if (!observation.exact || observation.conditionId === null) continue;
+    const hammer = num(observation.hammer);
+    if (hammer === null || hammer <= 0) continue;
+    let amount = hammer;
+    if (!observation.inBaseCurrency) {
+      const rate = num(observation.fxRateToBase);
+      if (rate === null) continue;
+      amount = hammer * rate;
+    }
+    out.push({
+      key: {
+        stampId: observation.stampId,
+        conditionId: observation.conditionId,
+        certificateStatusId: observation.certificateStatusId,
+        formatId: observation.formatId,
+      },
+      source: { kind: "observation", observationId: observation.observationId },
+      amount,
+      at: observation.soldOn,
+      split: false,
+    });
+  }
   return out;
 }
 
@@ -369,9 +436,17 @@ export interface MarketValuation extends MarketAggregate {
   confidence: MarketConfidence;
 }
 
-/** Extraction → aggregation → score in one call, for the common case. */
-export function valuateMarket(lots: MarketLotInput[], now: Date): MarketValuation[] {
-  return aggregateMarketDatapoints(extractMarketDatapoints(lots)).map((aggregate) => ({
+/** Extraction → aggregation → score in one call, for the common case. Observations (#1633) join the
+ * collector's own lots as datapoints of the same standing: a key's figures are over both. */
+export function valuateMarket(
+  lots: MarketLotInput[],
+  now: Date,
+  observations: MarketObservationInput[] = []
+): MarketValuation[] {
+  return aggregateMarketDatapoints([
+    ...extractMarketDatapoints(lots),
+    ...extractObservationDatapoints(observations),
+  ]).map((aggregate) => ({
     ...aggregate,
     confidence: marketConfidence(aggregate, now),
   }));

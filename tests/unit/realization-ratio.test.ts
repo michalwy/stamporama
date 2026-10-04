@@ -14,17 +14,20 @@ import {
 
 let seq = 0;
 
-/** One recorded ratio, with the parts a test does not care about filled in. */
-function obs(overrides: Partial<RatioObservation> = {}): RatioObservation {
+/** One recorded ratio, with the parts a test does not care about filled in. `lotId` names the lot
+ * a lot-sourced ratio came from, which is what the split dedup keys on. */
+function obs(
+  overrides: Partial<Omit<RatioObservation, "source">> & { lotId?: string } = {}
+): RatioObservation {
+  const { lotId = `lot-${++seq}`, ...rest } = overrides;
   return {
-    lotId: `lot-${++seq}`,
-    lineId: `line-${seq}`,
+    source: { kind: "lot", lotId, lineId: `line-${++seq}` },
     split: false,
     ratio: 0.5,
     areaId: "poland",
     conditionId: "mnh",
     issuedYear: 1950,
-    ...overrides,
+    ...rest,
   };
 }
 

@@ -1,7 +1,11 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
-import { extractMarketDatapoints, type MarketLotInput } from "./market-value";
+import {
+  extractMarketDatapoints,
+  extractObservationDatapoints,
+  type MarketLotInput,
+} from "./market-value";
 import { valuateItemRows, type ValuationRow } from "./items";
 import { getCollectionBaseCurrency } from "./pricing";
 import {
@@ -13,6 +17,7 @@ import {
 } from "./realization-ratio";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { onlySettledLots, type SettledConditionLot } from "./auction-line-condition";
+import { OBSERVATION_SELECT, observationInput } from "./price-observations";
 
 // **The learned realization ratio, read out of the lots already recorded** (#520; ADR-0029 §2).
 //
@@ -25,6 +30,10 @@ import { onlySettledLots, type SettledConditionLot } from "./auction-line-condit
 // invalidating on every lot edit, every catalogue price change and every area reassignment, and the
 // figures move slowly enough that recomputing them per page costs less than one class of staleness
 // bug.
+//
+// **Exact price observations from other people's auctions count too** (#1633; ADR-0063 §7): each is
+// one stamp at one key, taken whole, read against its key's catalogue value exactly as a single-line
+// lot is. Uncertain ones never do — the same rule market value follows.
 //
 // **The whole collection is read, not the stamps being anchored.** Bucket 4 is *every* ratio
 // recorded, and buckets 1–3 are ratios about other stamps by definition — the point of the ladder
@@ -74,6 +83,23 @@ const RATIO_LOT_SELECT = {
   },
 } satisfies Prisma.AuctionLotSelect;
 
+/** An observation as the ladder reads it: what market value reads, plus the stamp's area and year
+ * the buckets are drawn on, and its name for the drill-down. */
+const RATIO_OBSERVATION_SELECT = {
+  ...OBSERVATION_SELECT,
+  stamp: {
+    select: {
+      name: true,
+      issuedYear: true,
+      stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+      variants: { select: VARIANT_FLAG_SELECT },
+      ...VARIANT_FLAG_SELECT,
+    },
+  },
+} satisfies Prisma.PriceObservationSelect;
+
+type RatioObservationRow = Prisma.PriceObservationGetPayload<{ select: typeof RATIO_OBSERVATION_SELECT }>;
+
 type RatioLotPayload = Prisma.AuctionLotGetPayload<{ select: typeof RATIO_LOT_SELECT }>;
 /** A lot whose every line has its condition settled — the only kind that is evidence (#1623). */
 type RatioLotRow = SettledConditionLot<RatioLotPayload>;
@@ -115,6 +141,10 @@ export interface RealizationRatioResolver {
    * by definition.
    */
   describeLots(resolved: ResolvedRatio): RatioEvidenceLot[];
+  /** The price observations among a resolved bucket's evidence (#1633), newest sale first — the
+   * other half of {@link describeLots}, kept apart for the same reason market value keeps its lots
+   * and its observations apart: one is a link to a lot, the other a source to read. */
+  describeObservations(resolved: ResolvedRatio): RatioEvidenceObservation[];
 }
 
 /** One lot behind a bucket's median, in the shape the market-value evidence list already uses. */
@@ -138,6 +168,21 @@ export interface RatioEvidenceLot {
   split: boolean;
 }
 
+/** One price observation behind a bucket's median (#1633). */
+export interface RatioEvidenceObservation {
+  observationId: string;
+  soldOn: Date;
+  platformName: string;
+  auctionHouseName: string | null;
+  auctionName: string | null;
+  lotNo: string | null;
+  url: string | null;
+  stampName: string | null;
+  conditionAbbreviation: string;
+  /** What this observation contributed, unitless. */
+  ratio: number;
+}
+
 /**
  * Load every ratio the collection has recorded and return a resolver over them.
  *
@@ -147,7 +192,7 @@ export interface RatioEvidenceLot {
 export async function loadRealizationRatios(
   collectionId: string
 ): Promise<RealizationRatioResolver> {
-  const [collection, lots] = await Promise.all([
+  const [collection, lots, observationRows] = await Promise.all([
     prisma.collection.findUnique({
       where: { id: collectionId },
       select: { bidFallbackPercent: true },
@@ -165,10 +210,15 @@ export async function loadRealizationRatios(
       },
       select: RATIO_LOT_SELECT,
     }).then(onlySettledLots),
+    // Only the ones that name a condition can be exact; the extraction judges the rest.
+    prisma.priceObservation.findMany({
+      where: { collectionId, conditionId: { not: null } },
+      select: RATIO_OBSERVATION_SELECT,
+    }),
   ]);
   const fallbackPercent = collection?.bidFallbackPercent ?? 100;
 
-  if (lots.length === 0) return emptyResolver(fallbackPercent);
+  if (lots.length === 0 && observationRows.length === 0) return emptyResolver(fallbackPercent);
 
   const [baseCurrency, areas, conditions] = await Promise.all([
     getCollectionBaseCurrency(collectionId),
@@ -184,10 +234,9 @@ export async function loadRealizationRatios(
   const conditionNames = new Map(conditions.map((c) => [c.id, c.abbreviation]));
 
   // Every line of every closed lot, valued in one pass — the lines the split weighs against are the
-  // same ones that become ratios themselves.
-  const valuations = await valuateItemRows(
-    collectionId,
-    lots.flatMap((lot) =>
+  // same ones that become ratios themselves — and every observation beside them.
+  const valuations = await valuateItemRows(collectionId, [
+    ...lots.flatMap((lot) =>
       lot.lines.map<ValuationRow>((line) => ({
         id: line.id,
         stampId: line.stampId,
@@ -198,8 +247,19 @@ export async function loadRealizationRatios(
         carrier: null,
         faultReductionPercent: null,
       }))
-    )
-  );
+    ),
+    ...observationRows.map<ValuationRow>((row) => ({
+      id: row.id,
+      stampId: row.stampId,
+      // Filtered to a named condition by the query above.
+      conditionId: row.conditionId!,
+      certificateStatusId: row.certificateStatusId,
+      formatId: row.formatId,
+      unknownVariant: isUnknownVariantStamp(row.stamp),
+      carrier: null,
+      faultReductionPercent: null,
+    })),
+  ]);
 
   const lineRows = new Map<string, RatioLineRow>();
   for (const lot of lots) for (const line of lot.lines) lineRows.set(line.id, line);
@@ -222,34 +282,67 @@ export async function loadRealizationRatios(
     })),
   }));
 
+  const observationById = new Map<string, RatioObservationRow>(observationRows.map((row) => [row.id, row]));
+
   const observations: RatioObservation[] = [];
-  for (const point of extractMarketDatapoints(input)) {
+  const datapoints = [
+    ...extractMarketDatapoints(input),
+    ...extractObservationDatapoints(observationRows.map((row) => observationInput(row, baseCurrency))),
+  ];
+  for (const point of datapoints) {
     // A datapoint whose key has no catalogue value yields a market value but no ratio — there is
     // nothing to state it as a fraction of.
-    const catalogueValue = valuations.get(point.lineId)?.baseAmount ?? null;
+    const valuedId = point.source.kind === "lot" ? point.source.lineId : point.source.observationId;
+    const catalogueValue = valuations.get(valuedId)?.baseAmount ?? null;
     if (catalogueValue === null || catalogueValue <= 0) continue;
-    const line = lineRows.get(point.lineId);
-    if (!line) continue;
+    const stamp =
+      point.source.kind === "lot"
+        ? lineRows.get(point.source.lineId)?.stamp
+        : observationById.get(point.source.observationId)?.stamp;
+    if (!stamp) continue;
     observations.push({
-      lotId: point.lotId,
-      lineId: point.lineId,
+      source: point.source,
       split: point.split,
       ratio: point.amount / catalogueValue,
-      areaId: primaryAreaIdOf(line.stamp.stampAreaLinks),
-      conditionId: line.conditionId,
-      issuedYear: line.stamp.issuedYear,
+      areaId: primaryAreaIdOf(stamp.stampAreaLinks),
+      conditionId: point.key.conditionId,
+      issuedYear: stamp.issuedYear,
     });
   }
 
   const lotById = new Map(lots.map((lot) => [lot.id, lot]));
+  const conditionAbbreviationOf = (id: string) => conditionNames.get(id) ?? "";
 
   return {
     observationCount: observations.length,
+    describeObservations(resolved) {
+      return resolved.observations
+        .map<RatioEvidenceObservation | null>((observation) => {
+          if (observation.source.kind !== "observation") return null;
+          const row = observationById.get(observation.source.observationId);
+          if (!row) return null;
+          return {
+            observationId: row.id,
+            soldOn: row.soldOn,
+            platformName: row.platform.name,
+            auctionHouseName: row.auctionHouse?.name ?? null,
+            auctionName: row.auctionName,
+            lotNo: row.lotNo,
+            url: row.url,
+            stampName: row.stamp.name,
+            conditionAbbreviation: conditionAbbreviationOf(observation.conditionId),
+            ratio: observation.ratio,
+          };
+        })
+        .filter((row): row is RatioEvidenceObservation => row !== null)
+        .sort((a, b) => b.soldOn.getTime() - a.soldOn.getTime());
+    },
     describeLots(resolved) {
       return resolved.observations
         .map<RatioEvidenceLot | null>((observation) => {
-          const lot = lotById.get(observation.lotId);
-          const line = lineRows.get(observation.lineId);
+          if (observation.source.kind !== "lot") return null;
+          const lot = lotById.get(observation.source.lotId);
+          const line = lineRows.get(observation.source.lineId);
           if (!lot || !line) return null;
           return {
             lotId: lot.id,
@@ -286,6 +379,7 @@ function emptyResolver(fallbackPercent: number): RealizationRatioResolver {
   return {
     observationCount: 0,
     describeLots: () => [],
+    describeObservations: () => [],
     resolve(subject) {
       const resolved = resolveRealizationRatio(subject, [], fallbackPercent);
       return { ...resolved, bucketLabel: ratioBucketLabel(resolved, { areaName: null, conditionName: null }) };
