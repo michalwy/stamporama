@@ -39,6 +39,7 @@ import {
   unfoldedRows,
   withoutAssigned,
   RUN_DETAIL_FIELDS,
+  RUN_PIECE_FIELDS,
   type IssueRunIdentification,
   type RunCopyDetails,
   type RunCopyOverrides,
@@ -741,6 +742,74 @@ export function IssueRunDialog({
             : `${inRun.length} ${inRun.length === 1 ? "copy" : "copies"} will be created — one per tile, each of its own stamp and keeping its own pictures.`;
 
   const activeOwn = active ? (overrides.get(active.tileId) ?? {}) : {};
+  /** One of the active tile's own-details fields: its own value, or the shared one it follows. */
+  const ownField = (field: RunDetailField, tileId: string) => {
+    const isOwn = activeOwn[field] !== undefined;
+    const value = resolveRunCopyDetails(shared, activeOwn);
+    return (
+      <OwnField
+        key={`${tileId}-${field}`}
+        label={FIELD_LABEL[field]}
+        own={isOwn}
+        sharedText={describe(field, shared)}
+        disabled={isPending}
+        onOwn={(on) => setOwn(tileId, field, on ? shared[field] : undefined)}
+      >
+        {field === "conditionId" ? (
+          <ConditionSelect
+            conditions={conditions}
+            value={value.conditionId}
+            onChange={(v) => setOwn(tileId, "conditionId", v)}
+            disabled={isPending}
+          />
+        ) : field === "certificateStatusId" ? (
+          <CertificateSelect
+            certificateStatuses={certificateStatuses}
+            value={value.certificateStatusId}
+            onChange={(v) => setOwn(tileId, "certificateStatusId", v)}
+            disabled={isPending}
+          />
+        ) : field === "formatId" ? (
+          <FormatSelect
+            formats={formats}
+            value={value.formatId}
+            onChange={(v) => setOwn(tileId, "formatId", v)}
+            disabled={isPending}
+          />
+        ) : field === "lotId" ? (
+          <select
+            value={value.lotId}
+            onChange={(e) => setOwn(tileId, "lotId", e.target.value)}
+            disabled={isPending}
+            style={INPUT_STYLE}
+          >
+            {lotOptions.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        ) : field === "location" ? (
+          <LocationFields
+            name={`run-location-${tileId}`}
+            locations={locations}
+            locationTree={locationTree}
+            value={value.location}
+            onChange={(v) => setOwn(tileId, "location", v)}
+            disabled={isPending}
+          />
+        ) : (
+          <DispositionChips
+            values={value.disposition}
+            disabled={isPending}
+            onToggle={(flag, on) =>
+              setOwn(tileId, "disposition", { ...value.disposition, [flag]: on })
+            }
+          />
+        )}
+      </OwnField>
+    );
+  };
 
   /** The row whose held copies are open beside its tile (#1583) — the single tile's comparison
    * (#1207), reached from the run's held line. */
@@ -1467,74 +1536,11 @@ export function IssueRunDialog({
                     Everything follows <em>For all tiles</em> unless this tile has its own value — and
                     its own value stays when the shared one changes.
                   </p>
-                  {fields.map((field) => {
-                    const isOwn = activeOwn[field] !== undefined;
-                    const value = resolveRunCopyDetails(shared, activeOwn);
-                    const tileId = active.tileId;
-                    return (
-                      <OwnField
-                        key={`${tileId}-${field}`}
-                        label={FIELD_LABEL[field]}
-                        own={isOwn}
-                        sharedText={describe(field, shared)}
-                        disabled={isPending}
-                        onOwn={(on) => setOwn(tileId, field, on ? shared[field] : undefined)}
-                      >
-                        {field === "conditionId" ? (
-                          <ConditionSelect
-                            conditions={conditions}
-                            value={value.conditionId}
-                            onChange={(v) => setOwn(tileId, "conditionId", v)}
-                            disabled={isPending}
-                          />
-                        ) : field === "certificateStatusId" ? (
-                          <CertificateSelect
-                            certificateStatuses={certificateStatuses}
-                            value={value.certificateStatusId}
-                            onChange={(v) => setOwn(tileId, "certificateStatusId", v)}
-                            disabled={isPending}
-                          />
-                        ) : field === "formatId" ? (
-                          <FormatSelect
-                            formats={formats}
-                            value={value.formatId}
-                            onChange={(v) => setOwn(tileId, "formatId", v)}
-                            disabled={isPending}
-                          />
-                        ) : field === "lotId" ? (
-                          <select
-                            value={value.lotId}
-                            onChange={(e) => setOwn(tileId, "lotId", e.target.value)}
-                            disabled={isPending}
-                            style={INPUT_STYLE}
-                          >
-                            {lotOptions.map((l) => (
-                              <option key={l.id} value={l.id}>
-                                {l.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : field === "location" ? (
-                          <LocationFields
-                            name={`run-location-${tileId}`}
-                            locations={locations}
-                            locationTree={locationTree}
-                            value={value.location}
-                            onChange={(v) => setOwn(tileId, "location", v)}
-                            disabled={isPending}
-                          />
-                        ) : (
-                          <DispositionChips
-                            values={value.disposition}
-                            disabled={isPending}
-                            onToggle={(flag, on) =>
-                              setOwn(tileId, "disposition", { ...value.disposition, [flag]: on })
-                            }
-                          />
-                        )}
-                      </OwnField>
-                    );
-                  })}
+                  {/* What describes the piece first, then its faults with it, then where it goes
+                      (#1593). */}
+                  {fields
+                    .filter((f) => RUN_PIECE_FIELDS.includes(f))
+                    .map((field) => ownField(field, active.tileId))}
                   {/* The tile's faults (#1558) — its own and nothing else, so no *as for all*: a
                       fault belongs to one piece. Opened on the faults marked on the tile. */}
                   <div
@@ -1581,6 +1587,9 @@ export function IssueRunDialog({
                       <p style={MUTED}>Loading…</p>
                     )}
                   </div>
+                  {fields
+                    .filter((f) => !RUN_PIECE_FIELDS.includes(f))
+                    .map((field) => ownField(field, active.tileId))}
                 </section>
               </>
             ) : null}

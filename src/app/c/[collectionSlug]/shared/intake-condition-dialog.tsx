@@ -953,37 +953,10 @@ function IntakeConditionDialog({
             )}
           </div>
 
-          {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
-              Directly under the row it is keyed on — a catalogue price belongs to a condition ×
-              certificate, and putting it anywhere else would leave the collector to work out which
-              of the answers above it follows. The format picked beside it is *not* one of those
-              answers: the figure always lands on the single, with a multiple's value derived from it.
-              One field, the primary catalogue only: the full quick-price dialog stays for the
-              multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
-              intake only, the rule photos and the format field follow — one figure cannot be the
-              catalogue value of a whole set's stamps. */}
-          {selection.kind === "stamp" && (
-            <IntakeCatalogValueField
-              stampId={selection.stampId}
-              conditionId={conditionId}
-              certificateStatusId={certId}
-              subjectLabel={subjectLabel}
-              // The condition row above is two controls, or three once the collection defines
-              // formats — the same count the row itself is built from, so the two cannot drift.
-              columns={singleStamp && formats.length > 0 ? 3 : 2}
-              disabled={isPending || savingPrice}
-              onChange={handleCatalogValueChange}
-              variantGrid={
-                priceVariantsInGrid
-                  ? { formatId, subjectLabel: variantGridLabel, collectionId }
-                  : undefined
-              }
-            />
-          )}
-
-          {/* The copy's faults (#1558), with the piece in hand: after the catalogue value, which
-              belongs directly under the condition it is keyed on. Opened on the faults marked on the
-              tiles, or empty — never the last tile's, since a fault belongs to one piece. */}
+          {/* The copy's faults (#1558), with the piece in hand: straight after condition, certificate
+              and format, because they describe the piece and are worked out with it, while the
+              catalogue value below is looked up afterwards (#1593). Opened on the faults marked on
+              the tiles, or empty — never the last tile's, since a fault belongs to one piece. */}
           {askFaults && (
             <div style={{ marginTop: "0.75rem" }}>
               <LabelWithError htmlFor="intake-faults">
@@ -1006,6 +979,34 @@ function IntakeConditionDialog({
                 <div style={{ ...INPUT_STYLE, color: "var(--color-text-muted)" }}>Loading…</div>
               )}
             </div>
+          )}
+
+          {/* The catalogue value, while the paper catalogue is still open at this stamp (#593).
+              Under the row it is keyed on, with only the faults between (#1593) — a catalogue price
+              belongs to a condition × certificate, and its input keeps that row's columns so it
+              still lines up under the Condition control it follows. The format picked beside it is *not* one of those
+              answers: the figure always lands on the single, with a multiple's value derived from it.
+              One field, the primary catalogue only: the full quick-price dialog stays for the
+              multi-vendor case, and a row of vendor inputs here would bury the step. Single-stamp
+              intake only, the rule photos and the format field follow — one figure cannot be the
+              catalogue value of a whole set's stamps. */}
+          {selection.kind === "stamp" && (
+            <IntakeCatalogValueField
+              stampId={selection.stampId}
+              conditionId={conditionId}
+              certificateStatusId={certId}
+              subjectLabel={subjectLabel}
+              // The condition row above is two controls, or three once the collection defines
+              // formats — the same count the row itself is built from, so the two cannot drift.
+              columns={singleStamp && formats.length > 0 ? 3 : 2}
+              disabled={isPending || savingPrice}
+              onChange={handleCatalogValueChange}
+              variantGrid={
+                priceVariantsInGrid
+                  ? { formatId, subjectLabel: variantGridLabel, collectionId }
+                  : undefined
+              }
+            />
           )}
 
           {/* Storage location (#56/#121): optional at intake, shared by every created copy.
