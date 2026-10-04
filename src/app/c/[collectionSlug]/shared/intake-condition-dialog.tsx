@@ -7,6 +7,8 @@ import {
   DialogShell,
   DialogBody,
   DialogActions,
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
   LabelWithError,
 } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
@@ -772,12 +774,15 @@ function IntakeConditionDialog({
     <DialogShell
       title="Set condition"
       onClose={onClose}
-      // The same shape as the tile dialog one step back, which is where this picture was last seen:
-      // two surfaces showing the same scan at the same size is one habit rather than two.
-      maxWidth={pieceAside ? "min(96vw, 78rem)" : "36rem"}
-      height={pieceAside ? "min(90vh, 54rem)" : undefined}
+      // The same size as the tile dialog one step back (#1598), which is where this picture was last
+      // seen: the window less the shell's margin, so going from one step to the other does not
+      // resize anything (#1613). The form keeps the 40rem column it has always had and the viewer
+      // takes the rest, so *Fit* fills the added room; on a small window the viewer gives way first,
+      // down to a floor under which the form starts to give way too.
+      maxWidth={pieceAside ? DIALOG_MAX_WIDTH : "36rem"}
+      height={pieceAside ? DIALOG_MAX_HEIGHT : undefined}
       aside={pieceAside}
-      asideWidth="min(46vw, 38rem)"
+      asideWidth="max(16rem, 100% - 40rem)"
     >
       <form style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }} onSubmit={handleSubmit}>
         <DialogBody>

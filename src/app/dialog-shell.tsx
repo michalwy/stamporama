@@ -104,7 +104,8 @@ export interface DialogShellProps {
   aside?: ReactNode;
   /** Width of the `aside` column; ignored without one. The aside is fixed and the dialog's own
    * content flexes, which is what lets one dialog put a picker's whole browser beside it and
-   * another a narrow form. */
+   * another a narrow form. A percentage is of the row both columns share, so `100% - 40rem` turns
+   * it round — the content keeps 40rem and the aside takes the rest (#1613). */
   asideWidth?: string;
   children: ReactNode;
 }

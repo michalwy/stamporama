@@ -1453,6 +1453,11 @@ batch has both — which is half of what condition is judged on, gum and hinge m
 back. Each step opens fitted to its own panel; the zoom you set is kept across a front/back flip,
 as it is here.
 
+The **condition step** is the same size as this dialog — the whole browser window, less a narrow
+margin — so moving from one to the other does not resize anything. Its form keeps its column and the
+piece takes the rest, so at **Fit** the piece is as large as the window allows; on a small window the
+picture gives way before the form does. Without a piece to show, the step is its usual narrow form.
+
 It appears **only where there is a picture of that piece** — which means the scan-tile path and
 nothing else. Adding stamps by hand shows no picture at all, and deliberately does not fall back to
 the stamp's catalogue photo: that is a picture of *a* specimen of the stamp, not the one in your
