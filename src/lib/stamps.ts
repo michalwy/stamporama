@@ -61,6 +61,7 @@ import {
 import { putStampOnChecklists } from "./checklists";
 import { asChecklistKind, shownChecklists, type ChecklistKind } from "./checklist-kind";
 import { settleUmbrellaPrices, wouldActAsVariant } from "./umbrella-prices";
+import { refreshCandidateCopiesTx } from "./item-candidates";
 import type { UmbrellaPricesPolicy } from "./umbrella-prices-question";
 import {
   syncEntityTranslations,
@@ -259,6 +260,18 @@ async function clearStampFromCopiesTx(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   stampId: string
 ): Promise<void> {
+  // A stamp named as one of a copy's possible identities (#1651) is refused for the reason a carried
+  // one is: deleting it would quietly rewrite what that copy might be. Asked before the copies *of*
+  // the stamp are removed, since a set's pointer is one of the stamps it names.
+  const candidate = await tx.itemCandidate.findFirst({
+    where: { stampId },
+    select: { item: { select: { itemNo: true } } },
+  });
+  if (candidate) {
+    throw new Error(
+      `This stamp is one of the possible variants of copy #${candidate.item.itemNo}. Settle or narrow that copy before deleting the stamp.`
+    );
+  }
   await tx.item.deleteMany({ where: { stampId } });
   const carried = await tx.itemStamp.findFirst({
     where: { stampId },
@@ -314,6 +327,9 @@ export async function deleteStamp(
       await clearStampFromCopiesTx(tx, stampId);
       await tx.stamp.delete({ where: { id: stampId } });
       deletedIds.push(stampId);
+      // The children moved up a level, which can join or split the variant trees a candidate set
+      // spans (#1651).
+      await refreshCandidateCopiesTx(tx, collectionId);
     });
   } else {
     await prisma.$transaction(async (tx) => {
@@ -1511,6 +1527,9 @@ export async function updateStampWithCatalog(
         ...subtypeData,
       },
     });
+    // A stamp that starts or stops acting as a variant joins or splits variant trees, which moves
+    // the counts of any copy whose candidate set spans them (#1651).
+    if (managesSubtype) await refreshCandidateCopiesTx(tx, collectionId);
     await syncStampTranslations(tx, stampId, data.translations);
     if (data.checklistIds !== undefined && data.checklistIssueId) {
       await putStampOnChecklists(

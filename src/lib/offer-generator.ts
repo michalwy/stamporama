@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { candidateIdsOf } from "./candidate-set-rules";
 import { buildItemFilterWhere, type ItemListFiltersPaginated } from "./items";
 import { listableOnPlatformFilters, loadPoolChecklists } from "./lot-builder";
 import { loadVariantChains } from "./checklist-variant-rollup";
@@ -89,6 +90,7 @@ const POOL_SELECT = {
   formatId: true,
   stampCount: true,
   stamp: { select: { primaryCatalogSortKey: true, colnectId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+  candidates: { select: { stampId: true } },
 } as const;
 
 async function readGeneratorState(
@@ -144,6 +146,7 @@ async function readGeneratorState(
             formatId: row.formatId,
             unknownVariant: isUnknownVariantStamp(row.stamp),
             ownCatalogItemId: row.stamp.colnectId?.trim() || null,
+            candidateStampIds: candidateIdsOf(row),
           }))
         )
       : new Map<string, string>(),

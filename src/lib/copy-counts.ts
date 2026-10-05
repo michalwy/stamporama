@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import type { HeldCopyRow } from "./held-copies";
 import { buildDescendantMap } from "./pricing";
@@ -57,6 +58,9 @@ export function heldCopiesWhere(collectionId: string, stampIds: string[]) {
     // …and given to a partner, which is the third way (#644).
     ...NOT_TRADED_AWAY,
     ...NOT_MULTI_STAMP,
+    // …nor a copy whose candidates span several variant trees (#1651, ADR-0065): it is *possibly*
+    // each of them and certainly none, until it is settled.
+    ...NOT_ACROSS_TREES,
     disposedAt: null,
     deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
   };

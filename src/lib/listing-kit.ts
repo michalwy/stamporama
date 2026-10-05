@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { candidateIdsOf } from "./candidate-set-rules";
 import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { loadColnectConditionMap } from "./colnect";
@@ -191,6 +192,8 @@ const KIT_ITEM_SELECT = {
           variants: { select: VARIANT_FLAG_SELECT },
         },
       },
+      // A copy with a candidate set (#1651) is listed under its cheapest candidate.
+      candidates: { select: { stampId: true } },
     },
   },
 } as const;
@@ -270,6 +273,7 @@ export async function getOfferListingKit(
             formatId: item.formatId,
             unknownVariant: isUnknownVariantStamp(item.stamp),
             ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+            candidateStampIds: candidateIdsOf(item),
             listedAsStampId:
               chosen.get(listedVariantKey(offerId, item.stampId, item.conditionId)) ?? null,
           }))

@@ -167,6 +167,12 @@ async function syncItemFromEntriesTx(
     entries.push({ ...row, sortOrder: index });
   }
 
+  const stampCount = entries.reduce((sum, entry) => sum + entry.quantity, 0);
+  // A candidate set (#1651, ADR-0065) is a statement about a copy's **one** stamp, so a copy that now
+  // carries several loses it here — the one point every path that adds a stamp passes through. The
+  // rows are deleted in place rather than through `item-candidates.ts`, which imports this module.
+  const losesCandidates = stampCount > 1 || entries.length > 1;
+  if (losesCandidates) await tx.itemCandidate.deleteMany({ where: { itemId } });
   await tx.item.update({
     where: { id: itemId },
     data: {
@@ -175,7 +181,8 @@ async function syncItemFromEntriesTx(
       // piece actually carries, or the 171 readers of `Item.stampId` would be reading a stamp that
       // is not on the piece.
       stampId: entries[0].stampId,
-      stampCount: entries.reduce((sum, entry) => sum + entry.quantity, 0),
+      stampCount,
+      ...(losesCandidates ? { candidateTrees: 0 } : {}),
     },
   });
 

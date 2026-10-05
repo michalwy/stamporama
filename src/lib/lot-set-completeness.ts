@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, catalogLabel } from "./area-vendor";
 import { computeForSaleSetCompleteness } from "./checklist-completeness-rules";
@@ -96,6 +97,9 @@ function forSaleStockWhere(collectionId: string, stampIds: string[]) {
     // can go out as one offer set, and a cover bearing three of its stamps cannot supply a single
     // position of it — it is one piece that is sold whole.
     ...NOT_MULTI_STAMP,
+    // …nor a copy whose candidates span several variant trees (#1651, ADR-0065): it is *possibly*
+    // each of them and certainly none, until it is settled.
+    ...NOT_ACROSS_TREES,
     disposedAt: null,
     deliveryState: { in: [...IN_HAND_DELIVERY_STATES] },
   };

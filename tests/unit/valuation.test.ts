@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Decimal } from "@prisma/client/runtime/client";
 import type { RawCatalogPrice } from "../../src/lib/catalog-price";
 import {
+  valuateCandidateCopy,
   valuateCopy,
   valuateExplicitValue,
   aggregateHoldings,
@@ -640,5 +641,75 @@ describe("applyFaultReduction", () => {
       assert.deepEqual(applyFaultReduction(priced, bad), priced, String(bad));
       assert.equal(reduceForFaults(10, bad), 10);
     }
+  });
+});
+
+describe("valuateCandidateCopy — a copy that is one of several stamps (#1651)", () => {
+  const at = (ownPrices: RawCatalogPrice[], unknownVariant = false, variantPrices?: ReturnType<typeof variant>[]) =>
+    valuateCopy({
+      conditionId: MNH,
+      certificateStatusId: null,
+      unknownVariant,
+      primaryCatalogNameId: MICHEL,
+      ownPrices,
+      variantPrices,
+      baseCurrency: "PLN",
+      rates: new Map([["EUR", 4]]),
+    });
+  const rates = new Map<string, number | null>([["EUR", 4]]);
+
+  it("takes the cheapest candidate in base currency, flagged uncertain and naming it", () => {
+    const v = valuateCandidateCopy(
+      [
+        { stampId: "123aI", valuation: at([price(10, { currency: "EUR" })]), identified: true },
+        { stampId: "123bI", valuation: at([price(30, { currency: "PLN" })]), identified: true },
+      ],
+      "PLN",
+      rates
+    );
+    assert.equal(v.amount, "30.00");
+    assert.equal(v.sourceStampId, "123bI");
+    assert.equal(v.uncertain, true);
+    assert.deepEqual(v.unpricedVariantIds, []);
+  });
+
+  it("names the variant an umbrella candidate rolled its figure up from", () => {
+    const v = valuateCandidateCopy(
+      [
+        { stampId: "85", valuation: at([price(50)]), identified: true },
+        { stampId: "101", valuation: at([], true, [variant("101x", price(20)), variant("101y", price(40))]), identified: false },
+      ],
+      "PLN",
+      rates
+    );
+    assert.equal(v.amount, "20.00");
+    assert.equal(v.sourceStampId, "101x");
+  });
+
+  it("reports an identified candidate with nothing entered, which a listing must not stand on", () => {
+    const v = valuateCandidateCopy(
+      [
+        { stampId: "123aI", valuation: at([price(10)]), identified: true },
+        { stampId: "123bI", valuation: at([]), identified: true },
+      ],
+      "PLN",
+      rates
+    );
+    assert.equal(v.amount, "10.00", "the estimate is still the lowest of what is priced");
+    assert.deepEqual(v.unpricedVariantIds, ["123bI"]);
+  });
+
+  it("is unpriced, and still uncertain, when no candidate is priced", () => {
+    const v = valuateCandidateCopy(
+      [
+        { stampId: "123aI", valuation: at([]), identified: true },
+        { stampId: "123bI", valuation: at([]), identified: true },
+      ],
+      "PLN",
+      rates
+    );
+    assert.equal(v.unpriced, true);
+    assert.equal(v.uncertain, true);
+    assert.deepEqual(v.unpricedVariantIds, ["123aI", "123bI"]);
   });
 });

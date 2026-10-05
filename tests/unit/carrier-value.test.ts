@@ -91,6 +91,7 @@ describe("carrierComponentRows — the key each component is priced on", () => {
       unknownVariant: false,
       carrier: null,
       faultReductionPercent: null,
+      candidateStampIds: null,
     });
   });
 });

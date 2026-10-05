@@ -384,6 +384,7 @@ async function enrichReceiveLines(
                 unknownVariant: row.stamp ? isUnknownVariantStamp(row.stamp) : false,
                 carrier: null,
                 faultReductionPercent: null,
+                candidateStampIds: null,
               },
             ]
           : []
@@ -682,6 +683,7 @@ async function receiveAxisRows(
         unknownVariant: row.unknownVariant,
         carrier: null,
         faultReductionPercent: null,
+        candidateStampIds: null,
       }))
     );
     rows = rows.filter((row) => {

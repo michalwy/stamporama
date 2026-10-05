@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma, type DbTransaction } from "./db";
+import { candidateIdsOf } from "./candidate-set-rules";
 import {
   allocateOfferNumber,
   getHoldingsValuationByGroup,
@@ -713,6 +714,7 @@ async function listedAsByItem(
         certificateStatusId: true,
         formatId: true,
         stamp: { select: { colnectId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+        candidates: { select: { stampId: true } },
       },
     }),
     makeOfferLabeller(collectionId),
@@ -732,6 +734,7 @@ async function listedAsByItem(
       formatId: item.formatId,
       unknownVariant: isUnknownVariantStamp(item.stamp),
       ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+      candidateStampIds: candidateIdsOf(item),
       listedAsStampId: offerId
         ? (chosen.get(listedVariantKey(offerId, item.stampId, item.conditionId)) ?? null)
         : null,
@@ -1630,6 +1633,7 @@ const COLLISION_COPY_SELECT = {
   certificateStatusId: true,
   formatId: true,
   stamp: { select: { colnectId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+  candidates: { select: { stampId: true } },
 } as const;
 
 type CollisionCopyRow = Prisma.ItemGetPayload<{ select: typeof COLLISION_COPY_SELECT }>;
@@ -1648,6 +1652,7 @@ function collisionListingCopy(
     formatId: row.formatId,
     unknownVariant: isUnknownVariantStamp(row.stamp),
     ownCatalogItemId: row.stamp.colnectId?.trim() || null,
+    candidateStampIds: candidateIdsOf(row),
     listedAsStampId,
   };
 }
@@ -3198,6 +3203,8 @@ const LISTING_SETS_SELECT = {
               variants: { select: VARIANT_FLAG_SELECT },
             },
           },
+          // …or whether the copy is one of several candidates (#1651), which always does.
+          candidates: { select: { stampId: true } },
         },
       },
     },
@@ -3389,6 +3396,7 @@ async function resolveSetCatalogItemIds(
         formatId: item.formatId,
         unknownVariant: catalogued && isUnknownVariantStamp(item.stamp),
         ownCatalogItemId: item.stamp.colnectId?.trim() || null,
+        candidateStampIds: candidateIdsOf(item),
         listedAsStampId:
           chosen.get(listedVariantKey(set.offerId, item.stampId, item.conditionId)) ?? null,
       }))
@@ -4124,6 +4132,9 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
                       variants: { select: VARIANT_FLAG_SELECT },
                     },
                   },
+                  // A copy that is one of several candidates (#1651) is named by them and listed
+                  // under the cheapest.
+                  candidates: { select: { stampId: true, stamp: STAMP_LABEL_SELECT.stamp } },
                 },
               },
             },
@@ -4225,7 +4236,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       title: s.title,
       label: labeller.set(s),
       itemIds: items.map((li) => li.itemId),
-      copyLabels: items.map((li) => labeller.copy(li.item.stamp)),
+      copyLabels: items.map((li) => labeller.copyOf(li.item)),
       manualCopyOrder: hasManualItemOrder(s.items),
       holdings,
       holdingsInOfferCurrency:

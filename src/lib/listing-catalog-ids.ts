@@ -118,6 +118,12 @@ export interface ListingCatalogCopy {
    *  once and has no offer of its own to look one up by. Ignored on a copy whose own stamp carries an
    *  item-ID: that is a recorded identity, and a listing choice does not overrule one. */
   listedAsStampId?: string | null;
+  /** The copy's **candidate set** (#1651, ADR-0065), or null for an ordinary copy. Such a copy is
+   *  listed under its **cheapest candidate**, as an umbrella copy is under its cheapest variant: its
+   *  own stamp is only the set's pointer, so neither that stamp's item-ID nor an offer's choice made
+   *  for it is read. Required, so that no reader of a copy lists one under its pointer by omission;
+   *  build it with `candidateIdsOf`. */
+  candidateStampIds: readonly string[] | null;
 }
 
 /** Which catalogue entry one copy is listed under. */
@@ -172,14 +178,21 @@ export async function resolveListingCatalogItemIds(
 
   // Only an unmatched umbrella has anything to resolve at all. A matched one keeps its own id: it is
   // a recorded fact about this stamp, which neither a rollup nor a listing choice overrules.
-  const open = copies.filter((c) => !c.ownCatalogItemId && c.unknownVariant);
+  // A copy with a candidate set (#1651) always has: its own stamp is only the set's pointer.
+  const open = copies.filter(
+    (c) => c.candidateStampIds !== null || (!c.ownCatalogItemId && c.unknownVariant)
+  );
+  for (const c of open) {
+    if (c.candidateStampIds !== null) resolved.get(c.itemId)!.catalogItemId = null;
+  }
   if (open.length === 0) return resolved;
 
   // A copy the **offer** names a variant for takes it and asks the rollup nothing — which is what
   // makes a choice an answer where an unpriced tree (#617) had none. Split first, so the valuation
   // below is paid for only by the copies still taking the derivation.
-  const chosen = open.filter((c) => c.listedAsStampId);
-  const pending = open.filter((c) => !c.listedAsStampId);
+  // A choice is recorded against the copy's own stamp as an umbrella, which a set's pointer is not.
+  const chosen = open.filter((c) => c.listedAsStampId && c.candidateStampIds === null);
+  const pending = open.filter((c) => !c.listedAsStampId || c.candidateStampIds !== null);
 
   const rows: ValuationRow[] = pending.map((c) => ({
     id: c.itemId,
@@ -190,6 +203,7 @@ export async function resolveListingCatalogItemIds(
     unknownVariant: true,
     carrier: null,
     faultReductionPercent: null,
+    candidateStampIds: c.candidateStampIds,
   }));
   // `rows` is empty when every open copy was chosen by hand, and `valuateItemRows` answers an empty
   // batch without reading anything — so a fully overridden offer pays for no valuation at all.
@@ -336,7 +350,9 @@ export async function resolveListedStampIds(
   copies: readonly ListingCatalogCopy[]
 ): Promise<Map<string, string>> {
   const out = new Map(copies.map((c) => [c.itemId, c.stampId]));
-  if (!copies.some((c) => !c.ownCatalogItemId && c.unknownVariant)) return out;
+  if (!copies.some((c) => c.candidateStampIds !== null || (!c.ownCatalogItemId && c.unknownVariant))) {
+    return out;
+  }
   const resolved = await resolveListingCatalogItemIds(
     collectionId,
     copies,

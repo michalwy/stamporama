@@ -83,6 +83,9 @@ async function giveCandidatePool(
     deliveryStates: [...IN_HAND_DELIVERY_STATES],
     excludeGone: true,
     excludeIds: [...committed, ...blocks.map((b) => b.itemId)],
+    // A copy that is one of several candidates (#1651) serves a requirement only if every candidate
+    // would, and a requirement names one stamp — so it never does.
+    excludeCandidateSets: true,
   });
   if (eligible.length === 0) return [];
 

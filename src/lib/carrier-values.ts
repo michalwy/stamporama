@@ -86,6 +86,8 @@ export async function getCarrierValuation(
     // The piece's faults lower the recorded figure in every total (#1560); valued the same here, so
     // the dialog can say what the piece counts at beside what was recorded.
     faultReductionPercent: item.faultReductionPercent,
+    // A carrier has no candidate set (#1651): a set is offered on a single-stamp copy only.
+    candidateStampIds: null,
   };
   // Keyed by entry id, which no copy id can equal — one batched valuation for the piece and its
   // stamps together.

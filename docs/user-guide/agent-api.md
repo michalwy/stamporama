@@ -113,7 +113,7 @@ app shows on the stamp's row (`#901`), and wherever it has to name a stamp you c
 number as `st 901` — the same thing you would type in **Jump to…** — instead of a catalog number.
 The `st` is needed: a bare `901` is read as a catalog number, because that is what it usually is.
 
-**A read-and-write token can change things, and there are eight places where that is now true.**
+**A read-and-write token can change things, and there are ten places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
 for it, and write or re-generate its title and description — all of it inside Stamporama, on a
@@ -153,12 +153,21 @@ auction invoice, a seller's email — so you do not retype it. It can:
   and the country it sells in — and nothing else.
 
 **What it cannot do on a purchase is anything about the stamps themselves, or anything you cannot
-take back.** It never adds, identifies, moves or removes a copy — the purchase arrives with empty
-lots, and you identify the stamps into them as you always do. It does not close or reopen a lot,
+take back.** It never adds, moves or removes a copy — the purchase arrives with empty lots, and you
+identify the stamps into them as you always do. It does not close or reopen a lot,
 mark an order in transit or arrived, or delete a purchase, and it will not remove a lot that already
 holds copies or has closed. It does not touch the order a closed trade created, and it never sees or
 changes a contact's email, phone, address or notes, nor edits or deletes a contact you already have.
 Everything it writes is on the purchase's own screen, where you can change it back.
+
+On **what a copy is**, it can say which stamp one of your copies is — or, when that cannot be told
+from the piece, which stamps it **might** be: *Mi 123aI or 123bI* when the type is clear and the
+colour is not, or *Mi 85 or Mi 101* when the watermark that decides between two issues cannot be read
+on a cover. Such a copy is valued and offered at its cheapest possibility, and is marked as having its
+variant still to settle; the assistant can list those copies for you, narrow one down, or settle it
+to the stamp it turned out to be. Whenever it tells you about such a copy it names it the way the app
+does — *123aI or 123bI* — and never as one of them. It only ever changes a copy you already have; it
+does not create one.
 
 On **stamp sizes** — the figures your album pages cut hawid strips to — it can put a size it reads
 in a catalogue or a dealer's list onto your stamps, so you do not type it stamp by stamp. It can:

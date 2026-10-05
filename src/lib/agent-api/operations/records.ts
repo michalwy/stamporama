@@ -11,7 +11,13 @@ import { issueCatalogues } from "../area-reads";
 import { copyDetail, issueDetail, stampDetail } from "../collection-reads";
 import { notFound } from "../errors";
 import { requiredString } from "../params";
-import { collectionPath, loadCatalogLabelling, loadCollectionHeader, loadLocationPaths } from "./reads-shared";
+import {
+  candidateLabelsFor,
+  collectionPath,
+  loadCatalogLabelling,
+  loadCollectionHeader,
+  loadLocationPaths,
+} from "./reads-shared";
 import type { AgentCopyDetail, AgentIssueDetail, AgentStampDetail } from "../collection-reads";
 import type { Operation, OperationContext, ParsedParams } from "../types";
 import { stampIdFromRef } from "./stamp-refs";
@@ -180,6 +186,7 @@ export async function readCopy(
 
   return copyDetail(context.collectionId, copy, {
     catalogNumbers: labelling.labelFor(copy.areaId, copy.issueId, copy.catalogNumbers),
+    candidateLabels: candidateLabelsFor(labelling, copy),
     area: copy.areaId ? (labelling.areaName.get(copy.areaId) ?? null) : null,
     location: locations.pathFor(copy.locationId),
     path: collectionPath(header, `/inventory/${copy.id}`),

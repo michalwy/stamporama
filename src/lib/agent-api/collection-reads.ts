@@ -15,6 +15,7 @@
 import type { CatalogPriceMark } from "../catalog-price-mark";
 import { agentPhotoUrl } from "./photo-url";
 import { asChecklistKind, type ChecklistKind } from "../checklist-kind";
+import { candidateSetLabel } from "../candidate-set-rules";
 
 /**
  * Drop the keys that carry nothing.
@@ -586,6 +587,72 @@ export interface CopyValueRow {
   readonly faultReduction?: { readonly percent: number; readonly fullAmount: string } | null;
 }
 
+// ── Candidate sets (#1651, ADR-0065) ─────────────────────────────────────────
+
+/** One stamp a copy might be, as a copy read names it. */
+export interface AgentCandidateStamp {
+  readonly stampId: string;
+  readonly stamp?: string;
+  readonly catalogNumbers: string[];
+}
+
+/**
+ * A copy identified as **one of several candidate stamps** — *Mi 123aI or 123bI*, or *Mi 85 or Mi 101*
+ * across two issues. Present on every copy read for such a copy and absent on every other.
+ *
+ * - `label` is how the collector reads it: the candidates' leading numbers, joined by *or*.
+ * - `sharedStampId` is the stamp the candidates share (their nearest common variant ancestor) and the
+ *   copy's own `stampId` — present only when they lie in **one variant tree**. The copy then counts as
+ *   a copy of that stamp with its variant unknown.
+ * - `acrossTrees` is true when they do not: the copy's `stampId` is then merely the first candidate,
+ *   and the copy counts towards no completeness until it is settled.
+ */
+export interface AgentCandidateSet {
+  readonly label: string;
+  readonly stamps: AgentCandidateStamp[];
+  readonly sharedStampId?: string;
+  readonly acrossTrees?: boolean;
+}
+
+/** A candidate as a copy row carries it. */
+export interface CandidateRow {
+  readonly stampId: string;
+  readonly stampName: string | null;
+}
+
+/** What a copy row carries about its candidate set — empty and 0 for an ordinary copy. */
+export interface CandidateSetRow {
+  readonly stampId: string;
+  readonly candidates?: readonly CandidateRow[];
+  readonly candidateTrees?: number;
+}
+
+/**
+ * The candidate set of a copy row, or undefined for an ordinary copy. `labels` is each candidate's
+ * catalogue labels, in the row's candidate order — resolved by the handler, as a copy's own are.
+ */
+export function candidateSet(
+  row: CandidateSetRow,
+  labels: readonly (readonly CatalogLabelRow[])[] | undefined
+): AgentCandidateSet | undefined {
+  const candidates = row.candidates ?? [];
+  if (candidates.length < 2) return undefined;
+  const stamps = candidates.map((c, i) =>
+    compact({
+      stampId: c.stampId,
+      stamp: c.stampName ?? undefined,
+      catalogNumbers: catalogLabels(labels?.[i] ?? []),
+    })
+  );
+  const acrossTrees = (row.candidateTrees ?? 0) >= 2;
+  return compact({
+    label: candidateSetLabel(stamps.map((s) => s.catalogNumbers[0] ?? s.stamp ?? s.stampId)),
+    stamps,
+    sharedStampId: acrossTrees ? undefined : row.stampId,
+    acrossTrees: acrossTrees || undefined,
+  });
+}
+
 export function copyValue(row: CopyValueRow): AgentCopyValue {
   return compact({
     amount: row.amount ?? undefined,
@@ -608,6 +675,11 @@ export interface AgentCopyDetail {
   /** The copy is filed on a base stamp that has variants, so which variant it is has not been
    *  decided (ADR-0007 §2). */
   readonly unknownVariant?: boolean;
+  /** Which variant the copy is has still to be settled: it is filed on an umbrella
+   *  (`unknownVariant`) or identified as one of several `candidates` (#1651). */
+  readonly variantToSettle?: boolean;
+  /** The stamps the copy might be (#1651) — see {@link AgentCandidateSet}. */
+  readonly candidates?: AgentCandidateSet;
   readonly subtype?: string;
   readonly catalogNumbers: string[];
   readonly area?: string;
@@ -636,7 +708,7 @@ export interface AgentCopyDetail {
 }
 
 /** The row shape `listItemsPaginated` states a copy in, narrowed to what is published. */
-export interface CopyRow {
+export interface CopyRow extends CandidateSetRow {
   readonly id: string;
   readonly itemNo: number;
   readonly stampId: string;
@@ -672,6 +744,8 @@ export interface HoldingContext {
   /** The full filing path, root first (`Szafa 1 › Klaser A`). A ref only means anything inside its
    *  location (#421), so the two travel together or neither is an address. */
   readonly location: string | null;
+  /** Each candidate's catalogue labels, in the row's candidate order (#1651); absent without a set. */
+  readonly candidateLabels?: readonly (readonly CatalogLabelRow[])[];
 }
 
 /** The two further things a **detail** read resolves, and a list row deliberately does not — see
@@ -692,6 +766,8 @@ export function copyDetail(
     stampId: row.stampId,
     stamp: row.stampName ?? undefined,
     unknownVariant: row.unknownVariant || undefined,
+    variantToSettle: row.unknownVariant || (row.candidates?.length ?? 0) > 1 || undefined,
+    candidates: candidateSet(row, context.candidateLabels),
     subtype: subtypeName(row.subtype) ?? undefined,
     catalogNumbers: catalogLabels(context.catalogNumbers),
     area: context.area ?? undefined,
@@ -733,6 +809,11 @@ export interface AgentHolding {
   readonly stampId: string;
   readonly stamp?: string;
   readonly catalogNumbers: string[];
+  /** The copy is identified as one of several candidate stamps (#1651) — see
+   *  {@link AgentCandidateSet}. Absent on every other copy. */
+  readonly candidates?: AgentCandidateSet;
+  /** The variant is still to settle — an umbrella copy, or one with `candidates`. */
+  readonly variantToSettle?: boolean;
   readonly issue?: string;
   readonly issueYear?: number;
   readonly condition: string;
@@ -756,6 +837,8 @@ export function holding(row: CopyRow, context: HoldingContext): AgentHolding {
     stampId: row.stampId,
     stamp: row.stampName ?? undefined,
     catalogNumbers: catalogLabels(context.catalogNumbers),
+    candidates: candidateSet(row, context.candidateLabels),
+    variantToSettle: row.unknownVariant || (row.candidates?.length ?? 0) > 1 || undefined,
     issue: row.issueName ?? undefined,
     issueYear: row.issueYear ?? undefined,
     condition: row.conditionName,

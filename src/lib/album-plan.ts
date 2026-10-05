@@ -397,6 +397,8 @@ export async function albumPlanContext(
         // A slot is one catalogue position by definition, so there is no carrier to enumerate.
         stampCount: 1,
         stamps: [],
+        candidateTrees: 0,
+        candidates: [],
       })
     );
   }

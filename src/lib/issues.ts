@@ -1,6 +1,7 @@
 import "server-only";
 import { stampSizeProfileWrite } from "./scanning-profiles";
 import { prisma, type DbTransaction } from "./db";
+import { refreshCandidateCopiesTx } from "./item-candidates";
 import type { AreaFacet } from "./area-facets";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
 import { orderTagSummaries, TAG_SUMMARY_SELECT, type TagSummary } from "./tags";
@@ -3049,6 +3050,9 @@ export async function reparentStampNode(
       where: { id: stampId },
       data: { parentId: parentStampId, subtypeId },
     });
+    // A stamp moved under another parent can join or split the variant trees a copy's candidate set
+    // spans (#1651).
+    await refreshCandidateCopiesTx(tx, collectionId);
     // It lands at the end of its new sibling group, the way an arriving stamp does (#549): the
     // position it held among its old siblings was a statement about that group, and there is no
     // reading of it that carries over to this one.

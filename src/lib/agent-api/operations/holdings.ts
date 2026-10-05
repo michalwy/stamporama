@@ -5,10 +5,10 @@ import { countItems, countItemsByCondition, getHoldingsValuation, listItemsPagin
 import { conditionCounts, holding, valuationSummary } from "../collection-reads";
 import { notFound } from "../errors";
 import { listResponse, parseListWindow } from "../list";
-import { optionalInteger, optionalString } from "../params";
+import { optionalBoolean, optionalInteger, optionalString } from "../params";
 import { resolveVocabularyValue } from "../vocabulary";
 import { readCollectionVocabulary } from "./vocabulary";
-import { loadCatalogLabelling, loadLocationPaths } from "./reads-shared";
+import { candidateLabelsFor, loadCatalogLabelling, loadLocationPaths } from "./reads-shared";
 import type { AgentConditionCount, AgentHolding, AgentValuationSummary } from "../collection-reads";
 import type { ListResponse } from "../list";
 import type { CollectionVocabulary } from "../vocabulary";
@@ -35,7 +35,8 @@ import { stampIdFromRef } from "./stamp-refs";
 /**
  * The scoping parameters, declared once and shared by both operations.
  *
- * **Six named scopes and not a filter surface**, which is #710's first decision. Each names something
+ * **Six named scopes and not a filter surface**, which is #710's first decision — and a seventh since
+ * #1651, *variant to settle*, which names the collector's own worklist of copies still to identify. Each names something
  * a collector would say out loud — *what have I got from this series, from this country, from this
  * year, of this stamp, in this drawer, in this grade* — and they compose with AND. What is
  * deliberately **not** here is the rest of the Copies list's two dozen filters: an agent resolves a
@@ -95,6 +96,14 @@ const SCOPE_PARAMETERS: readonly ParameterSpec[] = [
     description:
       "Restrict to copies in this grade. Takes the condition's name or abbreviation from `get_collection_vocabulary` (`MNH` works) or its id.",
   },
+  {
+    name: "variant_to_settle",
+    in: "query",
+    type: "boolean",
+    required: false,
+    description:
+      "`true` restricts to copies whose variant is still to be settled — filed on a stamp that has variants, or identified as one of several candidate stamps (`candidates` on the row); `false` to the rest. Leave it out for both.",
+  },
 ];
 
 /** The scope as `items.ts` takes it. */
@@ -105,6 +114,7 @@ interface HoldingScope {
   readonly year?: number;
   readonly locationId?: string;
   readonly conditionIds?: string[];
+  readonly variantToSettle?: boolean;
 }
 
 /**
@@ -134,6 +144,7 @@ async function resolveScope(
   const year = optionalInteger(params, "year");
   const location = optionalString(params, "location");
   const condition = optionalString(params, "condition");
+  const variantToSettle = optionalBoolean(params, "variant_to_settle");
 
   const vocabulary: CollectionVocabulary | null =
     area !== null || location !== null || condition !== null
@@ -144,6 +155,7 @@ async function resolveScope(
     ...(issueId !== null ? { issueId } : {}),
     ...(stampId !== null ? { stampId } : {}),
     ...(year !== null ? { year } : {}),
+    ...(variantToSettle !== null ? { variantToSettle } : {}),
     ...(condition !== null && vocabulary
       ? {
           conditionIds: [
@@ -252,6 +264,7 @@ export async function readHoldings(
       page.items.map((copy) =>
         holding(copy, {
           catalogNumbers: labelling.labelFor(copy.areaId, copy.issueId, copy.catalogNumbers),
+          candidateLabels: candidateLabelsFor(labelling, copy),
           location: locations.pathFor(copy.locationId),
         })
       ),

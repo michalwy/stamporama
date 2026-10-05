@@ -376,6 +376,8 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
       ],
       stampCount: 1,
       stamps: [],
+      candidateTrees: 0,
+      candidates: [],
     };
   }
 

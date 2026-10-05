@@ -41,6 +41,7 @@ import {
 } from "../trade-reads";
 import { readCollectionVocabulary } from "./vocabulary";
 import {
+  candidateLabelsFor,
   collectionPath,
   loadCatalogLabelling,
   loadCollectionHeader,
@@ -427,6 +428,7 @@ export async function readTradeLines(
           sectionId,
           fulfillment,
           catalogNumbers: labelling.labelFor(copy.areaId, copy.issueId, copy.catalogNumbers),
+          candidateLabels: candidateLabelsFor(labelling, copy),
           location: locations.pathFor(copy.locationId),
         });
       }

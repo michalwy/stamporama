@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
+import { refreshCandidateCopiesTx } from "./item-candidates";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -217,9 +218,14 @@ export async function setSubtypeActsAsVariant(
 ): Promise<void> {
   const collectionId = await resolveSubtypeCollection(subtypeId);
   await assertCollectionOwner(ownerId, collectionId);
-  await prisma.stampSubtype.update({
-    where: { id: subtypeId },
-    data: { actsAsVariant },
+  await prisma.$transaction(async (tx) => {
+    await tx.stampSubtype.update({
+      where: { id: subtypeId },
+      data: { actsAsVariant },
+    });
+    // Every stamp of this subtype starts or stops acting as a variant, which joins or splits the
+    // variant trees a copy's candidate set spans (#1651).
+    await refreshCandidateCopiesTx(tx, collectionId);
   });
 }
 

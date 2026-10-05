@@ -262,6 +262,7 @@ export async function loadRealizationRatios(
         unknownVariant: isUnknownVariantStamp(line.stamp),
         carrier: null,
         faultReductionPercent: null,
+        candidateStampIds: null,
       }))
     ),
     ...observationRows.map<ValuationRow>((row) => ({
@@ -274,6 +275,7 @@ export async function loadRealizationRatios(
       unknownVariant: isUnknownVariantStamp(row.stamp),
       carrier: null,
       faultReductionPercent: null,
+      candidateStampIds: null,
     })),
   ]);
 

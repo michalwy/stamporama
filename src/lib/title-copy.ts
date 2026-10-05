@@ -23,6 +23,7 @@ import { compactCatalogNumbers } from "./offer-title-template";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { isMultiStampCount } from "./multi-stamp";
+import { isAcrossTrees } from "./candidate-set-predicates";
 
 // Shared server-side normalisation from an inventory `Item` row to the pure `TitleTemplateCopy`
 // shape the title-template engine (#210) consumes. Used both when generating offer / set titles
@@ -119,6 +120,12 @@ const CARRIED_STAMP_ORDER: Prisma.ItemStampOrderByWithRelationInput[] = [
   { id: "asc" },
 ];
 
+/** A candidate set in catalogue order (#1651), the id keeping it total for a stored text's sake. */
+const CANDIDATE_ORDER: Prisma.ItemCandidateOrderByWithRelationInput[] = [
+  { stamp: { primaryCatalogSortKey: { sort: "asc", nulls: "last" } } },
+  { stampId: "asc" },
+];
+
 /** A copy's faults in the dictionary's order (#1559) — `getFaults`' own order, the name breaking a tie. */
 const FAULT_ORDER: Prisma.ItemFaultOrderByWithRelationInput[] = [
   { fault: { sortOrder: "asc" } },
@@ -182,6 +189,23 @@ export const TITLE_COPY_SELECT = {
     select: {
       stamp: {
         select: {
+          catalogNumbers: TITLE_COPY_STAMP_SELECT.catalogNumbers,
+          stampAreaLinks: { select: { isPrimary: true, collectionAreaId: true } },
+          issueMemberships: { select: { issue: { select: { id: true } } }, take: 1 },
+        },
+      },
+    },
+  },
+  // The stamps the copy **might be** (#1651, ADR-0065), behind `{#unknownVariant}` and `{variants}`
+  // as an umbrella's variants are — and behind `{catalog}` when they lie in several variant trees,
+  // where the copy's own stamp is merely the first of them. Resolved like a carried stamp.
+  candidateTrees: true,
+  candidates: {
+    orderBy: CANDIDATE_ORDER,
+    select: {
+      stamp: {
+        select: {
+          name: true,
           catalogNumbers: TITLE_COPY_STAMP_SELECT.catalogNumbers,
           stampAreaLinks: { select: { isPrimary: true, collectionAreaId: true } },
           issueMemberships: { select: { issue: { select: { id: true } } }, take: 1 },
@@ -264,6 +288,12 @@ export type TitleCopyRow = {
   /** Every stamp the copy carries, in `sortOrder` (#749). Read only while `stampCount` makes the
    *  copy a carrier, so a row that is not a copy passes an empty list. */
   stamps: { stamp: CatalogIdentityRow }[];
+  /** How many variant trees the copy's candidate set spans (#1651) — 0 without one, and for a row
+   *  that is not a copy. */
+  candidateTrees: number;
+  /** The stamps the copy might be (#1651), in catalogue order; empty for an ordinary copy and for a
+   *  row that is not a copy. */
+  candidates: { stamp: CatalogIdentityRow & { name: string | null } }[];
 };
 
 /** What one stamp's catalog numbers are resolved from: the numbers themselves, the area whose
@@ -336,10 +366,15 @@ export function toTitleCopy(
   // ordinary copy leaves the field absent — its one stamp *is* `catalogNumbers` — and so does a
   // carrier somehow read with no entries, which falls back to the leading stamp rather than to
   // nothing.
+  // A copy whose candidates lie in several variant trees (#1651) has no shared stamp to name, so its
+  // `{catalog}` names each candidate, as a carrier's names each stamp; `{variants}` says they are
+  // alternatives.
   const carriedCatalogNumbers =
     isMultiStampCount(row.stampCount) && row.stamps.length > 0
       ? row.stamps.map((entry) => titleCatalogNumbers(entry.stamp, maps))
-      : null;
+      : isAcrossTrees(row.candidateTrees) && row.candidates.length > 1
+        ? row.candidates.map((entry) => titleCatalogNumbers(entry.stamp, maps))
+        : null;
 
   // What the piece might be, when its variant was never identified (#619). Only children that
   // actually *act* as variants count (ADR-0010 §3) — a distinct-entry child is another stamp, not
@@ -368,7 +403,26 @@ export function toTitleCopy(
     );
   // #150's collapsing, through the one implementation of it — `123a,123b,123c,123d` is `123a-d` on
   // every other surface and has to be here too.
-  const variants = variantLabels.length > 0 ? compactCatalogNumbers(variantLabels) || null : null;
+  // A copy identified as one of several candidates (#1651) names the candidates instead: they are
+  // exactly what it might be, each under its own area and issue, since they may lie in several.
+  const candidateLabels = row.candidates.length > 1
+    ? row.candidates
+        .filter((c) => c.stamp.catalogNumbers.length > 0 || c.stamp.name)
+        .map((c) => {
+          const links = c.stamp.stampAreaLinks;
+          return catalogLabel(
+            {
+              areaId: (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null,
+              issueId: c.stamp.issueMemberships[0]?.issue.id ?? null,
+              catalogNumbers: c.stamp.catalogNumbers,
+              name: c.stamp.name,
+            },
+            maps
+          );
+        })
+    : null;
+  const shownLabels = candidateLabels ?? variantLabels;
+  const variants = shownLabels.length > 0 ? compactCatalogNumbers(shownLabels) || null : null;
 
   // Each translatable field resolves *and* reports whether it fell back; `fallbacks` collects the
   // ones that did, keyed by the `TitleTemplateCopy` field the token renders from and carrying the
@@ -499,7 +553,7 @@ export function toTitleCopy(
     // is an umbrella on a marketplace that lists against no catalogue at all. What the listing
     // *stands under* is not: `listedAs` is left null here and filled in by the offer's own text
     // generation, which is the only caller that knows the platform and can pay for #616's rollup.
-    unknownVariant: variantChildren.length > 0,
+    unknownVariant: variantChildren.length > 0 || row.candidates.length > 1,
     variants,
     listedAs: null,
     // Not translatable and not an entity — plain digits, so it never joins the fallback machinery.

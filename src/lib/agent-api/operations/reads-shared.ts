@@ -68,6 +68,21 @@ export async function loadCatalogLabelling(collectionId: string): Promise<Catalo
   return makeCatalogLabeller(collectionId, vendors);
 }
 
+/** Each candidate of a copy's candidate set (#1651), labelled as the copy's own numbers are — what a
+ *  copy projection's `candidateLabels` takes. Empty for an ordinary copy. */
+export function candidateLabelsFor(
+  labelling: CatalogLabelling,
+  copy: {
+    readonly candidates: readonly {
+      readonly areaId: string | null;
+      readonly issueId: string | null;
+      readonly catalogNumbers: readonly { readonly catalogVendorId: string; readonly number: string }[];
+    }[];
+  }
+) {
+  return copy.candidates.map((c) => labelling.labelFor(c.areaId, c.issueId, [...c.catalogNumbers]));
+}
+
 /** Resolves a copy's `locationId` to the breadcrumb a collector would read. */
 export interface LocationPaths {
   readonly pathFor: (locationId: string | null) => string | null;

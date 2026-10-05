@@ -222,6 +222,8 @@ async function automaticFor(
         unknownVariant: true,
         ownCatalogItemId,
         listedAsStampId: null,
+        // The choice is made for an umbrella copy; a copy with a candidate set has none to make.
+        candidateStampIds: null,
       },
     ],
     labeller
@@ -273,6 +275,7 @@ export async function getOfferListedVariantChoice(
         unknownVariant: false,
         carrier: null,
         faultReductionPercent: null,
+        candidateStampIds: null,
       }))
     ),
     automaticFor(collectionId, subject, stampId, conditionId, ownCatalogItemId, labeller),

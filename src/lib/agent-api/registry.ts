@@ -180,6 +180,7 @@ import {
   setAreaOrderOperation,
   updateAreaOperation,
 } from "./operations/areas";
+import { setCopyStampOperation } from "./operations/copies";
 import { matchPathTemplate, parsePathTemplate, templateSpecificity } from "./path-template";
 import type { HttpMethod, Operation } from "./types";
 import type { PathTemplate } from "./path-template";
@@ -191,6 +192,7 @@ export const OPERATIONS: readonly Operation[] = [
   getStampOperation,
   getIssueOperation,
   getCopyOperation,
+  setCopyStampOperation,
   listHoldingsOperation,
   summarizeValuationOperation,
   findUnlistedCopiesOperation,
