@@ -62,6 +62,7 @@ import {
 import { CHECKLIST_STAMP_ORDER } from "./checklists";
 import {
   CONFIRMED_API_REVIEW,
+  lotReviewFields,
   nextApiReview,
   readApiReviewMark,
   type ApiReviewMark,
@@ -3497,7 +3498,8 @@ export async function deleteAuctionLot(ownerId: string, lotId: string): Promise<
 /**
  * Record one agent API write on a lot: the *to review* marker is set, or added to if it already
  * stands (`nextApiReview`). **Every API write to a lot calls this**, in the same transaction as the
- * write itself, so a lot cannot be changed through the API and come out unmarked.
+ * write itself, so a lot cannot be changed through the API and come out unmarked — the one exception
+ * being a current bid, an observation rather than a change (`lotReviewFields`, #1652).
  *
  * It only ever sets. Nothing reachable from the agent API clears the marker — that is
  * {@link confirmAuctionLotReviews} and {@link confirmAuctionSaleReview}, the collector's act, and
@@ -3863,9 +3865,11 @@ export type AuctionLotApiPatchResult =
 
 /**
  * Correct a lot through the agent API, and record the auction's current bid (#1627). Only what is
- * sent is written, and the marker names what actually changed — a figure restated unchanged is not
- * a change, though a current bid always is, since it dates a fresh look. Nothing here touches the
- * collector's own bid or ceiling; the lines and the ceiling have their own writes.
+ * sent is written, and the answer names what actually changed — a figure restated unchanged is not
+ * a change, though a current bid always is, since it dates a fresh look. The marker names the same
+ * changes but the current bid, which is an observation and never marks (#1652): a call that only
+ * refreshes it leaves the lot's marker as it was. Nothing here touches the collector's own bid or
+ * ceiling; the lines and the ceiling have their own writes.
  *
  * A settled lot refuses everything but its tags, which settlement did not transcribe (#1625).
  */
@@ -3967,10 +3971,13 @@ export async function updateAuctionLotThroughApi(
   if (tagsChanged) changed.push("tags");
 
   if (changed.length === 0) return { outcome: "written", changed };
+  const marked = lotReviewFields(changed);
   await prisma.$transaction(async (tx) => {
     if (Object.keys(data).length > 0) await tx.auctionLot.update({ where: { id: lotId }, data });
     if (tagsChanged) await replaceAuctionLotTagsTx(tx, collectionId, lotId, patch.tags!);
-    await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: changed });
+    if (marked.length > 0) {
+      await markAuctionLotWrittenByApi(tx, lotId, { kind: "changed", fields: marked });
+    }
   });
   return { outcome: "written", changed };
 }

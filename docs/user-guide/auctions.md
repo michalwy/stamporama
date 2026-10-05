@@ -634,8 +634,11 @@ the lot becomes.
 ### What the assistant wrote — *To review · API*
 
 When an [AI assistant](agent-api.md) adds a lot to your watchlist or changes one — its contents,
-its ceiling, the current bid, how its auction ended — the lot is marked **To review · API**, and it stays marked until you
-say you have looked. Hover the chip to see what the assistant did: *Added through the agent API*,
+its ceiling, how its auction ended — the lot is marked **To review · API**, and it stays marked until you
+say you have looked. **Refreshing the current bid does not mark it**: that is the assistant looking
+at the auction, not deciding anything, so a lot it checks every day is not left waiting for you
+because of it. The bid's age on the row still says when it was last checked, and a mark the lot
+already carries stays as it was. Hover the chip to see what the assistant did: *Added through the agent API*,
 or which things it *changed*, and when it last wrote. Several writes before you confirm add up, so a
 lot it added and then gave a ceiling says both.
 

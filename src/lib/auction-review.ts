@@ -45,6 +45,7 @@ export const AUCTION_LOT_REVIEW_FIELD_LABEL: Record<string, string> = {
   url: "listing address",
   endsAt: "closing time",
   startingPrice: "starting price",
+  // No write marks it since #1652; a marker set before then may still name it.
   currentBid: "current bid",
   lines: "contents",
   ceiling: "ceiling",
@@ -63,6 +64,20 @@ export const AUCTION_SALE_REVIEW_FIELD_LABEL: Record<string, string> = {
   premium: "premium",
   shipping: "shipping",
 };
+
+/**
+ * The lot fields an API write records **without marking** (#1652). A current bid, with when it was
+ * checked, is an observation of the auction rather than a decision — the Assistant's capture
+ * refreshes it with no marker — and an assistant refreshing its watched lots daily would otherwise
+ * leave nearly every one waiting for review, hiding what it actually decided.
+ */
+export const AUCTION_LOT_UNMARKED_FIELDS: ReadonlySet<string> = new Set(["currentBid"]);
+
+/** What of a lot write's changes the marker names: empty when the write marks nothing, and the
+ * lot's marker is then left exactly as it was — neither set nor cleared. */
+export function lotReviewFields(changed: readonly string[]): string[] {
+  return changed.filter((field) => !AUCTION_LOT_UNMARKED_FIELDS.has(field));
+}
 
 /** The stored columns read as a marker, or null when there is none. */
 export function readApiReviewMark(row: StoredApiReview): ApiReviewMark | null {

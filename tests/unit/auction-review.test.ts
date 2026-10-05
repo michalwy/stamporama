@@ -5,6 +5,7 @@ import {
   CONFIRMED_API_REVIEW,
   describeApiReview,
   describeSaleApiReview,
+  lotReviewFields,
   nextApiReview,
   readApiReviewMark,
   type StoredApiReview,
@@ -61,6 +62,21 @@ describe("nextApiReview", () => {
       apiReviewCreated: false,
       apiReviewFields: ["currentBid"],
     });
+  });
+});
+
+describe("lotReviewFields", () => {
+  // #1652: a current bid is an observation, recorded without marking.
+  it("marks nothing for a call that only refreshed the current bid", () => {
+    assert.deepEqual(lotReviewFields(["currentBid"]), []);
+  });
+
+  it("marks the other changes of a call that also recorded a current bid, and only them", () => {
+    assert.deepEqual(lotReviewFields(["title", "currentBid", "tags"]), ["title", "tags"]);
+  });
+
+  it("keeps every other field, in its order", () => {
+    assert.deepEqual(lotReviewFields(["endsAt", "url", "notStamps"]), ["endsAt", "url", "notStamps"]);
   });
 });
 

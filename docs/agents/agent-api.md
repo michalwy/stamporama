@@ -1384,7 +1384,8 @@ waiting for review, and that has to be enforced rather than left to a tag the as
 forget. So `AuctionLot` and `AuctionSale` carry a *to review* marker (`auctions.md`), and two rules
 hold for every auction write this surface will ever make:
 
-- **Every write marks what it touched**, in the write's own transaction, through
+- **Every write marks what it touched** — a lot's current bid alone excepted (#1652, *A write marks
+  what actually changed*) — in the write's own transaction, through
   `markAuctionLotWrittenByApi` / `markAuctionSaleWrittenByApi` with `{ kind: "created" }` or
   `{ kind: "changed", fields }`. The field keys are `AUCTION_LOT_REVIEW_FIELD_LABEL` /
   `AUCTION_SALE_REVIEW_FIELD_LABEL` in `auction-review.ts`, which word the chip's hint; a key not on
@@ -1534,6 +1535,18 @@ was sent with what is stored and name only the differences — in `AUCTION_LOT_R
 that changes nothing writes and marks nothing, answering `changed: []`. A current bid always counts:
 it dates a fresh look even when the figure has not moved (`checked_at`, defaulting to now, refused
 in the future). A settled lot takes only its tags, which settlement did not transcribe (#1625).
+
+**A current bid is recorded and never marks** (#1652, the collector, 2026-10-05; amends #1626 and
+#1627, where every API write marked). It is an observation, not a decision — the Assistant's capture
+refreshes it with no marker — and an assistant refreshing its watched lots daily left nearly every
+one waiting for review, so the marker stopped singling out what the assistant had decided. So
+`changed` still lists `currentBid` whenever one is sent, but the marker takes the call's other fields
+only (`lotReviewFields`, `AUCTION_LOT_UNMARKED_FIELDS` in `auction-review.ts`): a refresh alone leaves
+the lot's marker exactly as it was, neither set nor cleared, and a call that also changes another
+field marks that field alone, so the hint names only it. The refresh stays visible as the bid's age
+on the row. `currentBid` keeps its label in `AUCTION_LOT_REVIEW_FIELD_LABEL` for markers set before
+the change. The boundary test's *marks in its transaction* still reads the writer, whose marking
+call is now conditional.
 
 **Names, never creations, for the parties.** A seller is resolved exactly (`resolveSellerParam`,
 #1390's) and an unknown one is refused with close names, never created — `create_seller` is that

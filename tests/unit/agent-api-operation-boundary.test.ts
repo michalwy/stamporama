@@ -293,7 +293,8 @@ const AUCTION_WRITES = new Map<string, string>([
  *
  * **A map of what is allowed, where every other map in this file is what is not**, because the rule
  * here is a property of the writers rather than of their callers: each one sets the *to review*
- * marker (#1626) in the write's own transaction, and none writes `myBid` — the collector's bid,
+ * marker (#1626) in the write's own transaction — a current bid alone, an observation, excepted
+ * (#1652) — and none writes `myBid` — the collector's bid,
  * placed by hand on the platform (*the API writes the register and never bids*, the collector,
  * 2026-10-04). Both are read off `auctions.ts` below, so a writer that stopped marking, or started
  * bidding, turns this red whoever calls it.
