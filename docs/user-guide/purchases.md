@@ -1857,7 +1857,8 @@ from a list of hundreds. It is also what stops the `N unpriced` chip and the ref
 long after identification.
 
 - **One field, your primary catalogue only**, on its latest edition — the line beside the input
-  names it, with the currency. The full [Set catalog value](#closing-a-lot) dialog, which prices
+  names it, with the currency, and the condition and certificate the figure is for as their coloured
+  chips, the same ones the copies list draws. The full [Set catalog value](#closing-a-lot) dialog, which prices
   every catalogue active on the area, is still on each copy's row for when you want the rest.
 - **Optional, always.** Blank is the ordinary case, and nothing ever waits on it.
 - **The cursor lands here when the dialog opens**, ready to type — the condition, certificate,
@@ -1892,8 +1893,9 @@ a **Variant prices** section with a price field for each variant, right there in
 
 - **One row per stamp down the tree**, indented as the tree is: the stamp you picked, and every
   variant under it. The fields are for your primary catalogue's latest edition, **narrowed to the
-  condition, certificate and format** you have chosen in the step. Change any of the three and the
-  fields follow. Pick a condition first; the fields wait for one.
+  condition, certificate and format** you have chosen in the step — the line above the fields shows
+  the condition and certificate as their coloured chips, the format beside them. Change any of the
+  three and the fields follow. Pick a condition first; the fields wait for one.
 - **The heading shows the stamp's value and what is missing** — the lowest of its variants' prices
   (marked `≈`, since it is computed rather than recorded) and how many variants still have no price,
   for example *≈3.20 EUR · 2 of 5 variants unpriced*. Both update as you type, and both stay visible
