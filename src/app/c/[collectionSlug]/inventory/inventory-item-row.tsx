@@ -8,7 +8,7 @@ import {
   moneySecondaryText,
   type MoneyLike,
 } from "@/app/stamp-display";
-import type { CarriedStamp, ItemListItem } from "@/lib/items";
+import type { CandidateStamp, CarriedStamp, ItemListItem } from "@/lib/items";
 import type { CopyValuation } from "@/lib/valuation";
 import { resolveCostBasis } from "@/lib/cost-basis";
 import { deliveryStateLabel, deliveryStateToken, isDelivered } from "@/lib/delivery-state";
@@ -178,6 +178,58 @@ function CarriedStampChips({
           </span>
         );
       })}
+    </>
+  );
+}
+
+/**
+ * The stamps a copy **might be** (#1651, ADR-0065) — *123aI or 123bI* — drawn where an ordinary
+ * copy's own numbers go, each resolved against its own area and issue (the candidates may lie in
+ * several), joined by *or*, and marked *variant to settle* as an umbrella copy is marked *unknown
+ * variant*. The set's pointer is not drawn: it is where the copy is filed, not what it is.
+ */
+function CandidateStampChips({
+  collectionId,
+  areas,
+  stamps,
+}: {
+  collectionId: string;
+  areas: CollectionAreaData[];
+  stamps: CandidateStamp[];
+}) {
+  const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
+  return (
+    <>
+      {stamps.map((entry, idx) => {
+        const vendorMap = vendorMapFor(entry.areaId, entry.issueId);
+        const primaryVendorId = entry.areaId ? primaryVendorByArea.get(entry.areaId) : undefined;
+        const number =
+          entry.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ??
+          entry.catalogNumbers[0] ??
+          null;
+        return (
+          <span key={entry.stampId} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+            {idx > 0 && <span style={CARRIED_DETAIL}>or</span>}
+            {number ? (
+              <CatalogNumberChip
+                number={number.number}
+                vendor={vendorMap.get(number.catalogVendorId)}
+                style={STAMP_PRIMARY_CHIP}
+                tooltip={entry.stampName ?? undefined}
+              />
+            ) : (
+              <span style={CARRIED_DETAIL}>{entry.stampName ?? "(stamp)"}</span>
+            )}
+          </span>
+        );
+      })}
+      <Tooltip content="This copy is one of these stamps — which one has still to be settled. It is valued and offered at the cheapest.">
+        <span
+          style={{ ...CHIP, color: "var(--color-warning)", borderColor: "var(--color-warning-border, var(--color-border))" }}
+        >
+          variant to settle
+        </span>
+      </Tooltip>
     </>
   );
 }
@@ -634,7 +686,7 @@ export function InventoryItemRow({
   );
 
   const menuActions: RowAction[] = [
-    ...(item.unknownVariant
+    ...(item.variantToSettle
       ? [{ key: "identify", label: "Identify variant", icon: "variant", onSelect: () => onIdentify?.(item) } as RowAction]
       : []),
     ...(item.hasHistory
@@ -885,6 +937,8 @@ export function InventoryItemRow({
               areas={areas}
               stamps={item.carriedStamps}
             />
+          ) : item.candidates.length > 1 ? (
+            <CandidateStampChips collectionId={collectionId} areas={areas} stamps={item.candidates} />
           ) : (
             // An ordinary copy's identity — the one stamp it is a copy of, and what is known about
             // that stamp. None of it is drawn for a carrier, whose chips above name every stamp

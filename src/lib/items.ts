@@ -519,6 +519,9 @@ export interface ItemCreateInput {
   /** How much this copy's faults take off its value (#1560): a whole percentage, 1–100, or null for
    *  none. Absent leaves it alone. Allowed on a copy with no listed faults. */
   faultReductionPercent?: number | null;
+  /** Two or more stamps the copy **might be** (#1651, ADR-0065), written in the create's own
+   *  transaction; `stampId` is then only where the copy starts, re-pointed by the set. */
+  candidateStampIds?: readonly string[];
 }
 
 // The delivery axis values a copy may carry live in `./delivery-state` (ADR-0009 §5). Both
@@ -577,6 +580,12 @@ export interface ItemUpdateInput {
    * own: the counts follow the facts.
    */
   stamps?: readonly ItemStampEntryInput[];
+  /**
+   * The copy's candidate set (#1651, ADR-0065) when the caller owns that answer: two or more stamps
+   * set it, written after `stampId`/`stamps`, and an empty list drops a set the copy carried.
+   * Absent leaves the set alone.
+   */
+  candidateStampIds?: readonly string[];
 }
 
 export interface ItemListFilters {
@@ -664,6 +673,10 @@ export async function createItem(
       select: ITEM_SELECT,
     });
     await createLeadingEntriesTx(tx, [{ id: created.id, stampId: created.stampId }]);
+    if (data.candidateStampIds && data.candidateStampIds.length > 1) {
+      await setCopyStampTx(tx, created.id, data.candidateStampIds);
+      return tx.item.findUniqueOrThrow({ where: { id: created.id }, select: ITEM_SELECT });
+    }
     return created;
   });
   return toItemData(item);
@@ -768,7 +781,7 @@ export async function updateItem(
       : await resolvePlatformIds(collectionId, data.excludedPlatformIds);
 
   // `fields` is read key by key below, so the exclusions riding along in it reach no `update`.
-  const { variantChangeNote, ...fields } = data;
+  const { variantChangeNote, candidateStampIds, ...fields } = data;
   const updateData = {
     ...(fields.stampId !== undefined ? { stampId: fields.stampId } : {}),
     ...(fields.conditionId !== undefined ? { conditionId: fields.conditionId } : {}),
@@ -850,6 +863,17 @@ export async function updateItem(
     }
     if (data.stamps) {
       await setItemStampsTx(tx, itemId, data.stamps);
+    }
+    // The candidate set (#1651), after the stamps it is a statement about: two or more set it — the
+    // write moving the pointer and writing the history itself — and an empty list drops it.
+    if (candidateStampIds !== undefined) {
+      if (candidateStampIds.length > 1) {
+        await setCopyStampTx(tx, itemId, candidateStampIds, variantChangeNote);
+      } else {
+        await clearCandidatesTx(tx, itemId);
+      }
+    }
+    if (data.stamps || candidateStampIds !== undefined) {
       // Read the copy back: `stampId` and `stampCount` were just re-derived from the entries, and a
       // caller handed the row as it stood before that would be holding the pointer the request
       // proposed rather than the one the piece now carries.
@@ -1744,6 +1768,9 @@ export interface ItemListItem {
   /** How many variant trees {@link candidates} span — 0 without a set, 2+ when the copy counts
    *  towards no completeness until it is settled. */
   candidateTrees: number;
+  /** Which variant this copy is has still to be settled (#1651): it points at an unknown-variant
+   *  umbrella, or carries a candidate set. What *Identify variant* is offered on. */
+  variantToSettle: boolean;
 }
 
 /** One stamp of a copy's candidate set (#1651), labelled as a carried stamp is. */
@@ -2047,6 +2074,7 @@ function toItemListItem(
     carriedStamps: isMultiStampCount(row.stampCount) ? row.stamps.map(carriedStampOf) : [],
     candidates: row.candidates.length > 1 ? row.candidates.map(candidateStampOf) : [],
     candidateTrees: row.candidateTrees,
+    variantToSettle: isUnknownVariantStamp(row.stamp) || row.candidates.length > 1,
   };
 }
 

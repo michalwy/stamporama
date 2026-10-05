@@ -2206,6 +2206,7 @@ function useCopyEditing(ctx: {
       {identifyItem && (
         <IdentifyVariantDialog
           collectionId={collectionId}
+          areas={areas}
           item={identifyItem}
           isPending={isPending}
           error={copyError}
@@ -2387,7 +2388,7 @@ function CopyRow({
           icon: "edit",
           onSelect: () => copy.setEditCopyItem(item),
         },
-        ...(item.unknownVariant
+        ...(item.variantToSettle
           ? ([
               {
                 key: "identify",

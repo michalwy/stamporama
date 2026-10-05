@@ -1,4 +1,5 @@
 import "server-only";
+import { candidateSetLabel } from "./candidate-set-rules";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
 import { assertTradeOwner } from "./trade-access";
@@ -10,7 +11,7 @@ import { tradeShareFulfillmentLabel } from "./trade-realisation-rules";
 import type { TradeGroupHeading, TradeGroupLevel } from "./trade-grouping";
 import { readCollectionAreas } from "./areas";
 import { buildAreaPath } from "./area-path";
-import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
+import { buildAreaVendorMaps, catalogLabel, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import {
   readShareAddress,
@@ -707,13 +708,31 @@ function toShareLine(
   const primary =
     source.catalogNumbers.find((cn) => cn.catalogVendorId === primaryVendorId) ?? null;
 
+  // A copy that is one of several stamps (#1651) is named as the set — the partner reads *123aI or
+  // 123bI*, never the one it happens to be filed under — and marked as not pinned down.
+  const candidates = "copy" in item && item.copy.candidates.length > 1 ? item.copy.candidates : null;
+  const candidateLabel = candidates
+    ? candidateSetLabel(
+        candidates.map((c) =>
+          catalogLabel(
+            { areaId: c.areaId, issueId: c.issueId, catalogNumbers: c.catalogNumbers, name: c.stampName },
+            maps
+          )
+        )
+      )
+    : null;
+
   return {
     lineId: item.lineId,
     path: item.path,
-    primaryNumber: primary ? formatStampCN(primary.number, vendorMap.get(primary.catalogVendorId)) : null,
-    otherNumbers: source.catalogNumbers
-      .filter((cn) => cn !== primary)
-      .map((cn) => formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))),
+    primaryNumber:
+      candidateLabel ??
+      (primary ? formatStampCN(primary.number, vendorMap.get(primary.catalogVendorId)) : null),
+    otherNumbers: candidates
+      ? []
+      : source.catalogNumbers
+          .filter((cn) => cn !== primary)
+          .map((cn) => formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))),
     name: source.name,
     areaPath: source.areaId ? (buildAreaPath(areas, source.areaId) ?? null) : null,
     issueLabel: issueLabelOf(source.issueName, source.issueYear),
@@ -724,7 +743,7 @@ function toShareLine(
     certificate: source.certificate,
     format: source.format,
     quantity: source.quantity,
-    unknownVariant: source.unknownVariant,
+    unknownVariant: source.unknownVariant || candidates !== null,
     photoIds: source.photos.map((photo) => photo.id),
     value: valueOf(item.lineId),
     realisation: realisationOf(item.lineId),

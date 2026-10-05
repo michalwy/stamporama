@@ -1,4 +1,5 @@
 import "server-only";
+import { candidateSetLabel } from "./candidate-set-rules";
 import { Prisma } from "@/generated/prisma/client";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
@@ -44,6 +45,8 @@ export type LabelStamp = Prisma.StampGetPayload<{ select: typeof LABEL_STAMP_SEL
 export interface TradeLabelSource {
   condition: { name: string; abbreviation: string | null } | null;
   stamp: LabelStamp | null;
+  /** A give line's copy identified as one of several stamps (#1651); absent or empty otherwise. */
+  candidates?: readonly { stamp: LabelStamp }[];
 }
 
 export interface TradeLabelLine extends TradeLabelSource {
@@ -82,7 +85,11 @@ export function makeTradeLineLabeller(
   return (line) => {
     const source = line.item ?? line;
     const cond = source.condition?.abbreviation || source.condition?.name || "";
-    return `${nameStamp(source.stamp)}${cond ? ` (${cond})` : ""}`;
+    const name =
+      source.candidates && source.candidates.length > 1
+        ? candidateSetLabel(source.candidates.map((c) => nameStamp(c.stamp)))
+        : nameStamp(source.stamp);
+    return `${name}${cond ? ` (${cond})` : ""}`;
   };
 }
 

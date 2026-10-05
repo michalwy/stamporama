@@ -1025,13 +1025,14 @@ export function OfferSetsView({
   const matches = (c: ItemListItem) =>
     (!onlyUnpriced || isMissingCatalogPrice(c.value)) &&
     (!onlyNoPhoto || c.photos.length === 0) &&
-    (!onlyUnknownVariant || c.unknownVariant);
+    // An umbrella copy or one of several stamps (#1651) — both stand under a variant inferred.
+    (!onlyUnknownVariant || c.variantToSettle);
 
   // Totals across the offer's copies (unfiltered), for the count badges on each filter.
   // Missing, not marked (#1615): a copy the catalogue gives no price for has nothing to enter.
   const unpricedCount = copies.filter((c) => isMissingCatalogPrice(c.value)).length;
   const noPhotoCount = copies.filter((c) => c.photos.length === 0).length;
-  const unknownVariantCount = copies.filter((c) => c.unknownVariant).length;
+  const unknownVariantCount = copies.filter((c) => c.variantToSettle).length;
 
   const { invalidateAll } = useInvalidateOffers();
   // The stamp behind a listed copy is named by every copy list too (#676).

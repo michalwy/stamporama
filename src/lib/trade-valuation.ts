@@ -184,6 +184,8 @@ const LINE_SELECT = {
       ...COPY_VALUATION_SELECT,
       condition: { select: { name: true, abbreviation: true } },
       stamp: { select: LABEL_STAMP_SELECT },
+      // A copy that is one of several stamps (#1651) is named by them, *123aI or 123bI*.
+      candidates: { select: { stampId: true, stamp: { select: LABEL_STAMP_SELECT } } },
     },
   },
   valuations: {

@@ -79,6 +79,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     forTrade: boolParam(sp.get("forTrade")),
     noPhotos: boolParam(sp.get("noPhotos")),
     missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
+    // An umbrella copy or one with a candidate set (#1651).
+    variantToSettle: boolParam(sp.get("variantToSettle")),
     notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
     // The review read (#506): the copies set aside on this platform.
     excludedPlatformId: sp.get("excludedPlatformId") || undefined,

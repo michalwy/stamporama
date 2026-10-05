@@ -20,6 +20,9 @@ import {
   copyPictures,
 } from "@/app/c/[collectionSlug]/shared/reference-compare-dialog";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
+import type { CollectionAreaData } from "@/lib/areas";
+import { CandidateStampsPicker, pickedSetLabel } from "./candidate-stamps-picker";
+import type { PickedStamp } from "./stamp-picker-shared";
 
 /** Edge of each picture in the dialog (#1003). Two of them side by side fill the dialog's width,
  * which is as large as a front and a back can be drawn here without the dialog growing. */
@@ -53,6 +56,8 @@ interface VariantItem {
 
 export interface IdentifyVariantDialogProps {
   collectionId: string;
+  /** For *Several possible variants…* (#1651), whose picker browses the area tree. */
+  areas: CollectionAreaData[];
   item: ItemListItem;
   isPending: boolean;
   error?: string;
@@ -71,6 +76,7 @@ export interface IdentifyVariantDialogProps {
  * uploaded straight onto the copy (#112) never came off a card. */
 export function IdentifyVariantDialog({
   collectionId,
+  areas,
   item,
   isPending,
   error,
@@ -80,6 +86,12 @@ export function IdentifyVariantDialog({
   const [selectedId, setSelectedId] = useState("");
   /** Whether the reference comparison is open over this dialog (#1005). */
   const [comparing, setComparing] = useState(false);
+  /** The copy's candidate set, when it has one (#1651): the first thing offered, since settling it
+   *  is choosing among exactly these. */
+  const candidates = useMemo(() => item.candidates.map(candidatePick), [item.candidates]);
+  /** A set picked with *Several possible variants…* or *Narrow…*, saved in place of one stamp. */
+  const [pendingSet, setPendingSet] = useState<PickedStamp[] | null>(null);
+  const [pickingSet, setPickingSet] = useState(false);
 
   const { data: members = [], isLoading: membersLoading } = useIssueMembers(
     collectionId,
@@ -104,6 +116,7 @@ export function IdentifyVariantDialog({
   }, [members, item.stampId]);
 
   const hasVariants = descendantTree.length > 0;
+  const hasCandidates = candidates.length > 1;
   const pictures = item.photos.filter((p) => p.role === "front" || p.role === "back");
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -111,7 +124,11 @@ export function IdentifyVariantDialog({
     onSubmit(new FormData(e.currentTarget));
   }
 
-  const actionLabel = isPending ? "Identifying…" : "Identify variant";
+  const actionLabel = isPending
+    ? "Saving…"
+    : pendingSet
+      ? "Save possible variants"
+      : "Identify variant";
   /** The copy's front and back laid beside the references of its stamp and everything under it
    * (#1004/#1005) — only with a picture to compare and a tree to read the references from. */
   const canCompare = pictures.length > 0 && item.issueId != null;
@@ -141,11 +158,47 @@ export function IdentifyVariantDialog({
             )}
           </div>
 
+          {/* The stamps it might be (#1651): settling is choosing one of them, so they come first. */}
+          {hasCandidates && !pendingSet && (
+            <div style={{ marginBottom: "1.25rem" }}>
+              <div style={SECTION_LABEL}>It is one of</div>
+              <div role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                {candidates.map((c) => (
+                  <label key={c.stampId} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem" }}>
+                    <input
+                      type="radio"
+                      name="candidate"
+                      checked={selectedId === c.stampId}
+                      onChange={() => setSelectedId(c.stampId)}
+                      disabled={isPending}
+                    />
+                    {[c.catalogLabels[0], c.name].filter(Boolean).join(" · ") || "(unnamed stamp)"}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* A set picked in the popup, saved instead of one stamp (#1651). */}
+          {pendingSet && (
+            <div style={{ marginBottom: "1.25rem" }}>
+              <div style={SECTION_LABEL}>Possible variants</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem" }}>
+                <span style={{ flex: 1 }}>{pickedSetLabel(pendingSet)}</span>
+                <button type="button" onClick={() => setPendingSet(null)} style={LINK_BUTTON}>
+                  <Icon name="clear" size="sm" /> Discard
+                </button>
+              </div>
+              <input type="hidden" name="candidateStampIds" value={JSON.stringify(pendingSet.map((s) => s.stampId))} />
+            </div>
+          )}
+
           {/* Variant picker — descendants of the current stamp only */}
+          {!pendingSet && (
           <div style={{ marginBottom: "1.25rem" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
-              <div style={SECTION_LABEL}>Variant</div>
-              {canCompare && (
+              <div style={SECTION_LABEL}>{hasCandidates ? "" : "Variant"}</div>
+              {canCompare && !hasCandidates && (
                 <button
                   type="button"
                   onClick={() => setComparing(true)}
@@ -164,7 +217,7 @@ export function IdentifyVariantDialog({
                 </button>
               )}
             </div>
-            {item.issueId == null ? (
+            {hasCandidates ? null : item.issueId == null ? (
               <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
                 This copy&apos;s stamp is not part of an issue, so its variants can&apos;t be
                 listed here. Use <strong>Edit</strong> to re-point it.
@@ -185,7 +238,17 @@ export function IdentifyVariantDialog({
               />
             )}
             <input type="hidden" name="stampId" value={selectedId} />
+            {/* The stamp cannot be told, but it can be narrowed to a few (#1651). */}
+            <button
+              type="button"
+              onClick={() => setPickingSet(true)}
+              disabled={isPending}
+              style={{ ...LINK_BUTTON, marginTop: "0.5rem" }}
+            >
+              {hasCandidates ? "Narrow the possible variants…" : "Several possible variants…"}
+            </button>
           </div>
+          )}
 
           {/* Optional reason */}
           <div style={{ marginBottom: "1.25rem" }}>
@@ -209,11 +272,29 @@ export function IdentifyVariantDialog({
         <DialogActions
           actionLabel={actionLabel}
           onCancel={onClose}
-          disabled={isPending || !selectedId}
+          disabled={isPending || (!selectedId && !pendingSet)}
           error={error}
         />
       </form>
     </DialogShell>
+    {pickingSet && (
+      <CandidateStampsPicker
+        collectionId={collectionId}
+        areas={areas}
+        initial={candidates}
+        aside={
+          pictures.length > 0 ? (
+            <PhotoStrip collectionId={collectionId} photos={pictures} size="10rem" />
+          ) : undefined
+        }
+        onDone={(stamps) => {
+          setPendingSet(stamps);
+          setSelectedId("");
+          setPickingSet(false);
+        }}
+        onClose={() => setPickingSet(false)}
+      />
+    )}
     {comparing && item.issueId && (
       <ReferenceCompareDialog
         collectionId={collectionId}
@@ -225,6 +306,27 @@ export function IdentifyVariantDialog({
     )}
     </>
   );
+}
+
+const LINK_BUTTON: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  fontSize: "0.8125rem",
+  color: "var(--color-action-primary)",
+  cursor: "pointer",
+};
+
+/** A candidate of the copy, as the picker and this dialog name it. The numbers are raw, as the
+ *  variant tree beside them names its stamps. */
+function candidatePick(c: ItemListItem["candidates"][number]): PickedStamp {
+  return {
+    stampId: c.stampId,
+    catalogLabels: c.catalogNumbers.map((n) => n.number),
+    name: c.stampName,
+    secondary: null,
+    unknownVariant: false,
+  };
 }
 
 function findNode(

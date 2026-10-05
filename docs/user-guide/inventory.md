@@ -1695,6 +1695,49 @@ actually is, resolve it:
    *unknown variant* flag clears, and the change is recorded in the copy's refinement
    history.
 
+## When the piece could be one of several stamps
+
+Sometimes you can narrow a copy down without being able to say exactly which stamp it is. The type
+is clear but the colour is not, so it is *123aI or 123bI*. Or the watermark that decides between two
+catalogue numbers in different issues cannot be read on a cover, so it is *Mi 85 or Mi 101*. Linking
+the copy to the base stamp would throw away what you know, and picking one would claim what you do
+not. Record the possibilities instead:
+
+1. Next to the stamp in **Add copy**, **Edit copy**, **Identify variant** or the stamp picker when
+   identifying card scans, choose **Several possible variants…**.
+2. The usual stamp browser opens and stays open. Press every stamp the piece could be — from one
+   issue or several. Each press adds the stamp to the list beside the tree, and pressing it again
+   takes it off.
+3. Choose **Use these** once at least two are listed, then save.
+
+Ticking every variant of one stamp is the same as saying *some variant of it*, so the copy is simply
+linked to that stamp, as an unknown-variant copy is.
+
+Such a copy:
+
+- is named by its possibilities everywhere — *Mi 123aI or 123bI* on the Copies list, on its own page,
+  in offers and in trades, including the page you share with a trading partner. A long list is
+  shortened to the part the stamps share and the parts that differ;
+- is marked **variant to settle**. The Copies list's **Show only → Variant to settle** filter finds
+  these copies together with unknown-variant ones;
+- is valued at its **cheapest** possibility, shown as an estimate. On an offer it is listed under that
+  cheapest stamp, and the listing text names the possibilities;
+- satisfies no want and is not offered for a trading partner's request for a stamp, since it might be
+  the other one. You can still put the copy itself into a trade;
+- when its possibilities share a stamp (*123aI or 123bI* share *123*), counts as an unknown-variant
+  copy of that stamp. When they do not (*Mi 85 or Mi 101*), it counts towards no set's completeness
+  and no copy count until you settle it. It is still counted once in your collection's value.
+
+A copy carrying several stamps — a cover with three different stamps on it — cannot be given
+possibilities. Note the doubt in the copy's notes instead.
+
+### Settling it later
+
+Open **Identify variant** from the copy's **⋮** menu or its page. The possibilities are listed first:
+pick the one it turned out to be and save, and the copy becomes an ordinary copy of that stamp, with
+the change in its refinement history. If you can rule some out but still not decide, choose **Narrow
+the possible variants…**, take off the ones it cannot be, and save.
+
 ## Refinement history
 
 Every time a copy is re-pointed to a different variant — whether through **Identify
