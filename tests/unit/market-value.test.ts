@@ -10,6 +10,8 @@ import {
   type MarketAggregate,
   type MarketLotInput,
   type MarketLotLineInput,
+  copyMarketMedian,
+  marketStampIdsOf,
 } from "../../src/lib/market-value";
 
 // Market valuation from recorded auction results (#455; ADR-0022). Everything here is arithmetic on
@@ -327,5 +329,33 @@ describe("realizationRatio", () => {
     assert.equal(realizationRatio(12, null), null);
     // Not an enormous ratio — a ratio to nothing says nothing.
     assert.equal(realizationRatio(12, 0), null);
+  });
+});
+
+describe("copyMarketMedian — a copy that is one of several stamps (#1651)", () => {
+  const key = { conditionId: "used", certificateStatusId: null, formatId: null };
+  const medians = new Map([
+    [marketKeyOf({ ...key, stampId: "85" }), 12],
+    [marketKeyOf({ ...key, stampId: "101" }), 7],
+    [marketKeyOf({ ...key, stampId: "ptr" }), 99],
+  ]);
+
+  it("is the lowest candidate's median, never the pointer's", () => {
+    assert.equal(copyMarketMedian({ ...key, stampId: "ptr", candidateStampIds: ["85", "101"] }, medians), 7);
+  });
+
+  it("is no evidence while any candidate has none — the missing one could be the cheaper", () => {
+    assert.equal(copyMarketMedian({ ...key, stampId: "ptr", candidateStampIds: ["85", "110"] }, medians), null);
+  });
+
+  it("is the copy's own key's median without a set", () => {
+    assert.equal(copyMarketMedian({ ...key, stampId: "ptr", candidateStampIds: null }, medians), 99);
+  });
+
+  it("asks the market about every candidate", () => {
+    assert.deepEqual(
+      marketStampIdsOf([{ stampId: "ptr", candidateStampIds: ["85", "101"] }, { stampId: "85", candidateStampIds: null }]),
+      ["ptr", "85", "101"]
+    );
   });
 });

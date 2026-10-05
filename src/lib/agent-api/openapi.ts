@@ -227,6 +227,8 @@ export function buildOpenApiDocument(
         "",
         "A token carries a scope. An operation marked `x-stamporama-writes` needs a `read_write` token; a `read` token is refused on one with `403 forbidden`, and the refusal names the scope that would have worked. Nothing here can widen a token — the collector mints one in Settings → Assistant & API.",
         "",
+        "**A copy may be one of several candidate stamps.** When a piece cannot be identified exactly — the type is known and the colour is not, or a watermark that decides between two issues cannot be read — the collector records the stamps it might be. Every read returning such a copy carries `candidates` (a `label` such as *Mi 123aI or 123bI*, each stamp, and either the `sharedStampId` they have in common or `acrossTrees`) and `variantToSettle`. Report it as the label says — *123aI or 123bI* — and never as either one: the copy's own `stampId` is only where it is filed. It is valued and listed for sale at its cheapest candidate, satisfies no want and serves no trade requirement, and when the candidates share no stamp it counts towards no completeness. `set_copy_stamp` sets, narrows and settles a set.",
+        "",
         `Running build: ${options.appVersion}.`,
       ].join("\n"),
     },

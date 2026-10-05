@@ -108,6 +108,9 @@ export async function readTradeCandidatePool(
     deliveryStates: [...IN_HAND_DELIVERY_STATES],
     excludeGone: true,
     excludeIds: committed,
+    // Nor is a copy with a candidate set (#1651) a like-for-like alternative: its own stamp is only
+    // the set's pointer, so it is no copy of the line's stamp.
+    excludeCandidateSets: true,
   });
   if (eligible.length === 0) return { byKey: new Map(), blocked };
 

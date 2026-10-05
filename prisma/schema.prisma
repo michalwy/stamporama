@@ -3277,6 +3277,8 @@ model Stamp {
   /** The copies that **carry** this stamp (ADR-0044) — a superset of `items` in meaning, since the
    *  leading entry of every ordinary copy is here too. See {@link ItemStamp}. */
   itemStamps         ItemStamp[]
+  /** The copies that might be this stamp (#1651) — see {@link ItemCandidate}. */
+  itemCandidates     ItemCandidate[]
   variantHistoryFrom ItemVariantHistory[] @relation("ItemVariantHistoryFrom")
   variantHistoryTo   ItemVariantHistory[] @relation("ItemVariantHistoryTo")
   auctionLotLines    AuctionLotLine[]
@@ -3438,6 +3440,11 @@ model Item {
   // fault, and allowed without listed faults. Lowers every value of the copy — catalogue or recorded
   // value and market value — through `applyFaultReduction`; the stamp's catalogue prices are untouched.
   faultReductionPercent Int?
+  // How many variant trees this copy's **candidate set** spans (#1651, ADR-0065): 0 for an ordinary
+  // copy, 1 when every candidate climbs variant edges to one root, 2+ when they do not. A copy whose
+  // candidates lie in several trees counts towards no completeness, and this column keeps that a flat
+  // `where` (`NOT_ACROSS_TREES`). Derived: written only by `src/lib/item-candidates.ts`.
+  candidateTrees      Int      @default(0)
   notes               String?
   // Physical storage: at most one assignable `Location` per copy, plus an optional
   // free-text identifier within that location (e.g. a page/pocket ref like `A234`),
@@ -3456,6 +3463,9 @@ model Item {
   variantHistory    ItemVariantHistory[]
   /** Every stamp this copy carries, the leading one included (ADR-0044 §2). See {@link ItemStamp}. */
   stamps            ItemStamp[]
+  /** The stamps this copy **might be** — one of them, not known which (#1651, ADR-0065). Empty for an
+   *  ordinary copy, two or more otherwise. See {@link ItemCandidate}. */
+  candidates        ItemCandidate[]
   photos            Photo[]
   // Sales module (ADR-0013). A copy is packaged into offer sets (N:M — the same copy can be
   // listed on several platforms at once) and, once sold, is recorded on exactly one `SaleLine`
@@ -3560,6 +3570,34 @@ model ItemStamp {
   // identity includes the format. The unique index over ("itemId", "stampId", "formatId") lives in
   // the migration only: it needs `NULLS NOT DISTINCT`, which Prisma cannot express (ADR-0006 §3).
   @@map("item_stamp")
+}
+
+// One stamp a copy **might be** (#1651, ADR-0065) — a copy identified as *123aI or 123bI*, or as
+// *Mi 85 or Mi 101* when the watermark that tells two issues apart cannot be read.
+//
+// "One of these", which is why it is not `ItemStamp` ("every one of these", ADR-0044): that table is
+// summed into `stampCount`, enumerated by `{catalog}` and searched as stamps the piece carries. A set
+// is offered on a single-stamp copy only, so such a copy keeps its one `ItemStamp` entry, and
+// `Item.stampId` stays a pointer: at the candidates' nearest common variant ancestor when they share
+// a variant tree — so the copy counts as an umbrella copy of it — and at the first candidate in
+// catalogue order when they do not, where `Item.candidateTrees` takes the copy out of every count.
+//
+// An ordinary copy has no rows. A set has at least two, never a candidate together with its own
+// descendant, and never every variant of one umbrella — that set is the umbrella, and is stored as
+// it (`canonicalCandidateSet`).
+//
+// Written only by `src/lib/item-candidates.ts`. Both FKs cascade; `deleteStamp` refuses a stamp still
+// named here, as it does one a piece still carries.
+model ItemCandidate {
+  itemId  String
+  stampId String
+
+  item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  stamp Stamp @relation(fields: [stampId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, stampId])
+  @@index([stampId])
+  @@map("item_candidate")
 }
 
 // A copy the collector has decided is **never** to be listed on one platform (#506).

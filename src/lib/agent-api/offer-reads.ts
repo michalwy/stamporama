@@ -11,8 +11,14 @@
 // suggestions are told apart rather than merged into one number, and that nothing in the offer
 // projection says anything at all about a marketplace.
 
-import { compact, catalogLabels, copyValue } from "./collection-reads";
-import type { AgentCopyValue, CatalogLabelRow, CopyValueRow } from "./collection-reads";
+import { candidateSet, compact, catalogLabels, copyValue } from "./collection-reads";
+import type {
+  AgentCandidateSet,
+  AgentCopyValue,
+  CandidateSetRow,
+  CatalogLabelRow,
+  CopyValueRow,
+} from "./collection-reads";
 
 // ── find_unlisted_copies ─────────────────────────────────────────────────────
 
@@ -38,6 +44,9 @@ export interface AgentUnlistedCopy {
   readonly stampId: string;
   readonly stamp?: string;
   readonly catalogNumbers: string[];
+  /** The copy is one of several candidate stamps (#1651): valued at, and listed under, the cheapest
+   *  of them. See `AgentCandidateSet`. */
+  readonly candidates?: AgentCandidateSet;
   readonly issue?: string;
   readonly issueYear?: number;
   readonly condition: string;
@@ -61,7 +70,7 @@ export interface AgentUnlistedCopy {
 }
 
 /** What an unlisted-copy row is built from. */
-export interface UnlistedCopyRow {
+export interface UnlistedCopyRow extends CandidateSetRow {
   readonly id: string;
   readonly itemNo: number;
   readonly stampId: string;
@@ -86,6 +95,8 @@ export interface UnlistedCopyContext {
   readonly location: string | null;
   /** The market median, or null where nothing answers for this copy's stamp and grade. */
   readonly marketValue: string | null;
+  /** Each candidate's catalogue labels (#1651); absent without a set. */
+  readonly candidateLabels?: readonly (readonly CatalogLabelRow[])[];
 }
 
 export function unlistedCopy(
@@ -98,6 +109,7 @@ export function unlistedCopy(
     stampId: row.stampId,
     stamp: row.stampName ?? undefined,
     catalogNumbers: catalogLabels(context.catalogNumbers),
+    candidates: candidateSet(row, context.candidateLabels),
     issue: row.issueName ?? undefined,
     issueYear: row.issueYear ?? undefined,
     condition: row.conditionName,

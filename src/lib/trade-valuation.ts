@@ -224,7 +224,7 @@ function valuationKeyOf(row: LineRow): ValuationRow | null {
     // never a piece, so it has neither.
     ...(row.item
       ? copyValuationOf(row.item)
-      : { carrier: null, faultReductionPercent: null }),
+      : { carrier: null, faultReductionPercent: null, candidateStampIds: null }),
   };
 }
 

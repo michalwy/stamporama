@@ -516,6 +516,8 @@ describe("a holdings row", () => {
       "locationRef",
       "stamp",
       "stampId",
+      // The fixture is an umbrella copy, whose variant is still to settle (#1651).
+      "variantToSettle",
     ]);
   });
 
@@ -645,5 +647,47 @@ describe("the valuation summary", () => {
     // Market medians are aggregated in the base currency to begin with (ADR-0022 §2), and the
     // catalogue total is converted into it, so one scalar answers for all four.
     assert.equal(row.baseCurrency, "PLN");
+  });
+});
+
+describe("a copy with a candidate set (#1651)", () => {
+  const SET: CopyRow = {
+    ...COPY,
+    unknownVariant: true,
+    candidates: [
+      { stampId: "s1aI", stampName: null },
+      { stampId: "s1bI", stampName: null },
+    ],
+    candidateTrees: 1,
+  };
+  const LABELS = [[{ label: "Mi·PL 200aI", isPrimary: true }], [{ label: "Mi·PL 200bI", isPrimary: true }]];
+
+  it("names the candidates, the stamp they share, and that the variant is to settle", () => {
+    const row = holding(SET, { catalogNumbers: CATALOG, location: null, candidateLabels: LABELS });
+    assert.equal(row.variantToSettle, true);
+    assert.deepEqual(row.candidates, {
+      label: "Mi·PL 200aI or 200bI",
+      stamps: [
+        { stampId: "s1aI", catalogNumbers: ["Mi·PL 200aI"] },
+        { stampId: "s1bI", catalogNumbers: ["Mi·PL 200bI"] },
+      ],
+      sharedStampId: "s1",
+    });
+  });
+
+  it("says when the candidates share no stamp", () => {
+    const row = copyDetail("col1", { ...SET, unknownVariant: false, candidateTrees: 2 }, {
+      ...COPY_CONTEXT,
+      candidateLabels: LABELS,
+    });
+    assert.equal(row.variantToSettle, true);
+    assert.equal(row.candidates?.acrossTrees, true);
+    assert.equal("sharedStampId" in (row.candidates ?? {}), false);
+  });
+
+  it("is absent on an ordinary copy", () => {
+    const row = copyDetail("col1", { ...COPY, unknownVariant: false }, COPY_CONTEXT);
+    assert.equal("candidates" in row, false);
+    assert.equal("variantToSettle" in row, false);
   });
 });

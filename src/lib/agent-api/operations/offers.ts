@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "../../db";
 import { areaSubtreeIds } from "../../areas";
 import { countItems, listItemsPaginated } from "../../items";
-import { marketKeyOf } from "../../market-value";
+import { copyMarketMedian, marketStampIdsOf } from "../../market-value";
 import { readMarketMedians } from "../../market-values";
 import { reduceForFaults } from "../../valuation";
 import {
@@ -28,7 +28,13 @@ import {
 import { resolveVocabularyValue } from "../vocabulary";
 import { OFFER_TEXT_FIELDS, offerDetail, offerRow, unlistedCopy } from "../offer-reads";
 import { readCollectionVocabulary } from "./vocabulary";
-import { collectionPath, loadCatalogLabelling, loadCollectionHeader, loadLocationPaths } from "./reads-shared";
+import {
+  candidateLabelsFor,
+  collectionPath,
+  loadCatalogLabelling,
+  loadCollectionHeader,
+  loadLocationPaths,
+} from "./reads-shared";
 import type {
   AgentOfferDetail,
   AgentOfferRow,
@@ -266,25 +272,32 @@ export async function readUnlistedCopies(
   // the deduplicated stamps, which is `summarizeHoldings`' own arrangement: a page routinely holds
   // several copies of one stamp, and a key with no datapoints is simply absent — *no evidence*,
   // never a zero (ADR-0022 §6).
-  const medians = await readMarketMedians(context.collectionId, [
-    ...new Set(page.items.map((copy) => copy.stampId)),
-  ]);
+  // …and a copy with a candidate set (#1651) at its candidates' keys.
+  const candidatesOf = (copy: (typeof page.items)[number]) =>
+    copy.candidates.length > 1 ? copy.candidates.map((c) => c.stampId) : null;
+  const medians = await readMarketMedians(
+    context.collectionId,
+    marketStampIdsOf(page.items.map((copy) => ({ ...copy, candidateStampIds: candidatesOf(copy) })))
+  );
 
   return {
     ...listResponse(
       page.items.map((copy) =>
         unlistedCopy(copy, {
           catalogNumbers: labelling.labelFor(copy.areaId, copy.issueId, copy.catalogNumbers),
+          candidateLabels: candidateLabelsFor(labelling, copy),
           location: locations.pathFor(copy.locationId),
           marketValue: marketValueOf(
-            medians.get(
-              marketKeyOf({
+            copyMarketMedian(
+              {
                 stampId: copy.stampId,
                 conditionId: copy.conditionId,
                 certificateStatusId: copy.certificateStatusId,
                 formatId: copy.formatId,
-              })
-            ),
+                candidateStampIds: candidatesOf(copy),
+              },
+              medians
+            ) ?? undefined,
             copy.faultReductionPercent
           ),
         })

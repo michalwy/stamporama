@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { COLNECT_CONDITIONS } from "./colnect-conditions";
 import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import {
   colnectListBucketLabel,
   colnectListSourceShape,
@@ -186,6 +187,8 @@ async function copiesToTouch(
       // touch exactly the copies the figure beside it was counted from, or it acts on rows the
       // screen never showed.
       ...NOT_MULTI_STAMP,
+      // …and of a copy whose candidates span several variant trees (#1651), for the same reason.
+      ...NOT_ACROSS_TREES,
     },
     orderBy: { itemNo: "asc" },
     select: {

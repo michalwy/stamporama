@@ -4,6 +4,7 @@ import { prisma, type DbTransaction } from "./db";
 import type { AreaFacet } from "./area-facets";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { MULTI_STAMP, NOT_MULTI_STAMP } from "./multi-stamp";
+import { NO_CANDIDATES } from "./candidate-set-predicates";
 import { validateAcceptance, type AcceptanceInput } from "./acceptance";
 import { copyDeliveryBucket, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
@@ -293,6 +294,9 @@ function countedCopiesWhere(collectionId: string, stampIds: string[]): Prisma.It
     // because a cover *bearing* Mi 200 arrived: the stamp is glued to a piece that will be sold
     // whole, so the gap the want names is still open.
     ...NOT_MULTI_STAMP,
+    // A copy with a candidate set answers no want (#1651, ADR-0065): it would only if every candidate
+    // would, and a want names one stamp, matched exactly.
+    ...NO_CANDIDATES,
     disposedAt: null,
     deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
   };
@@ -1444,7 +1448,8 @@ async function withoutCarriers(
   const ids = [...new Set(copies.map((copy) => copy.itemId))];
   if (ids.length === 0) return [];
   const carriers = await prisma.item.findMany({
-    where: { collectionId, id: { in: ids }, ...MULTI_STAMP },
+    // …and the copies with a candidate set (#1651), which answer no want either.
+    where: { collectionId, id: { in: ids }, OR: [MULTI_STAMP, { candidateTrees: { gt: 0 } }] },
     select: { id: true },
   });
   if (carriers.length === 0) return [...copies];

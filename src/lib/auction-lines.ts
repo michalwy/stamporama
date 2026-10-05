@@ -354,6 +354,7 @@ async function valueAcrossConditions(
             unknownVariant: line.unknownVariant,
             carrier: null,
             faultReductionPercent: null,
+            candidateStampIds: null,
           };
           return line.certificateStatusId === null
             ? [row]

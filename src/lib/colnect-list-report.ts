@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { COLNECT_CONDITIONS, isColnectConditionValue } from "./colnect-conditions";
 import { NOT_MULTI_STAMP_SQL } from "./multi-stamp";
+import { NOT_ACROSS_TREES_SQL } from "./candidate-set-predicates";
 import { AREA_PATH_SEPARATOR } from "./area-path";
 import { sortPhotos, type PhotoSummary } from "./photos";
 import {
@@ -323,6 +324,7 @@ export async function readColnectLocalCondQty(
             AND i."deliveryState" = 'delivered'
             AND i."disposedAt" IS NULL
             AND i.${Prisma.raw(NOT_MULTI_STAMP_SQL)}
+            AND i.${Prisma.raw(NOT_ACROSS_TREES_SQL)}
             AND NULLIF(TRIM(s."colnectId"), '') = ANY(${ids})
           GROUP BY 1, 2`
       : // A want states a grade only where it names exactly one acceptable condition, and a stamp's
@@ -400,6 +402,7 @@ function localSide(collectionId: string, source: ColnectListSource): Prisma.Sql 
         AND i."deliveryState" = 'delivered'
         AND i."disposedAt" IS NULL
         AND i.${Prisma.raw(NOT_MULTI_STAMP_SQL)}
+        AND i.${Prisma.raw(NOT_ACROSS_TREES_SQL)}
       GROUP BY i."stampId"`;
   }
   // A want states a grade only when it names exactly one acceptable condition, and a stamp's open
@@ -447,6 +450,7 @@ function differences(input: {
             AND i."deliveryState" = 'delivered'
             AND i."disposedAt" IS NULL
             AND i.${Prisma.raw(NOT_MULTI_STAMP_SQL)}
+            AND i.${Prisma.raw(NOT_ACROSS_TREES_SQL)}
           GROUP BY i."stampId"`
       : Prisma.sql`SELECT NULL::text AS stamp_id, NULL::int AS spare WHERE FALSE`;
 

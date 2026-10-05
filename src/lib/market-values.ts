@@ -348,6 +348,7 @@ export async function readStampMarketEvidence(
         unknownVariant: isUnknownVariantStamp(line.stamp),
         carrier: null,
         faultReductionPercent: null,
+        candidateStampIds: null,
       }))
     ),
     ...observations.map<ValuationRow>((row) => ({
@@ -359,6 +360,7 @@ export async function readStampMarketEvidence(
       unknownVariant: isUnknownVariantStamp(row.stamp),
       carrier: null,
       faultReductionPercent: null,
+      candidateStampIds: null,
     })),
   ]);
 

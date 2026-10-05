@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { NOT_MULTI_STAMP } from "./multi-stamp";
+import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import {
   computeChecklistCompleteness,
@@ -121,6 +122,9 @@ async function completenessOf(
             // (#745, ADR-0044 §3): a cover franked with three of an issue's stamps completes no
             // square of its grid, because the collector cannot supply any one of them off it.
             ...NOT_MULTI_STAMP,
+            // …nor a copy whose candidates span several variant trees (#1651): it counts towards no
+            // completeness until it is settled.
+            ...NOT_ACROSS_TREES,
             disposedAt: null,
             deliveryState: { notIn: [...UNAVAILABLE_DELIVERY_STATES] },
           },

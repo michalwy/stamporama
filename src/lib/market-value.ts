@@ -51,6 +51,36 @@ export function marketKeyOf(key: MarketValueKey): string {
   return `${key.stampId}~${key.conditionId}~${key.certificateStatusId ?? ""}~${key.formatId ?? ""}`;
 }
 
+/**
+ * The median a **copy** is valued at on the market: its own key's, or — for a copy identified as one
+ * of several candidate stamps (#1651, ADR-0065) — the **lowest** of its candidates' at the copy's
+ * condition, certificate and format, and only when **every** candidate has evidence. A candidate
+ * with none could be the cheaper one, and a figure that might be too high is not stated (decided with
+ * the collector, 2026-10-05). Null is *no evidence*, never a zero (ADR-0022 §6).
+ */
+export function copyMarketMedian(
+  copy: MarketValueKey & { candidateStampIds: readonly string[] | null },
+  medians: ReadonlyMap<string, number>
+): number | null {
+  if (!copy.candidateStampIds || copy.candidateStampIds.length < 2) {
+    return medians.get(marketKeyOf(copy)) ?? null;
+  }
+  let lowest: number | null = null;
+  for (const stampId of copy.candidateStampIds) {
+    const median = medians.get(marketKeyOf({ ...copy, stampId }));
+    if (median === undefined) return null;
+    if (lowest === null || median < lowest) lowest = median;
+  }
+  return lowest;
+}
+
+/** Every stamp a set of copies' market values are read for: their own, and their candidates. */
+export function marketStampIdsOf(
+  copies: readonly { stampId: string; candidateStampIds: readonly string[] | null }[]
+): string[] {
+  return [...new Set(copies.flatMap((c) => [c.stampId, ...(c.candidateStampIds ?? [])]))];
+}
+
 // ── Extraction (ADR-0022 §2, §3) ────────────────────────────────────────────
 
 /** One line of a lot, with its catalogue value **already resolved** by the caller — the area's

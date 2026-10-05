@@ -1,4 +1,5 @@
 import "server-only";
+import { candidateSetLabel } from "./candidate-set-rules";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
@@ -69,6 +70,9 @@ export interface OfferLabeller {
    * bare — a copy is listed inside a set whose own label already names the catalogue (#379), so
    * repeating `Mi·PL` on every line of it says nothing. */
   copy(stamp: StampLabelRow): string;
+  /** {@link copy} for a copy that may carry a **candidate set** (#1651): *123aI or 123bI*, each
+   *  candidate named as `copy` names a stamp, rather than the set's pointer. */
+  copyOf(item: { stamp: StampLabelRow; candidates?: readonly { stamp: StampLabelRow }[] }): string;
   /** *Every* number the stamp carries, each printed with its vendor and area prefix (`Mi·PL 865`),
    * leading vendor first. For the lists that stand outside a set's own label and are read against
    * someone else's catalogue (#423): there, which catalogue a number belongs to is the whole point,
@@ -145,9 +149,14 @@ export async function makeOfferLabeller(collectionId: string): Promise<OfferLabe
     );
   }
 
+  const copy = (stamp: StampLabelRow) => catalogOf(stamp)?.number ?? stamp.name ?? "Copy";
   return {
     catalogOf,
-    copy: (stamp) => catalogOf(stamp)?.number ?? stamp.name ?? "Copy",
+    copy,
+    copyOf: (item) =>
+      item.candidates && item.candidates.length > 1
+        ? candidateSetLabel(item.candidates.map((c) => copy(c.stamp)))
+        : copy(item.stamp),
     catalogNumbers,
     set,
     offer: (sets) => deriveOfferLabel(sets.map(set)),

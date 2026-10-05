@@ -21,8 +21,14 @@
 //    `get_trade_balance`'s and is about the trade rather than about any row. Two readings of one
 //    question in two responses is how they come to disagree.
 
-import { catalogLabels, compact, copyValue, subtypeName } from "./collection-reads";
-import type { AgentCopyValue, CatalogLabelRow, CopyValueRow } from "./collection-reads";
+import { candidateSet, catalogLabels, compact, copyValue, subtypeName } from "./collection-reads";
+import type {
+  AgentCandidateSet,
+  AgentCopyValue,
+  CandidateSetRow,
+  CatalogLabelRow,
+  CopyValueRow,
+} from "./collection-reads";
 
 // ── The trade ────────────────────────────────────────────────────────────────
 
@@ -277,6 +283,8 @@ export interface AgentTradeLine {
   readonly location?: string;
   readonly locationRef?: string;
   readonly deliveryState?: string;
+  /** The give line's copy is one of several candidate stamps (#1651) — see `AgentCandidateSet`. */
+  readonly candidates?: AgentCandidateSet;
   // ── receive side only ──
   /** The line points at a base stamp that has variants: *one of these, which one is not recorded*. */
   readonly unknownVariant?: boolean;
@@ -284,7 +292,7 @@ export interface AgentTradeLine {
 }
 
 /** A give line's copy, as `listItemsPaginated` states it — `CopyRow`'s own shape, narrowed. */
-export interface GiveLineRow {
+export interface GiveLineRow extends CandidateSetRow {
   readonly id: string;
   readonly itemNo: number;
   readonly stampId: string;
@@ -319,6 +327,8 @@ export interface TradeLineContext {
   readonly fulfillment: string;
   readonly catalogNumbers: readonly CatalogLabelRow[];
   readonly location: string | null;
+  /** Each candidate's catalogue labels for a give line's copy (#1651); absent without a set. */
+  readonly candidateLabels?: readonly (readonly CatalogLabelRow[])[];
 }
 
 export function giveLine(row: GiveLineRow, context: TradeLineContext): AgentTradeLine {
@@ -342,6 +352,7 @@ export function giveLine(row: GiveLineRow, context: TradeLineContext): AgentTrad
     location: context.location ?? undefined,
     locationRef: row.locationRef ?? undefined,
     deliveryState: row.deliveryState,
+    candidates: candidateSet(row, context.candidateLabels),
   });
 }
 

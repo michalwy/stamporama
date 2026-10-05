@@ -15,6 +15,7 @@ import {
 } from "./carrier-value";
 import {
   applyFaultReduction,
+  valuateCandidateCopy,
   valuateCopy,
   valuateExplicitValue,
   type CopyValuation,
@@ -63,6 +64,13 @@ export interface ValuationRow {
    * {@link copyValuationOf}.
    */
   faultReductionPercent: number | null;
+  /**
+   * The copy's **candidate set** (#1651, ADR-0065) — two or more stamps it might be — or null for an
+   * ordinary copy and for every row that is not a copy. With a set, the copy is valued over its
+   * candidates (`valuateCandidateCopy`) and `stampId` — the set's pointer — is not priced at all.
+   * Required for `carrier`'s reason; built from a copy by {@link copyValuationOf}.
+   */
+  candidateStampIds: readonly string[] | null;
 }
 
 // Pure, and so living in `carrier-value.ts` where the unit suite can reach them; re-exported so every
@@ -78,16 +86,21 @@ export {
 export const COPY_VALUATION_SELECT = {
   ...CARRIER_VALUATION_SELECT,
   faultReductionPercent: true,
+  candidates: { select: { stampId: true } },
 } as const;
 
 /** The two copy-only fields of a {@link ValuationRow}, read off a copy selected with
  *  {@link COPY_VALUATION_SELECT}. Spread into the row, so a copy reader states both in one place. */
 export function copyValuationOf(
-  row: Parameters<typeof carrierValuationOf>[0] & { faultReductionPercent: number | null }
-): Pick<ValuationRow, "carrier" | "faultReductionPercent"> {
+  row: Parameters<typeof carrierValuationOf>[0] & {
+    faultReductionPercent: number | null;
+    candidates: readonly { stampId: string }[];
+  }
+): Pick<ValuationRow, "carrier" | "faultReductionPercent" | "candidateStampIds"> {
   return {
     carrier: carrierValuationOf(row),
     faultReductionPercent: row.faultReductionPercent,
+    candidateStampIds: row.candidates.length > 1 ? row.candidates.map((c) => c.stampId) : null,
   };
 }
 
@@ -144,14 +157,20 @@ export async function valuateItemRows(
   // piece as its leading stamp, which is the claim #745 removes.
   const catalogRows = rows.filter((r) => r.carrier === null);
 
+  // A copy with a candidate set (#1651) is valued over its candidates, any of which may be an umbrella
+  // itself — so their descendants are read too, and which of them is an umbrella is told by the tree.
+  const candidateIds = new Set(catalogRows.flatMap((r) => r.candidateStampIds ?? []));
   const unknownStampIds = new Set(
-    catalogRows.filter((r) => r.unknownVariant).map((r) => r.stampId)
+    catalogRows.filter((r) => r.unknownVariant && !r.candidateStampIds).map((r) => r.stampId)
   );
-  const descendantsByStamp = await buildDescendantMap(collectionId, unknownStampIds);
+  const descendantsByStamp = await buildDescendantMap(
+    collectionId,
+    new Set([...unknownStampIds, ...candidateIds])
+  );
 
   // Every stamp whose prices/area we must load: the copies' own stamps plus the
-  // descendant variants of any unknown-variant copy.
-  const stampIds = new Set<string>();
+  // descendant variants of any unknown-variant copy, and the candidates of any set.
+  const stampIds = new Set<string>(candidateIds);
   for (const r of catalogRows) stampIds.add(r.stampId);
   for (const set of descendantsByStamp.values()) {
     for (const id of set) stampIds.add(id);
@@ -167,6 +186,8 @@ export async function valuateItemRows(
         // carry a price. Read as one column here rather than as a `variants` relation per stamp — the
         // whole subtree is already in this result set, so the parent edges are enough.
         parentId: true,
+        // Catalogue order, which breaks a tie between two equally cheap candidates (#1651).
+        primaryCatalogSortKey: true,
         catalogPrices: { select: VALUATION_PRICE_SELECT },
         stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
         // The issue anchors a format multiplier (#343) — the narrowest anchor a catalog prints one
@@ -182,6 +203,7 @@ export async function valuateItemRows(
   const primaryCatalogByStamp = new Map<string, string | null>();
   const areaByStamp = new Map<string, string | null>();
   const issueByStamp = new Map<string, string | null>();
+  const sortKeyByStamp = new Map<string, string | null>();
   // Which descendants count as variants (ADR-0010 §3): only variant-kind children
   // feed the lowest-child price; distinct-entry descendants are excluded.
   const isVariantByStamp = new Map<string, boolean>();
@@ -201,6 +223,7 @@ export async function valuateItemRows(
     );
     areaByStamp.set(s.id, areaId);
     issueByStamp.set(s.id, s.issueMemberships[0]?.issueId ?? null);
+    sortKeyByStamp.set(s.id, s.primaryCatalogSortKey);
   }
 
   // A recorded value is converted to base by the very rates a catalogue price is.
@@ -221,8 +244,34 @@ export async function valuateItemRows(
     if (r.carrier !== null) {
       return valuateExplicitValue(r.carrier.explicitValue, baseCurrency, rates);
     }
-    const descendants = r.unknownVariant
-      ? [...(descendantsByStamp.get(r.stampId) ?? new Set<string>())].filter(
+    if (r.candidateStampIds && r.candidateStampIds.length > 1) {
+      // Each candidate valued as a copy of it would be — its own area's catalogue, its own issue's
+      // format factor, its own variants when it is an umbrella — then the lowest of them (#1651).
+      const ordered = [...r.candidateStampIds].sort((a, b) => {
+        const ka = sortKeyByStamp.get(a) ?? null;
+        const kb = sortKeyByStamp.get(b) ?? null;
+        if (ka === kb) return a < b ? -1 : a > b ? 1 : 0;
+        if (ka === null) return 1;
+        if (kb === null) return -1;
+        return ka < kb ? -1 : 1;
+      });
+      return valuateCandidateCopy(
+        ordered.map((stampId) => ({
+          stampId,
+          valuation: valuateAt(r, stampId, umbrellaStampIds.has(stampId)),
+          identified: !umbrellaStampIds.has(stampId),
+        })),
+        baseCurrency,
+        rates
+      );
+    }
+    return valuateAt(r, r.stampId, r.unknownVariant);
+  }
+
+  /** `r`'s condition, certificate and format, valued as a copy of `stampId`. */
+  function valuateAt(r: ValuationRow, stampId: string, unknownVariant: boolean): CopyValuation {
+    const descendants = unknownVariant
+      ? [...(descendantsByStamp.get(stampId) ?? new Set<string>())].filter(
           (id) => isVariantByStamp.get(id) ?? false
         )
       : null;
@@ -234,13 +283,13 @@ export async function valuateItemRows(
       // one, is scaled by the same rule, since it shares the umbrella's issue and area.
       formatFactor: factorLookup(
         r.formatId,
-        areaByStamp.get(r.stampId) ?? null,
-        issueByStamp.get(r.stampId) ?? null,
+        areaByStamp.get(stampId) ?? null,
+        issueByStamp.get(stampId) ?? null,
         r.conditionId
       ),
-      unknownVariant: r.unknownVariant,
-      primaryCatalogNameId: primaryCatalogByStamp.get(r.stampId) ?? null,
-      ownPrices: pricesByStamp.get(r.stampId) ?? [],
+      unknownVariant,
+      primaryCatalogNameId: primaryCatalogByStamp.get(stampId) ?? null,
+      ownPrices: pricesByStamp.get(stampId) ?? [],
       // Tagged with the variant each array belongs to (#616), so the rollup's answer names the
       // stamp it took its figure from.
       variantPrices: descendants

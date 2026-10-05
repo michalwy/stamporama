@@ -26,7 +26,7 @@ import {
   valuateItemRows,
   type ValuationRow,
 } from "./item-valuation";
-import { marketKeyOf } from "./market-value";
+import { copyMarketMedian, marketStampIdsOf } from "./market-value";
 import { readMarketMedians } from "./market-values";
 import {
   aggregateCostBasis,
@@ -55,6 +55,14 @@ import {
   validateItemStampEntries,
   type ItemStampEntryInput,
 } from "./item-stamps";
+import { clearCandidatesTx, loadCandidateTreeTx, setCopyStampTx } from "./item-candidates";
+import {
+  NO_CANDIDATES,
+  NOT_ACROSS_TREES,
+  VARIANT_SETTLED,
+  VARIANT_TO_SETTLE,
+} from "./candidate-set-predicates";
+import { variantChain } from "./candidate-set-rules";
 import {
   isMultiStampCount,
   MULTI_STAMP,
@@ -822,6 +830,8 @@ export async function updateItem(
       // the copy means moving that entry — and only that one. The other stamps on a carrier are
       // facts about the piece that this edit says nothing about.
       if (!data.stamps) await repointLeadingStampTx(tx, itemId, data.stampId!);
+      // Re-identified as one stamp: a candidate set it carried (#1651) was the previous answer.
+      await clearCandidatesTx(tx, itemId);
       // **A re-identification, not a reorder.** Refinement history is the record of this copy being
       // decided to be a *different* stamp (ADR-0007 §6), so it is written when the stamp now leading
       // was not on the piece before. Dragging Mi 205 to the front of a cover, or striking the
@@ -1193,6 +1203,12 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    *  Absent is both — the list's default, since a carrier stays an ordinary copy for everything the
    *  list does. Narrows through the very fragments the counts spread (`multi-stamp.ts`). */
   multiStamp?: MultiStampFilter;
+  /** The copies whose **variant is to settle** (#1651): `true` those with a candidate set or on an
+   *  unknown-variant umbrella, `false` the rest. Absent is both. See `candidate-set-predicates.ts`. */
+  variantToSettle?: boolean;
+  /** Leave out every copy with a candidate set (#1651) — for the reads that match a copy to a stamp
+   *  someone asked for, which such a copy satisfies only if every candidate would, and so never. */
+  excludeCandidateSets?: boolean;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
   offset?: number;
@@ -1382,6 +1398,12 @@ function buildItemWhere(
   // an `OR` of its own.
   const faults = faultFilterWhere(filters);
   if (faults) and.push(faults);
+  // Variant to settle (#1651) — an `OR` of its own (a candidate set, or an umbrella stamp), so it
+  // rides in the AND list rather than beside `stamp`.
+  if (filters.variantToSettle !== undefined) {
+    and.push(filters.variantToSettle ? VARIANT_TO_SETTLE : VARIANT_SETTLED);
+  }
+  if (filters.excludeCandidateSets) and.push(NO_CANDIDATES);
   if (filters.attachableToLotId) {
     // Two branches rather than one `lotId: { not: … }`: a copy on no lot must pass, and an
     // inequality is not a reliable way to say that about a nullable column.
@@ -1715,6 +1737,22 @@ export interface ItemListItem {
    *  **empty** for any other. The row names them all rather than hiding them behind a count (#748),
    *  and an ordinary copy's one stamp is already the row's own identity. */
   carriedStamps: CarriedStamp[];
+  /** The stamps the copy **might be** (#1651, ADR-0065), in catalogue order — **empty** for an
+   *  ordinary copy. With a set, `stampId` is only its pointer: the shared variant ancestor, or across
+   *  trees the first candidate, and never read as the copy's identity. */
+  candidates: CandidateStamp[];
+  /** How many variant trees {@link candidates} span — 0 without a set, 2+ when the copy counts
+   *  towards no completeness until it is settled. */
+  candidateTrees: number;
+}
+
+/** One stamp of a copy's candidate set (#1651), labelled as a carried stamp is. */
+export interface CandidateStamp {
+  stampId: string;
+  stampName: string | null;
+  catalogNumbers: { catalogVendorId: string; number: string }[];
+  areaId: string | null;
+  issueId: string | null;
 }
 
 export interface PaginatedItemsResult {
@@ -1729,6 +1767,8 @@ const ITEM_LIST_SELECT = {
   id: true,
   itemNo: true,
   stampId: true,
+  // How many variant trees the copy's candidate set spans (#1651) — 0 for none.
+  candidateTrees: true,
   inCollection: true,
   forSale: true,
   forTrade: true,
@@ -1827,6 +1867,22 @@ const ITEM_LIST_SELECT = {
   // …and the value a carrier is priced at instead of the catalogue (#747), `stampCount` included,
   // and what the copy's faults take off its value (#1560).
   ...COPY_VALUATION_SELECT,
+  // The candidate set (#1651), labelled, in catalogue order. Replaces the bare ids the valuation
+  // select spreads above; an ordinary copy has none, so the cost is nothing.
+  candidates: {
+    orderBy: [{ stamp: { primaryCatalogSortKey: { sort: "asc", nulls: "last" } } }, { stampId: "asc" }],
+    select: {
+      stampId: true,
+      stamp: {
+        select: {
+          name: true,
+          catalogNumbers: { select: { catalogVendorId: true, number: true } },
+          stampAreaLinks: { select: { collectionAreaId: true, isPrimary: true } },
+          issueMemberships: { ...FIRST_ISSUE_MEMBERSHIP, select: { issue: { select: { id: true } } } },
+        },
+      },
+    },
+  },
   stamps: {
     orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: {
@@ -1989,6 +2045,8 @@ function toItemListItem(
     value: valuation,
     multiStamp: isMultiStampCount(row.stampCount),
     carriedStamps: isMultiStampCount(row.stampCount) ? row.stamps.map(carriedStampOf) : [],
+    candidates: row.candidates.length > 1 ? row.candidates.map(candidateStampOf) : [],
+    candidateTrees: row.candidateTrees,
   };
 }
 
@@ -2006,6 +2064,17 @@ function carriedStampOf(entry: ItemListRow["stamps"][number]): CarriedStamp {
     areaId: (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null,
     issueId: entry.stamp.issueMemberships[0]?.issue.id ?? null,
     issues: entry.stamp.issueMemberships.map((m) => m.issue),
+  };
+}
+
+function candidateStampOf(entry: ItemListRow["candidates"][number]): CandidateStamp {
+  const links = entry.stamp.stampAreaLinks;
+  return {
+    stampId: entry.stampId,
+    stampName: entry.stamp.name,
+    catalogNumbers: entry.stamp.catalogNumbers,
+    areaId: (links.find((l) => l.isPrimary) ?? links[0])?.collectionAreaId ?? null,
+    issueId: entry.stamp.issueMemberships[0]?.issue.id ?? null,
   };
 }
 
@@ -2043,7 +2112,8 @@ async function enrichItemRows(
     loadItemWantSummaries(
       collectionId,
       rows
-        .filter((r) => !isMultiStampCount(r.stampCount))
+        // …nor for a copy with a candidate set (#1651), which answers no want.
+        .filter((r) => !isMultiStampCount(r.stampCount) && r.candidateTrees === 0)
         .map((r) => ({ itemId: r.id, stampId: r.stampId }))
     ),
   ]);
@@ -2890,7 +2960,9 @@ export async function listIssueGroupCompleteness(
           // checklist's stamps, which a carrier is not, and the header sits over groups that already
           // leave the carriers out.
           where: {
-            AND: [where, NOT_MULTI_STAMP, { stampId: { in: rollup.countingStampIds } }],
+            // …and a copy whose candidates span several variant trees (#1651), which completes no
+            // set until it is settled.
+            AND: [where, NOT_MULTI_STAMP, NOT_ACROSS_TREES, { stampId: { in: rollup.countingStampIds } }],
           },
           _count: { _all: true },
         }),
@@ -3316,10 +3388,20 @@ function buildGroupTree(
  * Deduplicated, since a set of copies routinely holds several of one stamp. */
 async function marketMediansFor(
   collectionId: string,
-  items: { stampId: string; disposedAt: Date | string | null; deliveryState: string }[]
+  items: {
+    stampId: string;
+    candidateStampIds: readonly string[] | null;
+    disposedAt: Date | string | null;
+    deliveryState: string;
+  }[]
 ): Promise<Map<string, number>> {
-  const stampIds = [...new Set(items.filter(isHeld).map((i) => i.stampId))];
-  return readMarketMedians(collectionId, stampIds);
+  // A copy with a candidate set (#1651) is valued at its candidates' medians, so they are read too.
+  return readMarketMedians(collectionId, marketStampIdsOf(items.filter(isHeld)));
+}
+
+/** The candidate ids of a list item, in the shape the market and valuation readers take (#1651). */
+function itemCandidateIds(item: { candidates: readonly { stampId: string }[] }): string[] | null {
+  return item.candidates.length > 1 ? item.candidates.map((c) => c.stampId) : null;
 }
 
 /** Bundle catalog value + actual purchase cost over a set of already-enriched copies into a
@@ -3360,7 +3442,7 @@ function summarizeHoldings(
     },
     market: aggregateMarketHoldings(
       held.map((i) => ({
-        median: marketMedians.get(marketKeyOf(i)) ?? null,
+        median: copyMarketMedian({ ...i, candidateStampIds: itemCandidateIds(i) }, marketMedians),
         faultReductionPercent: i.faultReductionPercent,
       })),
       baseCurrency
@@ -3444,7 +3526,14 @@ export async function getLotIntakeSummary(
     estimateWeightBase,
     derivedLabel: deriveLotLabel(all, maps),
     groupTree: buildGroupTree(matching, filters, areas),
-    holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
+    holdings: summarizeHoldings(
+      all,
+      baseCurrency,
+      await marketMediansFor(
+        collectionId,
+        all.map((i) => ({ ...i, candidateStampIds: itemCandidateIds(i) }))
+      )
+    ),
     catalogBasis: lotCatalogBasis(all.map(catalogBasisCopyOf)),
   };
 }
@@ -3547,7 +3636,14 @@ export async function getPurchaseIntakeSummary(
     noPhotoCount: all.filter((i) => i.photos.length === 0).length,
     lotWeightBase,
     groupTree: buildGroupTree(matching, filters, areas),
-    holdings: summarizeHoldings(all, baseCurrency, await marketMediansFor(collectionId, all)),
+    holdings: summarizeHoldings(
+      all,
+      baseCurrency,
+      await marketMediansFor(
+        collectionId,
+        all.map((i) => ({ ...i, candidateStampIds: itemCandidateIds(i) }))
+      )
+    ),
     lotCatalogBasis: lotCatalogBases,
   };
 }
@@ -3763,14 +3859,36 @@ export async function resolveItemVariant(
 ): Promise<ItemData> {
   const current = await prisma.item.findUnique({
     where: { id: itemId },
-    select: { collectionId: true, stampId: true, deliveryState: true },
+    select: {
+      collectionId: true,
+      stampId: true,
+      deliveryState: true,
+      candidates: { select: { stampId: true } },
+    },
   });
   if (!current) throw new Error("Item not found.");
   await assertCollectionOwner(ownerId, current.collectionId);
+  await assertStampInCollection(current.collectionId, toStampId);
+
+  // A copy with a candidate set (#1651) is settled to one of its candidates, or to a variant of one:
+  // the set is what is known about it, and the pointer — a shared ancestor, or across trees merely
+  // the first candidate — is not.
+  if (current.candidates.length > 0) {
+    const candidateIds = current.candidates.map((c) => c.stampId);
+    const item = await prisma.$transaction(async (tx) => {
+      const tree = await loadCandidateTreeTx(tx, current.collectionId, [toStampId]);
+      if (!variantChain(toStampId, tree).some((id) => candidateIds.includes(id))) {
+        throw new Error("A copy can only be settled to one of its candidates, or a variant of one.");
+      }
+      await setCopyStampTx(tx, itemId, [toStampId], note);
+      return tx.item.findUniqueOrThrow({ where: { id: itemId }, select: ITEM_SELECT });
+    });
+    return toItemData(item);
+  }
+
   if (toStampId === current.stampId) {
     throw new Error("Pick a variant different from the current stamp.");
   }
-  await assertStampInCollection(current.collectionId, toStampId);
   if (!(await isDescendantStamp(toStampId, current.stampId))) {
     throw new Error("A copy can only be resolved to a variant of its current stamp.");
   }
@@ -3958,7 +4076,10 @@ async function makeHoldingsSummarizer(
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
   // What the market paid for the same keys (#458), read once for the whole row set for the same
   // reason the catalogue valuation is: a per-slice read would repeat one query per platform.
-  const marketMedians = await marketMediansFor(collectionId, rows);
+  const marketMedians = await marketMediansFor(
+    collectionId,
+    rows.map((row) => ({ ...row, candidateStampIds: itemCandidateIds(row) }))
+  );
 
   return (itemIds) => {
     const ids = itemIds ?? rows.map((r) => r.id);
@@ -3983,7 +4104,10 @@ async function makeHoldingsSummarizer(
           .map((id) => rowById.get(id))
           .filter((row) => row !== undefined)
           .map((row) => ({
-            median: marketMedians.get(marketKeyOf(row)) ?? null,
+            median: copyMarketMedian(
+              { ...row, candidateStampIds: itemCandidateIds(row) },
+              marketMedians
+            ),
             faultReductionPercent: row.faultReductionPercent,
           })),
         baseCurrency

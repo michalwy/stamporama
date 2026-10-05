@@ -323,6 +323,62 @@ export function valuateCopy(input: CopyValuationInput): CopyValuation {
   );
 }
 
+/** One candidate of a copy's candidate set (#1651), valued as a copy of it would be. */
+export interface CandidateValuation {
+  stampId: string;
+  /** The candidate's own valuation by {@link valuateCopy} — an umbrella candidate's being its own
+   *  lowest-variant rollup. */
+  valuation: CopyValuation;
+  /** True when the candidate is fully identified (no variant children of its own) — the ones a price
+   *  is expected of, as {@link VariantPrices.identified}. */
+  identified: boolean;
+}
+
+/**
+ * Value a copy identified as **one of several candidate stamps** (#1651, ADR-0065). Pure.
+ *
+ * The rule is the unknown-variant rule over the candidates only (ADR-0007 §7): the **lowest** of
+ * their figures, compared in base currency, flagged `uncertain`, and naming where it came from in
+ * `sourceStampId` — the cheapest candidate, or the variant of it the figure was rolled up from when
+ * that candidate is an umbrella itself. Ties go to the first candidate in the order given, which is
+ * catalogue order.
+ *
+ * `unpricedVariantIds` is what a listing must not stand on (#617): an identified candidate that has
+ * nothing entered, and whatever an umbrella candidate's own rollup left unpriced. With no candidate
+ * priced, the copy is unpriced and takes the mark its candidates share, as an umbrella takes its
+ * variants' (#1615).
+ */
+export function valuateCandidateCopy(
+  candidates: readonly CandidateValuation[],
+  baseCurrency: string,
+  rates: Map<string, number | null>
+): CopyValuation {
+  const unpricedVariantIds: string[] = [];
+  for (const c of candidates) {
+    if (c.valuation.unpriced && !c.valuation.mark && c.identified) unpricedVariantIds.push(c.stampId);
+    for (const id of c.valuation.unpricedVariantIds) {
+      if (!unpricedVariantIds.includes(id)) unpricedVariantIds.push(id);
+    }
+  }
+
+  const priced = candidates
+    .filter((c) => !c.valuation.unpriced && c.valuation.amount !== null && c.valuation.currency !== null)
+    .map((c) => ({ ...c, amount: Number(c.valuation.amount), currency: c.valuation.currency! }));
+  const lowest = pickLowestByBase(priced, baseCurrency, rates);
+  if (!lowest) {
+    const mark = rolledUpCatalogPriceMark(
+      candidates.map((c) => ({ mark: c.valuation.mark, identified: c.identified }))
+    );
+    return toValuation(null, true, baseCurrency, rates, null, unpricedVariantIds, mark);
+  }
+  return {
+    ...lowest.valuation,
+    uncertain: true,
+    sourceStampId: lowest.valuation.sourceStampId ?? lowest.stampId,
+    unpricedVariantIds,
+  };
+}
+
 function toValuation(
   picked: PickedPrice | null,
   uncertain: boolean,

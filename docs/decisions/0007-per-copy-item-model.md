@@ -30,6 +30,11 @@ condition, certificate, and disposition. This supersedes the earlier
 
 ### 2. Variant reference — reuse ADR-0002's tree-level encoding
 
+> **Extended by [ADR-0065](0065-candidate-stamps.md) (#1651).** A copy can also be identified as a
+> **set** of candidate stamps — *123aI or 123bI*, or two stamps in different issues — stored beside
+> `stampId`, which then points at the candidates' shared variant ancestor or, across trees, merely at
+> the first of them.
+
 `Item.stampId` links to a `Stamp` row at any level of the variant tree:
 
 - **Identified copy** → link to the specific variant row (e.g. `2b`).

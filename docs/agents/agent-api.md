@@ -1647,6 +1647,40 @@ query spells `resultMarket`'s order rather than filtering after the page.
 **`recommend_bid` already lists its evidence** (#1634: `marketResults`, `notCounted`); #1635 adds each
 result's `id`, so an observation a recommendation stood on can be corrected or deleted directly.
 
+## A copy that is one of several stamps (#1651)
+
+**A copy may be identified as a set of candidate stamps** (ADR-0065) — *Mi 123aI or 123bI*, or *Mi 85
+or Mi 101* across two issues. The API covers it fully, and adds the surface's first write on a copy's
+identity:
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `set_copy_stamp` | yes | one stamp, or two or more the copy might be — sets, narrows and settles a set |
+
+**Every copy read reports a set the same way**, through one pure projection (`candidateSet` in
+`agent-api/collection-reads.ts`): `candidates` carries a `label` (`candidateSetLabel`, the app's own
+naming), each stamp with its catalogue labels, and either `sharedStampId` — one variant tree, the copy
+counts as an umbrella copy of it — or `acrossTrees`. `variantToSettle` is true for an umbrella copy and
+for a set. `get_copy`, `list_holdings`, `find_unlisted_copies` and `list_trade_lines`' give side carry
+it; `get_offer`'s `copyLabels` name the set; the handler resolves each candidate's labels with
+`candidateLabelsFor`. **The copy's own `stampId` stays where it is filed** — the shared ancestor, or the
+first candidate across trees — and the OpenAPI description tells an agent never to report it as the
+copy's identity.
+
+**`set_copy_stamp` is `setCopyStamp`**, the one write the app's identification and settling use, so
+its refusals are the app's sentences: an empty list, a stamp from elsewhere, a set on a copy carrying
+several stamps. Every variant of one umbrella is stored as the umbrella. It creates no copy (#1390's
+rule). A note rides into the refinement history when the copy is re-pointed.
+
+**The rest follows the app's rules with nothing restated**: the valuation is `valuateItemRows`' (the
+cheapest candidate, `sourceStampId` naming it), the market value `copyMarketMedian`'s (the lowest of
+the candidates', and none while any has no evidence), `draft_offer` lists the copy under its cheapest
+candidate because `resolveListingCatalogItemIds` does, and `serve_trade_requirement` and the trade
+alternatives leave a set out through `excludeCandidateSets` — a requirement names one stamp, and a set
+satisfies one only if every candidate would. `add_trade_give_lines` promises a copy, not a stamp, so a
+set may be promised like any other piece. `list_holdings` and `summarize_valuation` share the scope
+`variant_to_settle`.
+
 ## Entering purchases
 
 **Eleven operations** (#1390): an order the agent has in front of it as text — an order
