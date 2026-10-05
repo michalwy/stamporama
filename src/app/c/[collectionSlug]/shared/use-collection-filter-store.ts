@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { areaYearMemoryKey, type AreaYearMemory } from "@/lib/list-area-year-filter";
 
 /**
  * Shared area + year filter selection, persisted per collection in localStorage
  * and shared across every list where those filters appear (issues, stamps,
- * inventory) — #143. The URL keeps priority: a panel reads `areaId` / `year` from
+ * inventory) — #143. The stamp picker passes `"stamp-picker"` and remembers its
+ * own, so narrowing it never re-narrows a list, nor the reverse (#1659). The URL keeps priority: a panel reads `areaId` / `year` from
  * the query when present (so links stay shareable and an explicit "all" is
  * recorded with the `all` sentinel), and falls back to this store only when the
  * param is absent (a fresh navigation to the list). Panels mirror their effective
@@ -31,10 +33,6 @@ function listenersFor(key: string): Set<() => void> {
   return set;
 }
 
-function storageKey(collectionId: string): string {
-  return `stamporama:list-filters:${collectionId}`;
-}
-
 function readRaw(key: string): string {
   try {
     return localStorage.getItem(key) ?? "";
@@ -56,8 +54,11 @@ function parse(raw: string): StoredListFilters {
   }
 }
 
-export function useCollectionFilterStore(collectionId: string) {
-  const key = storageKey(collectionId);
+export function useCollectionFilterStore(
+  collectionId: string,
+  memory: AreaYearMemory = "lists"
+) {
+  const key = areaYearMemoryKey(collectionId, memory);
 
   const subscribe = useCallback(
     (onChange: () => void) => {

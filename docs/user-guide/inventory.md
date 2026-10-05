@@ -620,7 +620,9 @@ beside **Add copy**. Both are gone; what you had on that screen is now on an ope
      on the right, then expand an issue to choose a stamp or one of its variants. The picker
      remembers its area, year, and search text, so it reopens on the same filter you left it
      on — and the remembered text is **selected** when it opens, so you can just start typing
-     to replace it. The filter also looks **inside** each issue: a term that matches a stamp's
+     to replace it. Its area and year are **its own**, one for every place the picker opens: narrowing
+     the picker while identifying a card leaves the Issues, Stamps, Copies and Wants lists where they
+     were, and narrowing a list leaves the picker alone. The filter also looks **inside** each issue: a term that matches a stamp's
      name or catalog number (but not the issue's own name) still surfaces that issue, opens it,
      and shows **only** the matching stamps — the rest of the tree is hidden, exactly as it is on
      the [Issues list](collections.md#filtering-the-issues-stamps-and-copies-lists). The stamps a

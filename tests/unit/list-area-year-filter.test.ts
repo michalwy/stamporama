@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   ALL_SENTINEL,
+  areaYearMemoryKey,
   areaYearUrlUpdates,
   resolveAreaYearFilter,
   shouldRememberAreaYear,
@@ -194,5 +195,22 @@ describe("shared list area/year filter (#143, #844)", () => {
         true
       );
     });
+  });
+});
+
+describe("the picker's area/year memory is its own (#1659)", () => {
+  it("keeps the lists on the key they always had, so no list changes on the day this lands", () => {
+    assert.equal(areaYearMemoryKey("c1", "lists"), "stamporama:list-filters:c1");
+  });
+
+  it("gives the stamp picker a key no list reads or writes", () => {
+    assert.notEqual(areaYearMemoryKey("c1", "stamp-picker"), areaYearMemoryKey("c1", "lists"));
+  });
+
+  it("keeps each memory per collection", () => {
+    assert.notEqual(
+      areaYearMemoryKey("c1", "stamp-picker"),
+      areaYearMemoryKey("c2", "stamp-picker")
+    );
   });
 });
