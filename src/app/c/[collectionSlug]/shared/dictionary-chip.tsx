@@ -88,3 +88,39 @@ export function CertificateStatusChip({
     </Tooltip>
   );
 }
+
+/**
+ * The condition, and the certificate when one is set, as the chips above — inline, for a caption
+ * that names the condition a price is for (*… · EUR — for MH*, #1657). Each axis keeps its own
+ * colour, as on the rows, rather than the pair being run together as bold text.
+ */
+export function ConditionCertificateChips({
+  collectionId,
+  condition,
+  certificate,
+}: {
+  collectionId: string;
+  condition: { id: string; abbreviation: string; name: string };
+  certificate?: { id: string; abbreviation: string; name: string } | null;
+}) {
+  return (
+    <span
+      style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", verticalAlign: "middle" }}
+    >
+      <ConditionChip
+        collectionId={collectionId}
+        conditionId={condition.id}
+        label={condition.abbreviation || condition.name}
+        tooltip={condition.name}
+      />
+      {certificate && (
+        <CertificateStatusChip
+          collectionId={collectionId}
+          certificateStatusId={certificate.id}
+          label={certificate.abbreviation || certificate.name}
+          tooltip={certificate.name}
+        />
+      )}
+    </span>
+  );
+}

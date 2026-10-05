@@ -81,10 +81,10 @@ export function IntakeCatalogValueField({
   stampId,
   conditionId,
   certificateStatusId,
-  /** How the chosen condition × certificate reads, for the line naming what the figure is being
-   * recorded against and for the notice when a change strands one. Built by the dialog, which is
-   * where the dictionaries are. The format is deliberately absent — see the module header. */
-  subjectLabel,
+  /** The chosen condition × certificate as their chips (#1657), for the line naming what the figure
+   * is being recorded against and for the notice when a change strands one. Built by the dialog,
+   * which is where the dictionaries are. The format is deliberately absent — see the module header. */
+  subject,
   columns,
   disabled,
   onChange,
@@ -93,7 +93,7 @@ export function IntakeCatalogValueField({
   stampId: string;
   conditionId: string;
   certificateStatusId: string;
-  subjectLabel: string;
+  subject: React.ReactNode;
   /** How many equal columns the condition row above is drawn in — two, or three once the collection
    * defines formats (#573). The input takes exactly one of them, so it lines up with the Condition
    * control it is keyed on; the caption takes the rest. Passed in rather than guessed, since the
@@ -103,9 +103,14 @@ export function IntakeCatalogValueField({
   onChange: (value: IntakeCatalogValue) => void;
   /** Price an umbrella through its variants instead of this field (#1317, #1337) — see the module
    * header. `formatId` is the step's format, blank for a single; `subjectLabel` names all three
-   * axes the section is narrowed to; `collectionId` scopes its remembered open or closed state.
-   * Absent: the field, whatever the stamp. */
-  variantGrid?: { formatId: string; subjectLabel: string; collectionId: string };
+   * axes the section is narrowed to, and `subject` draws them; `collectionId` scopes its remembered
+   * open or closed state. Absent: the field, whatever the stamp. */
+  variantGrid?: {
+    formatId: string;
+    subjectLabel: string;
+    subject: React.ReactNode;
+    collectionId: string;
+  };
 }) {
   const [target, setTarget] = useState<Target | null>(null);
   /** Whether the stamp has variants of its own, off the same read as the target. Per stamp, so a
@@ -118,7 +123,7 @@ export function IntakeCatalogValueField({
   const [loading, setLoading] = useState(true);
   /** The subject a typed-but-unwritten figure belonged to, once a change of condition has stranded
    * it. Cleared as soon as anything is typed again. */
-  const [stranded, setStranded] = useState<string | null>(null);
+  const [stranded, setStranded] = useState<React.ReactNode>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   /** One shot, spent whether or not it was taken — see the focus effect below. */
   const focusClaim = useRef(false);
@@ -178,17 +183,17 @@ export function IntakeCatalogValueField({
   // and the comparison has to happen here anyway: this is the last render in which the outgoing
   // subject's own `amount` and `recorded` are still in hand.
   //
-  // The **outgoing** label is kept beside the key, because `subjectLabel` has already become the new
+  // The **outgoing** subject is kept beside the key, because `subject` has already become the new
   // subject's by this render — naming it in the notice would tell the collector their figure was
   // typed for the condition they have just switched *to*.
-  const [seen, setSeen] = useState({ key, label: subjectLabel });
+  const [seen, setSeen] = useState({ key, subject });
   if (seen.key !== key) {
     const dirty = amount.trim() !== "" && amount.trim() !== (recorded ?? "");
-    setStranded(dirty ? seen.label : null);
+    setStranded(dirty ? seen.subject : null);
     setAmount("");
     setRecorded(null);
     setLoading(true);
-    setSeen({ key, label: subjectLabel });
+    setSeen({ key, subject });
   }
 
   useEffect(() => {
@@ -261,6 +266,7 @@ export function IntakeCatalogValueField({
         certificateStatusId={certificateStatusId}
         formatId={variantGrid.formatId}
         subjectLabel={variantGrid.subjectLabel}
+        subject={variantGrid.subject}
         disabled={disabled}
       />
     );
@@ -320,7 +326,7 @@ export function IntakeCatalogValueField({
           {conditionId ? (
             <>
               {" — for "}
-              <strong style={{ color: "var(--color-text-secondary)" }}>{subjectLabel}</strong>
+              {subject}
               {recorded != null ? ", already on file" : ""}
             </>
           ) : (
@@ -333,7 +339,7 @@ export function IntakeCatalogValueField({
         // chosen, so it cannot follow — but a field that empties itself without a word reads as a
         // bug rather than as a rule.
         <p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-          The value you had typed was for <strong>{stranded}</strong>, so it was not carried over —
+          The value you had typed was for {stranded}, so it was not carried over —
           type it again if it applies here too.
         </p>
       )}

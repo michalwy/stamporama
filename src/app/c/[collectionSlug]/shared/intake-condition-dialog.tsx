@@ -79,6 +79,7 @@ import { TagEntryField } from "./tag-entry-field";
 import { useCollectionFaults } from "./use-faults";
 import { useCollectionTags } from "./use-tags";
 import { dispositionToggleColors } from "./disposition-colors";
+import { ConditionCertificateChips } from "./dictionary-chip";
 
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
@@ -663,18 +664,32 @@ function IntakeConditionDialog({
   // the single's price, the way the quick-CV dialog on a copy row records it, with a multiple's value
   // derived from it by the format's factor. Naming a format here would promise a row this never
   // writes.
-  const subjectLabel = [
-    conditions.find((c) => c.id === conditionId)?.abbreviation,
-    certificateStatuses.find((c) => c.id === certId)?.abbreviation,
-  ]
+  //
+  // Drawn as the condition's and the certificate's own chips (#1657), the colours the collector
+  // knows them by on every list (#728); the words are kept for the inputs' accessible names.
+  const subjectCondition = conditions.find((c) => c.id === conditionId);
+  const subjectCertificate = certificateStatuses.find((c) => c.id === certId);
+  const subjectLabel = [subjectCondition?.abbreviation, subjectCertificate?.abbreviation]
     .filter(Boolean)
     .join(" · ");
+  const subjectChips = subjectCondition ? (
+    <ConditionCertificateChips
+      collectionId={collectionId}
+      condition={subjectCondition}
+      certificate={subjectCertificate}
+    />
+  ) : null;
   // …and what an umbrella's variant grid is narrowed to (#1317), which **does** carry the format:
   // the grid fixes all three axes of the piece in hand, where the one figure above lands on the
-  // single whatever the format.
-  const variantGridLabel = [subjectLabel, formats.find((f) => f.id === formatId)?.abbreviation]
-    .filter(Boolean)
-    .join(" · ");
+  // single whatever the format. The format has no colour of its own, so it stays a word.
+  const subjectFormat = formats.find((f) => f.id === formatId)?.abbreviation;
+  const variantGridLabel = [subjectLabel, subjectFormat].filter(Boolean).join(" · ");
+  const variantGridSubject = (
+    <>
+      {subjectChips}
+      {subjectFormat && ` · ${subjectFormat}`}
+    </>
+  );
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1088,7 +1103,7 @@ function IntakeConditionDialog({
               stampId={selection.stampId}
               conditionId={conditionId}
               certificateStatusId={certId}
-              subjectLabel={subjectLabel}
+              subject={subjectChips}
               // The condition row above is two controls, or three once the collection defines
               // formats — the same count the row itself is built from, so the two cannot drift.
               columns={singleStamp && formats.length > 0 ? 3 : 2}
@@ -1096,7 +1111,12 @@ function IntakeConditionDialog({
               onChange={handleCatalogValueChange}
               variantGrid={
                 priceVariantsInGrid
-                  ? { formatId, subjectLabel: variantGridLabel, collectionId }
+                  ? {
+                      formatId,
+                      subjectLabel: variantGridLabel,
+                      subject: variantGridSubject,
+                      collectionId,
+                    }
                   : undefined
               }
             />

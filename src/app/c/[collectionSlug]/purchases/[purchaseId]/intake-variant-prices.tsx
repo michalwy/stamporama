@@ -93,12 +93,14 @@ export const IntakeVariantPricesSection = forwardRef<
     certificateStatusId: string;
     /** The step's format, blank for a single. */
     formatId: string;
-    /** All three axes the section is narrowed to, worded by the dialog. */
+    /** All three axes the section is narrowed to, worded by the dialog — for the inputs' names. */
     subjectLabel: string;
+    /** The same, drawn: the condition and certificate as their chips, the format as a word (#1657). */
+    subject: React.ReactNode;
     disabled: boolean;
   }
 >(function IntakeVariantPricesSection(
-  { collectionId, stampId, conditionId, certificateStatusId, formatId, subjectLabel, disabled },
+  { collectionId, stampId, conditionId, certificateStatusId, formatId, subjectLabel, subject, disabled },
   ref
 ) {
   const scope: VariantPriceScope = useMemo(
@@ -359,7 +361,7 @@ export const IntakeVariantPricesSection = forwardRef<
               {axes ? (
                 <>
                   {" — for "}
-                  <strong style={{ color: "var(--color-text-secondary)" }}>{subjectLabel}</strong>
+                  {subject}
                 </>
               ) : (
                 " — pick a condition first"
