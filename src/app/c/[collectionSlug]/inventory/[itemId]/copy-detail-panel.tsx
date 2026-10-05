@@ -50,6 +50,8 @@ import { FaultReductionMark } from "@/app/c/[collectionSlug]/shared/fault-reduct
 import { faultReductionHint } from "@/lib/fault-reduction";
 import type { CopyValuation } from "@/lib/valuation";
 import { Icon } from "@/app/icons";
+import { candidateSetLabel } from "@/lib/candidate-set-rules";
+import { catalogLabel, type AreaVendorMaps } from "@/lib/area-vendor";
 
 // The copy detail screen (#517). Read-only by design: every field here is edited through the copy
 // form dialog the list already opens, and a second editing surface for one record is two places to
@@ -177,7 +179,17 @@ export function CopyDetailPanel({
             primaryVendorId={primaryVendorId}
             href={`/c/${collectionSlug}/stamps/${item.stampId}`}
           />
-          {item.unknownVariant && (
+          {item.candidates.length > 1 ? (
+            // One of several stamps (#1651): named as the set, marked as still to settle.
+            <Tooltip content="This copy is one of these stamps — which one has still to be settled. It is valued and offered at the cheapest.">
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{ fontWeight: 600 }}>
+                  {candidateSetLabel(item.candidates.map((c) => candidateNumber(c, maps)))}
+                </span>
+                <StateChip label="Variant to settle" token="warning" />
+              </span>
+            </Tooltip>
+          ) : item.unknownVariant && (
             <Tooltip content="Linked to a base stamp that has variants — which variant this copy is has not been decided">
               <span>
                 <StateChip label="Variant unknown" token="warning" />
@@ -190,8 +202,8 @@ export function CopyDetailPanel({
           {/* What this screen can start (#673), at the end of the line that says which copy it is
               about. Both open the Copies list's own dialogs. */}
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
-            {item.unknownVariant && (
-              <Tooltip content="Say which variant this copy is, from the variants under its current stamp.">
+            {item.variantToSettle && (
+              <Tooltip content="Say which variant this copy is — from the variants under its current stamp, or from the stamps it might be.">
                 <button type="button" style={DETAIL_BUTTON} onClick={() => setDialog("identify")}>
                   <Icon name="variant" size="sm" /> Identify variant
                 </button>
@@ -574,6 +586,7 @@ export function CopyDetailPanel({
       {dialog === "identify" && (
         <IdentifyVariantDialog
           collectionId={collectionId}
+          areas={areas}
           item={item}
           isPending={isPending}
           error={actionError}
@@ -609,4 +622,12 @@ function copyValueText(value: CopyValuation, baseCurrency: string): string {
       ? ` ≈ ${value.baseAmountDisplay} ${baseCurrency}`
       : ""
   }${value.uncertain ? " (estimate)" : ""}`;
+}
+
+/** One candidate's leading number, prefixed as its own area and issue prefix it (#1651). */
+function candidateNumber(c: ItemListItem["candidates"][number], maps: AreaVendorMaps): string {
+  return catalogLabel(
+    { areaId: c.areaId, issueId: c.issueId, catalogNumbers: c.catalogNumbers, name: c.stampName },
+    maps
+  );
 }

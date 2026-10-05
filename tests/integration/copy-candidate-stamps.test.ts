@@ -264,6 +264,35 @@ describe("a copy that is one of several candidate stamps (#1651)", () => {
     });
   });
 
+  describe("the copy dialog's save (#1651)", () => {
+    it("creates a copy as one of several stamps in the create's own transaction", async () => {
+      const copy = await createItem(userId, collectionId, {
+        stampId: s["123aI"],
+        conditionId: mnhId,
+        candidateStampIds: [s["123aI"], s["123bI"]],
+      });
+      assert.deepEqual(await shape(copy.id), {
+        stampId: s["123"],
+        trees: 1,
+        candidates: ids("123aI", "123bI"),
+        leading: [s["123"]],
+      });
+      assert.equal(copy.stampId, s["123"], "the copy is returned as it now stands");
+    });
+
+    it("sets, keeps and drops a set on an edit", async () => {
+      const copy = await copyOn("85");
+      await updateItem(userId, copy, { candidateStampIds: [s["85"], s["101"]] });
+      assert.equal((await shape(copy)).trees, 2);
+      await updateItem(userId, copy, { notes: "watermark under UV tomorrow" });
+      assert.equal((await shape(copy)).trees, 2, "an edit that does not name the set leaves it");
+      await updateItem(userId, copy, { candidateStampIds: [] });
+      const dropped = await shape(copy);
+      assert.equal(dropped.trees, 0);
+      assert.deepEqual(dropped.candidates, []);
+    });
+  });
+
   describe("what the copy is worth, counts as and is listed under", () => {
     let oneTree: string;
     let acrossTrees: string;

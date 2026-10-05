@@ -15,6 +15,7 @@ import {
   getItemStamps,
   setItemPlatformExclusion,
 } from "@/lib/items";
+import { setCopyStamp } from "@/lib/item-candidates";
 import type { ItemListItem, ItemStampsRead } from "@/lib/items";
 import type { ItemStampEntryInput } from "@/lib/item-stamps";
 import { parseItemStampEntries } from "@/lib/item-stamp-entries";
@@ -149,6 +150,23 @@ function parseItemStamps(formData: FormData): ItemStampEntryInput[] | undefined 
   return parseItemStampEntries(formData.get("itemStamps"));
 }
 
+/**
+ * The candidate set the copy dialog submitted (#1651), as a JSON list of stamp ids in the
+ * `candidateStampIds` field. `undefined` when the field was not submitted — the set is then left
+ * alone — and an empty list when the dialog dropped one. Malformed JSON reads as not submitted, for
+ * `parseItemStamps`' reason; the domain re-validates every id.
+ */
+function parseCandidateStampIds(formData: FormData): string[] | undefined {
+  const raw = formData.get("candidateStampIds");
+  if (typeof raw !== "string" || raw === "") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((id) => typeof id === "string") ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** A multi-stamp copy's recorded value beside the sum of its stamps, for the Valuation dialog (#747). */
 export async function getCarrierValuationAction(itemId: string): Promise<CarrierValuationRead> {
   const session = await getSession();
@@ -192,7 +210,10 @@ export async function createItemAction(
   if (error) return { status: "error", message: error };
   const changeSet = parsePhotoChangeSet(formData);
   try {
-    const item = await createItem(session.user.id, collectionId, data);
+    const item = await createItem(session.user.id, collectionId, {
+      ...data,
+      candidateStampIds: parseCandidateStampIds(formData),
+    });
     if (changeSet) {
       await applyPhotoChangeSet(session.user.id, item.id, changeSet);
     }
@@ -300,6 +321,8 @@ export async function updateItemAction(
       // same call as every other field: one save, one transaction, and the copy cannot come out of
       // it carrying the old cover's stamps and the new one's condition.
       stamps: parseItemStamps(formData),
+      // …and the stamps it might be (#1651), when the dialog says.
+      candidateStampIds: parseCandidateStampIds(formData),
     });
     if (changeSet) {
       await applyPhotoChangeSet(session.user.id, itemId, changeSet);
@@ -315,6 +338,29 @@ export async function updateItemAction(
   }
 }
 
+/**
+ * Identify a copy as one stamp or as two or more it might be (#1651, ADR-0065) — the write behind
+ * *Several possible variants…*, narrowing a set and settling it. Every variant of one umbrella is
+ * stored as the umbrella, and one stamp makes an ordinary copy.
+ */
+export async function setCopyStampAction(
+  itemId: string,
+  stampIds: string[],
+  note: string | null
+): Promise<ItemActionState> {
+  const session = await getSession();
+  if (stampIds.length === 0) return { status: "error", message: "Pick at least one stamp." };
+  try {
+    await setCopyStamp(session.user.id, itemId, stampIds, note);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the possible variants. Please try again.",
+    };
+  }
+}
+
 /** First-class "Identify variant" action (ADR-0007 §6): re-point an unknown-variant copy
  * to a specific descendant variant, recording the change in its refinement history. */
 export async function resolveItemVariantAction(
@@ -322,6 +368,11 @@ export async function resolveItemVariantAction(
   formData: FormData
 ): Promise<ItemActionState> {
   const session = await getSession();
+  // *Several possible variants…* and *Narrow…* (#1651) submit a set rather than one stamp.
+  const candidateStampIds = parseCandidateStampIds(formData);
+  if (candidateStampIds && candidateStampIds.length > 1) {
+    return setCopyStampAction(itemId, candidateStampIds, str(formData, "variantChangeNote") || null);
+  }
   const toStampId = str(formData, "stampId");
   if (!toStampId) return { status: "error", message: "A variant must be selected." };
   try {

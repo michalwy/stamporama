@@ -21,6 +21,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import type { LocationData } from "@/lib/locations";
 import { StampSelect } from "./stamp-select";
+import { CandidateStampsPicker, pickedSetLabel } from "./candidate-stamps-picker";
 import { ItemStampsField, type ItemStampRow } from "./item-stamps-field";
 import { issueLabel, orderedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import type { ItemStampSummary } from "@/lib/items";
@@ -49,6 +50,15 @@ import { dispositionToggleColors } from "@/app/c/[collectionSlug]/shared/disposi
 const LOCATION_SELECT_BUTTON_CLASS = defaultTreeSelectButtonClassName
   .replace("min-h-8", "min-h-9")
   .replace("py-1", "py-2");
+
+const SET_LINK: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  fontSize: "0.8125rem",
+  color: "var(--color-action-primary)",
+  cursor: "pointer",
+};
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -333,6 +343,29 @@ export function InventoryItemFormDialog({
   // A stamp picker popup stacks above this dialog; while one is up this dialog must stop dismissing
   // itself, or one Esc would close both (and the create dialogs the browser itself stacks on top).
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // The stamps the copy **might be** (#1651, ADR-0065), in place of one stamp. Seeded from the copy's
+  // own set in edit mode. `setTouched` records that the collector changed it here, which is what
+  // makes the save send it — dropping a set is sending an empty list.
+  const [candidateSet, setCandidateSet] = useState<PickedStamp[] | null>(() =>
+    item && item.candidates.length > 1
+      ? item.candidates.map((c) =>
+          pickedFor({
+            stampId: c.stampId,
+            catalogNumbers: c.catalogNumbers,
+            areaId: c.areaId,
+            name: c.stampName,
+            issueName: null,
+            issueYear: null,
+            unknownVariant: false,
+          })
+        )
+      : null
+  );
+  const [setTouched, setSetTouched] = useState(false);
+  const [pickingSet, setPickingSet] = useState(false);
+  /** A carrier of several stamps takes no set (decided with the collector, 2026-10-05). */
+  const offersSet = !(stampRows && stampRows.length > 1);
   const handlePhotoChange = useCallback((value: PhotoEditorValue) => {
     photoValueRef.current = value;
     setPhotosUploading(value.uploading);
@@ -367,11 +400,12 @@ export function InventoryItemFormDialog({
       : mode === "add" ? (addActionLabel ?? "Add copy") : "Save changes";
   // In edit mode the stamp comes from the entry list (or, while it loads, from the copy itself), so
   // the add-mode picker's own state says nothing about whether there is one.
-  const haveStamp = mode === "edit" ? true : !!stampId;
+  const haveStamp = mode === "edit" ? true : !!stampId || !!candidateSet;
   const actionDisabled = isPending || !haveStamp || photosUploading;
 
   return (
-    <DialogShell title={title} onClose={onClose} maxWidth="52rem" dismissable={!pickerOpen}>
+    <>
+    <DialogShell title={title} onClose={onClose} maxWidth="52rem" dismissable={!pickerOpen && !pickingSet}>
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
@@ -386,9 +420,34 @@ export function InventoryItemFormDialog({
                 single picker, because a copy is not born a carrier (ADR-0044). */}
             <div>
               <GroupLabel>
-                {stampRows && stampRows.length > 1 ? "Stamps on this piece" : "Stamp"}
+                {stampRows && stampRows.length > 1
+                  ? "Stamps on this piece"
+                  : candidateSet
+                    ? "Possible variants"
+                    : "Stamp"}
               </GroupLabel>
-              {mode === "edit" ? (
+              {candidateSet ? (
+                // One of several stamps (#1651): named as the set, changed or dropped here.
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.875rem" }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    One of <strong>{pickedSetLabel(candidateSet)}</strong>
+                  </span>
+                  <button type="button" disabled={isPending} onClick={() => setPickingSet(true)} style={SET_LINK}>
+                    Change…
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      setCandidateSet(null);
+                      setSetTouched(true);
+                    }}
+                    style={SET_LINK}
+                  >
+                    One stamp instead
+                  </button>
+                </div>
+              ) : mode === "edit" ? (
                 stampRows ? (
                   <ItemStampsField
                     collectionId={collectionId}
@@ -423,6 +482,28 @@ export function InventoryItemFormDialog({
                   scopeIssue={scopeIssue}
                   disabled={isPending}
                   onPickerOpenChange={setPickerOpen}
+                />
+              )}
+              {!candidateSet && offersSet && (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setPickingSet(true)}
+                  style={{ ...SET_LINK, marginTop: "0.375rem" }}
+                >
+                  Several possible variants…
+                </button>
+              )}
+              {/* The set, when there is one or it was dropped here (#1651). Add mode files the copy
+                  under its first candidate until the set re-points it, in the same save. */}
+              {candidateSet && mode === "add" && (
+                <input type="hidden" name="stampId" value={candidateSet[0].stampId} />
+              )}
+              {(candidateSet || setTouched) && (
+                <input
+                  type="hidden"
+                  name="candidateStampIds"
+                  value={JSON.stringify(candidateSet ? candidateSet.map((c) => c.stampId) : [])}
                 />
               )}
               {/* In edit mode `StampSelect` is not there to carry these, and both are read by the
@@ -730,6 +811,23 @@ export function InventoryItemFormDialog({
         />
       </form>
     </DialogShell>
+    {pickingSet && (
+      <CandidateStampsPicker
+        collectionId={collectionId}
+        areas={areas}
+        initial={
+          candidateSet ??
+          (mode === "edit" && stampRows && stampRows.length === 1 ? [stampRows[0].picked] : [])
+        }
+        onDone={(stamps) => {
+          setCandidateSet(stamps);
+          setSetTouched(true);
+          setPickingSet(false);
+        }}
+        onClose={() => setPickingSet(false)}
+      />
+    )}
+    </>
   );
 }
 

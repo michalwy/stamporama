@@ -2,6 +2,10 @@
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
 import { useState } from "react";
+import {
+  CandidateStampsPicker,
+  pickedSetLabel,
+} from "@/app/c/[collectionSlug]/inventory/candidate-stamps-picker";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
 import type { StampConditionData } from "@/lib/conditions";
@@ -491,6 +495,21 @@ export function TileIdentifyChainDialogs({
    * picker. Over the picker rather than instead of it, so closing the comparison is back at the tree
    * with the row still where it was. */
   const [comparing, setComparing] = useState<ReferenceSubject | null>(null);
+  /** The stamps the piece **might be** (#1651), picked with *Several possible variants…* in place of
+   *  one stamp, and the popup that picks them. Cleared whenever the chain closes or a single stamp is
+   *  picked, so a set never rides into the next identification. */
+  const [candidates, setCandidates] = useState<PickedStamp[] | null>(null);
+  const [pickingSet, setPickingSet] = useState(false);
+  // Reset as the chain closes — during render, on the step changing, as derived state is reset
+  // elsewhere on these screens, rather than in an effect that would draw the stale set once first.
+  const [stepSeen, setStepSeen] = useState(tileStep);
+  if (stepSeen !== tileStep) {
+    setStepSeen(tileStep);
+    if (tileStep === "none") {
+      setCandidates(null);
+      setPickingSet(false);
+    }
+  }
 
   /** The piece's stamps as they stand: the list when there is one, and otherwise the stamp picked. */
   const currentDrafts = (): PieceStampDraft[] =>
@@ -542,11 +561,33 @@ export function TileIdentifyChainDialogs({
           // With a run ticked (#596) it is all of them, small — one stamp is being picked for every
           // piece on screen, and this is where a wrong assertion is still free to be corrected.
           aside={
-            <IdentifiedPieceAside
-              collectionId={collectionId}
-              pieces={tileIntake}
-              scanning={scanning}
-            />
+            <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0, gap: "0.625rem" }}>
+              <IdentifiedPieceAside
+                collectionId={collectionId}
+                pieces={tileIntake}
+                scanning={scanning}
+              />
+              {/* The stamp cannot be told from the piece, but it can be narrowed to a few (#1651).
+                  Not for a piece carrying several stamps, which takes no set. */}
+              {!(tileStamps && tileStamps.length > 1) && (
+                <button
+                  type="button"
+                  onClick={() => setPickingSet(true)}
+                  style={{
+                    flexShrink: 0,
+                    alignSelf: "flex-start",
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    fontSize: "0.8125rem",
+                    color: "var(--color-action-primary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  Several possible variants…
+                </button>
+              )}
+            </div>
           }
           asideWidth="26rem"
           // Correcting an identification, the stamp the copy is pointing at now is marked on its own
@@ -563,6 +604,7 @@ export function TileIdentifyChainDialogs({
               : undefined
           }
           onPick={(picked: PickedStamp) => {
+            setCandidates(null);
             setTileSelection(pickedSelection(picked));
             setTileLeadPick(picked);
             // With the piece already described as carrying several (#750) — a correction of a cover,
@@ -585,6 +627,33 @@ export function TileIdentifyChainDialogs({
           // The piece beside a stamp's references and its variants' (#1005), from the row itself.
           onCompare={setComparing}
           onClose={resetTileIntake}
+        />
+      )}
+      {tileStep === "picker" && tileIntake.length > 0 && pickingSet && (
+        <CandidateStampsPicker
+          collectionId={collectionId}
+          areas={areas}
+          initial={candidates ?? []}
+          aside={
+            <IdentifiedPieceAside collectionId={collectionId} pieces={tileIntake} scanning={scanning} />
+          }
+          onDone={(stamps) => {
+            setCandidates(stamps);
+            // The step names the set; the copy is filed under its first candidate until the write
+            // re-points it.
+            setTileSelection({
+              kind: "stamp",
+              stampId: stamps[0].stampId,
+              label: `One of ${pickedSetLabel(stamps)}`,
+              chips: [],
+              name: null,
+            });
+            setTileLeadPick(null);
+            setPickingSet(false);
+            setError(undefined);
+            setTileStep("condition");
+          }}
+          onClose={() => setPickingSet(false)}
         />
       )}
       {tileStep === "picker" && tileIntake.length > 0 && comparing && (
@@ -684,6 +753,8 @@ export function TileIdentifyChainDialogs({
           onSubmit={(fd) => {
             setError(undefined);
             if (tileSelection.kind === "stamp") fd.set("stampId", tileSelection.stampId);
+            // The stamps the piece might be (#1651); a correction without one drops a set.
+            if (candidates) fd.set("candidateStampIds", JSON.stringify(candidates.map((c) => c.stampId)));
             // Every stamp on the piece (#750), the stamp picked first — the copy dialog's own list
             // shape (#746), read by the same parser on the other side.
             if (tileStamps) {
@@ -733,6 +804,7 @@ export function TileIdentifyChainDialogs({
                       correction?.stampId,
                       fd.get("stampId")?.toString(),
                       ...(tileStamps ?? []).map((draft) => draft.stampId),
+                      ...(candidates ?? []).map((c) => c.stampId),
                     ]
                   ),
                 };

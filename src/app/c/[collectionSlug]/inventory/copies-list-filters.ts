@@ -35,6 +35,7 @@ export const REMEMBERED_FILTER_KEYS = [
   "locationId",
   "noPhotos",
   "missingCatalogValue",
+  "variantToSettle",
   "includeGone",
   "includeDisposed",
   "multiStamp",

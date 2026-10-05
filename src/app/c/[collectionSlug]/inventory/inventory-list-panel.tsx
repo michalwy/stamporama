@@ -357,6 +357,7 @@ export function InventoryListPanel({
   const [includeSubLocations, setIncludeSubLocations] = useSubtreeScope("location");
   const noPhotos = readFilterParam("noPhotos") === "true";
   const missingCatalogValue = readFilterParam("missingCatalogValue") === "true";
+  const variantToSettle = readFilterParam("variantToSettle") === "true";
   // "For sale, not yet offered on platform X" (#259), remembered per collection (#275): the URL
   // param wins when present (shareable), else fall back to the stored selection on a fresh visit.
   // A stale value (platform since removed) is ignored so the filter can't silently narrow to nothing.
@@ -536,6 +537,7 @@ export function InventoryListPanel({
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
+      variantToSettle: variantToSettle || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
@@ -545,7 +547,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -569,6 +571,7 @@ export function InventoryListPanel({
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
+      variantToSettle: variantToSettle || undefined,
       notOfferedPlatformId: notOfferedPlatformId || undefined,
       excludedPlatformId: excludedPlatformId || undefined,
       deliveryStates: deliveryStates.length > 0 ? deliveryStates : undefined,
@@ -576,7 +579,7 @@ export function InventoryListPanel({
       includeDisposed: includeDisposed || undefined,
       multiStamp,
     }),
-    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
+    [filterAreaIds, search, parsedCatalog, conditionIds, certificateStatusIds, formatIds, subtypeIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1151,6 +1154,7 @@ export function InventoryListPanel({
     !!locationId ||
     noPhotos ||
     missingCatalogValue ||
+    variantToSettle ||
     !!notOfferedPlatformId ||
     !!excludedPlatformId ||
     deliveryStates.length > 0 ||
@@ -2025,6 +2029,7 @@ export function InventoryListPanel({
       {dialog.kind === "identify" && (
         <IdentifyVariantDialog
           collectionId={collectionId}
+          areas={areas}
           item={dialog.item}
           isPending={isPending}
           error={actionError}

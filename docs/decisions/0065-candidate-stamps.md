@@ -6,8 +6,8 @@ Accepted. Written by #1651. **Extends ADR-0007** §2/§6/§7 (a copy points at o
 tree; an umbrella means *some variant of it*), as revised by **ADR-0010** §3 (what a variant edge is),
 and sits beside **ADR-0044** (a copy carrying several stamps). #1651 is delivered in three pull
 requests: the model, the valuation, the counts, the wants and trades, the listing and the agent API
-first; the screens second; *possibly this copy* under each candidate on the issue-grouped lists and
-the copy-count chips third. §8 below is what the third will build on.
+first; the screens second (§10); *possibly this copy* under each candidate on the issue-grouped lists
+and the copy-count chips third. §8 below is what the third will build on.
 
 ## Context
 
@@ -133,6 +133,19 @@ set accepts a candidate or a variant of one. Re-pointing the copy writes a refin
 (ADR-0007 §6); narrowing without moving the pointer writes none. An edit re-identifying the copy as
 one stamp drops the set. A stamp still named as a candidate is not deleted (`deleteStamp` refuses,
 as it refuses one a piece still carries).
+
+### 10. The screens offer it beside the stamp
+
+*Several possible variants…* sits beside the stamp in the copy dialog (add and edit), in *Identify
+variant* and in the scan identification's picker, and opens one shared picker
+(`CandidateStampsPicker`): the identification's own `StampPickerBrowser`, kept open, a press adding a
+stamp and a second press taking it off, the list beside the tree. It is not offered on a carrier.
+*Identify variant* is offered on every copy whose variant is to settle (`ItemListItem.variantToSettle`)
+and lists a set's candidates first; settling is picking one, narrowing is the picker again. A set is
+named *X or Y* on the Copies list row, the copy's page, offers, trade labels and the page shared with a
+partner, and marked *variant to settle*; the Copies list's *Show only → Variant to settle* filter reads
+`VARIANT_TO_SETTLE`. The copy dialog sends `candidateStampIds` only when it holds a set or dropped one,
+so an edit that does not touch it leaves the set alone.
 
 ## Consequences
 

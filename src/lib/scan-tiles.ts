@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
+import { setCopyStamp } from "./item-candidates";
 import { getRunChecklist } from "./checklists";
 import { formatItemNo } from "./item-number";
 import { updateItem } from "./items";
@@ -126,6 +127,9 @@ export interface TileIdentification {
    * then used silently. */
   lotId?: string | null;
   stampId: string;
+  /** Two or more stamps the pieces **might be** (#1651, ADR-0065) — *Several possible variants…*.
+   *  `stampId` is then the first of them; each copy is given the set once it exists. */
+  candidateStampIds?: readonly string[] | null;
   conditionId: string;
   certificateStatusId?: string | null;
   locationId?: string | null;
@@ -267,6 +271,10 @@ export async function identifyTilesAsNewCopies(
   }
   if (copies.length !== tiles.length) {
     throw new ScanValidationError("The copies could not be created.");
+  }
+  // The stamps the pieces might be (#1651), through the copy's own write, once each copy exists.
+  if (input.candidateStampIds && input.candidateStampIds.length > 1) {
+    for (const copy of copies) await setCopyStamp(ownerId, copy.itemId, input.candidateStampIds);
   }
   // The faults (#1558): the step's for every copy, or the tile's own where it keeps its marked ones.
   await giveNewCopiesFaults(
@@ -644,6 +652,8 @@ export async function assignTileToCopy(
  */
 export interface TileReidentification {
   stampId: string;
+  /** The stamps the piece might be (#1651), or none — a correction re-answers the set too. */
+  candidateStampIds?: readonly string[] | null;
   conditionId: string;
   certificateStatusId?: string | null;
   locationId?: string | null;
@@ -747,6 +757,8 @@ export async function reidentifyTileCopy(
     // Through `updateItem`'s own list write (#746), so the copy's columns and the stamps on it are
     // one save and one transaction, exactly as the copy dialog saves them.
     ...(stamps ? { stamps } : {}),
+    // The set the piece might be (#1651) — or none, which drops one the copy carried.
+    candidateStampIds: input.candidateStampIds ?? [],
   });
   if (input.stampPhotoTileId === undefined) await seedStampImage(ownerId, item.id);
   if (stampPhotoFrom) await giveStampTilePhoto(ownerId, stampPhotoFrom);

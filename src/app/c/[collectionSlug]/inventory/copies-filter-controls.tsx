@@ -53,6 +53,8 @@ import { dispositionTint } from "@/app/c/[collectionSlug]/shared/disposition-col
 export const SPARE_FILTERS = [
   { key: "noPhotos", label: "No photos", group: "Show only" },
   { key: "missingCatalogValue", label: "Missing catalog value", group: "Show only" },
+  // The copies whose variant is still to settle (#1651): an umbrella copy, or one of several stamps.
+  { key: "variantToSettle", label: "Variant to settle", group: "Show only" },
   { key: "includeGone", label: "Include sold & traded", group: "Also include" },
   { key: "includeDisposed", label: "Include no longer held", group: "Also include" },
 ] as const;

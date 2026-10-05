@@ -354,6 +354,8 @@ export async function identifyTilesAction(
       // with one lot, which is the stockbook case and must keep asking nothing.
       lotId: str("lotId"),
       stampId,
+      // The stamps the piece might be (#1651), when the step was given a set.
+      candidateStampIds: parseCandidateStampIds(formData.get("candidateStampIds")),
       conditionId,
       certificateStatusId: str("certificateStatusId"),
       locationId: str("locationId"),
@@ -385,6 +387,17 @@ export async function identifyTilesAction(
             ? "Failed to identify the tile. Please try again."
             : "Failed to identify the tiles. Please try again.",
     };
+  }
+}
+
+/** The `candidateStampIds` field (#1651): a JSON list of stamp ids, or null when absent or unreadable. */
+function parseCandidateStampIds(raw: FormDataEntryValue | null): string[] | null {
+  if (typeof raw !== "string" || raw === "") return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((id) => typeof id === "string") ? parsed : null;
+  } catch {
+    return null;
   }
 }
 
@@ -466,6 +479,8 @@ export async function reidentifyTileAction(
   try {
     await reidentifyTileCopy(session.user.id, tileId, {
       stampId,
+      // The stamps the piece might be (#1651), when the step was given a set.
+      candidateStampIds: parseCandidateStampIds(formData.get("candidateStampIds")),
       conditionId,
       certificateStatusId: str("certificateStatusId"),
       locationId: str("locationId"),

@@ -1274,6 +1274,30 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.deepEqual(await entriesOf(repeated.itemId), await entriesOf(outcomes[0].itemId));
   });
 
+  it("identifies a tile as one of several stamps, and a correction drops the set (#1651)", async () => {
+    const { tileIds } = await orderWithTiles();
+    const [outcome] = await identifyTilesAsNewCopies(userId, [tileIds[0]], {
+      stampId,
+      conditionId,
+      candidateStampIds: [stampId, describedStampId],
+    });
+    const copy = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: { candidateTrees: true, candidates: { select: { stampId: true } } },
+    });
+    assert.deepEqual(copy.candidates.map((c) => c.stampId).sort(), [stampId, describedStampId].sort());
+    assert.ok(copy.candidateTrees >= 1);
+
+    await reidentifyTileCopy(userId, tileIds[0], { stampId, conditionId });
+    const corrected = await prisma.item.findUniqueOrThrow({
+      where: { id: outcome.itemId },
+      select: { stampId: true, candidateTrees: true, _count: { select: { candidates: true } } },
+    });
+    assert.equal(corrected.stampId, stampId);
+    assert.equal(corrected.candidateTrees, 0);
+    assert.equal(corrected._count.candidates, 0, "a correction re-answers the set too");
+  });
+
   it("refuses a list that does not lead with the stamp identified, before anything exists (#750)", async () => {
     const { purchaseId, tileIds } = await orderWithTiles();
     await assert.rejects(
