@@ -192,3 +192,22 @@ export function shouldRememberAreaYear(
 ): boolean {
   return statedAreaYear(selection, urlAreaId, urlYear);
 }
+
+/**
+ * **Whose memory** an area/year selection is (#1659). The main lists share one — that is #143's
+ * point, a country carried from Copies to Issues — and the stamp picker has another, shared by every
+ * place it opens (identification, lots, trades), as its expanded tree is (#1616). Sharing one memory
+ * between the two made each task undo the other: narrowing the picker for a card re-narrowed the
+ * Issues list the next time it opened, and the other way round.
+ *
+ * The lists keep the key they always had, so no list changes on the day this lands, and the picker's
+ * key is new, so the picker starts from no facet.
+ */
+export type AreaYearMemory = "lists" | "stamp-picker";
+
+/** The localStorage key holding one memory's selection for one collection. */
+export function areaYearMemoryKey(collectionId: string, memory: AreaYearMemory): string {
+  return memory === "lists"
+    ? `stamporama:list-filters:${collectionId}`
+    : `stamporama:stamp-picker-filters:${collectionId}`;
+}

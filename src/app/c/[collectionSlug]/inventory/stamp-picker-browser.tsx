@@ -230,12 +230,15 @@ export function StampPickerBrowser({
   onCompare?: (stamp: { stampId: string; issueId: string }) => void;
   onClose: () => void;
 }) {
-  // Area + year come from the shared per-collection store (#143), so the picker
-  // opens on the same filter as the lists and changes here carry back to them.
+  // Area + year come from the picker's own per-collection memory (#1659) — one for every place the
+  // picker opens, as its tree is (#1616), and never the lists' (#143): sharing theirs made narrowing
+  // the picker for a card re-narrow the Issues list, and the other way round.
   // Year values: "none" = no-year bucket, a numeric string = a year, null = all.
   // The store rather than the URL, as everywhere else in a dialog: a popup has no address.
-  const { storedAreaId, storedYear, writeStore } =
-    useCollectionFilterStore(collectionId);
+  const { storedAreaId, storedYear, writeStore } = useCollectionFilterStore(
+    collectionId,
+    "stamp-picker"
+  );
   const areaId = storedAreaId;
   const year = storedYear;
   const setAreaId = useCallback(
