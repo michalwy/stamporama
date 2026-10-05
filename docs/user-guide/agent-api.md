@@ -397,7 +397,8 @@ one you would see there.
 
 - **Reading needs only a read only token.** Listing, costing and recognising lots changes nothing.
 - **Whatever it ever writes to your auctions waits for you.** Every lot or sale written through the
-  agent API is marked **To review · API**, saying what was added or changed and when, and only you
+  agent API is marked **To review · API**, saying what was added or changed and when — except a
+  refreshed current bid, which is only the assistant looking — and only you
   can clear that mark — by pressing **Confirm** on the lot, on the lots you tick, or on the whole
   sale. Editing the lot yourself does not clear it. See
   [What the assistant wrote](auctions.md#what-the-assistant-wrote--to-review--api).
@@ -436,7 +437,8 @@ A listing you already track is never added twice: it is refused, and the assista
 has it. **It never bids**: it does not touch *my bid* — the bid you place by hand on the platform —
 and it does not reopen a lot or settle one into a purchase — a won lot waits for you to settle the
 parcel, as before. **Every lot and sale it writes is marked
-*To review · API* until you confirm it.** A seller you have never bought from is not created by
+*To review · API* until you confirm it**, apart from a refreshed current bid, which leaves the mark
+as it was. A seller you have never bought from is not created by
 adding a lot; the assistant adds them as a contact first, as it does for a purchase.
 
 **It can record what stamps fetched at other people's auctions**, with a writing token — the

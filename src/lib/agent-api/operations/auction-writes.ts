@@ -61,7 +61,9 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 //
 // Each writer sets the *to review* marker (#1626) on what it touched, in its own transaction, so a
 // write cannot land unmarked; only the collector's *Confirm* clears it, and nothing here can reach
-// that. The answers carry the marker as `toReview`.
+// that. The answers carry the marker as `toReview`. The one thing recorded without marking is a
+// lot's current bid (#1652): an observation of the auction, not a decision, refreshed as often as
+// the assistant looks.
 //
 // ## The sale follows the capture's rule
 //
@@ -460,7 +462,7 @@ const UPDATE_LOT_PARAMETERS: readonly ParameterSpec[] = [
     type: "string",
     required: false,
     description:
-      "What the auction stands at now — the highest bid on the listing, whoever placed it — in the sale's currency, as \"45.00\". An observation, dated by `checked_at`; send it even when it has not moved, which records that it was checked. It is never the collector's own bid.",
+      "What the auction stands at now — the highest bid on the listing, whoever placed it — in the sale's currency, as \"45.00\". An observation, dated by `checked_at`; send it even when it has not moved, which records that it was checked. It is never the collector's own bid, and it does not mark the lot for review.",
   },
   {
     name: "checked_at",
@@ -505,7 +507,8 @@ const UPDATE_LOT_PARAMETERS: readonly ParameterSpec[] = [
 
 export interface AgentLotChange {
   readonly lot: AgentWrittenLot;
-  /** What the call changed, as the review marker names it; empty when everything sent was already so. */
+  /** What the call changed, as the review marker names it — though a current bid never marks (#1652);
+   * empty when everything sent was already so. */
   readonly changed: readonly string[];
 }
 
@@ -585,13 +588,13 @@ export const updateAuctionLotOperation: Operation = {
   method: "PATCH",
   path: "/auctions/lots/{lotId}",
   description:
-    "Correct a tracked lot — its title, number, address, closing time, starting price, tags or its not-stamps mark — and record what the auction currently stands at, with when it was checked. Only what is sent changes. Its contents and its ceiling have their own operations. It never sets the collector's own bid: they bid by hand on the platform. A settled lot takes only its tags. Every change waits for the collector to confirm it in the app.",
+    "Correct a tracked lot — its title, number, address, closing time, starting price, tags or its not-stamps mark — and record what the auction currently stands at, with when it was checked. Only what is sent changes. Its contents and its ceiling have their own operations. It never sets the collector's own bid: they bid by hand on the platform. A settled lot takes only its tags. Every change waits for the collector to confirm it in the app — except the current bid: recording it, with when it was checked, is an observation and leaves the lot's review marker as it was, so a routine refresh does not put a lot up for review.",
   writes: true,
   parameters: UPDATE_LOT_PARAMETERS,
   result: {
     kind: "object",
     description:
-      "`lot` as it now stands, in `add_auction_lot`'s shape, and `changed` — what this call changed, in the review marker's words (`title`, `lotNo`, `url`, `endsAt`, `startingPrice`, `currentBid`, `tags`, `notStamps`); empty when every value sent was already so, and then nothing was marked. A new address or number another lot already tracks is refused with that lot.",
+      "`lot` as it now stands, in `add_auction_lot`'s shape, and `changed` — what this call changed, in the review marker's words (`title`, `lotNo`, `url`, `endsAt`, `startingPrice`, `currentBid`, `tags`, `notStamps`); empty when every value sent was already so, and then nothing was marked. `currentBid` is listed whenever one was sent but never marks: the marker names the other fields only, and a call that changed nothing else leaves it as it was. A new address or number another lot already tracks is refused with that lot.",
   },
   handler: async (context, params) => updateAuctionLot(context, params),
 };

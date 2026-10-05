@@ -391,7 +391,7 @@ describe("auction writes through the agent API (#1627)", () => {
   });
 
   describe("update_auction_lot", () => {
-    it("records the current bid with when it was checked, and adds to the marker", async () => {
+    it("records the current bid with when it was checked, and marks the other changes only", async () => {
       const checkedAt = new Date(Date.now() - 60 * 60 * 1000);
       const change = await ok<AgentLotChange>(token, "PATCH", `/auctions/lots/${allegroLot.lot.lotId}`, {
         current_bid: "45",
@@ -405,8 +405,26 @@ describe("auction writes through the agent API (#1627)", () => {
       assert.deepEqual(change.lot.tags, ["agent-found", "danzig"]);
       const row = await marker(allegroLot.lot.lotId);
       assert.equal(row.apiReviewCreated, true, "created stays until confirmed");
-      assert.deepEqual(row.apiReviewFields, ["title", "currentBid", "tags"]);
+      assert.deepEqual(row.apiReviewFields, ["title", "tags"], "a current bid never marks (#1652)");
       assert.equal(row.myBid, null);
+    });
+
+    it("leaves a standing marker as it was when only the current bid is refreshed", async () => {
+      const review = async () => {
+        const { apiReviewAt, apiReviewCreated, apiReviewFields } = await marker(allegroLot.lot.lotId);
+        return { apiReviewAt, apiReviewCreated, apiReviewFields };
+      };
+      const before = await review();
+      assert.ok(before.apiReviewAt);
+      const checkedAt = new Date(Date.now() - 10 * 60 * 1000);
+      const change = await ok<AgentLotChange>(token, "PATCH", `/auctions/lots/${allegroLot.lot.lotId}`, {
+        current_bid: "52.50",
+        checked_at: checkedAt.toISOString(),
+      });
+      assert.deepEqual(change.changed, ["currentBid"]);
+      assert.equal(change.lot.currentBid, "52.50");
+      assert.equal(change.lot.checkedAt, checkedAt.toISOString());
+      assert.deepEqual(await review(), before, "neither set again nor cleared");
     });
 
     it("writes nothing and marks nothing when everything sent is already so", async () => {
@@ -427,14 +445,26 @@ describe("auction writes through the agent API (#1627)", () => {
       assert.deepEqual(error.accepted, [allegroLot.lot.lotId]);
     });
 
-    it("starts a fresh marker on a lot the collector has confirmed", async () => {
+    it("leaves a confirmed lot unmarked when only the current bid is refreshed", async () => {
       await confirmAuctionLotReviews(userId, collectionId, [allegroLot.lot.lotId]);
       assert.equal((await marker(allegroLot.lot.lotId)).apiReviewAt, null);
-      await ok<AgentLotChange>(token, "PATCH", `/auctions/lots/${allegroLot.lot.lotId}`, { current_bid: "45.00" });
+      const change = await ok<AgentLotChange>(token, "PATCH", `/auctions/lots/${allegroLot.lot.lotId}`, {
+        current_bid: "45.00",
+      });
+      assert.deepEqual(change.changed, ["currentBid"]);
+      assert.equal(change.lot.currentBid, "45.00");
+      assert.equal((await marker(allegroLot.lot.lotId)).apiReviewAt, null);
+    });
+
+    it("starts a fresh marker on a confirmed lot, naming only what is not the current bid", async () => {
+      await ok<AgentLotChange>(token, "PATCH", `/auctions/lots/${allegroLot.lot.lotId}`, {
+        current_bid: "47.00",
+        title: "Fi 1-3, used, fine",
+      });
       const row = await marker(allegroLot.lot.lotId);
       assert.ok(row.apiReviewAt);
       assert.equal(row.apiReviewCreated, false);
-      assert.deepEqual(row.apiReviewFields, ["currentBid"]);
+      assert.deepEqual(row.apiReviewFields, ["title"]);
     });
   });
 
