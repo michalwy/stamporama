@@ -1726,7 +1726,10 @@ Such a copy:
   the other one. You can still put the copy itself into a trade;
 - when its possibilities share a stamp (*123aI or 123bI* share *123*), counts as an unknown-variant
   copy of that stamp. When they do not (*Mi 85 or Mi 101*), it counts towards no set's completeness
-  and no copy count until you settle it. It is still counted once in your collection's value.
+  and no copy count until you settle it, and is shown under **each** possibility as *possibly* — in
+  a stamp's and an issue's **Copies** card under *Possibly this stamp*, on the Copies list grouped by
+  issue as *+1 possibly* beside the issue's own count, and as a muted *(?1)* on the stamp's copy
+  count. It is still counted once in your collection's value.
 
 A copy carrying several stamps — a cover with three different stamps on it — cannot be given
 possibilities. Note the doubt in the copy's notes instead.

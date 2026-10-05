@@ -57,6 +57,7 @@ import {
 } from "./item-stamps";
 import { clearCandidatesTx, loadCandidateTreeTx, setCopyStampTx } from "./item-candidates";
 import {
+  ACROSS_TREES,
   NO_CANDIDATES,
   NOT_ACROSS_TREES,
   VARIANT_SETTLED,
@@ -1108,6 +1109,15 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
   /** Restrict to copies of the stamps a checklist lists — exactly, as {@link issueId} is exact —
    *  for the copies popup a checklist's branch on the Issues list opens (#1520). */
   checklistId?: string;
+  /**
+   * The copies that **might be** this stamp (#1651, ADR-0065 §8): one of several candidates across
+   * variant trees, which {@link stampId} never lists — a copy that is *Mi 85 or Mi 101* is certainly
+   * neither. Read beside `stampId` as a second, separately counted list.
+   */
+  possibleStampId?: string;
+  /** {@link possibleStampId} for an issue: a copy with a candidate in it, across trees.
+   *  {@link NO_ISSUE} is a candidate in no issue. */
+  possibleIssueId?: string;
   /** Restrict to copies stored in this location or any of its descendants (#56). The literal
    *  {@link NO_LOCATION} matches the copies filed **nowhere** — null *is* a value here, exactly as
    *  `"single"` is for format, and an absent filter cannot express it. Needed to address the
@@ -1428,6 +1438,29 @@ function buildItemWhere(
     and.push(filters.variantToSettle ? VARIANT_TO_SETTLE : VARIANT_SETTLED);
   }
   if (filters.excludeCandidateSets) and.push(NO_CANDIDATES);
+  // **A copy whose candidates span variant trees is certainly none of them** (#1651, ADR-0065 §8),
+  // so the filters naming a stamp, an issue or a checklist leave it out — its pointer is merely the
+  // first candidate — and the `possible…` filters find it instead, as *possibly* this one.
+  if (filters.stampId || (filters.stampIds && filters.stampIds.length > 0) || filters.issueId || filters.checklistId) {
+    and.push(NOT_ACROSS_TREES);
+  }
+  if (filters.possibleStampId) {
+    and.push(ACROSS_TREES, { candidates: { some: { stampId: filters.possibleStampId } } });
+  }
+  if (filters.possibleIssueId) {
+    and.push(ACROSS_TREES, {
+      candidates: {
+        some: {
+          stamp: {
+            issueMemberships:
+              filters.possibleIssueId === NO_ISSUE
+                ? { none: {} }
+                : { some: { issueId: filters.possibleIssueId } },
+          },
+        },
+      },
+    });
+  }
   if (filters.attachableToLotId) {
     // Two branches rather than one `lotId: { not: … }`: a copy on no lot must pass, and an
     // inequality is not a reliable way to say that about a nullable column.
@@ -2764,6 +2797,10 @@ export interface IssueGroupRow {
   issueYear: number | null;
   /** How many copies of the *filtered* set this group holds. */
   count: number;
+  /** How many more **might** belong here (#1651, ADR-0065 §8): copies whose candidates span variant
+   *  trees, one of them in this issue. Counted apart, and in every candidate's issue — a copy that
+   *  is *Mi 85 or Mi 101* is possibly in both and certainly in neither, so it is in no `count`. */
+  possibleCount: number;
 }
 
 export interface PaginatedIssueGroupsResult {
@@ -2796,6 +2833,9 @@ export interface PaginatedIssueGroupsResult {
  * for the same reason. Only the two ids come back per row, so the cost is one narrow scan of the
  * filtered set rather than a page of enriched copies.
  *
+ * A copy whose candidates span variant trees (#1651, ADR-0065 §8) is in no group's `count` and in each
+ * of its candidates' issues' `possibleCount`, so the counts partition the list **less** those copies.
+ *
  * The groups are then read **whole** and paged in memory, because the reading order is the Issues
  * list's own (`compareIssueGroups`) and the counts are the whole point. That is bounded by the
  * number of issues a collection has entered, not by its copies. The order is total, so paging over
@@ -2821,8 +2861,11 @@ export async function listItemIssueGroups(
   // claim about one of its stamps, and a cover franked from three series would otherwise sit under
   // whichever was put first. The carriers are one bucket after the issue-less one instead, so the
   // groups still partition the list and their counts still add up to it.
+  // A copy whose candidates span variant trees (#1651) is in no group's own count either: it is
+  // counted below as *possibly* in each of its candidates' issues, so the groups' own counts and the
+  // carriers' bucket still partition the rest of the list.
   const rows = await prisma.item.findMany({
-    where: { AND: [where, NOT_MULTI_STAMP] },
+    where: { AND: [where, NOT_MULTI_STAMP, NOT_ACROSS_TREES] },
     select: {
       stamp: {
         select: {
@@ -2859,7 +2902,56 @@ export async function listItemIssueGroups(
       issueYear: issue?.year ?? null,
       catalogSortKey: issue?.primaryCatalogSortKey ?? null,
       count: 1,
+      possibleCount: 0,
     });
+  }
+
+  // …and the copies that might be in an issue (#1651): each counted once per issue its candidates
+  // are in, however many of its candidates share it. An issue only such a copy reaches still gets a
+  // group, holding nothing certain.
+  const possible = await prisma.item.findMany({
+    where: { AND: [where, NOT_MULTI_STAMP, ACROSS_TREES] },
+    select: {
+      candidates: {
+        select: {
+          stamp: {
+            select: {
+              issueMemberships: {
+                ...FIRST_ISSUE_MEMBERSHIP,
+                select: {
+                  issue: { select: { id: true, name: true, year: true, primaryCatalogSortKey: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  for (const row of possible) {
+    const issues = new Map(
+      row.candidates.map((c) => {
+        const issue = c.stamp.issueMemberships[0]?.issue ?? null;
+        return [issue?.id ?? NO_ISSUE, issue] as const;
+      })
+    );
+    for (const [key, issue] of issues) {
+      const existing = groups.get(key);
+      if (existing) {
+        existing.possibleCount += 1;
+        continue;
+      }
+      groups.set(key, {
+        key,
+        issueId: issue?.id ?? null,
+        label: issueGroupLabel(issue?.id ?? null, issue?.name ?? null, issue?.year ?? null),
+        issueName: issue?.name ?? null,
+        issueYear: issue?.year ?? null,
+        catalogSortKey: issue?.primaryCatalogSortKey ?? null,
+        count: 0,
+        possibleCount: 1,
+      });
+    }
   }
 
   const ordered = [...groups.values()].sort(compareIssueGroups);
@@ -2869,13 +2961,14 @@ export async function listItemIssueGroups(
   // `catalogSortKey` is an ordering input, not something a row states — it is a denormalized
   // column, and a screen has the catalog numbers themselves.
   return {
-    groups: page.map(({ key, issueId, label, issueName, issueYear, count }) => ({
+    groups: page.map(({ key, issueId, label, issueName, issueYear, count, possibleCount }) => ({
       key,
       issueId,
       label,
       issueName,
       issueYear,
       count,
+      possibleCount,
     })),
     nextCursor,
     multiStampGroup,

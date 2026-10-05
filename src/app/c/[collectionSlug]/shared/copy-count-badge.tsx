@@ -168,9 +168,16 @@ export function dispositionParts(copies: StampCopyCounts): string[] {
 }
 
 /** What the chip itself says, and what a screen reader hears before opening anything. */
-function summarize(total: number, variantTotal: number): string {
+function summarize(total: number, variantTotal: number, possible = 0): string {
   const held = `${total} ${total === 1 ? "copy" : "copies"} held`;
-  return variantTotal ? `${held}, ${variantTotal} more under its variants` : held;
+  return [
+    held,
+    variantTotal ? `${variantTotal} more under its variants` : null,
+    // One of several stamps across variant trees (#1651): possibly this one, certainly none.
+    possible ? `${possible} more might be this stamp` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export function CopyCountBadge({
@@ -189,16 +196,20 @@ export function CopyCountBadge({
    * surfaces. Omitted where the site has no such view (pickers, dialogs, detail pages); the chip
    * is then not a control at all and only previews on hover. */
   onOpenCopies,
+  /** Copies that might be this stamp (#1651) — one of several stamps across variant trees, counted
+   *  apart and drawn as a muted `(?1)`. */
+  possibleCopies = 0,
 }: {
   collectionId: string;
   copies: StampCopyCounts | null | undefined;
   variantCopies?: StampCopyCounts | null;
   size?: "small" | "medium";
   onOpenCopies?: () => void;
+  possibleCopies?: number;
 }) {
   const counts = copies ?? NO_COPY_COUNTS;
   const variants = variantCopies ?? NO_COPY_COUNTS;
-  if (counts.total === 0 && variants.total === 0) return null;
+  if (counts.total === 0 && variants.total === 0 && possibleCopies === 0) return null;
   // A component of its own below the zero rule, so the dictionary reads it holds are made only by
   // rows that have a panel to draw — and made when the row renders, not on the first hover, which
   // would open a panel of blank chips.
@@ -207,6 +218,7 @@ export function CopyCountBadge({
       collectionId={collectionId}
       counts={counts}
       variants={variants}
+      possible={possibleCopies}
       size={size}
       onOpenCopies={onOpenCopies}
     />
@@ -217,12 +229,14 @@ function HeldCopiesChip({
   collectionId,
   counts,
   variants,
+  possible,
   size,
   onOpenCopies,
 }: {
   collectionId: string;
   counts: StampCopyCounts;
   variants: StampCopyCounts;
+  possible: number;
   size: "small" | "medium";
   onOpenCopies?: () => void;
 }) {
@@ -251,7 +265,7 @@ function HeldCopiesChip({
   );
 
   const label = [
-    summarize(total, variants.total),
+    summarize(total, variants.total, possible),
     // What the dots convey, in words: which markers are present, not how many carry them.
     dots.length ? dots.map((key) => MARKERS[key].label.toLowerCase()).join(", ") : null,
     onOpenCopies ? "view the copies" : null,
@@ -265,7 +279,8 @@ function HeldCopiesChip({
           same line, and a lone multiplier there reads as a quantity *of the price*. The noun is
           plural whenever a variant figure is present, since it then covers both numbers. */}
       {total}
-      {variants.total > 0 && <span style={VARIANT_PART}>&nbsp;(+{variants.total})</span>}&nbsp;
+      {variants.total > 0 && <span style={VARIANT_PART}>&nbsp;(+{variants.total})</span>}
+      {possible > 0 && <span style={VARIANT_PART}>&nbsp;(?{possible})</span>}&nbsp;
       {total === 1 && variants.total === 0 ? "copy" : "copies"}
       {/* Decorative for a screen reader: the label above says the same in words. */}
       {dots.map((key) => (
@@ -311,6 +326,7 @@ function HeldCopiesChip({
           collectionId={collectionId}
           total={total}
           variants={variants}
+          possible={possible}
           groups={groups}
           names={names}
         />
@@ -358,18 +374,20 @@ function CopiesPanel({
   collectionId,
   total,
   variants,
+  possible,
   groups,
   names,
 }: {
   collectionId: string;
   total: number;
+  possible: number;
   variants: StampCopyCounts;
   groups: CopyBreakdownGroup[];
   names: LineNames;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-      <span style={PANEL_HEADING}>{summarize(total, variants.total)}</span>
+      <span style={PANEL_HEADING}>{summarize(total, variants.total, possible)}</span>
 
       {/* Ruled off from the total above: the figures below describe those copies, they do not
           divide them. One grid for every group, so the figures line up down the whole panel. */}

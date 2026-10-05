@@ -6,8 +6,8 @@ Accepted. Written by #1651. **Extends ADR-0007** §2/§6/§7 (a copy points at o
 tree; an umbrella means *some variant of it*), as revised by **ADR-0010** §3 (what a variant edge is),
 and sits beside **ADR-0044** (a copy carrying several stamps). #1651 is delivered in three pull
 requests: the model, the valuation, the counts, the wants and trades, the listing and the agent API
-first; the screens second (§10); *possibly this copy* under each candidate on the issue-grouped lists
-and the copy-count chips third. §8 below is what the third will build on.
+first; the screens second (§10); *possibly this copy* under each candidate on the issue-grouped lists,
+the Copies cards and the copy-count chips third (§8).
 
 ## Context
 
@@ -121,9 +121,22 @@ A set may still be **promised** on a trade, which names a copy rather than a sta
 ### 8. Across trees: possibly this copy
 
 A copy whose candidates span several trees counts towards no completeness and no copy count until it
-is settled. Showing it under each candidate as *possibly this copy*, counted apart, is the third pull
-request of #1651; `item_candidate_stampId_idx` is the read it will need. Collection totals count it
-once, at its cheapest candidate, which §5 already does.
+is settled, and is listed as no stamp's copy: the filters naming a stamp, an issue or a checklist
+leave it out (its pointer is merely the first candidate). It is shown under **each** candidate as
+*possibly this copy*, counted apart:
+
+- the `possibleStampId` / `possibleIssueId` filters find it — a candidate of that stamp, or in that
+  issue — and a stamp's or an issue's Copies card lists it under *Possibly this stamp* / *Possibly of
+  this issue*;
+- the Copies list grouped by issue counts it in each candidate's issue as `possibleCount`, beside —
+  never in — the group's own `count`, and lists it under *Possibly of this issue* when the group is
+  open; an issue only such a copy reaches still gets a group. The groups' own counts and the carriers'
+  bucket therefore partition the list **less** these copies, which are in no group's count;
+- the copy-count chip gains a muted `(?N)` from `countPossibleCopiesByStamp`, and `get_stamp` reports
+  `possibleCopies`.
+
+Collection totals count it once, at its cheapest candidate (§5). A copy whose candidates share a
+variant tree is never *possibly* anything: it is an umbrella copy of the stamp they share.
 
 ### 9. Settling and narrowing
 
@@ -156,5 +169,5 @@ so an edit that does not touch it leaves the set alone.
 - Area slicing of the value snapshots follows the pointer: across trees, the first candidate's area.
   The German Reich case keeps both candidates in one area; a set spanning areas is filed under the
   first.
-- Duplicate groups and issue groups still key on the pointer; the third pull request settles where a
-  set across trees is listed.
+- Duplicate groups still key on the pointer: a set across trees is grouped with the copies of its
+  first candidate's stamp, where *Identify variant* is one press away.

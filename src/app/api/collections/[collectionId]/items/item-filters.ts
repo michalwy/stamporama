@@ -81,6 +81,9 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
     // An umbrella copy or one with a candidate set (#1651).
     variantToSettle: boolParam(sp.get("variantToSettle")),
+    // The copies that might be this stamp, or have a candidate in this issue (#1651).
+    possibleStampId: sp.get("possibleStampId") || undefined,
+    possibleIssueId: sp.get("possibleIssueId") || undefined,
     notOfferedPlatformId: sp.get("notOfferedPlatformId") || undefined,
     // The review read (#506): the copies set aside on this platform.
     excludedPlatformId: sp.get("excludedPlatformId") || undefined,

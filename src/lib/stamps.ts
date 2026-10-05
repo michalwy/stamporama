@@ -467,6 +467,9 @@ export interface StampListItem {
    *  beside {@link copies}, never added to it. Broken down by disposition the same way, so the
    *  badge can say what those copies are held for and not only how many there are. */
   variantCopies: StampCopyCounts;
+  /** Copies that might be this stamp — one of several candidates across variant trees (#1651) —
+   *  counted apart from both figures above. */
+  possibleCopies: number;
   /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
    *  is still being looked for* marker. */
   wants: StampWantSummary | null;
@@ -674,6 +677,7 @@ function toStampListItem(
       .sort(sortPhotos),
     copies: copyCounts.direct.get(stamp.id) ?? NO_COPIES,
     variantCopies: copyCounts.variant.get(stamp.id) ?? NO_COPIES,
+    possibleCopies: copyCounts.possible.get(stamp.id) ?? 0,
     wants: wantsByStamp.get(stamp.id) ?? null,
     tags: orderTagSummaries(stamp.tags),
     attributes: stampAttributeLabels(stamp),
