@@ -213,7 +213,7 @@ export const getStampOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "One stamp. `copies` is how many are held of this stamp exactly and `variantCopies` how many under its variants — two answers to two questions, never added together. `catalogPrice` is the headline figure for the collection's leading condition; on a stamp whose variant is unknown it rolls up from the cheapest priced variant, so treat it as an estimate. `catalogNumbers` lead with the area's primary catalogue. Each of `issues` names the `checklists` of that issue the stamp is on — standard ones only unless `include_specialised` is sent, and then `specialisedChecklists` says which of them are specialised. Every field the stamp does not state is absent rather than null.",
+      "One stamp. `copies` is how many are held of this stamp exactly and `variantCopies` how many under its variants — two answers to two questions, never added together; `possibleCopies` is how many more **might** be this stamp, recorded as one of several stamps, and is in neither. `catalogPrice` is the headline figure for the collection's leading condition; on a stamp whose variant is unknown it rolls up from the cheapest priced variant, so treat it as an estimate. `catalogNumbers` lead with the area's primary catalogue. Each of `issues` names the `checklists` of that issue the stamp is on — standard ones only unless `include_specialised` is sent, and then `specialisedChecklists` says which of them are specialised. Every field the stamp does not state is absent rather than null.",
   },
   handler: async (context, params) => readStamp(context, params),
 };

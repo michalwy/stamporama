@@ -133,6 +133,7 @@ export function StampDetailPanel({
             collectionId={collectionId}
             copies={stamp.copies}
             variantCopies={stamp.variantCopies}
+            possibleCopies={stamp.possibleCopies}
             size="medium"
           />
           {/* The collector's own labels (#152), on the line that says which stamp this is — the
@@ -178,7 +179,7 @@ export function StampDetailPanel({
                   {stamp.subtype ? stamp.subtype.name : stamp.parentId ? null : "Base stamp"}
                 </Field>
                 <Field label="Copies held">
-                  {stamp.copies.total > 0 || stamp.variantCopies.total > 0
+                  {stamp.copies.total > 0 || stamp.variantCopies.total > 0 || stamp.possibleCopies > 0
                     ? [
                         stamp.copies.total > 0 ? `${stamp.copies.total} held` : null,
                         // Markers, not slices: they overlap, so they are listed after the total
@@ -187,6 +188,8 @@ export function StampDetailPanel({
                         // The variants' copies (#528) are held of something else and are stated as
                         // their own figure, never folded into the number before them.
                         stamp.variantCopies.total > 0 ? `${stamp.variantCopies.total} in variants` : null,
+                        // …and the copies that might be this stamp (#1651), apart from both.
+                        stamp.possibleCopies > 0 ? `${stamp.possibleCopies} possibly` : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")

@@ -122,6 +122,10 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
    *  A grouped list's multi-stamp bucket addresses its own members with `only`, and every other
    *  group of a grouping that sets carriers apart with `exclude`. */
   multiStamp?: MultiStampFilter;
+  /** The copies that might be this stamp — candidates across variant trees (#1651). */
+  possibleStampId?: string;
+  /** The copies with a candidate in this issue, across variant trees (#1651). */
+  possibleIssueId?: string;
   sortBy?: ItemSortBy;
   sortDir?: "asc" | "desc";
 }
@@ -218,6 +222,8 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.stampId) params.set("stampId", filters.stampId);
   if (filters.issueId) params.set("issueId", filters.issueId);
   if (filters.checklistId) params.set("checklistId", filters.checklistId);
+  if (filters.possibleStampId) params.set("possibleStampId", filters.possibleStampId);
+  if (filters.possibleIssueId) params.set("possibleIssueId", filters.possibleIssueId);
   if (filters.locationId) params.set("locationId", filters.locationId);
   if (filters.locationExact) params.set("locationExact", "true");
   if (filters.locationRef) params.set("locationRef", filters.locationRef);
@@ -465,7 +471,7 @@ export function useHoldingsValuation(
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
-      if (filters.variantToSettle) params.set("variantToSettle", "true");
+  if (filters.variantToSettle) params.set("variantToSettle", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
       if (filters.excludedPlatformId)
@@ -518,7 +524,7 @@ export function useItemYears(
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
-      if (filters.variantToSettle) params.set("variantToSettle", "true");
+  if (filters.variantToSettle) params.set("variantToSettle", "true");
       if (filters.notOfferedPlatformId)
         params.set("notOfferedPlatformId", filters.notOfferedPlatformId);
       if (filters.excludedPlatformId)

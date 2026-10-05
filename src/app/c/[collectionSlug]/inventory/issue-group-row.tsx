@@ -20,6 +20,7 @@ import {
   type CopySelection,
 } from "./inventory-copy-list";
 import { CopyGroupShell, useGroupMembers } from "./copy-group-shell";
+import { PossibleCopiesList } from "./possible-copies-list";
 import type { InventoryItemFilters } from "./use-inventory-query";
 import { markedChecklistName } from "@/lib/checklist-kind";
 
@@ -239,6 +240,14 @@ export function IssueGroupRow({
           >
             <span style={GROUP_COUNT_CHIP}>×{group.count}</span>
           </Tooltip>
+          {group.possibleCount > 0 && (
+            // Copies that might be of this issue (#1651) — counted apart, never in the figure above.
+            <Tooltip
+              content={`${group.possibleCount} more cop${group.possibleCount === 1 ? "y" : "ies"} might be of this issue — one of several possible stamps, which one still to be settled`}
+            >
+              <span style={{ ...MUTED, whiteSpace: "nowrap" }}>+{group.possibleCount} possibly</span>
+            </Tooltip>
+          )}
           <span
             style={{
               fontSize: "0.9375rem",
@@ -292,6 +301,18 @@ export function IssueGroupRow({
           onLoadMore={fetchNextPage}
           {...rowActions}
           selection={selection}
+        />
+      )}
+      {group.possibleCount > 0 && (
+        <PossibleCopiesList
+          collectionId={collectionId}
+          filters={{ ...baseFilters, possibleIssueId: group.issueId ?? NO_ISSUE, multiStamp: "exclude" }}
+          enabled={open}
+          heading="Possibly of this issue"
+          areas={areas}
+          locations={locations}
+          baseCurrency={baseCurrency}
+          rowActions={rowActions}
         />
       )}
     </CopyGroupShell>

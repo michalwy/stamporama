@@ -356,6 +356,9 @@ export interface AgentStampDetail {
   readonly heightMm?: number;
   readonly copies: AgentCopyCounts;
   readonly variantCopies: AgentCopyCounts;
+  /** Copies that **might be** this stamp (#1651): identified as one of several stamps across
+   *  variant trees, so in neither figure above. Absent when there are none. */
+  readonly possibleCopies?: number;
   readonly openWants?: number;
   readonly photoUrls: string[];
   readonly path: string;
@@ -384,6 +387,8 @@ export interface StampDetailRow {
   readonly photos: readonly { readonly id: string }[];
   readonly copies: AgentCopyCounts;
   readonly variantCopies: AgentCopyCounts;
+  /** Copies that might be this stamp (#1651); absent on rows that predate it. */
+  readonly possibleCopies?: number;
   readonly wants: { readonly openCount: number } | null;
   readonly attributes: {
     readonly denomination: string | null;
@@ -453,6 +458,7 @@ export function stampDetail(
     heightMm: row.size.heightMm ?? undefined,
     copies: copyCounts(row.copies),
     variantCopies: copyCounts(row.variantCopies),
+    possibleCopies: row.possibleCopies || undefined,
     openWants: row.wants?.openCount ?? undefined,
     photoUrls: photoUrls(collectionId, row.photos),
     path: extra.path,

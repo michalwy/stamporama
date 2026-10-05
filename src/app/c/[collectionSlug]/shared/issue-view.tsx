@@ -402,6 +402,7 @@ export function StampDetailLine({
         collectionId={collectionId}
         copies={node.copies}
         variantCopies={node.variantCopies}
+        possibleCopies={node.possibleCopies}
         onOpenCopies={onOpenCopies}
       />
       {/* Beside the copies held: what the collection has of this stamp, and what it is still

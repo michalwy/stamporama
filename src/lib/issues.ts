@@ -195,6 +195,9 @@ export interface StampNodeData {
    *  number beside {@link copies}, broken down by disposition the same way. Zero when the caller
    *  loaded no counts. */
   variantCopies: StampCopyCounts;
+  /** Copies that might be this stamp — one of several candidates across variant trees (#1651) —
+   *  counted apart from both figures above. */
+  possibleCopies: number;
   /** The open wants recorded for this stamp (#532), or null for none — the catalogue row's *this
    *  is still being looked for* marker. Null too when the caller loaded no summaries. */
   wants: StampWantSummary | null;
@@ -438,6 +441,7 @@ function toStampNode(
     photos: toPhotoSummaries(m.stamp.photos),
     copies: copyCounts?.direct.get(m.stampId) ?? NO_COPIES,
     variantCopies: copyCounts?.variant.get(m.stampId) ?? NO_COPIES,
+    possibleCopies: copyCounts?.possible.get(m.stampId) ?? 0,
     wants: wantsByStamp?.get(m.stampId) ?? null,
     attributes: stampAttributeLabels(m.stamp),
     tags: orderTagSummaries(m.stamp.tags),

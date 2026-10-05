@@ -554,6 +554,7 @@ function RelativeRow({
           collectionId={collectionId}
           copies={stamp.copies}
           variantCopies={stamp.variantCopies}
+          possibleCopies={stamp.possibleCopies}
         />
       )}
       <span

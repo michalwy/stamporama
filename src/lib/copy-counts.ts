@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { NOT_MULTI_STAMP } from "./multi-stamp";
-import { NOT_ACROSS_TREES } from "./candidate-set-predicates";
+import { ACROSS_TREES, NOT_ACROSS_TREES } from "./candidate-set-predicates";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import type { HeldCopyRow } from "./held-copies";
 import { buildDescendantMap } from "./pricing";
@@ -220,6 +220,34 @@ export async function countVariantDescendantCopies(
 export interface StampCopyCountMaps {
   direct: Map<string, StampCopyCounts>;
   variant: Map<string, StampCopyCounts>;
+  /** Copies that **might be** the stamp (#1651, ADR-0065 §8): one of several candidates across
+   *  variant trees, so in neither figure above. Absent ids hold none. */
+  possible: Map<string, number>;
+}
+
+/**
+ * The held copies that might be each of these stamps (#1651): a copy identified as one of several
+ * stamps whose candidates span variant trees is certainly none of them, so no {@link heldCopiesWhere}
+ * count includes it — and it is counted here instead, once under every candidate. Held on exactly
+ * the terms the other figures are; only the pointer and the across-trees guard are swapped out.
+ */
+export async function countPossibleCopiesByStamp(
+  collectionId: string,
+  stampIds: string[]
+): Promise<Map<string, number>> {
+  const ids = [...new Set(stampIds)];
+  const counts = new Map<string, number>();
+  if (ids.length === 0) return counts;
+  const rows = await prisma.itemCandidate.groupBy({
+    by: ["stampId"],
+    where: {
+      stampId: { in: ids },
+      item: { ...heldCopiesWhere(collectionId, ids), stampId: undefined, ...ACROSS_TREES },
+    },
+    _count: { _all: true },
+  });
+  for (const row of rows) counts.set(row.stampId, row._count._all);
+  return counts;
 }
 
 /** Both figures for a page of stamps, loaded together — every surface that shows one shows the
@@ -228,11 +256,12 @@ export async function loadStampCopyCounts(
   collectionId: string,
   stampIds: string[]
 ): Promise<StampCopyCountMaps> {
-  const [direct, variant] = await Promise.all([
+  const [direct, variant, possible] = await Promise.all([
     countCopiesByStamp(collectionId, stampIds),
     countVariantDescendantCopies(collectionId, stampIds),
+    countPossibleCopiesByStamp(collectionId, stampIds),
   ]);
-  return { direct, variant };
+  return { direct, variant, possible };
 }
 
 /**

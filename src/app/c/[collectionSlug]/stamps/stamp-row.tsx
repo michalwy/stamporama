@@ -312,6 +312,7 @@ export function StampRow({
             collectionId={collectionId}
             copies={stamp.copies}
             variantCopies={stamp.variantCopies}
+            possibleCopies={stamp.possibleCopies}
             size="medium"
             // Same as the issue tree's (#721): hover previews the breakdown, click opens the
             // row's own *View copies* dialog.

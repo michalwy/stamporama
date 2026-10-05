@@ -2,10 +2,17 @@ import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
-import { createItem, resolveItemVariant, updateItem, valuateItemsByIds } from "../../src/lib/items";
+import {
+  createItem,
+  listItemIssueGroups,
+  listItemsPaginated,
+  resolveItemVariant,
+  updateItem,
+  valuateItemsByIds,
+} from "../../src/lib/items";
 import { setCopyStamp } from "../../src/lib/item-candidates";
 import { setItemStamps } from "../../src/lib/item-stamps";
-import { countCopiesByStamp } from "../../src/lib/copy-counts";
+import { countCopiesByStamp, loadStampCopyCounts } from "../../src/lib/copy-counts";
 import { createWantsForStamps, findWantsSatisfiedBy } from "../../src/lib/wants";
 import { setSubtypeActsAsVariant } from "../../src/lib/subtypes";
 import { deleteStamp } from "../../src/lib/stamps";
@@ -351,6 +358,57 @@ describe("a copy that is one of several candidate stamps (#1651)", () => {
         },
       ]);
       assert.equal(listed.get(oneTree), s["123aI"]);
+    });
+  });
+
+  describe("possibly this copy, under each candidate (#1651, ADR-0065 §8)", () => {
+    let issue85: string;
+    let issue101: string;
+    let copy: string;
+
+    before(async () => {
+      for (const [key, name, no] of [["85", "Watermark A", 1], ["101", "Watermark B", 2]] as const) {
+        const issue = await prisma.issue.create({
+          data: { collectionId, issueNo: 7700 + no, collectionAreaId: areaId, name, year: 1923 },
+        });
+        await prisma.issueMember.create({ data: { issueId: issue.id, stampId: s[key] } });
+        if (key === "85") issue85 = issue.id;
+        else issue101 = issue.id;
+      }
+      copy = await copyOn("85");
+      await setCopyStamp(userId, copy, [s["85"], s["101"]]);
+    });
+
+    it("lists the copy under neither stamp, and under each as possibly", async () => {
+      for (const key of ["85", "101"]) {
+        const certain = await listItemsPaginated(userId, collectionId, { stampId: s[key], pageSize: 500 });
+        assert.equal(certain.items.some((i) => i.id === copy), false, `not certainly Mi ${key}`);
+        const possible = await listItemsPaginated(userId, collectionId, { possibleStampId: s[key] });
+        assert.ok(possible.items.some((i) => i.id === copy), `possibly Mi ${key}`);
+      }
+      const byIssue = await listItemsPaginated(userId, collectionId, { possibleIssueId: issue101 });
+      assert.ok(byIssue.items.some((i) => i.id === copy));
+    });
+
+    it("counts it apart under each candidate's issue group, and in neither group's own figure", async () => {
+      const { groups } = await listItemIssueGroups(userId, collectionId, { pageSize: 500 });
+      const a = groups.find((g) => g.issueId === issue85)!;
+      const b = groups.find((g) => g.issueId === issue101)!;
+      assert.ok(a.possibleCount >= 1 && b.possibleCount >= 1);
+      // The members a group row reads back — its issue, carriers left to their own bucket.
+      const certainIn85 = await listItemsPaginated(userId, collectionId, {
+        issueId: issue85,
+        multiStamp: "exclude",
+        pageSize: 500,
+      });
+      assert.equal(a.count, certainIn85.items.length, "the group's own figure is what its members list");
+    });
+
+    it("puts a possibly figure on each candidate's copy count", async () => {
+      const counts = await loadStampCopyCounts(collectionId, [s["85"], s["101"], s["123"]]);
+      assert.ok((counts.possible.get(s["85"]) ?? 0) >= 1);
+      assert.ok((counts.possible.get(s["101"]) ?? 0) >= 1);
+      assert.equal(counts.possible.get(s["123"]) ?? 0, 0, "a one-tree set is an umbrella copy, never possibly");
     });
   });
 
