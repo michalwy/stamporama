@@ -3,8 +3,12 @@ import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
 import {
+  cleanFacebookDefaults,
   cleanFacebookGroupValues,
+  FACEBOOK_BLANK_SETTINGS,
+  isFacebookGroupSetting,
   type FacebookGroupValues,
+  type FacebookPostingSettings,
   type FacebookStartingPriceMode,
 } from "./facebook-group-rules";
 
@@ -14,6 +18,10 @@ import {
 // contact this collection calls Facebook, and is not a platform of its own. What a group holds is its
 // customs — the post template, the standing note, and the defaults a new auction starts from — each
 // read when an offer is created (#1544) and then owned by the offer.
+//
+// Each setting of a group **follows the platform's** unless the group marks it custom (#1661): the
+// platform's own settings are a `FacebookDefaults` row, and `readFacebookDefaults` is the one reader
+// of it — a platform without a row reads as every setting blank.
 //
 // The rule this module exists to keep is **archive, never delete, once a group has offers**: an offer
 // names its group, and the sales reports per group need that group to still exist. A group nobody has
@@ -36,6 +44,8 @@ export interface FacebookGroupList {
   platformName: string | null;
   /** The platform's own currency (#196) — what a group with no currency of its own states figures in. */
   platformCurrency: string | null;
+  /** The platform's settings every group follows unless it holds its own (#1661). */
+  defaults: FacebookPostingSettings;
   /** In use first, then archived; each by name. */
   groups: FacebookGroupData[];
 }
@@ -72,12 +82,54 @@ async function facebookPlatformOf(
   });
 }
 
+interface SettingsRow {
+  postTemplate: string;
+  standingNote: string;
+  startingPriceMode: string | null;
+  startingPriceValue: Decimal | null;
+  bidIncrement: Decimal | null;
+  auctionDays: number | null;
+  closingTime: string | null;
+}
+
+/** A settings row's columns as the plain values the rules and the client hold. */
+export function toPostingSettings(row: SettingsRow): FacebookPostingSettings {
+  return {
+    postTemplate: row.postTemplate,
+    standingNote: row.standingNote,
+    // Only ever written through the rules' cleaning, which admits the two modes alone.
+    startingPriceMode: row.startingPriceMode as FacebookStartingPriceMode | null,
+    startingPriceValue: row.startingPriceValue?.toNumber() ?? null,
+    bidIncrement: row.bidIncrement?.toNumber() ?? null,
+    auctionDays: row.auctionDays,
+    closingTime: row.closingTime,
+  };
+}
+
+/** The settings of a group's stored `customSettings`, keeping only keys the rules know. */
+export function toCustomSettings(stored: readonly string[]) {
+  return stored.filter(isFacebookGroupSetting);
+}
+
+/**
+ * The Facebook platform's own settings (#1661) — what every group follows unless it holds its own.
+ * A platform nobody has stated any for has no row and reads as every setting blank.
+ */
+export async function readFacebookDefaults(
+  platformId: string,
+  db: Pick<typeof prisma, "facebookDefaults"> = prisma
+): Promise<FacebookPostingSettings> {
+  const row = await db.facebookDefaults.findUnique({ where: { platformId } });
+  return row ? toPostingSettings(row) : { ...FACEBOOK_BLANK_SETTINGS };
+}
+
 const GROUP_SELECT = {
   id: true,
   platformId: true,
   name: true,
   url: true,
   archivedAt: true,
+  customSettings: true,
   postTemplate: true,
   standingNote: true,
   startingPriceMode: true,
@@ -95,27 +147,22 @@ interface GroupRow {
   name: string;
   url: string;
   archivedAt: Date | null;
-  postTemplate: string;
-  standingNote: string;
-  startingPriceMode: string | null;
-  startingPriceValue: Decimal | null;
-  bidIncrement: Decimal | null;
-  auctionDays: number | null;
-  closingTime: string | null;
+  customSettings: string[];
   currency: string | null;
   _count: { offers: number };
 }
 
-function toData(row: GroupRow): FacebookGroupData {
-  const { _count, startingPriceValue, bidIncrement, archivedAt, startingPriceMode, ...rest } = row;
+function toData(row: GroupRow & SettingsRow): FacebookGroupData {
   return {
-    ...rest,
-    // Only ever written through `cleanFacebookGroupValues`, which admits the two modes alone.
-    startingPriceMode: startingPriceMode as FacebookStartingPriceMode | null,
-    startingPriceValue: startingPriceValue?.toNumber() ?? null,
-    bidIncrement: bidIncrement?.toNumber() ?? null,
-    archivedAt: archivedAt?.toISOString() ?? null,
-    offerCount: _count.offers,
+    id: row.id,
+    platformId: row.platformId,
+    name: row.name,
+    url: row.url,
+    ...toPostingSettings(row),
+    currency: row.currency,
+    custom: toCustomSettings(row.customSettings),
+    archivedAt: row.archivedAt?.toISOString() ?? null,
+    offerCount: row._count.offers,
   };
 }
 
@@ -128,18 +175,28 @@ export async function listFacebookGroups(
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await facebookPlatformOf(collectionId);
   if (!platform) {
-    return { platformId: null, platformName: null, platformCurrency: null, groups: [] };
+    return {
+      platformId: null,
+      platformName: null,
+      platformCurrency: null,
+      defaults: { ...FACEBOOK_BLANK_SETTINGS },
+      groups: [],
+    };
   }
-  const rows = await prisma.facebookGroup.findMany({
-    where: { platformId: platform.id },
-    orderBy: { name: "asc" },
-    select: GROUP_SELECT,
-  });
+  const [rows, defaults] = await Promise.all([
+    prisma.facebookGroup.findMany({
+      where: { platformId: platform.id },
+      orderBy: { name: "asc" },
+      select: GROUP_SELECT,
+    }),
+    readFacebookDefaults(platform.id),
+  ]);
   const groups = rows.map(toData);
   return {
     platformId: platform.id,
     platformName: platform.name,
     platformCurrency: platform.platformCurrency,
+    defaults,
     groups: [
       ...groups.filter((g) => g.archivedAt === null),
       ...groups.filter((g) => g.archivedAt !== null),
@@ -167,10 +224,8 @@ function isUniqueViolation(err: unknown): boolean {
   return (err as { code?: unknown })?.code === "P2002";
 }
 
-function toColumns(values: FacebookGroupValues) {
+function settingsColumns(values: FacebookPostingSettings) {
   return {
-    name: values.name,
-    url: values.url,
     postTemplate: values.postTemplate,
     standingNote: values.standingNote,
     startingPriceMode: values.startingPriceMode,
@@ -178,8 +233,40 @@ function toColumns(values: FacebookGroupValues) {
     bidIncrement: values.bidIncrement,
     auctionDays: values.auctionDays,
     closingTime: values.closingTime,
+  };
+}
+
+function toColumns(values: FacebookGroupValues) {
+  return {
+    name: values.name,
+    url: values.url,
+    customSettings: values.custom,
+    ...settingsColumns(values),
     currency: values.currency,
   };
+}
+
+/**
+ * State the Facebook platform's own settings (#1661): every group following one sees the change at
+ * once, and no auction already made does — a group's settings are read when an offer is created
+ * (#1544) and then owned by the offer.
+ */
+export async function updateFacebookDefaults(
+  ownerId: string,
+  collectionId: string,
+  input: FacebookPostingSettings
+): Promise<void> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const platform = await facebookPlatformOf(collectionId);
+  if (!platform) {
+    throw new Error("This collection has no Facebook platform yet. Choose one at the top of this page first.");
+  }
+  const columns = settingsColumns(cleanFacebookDefaults(input));
+  await prisma.facebookDefaults.upsert({
+    where: { platformId: platform.id },
+    create: { platformId: platform.id, ...columns },
+    update: columns,
+  });
 }
 
 /** Add a group to the collection's Facebook platform. */

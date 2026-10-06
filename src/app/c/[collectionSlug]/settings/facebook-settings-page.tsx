@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
@@ -10,10 +10,14 @@ import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input"
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { FacebookGroupData, FacebookGroupList } from "@/lib/facebook-groups";
 import {
+  effectiveFacebookGroupSettings,
   FACEBOOK_AUCTION_DAYS_MAX,
   FACEBOOK_POST_PLACEHOLDERS,
+  isFacebookGroupSetting,
   unknownPostPlaceholders,
+  type FacebookGroupSetting,
   type FacebookGroupValues,
+  type FacebookPostingSettings,
   type FacebookStartingPriceMode,
 } from "@/lib/facebook-group-rules";
 import {
@@ -21,6 +25,7 @@ import {
   deleteFacebookGroupAction,
   setFacebookGroupArchivedAction,
   setFacebookPlatformAction,
+  updateFacebookDefaultsAction,
   updateFacebookGroupAction,
 } from "@/app/actions/facebook";
 import { MarketplacePlatformSelect } from "./marketplace-platform-select";
@@ -48,10 +53,12 @@ import {
  * Settings → Facebook (#1543; ADR-0061): which platform is Facebook, in the page header as on every
  * marketplace page, and the **groups** under it — list beside detail, the dictionaries' shape (#1471).
  *
- * Facebook is one platform and its groups sit under it, so the page has no tabs: a group is the one
- * thing configured here, and what a group holds is its customs — the post template, the standing
- * note, and the defaults a new auction there starts from. Groups in use are listed first and the
- * archived ones under their own heading, still editable and brought back from the pane.
+ * Facebook is one platform and its groups sit under it, so the page has no tabs: the groups are what
+ * is configured here, and what a group holds is its customs — the post template, the standing note,
+ * and the defaults a new auction there starts from. **Facebook's own row comes first** (#1661): the
+ * settings every group follows, each of which a group may instead set custom for itself. Groups in
+ * use are listed next and the archived ones under their own heading, still editable and brought
+ * back from the pane.
  */
 
 export function FacebookSettingsBody({
@@ -102,11 +109,17 @@ function NoPlatform({ hasPlatforms }: { hasPlatforms: boolean }) {
   );
 }
 
+/** The list's first row: Facebook's own settings, which every group follows (#1661). Not a group id
+ *  — a cuid never carries a colon. */
+const DEFAULTS_ROW = "facebook:defaults";
+
 function GroupsListDetail({ collectionId, list }: { collectionId: string; list: FacebookGroupList }) {
   const router = useRouter();
   const refresh = () => router.refresh();
-  const sel = useListSelection(list.groups);
-  const current = sel.current;
+  const rows = useMemo(() => [{ id: DEFAULTS_ROW }, ...list.groups], [list.groups]);
+  const sel = useListSelection(rows);
+  const onDefaults = !sel.adding && sel.current?.id === DEFAULTS_ROW;
+  const current = list.groups.find((g) => g.id === sel.current?.id) ?? null;
   const inUse = list.groups.filter((g) => g.archivedAt === null);
   const archived = list.groups.filter((g) => g.archivedAt !== null);
 
@@ -126,28 +139,49 @@ function GroupsListDetail({ collectionId, list }: { collectionId: string; list: 
             caption={countLabel(inUse.length, "group", "groups")}
             hint={
               <>
-                The Facebook groups you auction in on {list.platformName}. Each keeps its own customs:
-                how a post there reads, the note on shipping, payment and terms, and what a new
-                auction starts from. Archive a group you no longer post in; one with offers cannot be
-                deleted.
+                The Facebook groups you auction in on {list.platformName}. Every group follows
+                Facebook&rsquo;s settings — how a post reads, the note on shipping, payment and
+                terms, and what a new auction starts from — unless it sets one custom for itself.
+                Archive a group you no longer post in; one with offers cannot be deleted.
               </>
             }
-            empty={
-              list.groups.length === 0 &&
-              "No groups yet. Add the groups you auction in — an auction on Facebook is posted in one."
-            }
           >
-            {inUse.length > 0 && <ListRows label="Facebook groups">{inUse.map(row)}</ListRows>}
+            <ListRows label="Facebook">
+              <ListRow selected={onDefaults} onSelect={() => sel.select(DEFAULTS_ROW)}>
+                <RowName strong>Facebook defaults</RowName>
+              </ListRow>
+            </ListRows>
+            <ListGroupHeading>Groups</ListGroupHeading>
+            {inUse.length > 0 ? (
+              <ListRows label="Facebook groups">{inUse.map(row)}</ListRows>
+            ) : (
+              list.groups.length === 0 && (
+                <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
+                  No groups yet. Add the groups you auction in — an auction on Facebook is posted in one.
+                </p>
+              )
+            )}
             {archived.length > 0 && (
               <>
-                <ListGroupHeading first={inUse.length === 0}>Archived</ListGroupHeading>
+                <ListGroupHeading>Archived</ListGroupHeading>
                 <ListRows label="Archived Facebook groups">{archived.map(row)}</ListRows>
               </>
             )}
           </ListPane>
         }
         detail={
-          sel.adding || current ? (
+          onDefaults ? (
+            <DetailForm
+              key={DEFAULTS_ROW}
+              title="Facebook defaults"
+              context="Every group follows these unless it sets its own"
+              isNew={false}
+              onSave={(fd) => updateFacebookDefaultsAction(collectionId, settingsInput(fd))}
+              onSaved={refresh}
+            >
+              <DefaultsFields defaults={list.defaults} platformCurrency={list.platformCurrency} />
+            </DetailForm>
+          ) : sel.adding || current ? (
             <DetailForm
               key={current ? current.id : "new"}
               title={current ? current.name : "New group"}
@@ -190,14 +224,14 @@ function GroupsListDetail({ collectionId, list }: { collectionId: string; list: 
                   : undefined
               }
             >
-              <GroupFields group={current} platformCurrency={list.platformCurrency} />
+              <GroupFields
+                group={current}
+                defaults={list.defaults}
+                platformCurrency={list.platformCurrency}
+              />
             </DetailForm>
           ) : (
-            <DetailPlaceholder>
-              {list.groups.length === 0
-                ? "No groups yet. Add one to start the list."
-                : "Choose a group to see its settings."}
-            </DetailPlaceholder>
+            <DetailPlaceholder>Choose a group to see its settings.</DetailPlaceholder>
           )
         }
       />
@@ -238,13 +272,12 @@ function optionalNumber(raw: string): number | null {
   return raw.trim() === "" ? null : Number(raw);
 }
 
-/** What the pane's form saves. */
-function groupInput(fd: FormData): FacebookGroupValues {
+/** The posting settings a pane's form holds — Facebook's, or a group's own. A setting a group
+ *  follows has no control in the form, so it reads as blank here, which is what the save stores. */
+function settingsInput(fd: FormData): FacebookPostingSettings {
   const text = (key: string) => String(fd.get(key) ?? "");
   const mode = text("startingPriceMode");
   return {
-    name: text("name"),
-    url: text("url"),
     postTemplate: text("postTemplate"),
     standingNote: text("standingNote"),
     startingPriceMode: mode === "" ? null : (mode as FacebookStartingPriceMode),
@@ -252,7 +285,18 @@ function groupInput(fd: FormData): FacebookGroupValues {
     bidIncrement: optionalNumber(text("bidIncrement")),
     auctionDays: optionalNumber(text("auctionDays")),
     closingTime: text("closingTime") || null,
+  };
+}
+
+/** What a group's pane saves. */
+function groupInput(fd: FormData): FacebookGroupValues {
+  const text = (key: string) => String(fd.get(key) ?? "");
+  return {
+    name: text("name"),
+    url: text("url"),
+    ...settingsInput(fd),
     currency: text("currency") || null,
+    custom: fd.getAll("custom").map(String).filter(isFacebookGroupSetting),
   };
 }
 
@@ -282,23 +326,146 @@ const TEXTAREA_STYLE: React.CSSProperties = {
   lineHeight: 1.5,
 };
 
+/** The hints the settings carry, said once for Facebook's pane and a group's alike. */
+const HINTS = {
+  postTemplate: (
+    <>
+      The text a post is prepared from. Each placeholder is filled in from the auction when the post
+      is prepared; in a post holding several lots, each lot gets its own line. The note on shipping,
+      payment and terms is added after it.
+    </>
+  ),
+  standingNote:
+    "Added to every post, as written — how you ship, how buyers pay, and the group's own terms.",
+  newAuctions:
+    "What a new auction starts from. Each can be changed on the auction itself, and changing it here never changes an auction already made. Leave a field blank for no default.",
+} as const;
+
+function money(value: number | null, currency: string | null): string {
+  return value == null ? "None" : `${value.toFixed(2)}${currency ? ` ${currency}` : ""}`;
+}
+
+/** A setting's value as a sentence — what a group following Facebook shows instead of the field. */
+function describeSetting(
+  key: FacebookGroupSetting,
+  s: FacebookPostingSettings,
+  platformCurrency: string | null
+): React.ReactNode {
+  switch (key) {
+    case "postTemplate":
+    case "standingNote": {
+      const text = s[key].trim();
+      return text ? <span style={{ whiteSpace: "pre-wrap" }}>{text}</span> : "None";
+    }
+    case "startingPrice":
+      if (s.startingPriceMode === null || s.startingPriceValue == null) return "None";
+      return s.startingPriceMode === "amount"
+        ? money(s.startingPriceValue, platformCurrency)
+        : `${s.startingPriceValue}% of catalogue value`;
+    case "bidIncrement":
+      return money(s.bidIncrement, platformCurrency);
+    case "auctionDays":
+      return s.auctionDays == null ? "None" : countLabel(s.auctionDays, "day", "days");
+    case "closingTime":
+      return s.closingTime ?? "None";
+    case "currency":
+      return platformCurrency ? `The platform's, ${platformCurrency}` : "The platform's";
+  }
+}
+
+/**
+ * Facebook's own settings (#1661) — what every group follows unless it sets its own. The currency is
+ * not one of them: it is the platform's own (#196), stated on its contact, so it is said here rather
+ * than edited.
+ */
+function DefaultsFields({
+  defaults,
+  platformCurrency,
+}: {
+  defaults: FacebookPostingSettings;
+  platformCurrency: string | null;
+}) {
+  return (
+    <Fields>
+      <div>
+        <GroupLabel htmlFor="facebook-post-template" hint={HINTS.postTemplate}>
+          Post template
+        </GroupLabel>
+        <PostTemplateField id="facebook-post-template" initial={defaults.postTemplate} />
+      </div>
+      <div>
+        <GroupLabel htmlFor="facebook-standing-note" hint={HINTS.standingNote}>
+          Shipping, payment and terms
+        </GroupLabel>
+        <StandingNoteField id="facebook-standing-note" initial={defaults.standingNote} />
+      </div>
+      <div>
+        <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
+        <div style={FIGURE_GRID}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <StartingPriceField initial={defaults} currency={platformCurrency} />
+          </div>
+          <div>
+            <BidIncrementField initial={defaults.bidIncrement} />
+            <FieldNote>Bid increment{platformCurrency ? `, in ${platformCurrency}` : ""}</FieldNote>
+          </div>
+          <div>
+            <AuctionDaysField initial={defaults.auctionDays} />
+            <FieldNote>Days an auction runs</FieldNote>
+          </div>
+          <div>
+            <ClosingTimeField initial={defaults.closingTime} />
+            <FieldNote>Closing time, on its last day</FieldNote>
+          </div>
+          <div>
+            <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)" }}>
+              {platformCurrency ?? "Not set yet"}
+            </div>
+            <FieldNote>Currency — the platform&rsquo;s own, set on its contact</FieldNote>
+          </div>
+        </div>
+      </div>
+    </Fields>
+  );
+}
+
+const FIGURE_GRID: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "0.75rem 0.5rem",
+};
+
 /**
  * One group's fields. **Every one is a named form control** (#1471) — the pane measures what is
- * unsaved off the form. The template, the starting-price mode and the currency are held in state as
- * well, because each is read back while it is typed.
+ * unsaved off the form. Each setting either follows Facebook, shown with the value it follows, or is
+ * custom for this group, with its field (#1661); the switch is the `custom` control, so turning it
+ * is a change the pane sees.
  */
 function GroupFields({
   group,
+  defaults,
   platformCurrency,
 }: {
   group: FacebookGroupData | null;
+  defaults: FacebookPostingSettings;
   platformCurrency: string | null;
 }) {
-  const [template, setTemplate] = useState(group?.postTemplate ?? "");
-  const [mode, setMode] = useState<FacebookStartingPriceMode | "">(group?.startingPriceMode ?? "");
-  const [currency, setCurrency] = useState(group?.currency ?? "");
-  const unknown = unknownPostPlaceholders(template);
-  const shownCurrency = currency || platformCurrency;
+  const [custom, setCustom] = useState<FacebookGroupSetting[]>(group?.custom ?? []);
+  const [currency, setCurrency] = useState(group?.currency ?? platformCurrency ?? "");
+  const own = (key: FacebookGroupSetting) => custom.includes(key);
+  // What a field switched to custom starts from: the group's own value where it had one, else the
+  // value it was following — so a custom setting is a change made to Facebook's, not a blank.
+  const start = group
+    ? effectiveFacebookGroupSettings(group, defaults)
+    : { ...defaults, currency: null };
+  const shownCurrency = own("currency") ? currency || null : platformCurrency;
+  const setting = (key: FacebookGroupSetting) => ({
+    custom: own(key),
+    onCustom: (on: boolean) =>
+      setCustom((c) => (on ? [...c, key] : c.filter((k) => k !== key))),
+    following: describeSetting(key, defaults, platformCurrency),
+    settingKey: key,
+  });
 
   return (
     <Fields>
@@ -342,142 +509,46 @@ function GroupFields({
         />
       </div>
 
-      <div>
-        <GroupLabel
-          htmlFor="facebook-group-template"
-          hint={
-            <>
-              The text a post in this group is prepared from. Each placeholder is filled in from the
-              auction when the post is prepared; in a post holding several lots, each lot gets its own
-              line. The standing note below is added after it.
-            </>
-          }
-        >
-          Post template
-        </GroupLabel>
-        <TextArea
-          id="facebook-group-template"
-          name="postTemplate"
-          value={template}
-          onChange={(e) => setTemplate(e.target.value)}
-          style={TEXTAREA_STYLE}
-          {...NO_AUTOFILL}
-        />
-        <FieldNote>
-          Placeholders:{" "}
-          {FACEBOOK_POST_PLACEHOLDERS.map((p, i) => (
-            <span key={p.token}>
-              {i > 0 && ", "}
-              <code>{p.token}</code> {p.label.toLowerCase()}
-            </span>
-          ))}
-          .
-        </FieldNote>
-        {unknown.length > 0 && (
-          <FieldNote>
-            <span style={{ color: "var(--color-warning)" }}>
-              Not a placeholder, so it stays as typed: {unknown.join(", ")}.
-            </span>
-          </FieldNote>
-        )}
-      </div>
+      <FollowableSetting
+        label="Post template"
+        htmlFor="facebook-group-template"
+        hint={HINTS.postTemplate}
+        {...setting("postTemplate")}
+      >
+        <PostTemplateField id="facebook-group-template" initial={start.postTemplate} />
+      </FollowableSetting>
+
+      <FollowableSetting
+        label="Shipping, payment and terms"
+        htmlFor="facebook-group-note"
+        hint={HINTS.standingNote}
+        {...setting("standingNote")}
+      >
+        <StandingNoteField id="facebook-group-note" initial={start.standingNote} />
+      </FollowableSetting>
 
       <div>
-        <GroupLabel
-          htmlFor="facebook-group-note"
-          hint="Added to every post in this group, as written — how you ship, how buyers pay, and the group's own terms."
-        >
-          Shipping, payment and terms
-        </GroupLabel>
-        <TextArea
-          id="facebook-group-note"
-          name="standingNote"
-          defaultValue={group?.standingNote ?? ""}
-          style={{ ...TEXTAREA_STYLE, minHeight: "5rem" }}
-          {...NO_AUTOFILL}
-        />
-      </div>
-
-      <div>
-        <GroupLabel hint="What a new auction in this group starts from. Each can be changed on the auction itself, and changing it here never changes an auction already made. Leave a field blank for no default.">
-          New auctions
-        </GroupLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-          <div>
-            <select
-              name="startingPriceMode"
-              aria-label="Starting price"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as FacebookStartingPriceMode | "")}
-              style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
-            >
-              <option value="">No starting price</option>
-              <option value="amount">Starting price: an amount</option>
-              <option value="catalogPercent">Starting price: % of catalogue value</option>
-            </select>
-            <FieldNote>Starting price</FieldNote>
+        <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
+        <div style={FIGURE_GRID}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FollowableSetting label="Starting price" small {...setting("startingPrice")}>
+              <StartingPriceField initial={start} currency={shownCurrency} />
+            </FollowableSetting>
           </div>
-          <div>
-            {mode !== "" && (
-              <>
-                <NumericInput
-                  key={mode}
-                  kind={mode === "amount" ? "amount" : "number"}
-                  name="startingPriceValue"
-                  aria-label={mode === "amount" ? "Starting price amount" : "Percentage of catalogue value"}
-                  defaultValue={
-                    group?.startingPriceMode === mode && group.startingPriceValue != null
-                      ? mode === "amount"
-                        ? group.startingPriceValue.toFixed(2)
-                        : String(group.startingPriceValue)
-                      : ""
-                  }
-                  style={INPUT_STYLE}
-                />
-                <FieldNote>
-                  {mode === "amount"
-                    ? `Amount${shownCurrency ? `, in ${shownCurrency}` : ""}`
-                    : "Percent of the copies' catalogue value"}
-                </FieldNote>
-              </>
-            )}
-          </div>
-          <div>
-            <NumericInput
-              kind="amount"
-              name="bidIncrement"
-              aria-label="Bid increment"
-              defaultValue={group?.bidIncrement?.toFixed(2) ?? ""}
-              placeholder="—"
-              style={INPUT_STYLE}
-            />
-            <FieldNote>Bid increment{shownCurrency ? `, in ${shownCurrency}` : ""}</FieldNote>
-          </div>
-          <div>
-            <input
-              name="auctionDays"
-              aria-label="Days an auction runs"
-              type="number"
-              min={1}
-              max={FACEBOOK_AUCTION_DAYS_MAX}
-              step={1}
-              defaultValue={group?.auctionDays == null ? "" : String(group.auctionDays)}
-              placeholder="—"
-              style={INPUT_STYLE}
-            />
-            <FieldNote>Days an auction runs</FieldNote>
-          </div>
-          <div>
-            <input
-              name="closingTime"
-              aria-label="Closing time"
-              type="time"
-              defaultValue={group?.closingTime ?? ""}
-              style={INPUT_STYLE}
-            />
-            <FieldNote>Closing time, on its last day</FieldNote>
-          </div>
-          <div>
+          <FollowableSetting
+            label={`Bid increment${shownCurrency ? `, in ${shownCurrency}` : ""}`}
+            small
+            {...setting("bidIncrement")}
+          >
+            <BidIncrementField initial={start.bidIncrement} />
+          </FollowableSetting>
+          <FollowableSetting label="Days an auction runs" small {...setting("auctionDays")}>
+            <AuctionDaysField initial={start.auctionDays} />
+          </FollowableSetting>
+          <FollowableSetting label="Closing time, on its last day" small {...setting("closingTime")}>
+            <ClosingTimeField initial={start.closingTime} />
+          </FollowableSetting>
+          <FollowableSetting label="Currency" small {...setting("currency")}>
             <select
               name="currency"
               aria-label="Currency"
@@ -485,9 +556,7 @@ function GroupFields({
               onChange={(e) => setCurrency(e.target.value)}
               style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
             >
-              <option value="">
-                {platformCurrency ? `The platform's (${platformCurrency})` : "The platform's"}
-              </option>
+              <option value="">Choose a currency</option>
               {COMMON_CURRENCIES.map((code) => (
                 <option key={code} value={code}>
                   {code}
@@ -498,10 +567,234 @@ function GroupFields({
                 <option value={group.currency}>{group.currency}</option>
               )}
             </select>
-            <FieldNote>Currency</FieldNote>
-          </div>
+          </FollowableSetting>
         </div>
       </div>
     </Fields>
+  );
+}
+
+/**
+ * One of a group's settings (#1661): **Same as Facebook**, with the value it follows, or **Custom for
+ * this group**, with its field. The switch is a checkbox named `custom` carrying the setting's key —
+ * what the save reads — and switching it back drops the field, so the group keeps no value of its own.
+ */
+function FollowableSetting({
+  label,
+  htmlFor,
+  hint,
+  small,
+  settingKey,
+  custom,
+  onCustom,
+  following,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  hint?: React.ReactNode;
+  /** A figure under *New auctions*: its label is the small one the grid's fields carry. */
+  small?: boolean;
+  settingKey: FacebookGroupSetting;
+  custom: boolean;
+  onCustom: (on: boolean) => void;
+  following: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: small ? "0.25rem" : 0 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {small ? (
+            <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{label}</span>
+          ) : (
+            <GroupLabel htmlFor={custom ? htmlFor : undefined} hint={hint}>
+              {label}
+            </GroupLabel>
+          )}
+        </div>
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.25rem",
+            fontSize: "0.75rem",
+            color: "var(--color-text-muted)",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <input
+            type="checkbox"
+            name="custom"
+            value={settingKey}
+            checked={custom}
+            onChange={(e) => onCustom(e.target.checked)}
+          />
+          {/* A figure's half of the grid has no room for the whole phrase; its pane says it once. */}
+          {small ? "Custom" : "Custom for this group"}
+        </label>
+      </div>
+      {custom ? (
+        children
+      ) : (
+        <div
+          style={{
+            ...INPUT_STYLE,
+            minHeight: undefined,
+            display: "flex",
+            gap: "0.375rem",
+            alignItems: "baseline",
+            background: "var(--color-bg-subtle)",
+            borderStyle: "dashed",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          <span style={{ flexShrink: 0 }}>Same as Facebook:</span>
+          <span style={{ color: "var(--color-text-primary)", minWidth: 0 }}>{following}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The post template, with its placeholders named under it and an unknown one called out as typed. */
+function PostTemplateField({ id, initial }: { id: string; initial: string }) {
+  const [template, setTemplate] = useState(initial);
+  const unknown = unknownPostPlaceholders(template);
+  return (
+    <>
+      <TextArea
+        id={id}
+        name="postTemplate"
+        value={template}
+        onChange={(e) => setTemplate(e.target.value)}
+        style={TEXTAREA_STYLE}
+        {...NO_AUTOFILL}
+      />
+      <FieldNote>
+        Placeholders:{" "}
+        {FACEBOOK_POST_PLACEHOLDERS.map((p, i) => (
+          <span key={p.token}>
+            {i > 0 && ", "}
+            <code>{p.token}</code> {p.label.toLowerCase()}
+          </span>
+        ))}
+        .
+      </FieldNote>
+      {unknown.length > 0 && (
+        <FieldNote>
+          <span style={{ color: "var(--color-warning)" }}>
+            Not a placeholder, so it stays as typed: {unknown.join(", ")}.
+          </span>
+        </FieldNote>
+      )}
+    </>
+  );
+}
+
+function StandingNoteField({ id, initial }: { id: string; initial: string }) {
+  return (
+    <TextArea
+      id={id}
+      name="standingNote"
+      defaultValue={initial}
+      style={{ ...TEXTAREA_STYLE, minHeight: "5rem" }}
+      {...NO_AUTOFILL}
+    />
+  );
+}
+
+/** The starting price: its kind, and the figure beside it once there is one. */
+function StartingPriceField({
+  initial,
+  currency,
+}: {
+  initial: Pick<FacebookPostingSettings, "startingPriceMode" | "startingPriceValue">;
+  currency: string | null;
+}) {
+  const [mode, setMode] = useState<FacebookStartingPriceMode | "">(initial.startingPriceMode ?? "");
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+      <div>
+        <select
+          name="startingPriceMode"
+          aria-label="Starting price"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as FacebookStartingPriceMode | "")}
+          style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
+        >
+          <option value="">No starting price</option>
+          <option value="amount">Starting price: an amount</option>
+          <option value="catalogPercent">Starting price: % of catalogue value</option>
+        </select>
+      </div>
+      <div>
+        {mode !== "" && (
+          <>
+            <NumericInput
+              key={mode}
+              kind={mode === "amount" ? "amount" : "number"}
+              name="startingPriceValue"
+              aria-label={mode === "amount" ? "Starting price amount" : "Percentage of catalogue value"}
+              defaultValue={
+                initial.startingPriceMode === mode && initial.startingPriceValue != null
+                  ? mode === "amount"
+                    ? initial.startingPriceValue.toFixed(2)
+                    : String(initial.startingPriceValue)
+                  : ""
+              }
+              style={INPUT_STYLE}
+            />
+            <FieldNote>
+              {mode === "amount"
+                ? `Amount${currency ? `, in ${currency}` : ""}`
+                : "Percent of the copies' catalogue value"}
+            </FieldNote>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BidIncrementField({ initial }: { initial: number | null }) {
+  return (
+    <NumericInput
+      kind="amount"
+      name="bidIncrement"
+      aria-label="Bid increment"
+      defaultValue={initial?.toFixed(2) ?? ""}
+      placeholder="—"
+      style={INPUT_STYLE}
+    />
+  );
+}
+
+function AuctionDaysField({ initial }: { initial: number | null }) {
+  return (
+    <input
+      name="auctionDays"
+      aria-label="Days an auction runs"
+      type="number"
+      min={1}
+      max={FACEBOOK_AUCTION_DAYS_MAX}
+      step={1}
+      defaultValue={initial == null ? "" : String(initial)}
+      placeholder="—"
+      style={INPUT_STYLE}
+    />
+  );
+}
+
+function ClosingTimeField({ initial }: { initial: string | null }) {
+  return (
+    <input
+      name="closingTime"
+      aria-label="Closing time"
+      type="time"
+      defaultValue={initial ?? ""}
+      style={INPUT_STYLE}
+    />
   );
 }

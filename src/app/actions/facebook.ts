@@ -5,11 +5,12 @@ import { redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { setFacebookPlatform } from "@/lib/facebook";
-import type { FacebookGroupValues } from "@/lib/facebook-group-rules";
+import type { FacebookGroupValues, FacebookPostingSettings } from "@/lib/facebook-group-rules";
 import {
   createFacebookGroup,
   deleteFacebookGroup,
   setFacebookGroupArchived,
+  updateFacebookDefaults,
   updateFacebookGroup,
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
@@ -51,6 +52,20 @@ export async function setFacebookPlatformAction(
     return { status: "success" };
   } catch (err) {
     return failure(err, "The Facebook platform could not be set.");
+  }
+}
+
+/** State the platform's own settings, which every group follows unless it holds its own (#1661). */
+export async function updateFacebookDefaultsAction(
+  collectionId: string,
+  input: FacebookPostingSettings
+): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await updateFacebookDefaults(session.user.id, collectionId, input);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Facebook's settings could not be saved.");
   }
 }
 

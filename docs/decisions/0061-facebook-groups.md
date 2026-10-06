@@ -5,7 +5,7 @@
 Accepted. Designed with the collector on 2026-10-03 and written down by #1543, which builds the
 platform and its groups (§1, §6). The offer, the post and its kit are #1544 (§2, §3, §5), the running
 bid and the result #1545 (§4), the Assistant filling a post #1546 (§3), and several groups at once
-#1547 (§5).
+#1547 (§5). §6 is amended by #1661: a group's settings follow the platform's unless set custom.
 
 ## Context
 
@@ -88,6 +88,22 @@ Every one of them is optional and is a **default read when an offer is created**
 the offer — the rule every platform setting here follows (#308, #449) — so changing a group never
 re-prices an auction already running. The pure rules are `src/lib/facebook-group-rules.ts`, the
 reads and writes `src/lib/facebook-groups.ts`.
+
+**Amended by #1661 (decided with the collector on 2026-10-06): the platform's settings are every
+group's defaults, and each setting can be marked custom for a particular group.** Most groups want the
+same things, and stating them once per group was stating them several times. So the Facebook platform
+holds the same settings — the post template, the note, the starting price (an amount or a percentage,
+as a group's), the increment, the days and the closing time — and its currency is the platform's own
+(#196). A group follows each of them, read live, unless it marks that one custom; a custom setting
+may be empty, and switching it back drops the group's value. A new group follows throughout, and the
+existing ones were migrated so that what each posts did not change: a setting equal to the platform's
+became *follows*, one that differed stayed custom.
+
+The platform's post template is its own, **not** the contact's description template (decided with
+the collector, 2026-10-06): the description template writes the offer's description, which the post
+template's `{description}` places — one is inside the other. The contact's default starting price, an
+amount that no Facebook auction read, moved into the platform's settings and is no longer offered on
+the Facebook platform's contact.
 
 ### 7. A group with offers is archived, never deleted
 

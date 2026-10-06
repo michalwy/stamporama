@@ -86,6 +86,10 @@ because an auction is opened deliberately below what the goods are worth, to att
 touches the offer's current price, which stays empty until somebody bids, and whatever it fills in is
 yours to edit on the offer. Leave it empty for houses you open individually.
 
+The platform you use for [Facebook](facebook.md) does not show it: there the opening figure is one
+of Facebook's own settings, under **Settings → Facebook**, where it can also be a percentage of the
+copies' catalogue value.
+
 There is deliberately no default price for a **quick buy**: its price follows from the goods, which
 is exactly what those two suggestions already answer.
 

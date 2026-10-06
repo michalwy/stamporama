@@ -94,9 +94,16 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
     { label: "Delcampe’s own category list", part: "categories" },
     { label: "What each kind of stamp was uploaded as", part: "categories", words: ["learned"] },
   ],
-  // The platform choice in the header; a group's fields are in the pane of the group chosen, which
-  // is a row of the collector's list rather than a field of the page.
-  facebook: [{ label: "Facebook platform", words: ["groups"] }],
+  // The platform choice in the header, and Facebook's own settings, the pane the page opens on
+  // (#1661). A group's fields are in the pane of the group chosen, which is a row of the collector's
+  // list rather than a field of the page.
+  facebook: [
+    { label: "Facebook platform", words: ["groups"] },
+    {
+      label: "Facebook defaults",
+      words: ["post template", "shipping", "payment", "terms", "starting price", "bid increment", "closing time"],
+    },
+  ],
   philasearch: [{ label: "Philasearch platform" }],
   acceptance: [],
   bids: [

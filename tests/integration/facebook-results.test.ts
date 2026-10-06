@@ -73,6 +73,7 @@ describe("Facebook auction results (#1545)", () => {
         name: "Znaczki — aukcje",
         url: "https://www.facebook.com/groups/123456",
         currency: "EUR",
+        custom: ["currency"],
       })
     ).id;
   });

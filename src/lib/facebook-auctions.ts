@@ -1,7 +1,12 @@
 import "server-only";
 import { prisma, type DbTransaction } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
-import type { FacebookStartingPriceMode } from "./facebook-group-rules";
+import {
+  effectiveFacebookGroupSettings,
+  type FacebookEffectiveSettings,
+  type FacebookStartingPriceMode,
+} from "./facebook-group-rules";
+import { readFacebookDefaults, toCustomSettings, toPostingSettings } from "./facebook-groups";
 import {
   describeFacebookAuctionCopies,
   type FacebookAuctionCopy,
@@ -28,6 +33,18 @@ import type { OfferState } from "./offer-rules";
  * collector preparing a second auction out of the same stamps competes for nothing until it goes up.
  */
 export const FACEBOOK_AUCTION_HOLDING_STATES: readonly OfferState[] = ["active", "paused"];
+
+/** A group row's settings as it posts with them: its own where it holds one, the platform's
+ *  otherwise (#1661). The one place a group row is read for its settings. */
+function groupSettings(
+  row: Parameters<typeof toPostingSettings>[0] & { currency: string | null; customSettings: string[] },
+  platform: Awaited<ReturnType<typeof readFacebookDefaults>>
+): FacebookEffectiveSettings {
+  return effectiveFacebookGroupSettings(
+    { ...toPostingSettings(row), currency: row.currency, custom: toCustomSettings(row.customSettings) },
+    platform
+  );
+}
 
 /** A group as the offer form offers it: what a new auction there starts from. Money as 2-dp strings,
  *  the boundary's convention. */
@@ -68,26 +85,32 @@ export async function listFacebookGroupChoices(
     select: { platformModule: true, platformCurrency: true },
   });
   if (platform?.platformModule !== FACEBOOK_PLATFORM_MODULE) return { isFacebook: false, groups: [] };
-  const rows = await prisma.facebookGroup.findMany({
-    where: {
-      platformId,
-      OR: [{ archivedAt: null }, ...(includeGroupId ? [{ id: includeGroupId }] : [])],
-    },
-    orderBy: { name: "asc" },
-  });
+  const [rows, defaults] = await Promise.all([
+    prisma.facebookGroup.findMany({
+      where: {
+        platformId,
+        OR: [{ archivedAt: null }, ...(includeGroupId ? [{ id: includeGroupId }] : [])],
+      },
+      orderBy: { name: "asc" },
+    }),
+    readFacebookDefaults(platformId),
+  ]);
   return {
     isFacebook: true,
-    groups: rows.map((g) => ({
-      id: g.id,
-      name: g.name,
-      archived: g.archivedAt !== null,
-      currency: g.currency ?? platform.platformCurrency,
-      startingPriceMode: g.startingPriceMode as FacebookStartingPriceMode | null,
-      startingPriceValue: g.startingPriceValue?.toNumber() ?? null,
-      bidIncrement: g.bidIncrement?.toFixed(2) ?? null,
-      auctionDays: g.auctionDays,
-      closingTime: g.closingTime,
-    })),
+    groups: rows.map((g) => {
+      const settings = groupSettings(g, defaults);
+      return {
+        id: g.id,
+        name: g.name,
+        archived: g.archivedAt !== null,
+        currency: settings.currency ?? platform.platformCurrency,
+        startingPriceMode: settings.startingPriceMode,
+        startingPriceValue: settings.startingPriceValue,
+        bidIncrement: settings.bidIncrement?.toFixed(2) ?? null,
+        auctionDays: settings.auctionDays,
+        closingTime: settings.closingTime,
+      };
+    }),
   };
 }
 
@@ -141,16 +164,17 @@ export async function resolveFacebookOffer(
       message: `${group.name} is archived — restore it in Settings → Facebook to auction in it again.`,
     };
   }
+  const settings = groupSettings(group, await readFacebookDefaults(group.platformId));
   const submittedIncrement = input.bidIncrement?.trim() || null;
   return {
     ok: true,
     facebookGroupId: group.id,
     bidIncrement:
-      submittedIncrement ?? (mode.create ? (group.bidIncrement?.toFixed(2) ?? null) : null),
-    currency: group.currency,
+      submittedIncrement ?? (mode.create ? (settings.bidIncrement?.toFixed(2) ?? null) : null),
+    currency: settings.currency,
     defaultStartingPrice:
-      mode.create && group.startingPriceMode === "amount"
-        ? (group.startingPriceValue?.toFixed(2) ?? null)
+      mode.create && settings.startingPriceMode === "amount"
+        ? (settings.startingPriceValue?.toFixed(2) ?? null)
         : null,
   };
 }
@@ -300,9 +324,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       collectionId: true,
       facebookPostId: true,
       facebookPost: { select: { id: true, url: true } },
-      facebookGroup: {
-        select: { id: true, name: true, url: true, archivedAt: true, postTemplate: true, standingNote: true },
-      },
+      facebookGroup: true,
     },
   });
   if (!offer?.facebookGroup) return null;
@@ -357,14 +379,19 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     };
   });
   const base = `/api/collections/${offer.collectionId}`;
+  // The post reads as the group posts now — its own template, or the platform's it follows (#1661).
+  const settings = groupSettings(
+    offer.facebookGroup,
+    await readFacebookDefaults(offer.facebookGroup.platformId)
+  );
   return {
     group: {
       id: offer.facebookGroup.id,
       name: offer.facebookGroup.name,
       url: offer.facebookGroup.url,
       archived: offer.facebookGroup.archivedAt !== null,
-      postTemplate: offer.facebookGroup.postTemplate,
-      standingNote: offer.facebookGroup.standingNote,
+      postTemplate: settings.postTemplate,
+      standingNote: settings.standingNote,
     },
     post: offer.facebookPost,
     lots,

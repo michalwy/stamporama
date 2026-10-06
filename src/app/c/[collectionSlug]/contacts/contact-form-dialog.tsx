@@ -37,6 +37,7 @@ import {
 } from "@/lib/offer-photo-config";
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
 import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
+import { FACEBOOK_PLATFORM_MODULE } from "@/lib/platform-modules";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -621,7 +622,10 @@ export function ContactFormDialog({
                       on (or never do). Changeable per offer.
                     </p>
                   </div>
-                  {defaultListingType === "auction" && (
+                  {/* Not on the Facebook platform: there the opening figure is Facebook's own
+                      setting, an amount or a share of catalogue value, on Settings → Facebook
+                      (#1661) — stated once, where its groups follow it. */}
+                  {defaultListingType === "auction" && contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
                     <div style={{ flex: 1 }}>
                       <LabelWithError htmlFor="contact-default-starting-price">
                         Default starting price (optional)

@@ -2,9 +2,13 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   FACEBOOK_AUCTION_DAYS_MAX,
+  FACEBOOK_BLANK_SETTINGS,
   FACEBOOK_GROUP_DEFAULTS,
+  FACEBOOK_GROUP_SETTINGS,
   FACEBOOK_POST_PLACEHOLDERS,
+  cleanFacebookDefaults,
   cleanFacebookGroupValues,
+  effectiveFacebookGroupSettings,
   isFacebookGroupUrl,
   normalizeClosingTime,
   unknownPostPlaceholders,
@@ -12,22 +16,36 @@ import {
 } from "../../src/lib/facebook-group-rules";
 
 // A Facebook group's settings (#1543; ADR-0061): every default optional, and what is stated held to
-// its shape. The database half — the platform marker, archive, the delete refused while offers name
+// its shape — and, since #1661, each setting either the group's own or following the platform's. The
+// database half — the platform marker, archive, the delete refused while offers name
 // the group — is `tests/integration/facebook-groups.test.ts`.
 
+// Every setting the group's own, so what is sent is what is cleaned — the shape rules below are the
+// rules a custom setting is held to. What following the platform does is its own block.
 function values(overrides: Partial<FacebookGroupValues> = {}): FacebookGroupValues {
   return {
     ...FACEBOOK_GROUP_DEFAULTS,
     name: "Znaczki — aukcje",
     url: "https://www.facebook.com/groups/123456",
+    custom: [...FACEBOOK_GROUP_SETTINGS],
+    currency: "PLN",
     ...overrides,
   };
 }
 
 describe("cleanFacebookGroupValues (#1543)", () => {
-  it("accepts a group with a name and a link and nothing else", () => {
-    const clean = cleanFacebookGroupValues(values());
-    assert.deepEqual(clean, { ...FACEBOOK_GROUP_DEFAULTS, name: "Znaczki — aukcje", url: "https://www.facebook.com/groups/123456" });
+  it("accepts a group with a name and a link and nothing else, following the platform throughout", () => {
+    const clean = cleanFacebookGroupValues({
+      ...FACEBOOK_GROUP_DEFAULTS,
+      name: " Znaczki — aukcje ",
+      url: "https://www.facebook.com/groups/123456",
+    });
+    assert.deepEqual(clean, {
+      ...FACEBOOK_GROUP_DEFAULTS,
+      name: "Znaczki — aukcje",
+      url: "https://www.facebook.com/groups/123456",
+    });
+    assert.deepEqual(clean.custom, []);
   });
 
   it("refuses a group without a name or without a link", () => {
@@ -111,10 +129,138 @@ describe("cleanFacebookGroupValues (#1543)", () => {
     assert.throws(() => cleanFacebookGroupValues(values({ closingTime: "8pm" })), /time of day/);
   });
 
-  it("upper-cases a currency code, refuses a non-code, and leaves null as the platform's", () => {
+  it("upper-cases a custom currency code, and refuses a non-code or none", () => {
     assert.equal(cleanFacebookGroupValues(values({ currency: "eur" })).currency, "EUR");
-    assert.equal(cleanFacebookGroupValues(values({ currency: "" })).currency, null);
+    assert.throws(() => cleanFacebookGroupValues(values({ currency: "" })), /own currency/);
+    assert.throws(() => cleanFacebookGroupValues(values({ currency: null })), /own currency/);
     assert.throws(() => cleanFacebookGroupValues(values({ currency: "euro" })), /three-letter code/);
+  });
+});
+
+describe("a group following the platform (#1661)", () => {
+  it("stores a followed setting blank whatever was sent, and keeps a custom one", () => {
+    const clean = cleanFacebookGroupValues(
+      values({
+        custom: ["standingNote", "bidIncrement"],
+        postTemplate: "{description}",
+        standingNote: "Shipping 5 zł",
+        startingPriceMode: "amount",
+        startingPriceValue: 5,
+        bidIncrement: 1,
+        auctionDays: 7,
+        closingTime: "20:00",
+        currency: "EUR",
+      })
+    );
+    assert.deepEqual(clean, {
+      name: "Znaczki — aukcje",
+      url: "https://www.facebook.com/groups/123456",
+      ...FACEBOOK_BLANK_SETTINGS,
+      standingNote: "Shipping 5 zł",
+      bidIncrement: 1,
+      currency: null,
+      custom: ["standingNote", "bidIncrement"],
+    });
+  });
+
+  it("does not check the shape of a setting it follows — the field was never shown", () => {
+    const clean = cleanFacebookGroupValues(
+      values({ custom: [], closingTime: "8pm", auctionDays: 0, currency: "euro" })
+    );
+    assert.equal(clean.closingTime, null);
+    assert.equal(clean.auctionDays, null);
+    assert.equal(clean.currency, null);
+  });
+
+  it("keeps each custom key once, in the one order, and refuses one it does not know", () => {
+    assert.deepEqual(
+      cleanFacebookGroupValues(values({ custom: ["currency", "postTemplate", "currency"] })).custom,
+      ["postTemplate", "currency"]
+    );
+    assert.throws(
+      () => cleanFacebookGroupValues(values({ custom: ["name" as unknown as "postTemplate"] })),
+      /Unknown group setting/
+    );
+  });
+});
+
+describe("cleanFacebookDefaults (#1661)", () => {
+  it("holds the platform's settings to a group's rules", () => {
+    assert.deepEqual(cleanFacebookDefaults(FACEBOOK_BLANK_SETTINGS), FACEBOOK_BLANK_SETTINGS);
+    assert.deepEqual(
+      cleanFacebookDefaults({
+        postTemplate: "  {description}\n{closesAt} ",
+        standingNote: "",
+        startingPriceMode: "catalogPercent",
+        startingPriceValue: 30,
+        bidIncrement: 0.5,
+        auctionDays: 7,
+        closingTime: "9:00",
+      }),
+      {
+        postTemplate: "{description}\n{closesAt}",
+        standingNote: "",
+        startingPriceMode: "catalogPercent",
+        startingPriceValue: 30,
+        bidIncrement: 0.5,
+        auctionDays: 7,
+        closingTime: "09:00",
+      }
+    );
+    assert.throws(
+      () => cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, startingPriceMode: "amount" }),
+      /what the starting price is/
+    );
+    assert.throws(
+      () => cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, closingTime: "25:00" }),
+      /time of day/
+    );
+  });
+});
+
+describe("effectiveFacebookGroupSettings (#1661)", () => {
+  const platform = {
+    postTemplate: "Platform {description}",
+    standingNote: "Platform terms",
+    startingPriceMode: "amount" as const,
+    startingPriceValue: 5,
+    bidIncrement: 1,
+    auctionDays: 7,
+    closingTime: "20:00",
+  };
+
+  it("reads every setting from the platform for a group that follows it throughout", () => {
+    assert.deepEqual(
+      effectiveFacebookGroupSettings({ ...FACEBOOK_BLANK_SETTINGS, currency: null, custom: [] }, platform),
+      { ...platform, currency: null }
+    );
+  });
+
+  it("reads a custom setting from the group — a custom *none* included", () => {
+    const group = {
+      ...FACEBOOK_BLANK_SETTINGS,
+      standingNote: "Group terms",
+      currency: "EUR",
+      custom: ["standingNote", "startingPrice", "closingTime", "currency"],
+    };
+    assert.deepEqual(effectiveFacebookGroupSettings(group, platform), {
+      postTemplate: "Platform {description}",
+      standingNote: "Group terms",
+      startingPriceMode: null,
+      startingPriceValue: null,
+      bidIncrement: 1,
+      auctionDays: 7,
+      closingTime: null,
+      currency: "EUR",
+    });
+  });
+
+  it("leaves the currency null — the platform's — on a group that follows it, whatever is stored", () => {
+    assert.equal(
+      effectiveFacebookGroupSettings({ ...FACEBOOK_BLANK_SETTINGS, currency: "EUR", custom: [] }, platform)
+        .currency,
+      null
+    );
   });
 });
 
