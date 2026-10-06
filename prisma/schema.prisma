@@ -2834,6 +2834,12 @@ model FacebookGroup {
   // new auction; clearing the column brings a group back.
   archivedAt   DateTime?
 
+  // Which of the settings below are this group's own (#1661): the keys of
+  // `FACEBOOK_GROUP_SETTINGS`. Every other setting **follows the platform's** (`FacebookDefaults`),
+  // read live, and its column here is blank — switching a setting back to the platform's drops the
+  // group's value. A new group follows the platform throughout, so this starts empty.
+  customSettings String[] @default([])
+
   // ── How a post here reads ─────────────────────────────────────────────────────────────────────
   // The text a post is prepared from (#1544), with `{token}` placeholders — the vocabulary is
   // `facebook-group-rules.ts`'s. Empty is allowed and means the post carries no template text yet.
@@ -2869,6 +2875,33 @@ model FacebookGroup {
   @@index([collectionId])
   @@index([platformId])
   @@map("facebook_group")
+}
+
+// The Facebook platform's own posting settings (#1661): what every group follows unless it marks a
+// setting custom (`FacebookGroup.customSettings`). The same fields as a group's, under the same
+// rules (`facebook-group-rules.ts`), except the currency — that is the platform's own
+// `Contact.platformCurrency` (#196), which a group following the platform already used. One row per
+// platform contact, written the first time Settings → Facebook saves one; no row reads as every
+// setting blank. Read live by the groups that follow it, and — like a group's — read when an auction
+// is created and then owned by the offer, so changing it never reaches an auction already made.
+model FacebookDefaults {
+  platformId String @id
+
+  postTemplate String @default("")
+  standingNote String @default("")
+
+  startingPriceMode  String?
+  startingPriceValue Decimal? @db.Decimal(10, 2)
+  bidIncrement       Decimal? @db.Decimal(10, 2)
+  auctionDays        Int?
+  closingTime        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  platform Contact @relation("PlatformFacebookDefaults", fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@map("facebook_defaults")
 }
 
 // A post holding several lots in one Facebook group (#1544; ADR-0061 §2): an album, each photo a lot
@@ -6387,6 +6420,7 @@ model Contact {
   defaultDelcampeListingProfile DelcampeListingProfile? @relation("PlatformDefaultDelcampeListingProfile", fields: [defaultDelcampeListingProfileId], references: [id], onDelete: SetNull)
   // The groups this platform auctions in, when it is Facebook (#1543; ADR-0061). They go with it.
   facebookGroups FacebookGroup[] @relation("PlatformFacebookGroup")
+  facebookDefaults FacebookDefaults? @relation("PlatformFacebookDefaults")
   // Sales made to this contact as the buyer (ADR-0012, #166). Same detach-before-delete guard
   // via the `Sale.buyerId` FK (`onDelete: Restrict`).
   salesBuyer        Sale[]     @relation("SaleBuyer")

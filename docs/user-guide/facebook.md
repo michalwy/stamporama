@@ -2,8 +2,9 @@
 
 Facebook is a platform you **auction** on, in groups: an auction there is a post in a group, buyers
 bid in the comments under it, and the sale closes there. Stamporama treats Facebook as **one
-platform** and keeps the groups you auction in under it, each with its own customs — how a post there
-reads, what you say about shipping and payment, and what a new auction starts from.
+platform** and keeps the groups you auction in under it. How a post reads, what you say about
+shipping and payment, and what a new auction starts from are set **once for Facebook**, and every
+group follows them — except where you set one **custom** for a particular group.
 
 The platform and its groups are set up under **Settings → Facebook**; an auction is an
 [offer](offers.md) on the Facebook platform, prepared, posted and followed like any other.
@@ -25,19 +26,11 @@ the contact they were added to, so the page then shows the new platform's groups
 Naming it does **not** switch the [Assistant](assistant.md) on, and none of the Colnect checks is
 asked of its offers.
 
-## Groups
+## Facebook defaults
 
-The page lists your groups on the left — those you use first, then any you have archived under
-**Archived** — and the chosen group's settings on the right. **Add group** at the top of the page
-starts a new one in the same place. A group with offers shows how many beside its name.
+The first row of the list, **Facebook defaults**, holds the settings every group follows:
 
-Each group has:
-
-- **Name** — what you call it here, usually the group's own name. Two groups on the platform cannot
-  share one.
-- **Link** — the group's address on Facebook, starting with `https://`. Any address that opens the
-  group will do; the ↗ beside the label opens it.
-- **Post template** — the text a post in this group is prepared from. It can carry placeholders,
+- **Post template** — the text a post is prepared from. It can carry placeholders,
   filled in from the auction when the post is prepared:
 
   | Placeholder | Becomes |
@@ -51,16 +44,39 @@ Each group has:
 
   Anything else in braces stays exactly as you typed it, and the field says so under it while you
   type — so a misspelt `{startprice}` is caught before it reaches a post.
-- **Shipping, payment and terms** — a standing note added under every post in this group, as written.
-- **New auctions** — what a new auction in this group starts from, each optional:
+- **Shipping, payment and terms** — a standing note added under every post, as written.
+- **New auctions** — what a new auction starts from, each optional:
   - **Starting price** — none, an amount, or a percentage of the copies' catalogue value.
   - **Bid increment** — how much a bid must beat the last one by.
   - **Days an auction runs** — between 1 and 90.
   - **Closing time** — the time of day an auction closes on its last day.
-  - **Currency** — the platform's own unless you choose another for this group.
+  - **Currency** — shown, not set here: it is the platform's own currency, set on its contact.
 
-  These are starting points: each can be changed on the auction itself, and changing a group never
-  changes an auction already made from it.
+  These are starting points: each can be changed on the auction itself. Changing one here changes it
+  at once for every group that follows it, and never changes an auction already made.
+
+The template here is Facebook's own, not the platform's description template: that one writes an
+offer's description, which is what `{description}` puts into the post.
+
+## Groups
+
+The page lists your groups under **Facebook defaults** — those you use first, then any you have
+archived under **Archived** — and the chosen group's settings on the right. **Add group** at the top
+of the page starts a new one in the same place. A group with offers shows how many beside its name.
+
+Each group has a **Name** — what you call it here, usually the group's own name; two groups on the
+platform cannot share one — and a **Link**, the group's address on Facebook, starting with
+`https://`. Any address that opens the group will do; the ↗ beside the label opens it.
+
+Every other setting — the post template, the note on shipping, payment and terms, the starting
+price, the bid increment, the days, the closing time and the currency — shows as **Same as
+Facebook**, with the value it follows, until you tick **Custom for this group** beside it (**Custom**
+under *New auctions*). The field then appears, starting from Facebook's value, and what you save there
+is this group's alone: a later change to Facebook defaults does not reach it. Untick it to follow
+Facebook again — the group's own value is dropped. A custom setting may also be empty, for a group
+that wants, say, no bid increment where Facebook has one. A custom **currency** must name one.
+
+A new group follows Facebook throughout.
 
 Save keeps what you changed; Revert puts the group back as it was saved.
 
@@ -81,7 +97,8 @@ on the Offers screen, or **Add to new offer** from your copies — and choose Fa
 the form then asks for the **Group**, and a Facebook offer is always an auction, so it does not ask
 how the listing is sold.
 
-Picking a group fills in that group's defaults, each of which you can change before you save:
+Picking a group fills in that group's settings — its own where it has them, Facebook's otherwise —
+each of which you can change before you save:
 
 - the **starting price** — the group's amount, or its percentage of the copies' catalogue value
   when the form suggests one from your copies;
@@ -91,7 +108,8 @@ Picking a group fills in that group's defaults, each of which you can change bef
 - the **currency** — the group's own when it has one, otherwise the platform's. An auction in a group
   with a currency of its own is in that currency, whatever the platform's is.
 
-Changing the group's settings later changes nothing about auctions already made from it. Only groups
+Changing the group's settings, or Facebook defaults, later changes nothing about auctions already
+made. Only groups
 in use are offered; an archived group can be kept by an auction already in it, but not chosen for a
 new one.
 
@@ -110,8 +128,8 @@ Facebook has no way for an app to post in a group, so you post by hand from the 
 the offer's screen, which holds everything the post needs:
 
 - the **group**, with a link to open it;
-- the **post text**: the group's post template filled in from the auction, with the group's note on
-  shipping, payment and terms under it. **Copy** puts it on the clipboard in one click. A group with
+- the **post text**: the group's post template — its own or Facebook's, as it reads now — filled in
+  from the auction, with the note on shipping, payment and terms under it. **Copy** puts it on the clipboard in one click. A group with
   no template posts each lot's description;
 - **↓ Photos**: the offer's photos as one download.
 

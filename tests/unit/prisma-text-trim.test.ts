@@ -157,12 +157,14 @@ describe("the schema this rule was reasoned about", () => {
     // these. All of them hold ids, which have no whitespace to remove — and `apiReviewFields` (twice:
     // an auction sale's and a lot's, #1626) holds field keys the code writes, never typed text.
     // `anchorMarkets` (#1634) holds two-letter country codes, normalised by the domain on write.
+    // `customSettings` (#1661) holds a Facebook group's setting keys, filtered to the known ones.
     const found = [...schema.matchAll(/^\s+(\w+)\s+String\[\]/gm)].map((m) => m[1]).sort();
     assert.deepEqual(found, [
       "anchorMarkets",
       "apiReviewFields",
       "apiReviewFields",
       "conditionIds",
+      "customSettings",
       "formatIds",
       "itemIds",
       "photoPlanOrder",

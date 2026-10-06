@@ -72,8 +72,9 @@ published category list, so an upload row's category number arrives with a name 
 that list already read, needs no credentials, and instances that do not sell on Delcampe never make
 the request.
 
-If you auction in **Facebook groups**, Facebook is one platform and your groups sit under it, each
-with its own post template, note on shipping and payment, and auction defaults; Facebook has no API
+If you auction in **Facebook groups**, Facebook is one platform and your groups sit under it; the
+post template, note on shipping and payment, and auction defaults are set once for Facebook and
+followed by every group, which can set any of them custom for itself. Facebook has no API
 for group posts, so an auction there is prepared as a kit — the post's text and photos — that you
 paste by hand, alone or as lots of one post. You type the highest bid while it runs, and when it ends
 the winner and the price, which records the sale — see [Facebook](docs/user-guide/facebook.md).

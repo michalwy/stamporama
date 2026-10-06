@@ -12,7 +12,24 @@ read together.
   in **neither** rule table of `platform-modules.ts`: no listing half, no capture, no close, so it
   inherits nobody's rules by existing (`tests/unit/platform-modules.test.ts` pins that).
 
-- **A group's settings are defaults, every one optional** (ADR-0061 §6). The post template with its
+- **A group's settings follow the platform's unless set custom** (#1661, amending ADR-0061 §6). The
+  platform's own are a `FacebookDefaults` row keyed by the platform contact (`readFacebookDefaults`,
+  no row = `FACEBOOK_BLANK_SETTINGS`), with the group's columns bar the currency — that is
+  `platformCurrency`, which a group naming none already used. A group lists its own settings in
+  `customSettings` (`FACEBOOK_GROUP_SETTINGS`; `startingPrice` is mode and value together), and a
+  followed column is **stored blank** — `cleanFacebookGroupValues` blanks it whatever was sent, so
+  switching back drops the value. A custom setting may be empty (a custom *no increment* where
+  Facebook has one), which is why this is a key list and not "null means follow". Every reader goes
+  through `effectiveFacebookGroupSettings` — the offer form's choices, `resolveFacebookOffer` and the
+  kit — read live, so a changed default reaches every following group and, being read at creation,
+  no auction already made. The kit's template and note are read live as they always were. The
+  migration made a setting custom exactly where it differed from the platform's, and moved the
+  Facebook contact's `defaultStartingPrice` (never read by a Facebook auction) into the defaults row
+  as an `amount`; the contact dialog no longer offers that field for the Facebook platform. The post
+  template is **not** the contact's `descriptionTemplate` (decided with the collector, 2026-10-06):
+  that one writes the offer's description, which `{description}` puts into the post.
+
+- **What a setting holds, every one optional** (ADR-0061 §6). The post template with its
   six `{token}` placeholders (`FACEBOOK_POST_PLACEHOLDERS` — `{catalog}` is the title template's own
   word, so it means one thing across templates), the standing note, the starting price as a **mode
   plus one value** (`startingPriceMode` = `amount | catalogPercent`, `startingPriceValue` cleared
@@ -110,7 +127,10 @@ read together.
 
 - **Where it is seen.** Settings → Facebook (`facebook-settings-page.tsx`): the platform choice in the
   header (`MarketplacePlatformSelect`, *Facebook platform*), then list beside detail (#1471) with no
-  tabs and no summary strip — the groups are the one thing configured. Archive/Restore is the detail
+  tabs and no summary strip. The list's first row is **Facebook defaults** (`DEFAULTS_ROW`, the
+  page's default selection), then the groups; a group's pane shows each setting as *Same as Facebook*
+  with its value, or with its field once *Custom for this group* — a checkbox named `custom` carrying
+  the key, so the pane's unsaved measure sees it. Archive/Restore is the detail
   pane's header action; Delete is disabled with its reason while offers name the group. The user guide
   is `docs/user-guide/facebook.md`.
   An auction is the offer form (group + increment, shown only on the Facebook platform, the group

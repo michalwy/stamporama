@@ -12,9 +12,18 @@ import {
   type OfferInput,
 } from "../../src/lib/offers";
 import { setFacebookPlatform } from "../../src/lib/facebook";
-import { createFacebookGroup, setFacebookGroupArchived } from "../../src/lib/facebook-groups";
-import { FACEBOOK_GROUP_DEFAULTS, type FacebookGroupValues } from "../../src/lib/facebook-group-rules";
-import { getFacebookOfferKit } from "../../src/lib/facebook-auctions";
+import {
+  createFacebookGroup,
+  setFacebookGroupArchived,
+  updateFacebookDefaults,
+  updateFacebookGroup,
+} from "../../src/lib/facebook-groups";
+import {
+  FACEBOOK_BLANK_SETTINGS,
+  FACEBOOK_GROUP_DEFAULTS,
+  type FacebookGroupValues,
+} from "../../src/lib/facebook-group-rules";
+import { getFacebookOfferKit, listFacebookGroupChoices } from "../../src/lib/facebook-auctions";
 import {
   createFacebookPost,
   recordFacebookPostLink,
@@ -91,6 +100,7 @@ describe("Facebook auction offers (#1544)", () => {
           startingPriceValue: 4,
           bidIncrement: 0.5,
           currency: "EUR",
+          custom: ["postTemplate", "standingNote", "startingPrice", "bidIncrement", "currency"],
         })
       )
     ).id;
@@ -178,6 +188,73 @@ describe("Facebook auction offers (#1544)", () => {
     const stated = await createOffer(userId, collectionId, input({ startingPrice: "9.00", bidIncrement: "2.00" }));
     assert.equal((await read(stated)).startingPrice?.toFixed(2), "9.00");
     assert.equal((await read(stated)).bidIncrement?.toFixed(2), "2.00");
+  });
+
+  it("starts an auction in a group following Facebook from Facebook's settings, read live (#1661)", async () => {
+    // The second group follows Facebook throughout; Facebook states its own settings.
+    await updateFacebookDefaults(userId, collectionId, {
+      ...FACEBOOK_BLANK_SETTINGS,
+      postTemplate: "Facebook {description}",
+      standingNote: "Facebook terms",
+      startingPriceMode: "amount",
+      startingPriceValue: 6,
+      bidIncrement: 2,
+      auctionDays: 3,
+      closingTime: "21:00",
+    });
+    const before = await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId }));
+    let offer = await read(before);
+    assert.equal(offer.currency, "PLN", "following Facebook's currency is the platform's");
+    assert.equal(offer.startingPrice?.toFixed(2), "6.00");
+    assert.equal(offer.bidIncrement?.toFixed(2), "2.00");
+    let kit = await getFacebookOfferKit(before);
+    assert.equal(kit?.group.postTemplate, "Facebook {description}");
+    assert.equal(kit?.group.standingNote, "Facebook terms");
+
+    // What the offer form starts a new auction from, per group: its own where custom.
+    const choices = await listFacebookGroupChoices(userId, collectionId, facebookId);
+    const byName = new Map(choices.groups.map((g) => [g.name, g]));
+    assert.deepEqual(
+      [byName.get("Filatelistyka")?.bidIncrement, byName.get("Filatelistyka")?.auctionDays, byName.get("Filatelistyka")?.closingTime, byName.get("Filatelistyka")?.currency],
+      ["2.00", 3, "21:00", "PLN"]
+    );
+    assert.deepEqual(
+      [byName.get("Znaczki — aukcje")?.bidIncrement, byName.get("Znaczki — aukcje")?.auctionDays, byName.get("Znaczki — aukcje")?.currency],
+      ["0.50", 3, "EUR"],
+      "the custom increment and currency are the group's, the length Facebook's"
+    );
+
+    // A changed default reaches the next auction and the group's kit, and no auction already made.
+    await updateFacebookDefaults(userId, collectionId, {
+      ...FACEBOOK_BLANK_SETTINGS,
+      postTemplate: "Changed {description}",
+      startingPriceMode: "amount",
+      startingPriceValue: 8,
+      bidIncrement: 3,
+    });
+    offer = await read(before);
+    assert.equal(offer.startingPrice?.toFixed(2), "6.00");
+    assert.equal(offer.bidIncrement?.toFixed(2), "2.00");
+    const after = await read(await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId })));
+    assert.equal(after.startingPrice?.toFixed(2), "8.00");
+    assert.equal(after.bidIncrement?.toFixed(2), "3.00");
+    kit = await getFacebookOfferKit(before);
+    assert.equal(kit?.group.postTemplate, "Changed {description}");
+    assert.equal(kit?.group.standingNote, "");
+
+    // A group that sets the increment custom — to none — stops following it.
+    await updateFacebookGroup(
+      userId,
+      otherGroupId,
+      groupValues({ name: "Filatelistyka", custom: ["bidIncrement"], bidIncrement: null })
+    );
+    const custom = await read(await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId })));
+    assert.equal(custom.bidIncrement, null, "custom with no increment is not Facebook's 3.00");
+    assert.equal(custom.startingPrice?.toFixed(2), "8.00", "the starting price still follows Facebook");
+
+    // Back to a blank Facebook, so the cases below read the groups as they were.
+    await updateFacebookDefaults(userId, collectionId, FACEBOOK_BLANK_SETTINGS);
+    await updateFacebookGroup(userId, otherGroupId, groupValues({ name: "Filatelistyka" }));
   });
 
   it("leaves no Facebook group on an offer elsewhere, and clears it when one moves off Facebook", async () => {
