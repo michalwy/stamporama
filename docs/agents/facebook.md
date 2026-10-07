@@ -1,8 +1,33 @@
-# Facebook Group Auctions
+# Facebook Group Auctions and Quick Buys
 
 Which platform is Facebook, the groups under it and what each holds, and what is deliberately not
 here yet. The design is [ADR-0061](../decisions/0061-facebook-groups.md); the track is #1543–#1547,
-read together.
+read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
+
+- **An offer on Facebook is an auction or a quick buy** (#1671; ADR-0061 §8, decided with the
+  collector on 2026-10-07). Three settings joined the group/default pair under #1661's rule:
+  `listingType` (what a new offer starts as; the platform's blank is `auction`, so the migration
+  changed nothing), `quickBuyTemplate` beside `postTemplate` (which stayed the **auction** template —
+  renaming it would have been a migration for a word), and `mixedListingTypes` (whether one post may
+  hold both; off unless set). `resolveFacebookOffer` returns the group's `listingType` on create only,
+  and `facebookPricingDefaults` hands it to `resolveOfferPricing` as the platform default would be —
+  so the form's own answer outranks it and nothing is forced any more. `facebookIncrementFor` drops the
+  increment on a quick buy, and `endsAt` is already dropped there by the ordinary rule. An edit naming
+  **no** type keeps a Facebook offer's (`updateOffer`), since a save without one is no reason to turn
+  an old auction into a quick buy; off Facebook that path is unchanged. A quick buy is asked for its
+  asking price by the same `missingPriceField` as anywhere, and a group starting quick buys skips the
+  `catalogPercent` short-cut in `quickOfferCreationBlock`. The contact dialog no longer offers the
+  Facebook platform's `defaultListingType` — it is Settings → Facebook's now.
+
+- **Templates by type, `{catalog}` retired** (#1671). `FACEBOOK_AUCTION_PLACEHOLDERS` and
+  `FACEBOOK_QUICK_BUY_PLACEHOLDERS` (`facebookPostPlaceholders(type)`) are what each editor lists and
+  what `renderFacebookLotText` fills for a lot of that type; both carry `{title}`. A lot is rendered
+  from `facebookTemplateFor(templates, lot.listingType)`, never the other, so a post of mixed lots is
+  each lot in its own words. `{catalog}` is in `FACEBOOK_RETIRED_PLACEHOLDERS`: not listed, not
+  *unknown*, still filled in, and flagged — `retiredPostPlaceholders` under the field and
+  `usesRetiredPostPlaceholder` as a row tag (a group's own templates only; one it follows is flagged on
+  the defaults row). Another type's token in a template is *unknown*, so it stays as typed and is named
+  while it is typed.
 
 - **One platform, groups under it** (#1543; ADR-0061 §1). Facebook is the `Contact` carrying
   `platformModule = "facebook"` (`FACEBOOK_PLATFORM_MODULE`), set on Settings → Facebook through the
@@ -29,9 +54,9 @@ read together.
   template is **not** the contact's `descriptionTemplate` (decided with the collector, 2026-10-06):
   that one writes the offer's description, which `{description}` puts into the post.
 
-- **What a setting holds, every one optional** (ADR-0061 §6). The post template with its
-  six `{token}` placeholders (`FACEBOOK_POST_PLACEHOLDERS` — `{catalog}` is the title template's own
-  word, so it means one thing across templates), the standing note, the starting price as a **mode
+- **What a setting holds, every one optional** (ADR-0061 §6). The listing type, whether a post may
+  mix types, the auction and quick-buy post templates with their `{token}` placeholders (above), the
+  standing note, the starting price as a **mode
   plus one value** (`startingPriceMode` = `amount | catalogPercent`, `startingPriceValue` cleared
   whenever the mode is null), the increment, the length in days, the closing time as `HH:MM`, and the
   currency (null = `platformCurrency`). They are read when an offer is created (#1544) and then owned
@@ -47,12 +72,12 @@ read together.
   Archiving is `archivedAt`; listed after the groups in use, offered to no new auction (#1544's to
   enforce), cleared to restore.
 
-- **A Facebook offer is an auction in a group, resolved in one place** (#1544).
+- **A Facebook offer is in a group, resolved in one place** (#1544).
   `resolveFacebookOffer` (`facebook-auctions.ts`) is asked by `createOffer`, `duplicateOffer` and
   `updateOffer`: on the Facebook platform a group **of that platform** is required, a new auction may
   name only one in use (an edit may keep its archived one), and everything Facebook is null off it —
-  so moving an offer away clears it. The listing type is forced to `auction` before
-  `resolveOfferPricing`, and the group's `amount` stands in for `Contact.defaultStartingPrice` as the
+  so moving an offer away clears it. The listing type was forced to `auction` here until #1671 (top of
+  this file), and the group's `amount` stands in for `Contact.defaultStartingPrice` as the
   blank-submission fallback (`facebookPricingDefaults`); `catalogPercent` was the **form's** job
   alone, over the catalogue suggestion it already holds (#230), until #1663 gave the server the same
   figure over the seed (below) — the form's stated figure still outranks it. `Offer.bidIncrement` is seeded from the group on create only.
@@ -90,7 +115,8 @@ read together.
   a group naming none falls through to the lock as before. An edit never re-currencies an offer
   (#196's snapshot rule), including when its group changes.
 
-- **A copy is in one Facebook auction that is up** (ADR-0061 §5). "Up" is
+- **A copy is in one Facebook offer that is up** (ADR-0061 §5; quick buys included since #1671,
+  either can sell it — the query was already keyed on `facebookGroupId`, so only the words changed). "Up" is
   `FACEBOOK_AUCTION_HOLDING_STATES` = `active | paused`; drafts compete for nothing (#639's reading).
   `facebookAuctionRefusal` is asked **only by a Facebook offer**, at every composition path that asks
   `assertNotCommittedElsewhere`, at `createOffer`/`duplicateOffer` seeding, and at `→ active` in
@@ -107,8 +133,12 @@ read together.
   second field for one address, and both are gone — the migration moved a recorded post link into
   each lot whose `url` was empty, then dropped the column. A post is up once any lot is
   (`isFacebookLotPosted`, past Ready), the same reading `facebookPostRefusal` already used. The **closing time stays on each offer** (`endsAt`, where the
-  ended-auction flag and every list read it) and `updateOffer` writes it to every lot of the post —
-  one fact written in several places rather than a second column readers would have to join.
+  ended-auction flag and every list read it) and `updateOffer` writes it to every **auction** lot of
+  the post — one fact written in several places rather than a second column readers would have to
+  join; a quick buy neither writes one nor takes one (#1671). **A post's lots share one type** unless
+  the group's `mixedListingTypes` says otherwise: `facebookPostRefusal` takes the group's setting
+  (`facebookGroupMixesTypes`) and `facebookMixedTypesRefusal` names each type's offers, and
+  `updateOffer` asks `facebookLotTypeRefusal` before a lot changes type inside such a post.
   `detachFacebookLot` is the one way out: renumbers in two passes (the unique index), dissolves a
   post left with one lot, and runs on take-out and on `deleteOffer`.
 
@@ -126,9 +156,9 @@ read together.
 
 - **The kit's text is rendered in the browser** (`renderFacebookPostText`, pure): `{closesAt}` is a
   local time and the browser is the only place the zone is known (#490's rule). `{description}` is
-  the offer's description, else its display title; `{catalog}` is every copy's leading number through
-  `compactCatalogNumberGroups`, the title's own `{catalog}` vocabulary; `{lot}` is empty on a single
-  post. Lots are joined by a blank line and the standing note goes under the last, once. The photos
+  the offer's description, else its display title; `{title}` the display title; `{price}` a quick
+  buy's asking price; the retired `{catalog}` is every copy's leading number through
+  `compactCatalogNumberGroups`; `{lot}` is empty on a single post. Lots are joined by a blank line and the standing note goes under the last, once. The photos
   are the offer's own ZIP for a single post and `GET …/facebook-posts/[postId]/photos/zip` for a
   multi-lot one — every lot's upload set, flat, prefixed `lot-NN-`.
 
@@ -144,7 +174,10 @@ read together.
   evidence. The integration test fails with that clause removed (checked when written).
 
 - **The result is `facebook-results.ts`** (imports `offers.ts` and `sales.ts`; nothing imports it but
-  the actions). A win: the winner contact is found by `facebookProfileUrl` first, then by name
+  the actions). `recordFacebookSale` records an auction's win and a quick buy's sale alike (#1671) —
+  the one difference is that only an auction's price is patched to the sale's figure; a quick buy's
+  asking price is the seller's own and stays. `cleanFacebookWin` takes the type for its wording, and
+  *No bids* refuses a quick buy. A win: the winner contact is found by `facebookProfileUrl` first, then by name
   (case-insensitive, any role); a name match carrying a **different** link is refused as somebody
   else, since `Contact.name` is unique and cannot be taken twice. A found contact gets the buyer role
   and, where it has none, the link; otherwise a buyer is created with both. The winning bid is written
@@ -169,8 +202,12 @@ read together.
   the key, so the pane's unsaved measure sees it. Archive/Restore is the detail
   pane's header action; Delete is disabled with its reason while offers name the group. The user guide
   is `docs/user-guide/facebook.md`.
-  An auction is the offer form (group + increment, shown only on the Facebook platform, the group
-  locked on a lot of a post), the **Facebook** card on the offer's screen (`offer-facebook-card.tsx`,
-  with a **Bidding** part while it is up and the result dialog, `facebook-result-dialog.tsx`),
-  and **Post together** in the offers list's selection bar, offered while every ticked offer in view
-  is a Facebook auction and numbering the lots in tick order.
+  The panes group the settings as the collector asked (#1671): *Every offer* (type, currency, mixing),
+  the note, *New auctions* (auction template and figures), *Quick buys* (its template).
+  An offer is the offer form (group, the listing type seeded from it until touched, and an auction's
+  increment, shown only on the Facebook platform, the group locked on a lot of a post), the
+  **Facebook** card on the offer's screen (`offer-facebook-card.tsx`, with a **Bidding** part while an
+  auction is up, a **Sale** part while a quick buy is, and the result dialog,
+  `facebook-result-dialog.tsx`, in either's words), and **Post together** in the offers list's
+  selection bar, offered while every ticked offer in view is a Facebook offer and numbering the lots
+  in tick order.

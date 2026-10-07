@@ -201,7 +201,7 @@ export async function readCollectionVocabulary(
           name: true,
           platformCurrency: true,
           platformModule: true,
-          // The groups a Facebook auction may be in (#1663) — in use only, as the offer form offers them.
+          // The groups a Facebook offer may be in (#1663) — in use only, as the offer form offers them.
           facebookGroups: { where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } },
         },
       }),

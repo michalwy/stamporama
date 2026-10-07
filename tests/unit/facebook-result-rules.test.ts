@@ -87,4 +87,19 @@ describe("cleanFacebookWin", () => {
     assert.equal(cleanFacebookWin({ ...input, soldOn: "2026-02-31" }).ok, false);
     assert.equal(cleanFacebookWin({ ...input, profileUrl: "https://example.com/jan" }).ok, false);
   });
+
+  it("says a quick buy's refusals in its own words — a buyer and a price, not a winner and a bid (#1671)", () => {
+    assert.deepEqual(cleanFacebookWin({ ...input, winnerName: "" }, "fixed"), {
+      ok: false,
+      message: "Name the buyer as their Facebook profile shows it.",
+    });
+    assert.deepEqual(cleanFacebookWin({ ...input, price: "0" }, "fixed"), {
+      ok: false,
+      message: "Enter the price it sold for — an amount above zero.",
+    });
+    assert.deepEqual(cleanFacebookWin({ ...input, price: "0" }), {
+      ok: false,
+      message: "Enter the winning bid — an amount above zero.",
+    });
+  });
 });

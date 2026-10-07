@@ -7,6 +7,7 @@ import {
   cleanFacebookGroupValues,
   FACEBOOK_BLANK_SETTINGS,
   isFacebookGroupSetting,
+  toFacebookListingType,
   type FacebookGroupValues,
   type FacebookPostingSettings,
   type FacebookStartingPriceMode,
@@ -16,8 +17,9 @@ import {
 //
 // Facebook is **one platform and its groups sit under it**: a group is a row owned by the platform
 // contact this collection calls Facebook, and is not a platform of its own. What a group holds is its
-// customs — the post template, the standing note, and the defaults a new auction starts from — each
-// read when an offer is created (#1544) and then owned by the offer.
+// customs — how a new offer is sold (#1671), the auction and quick-buy post templates, the standing
+// note, and the defaults a new auction starts from — each read when an offer is created (#1544) and
+// then owned by the offer.
 //
 // Each setting of a group **follows the platform's** unless the group marks it custom (#1661): the
 // platform's own settings are a `FacebookDefaults` row, and `readFacebookDefaults` is the one reader
@@ -83,7 +85,10 @@ async function facebookPlatformOf(
 }
 
 interface SettingsRow {
+  listingType: string;
+  mixedListingTypes: boolean;
   postTemplate: string;
+  quickBuyTemplate: string;
   standingNote: string;
   startingPriceMode: string | null;
   startingPriceValue: Decimal | null;
@@ -95,7 +100,10 @@ interface SettingsRow {
 /** A settings row's columns as the plain values the rules and the client hold. */
 export function toPostingSettings(row: SettingsRow): FacebookPostingSettings {
   return {
+    listingType: toFacebookListingType(row.listingType),
+    mixedListingTypes: row.mixedListingTypes,
     postTemplate: row.postTemplate,
+    quickBuyTemplate: row.quickBuyTemplate,
     standingNote: row.standingNote,
     // Only ever written through the rules' cleaning, which admits the two modes alone.
     startingPriceMode: row.startingPriceMode as FacebookStartingPriceMode | null,
@@ -130,7 +138,10 @@ const GROUP_SELECT = {
   url: true,
   archivedAt: true,
   customSettings: true,
+  listingType: true,
+  mixedListingTypes: true,
   postTemplate: true,
+  quickBuyTemplate: true,
   standingNote: true,
   startingPriceMode: true,
   startingPriceValue: true,
@@ -226,7 +237,10 @@ function isUniqueViolation(err: unknown): boolean {
 
 function settingsColumns(values: FacebookPostingSettings) {
   return {
+    listingType: values.listingType,
+    mixedListingTypes: values.mixedListingTypes,
     postTemplate: values.postTemplate,
+    quickBuyTemplate: values.quickBuyTemplate,
     standingNote: values.standingNote,
     startingPriceMode: values.startingPriceMode,
     startingPriceValue: values.startingPriceValue,

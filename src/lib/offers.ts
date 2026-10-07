@@ -154,6 +154,7 @@ import { describeCommittedCopies, type CommittedCopy } from "./trade-reservation
 import {
   detachFacebookLot,
   facebookAuctionRefusal,
+  facebookLotTypeRefusal,
   getFacebookOfferKit,
   offerItemIds,
   resolveFacebookOffer,
@@ -5052,15 +5053,26 @@ function facebookOrRefuse(
   return resolution;
 }
 
-/** How a Facebook auction is priced (#1544; ADR-0061 §6): always an auction, opening at the group's
- *  amount where the form states none — the platform's own `defaultStartingPrice` rule (#362), with the
- *  group's figure in its place. Anything else is the platform's ordinary resolution. */
+/** How a Facebook offer is priced (#1544; ADR-0061 §6): sold as its group says where the form says
+ *  nothing — an auction or, since #1671, a quick buy — and an auction opening at the group's amount
+ *  where the form states none: the platform's own `defaultListingType` and `defaultStartingPrice`
+ *  rule (#362, #449), with the group's settings in their place. Anything else is the platform's
+ *  ordinary resolution. */
 function facebookPricingDefaults(
   platform: { defaultListingType: string | null; defaultStartingPrice: string | null },
   facebook: Extract<FacebookOfferResolution, { ok: true }>
 ): { defaultListingType: string | null; defaultStartingPrice: string | null } {
   if (!facebook.facebookGroupId) return platform;
-  return { defaultListingType: "auction", defaultStartingPrice: facebook.defaultStartingPrice };
+  return { defaultListingType: facebook.listingType, defaultStartingPrice: facebook.defaultStartingPrice };
+}
+
+/** A Facebook offer's bid increment as it is stored: an auction's, and none on a quick buy (#1671),
+ *  which has no bidding for it to step. */
+function facebookIncrementFor(
+  listingType: OfferListingType,
+  facebook: Extract<FacebookOfferResolution, { ok: true }>
+): string | null {
+  return isAuctionListing(listingType) ? facebook.bidIncrement : null;
 }
 
 /** A Facebook group's `catalogPercent` opening figure over the copies an offer is created with (#1663),
@@ -5214,7 +5226,9 @@ async function prepareOfferCreation(
   // over the seed, for a creation no form priced — the Lot builder, quick offer mode, a composed
   // series, the generator. The form states its own figure, which outranks this one as above.
   const facebookDefaults =
-    facebook.startingPricePercent !== null && !hasPrice(input.startingPrice ?? "")
+    facebook.startingPricePercent !== null &&
+    isAuctionListing(normalizeListingType(input.listingType ?? facebook.listingType)) &&
+    !hasPrice(input.startingPrice ?? "")
       ? {
           ...facebook,
           defaultStartingPrice: await catalogShareOfSets(
@@ -5225,11 +5239,7 @@ async function prepareOfferCreation(
           ),
         }
       : facebook;
-  const pricing = resolveOfferPricing(
-    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
-    input.price,
-    facebookPricingDefaults(platform, facebookDefaults)
-  );
+  const pricing = resolveOfferPricing(input, input.price, facebookPricingDefaults(platform, facebookDefaults));
   const price = pricing.price;
 
   // A prepared or live listing needs an asking price (#336) — creating one straight as `ready` /
@@ -5322,9 +5332,9 @@ async function writeOfferCreation(
       // a fixed-price listing has no ending of its own, so a date here would be about a format
       // this listing is not in.
       endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
-      // The group a Facebook auction is in and its increment (#1544), null everywhere else.
+      // The group a Facebook offer is in (#1544), and an auction's increment; null everywhere else.
       facebookGroupId: facebook.facebookGroupId,
-      bidIncrement: facebook.bidIncrement,
+      bidIncrement: facebookIncrementFor(pricing.listingType, facebook),
       currency,
       listingDate: input.listingDate,
       // Set the target state directly (creation states the real-world status; the step-through
@@ -5453,11 +5463,7 @@ export async function duplicateOffer(
   // Same pricing rules as a fresh creation (#336, #449): the clone is priced — and its format
   // chosen — for its own platform, so a blank price cannot start it prepared or live either, and an
   // auction still needs its opening figure.
-  const pricing = resolveOfferPricing(
-    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
-    input.price,
-    facebookPricingDefaults(platform, facebook)
-  );
+  const pricing = resolveOfferPricing(input, input.price, facebookPricingDefaults(platform, facebook));
   const missing = missingPriceField(
     pricing.listingType,
     targetState,
@@ -5519,7 +5525,7 @@ export async function duplicateOffer(
         ...pricing,
         endsAt: isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null,
         facebookGroupId: facebook.facebookGroupId, // #1544, as in `createOffer`
-        bidIncrement: facebook.bidIncrement,
+        bidIncrement: facebookIncrementFor(pricing.listingType, facebook),
         currency,
         listingDate: input.listingDate,
         state: targetState,
@@ -5588,11 +5594,18 @@ export async function updateOffer(
   // The same resolution creation uses (#449), minus the platform default: switching platforms on an
   // existing offer must not re-describe a listing that already exists. An auction with no current
   // figure falls back to its opening one here too, so an edit can *give* a live auction its price by
-  // stating what it started at. A Facebook offer is always an auction (ADR-0061).
+  // stating what it started at. A Facebook offer is an auction or a quick buy like any other (#1671);
+  // one edited without saying which stays what it was — it was always an auction until then, and a
+  // save that names no type is no reason to make it a quick buy.
   const pricing = resolveOfferPricing(
-    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
+    facebook.facebookGroupId && !input.listingType ? { ...input, listingType: ref.listingType } : input,
     input.price
   );
+  // A lot of a post whose group keeps one type per post (#1671) changes type only by leaving it.
+  if (postId && facebook.facebookGroupId && pricing.listingType !== ref.listingType) {
+    const refusal = await facebookLotTypeRefusal(postId, offerId, pricing.listingType);
+    if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
+  }
   // The invariants the transition guard enforces (#336, #449): a ready or active offer always has a
   // price — and, being an auction, a starting price — so an edit cannot clear either back out from
   // under one.
@@ -5627,10 +5640,11 @@ export async function updateOffer(
     // Moved off Facebook: a lot leaves its post, which renumbers or dissolves it (ADR-0061 §2).
     if (postId && !facebook.facebookGroupId) await detachFacebookLot(tx, offerId);
     // The lots of one post close together (ADR-0061 §2), so a closing time written on one is the
-    // post's — written to every lot, which is where everything reading an auction's end looks.
-    if (postId && facebook.facebookGroupId) {
+    // post's — written to every auction among its lots, which is where everything reading an
+    // auction's end looks. A quick buy closes at no time, so it neither writes one nor takes one.
+    if (postId && facebook.facebookGroupId && isAuctionListing(pricing.listingType)) {
       await tx.offer.updateMany({
-        where: { facebookPostId: postId, id: { not: offerId } },
+        where: { facebookPostId: postId, id: { not: offerId }, listingType: "auction" },
         data: { endsAt },
       });
     }
@@ -5641,7 +5655,7 @@ export async function updateOffer(
       url: input.url,
       colnectSaleId,
       facebookGroupId: facebook.facebookGroupId,
-      bidIncrement: facebook.bidIncrement,
+      bidIncrement: facebookIncrementFor(pricing.listingType, facebook),
       listingType: pricing.listingType,
       price: pricing.price,
       startingPrice: pricing.startingPrice,
@@ -6487,7 +6501,8 @@ export async function quickOfferCreationBlock(
 ): Promise<string | null> {
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await assertPlatform(collectionId, platformId);
-  // On Facebook the offers are auctions in the group picked beside the button (#1663), priced from it.
+  // On Facebook the offers are in the group picked beside the button (#1663), sold as it says (#1671)
+  // and priced from it.
   const facebook = await resolveFacebookOffer(
     collectionId,
     { id: platformId, platformModule: platform.platformModule },
@@ -6500,12 +6515,9 @@ export async function quickOfferCreationBlock(
   }
   // A share of catalogue value is worked out per offer, over its own copies, as each is written; an
   // offer whose copies carry none is refused then, by name, like any unpriced creation.
-  if (facebook.startingPricePercent !== null) return null;
-  const pricing = resolveOfferPricing(
-    facebook.facebookGroupId ? { listingType: "auction" } : {},
-    "0.00",
-    facebookPricingDefaults(platform, facebook)
-  );
+  // A quick buy has no starting price to work out, so it is asked for its asking price below.
+  if (facebook.startingPricePercent !== null && facebook.listingType === "auction") return null;
+  const pricing = resolveOfferPricing({}, "0.00", facebookPricingDefaults(platform, facebook));
   const missing = missingPriceField(pricing.listingType, state, pricing.price, pricing.startingPrice);
   return missing
     ? `An offer can't start ${OFFER_STATE_LABEL_LOWER[state]} with no ${missing}, and these offers are created without one. Start them as Preparing instead.`

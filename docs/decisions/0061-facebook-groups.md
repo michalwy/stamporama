@@ -7,6 +7,7 @@ platform and its groups (§1, §6). The offer, the post and its kit are #1544 (�
 bid and the result #1545 (§4), the Assistant filling a post #1546 (§3), and several groups at once
 #1547 (§5). §6 is amended by #1661: a group's settings follow the platform's unless set custom. §3
 is amended by #1668: the post's link is recorded as the offer's own listing link, asked by *Activate*.
+The whole is amended by #1671 (§8): a Facebook offer can be a quick buy as well as an auction.
 
 ## Context
 
@@ -81,7 +82,8 @@ by allowing it first.
 ### 6. A group holds its customs, as defaults
 
 Per group: the **post template** (`{token}` placeholders for the description, the catalogue numbers,
-the starting price, the increment, the closing time and the lot number — `FACEBOOK_POST_PLACEHOLDERS`),
+the starting price, the increment, the closing time and the lot number — `FACEBOOK_POST_PLACEHOLDERS`,
+split by type and without the catalogue numbers since §8),
 a **standing note** on shipping, payment and terms appended to every post, the default **starting
 price** (an amount, or a percentage of catalogue value), the default **bid increment**, the default
 **length** of an auction and its **closing time of day**, and the **currency**, which is the
@@ -114,6 +116,35 @@ A group is where sales happened, and the reports per group need it to still exis
 offer names can be deleted, one that has offers can only be **archived** (`archivedAt`) — kept, listed
 apart, offered to no new auction, and brought back with one click. `Offer.facebookGroupId` is
 `ON DELETE RESTRICT` as the backstop to the domain's refusal.
+
+### 8. A Facebook offer can be a quick buy too (amendment, #1671)
+
+**Decided with the collector on 2026-10-07.** Facebook groups carry fixed-price sales as well as
+auctions — a post with a price, the first buyer to claim it taking it — so a Facebook offer is an
+**Auction** or a **Quick buy**, the `listingType` every other platform's offer already has. What this
+amends: the decision above was written for auctions alone, and #1544 forced every Facebook offer to
+be one.
+
+- **The listing type is a setting** of the Facebook defaults and of a group, following §6's
+  default-and-custom rule; a new offer starts from its group's and can change it. The platform's
+  starts as *Auction*, which every Facebook offer so far was, so the migration changed nothing.
+- **There are two post templates**, one per type, each following the same rule, and a post's lot is
+  built from the one matching its offer's type — never the other. A quick buy's template takes
+  `{price}` where an auction's takes the starting price, increment and closing time; **both take
+  `{title}`**, the offer's title.
+- **`{catalog}` is dropped from the templates** — the catalogue numbers are already in an offer's title
+  or description. A template still carrying it is flagged in Settings so the collector removes it, and
+  until then it is still filled in, so no post loses text unannounced.
+- **Settings group by type**: *New auctions* (the auction template, starting price, increment, days,
+  closing time) and *Quick buys* (its template); the listing type, the currency, the note and whether a
+  post may mix types apply to both.
+- **A quick buy has an asking price** like any quick buy and no increment or closing time; **its sale
+  is recorded as an auction's win is** (§4) — the buyer a contact found or created by profile link and
+  name, the price split over the sets — except that the offer's own asking price is left as it was.
+- **A post's lots share one type unless the group allows mixing** — a setting of its own, following
+  the same rule, off unless set. Only a post's auctions share its closing time.
+- **§5 covers quick buys too**: a copy is in one Facebook offer that is up at a time, auction or quick
+  buy, since either can sell it.
 
 ## Consequences
 

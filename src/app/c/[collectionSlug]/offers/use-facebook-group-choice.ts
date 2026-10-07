@@ -8,7 +8,7 @@ import { facebookDefaultEndsAt, NO_FACEBOOK_CHOICE, type FacebookCreateChoice } 
 /**
  * The Facebook group a shortcut creates its offer in (#1663): every create step that is not the offer
  * form — the Lot builder, quick offer mode and the generator on the Copies list, *Series from singles*
- * — asks it beside its create button, because an auction on Facebook is in one group (#1544) and the
+ * — asks it beside its create button, because an offer on Facebook is in one group (#1544) and the
  * server refuses one without it.
  *
  * Starts on the group last used **on that platform**, remembered per collection in localStorage the
@@ -26,7 +26,7 @@ export interface FacebookGroupChoiceState {
   isFacebook: boolean;
   /** Still asking whether the platform is Facebook — a create button waits for the answer. */
   loading: boolean;
-  /** The groups a new auction may be in, by name; archived ones are not offered. */
+  /** The groups a new offer may be in, by name; archived ones are not offered. */
   groups: FacebookGroupChoice[];
   groupId: string;
   group: FacebookGroupChoice | null;
@@ -39,7 +39,7 @@ export interface FacebookGroupChoiceState {
   remember: () => void;
 }
 
-export const FACEBOOK_GROUP_MISSING = "Choose the Facebook group this auction is in.";
+export const FACEBOOK_GROUP_MISSING = "Choose the Facebook group this offer is in.";
 export const FACEBOOK_NO_GROUPS =
   "This platform has no Facebook groups yet — add one in Settings → Facebook first.";
 

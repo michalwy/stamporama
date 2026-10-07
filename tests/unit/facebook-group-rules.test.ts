@@ -5,13 +5,17 @@ import {
   FACEBOOK_BLANK_SETTINGS,
   FACEBOOK_GROUP_DEFAULTS,
   FACEBOOK_GROUP_SETTINGS,
-  FACEBOOK_POST_PLACEHOLDERS,
+  FACEBOOK_AUCTION_PLACEHOLDERS,
+  FACEBOOK_QUICK_BUY_PLACEHOLDERS,
   cleanFacebookDefaults,
   cleanFacebookGroupValues,
   effectiveFacebookGroupSettings,
   isFacebookGroupUrl,
   normalizeClosingTime,
+  retiredPostPlaceholders,
+  toFacebookListingType,
   unknownPostPlaceholders,
+  usesRetiredPostPlaceholder,
   type FacebookGroupValues,
 } from "../../src/lib/facebook-group-rules";
 
@@ -56,6 +60,19 @@ describe("cleanFacebookGroupValues (#1543)", () => {
   it("refuses a link that is not a web address", () => {
     assert.throws(() => cleanFacebookGroupValues(values({ url: "facebook.com/groups/1" })), /web address/);
     assert.throws(() => cleanFacebookGroupValues(values({ url: "javascript:alert(1)" })), /web address/);
+  });
+
+  it("takes a quick buy as the listing type, its template and post mixing, and refuses another type (#1671)", () => {
+    const clean = cleanFacebookGroupValues(
+      values({ listingType: "fixed", quickBuyTemplate: " {title} — {price} ", mixedListingTypes: true })
+    );
+    assert.equal(clean.listingType, "fixed");
+    assert.equal(clean.quickBuyTemplate, "{title} — {price}");
+    assert.equal(clean.mixedListingTypes, true);
+    assert.throws(
+      () => cleanFacebookGroupValues(values({ listingType: "barter" as unknown as "fixed" })),
+      /Unknown listing type/
+    );
   });
 
   it("keeps the template's and the note's own line breaks, trimming only around them", () => {
@@ -142,7 +159,10 @@ describe("a group following the platform (#1661)", () => {
     const clean = cleanFacebookGroupValues(
       values({
         custom: ["standingNote", "bidIncrement"],
+        listingType: "fixed",
+        mixedListingTypes: true,
         postTemplate: "{description}",
+        quickBuyTemplate: "{title} {price}",
         standingNote: "Shipping 5 zł",
         startingPriceMode: "amount",
         startingPriceValue: 5,
@@ -189,7 +209,10 @@ describe("cleanFacebookDefaults (#1661)", () => {
     assert.deepEqual(cleanFacebookDefaults(FACEBOOK_BLANK_SETTINGS), FACEBOOK_BLANK_SETTINGS);
     assert.deepEqual(
       cleanFacebookDefaults({
+        listingType: "fixed",
+        mixedListingTypes: true,
         postTemplate: "  {description}\n{closesAt} ",
+        quickBuyTemplate: " {title}\n{price} ",
         standingNote: "",
         startingPriceMode: "catalogPercent",
         startingPriceValue: 30,
@@ -198,7 +221,10 @@ describe("cleanFacebookDefaults (#1661)", () => {
         closingTime: "9:00",
       }),
       {
+        listingType: "fixed",
+        mixedListingTypes: true,
         postTemplate: "{description}\n{closesAt}",
+        quickBuyTemplate: "{title}\n{price}",
         standingNote: "",
         startingPriceMode: "catalogPercent",
         startingPriceValue: 30,
@@ -220,7 +246,10 @@ describe("cleanFacebookDefaults (#1661)", () => {
 
 describe("effectiveFacebookGroupSettings (#1661)", () => {
   const platform = {
+    listingType: "fixed" as const,
+    mixedListingTypes: true,
     postTemplate: "Platform {description}",
+    quickBuyTemplate: "Platform {price}",
     standingNote: "Platform terms",
     startingPriceMode: "amount" as const,
     startingPriceValue: 5,
@@ -241,10 +270,13 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       ...FACEBOOK_BLANK_SETTINGS,
       standingNote: "Group terms",
       currency: "EUR",
-      custom: ["standingNote", "startingPrice", "closingTime", "currency"],
+      custom: ["standingNote", "startingPrice", "closingTime", "currency", "listingType", "mixedListingTypes"],
     };
     assert.deepEqual(effectiveFacebookGroupSettings(group, platform), {
+      listingType: "auction",
+      mixedListingTypes: false,
       postTemplate: "Platform {description}",
+      quickBuyTemplate: "Platform {price}",
       standingNote: "Group terms",
       startingPriceMode: null,
       startingPriceValue: null,
@@ -283,15 +315,42 @@ describe("isFacebookGroupUrl", () => {
 });
 
 describe("post template placeholders", () => {
-  it("are the six the issue settled, in the {token} spelling", () => {
+  it("are an auction's settled ones with {title}, and no longer {catalog} (#1543, #1671)", () => {
     assert.deepEqual(
-      FACEBOOK_POST_PLACEHOLDERS.map((p) => p.token),
-      ["{description}", "{catalog}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}"]
+      FACEBOOK_AUCTION_PLACEHOLDERS.map((p) => p.token),
+      ["{title}", "{description}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}"]
     );
   });
 
-  it("names a token the post does not know, once, and nothing else", () => {
-    assert.deepEqual(unknownPostPlaceholders("{lot} {startprice} {lot} {startprice} {catalog}"), ["{startprice}"]);
-    assert.deepEqual(unknownPostPlaceholders("Lot {lot}: {description}"), []);
+  it("are a quick buy's own: its price where an auction states its bidding (#1671)", () => {
+    assert.deepEqual(
+      FACEBOOK_QUICK_BUY_PLACEHOLDERS.map((p) => p.token),
+      ["{title}", "{description}", "{price}", "{lot}"]
+    );
+  });
+
+  it("names a token the post does not know, once, and nothing else — a retired one is not unknown", () => {
+    assert.deepEqual(unknownPostPlaceholders("{lot} {startprice} {lot} {startprice} {catalog}", "auction"), ["{startprice}"]);
+    assert.deepEqual(unknownPostPlaceholders("Lot {lot}: {title} {description}", "auction"), []);
+  });
+
+  it("names the other type's tokens as unknown in a template (#1671)", () => {
+    assert.deepEqual(unknownPostPlaceholders("{title} {price} {closesAt}", "fixed"), ["{closesAt}"]);
+    assert.deepEqual(unknownPostPlaceholders("{title} {price} {closesAt}", "auction"), ["{price}"]);
+  });
+
+  it("flags a template still carrying {catalog} (#1671)", () => {
+    assert.deepEqual(retiredPostPlaceholders("{catalog} {title} {catalog}"), ["{catalog}"]);
+    assert.deepEqual(retiredPostPlaceholders("{title}"), []);
+    assert.equal(usesRetiredPostPlaceholder({ postTemplate: "{title}", quickBuyTemplate: "{catalog}" }), true);
+    assert.equal(usesRetiredPostPlaceholder({ postTemplate: "{title}", quickBuyTemplate: "" }), false);
+  });
+});
+
+describe("toFacebookListingType (#1671)", () => {
+  it("reads a quick buy as itself and anything else as the auction every older offer was", () => {
+    assert.equal(toFacebookListingType("fixed"), "fixed");
+    assert.equal(toFacebookListingType("auction"), "auction");
+    assert.equal(toFacebookListingType(null), "auction");
   });
 });

@@ -1,14 +1,16 @@
 import "server-only";
 import { prisma } from "./db";
-import { detachFacebookLot } from "./facebook-auctions";
+import { detachFacebookLot, facebookGroupMixesTypes } from "./facebook-auctions";
 import { facebookPostRefusal, isFacebookLotPosted } from "./facebook-post-rules";
 import { OfferActionBlockedError, publishOffer, setOfferState } from "./offers";
+import { isAuctionListing, normalizeListingType } from "./offer-rules";
 
 // A post holding several lots in one Facebook group (#1544; ADR-0061 §2, §3).
 //
-// The lots are ordinary Facebook auction offers; what a post adds is that they go up **together**:
-// one group, one closing time, numbered in the order they were put in, and one activation that takes
-// all of them live. The post's link is each lot's own listing link (#1668), given once when any lot is
+// The lots are ordinary Facebook offers — auctions, or quick buys (#1671), of one type unless the
+// group lets its posts mix them; what a post adds is that they go up **together**: one group, one
+// closing time for its auctions, numbered in the order they were put in, and one activation that
+// takes all of them live. The post's link is each lot's own listing link (#1668), given once when any lot is
 // activated. An offer posted alone needs none of this; it is activated and its link recorded the way
 // every other listing is published.
 //
@@ -34,12 +36,13 @@ async function assertPostOwner(ownerId: string, postId: string): Promise<{ colle
 }
 
 /**
- * Put several Facebook auctions into one post, numbered as lots **in the order given** — the order
+ * Put several Facebook offers into one post, numbered as lots **in the order given** — the order
  * the collector ticked them is the order the album shows them.
  *
- * They must be auctions in one group, in no other post, and not yet up (ADR-0061 §2): a lot of a post
- * goes up with the post. Their closing time becomes one — the first lot's that has one — since the
- * lots of a post close together.
+ * They must be offers in one group, in no other post, and not yet up (ADR-0061 §2): a lot of a post
+ * goes up with the post. They share one listing type unless the group's posts may mix them (#1671).
+ * The auctions' closing time becomes one — the first auction's that has one — since the lots of a
+ * post close together; a quick buy closes at no time and keeps none.
  */
 export async function createFacebookPost(
   ownerId: string,
@@ -55,6 +58,7 @@ export async function createFacebookPost(
       offerNo: true,
       facebookGroupId: true,
       facebookPostId: true,
+      listingType: true,
       state: true,
       url: true,
       endsAt: true,
@@ -62,11 +66,18 @@ export async function createFacebookPost(
   });
   if (rows.length !== ids.length) throw new Error("Offer not found or access denied.");
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const lots = ids.map((id) => byId.get(id)!);
-  const refusal = facebookPostRefusal(lots);
+  const lots = ids.map((id) => {
+    const row = byId.get(id)!;
+    return { ...row, listingType: normalizeListingType(row.listingType) };
+  });
+  const groupId = lots.find((l) => l.facebookGroupId !== null)?.facebookGroupId ?? null;
+  const refusal = facebookPostRefusal(lots, {
+    mixedListingTypes: groupId ? await facebookGroupMixesTypes(groupId) : false,
+  });
   if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
 
-  const endsAt = lots.find((l) => l.endsAt !== null)?.endsAt ?? null;
+  const auction = (l: (typeof lots)[number]) => isAuctionListing(l.listingType);
+  const endsAt = lots.find((l) => auction(l) && l.endsAt !== null)?.endsAt ?? null;
   return prisma.$transaction(async (tx) => {
     const post = await tx.facebookPost.create({
       data: { collectionId, groupId: lots[0].facebookGroupId! },
@@ -75,7 +86,7 @@ export async function createFacebookPost(
     for (const [index, lot] of lots.entries()) {
       await tx.offer.update({
         where: { id: lot.id },
-        data: { facebookPostId: post.id, facebookLotNo: index + 1, endsAt },
+        data: { facebookPostId: post.id, facebookLotNo: index + 1, ...(auction(lot) ? { endsAt } : {}) },
       });
     }
     return { postId: post.id };
@@ -109,7 +120,7 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
 }
 
 /**
- * Activate an offer with the listing link the collector pasted back (#1668) — for a Facebook auction
+ * Activate an offer with the listing link the collector pasted back (#1668) — for a Facebook offer
  * that is the post's link. An offer posted alone, and every offer off Facebook, is the ordinary
  * `publishOffer`; a lot of a post holding several takes the whole post live with it.
  */

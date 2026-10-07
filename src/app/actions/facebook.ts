@@ -18,7 +18,7 @@ import { createFacebookPost, removeFacebookLot } from "@/lib/facebook-posts";
 import {
   lookupFacebookWinner,
   recordFacebookAuctionNoBids,
-  recordFacebookAuctionWin,
+  recordFacebookSale,
   type FacebookWinnerLookup,
 } from "@/lib/facebook-results";
 import type { FacebookWinInput } from "@/lib/facebook-result-rules";
@@ -120,9 +120,9 @@ export async function deleteFacebookGroupAction(groupId: string): Promise<Facebo
   }
 }
 
-// ── Auctions in a group (#1544; ADR-0061 §2, §3) ────────────────────────────────────────────────
+// ── Offers in a group (#1544; ADR-0061 §2, §3; quick buys #1671) ─────────────────────────────────
 
-/** Whether `platformId` is Facebook and which groups a new auction there may name — what the offer
+/** Whether `platformId` is Facebook and which groups a new offer there may name — what the offer
  *  form asks when a platform is picked. `includeGroupId` keeps an edited offer's own archived group. */
 export async function facebookGroupChoicesAction(
   collectionId: string,
@@ -137,7 +137,7 @@ export type FacebookPostActionState =
   | { status: "success"; postId: string }
   | { status: "error"; message: string };
 
-/** Put the ticked Facebook auctions into one post, as lots in the order given. */
+/** Put the ticked Facebook offers into one post, as lots in the order given. */
 export async function createFacebookPostAction(
   collectionId: string,
   offerIds: string[]
@@ -164,7 +164,7 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
 
 // ── The result (#1545; ADR-0061 §4) ───────────────────────────────────────────────────────────────
 
-/** Who the typed winner is and which of their open sales the lot could join — read while the result
+/** Who the typed winner — or buyer — is and which of their open sales the lot could join — read while the result
  *  dialog is filled in. */
 export async function lookupFacebookWinnerAction(
   offerId: string,
@@ -179,14 +179,15 @@ export type FacebookWinState =
   | { status: "success"; saleId: string }
   | { status: "error"; message: string };
 
-/** Record the winner and the winning bid, which records the sale. */
-export async function recordFacebookAuctionWinAction(
+/** Record the winner and the winning bid — or a quick buy's buyer and price (#1671) — which records
+ *  the sale. */
+export async function recordFacebookSaleAction(
   offerId: string,
   input: FacebookWinInput
 ): Promise<FacebookWinState> {
   const session = await getSession();
   try {
-    const { saleId } = await recordFacebookAuctionWin(session.user.id, offerId, input);
+    const { saleId } = await recordFacebookSale(session.user.id, offerId, input);
     return { status: "success", saleId };
   } catch (err) {
     return failure(err, "Failed to record the result.");

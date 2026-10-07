@@ -10,7 +10,7 @@ import {
   renderFacebookPostText,
   type FacebookPostLotText,
 } from "@/lib/facebook-post-rules";
-import { OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import { isAuctionListing, OFFER_LISTING_TYPE_LABEL, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -19,7 +19,7 @@ import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions
 import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { FacebookResultDialog } from "./facebook-result-dialog";
 
-// A Facebook auction's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
+// A Facebook offer's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
 // alone, or as a numbered lot of a post holding several — and the post's text and photos, each taken
 // in one click. Where the post went up is the offer's own listing link (#1668): *Activate* in the
 // header asks for it, as on every platform, and for a lot it is written into every lot of the post.
@@ -29,10 +29,11 @@ import { FacebookResultDialog } from "./facebook-result-dialog";
 // closing time it states is a local time and this is the one place the collector's zone is known —
 // the same reason the closing time is typed in the browser (#490).
 //
-// While the auction is up, the card is also where it is followed (#1545; ADR-0061 §4): nothing reads
+// While an auction is up, the card is also where it is followed (#1545; ADR-0061 §4): nothing reads
 // the comments, so the standing bid is typed here, dated, and once the closing time has passed the card
 // asks for the result — the winner and the winning bid, which records the sale, or *No bids*, which
-// withdraws the offer and frees its copies.
+// withdraws the offer and frees its copies. A quick buy (#1671) has no bidding: while it is up the
+// card offers only its sale — the buyer and the price, recorded the same way.
 //
 // Rendered only for an offer naming a group: `OfferDetail.facebook` is null everywhere else.
 
@@ -126,27 +127,40 @@ export function OfferFacebookCard({
   const self = kit.lots.find((l) => l.offerId === offerId) ?? kit.lots[0];
   const multiLot = kit.post !== null;
 
+  const auction = isAuctionListing(self.listingType);
   const postText = useMemo(() => {
     const lots: FacebookPostLotText[] = kit.lots.map((lot) => ({
       lotNo: lot.lotNo,
+      listingType: lot.listingType,
+      title: lot.title,
       description: lot.description,
       catalog: lot.catalog,
       startingPrice: facebookMoney(lot.startingPrice, lot.currency),
       increment: facebookMoney(lot.bidIncrement, lot.currency),
       closesAt: formatClosesAt(lot.endsAt),
+      price: isAuctionListing(lot.listingType) ? "" : facebookMoney(lot.price, lot.currency),
     }));
-    return renderFacebookPostText(kit.group.postTemplate, kit.group.standingNote, lots);
+    return renderFacebookPostText(
+      { auction: kit.group.postTemplate, quickBuy: kit.group.quickBuyTemplate },
+      kit.group.standingNote,
+      lots
+    );
   }, [kit]);
+  // The templates the post is written from that are blank, so their lots read as their description.
+  const blankTemplates = [
+    ...(kit.lots.some((l) => isAuctionListing(l.listingType)) && !kit.group.postTemplate.trim() ? ["auction"] : []),
+    ...(kit.lots.some((l) => !isAuctionListing(l.listingType)) && !kit.group.quickBuyTemplate.trim() ? ["quick-buy"] : []),
+  ];
 
   // Posted: once any lot has gone up — the lots of a post go up together.
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
   // What stands between the post and going up: every lot must be Ready, the gate publishing asks.
   const waiting = kit.lots.filter((l) => l.state !== "ready" && l.state !== "active");
 
-  // Up in the group: the auction is running, or has closed and waits for its result.
+  // Up in the group: the offer is running — an auction may have closed and wait for its result.
   const up = self.state === "active" || self.state === "paused";
   const now = new Date();
-  const closed = up && self.endsAt !== null && new Date(self.endsAt).getTime() <= now.getTime();
+  const closed = auction && up && self.endsAt !== null && new Date(self.endsAt).getTime() <= now.getTime();
   const hasBid = self.price !== "0.00";
 
   function run(task: () => Promise<{ status: "success" } | { status: "error"; message: string }>) {
@@ -184,7 +198,7 @@ export function OfferFacebookCard({
   }
 
   return (
-    <section style={CARD} aria-label="Facebook auction">
+    <section style={CARD} aria-label={auction ? "Facebook auction" : "Facebook quick buy"}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
           Facebook
@@ -215,7 +229,7 @@ export function OfferFacebookCard({
                       #{lot.offerNo} {lot.title}
                     </Link>
                   )}{" "}
-                  · {OFFER_STATE_LABEL[lot.state]}
+                  · {OFFER_LISTING_TYPE_LABEL[lot.listingType]} · {OFFER_STATE_LABEL[lot.state]}
                   {lot.url && (
                     <>
                       {" "}
@@ -235,7 +249,9 @@ export function OfferFacebookCard({
             )}
           </>
         ) : (
-          <p style={{ ...MUTED, margin: 0 }}>Posted alone — one auction, one post.</p>
+          <p style={{ ...MUTED, margin: 0 }}>
+            Posted alone — one {auction ? "auction" : "quick buy"}, one post.
+          </p>
         )}
       </div>
 
@@ -255,9 +271,11 @@ export function OfferFacebookCard({
         ) : (
           <p style={{ ...MUTED, margin: 0 }}>Nothing to post yet — give the offer a description.</p>
         )}
-        {!kit.group.postTemplate.trim() && (
+        {blankTemplates.length > 0 && (
           <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
-            {kit.group.name} has no post template, so each lot is its description.
+            {kit.group.name} has no{" "}
+            {blankTemplates.length === 2 ? "post templates" : `${blankTemplates[0]} post template`}, so{" "}
+            {multiLot ? "each such lot" : "the post"} is its description.
           </p>
         )}
       </div>
@@ -284,8 +302,23 @@ export function OfferFacebookCard({
         )}
       </div>
 
+      {/* A quick buy's sale (#1671): nobody bids, so the card asks only who bought it and for how much. */}
+      {up && !auction && (
+        <div style={{ marginTop: "0.875rem" }}>
+          <p style={SECTION_LABEL}>Sale</p>
+          <p style={{ ...MUTED, margin: "0 0 0.375rem" }}>
+            Price{" "}
+            <strong style={{ color: "var(--color-text-primary)" }}>{facebookMoney(self.price, self.currency)}</strong>{" "}
+            — the first buyer to claim it takes it.
+          </p>
+          <DialogPrimaryButton type="button" disabled={isPending} onClick={() => setResultOpen(true)}>
+            Record sale…
+          </DialogPrimaryButton>
+        </div>
+      )}
+
       {/* The bidding, typed by hand while it runs, and the result once it has closed (#1545). */}
-      {up && (
+      {up && auction && (
         <div style={{ marginTop: "0.875rem" }}>
           <p style={SECTION_LABEL}>Bidding</p>
           {closed && (
@@ -352,9 +385,10 @@ export function OfferFacebookCard({
       {resultOpen && (
         <FacebookResultDialog
           offerId={offerId}
+          listingType={self.listingType}
           currency={self.currency}
           standingBid={self.price}
-          endsAt={self.endsAt}
+          endsAt={auction ? self.endsAt : null}
           onClose={() => setResultOpen(false)}
           onRecorded={(saleId) => {
             setResultOpen(false);

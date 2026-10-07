@@ -880,7 +880,7 @@ export function InventoryListPanel({
     () => offerPlatforms.find((p) => p.id === quickPlatformId) ?? null,
     [offerPlatforms, quickPlatformId]
   );
-  // On Facebook every offer is an auction in a group (#1663), picked in the bar beside the platform.
+  // On Facebook every offer is in a group (#1663), picked in the bar beside the platform.
   const quickFacebook = useFacebookGroupChoice(collectionId, quickPlatformId);
   const { choice: quickFacebookChoice, remember: rememberQuickFacebook } = quickFacebook;
   // Armed only once the bar carries a platform that can actually take an offer: its currency is

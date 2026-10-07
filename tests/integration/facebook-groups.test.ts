@@ -193,7 +193,10 @@ describe("Facebook groups (#1543)", () => {
   it("states Facebook's own settings, read as blank until then, and refuses another user (#1661)", async () => {
     assert.deepEqual(await readFacebookDefaults(facebookId), FACEBOOK_BLANK_SETTINGS);
     await updateFacebookDefaults(userId, collectionId, {
+      listingType: "fixed",
+      mixedListingTypes: true,
       postTemplate: " {description}\nStart {startingPrice} ",
+      quickBuyTemplate: " {title} {price} ",
       standingNote: "Wysyłka 7 zł.",
       startingPriceMode: "catalogPercent",
       startingPriceValue: 25,
@@ -202,7 +205,10 @@ describe("Facebook groups (#1543)", () => {
       closingTime: "9:00",
     });
     const expected: FacebookPostingSettings = {
+      listingType: "fixed",
+      mixedListingTypes: true,
       postTemplate: "{description}\nStart {startingPrice}",
+      quickBuyTemplate: "{title} {price}",
       standingNote: "Wysyłka 7 zł.",
       startingPriceMode: "catalogPercent",
       startingPriceValue: 25,

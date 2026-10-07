@@ -9,10 +9,12 @@ import {
   splitAuctionPrice,
   type FacebookWinInput,
 } from "./facebook-result-rules";
-import type { OfferState } from "./offer-rules";
+import { isAuctionListing, normalizeListingType, type OfferState } from "./offer-rules";
 import type { SaleStatus } from "./sale-status";
 
-// A Facebook auction's result (#1545; ADR-0061 §4, decided with the collector on 2026-10-03).
+// A Facebook offer's result (#1545; ADR-0061 §4, decided with the collector on 2026-10-03) — an
+// auction's, and since #1671 a quick buy's, which is recorded the same way: who bought it and for how
+// much, the buyer found or created exactly as an auction's winner is.
 //
 // Bids on a Facebook auction are comments under the post, so nothing reports them: the standing bid
 // is typed onto the offer while it runs (the ordinary in-place price edit, dated by `priceCheckedAt`),
@@ -31,8 +33,8 @@ import type { SaleStatus } from "./sale-status";
 /** The statuses a sale is still open to another lot in: not yet sent. */
 const OPEN_SALE_STATUSES: readonly SaleStatus[] = ["ordered", "paid", "packed"];
 
-/** An offer as the result is recorded against: a Facebook auction that is up, with its sets. */
-async function readFacebookAuction(ownerId: string, offerId: string) {
+/** An offer as the result is recorded against: a Facebook offer that is up, with its sets. */
+async function readFacebookOffer(ownerId: string, offerId: string) {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     select: {
@@ -41,6 +43,7 @@ async function readFacebookAuction(ownerId: string, offerId: string) {
       platformId: true,
       currency: true,
       state: true,
+      listingType: true,
       facebookGroupId: true,
       collection: { select: { ownerId: true } },
       sets: {
@@ -50,11 +53,14 @@ async function readFacebookAuction(ownerId: string, offerId: string) {
     },
   });
   if (!offer || offer.collection.ownerId !== ownerId) throw new Error("Offer not found or access denied.");
-  if (!offer.facebookGroupId) throw new Error("Only a Facebook auction records its result here.");
+  if (!offer.facebookGroupId) throw new Error("Only a Facebook offer records its result here.");
+  const listingType = normalizeListingType(offer.listingType);
   if (!(FACEBOOK_AUCTION_HOLDING_STATES as readonly string[]).includes(offer.state)) {
-    throw new Error(`This auction is ${offer.state as OfferState} — only one that is up has a result to record.`);
+    throw new Error(
+      `This ${isAuctionListing(listingType) ? "auction" : "offer"} is ${offer.state as OfferState} — only one that is up has a result to record.`
+    );
   }
-  return offer;
+  return { ...offer, listingType };
 }
 
 /** The winner as the lookup found them. */
@@ -148,7 +154,7 @@ export async function lookupFacebookWinner(
   offerId: string,
   input: { winnerName: string; profileUrl: string }
 ): Promise<FacebookWinnerLookup> {
-  const offer = await readFacebookAuction(ownerId, offerId);
+  const offer = await readFacebookOffer(ownerId, offerId);
   const profile = normalizeFacebookProfileUrl(input.profileUrl);
   if (!profile.ok) return { contact: null, conflict: profile.message, openSales: [] };
   const { contact, conflict } = await findWinner(offer.collectionId, input.winnerName.trim(), profile.value);
@@ -160,23 +166,27 @@ export async function lookupFacebookWinner(
 }
 
 /**
- * Record that somebody won the auction: the winner as a buyer contact, the winning bid as the offer's
- * final price, and the sale — a new one, or the winner's open sale named by `saleId` — holding every
- * set the offer still has, the price split over them in cents. The offer is `sold` once every set is
- * (`addSaleLines`). Returns the sale the lot went into.
+ * Record that somebody won the auction, or bought the quick buy (#1671): them as a buyer contact, and
+ * the sale — a new one, or their open sale named by `saleId` — holding every set the offer still has,
+ * the price split over them in cents. The offer is `sold` once every set is (`addSaleLines`). On an
+ * auction the winning bid is also the offer's final price, the observation the lists show; a quick
+ * buy's asking price is the seller's own and stays as it was. Returns the sale the lot went into.
  */
-export async function recordFacebookAuctionWin(
+export async function recordFacebookSale(
   ownerId: string,
   offerId: string,
   input: FacebookWinInput
 ): Promise<{ saleId: string; buyerId: string }> {
-  const offer = await readFacebookAuction(ownerId, offerId);
-  const cleaned = cleanFacebookWin(input);
+  const offer = await readFacebookOffer(ownerId, offerId);
+  const auction = isAuctionListing(offer.listingType);
+  const cleaned = cleanFacebookWin(input, offer.listingType);
   if (!cleaned.ok) throw new Error(cleaned.message);
   const win = cleaned.value;
 
   const sets = offer.sets.filter((s) => s.saleLines.length === 0 && s.items.length > 0);
-  if (sets.length === 0) throw new Error("Nothing is left to sell on this auction — every set has sold.");
+  if (sets.length === 0) {
+    throw new Error(`Nothing is left to sell on this ${auction ? "auction" : "offer"} — every set has sold.`);
+  }
 
   const { contact, conflict } = await findWinner(offer.collectionId, win.winnerName, win.profileUrl);
   if (conflict) throw new Error(conflict);
@@ -210,7 +220,7 @@ export async function recordFacebookAuctionWin(
       ).id;
 
   // The winning bid is the auction's final figure — the observation the lists show — before it sells.
-  await patchOffer(ownerId, offerId, { price: win.price });
+  if (auction) await patchOffer(ownerId, offerId, { price: win.price });
 
   const prices = splitAuctionPrice(win.price, sets.length);
   const lines: SaleLineDraft[] = sets.map((s, i) => ({
@@ -251,8 +261,12 @@ export async function recordFacebookAuctionWin(
 }
 
 /** Record that nobody bid: the auction is withdrawn, which frees its copies. Listing them again is a
- *  new offer (decided with the collector on 2026-10-03). */
+ *  new offer (decided with the collector on 2026-10-03). A quick buy has no bids to lack, so it is
+ *  withdrawn the ordinary way. */
 export async function recordFacebookAuctionNoBids(ownerId: string, offerId: string): Promise<void> {
-  await readFacebookAuction(ownerId, offerId);
+  const offer = await readFacebookOffer(ownerId, offerId);
+  if (!isAuctionListing(offer.listingType)) {
+    throw new Error("A quick buy has no bids — withdraw it from the offer's actions instead.");
+  }
   await setOfferState(ownerId, offerId, "withdrawn");
 }
