@@ -7,19 +7,23 @@ import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { FacebookGroupData, FacebookGroupList } from "@/lib/facebook-groups";
 import {
   effectiveFacebookGroupSettings,
   FACEBOOK_AUCTION_DAYS_MAX,
-  FACEBOOK_POST_PLACEHOLDERS,
+  facebookPostPlaceholders,
   isFacebookGroupSetting,
+  retiredPostPlaceholders,
   unknownPostPlaceholders,
+  usesRetiredPostPlaceholder,
   type FacebookGroupSetting,
   type FacebookGroupValues,
   type FacebookPostingSettings,
   type FacebookStartingPriceMode,
 } from "@/lib/facebook-group-rules";
+import { OFFER_LISTING_TYPE_LABEL, OFFER_LISTING_TYPES, type OfferListingType } from "@/lib/offer-rules";
 import {
   createFacebookGroupAction,
   deleteFacebookGroupAction,
@@ -54,8 +58,9 @@ import {
  * marketplace page, and the **groups** under it — list beside detail, the dictionaries' shape (#1471).
  *
  * Facebook is one platform and its groups sit under it, so the page has no tabs: the groups are what
- * is configured here, and what a group holds is its customs — the post template, the standing note,
- * and the defaults a new auction there starts from. **Facebook's own row comes first** (#1661): the
+ * is configured here, and what a group holds is its customs — how a new offer there is sold, the post
+ * templates for an auction and a quick buy (#1671), the standing note, and the defaults a new auction
+ * there starts from. **Facebook's own row comes first** (#1661): the
  * settings every group follows, each of which a group may instead set custom for itself. Groups in
  * use are listed next and the archived ones under their own heading, still editable and brought
  * back from the pane.
@@ -126,6 +131,9 @@ function GroupsListDetail({ collectionId, list }: { collectionId: string; list: 
   const row = (group: FacebookGroupData) => (
     <ListRow key={group.id} selected={current?.id === group.id} onSelect={() => sel.select(group.id)}>
       <RowName>{group.name}</RowName>
+      {/* A group's own template still carrying a retired placeholder (#1671); one it follows is
+          flagged on Facebook's row instead. */}
+      {usesRetiredPostPlaceholder(group) && <RetiredTag />}
       {group.offerCount > 0 && <RowTag>{countLabel(group.offerCount, "offer", "offers")}</RowTag>}
     </ListRow>
   );
@@ -139,16 +147,18 @@ function GroupsListDetail({ collectionId, list }: { collectionId: string; list: 
             caption={countLabel(inUse.length, "group", "groups")}
             hint={
               <>
-                The Facebook groups you auction in on {list.platformName}. Every group follows
-                Facebook&rsquo;s settings — how a post reads, the note on shipping, payment and
-                terms, and what a new auction starts from — unless it sets one custom for itself.
-                Archive a group you no longer post in; one with offers cannot be deleted.
+                The Facebook groups you sell in on {list.platformName}. Every group follows
+                Facebook&rsquo;s settings — whether a new offer is an auction or a quick buy, how a
+                post reads, the note on shipping, payment and terms, and what a new auction starts
+                from — unless it sets one custom for itself. Archive a group you no longer post in;
+                one with offers cannot be deleted.
               </>
             }
           >
             <ListRows label="Facebook">
               <ListRow selected={onDefaults} onSelect={() => sel.select(DEFAULTS_ROW)}>
                 <RowName strong>Facebook defaults</RowName>
+                {usesRetiredPostPlaceholder(list.defaults) && <RetiredTag />}
               </ListRow>
             </ListRows>
             <ListGroupHeading>Groups</ListGroupHeading>
@@ -157,7 +167,7 @@ function GroupsListDetail({ collectionId, list }: { collectionId: string; list: 
             ) : (
               list.groups.length === 0 && (
                 <p style={{ margin: 0, color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-                  No groups yet. Add the groups you auction in — an auction on Facebook is posted in one.
+                  No groups yet. Add the groups you sell in — an offer on Facebook is posted in one.
                 </p>
               )
             )}
@@ -239,6 +249,20 @@ function GroupsListDetail({ collectionId, list }: { collectionId: string; list: 
   );
 }
 
+/** A row whose template still carries a placeholder no longer offered (#1671): the collector removes
+ *  it from the template, which is filled in until then. */
+function RetiredTag() {
+  return (
+    <Tooltip content="A post template here still uses {catalog}, which is no longer offered — the catalogue numbers are in the title or description. It is filled in until you remove it.">
+      <span style={{ display: "inline-flex" }}>
+        <RowTag>
+          <span style={{ color: "var(--color-warning)", textTransform: "none" }}>{"{catalog}"}</span>
+        </RowTag>
+      </span>
+    </Tooltip>
+  );
+}
+
 /** Archive the group, or bring it back — one click, no question: nothing is lost either way. */
 function ArchiveButton({ group, onDone }: { group: FacebookGroupData; onDone: () => void }) {
   const [isPending, startTransition] = useTransition();
@@ -278,7 +302,11 @@ function settingsInput(fd: FormData): FacebookPostingSettings {
   const text = (key: string) => String(fd.get(key) ?? "");
   const mode = text("startingPriceMode");
   return {
+    // A group following Facebook sends no listing type; the save stores the blank one.
+    listingType: text("listingType") === "fixed" ? "fixed" : "auction",
+    mixedListingTypes: fd.get("mixedListingTypes") === "on",
     postTemplate: text("postTemplate"),
+    quickBuyTemplate: text("quickBuyTemplate"),
     standingNote: text("standingNote"),
     startingPriceMode: mode === "" ? null : (mode as FacebookStartingPriceMode),
     startingPriceValue: mode === "" ? null : optionalNumber(text("startingPriceValue")),
@@ -328,17 +356,30 @@ const TEXTAREA_STYLE: React.CSSProperties = {
 
 /** The hints the settings carry, said once for Facebook's pane and a group's alike. */
 const HINTS = {
+  listingType:
+    "Whether a new offer here starts as an auction or a quick buy. Each offer can be changed on its own form.",
+  mixedListingTypes:
+    "Off, the lots of one post are all auctions or all quick buys. On, one post may hold both, each lot written from its own type's template.",
   postTemplate: (
     <>
-      The text a post is prepared from. Each placeholder is filled in from the auction when the post
-      is prepared; in a post holding several lots, each lot gets its own line. The note on shipping,
-      payment and terms is added after it.
+      The text an auction&rsquo;s post is prepared from. Each placeholder is filled in from the offer
+      when the post is prepared; in a post holding several lots, each lot gets its own line. The note
+      on shipping, payment and terms is added after it.
+    </>
+  ),
+  quickBuyTemplate: (
+    <>
+      The text a quick buy&rsquo;s post is prepared from, the same way. A quick buy is never written
+      from the auction template, nor an auction from this one.
     </>
   ),
   standingNote:
     "Added to every post, as written — how you ship, how buyers pay, and the group's own terms.",
+  shared: "These apply to auctions and quick buys alike.",
   newAuctions:
     "What a new auction starts from. Each can be changed on the auction itself, and changing it here never changes an auction already made. Leave a field blank for no default.",
+  quickBuys:
+    "A quick buy has a price and no bidding: the first buyer to claim it takes it. Its price is set on each offer.",
 } as const;
 
 function money(value: number | null, currency: string | null): string {
@@ -352,7 +393,12 @@ function describeSetting(
   platformCurrency: string | null
 ): React.ReactNode {
   switch (key) {
+    case "listingType":
+      return OFFER_LISTING_TYPE_LABEL[s.listingType];
+    case "mixedListingTypes":
+      return s.mixedListingTypes ? "A post may mix auctions and quick buys" : "A post's lots share one type";
     case "postTemplate":
+    case "quickBuyTemplate":
     case "standingNote": {
       const text = s[key].trim();
       return text ? <span style={{ whiteSpace: "pre-wrap" }}>{text}</span> : "None";
@@ -388,10 +434,22 @@ function DefaultsFields({
   return (
     <Fields>
       <div>
-        <GroupLabel htmlFor="facebook-post-template" hint={HINTS.postTemplate}>
-          Post template
-        </GroupLabel>
-        <PostTemplateField id="facebook-post-template" initial={defaults.postTemplate} />
+        <GroupLabel hint={HINTS.shared}>Every offer</GroupLabel>
+        <div style={FIGURE_GRID}>
+          <div>
+            <ListingTypeField initial={defaults.listingType} />
+            <FieldNote>A new offer starts as</FieldNote>
+          </div>
+          <div>
+            <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)" }}>
+              {platformCurrency ?? "Not set yet"}
+            </div>
+            <FieldNote>Currency — the platform&rsquo;s own, set on its contact</FieldNote>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <MixedListingTypesField initial={defaults.mixedListingTypes} />
+          </div>
+        </div>
       </div>
       <div>
         <GroupLabel htmlFor="facebook-standing-note" hint={HINTS.standingNote}>
@@ -402,6 +460,10 @@ function DefaultsFields({
       <div>
         <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
         <div style={FIGURE_GRID}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <span style={SMALL_LABEL}>Post template</span>
+            <PostTemplateField id="facebook-post-template" listingType="auction" initial={defaults.postTemplate} />
+          </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <StartingPriceField initial={defaults} currency={platformCurrency} />
           </div>
@@ -417,17 +479,24 @@ function DefaultsFields({
             <ClosingTimeField initial={defaults.closingTime} />
             <FieldNote>Closing time, on its last day</FieldNote>
           </div>
-          <div>
-            <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)" }}>
-              {platformCurrency ?? "Not set yet"}
-            </div>
-            <FieldNote>Currency — the platform&rsquo;s own, set on its contact</FieldNote>
-          </div>
         </div>
+      </div>
+      <div>
+        <GroupLabel hint={HINTS.quickBuys}>Quick buys</GroupLabel>
+        <span style={SMALL_LABEL}>Post template</span>
+        <PostTemplateField id="facebook-quick-buy-template" listingType="fixed" initial={defaults.quickBuyTemplate} />
       </div>
     </Fields>
   );
 }
+
+/** The label a field inside a section carries — the small one the figures' grid uses. */
+const SMALL_LABEL: React.CSSProperties = {
+  display: "block",
+  marginBottom: "0.25rem",
+  fontSize: "0.75rem",
+  color: "var(--color-text-muted)",
+};
 
 const FIGURE_GRID: React.CSSProperties = {
   display: "grid",
@@ -509,44 +578,11 @@ function GroupFields({
         />
       </div>
 
-      <FollowableSetting
-        label="Post template"
-        htmlFor="facebook-group-template"
-        hint={HINTS.postTemplate}
-        {...setting("postTemplate")}
-      >
-        <PostTemplateField id="facebook-group-template" initial={start.postTemplate} />
-      </FollowableSetting>
-
-      <FollowableSetting
-        label="Shipping, payment and terms"
-        htmlFor="facebook-group-note"
-        hint={HINTS.standingNote}
-        {...setting("standingNote")}
-      >
-        <StandingNoteField id="facebook-group-note" initial={start.standingNote} />
-      </FollowableSetting>
-
       <div>
-        <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
+        <GroupLabel hint={HINTS.shared}>Every offer</GroupLabel>
         <div style={FIGURE_GRID}>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <FollowableSetting label="Starting price" small {...setting("startingPrice")}>
-              <StartingPriceField initial={start} currency={shownCurrency} />
-            </FollowableSetting>
-          </div>
-          <FollowableSetting
-            label={`Bid increment${shownCurrency ? `, in ${shownCurrency}` : ""}`}
-            small
-            {...setting("bidIncrement")}
-          >
-            <BidIncrementField initial={start.bidIncrement} />
-          </FollowableSetting>
-          <FollowableSetting label="Days an auction runs" small {...setting("auctionDays")}>
-            <AuctionDaysField initial={start.auctionDays} />
-          </FollowableSetting>
-          <FollowableSetting label="Closing time, on its last day" small {...setting("closingTime")}>
-            <ClosingTimeField initial={start.closingTime} />
+          <FollowableSetting label="A new offer starts as" small {...setting("listingType")}>
+            <ListingTypeField initial={start.listingType} />
           </FollowableSetting>
           <FollowableSetting label="Currency" small {...setting("currency")}>
             <select
@@ -568,7 +604,57 @@ function GroupFields({
               )}
             </select>
           </FollowableSetting>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FollowableSetting label="Lots of one post" small {...setting("mixedListingTypes")}>
+              <MixedListingTypesField initial={start.mixedListingTypes} />
+            </FollowableSetting>
+          </div>
         </div>
+      </div>
+
+      <FollowableSetting
+        label="Shipping, payment and terms"
+        htmlFor="facebook-group-note"
+        hint={HINTS.standingNote}
+        {...setting("standingNote")}
+      >
+        <StandingNoteField id="facebook-group-note" initial={start.standingNote} />
+      </FollowableSetting>
+
+      <div>
+        <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
+        <div style={FIGURE_GRID}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FollowableSetting label="Post template" small {...setting("postTemplate")}>
+              <PostTemplateField id="facebook-group-template" listingType="auction" initial={start.postTemplate} />
+            </FollowableSetting>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FollowableSetting label="Starting price" small {...setting("startingPrice")}>
+              <StartingPriceField initial={start} currency={shownCurrency} />
+            </FollowableSetting>
+          </div>
+          <FollowableSetting
+            label={`Bid increment${shownCurrency ? `, in ${shownCurrency}` : ""}`}
+            small
+            {...setting("bidIncrement")}
+          >
+            <BidIncrementField initial={start.bidIncrement} />
+          </FollowableSetting>
+          <FollowableSetting label="Days an auction runs" small {...setting("auctionDays")}>
+            <AuctionDaysField initial={start.auctionDays} />
+          </FollowableSetting>
+          <FollowableSetting label="Closing time, on its last day" small {...setting("closingTime")}>
+            <ClosingTimeField initial={start.closingTime} />
+          </FollowableSetting>
+        </div>
+      </div>
+
+      <div>
+        <GroupLabel hint={HINTS.quickBuys}>Quick buys</GroupLabel>
+        <FollowableSetting label="Post template" small {...setting("quickBuyTemplate")}>
+          <PostTemplateField id="facebook-group-quick-buy-template" listingType="fixed" initial={start.quickBuyTemplate} />
+        </FollowableSetting>
       </div>
     </Fields>
   );
@@ -658,15 +744,26 @@ function FollowableSetting({
   );
 }
 
-/** The post template, with its placeholders named under it and an unknown one called out as typed. */
-function PostTemplateField({ id, initial }: { id: string; initial: string }) {
+/** A post template — an auction's or a quick buy's (#1671) — with its type's placeholders named under
+ *  it, an unknown one called out as typed, and a retired one flagged so it is removed. */
+function PostTemplateField({
+  id,
+  listingType,
+  initial,
+}: {
+  id: string;
+  listingType: OfferListingType;
+  initial: string;
+}) {
   const [template, setTemplate] = useState(initial);
-  const unknown = unknownPostPlaceholders(template);
+  const unknown = unknownPostPlaceholders(template, listingType);
+  const retired = retiredPostPlaceholders(template);
   return (
     <>
       <TextArea
         id={id}
-        name="postTemplate"
+        name={listingType === "auction" ? "postTemplate" : "quickBuyTemplate"}
+        aria-label={`${OFFER_LISTING_TYPE_LABEL[listingType]} post template`}
         value={template}
         onChange={(e) => setTemplate(e.target.value)}
         style={TEXTAREA_STYLE}
@@ -674,7 +771,7 @@ function PostTemplateField({ id, initial }: { id: string; initial: string }) {
       />
       <FieldNote>
         Placeholders:{" "}
-        {FACEBOOK_POST_PLACEHOLDERS.map((p, i) => (
+        {facebookPostPlaceholders(listingType).map((p, i) => (
           <span key={p.token}>
             {i > 0 && ", "}
             <code>{p.token}</code> {p.label.toLowerCase()}
@@ -689,7 +786,45 @@ function PostTemplateField({ id, initial }: { id: string; initial: string }) {
           </span>
         </FieldNote>
       )}
+      {retired.length > 0 && (
+        <FieldNote>
+          <span style={{ color: "var(--color-warning)" }}>
+            {retired.join(", ")} is no longer offered — the catalogue numbers are in the title or
+            description. Remove it; until then it is still filled in.
+          </span>
+        </FieldNote>
+      )}
     </>
+  );
+}
+
+/** How a new offer starts (#1671): an auction, or a quick buy. */
+function ListingTypeField({ initial }: { initial: OfferListingType }) {
+  return (
+    <select
+      name="listingType"
+      aria-label="A new offer starts as"
+      defaultValue={initial}
+      style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
+    >
+      {/* Auction first: it is what every Facebook offer was before quick buys. */}
+      {[...OFFER_LISTING_TYPES].reverse().map((t) => (
+        <option key={t} value={t}>
+          {OFFER_LISTING_TYPE_LABEL[t]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Whether one post may hold auctions and quick buys together (#1671). */
+function MixedListingTypesField({ initial }: { initial: boolean }) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.875rem" }}>
+      <input type="checkbox" name="mixedListingTypes" defaultChecked={initial} />
+      A post may mix auctions and quick buys
+      <InfoHint>{HINTS.mixedListingTypes}</InfoHint>
+    </label>
   );
 }
 

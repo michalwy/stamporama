@@ -4,6 +4,7 @@ import {
   describeFacebookAuctionCopies,
   facebookDefaultEndsAt,
   facebookDefaultStartingPrice,
+  facebookMixedTypesRefusal,
   facebookMoney,
   facebookPostRefusal,
   isFacebookLotPosted,
@@ -15,18 +16,21 @@ import {
   type FacebookPostLotText,
 } from "../../src/lib/facebook-post-rules";
 
-// A Facebook auction and its post (#1544; ADR-0061 §2, §3, §6): what a group's defaults become on a
-// new auction, and the kit's text. The database half — the group required, its currency, a copy in
+// A Facebook offer and its post (#1544; ADR-0061 §2, §3, §6): what a group's defaults become on a
+// new auction, and the kit's text — an auction's or, since #1671, a quick buy's. The database half — the group required, its currency, a copy in
 // one auction at a time, posts and their links — is `tests/integration/facebook-auctions.test.ts`.
 
 function lot(overrides: Partial<FacebookPostLotText> = {}): FacebookPostLotText {
   return {
     lotNo: null,
+    listingType: "auction",
+    title: "Austria 1850 Mercury",
     description: "Mercury, 1850, unused",
     catalog: "Mi·AT 1",
     startingPrice: "10.00 PLN",
     increment: "1.00 PLN",
     closesAt: "Sun 5 Oct, 20:00",
+    price: "",
     ...overrides,
   };
 }
@@ -90,13 +94,27 @@ describe("parseBidIncrement (#1544)", () => {
 describe("the post's text (#1544; ADR-0061 §3)", () => {
   it("fills every placeholder and keeps an unknown token as typed", () => {
     const text = renderFacebookLotText(
-      "Lot {lot}: {catalog} {description}\nStart {startingPrice}, +{increment}, ends {closesAt} {startprice}",
+      "Lot {lot}: {title} — {description}\nStart {startingPrice}, +{increment}, ends {closesAt} {startprice}",
       lot({ lotNo: 3 })
     );
     assert.equal(
       text,
-      "Lot 3: Mi·AT 1 Mercury, 1850, unused\nStart 10.00 PLN, +1.00 PLN, ends Sun 5 Oct, 20:00 {startprice}"
+      "Lot 3: Austria 1850 Mercury — Mercury, 1850, unused\nStart 10.00 PLN, +1.00 PLN, ends Sun 5 Oct, 20:00 {startprice}"
     );
+  });
+
+  it("still fills the retired {catalog}, so no post loses text unannounced (#1671)", () => {
+    assert.equal(renderFacebookLotText("{catalog} {title}", lot()), "Mi·AT 1 Austria 1850 Mercury");
+    assert.equal(renderFacebookLotText("{catalog}", lot({ listingType: "fixed" })), "Mi·AT 1");
+  });
+
+  it("fills a quick buy's price and keeps an auction's tokens in it as typed (#1671)", () => {
+    const quickBuy = lot({ listingType: "fixed", price: "25.00 PLN" });
+    assert.equal(
+      renderFacebookLotText("{title}: {price} {closesAt}", quickBuy),
+      "Austria 1850 Mercury: 25.00 PLN {closesAt}"
+    );
+    assert.equal(renderFacebookLotText("{title} {price}", lot()), "Austria 1850 Mercury {price}");
   });
 
   it("leaves {lot} empty on an offer posted alone", () => {
@@ -108,15 +126,24 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
   });
 
   it("joins the lots in lot order and puts the standing note under the last, once", () => {
-    const text = renderFacebookPostText("Lot {lot}: {catalog}", "Shipping 5 PLN.", [
+    const text = renderFacebookPostText({ auction: "Lot {lot}: {catalog}", quickBuy: "" }, "Shipping 5 PLN.", [
       lot({ lotNo: 2, catalog: "Mi·AT 2" }),
       lot({ lotNo: 1, catalog: "Mi·AT 1" }),
     ]);
     assert.equal(text, "Lot 1: Mi·AT 1\n\nLot 2: Mi·AT 2\n\nShipping 5 PLN.");
   });
 
+  it("writes each lot from its own type's template, never the other (#1671)", () => {
+    const templates = { auction: "Lot {lot} auction: {startingPrice}", quickBuy: "Lot {lot} buy now: {price}" };
+    const text = renderFacebookPostText(templates, "", [
+      lot({ lotNo: 1 }),
+      lot({ lotNo: 2, listingType: "fixed", price: "25.00 PLN" }),
+    ]);
+    assert.equal(text, "Lot 1 auction: 10.00 PLN\n\nLot 2 buy now: 25.00 PLN");
+  });
+
   it("leaves out an empty standing note rather than a gap", () => {
-    assert.equal(renderFacebookPostText("{catalog}", "  ", [lot()]), "Mi·AT 1");
+    assert.equal(renderFacebookPostText({ auction: "{catalog}", quickBuy: "" }, "  ", [lot()]), "Mi·AT 1");
   });
 
   it("writes a figure with its currency, and nothing for none", () => {
@@ -135,7 +162,15 @@ describe("isFacebookLotPosted (#1668)", () => {
 
 describe("facebookPostRefusal (#1544; ADR-0061 §2)", () => {
   function offer(overrides: Partial<FacebookPostCandidate> = {}): FacebookPostCandidate {
-    return { offerNo: 1, facebookGroupId: "g1", facebookPostId: null, state: "ready", url: null, ...overrides };
+    return {
+      offerNo: 1,
+      facebookGroupId: "g1",
+      listingType: "auction",
+      facebookPostId: null,
+      state: "ready",
+      url: null,
+      ...overrides,
+    };
   }
 
   it("lets two unposted auctions in one group become a post", () => {
@@ -144,7 +179,7 @@ describe("facebookPostRefusal (#1544; ADR-0061 §2)", () => {
 
   it("refuses a single offer, another platform, a second group, another post, or one already up", () => {
     assert.match(facebookPostRefusal([offer()])!, /at least two/);
-    assert.match(facebookPostRefusal([offer(), offer({ offerNo: 7, facebookGroupId: null })])!, /#7 is not a Facebook auction/);
+    assert.match(facebookPostRefusal([offer(), offer({ offerNo: 7, facebookGroupId: null })])!, /#7 is not a Facebook offer/);
     assert.match(facebookPostRefusal([offer(), offer({ offerNo: 2, facebookGroupId: "g2" })])!, /different groups/);
     assert.match(facebookPostRefusal([offer(), offer({ offerNo: 3, facebookPostId: "p" })])!, /#3 is already a lot/);
     assert.match(
@@ -152,20 +187,40 @@ describe("facebookPostRefusal (#1544; ADR-0061 §2)", () => {
       /Offers #4 and #5 are already up or closed/
     );
   });
+
+  it("keeps a post's lots to one listing type unless the group lets them mix (#1671)", () => {
+    const mixed = [offer(), offer({ offerNo: 2, listingType: "fixed" }), offer({ offerNo: 3, listingType: "fixed" })];
+    assert.equal(
+      facebookPostRefusal(mixed),
+      "The lots of one post share one listing type here: #1 is an auction and #2, #3 are quick buys. Post them apart, or let this group's posts mix them in Settings → Facebook."
+    );
+    assert.equal(facebookPostRefusal(mixed, { mixedListingTypes: true }), null);
+    assert.equal(
+      facebookPostRefusal([offer({ listingType: "fixed" }), offer({ offerNo: 2, listingType: "fixed" })]),
+      null
+    );
+  });
+});
+
+describe("facebookMixedTypesRefusal (#1671)", () => {
+  it("is null for lots of one type", () => {
+    assert.equal(facebookMixedTypesRefusal([{ offerNo: 1, listingType: "auction" }]), null);
+    assert.equal(facebookMixedTypesRefusal([]), null);
+  });
 });
 
 describe("describeFacebookAuctionCopies (ADR-0061 §5)", () => {
   it("names each copy and the auction holding it", () => {
     assert.equal(
       describeFacebookAuctionCopies([{ itemNo: 12, offerNo: 41, groupName: "Znaczki" }]),
-      "Copy #12 is already in an active Facebook auction: offer #41 in Znaczki. A copy is in one Facebook auction at a time — close or withdraw that one first."
+      "Copy #12 is already in an active Facebook offer: offer #41 in Znaczki. A copy is in one Facebook offer at a time, auction or quick buy — close or withdraw that one first."
     );
     assert.match(
       describeFacebookAuctionCopies([
         { itemNo: 12, offerNo: 41, groupName: "Znaczki" },
         { itemNo: 13, offerNo: 41, groupName: "Znaczki" },
       ]),
-      /^Copies #12, #13 are already in an active Facebook auction: offer #41 in Znaczki\./
+      /^Copies #12, #13 are already in an active Facebook offer: offer #41 in Znaczki\./
     );
   });
 });

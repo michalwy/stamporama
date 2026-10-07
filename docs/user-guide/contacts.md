@@ -36,8 +36,9 @@ ordinary case for a marketplace buyer: you know them as `bronek_1980`, and the p
 contact that has none.
 
 **Facebook profile** is the link to the person's profile. It is how the winner of a
-[Facebook auction](facebook.md#when-it-ends) is recognised next time, since names repeat on Facebook;
-recording a result fills it in on a contact that has none. Any form of the link works — the phone's,
+[Facebook auction](facebook.md#when-an-auction-ends), or the buyer of a
+[quick buy](facebook.md#selling-a-quick-buy), is recognised next time, since names repeat on
+Facebook; recording a result fills it in on a contact that has none. Any form of the link works — the phone's,
 the desktop's — and it is kept in one form. The contact's row links to the profile.
 
 ### Market

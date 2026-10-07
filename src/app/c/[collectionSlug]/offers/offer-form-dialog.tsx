@@ -178,9 +178,9 @@ export function OfferFormDialog({
 
   // ── Facebook (#1544; ADR-0061) ──────────────────────────────────────────────────────────────
   // Whether the picked platform is Facebook, and its groups, asked of the server whenever the
-  // platform changes: a Facebook offer is an auction in a group, which the collector names here, and
-  // a new one starts from that group's defaults — the starting price, the increment, when it closes
-  // and the currency. Read when the group is picked and owned by the offer from then on, the
+  // platform changes: a Facebook offer is in a group, which the collector names here, and a new one
+  // starts from that group's defaults — whether it is an auction or a quick buy (#1671), the starting
+  // price, the increment, when it closes and the currency. Read when the group is picked and owned by the offer from then on, the
   // platform defaults' rule (#362): an edit never re-seeds anything.
   const { data: facebookChoices } = useQuery({
     queryKey: ["facebook-group-choices", collectionId, platformId, offer?.facebookGroupId ?? null],
@@ -215,6 +215,7 @@ export function OfferFormDialog({
     setFacebookGroupId(id);
     if (isEdit) return;
     const group = facebookGroups.find((g) => g.id === id);
+    if (group && !listingTypeTouched) setListingType(group.listingType);
     if (!bidIncrementTouched) setBidIncrement(group?.bidIncrement ?? "");
     if (!endsAtTouched) {
       setEndsAt(
@@ -236,8 +237,8 @@ export function OfferFormDialog({
     normalizeListingType(isEdit ? offer!.listingType : initialPlatform?.defaultListingType)
   );
   const [listingTypeTouched, setListingTypeTouched] = useState(false);
-  // A Facebook offer is an auction in a group (ADR-0061), so there the question is not asked.
-  const isAuction = isFacebook || isAuctionListing(listingType);
+  // A Facebook offer is an auction or a quick buy like any other (#1671); its group only seeds which.
+  const isAuction = isAuctionListing(listingType);
   // An auction's opening figure, seeded from the platform's own default (#362): re-seeded on a
   // platform change and left alone the moment the collector types one.
   const [startingPrice, setStartingPrice] = useState(
@@ -385,9 +386,10 @@ export function OfferFormDialog({
             />
           </div>
 
-          {/* The Facebook group the auction is in, and its bid increment (#1544; ADR-0061) — asked
-              only on the Facebook platform, where the group is required. Picking one on a new offer
-              fills in the group's defaults below; each stays editable. */}
+          {/* The Facebook group the offer is in, and an auction's bid increment (#1544; ADR-0061) —
+              asked only on the Facebook platform, where the group is required. Picking one on a new
+              offer fills in the group's defaults, its listing type among them (#1671); each stays
+              editable. */}
           {isFacebook && (
             <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
               <div style={{ flex: 2 }}>
@@ -409,22 +411,24 @@ export function OfferFormDialog({
                   </p>
                 )}
               </div>
-              <div style={{ flex: 1 }}>
-                <LabelWithError htmlFor="offer-bid-increment">Bid increment</LabelWithError>
-                <NumericInput
-                  kind="amount"
-                  id="offer-bid-increment"
-                  name="bidIncrement"
-                  placeholder="0.00"
-                  disabled={isPending}
-                  style={INPUT_STYLE}
-                  value={bidIncrement}
-                  onChange={(e) => {
-                    setBidIncrement(e.target.value);
-                    setBidIncrementTouched(true);
-                  }}
-                />
-              </div>
+              {isAuction && (
+                <div style={{ flex: 1 }}>
+                  <LabelWithError htmlFor="offer-bid-increment">Bid increment</LabelWithError>
+                  <NumericInput
+                    kind="amount"
+                    id="offer-bid-increment"
+                    name="bidIncrement"
+                    placeholder="0.00"
+                    disabled={isPending}
+                    style={INPUT_STYLE}
+                    value={bidIncrement}
+                    onChange={(e) => {
+                      setBidIncrement(e.target.value);
+                      setBidIncrementTouched(true);
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -436,15 +440,6 @@ export function OfferFormDialog({
           <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-listing-type">Listing type</LabelWithError>
-              {isFacebook ? (
-                // An auction in a group is the only way Facebook sells here (ADR-0061).
-                <>
-                  <input type="hidden" name="listingType" value="auction" />
-                  <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)", cursor: "not-allowed" }}>
-                    {OFFER_LISTING_TYPE_LABEL.auction} · in a group
-                  </div>
-                </>
-              ) : (
               <select
                 id="offer-listing-type"
                 name="listingType"
@@ -462,7 +457,6 @@ export function OfferFormDialog({
                   </option>
                 ))}
               </select>
-              )}
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-currency">Currency</LabelWithError>

@@ -445,9 +445,10 @@ export function OffersListPanel({
     });
   }
 
-  /** Put the ticked Facebook auctions **in view** into one post (#1544; ADR-0061 §2), numbered as
+  /** Put the ticked Facebook offers **in view** into one post (#1544; ADR-0061 §2), numbered as
    * lots in the order they were ticked. The server says why when they cannot be — different groups,
-   * one already up — and nothing is written then, so the ticks stay to be corrected. */
+   * one already up, auctions and quick buys in a group that keeps one type per post (#1671) — and
+   * nothing is written then, so the ticks stay to be corrected. */
   function postTogether() {
     const batch = selectedInView;
     startTransition(async () => {
@@ -463,7 +464,7 @@ export function OffersListPanel({
       invalidateAll(collectionId);
       setSelection((prev) => keptAfterBulkRun(prev, batch.map((o) => o.id), []));
       toast({
-        message: `${batch.length} auctions are now one post, as lots 1–${batch.length}`,
+        message: `${batch.length} offers are now one post, as lots 1–${batch.length}`,
         href: `/c/${collectionSlug}/offers/${batch[0].id}`,
         linkLabel: "Open lot 1",
       });
@@ -889,11 +890,11 @@ export function OffersListPanel({
                         marginLeft: "auto",
                       }}
                     >
-                      {/* Several Facebook auctions in one group become one post (#1544): offered
-                          only while every ticked offer in view is a Facebook auction. */}
+                      {/* Several Facebook offers in one group become one post (#1544): offered
+                          only while every ticked offer in view is a Facebook offer. */}
                       {selectedInView.length >= 2 &&
                         selectedInView.every((o) => o.facebookGroupId !== null) && (
-                          <Tooltip content="One Facebook post holding these auctions as lots, numbered in the order you ticked them.">
+                          <Tooltip content="One Facebook post holding these offers as lots, numbered in the order you ticked them.">
                             <button
                               type="button"
                               onClick={postTogether}

@@ -1182,7 +1182,7 @@ Press **Quick offer mode** at the top of the list. A bar appears under the toolb
 while you scroll, with two things in it:
 
 - **Platform** — which marketplace these offers are listed on.
-- **Group** — on Facebook only, the group the auctions are in. It starts on the last group you
+- **Group** — on Facebook only, the group the offers are in. It starts on the last group you
   used there, and until one is chosen the mode creates nothing on its own: **Add to new offer** opens
   the form instead, and the bar says why. See [Facebook](facebook.md#without-the-form).
 - **Status** — what each new offer starts as: *Preparing*, *Ready* or *Active*.
@@ -1197,8 +1197,8 @@ row, and the **New offer** buttons in the selection bar — creates the offer **
 no dialog. The menu entry says so while the mode is on: it reads *New offer on Colnect* rather than
 *Add to new offer*. The bar counts what the pass has created so far, and reports anything that failed.
 
-The new offers carry **no asking price and no listing URL** — except on Facebook, where each is an
-auction opening at the group's starting price. That is the point: the pass is about
+The new offers carry **no asking price and no listing URL** — except on Facebook, where a group that
+starts its offers as auctions makes each an auction opening at the group's starting price. That is the point: the pass is about
 getting the listings made, and both of those belong on the offer's own screen once the listing
 exists. If you want the price filled in from the copy's catalog value, use the ordinary
 [create form](#the-new-offer-shortcuts) instead — quick mode is for the bulk case.
@@ -1249,8 +1249,8 @@ Two choices:
     lowest-numbered is proposed, and you can pick another. An Active or Paused offer that receives
     sets is marked as [changed after listing](offers.md#keeping-platforms-in-sync--needs-action), so it turns up in *Needs action*. An offer in
     **active bidding** never receives sets: a new offer is made instead, and the preview says why.
-    On Facebook only an auction **in the group chosen in the bar** receives sets; one in another
-    group is left alone and a new auction is made in the chosen group.
+    On Facebook only an offer **in the group chosen in the bar** receives sets; one in another
+    group is left alone and a new offer is made in the chosen group.
   - **Separate offers** — every set becomes a new offer of its own, even where a similar offer exists.
 
 The preview lists every offer on **one line**: the checklist's name (or the stamp's), the condition

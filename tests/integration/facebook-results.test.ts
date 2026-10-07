@@ -16,10 +16,11 @@ import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import {
   lookupFacebookWinner,
   recordFacebookAuctionNoBids,
-  recordFacebookAuctionWin,
+  recordFacebookSale,
 } from "../../src/lib/facebook-results";
 
-// A Facebook auction's running bid and its result (#1545; ADR-0061 §4). The rules worth a database:
+// A Facebook auction's running bid and its result (#1545; ADR-0061 §4), and a quick buy's sale
+// (#1671). The rules worth a database:
 // a closed Facebook auction asks for its result with or without a bid typed, the winner becomes a
 // buyer contact recognised by their profile link, the win records the sale — new, or the winner's open
 // one — in the auction's own currency, and *No bids* withdraws the offer and frees its copies. The
@@ -132,7 +133,7 @@ describe("Facebook auction results (#1545)", () => {
 
   it("records a win as a sale to a new buyer holding the profile link, in the auction's currency", async () => {
     const offerId = await auction([await newItem(), await newItem()]);
-    const { saleId, buyerId } = await recordFacebookAuctionWin(userId, offerId, {
+    const { saleId, buyerId } = await recordFacebookSale(userId, offerId, {
       winnerName: "Jan Kowalski",
       profileUrl: "https://m.facebook.com/jan.kowalski/",
       price: "10.00",
@@ -168,7 +169,7 @@ describe("Facebook auction results (#1545)", () => {
 
   it("recognises a repeat winner by the profile link, and puts a second lot into their open sale", async () => {
     const first = await auction([await newItem()]);
-    const { saleId, buyerId } = await recordFacebookAuctionWin(userId, first, {
+    const { saleId, buyerId } = await recordFacebookSale(userId, first, {
       winnerName: "Anna Nowak",
       profileUrl: "https://www.facebook.com/profile.php?id=100012345678",
       price: "4.00",
@@ -186,7 +187,7 @@ describe("Facebook auction results (#1545)", () => {
     assert.equal(lookup.contact?.matchedBy, "profile");
     assert.deepEqual(lookup.openSales.map((s) => s.id), [saleId]);
 
-    const into = await recordFacebookAuctionWin(userId, second, {
+    const into = await recordFacebookSale(userId, second, {
       winnerName: "Anna N.",
       profileUrl: "https://m.facebook.com/profile.php?id=100012345678",
       price: "6.50",
@@ -205,7 +206,7 @@ describe("Facebook auction results (#1545)", () => {
     assert.deepEqual(after.openSales, []);
     await assert.rejects(
       () =>
-        recordFacebookAuctionWin(userId, third, {
+        recordFacebookSale(userId, third, {
           winnerName: "Anna Nowak",
           profileUrl: "",
           price: "3.00",
@@ -220,7 +221,7 @@ describe("Facebook auction results (#1545)", () => {
   it("fills the link in on a contact found by name, and refuses one whose profile is somebody else's", async () => {
     const known = await prisma.contact.create({ data: { collectionId, name: "Piotr Zieliński" } });
     const offerId = await auction([await newItem()]);
-    const { buyerId } = await recordFacebookAuctionWin(userId, offerId, {
+    const { buyerId } = await recordFacebookSale(userId, offerId, {
       winnerName: "piotr zieliński",
       profileUrl: "https://www.facebook.com/piotr.z",
       price: "8.00",
@@ -235,7 +236,7 @@ describe("Facebook auction results (#1545)", () => {
     const other = await auction([await newItem()]);
     await assert.rejects(
       () =>
-        recordFacebookAuctionWin(userId, other, {
+        recordFacebookSale(userId, other, {
           winnerName: "Piotr Zieliński",
           profileUrl: "https://www.facebook.com/another.piotr",
           price: "8.00",
@@ -258,6 +259,46 @@ describe("Facebook auction results (#1545)", () => {
     await auction([copy], future);
   });
 
+  it("records a quick buy's sale to its buyer at the price, leaving its asking price as it was (#1671)", async () => {
+    const offerId = await createOffer(
+      userId,
+      collectionId,
+      {
+        platformId: facebookId,
+        url: null,
+        listingType: "fixed",
+        price: "25.00",
+        currency: "EUR",
+        listingDate: null,
+        state: "active",
+        facebookGroupId: groupId,
+      },
+      { seedItemIds: [await newItem()] }
+    );
+    // A quick buy never ends of itself, so it never asks for a result on its own.
+    assert.ok(!(await endedIds()).includes(offerId));
+    await assert.rejects(() => recordFacebookAuctionNoBids(userId, offerId), /quick buy has no bids/);
+
+    const { saleId, buyerId } = await recordFacebookSale(userId, offerId, {
+      winnerName: "Ewa Wiśniewska",
+      profileUrl: "https://www.facebook.com/ewa.wisniewska",
+      price: "22.00",
+      soldOn: "2026-10-07",
+      saleId: null,
+    });
+    const buyer = await prisma.contact.findUniqueOrThrow({ where: { id: buyerId } });
+    assert.deepEqual([buyer.name, buyer.buyer, buyer.facebookProfileUrl], [
+      "Ewa Wiśniewska",
+      true,
+      "https://www.facebook.com/ewa.wisniewska",
+    ]);
+    const sale = await prisma.sale.findUniqueOrThrow({ where: { id: saleId }, include: { lines: true } });
+    assert.deepEqual(sale.lines.map((l) => l.price.toFixed(2)), ["22.00"]);
+    const offer = await prisma.offer.findUniqueOrThrow({ where: { id: offerId } });
+    assert.equal(offer.state, "sold");
+    assert.equal(offer.price.toFixed(2), "25.00", "the asking price is the seller's own, not the sale's");
+  });
+
   it("records a result only for a Facebook auction that is up", async () => {
     const draft = await createOffer(
       userId,
@@ -276,7 +317,7 @@ describe("Facebook auction results (#1545)", () => {
     await assert.rejects(() => recordFacebookAuctionNoBids(userId, draft), /only one that is up/);
     await assert.rejects(
       () =>
-        recordFacebookAuctionWin(userId, draft, {
+        recordFacebookSale(userId, draft, {
           winnerName: "X",
           profileUrl: "",
           price: "1.00",

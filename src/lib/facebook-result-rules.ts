@@ -1,9 +1,10 @@
-// The pure half of a Facebook auction's result (#1545; ADR-0061 §4): the winner's profile link as
-// the one identity a repeat buyer is recognised by, the final price spread over the offer's sets, and
-// what the result dialog submitted, checked. No Prisma, no React — the dialog and the server read the
+// The pure half of a Facebook offer's result (#1545; ADR-0061 §4) — an auction's winner, or a quick
+// buy's buyer (#1671): their profile link as the one identity a repeat buyer is recognised by, the
+// final price spread over the offer's sets, and what the result dialog submitted, checked. No Prisma, no React — the dialog and the server read the
 // same rules, and `tests/unit/facebook-result-rules.test.ts` pins them.
 
 import { parsePrice, parseSaleDate } from "./sale-rules";
+import type { OfferListingType } from "./offer-rules";
 
 /** The forms of the address a profile is reached by on the phone, the old mobile site and the
  *  desktop — all one profile, so all one stored link. */
@@ -60,13 +61,14 @@ export function splitAuctionPrice(total: string, setCount: number): string[] {
   return Array.from({ length: setCount }, (_, i) => ((base + (i < rest ? 1 : 0)) / 100).toFixed(2));
 }
 
-/** What the result dialog submits for an auction somebody won. */
+/** What the result dialog submits for an auction somebody won, or a quick buy somebody bought. */
 export interface FacebookWinInput {
-  /** The winner's name as their Facebook profile shows it — what a buyer is filed under here. */
+  /** The winner's — or buyer's — name as their Facebook profile shows it: what a buyer is filed
+   *  under here. */
   winnerName: string;
   /** Their profile link, or blank. */
   profileUrl: string;
-  /** The winning bid, in the offer's currency. */
+  /** The winning bid, or the price a quick buy sold for, in the offer's currency. */
   price: string;
   /** The day it sold, `YYYY-MM-DD`. */
   soldOn: string;
@@ -82,20 +84,28 @@ export interface CleanFacebookWin {
   saleId: string | null;
 }
 
-/** Check the dialog's fields, each refusal naming the field it is about. */
+/** Check the dialog's fields, each refusal naming the field it is about — in an auction's words or a
+ *  quick buy's (#1671). */
 export function cleanFacebookWin(
-  input: FacebookWinInput
+  input: FacebookWinInput,
+  listingType: OfferListingType = "auction"
 ): { ok: true; value: CleanFacebookWin } | { ok: false; message: string } {
+  const auction = listingType === "auction";
   const winnerName = input.winnerName.trim();
-  if (!winnerName) return { ok: false, message: "Name the winner as their Facebook profile shows it." };
+  if (!winnerName) {
+    return { ok: false, message: `Name the ${auction ? "winner" : "buyer"} as their Facebook profile shows it.` };
+  }
   const profile = normalizeFacebookProfileUrl(input.profileUrl);
   if (!profile.ok) return profile;
   const price = parsePrice(input.price);
   if (!price.ok || Number(price.value) <= 0) {
-    return { ok: false, message: "Enter the winning bid — an amount above zero." };
+    return {
+      ok: false,
+      message: `Enter ${auction ? "the winning bid" : "the price it sold for"} — an amount above zero.`,
+    };
   }
   const soldAt = parseSaleDate(input.soldOn);
-  if (!soldAt) return { ok: false, message: "Enter the day the auction was won." };
+  if (!soldAt) return { ok: false, message: auction ? "Enter the day the auction was won." : "Enter the day it sold." };
   return {
     ok: true,
     value: { winnerName, profileUrl: profile.value, price: price.value, soldAt, saleId: input.saleId || null },

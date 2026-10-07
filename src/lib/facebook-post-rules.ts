@@ -1,13 +1,19 @@
-// The rules a Facebook auction and its post are prepared by (#1544; ADR-0061 §2, §3, §6) — pure, no
+// The rules a Facebook offer and its post are prepared by (#1544; ADR-0061 §2, §3, §6) — pure, no
 // Prisma and no `server-only`, because the offer form and the offer's Facebook card are client
 // components and the closing time is a local time of day: it can only be turned into an instant in
 // the browser, the one place the collector's zone is known (the `endsAt` field's rule, #490).
 //
 // What lives here is the arithmetic a group's defaults become on a new auction, and the text of the
-// kit: the group's post template filled in per lot, with the standing note under it.
+// kit: the group's post template filled in per lot — an auction's or a quick buy's, whichever the lot
+// is (#1671) — with the standing note under it.
 
 import { normalizeDecimalInput, roundAmount } from "./decimal-input";
-import { FACEBOOK_POST_PLACEHOLDERS, type FacebookStartingPriceMode } from "./facebook-group-rules";
+import {
+  FACEBOOK_RETIRED_PLACEHOLDERS,
+  facebookPostPlaceholders,
+  type FacebookStartingPriceMode,
+} from "./facebook-group-rules";
+import type { OfferListingType } from "./offer-rules";
 
 /**
  * When a new auction in a group closes, from the group's defaults: `days` after `now`, at the group's
@@ -94,52 +100,77 @@ export function parseBidIncrement(
 export interface FacebookPostLotText {
   /** The lot's number in a multi-lot post, or null for an offer posted alone — `{lot}` is then empty. */
   lotNo: number | null;
+  /** Which of the group's templates the lot is written from (#1671). */
+  listingType: OfferListingType;
+  /** `{title}`: the offer's title (#1671). */
+  title: string;
   description: string;
+  /** `{catalog}`, retired (#1671) and still filled in where a template carries it. */
   catalog: string;
-  /** `10.00 PLN`, or empty when the auction states none. */
+  /** An auction's figures — `10.00 PLN`, or empty when it states none. */
   startingPrice: string;
   increment: string;
   closesAt: string;
+  /** A quick buy's asking price (#1671), the same way. */
+  price: string;
 }
 
-/** What a post with no template of its own says per lot: what is auctioned, and nothing invented. */
+/** The group's two post templates (#1671): a post's lot is written from the one matching its type,
+ *  never the other. */
+export interface FacebookPostTemplates {
+  auction: string;
+  quickBuy: string;
+}
+
+/** What a post with no template of its own says per lot: what is offered, and nothing invented. */
 export const FACEBOOK_FALLBACK_POST_TEMPLATE = "{description}";
 
-const KNOWN_TOKENS = new Set<string>(FACEBOOK_POST_PLACEHOLDERS.map((p) => p.token));
-
 /**
- * One lot's text: the group's template with its placeholders filled in. A token the template carries
- * that is not a placeholder is **kept as typed** — the title template's rule, and what the settings
- * editor already warns about while it is typed (`unknownPostPlaceholders`).
+ * One lot's text: its type's template with that type's placeholders filled in. A token the template
+ * carries that is not one of them is **kept as typed** — the title template's rule, and what the
+ * settings editor already warns about while it is typed (`unknownPostPlaceholders`) — so an
+ * auction's `{closesAt}` left in a quick buy's template is seen, not quietly emptied. A retired
+ * placeholder is still filled in (#1671), so no post loses text the collector has not been told of.
  */
 export function renderFacebookLotText(template: string, lot: FacebookPostLotText): string {
   const source = template.trim() ? template : FACEBOOK_FALLBACK_POST_TEMPLATE;
+  const known = new Set<string>([
+    ...facebookPostPlaceholders(lot.listingType).map((p) => p.token),
+    ...FACEBOOK_RETIRED_PLACEHOLDERS,
+  ]);
   const values: Record<string, string> = {
+    "{title}": lot.title,
     "{description}": lot.description,
     "{catalog}": lot.catalog,
     "{startingPrice}": lot.startingPrice,
     "{increment}": lot.increment,
     "{closesAt}": lot.closesAt,
+    "{price}": lot.price,
     "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
   };
   return source
-    .replace(/\{[A-Za-z]+\}/g, (token) => (KNOWN_TOKENS.has(token) ? values[token] : token))
+    .replace(/\{[A-Za-z]+\}/g, (token) => (known.has(token) ? values[token] : token))
     .trim();
 }
 
+/** The template a lot of `listingType` is written from (#1671). */
+export function facebookTemplateFor(templates: FacebookPostTemplates, listingType: OfferListingType): string {
+  return listingType === "auction" ? templates.auction : templates.quickBuy;
+}
+
 /**
- * The whole post: each lot's text in lot order, a blank line between them, and the group's standing
- * note under the last — once, however many lots the post holds. Empty parts are left out rather than
- * leaving a gap.
+ * The whole post: each lot's text in lot order — each from its own type's template — a blank line
+ * between them, and the group's standing note under the last, once, however many lots the post
+ * holds. Empty parts are left out rather than leaving a gap.
  */
 export function renderFacebookPostText(
-  template: string,
+  templates: FacebookPostTemplates,
   standingNote: string,
   lots: readonly FacebookPostLotText[]
 ): string {
   const parts = [...lots]
     .sort((a, b) => (a.lotNo ?? 0) - (b.lotNo ?? 0))
-    .map((lot) => renderFacebookLotText(template, lot));
+    .map((lot) => renderFacebookLotText(facebookTemplateFor(templates, lot.listingType), lot));
   if (standingNote.trim()) parts.push(standingNote.trim());
   return parts.filter((p) => p !== "").join("\n\n");
 }
@@ -160,19 +191,27 @@ export function isFacebookLotPosted(state: string): boolean {
 export interface FacebookPostCandidate {
   offerNo: number;
   facebookGroupId: string | null;
+  listingType: OfferListingType;
   facebookPostId: string | null;
   state: string;
   url: string | null;
 }
 
-export function facebookPostRefusal(offers: readonly FacebookPostCandidate[]): string | null {
+export function facebookPostRefusal(
+  offers: readonly FacebookPostCandidate[],
+  group: { mixedListingTypes: boolean } = { mixedListingTypes: false }
+): string | null {
   if (offers.length < 2) return "A post with several lots needs at least two offers.";
   const notFacebook = offers.filter((o) => o.facebookGroupId === null);
   if (notFacebook.length > 0) {
-    return `${listOfferNos(notFacebook)} ${notFacebook.length === 1 ? "is" : "are"} not a Facebook auction.`;
+    return `${listOfferNos(notFacebook)} ${notFacebook.length === 1 ? "is" : "are"} not a Facebook offer.`;
   }
   if (new Set(offers.map((o) => o.facebookGroupId)).size > 1) {
     return "The lots of one post are in one group — these offers are in different groups.";
+  }
+  if (!group.mixedListingTypes) {
+    const mixed = facebookMixedTypesRefusal(offers);
+    if (mixed) return mixed;
   }
   const inPost = offers.filter((o) => o.facebookPostId !== null);
   if (inPost.length > 0) {
@@ -185,7 +224,22 @@ export function facebookPostRefusal(offers: readonly FacebookPostCandidate[]): s
   return null;
 }
 
-/** A copy already in an active Facebook auction, and the auction it is in. */
+/**
+ * Why these lots cannot share a post whose group keeps one type per post (#1671), or null when they
+ * are all one type: each type named with its offers, so the collector sees which to post apart.
+ */
+export function facebookMixedTypesRefusal(
+  offers: readonly { offerNo: number; listingType: OfferListingType }[]
+): string | null {
+  const auctions = offers.filter((o) => o.listingType === "auction");
+  const quickBuys = offers.filter((o) => o.listingType !== "auction");
+  if (auctions.length === 0 || quickBuys.length === 0) return null;
+  const named = (list: readonly { offerNo: number }[], one: string, many: string) =>
+    `${list.map((o) => `#${o.offerNo}`).join(", ")} ${list.length === 1 ? `is ${one}` : `are ${many}`}`;
+  return `The lots of one post share one listing type here: ${named(auctions, "an auction", "auctions")} and ${named(quickBuys, "a quick buy", "quick buys")}. Post them apart, or let this group's posts mix them in Settings → Facebook.`;
+}
+
+/** A copy already in an active Facebook offer — an auction or a quick buy (#1671) — and the offer. */
 export interface FacebookAuctionCopy {
   itemNo: number;
   offerNo: number;
@@ -193,9 +247,10 @@ export interface FacebookAuctionCopy {
 }
 
 /**
- * Why these copies cannot go into another Facebook auction (ADR-0061 §5): a copy is in one active
- * Facebook auction at a time, in any group. Names the auction each is in, since that auction is what
- * the collector has to look at — it may have ended without being closed here.
+ * Why these copies cannot go into another Facebook offer (ADR-0061 §5): a copy is in one active
+ * Facebook offer at a time, in any group — an auction or, since #1671, a quick buy, since either
+ * sells it. Names the offer each is in, since that offer is what the collector has to look at — it
+ * may have ended without being closed here.
  */
 export function describeFacebookAuctionCopies(copies: readonly FacebookAuctionCopy[]): string {
   const auctions = [...new Map(copies.map((c) => [c.offerNo, c])).values()].map(
@@ -205,7 +260,7 @@ export function describeFacebookAuctionCopies(copies: readonly FacebookAuctionCo
     copies.length === 1
       ? `Copy #${copies[0].itemNo} is`
       : `Copies ${copies.map((c) => `#${c.itemNo}`).join(", ")} are`;
-  return `${subject} already in an active Facebook auction: ${auctions.join(", ")}. A copy is in one Facebook auction at a time — close or withdraw that one first.`;
+  return `${subject} already in an active Facebook offer: ${auctions.join(", ")}. A copy is in one Facebook offer at a time, auction or quick buy — close or withdraw that one first.`;
 }
 
 function listOfferNos(offers: readonly { offerNo: number }[]): string {

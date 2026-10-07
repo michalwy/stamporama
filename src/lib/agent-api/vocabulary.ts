@@ -83,8 +83,8 @@ export interface PlatformVocabularyEntry extends VocabularyEntry {
    */
   readonly currency: string | null;
   /**
-   * The groups an auction on this platform may be in — present on the **Facebook** platform only
-   * (#1663), and only the groups in use. A Facebook offer is an auction in one group (#1544), so
+   * The groups an offer on this platform may be in — present on the **Facebook** platform only
+   * (#1663), and only the groups in use. A Facebook offer is in one group (#1544), so
    * `draft_offer` takes one of these in `facebook_group`. Omitted everywhere else, so no other
    * platform pays for the key.
    */

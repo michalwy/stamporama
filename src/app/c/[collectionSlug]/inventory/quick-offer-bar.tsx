@@ -26,7 +26,7 @@ import type { FacebookGroupChoiceState } from "@/app/c/[collectionSlug]/offers/u
  * and no warning, which is the one thing this must never do. Arming it is one click and it says so.
  *
  * Only the parameters an offer cannot be created without are here — the platform, the status and,
- * on Facebook, the group the auction is in (#1663), whose defaults then price it. The price and the URL are
+ * on Facebook, the group the offer is in (#1663), whose defaults then type and price it. The price and the URL are
  * left unset on purpose (the offer's own screen is where they land, once the listing exists) — that
  * is what makes this pass a *bulk* one, and it is exactly what #234's remembered values could not
  * do, since pre-filling a dialog still leaves the dialog.
@@ -111,7 +111,7 @@ export function QuickOfferBar({
         </select>
       </label>
 
-      {/* A Facebook auction is in a group (#1544), so on Facebook the bar asks which (#1663) — starting
+      {/* A Facebook offer is in a group (#1544), so on Facebook the bar asks which (#1663) — starting
           on the group last used there. */}
       {facebook.isFacebook && (
         <label style={FIELD}>
@@ -146,7 +146,9 @@ export function QuickOfferBar({
         content={
           blocked ??
           (facebook.group
-            ? `Every "Add to new offer" now creates an auction straight away in ${facebook.group.name} as ${OFFER_STATE_LABEL[state]}, with the group's starting price, increment and closing time and no listing URL — set that on the offer itself once the post exists.`
+            ? facebook.group.listingType === "auction"
+              ? `Every "Add to new offer" now creates an auction straight away in ${facebook.group.name} as ${OFFER_STATE_LABEL[state]}, with the group's starting price, increment and closing time and no listing URL — set that on the offer itself once the post exists.`
+              : `Every "Add to new offer" now creates a quick buy straight away in ${facebook.group.name} as ${OFFER_STATE_LABEL[state]}, with no price and no listing URL — set those on the offer itself once the post exists.`
             : `Every "Add to new offer" now creates the offer straight away on ${platform?.name} as ${OFFER_STATE_LABEL[state]}, with no asking price and no listing URL — set those on the offer itself once the listing exists.`)
         }
       >

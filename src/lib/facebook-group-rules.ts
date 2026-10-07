@@ -2,32 +2,64 @@
 // `server-only`, because the settings editor is a client component and builds its fields from the
 // very lists the domain layer validates against (the `delcampe-listing-profile-rules.ts` rule).
 //
-// A group's settings are its **customs**: how a post there reads, the standing note every post
-// carries, and the figures a new auction there starts from. Each one **follows the Facebook
+// A group's settings are its **customs**: how a new offer there is sold, how a post there reads — one
+// template for an auction, one for a quick buy (#1671) — the standing note every post carries, and
+// the figures a new auction there starts from. Each one **follows the Facebook
 // platform's** unless the group marks it custom (#1661): the platform states what most groups want,
 // once, and a group overrides only what differs. Nothing here renders a post — that is the kit's
 // (#1544) — so what this module answers is what a group *says*, and the cleaning every write goes
 // through.
 
 import { roundAmount } from "./decimal-input";
+import type { OfferListingType } from "./offer-rules";
+
+/** One placeholder a post template may carry, with the label and example the editor shows. */
+export interface FacebookPostPlaceholder {
+  token: string;
+  label: string;
+  example: string;
+}
 
 /**
- * The placeholders a post template may carry, with the label and example the editor shows.
+ * The placeholders an **auction's** post template may carry.
  *
- * Settled with the issue (#1543): the description, the catalogue numbers, the starting price, the
- * increment, the closing time and the lot number. They are the `{token}` spelling every other
- * template here uses (`offer-title-template.ts`), and `{catalog}` is that engine's own name for the
- * catalogue numbers, so the word means one thing across templates. Rendering them is #1544's; an
- * unknown token is kept as typed rather than refused, the title template's rule.
+ * Settled with the issue (#1543): the description, the starting price, the increment, the closing
+ * time and the lot number — and the offer's title since #1671. They are the `{token}` spelling every
+ * other template here uses (`offer-title-template.ts`). Rendering them is #1544's; an unknown token
+ * is kept as typed rather than refused, the title template's rule.
  */
-export const FACEBOOK_POST_PLACEHOLDERS = [
+export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
+  { token: "{title}", label: "Title", example: "Austria 1850 Mercury" },
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
-  { token: "{catalog}", label: "Catalogue numbers", example: "Mi·AT 1" },
   { token: "{startingPrice}", label: "Starting price", example: "10.00 PLN" },
   { token: "{increment}", label: "Bid increment", example: "1.00 PLN" },
   { token: "{closesAt}", label: "Closing time", example: "Sun 5 Oct, 20:00" },
   { token: "{lot}", label: "Lot number", example: "3" },
-] as const satisfies readonly { token: string; label: string; example: string }[];
+];
+
+/**
+ * The placeholders a **quick buy's** post template may carry (#1671): its asking price where an
+ * auction states its opening figure, increment and closing time — a quick buy has none of those.
+ */
+export const FACEBOOK_QUICK_BUY_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
+  { token: "{title}", label: "Title", example: "Austria 1850 Mercury" },
+  { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
+  { token: "{price}", label: "Price", example: "25.00 PLN" },
+  { token: "{lot}", label: "Lot number", example: "3" },
+];
+
+/**
+ * Placeholders no longer offered, though a template already carrying one is still filled in (#1671):
+ * `{catalog}` was the catalogue numbers, which the offer's title or description already state. The
+ * editor flags a template still using one, so the collector removes it; until then no post loses
+ * text unannounced.
+ */
+export const FACEBOOK_RETIRED_PLACEHOLDERS: readonly string[] = ["{catalog}"];
+
+/** The placeholders the template for `listingType` offers — an auction's, or a quick buy's. */
+export function facebookPostPlaceholders(listingType: OfferListingType): readonly FacebookPostPlaceholder[] {
+  return listingType === "auction" ? FACEBOOK_AUCTION_PLACEHOLDERS : FACEBOOK_QUICK_BUY_PLACEHOLDERS;
+}
 
 /** How a group states its default starting price: a figure, or a share of catalogue value. */
 export const FACEBOOK_STARTING_PRICE_MODES = ["amount", "catalogPercent"] as const;
@@ -46,7 +78,10 @@ export const FACEBOOK_STARTING_PERCENT_MAX = 1000;
  * together, since one is meaningless without the other.
  */
 export const FACEBOOK_GROUP_SETTINGS = [
+  "listingType",
+  "mixedListingTypes",
   "postTemplate",
+  "quickBuyTemplate",
   "standingNote",
   "startingPrice",
   "bidIncrement",
@@ -64,7 +99,14 @@ export function isFacebookGroupSetting(value: unknown): value is FacebookGroupSe
  *  them. Money is a plain number here: `Decimal` is Prisma's, and this module is read by the browser.
  *  Null is "no default". */
 export interface FacebookPostingSettings {
+  /** How a new offer is sold (#1671): `auction`, or `fixed` — a quick buy. */
+  listingType: OfferListingType;
+  /** Whether the lots of one post may be of both types (#1671); off, they share one. */
+  mixedListingTypes: boolean;
+  /** An auction's post template. */
   postTemplate: string;
+  /** A quick buy's post template (#1671). */
+  quickBuyTemplate: string;
   standingNote: string;
   startingPriceMode: FacebookStartingPriceMode | null;
   startingPriceValue: number | null;
@@ -74,9 +116,13 @@ export interface FacebookPostingSettings {
   closingTime: string | null;
 }
 
-/** The platform's settings before anybody has stated any — what a platform with no row reads as. */
+/** The platform's settings before anybody has stated any — what a platform with no row reads as.
+ *  An auction, since that is what every Facebook offer was until #1671. */
 export const FACEBOOK_BLANK_SETTINGS: FacebookPostingSettings = {
+  listingType: "auction",
+  mixedListingTypes: false,
   postTemplate: "",
+  quickBuyTemplate: "",
   standingNote: "",
   startingPriceMode: null,
   startingPriceValue: null,
@@ -182,9 +228,15 @@ function cleanClosingTime(value: string | null): string | null {
  * held to its shape, by the same rules a group's own setting is.
  */
 export function cleanFacebookDefaults(input: FacebookPostingSettings): FacebookPostingSettings {
+  if (input.listingType !== "auction" && input.listingType !== "fixed") {
+    throw new Error("Unknown listing type.");
+  }
   return {
+    listingType: input.listingType,
+    mixedListingTypes: input.mixedListingTypes === true,
     // Kept as typed apart from the whitespace around them: the line breaks inside are the post's.
     postTemplate: input.postTemplate.trim(),
+    quickBuyTemplate: input.quickBuyTemplate.trim(),
     standingNote: input.standingNote.trim(),
     ...cleanStartingPrice(input.startingPriceMode, input.startingPriceValue),
     bidIncrement: optionalAmount(input.bidIncrement, "The bid increment"),
@@ -218,8 +270,12 @@ export function cleanFacebookGroupValues(input: FacebookGroupValues): FacebookGr
   const custom = FACEBOOK_GROUP_SETTINGS.filter((key) => input.custom.includes(key));
   const own = (key: FacebookGroupSetting) => custom.includes(key);
 
+  const blank = FACEBOOK_BLANK_SETTINGS;
   const settings = cleanFacebookDefaults({
+    listingType: own("listingType") ? input.listingType : blank.listingType,
+    mixedListingTypes: own("mixedListingTypes") ? input.mixedListingTypes : blank.mixedListingTypes,
     postTemplate: own("postTemplate") ? input.postTemplate : "",
+    quickBuyTemplate: own("quickBuyTemplate") ? input.quickBuyTemplate : "",
     standingNote: own("standingNote") ? input.standingNote : "",
     startingPriceMode: own("startingPrice") ? input.startingPriceMode : null,
     startingPriceValue: own("startingPrice") ? input.startingPriceValue : null,
@@ -258,7 +314,10 @@ export function effectiveFacebookGroupSettings(
   const own = (key: FacebookGroupSetting) => group.custom.includes(key);
   const from = (key: FacebookGroupSetting) => (own(key) ? group : platform);
   return {
+    listingType: from("listingType").listingType,
+    mixedListingTypes: from("mixedListingTypes").mixedListingTypes,
     postTemplate: from("postTemplate").postTemplate,
+    quickBuyTemplate: from("quickBuyTemplate").quickBuyTemplate,
     standingNote: from("standingNote").standingNote,
     startingPriceMode: from("startingPrice").startingPriceMode,
     startingPriceValue: from("startingPrice").startingPriceValue,
@@ -269,10 +328,39 @@ export function effectiveFacebookGroupSettings(
   };
 }
 
-/** The template tokens a text carries that are not placeholders a post knows — said beside the field
- *  so a misspelt `{startprice}` is seen while it is typed, not on the first post. */
-export function unknownPostPlaceholders(template: string): string[] {
-  const known = new Set<string>(FACEBOOK_POST_PLACEHOLDERS.map((p) => p.token));
-  const found = template.match(/\{[A-Za-z]+\}/g) ?? [];
-  return [...new Set(found.filter((token) => !known.has(token)))];
+function templateTokens(template: string): string[] {
+  return [...new Set(template.match(/\{[A-Za-z]+\}/g) ?? [])];
+}
+
+/** The template tokens a text carries that are not placeholders of its type's post — said beside the
+ *  field so a misspelt `{startprice}`, or an auction's `{increment}` in a quick buy's template, is
+ *  seen while it is typed, not on the first post. A retired placeholder is not unknown: it is
+ *  {@link retiredPostPlaceholders}' to name. */
+export function unknownPostPlaceholders(template: string, listingType: OfferListingType): string[] {
+  const known = new Set<string>([
+    ...facebookPostPlaceholders(listingType).map((p) => p.token),
+    ...FACEBOOK_RETIRED_PLACEHOLDERS,
+  ]);
+  return templateTokens(template).filter((token) => !known.has(token));
+}
+
+/** The retired placeholders a template still carries (#1671) — flagged so the collector removes them,
+ *  and filled in until they do. */
+export function retiredPostPlaceholders(template: string): string[] {
+  return templateTokens(template).filter((token) => FACEBOOK_RETIRED_PLACEHOLDERS.includes(token));
+}
+
+/** Whether any template of these settings still carries a retired placeholder — what marks a row in
+ *  Settings → Facebook, so a template following another is not missed. */
+export function usesRetiredPostPlaceholder(settings: Pick<FacebookPostingSettings, "postTemplate" | "quickBuyTemplate">): boolean {
+  return (
+    retiredPostPlaceholders(settings.postTemplate).length > 0 ||
+    retiredPostPlaceholders(settings.quickBuyTemplate).length > 0
+  );
+}
+
+/** A stored listing type as the settings hold it. Only ever written through the cleaning above, so
+ *  anything else is a row older than the column — which every Facebook offer then was: an auction. */
+export function toFacebookListingType(value: string | null | undefined): OfferListingType {
+  return value === "fixed" ? "fixed" : "auction";
 }

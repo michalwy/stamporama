@@ -11,12 +11,14 @@ import {
 import type { FacebookWinnerLookup } from "@/lib/facebook-results";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { isAuctionListing, type OfferListingType } from "@/lib/offer-rules";
 
 // Recording who won a Facebook auction and for how much (#1545; ADR-0061 §4). The winner is typed as
 // their profile shows them, with the profile's link when it is to hand; the dialog says, while it is
 // filled in, which contact that is — or that a new buyer will be created — and offers the winner's
 // sales still open on Facebook, because several lots won by one person are usually one parcel. Saving
-// records the sale, as every other platform's result does.
+// records the sale, as every other platform's result does. A quick buy (#1671) is recorded the same
+// way, in its own words: its buyer, and the price it sold for — starting from its asking price.
 
 const INPUT_STYLE: React.CSSProperties = {
   width: "100%",
@@ -40,7 +42,8 @@ const MUTED: React.CSSProperties = {
 
 const NEW_SALE = "";
 
-/** `YYYY-MM-DD` of an instant in the collector's own zone — the day the auction closed, as they saw it. */
+/** `YYYY-MM-DD` of an instant in the collector's own zone — the day the auction closed, as they saw it,
+ *  or today for a quick buy. */
 function localDay(iso: string | null): string {
   const d = iso ? new Date(iso) : new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -49,6 +52,7 @@ function localDay(iso: string | null): string {
 
 export function FacebookResultDialog({
   offerId,
+  listingType,
   currency,
   standingBid,
   endsAt,
@@ -56,14 +60,18 @@ export function FacebookResultDialog({
   onClose,
 }: {
   offerId: string;
+  /** An auction asks for its winner and winning bid; a quick buy for its buyer and price (#1671). */
+  listingType: OfferListingType;
   currency: string;
-  /** The bid recorded while it ran, `0.00` when none was — the final price starts from it. */
+  /** The bid recorded while it ran, `0.00` when none was — or a quick buy's asking price. The final
+   *  price starts from it. */
   standingBid: string;
-  /** ISO-8601 closing time, or null; the sale is dated the day it closed. */
+  /** ISO-8601 closing time, or null for today; the sale is dated the day it closed. */
   endsAt: string | null;
   onRecorded: (saleId: string) => void;
   onClose: () => void;
 }) {
+  const auction = isAuctionListing(listingType);
   const [winnerName, setWinnerName] = useState("");
   const [profileUrl, setProfileUrl] = useState("");
   const [price, setPrice] = useState(standingBid === "0.00" ? "" : standingBid);
@@ -98,8 +106,8 @@ export function FacebookResultDialog({
   function save() {
     setError(undefined);
     startTransition(async () => {
-      const { recordFacebookAuctionWinAction } = await import("@/app/actions/facebook");
-      const result = await recordFacebookAuctionWinAction(offerId, {
+      const { recordFacebookSaleAction } = await import("@/app/actions/facebook");
+      const result = await recordFacebookSaleAction(offerId, {
         winnerName,
         profileUrl,
         price,
@@ -122,10 +130,10 @@ export function FacebookResultDialog({
       : null;
 
   return createPortal(
-    <DialogShell title="Record result" onClose={onClose} maxWidth="32rem">
+    <DialogShell title={auction ? "Record result" : "Record sale"} onClose={onClose} maxWidth="32rem">
       <DialogBody>
         <div style={FIELD_GAP}>
-          <LabelWithError htmlFor="fb-winner-name">Winner</LabelWithError>
+          <LabelWithError htmlFor="fb-winner-name">{auction ? "Winner" : "Buyer"}</LabelWithError>
           <TextInput
             id="fb-winner-name"
             value={winnerName}
@@ -157,7 +165,9 @@ export function FacebookResultDialog({
         </div>
         <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
           <div style={{ flex: 1 }}>
-            <LabelWithError htmlFor="fb-final-price">Winning bid ({currency})</LabelWithError>
+            <LabelWithError htmlFor="fb-final-price">
+              {auction ? "Winning bid" : "Price"} ({currency})
+            </LabelWithError>
             <NumericInput
               kind="amount"
               id="fb-final-price"

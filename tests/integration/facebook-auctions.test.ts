@@ -173,8 +173,8 @@ describe("Facebook auction offers (#1544)", () => {
   });
 
   it("makes an auction from the group's defaults, in the group's currency, leaving the platform's alone", async () => {
-    // A quick buy asked for is still an auction: that is the only way Facebook sells here.
-    const offerId = await createOffer(userId, collectionId, input({ listingType: "fixed" }));
+    // The form names no type, so the group's — Facebook's blank one, an auction — decides it.
+    const offerId = await createOffer(userId, collectionId, input());
     const offer = await read(offerId);
     assert.equal(offer.listingType, "auction");
     assert.equal(offer.currency, "EUR", "the group's currency, not the platform's PLN");
@@ -188,6 +188,63 @@ describe("Facebook auction offers (#1544)", () => {
     const stated = await createOffer(userId, collectionId, input({ startingPrice: "9.00", bidIncrement: "2.00" }));
     assert.equal((await read(stated)).startingPrice?.toFixed(2), "9.00");
     assert.equal((await read(stated)).bidIncrement?.toFixed(2), "2.00");
+  });
+
+  it("makes a quick buy where the group says so, or the form does, with no auction figures (#1671)", async () => {
+    // Facebook's own type is a quick buy; the second group follows it, the first does not.
+    await updateFacebookDefaults(userId, collectionId, {
+      ...FACEBOOK_BLANK_SETTINGS,
+      listingType: "fixed",
+      quickBuyTemplate: "{title} — {price}",
+      bidIncrement: 1,
+    });
+    const choices = await listFacebookGroupChoices(userId, collectionId, facebookId);
+    assert.deepEqual(
+      choices.groups.map((g) => [g.name, g.listingType]),
+      [["Filatelistyka", "fixed"], ["Znaczki — aukcje", "fixed"]],
+      "a group follows Facebook's listing type unless it sets its own"
+    );
+
+    const quickBuyId = await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId, price: "25.00" }));
+    const quickBuy = await read(quickBuyId);
+    assert.equal(quickBuy.listingType, "fixed");
+    assert.equal(quickBuy.startingPrice, null);
+    assert.equal(quickBuy.bidIncrement, null, "a quick buy has no bidding to step");
+    assert.equal(quickBuy.endsAt, null);
+
+    // The form's own answer outranks the group's, both ways.
+    const asked = await read(
+      await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId, listingType: "auction" }))
+    );
+    assert.equal(asked.listingType, "auction");
+    assert.equal(asked.bidIncrement?.toFixed(2), "1.00", "an auction takes the group's increment");
+
+    // A quick buy going live needs its asking price, as anywhere.
+    const unpricedCopy = await newItem();
+    await assert.rejects(
+      () =>
+        createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId, state: "active" }), {
+          seedItemIds: [unpricedCopy],
+        }),
+      /no asking price/
+    );
+
+    // An edit may switch the type; one naming none keeps it.
+    const offerId = await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId, price: "25.00" }));
+    await updateOffer(userId, offerId, input({ facebookGroupId: otherGroupId, listingType: "auction", startingPrice: "5.00", bidIncrement: "0.50" }));
+    assert.deepEqual(
+      [(await read(offerId)).listingType, (await read(offerId)).bidIncrement?.toFixed(2)],
+      ["auction", "0.50"]
+    );
+    await updateOffer(userId, offerId, input({ facebookGroupId: otherGroupId, startingPrice: "5.00" }));
+    assert.equal((await read(offerId)).listingType, "auction");
+
+    // The kit carries both templates and each lot's type.
+    const kit = await getFacebookOfferKit(quickBuyId);
+    assert.equal(kit?.group.quickBuyTemplate, "{title} — {price}");
+    assert.equal(kit?.lots[0].listingType, "fixed");
+
+    await updateFacebookDefaults(userId, collectionId, FACEBOOK_BLANK_SETTINGS);
   });
 
   it("starts an auction in a group following Facebook from Facebook's settings, read live (#1661)", async () => {
@@ -279,10 +336,10 @@ describe("Facebook auction offers (#1544)", () => {
 
     await assert.rejects(
       () => createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId }), { seedItemIds: [copy] }),
-      new RegExp(`already in an active Facebook auction: offer #${firstNo} in Znaczki`)
+      new RegExp(`already in an active Facebook offer: offer #${firstNo} in Znaczki`)
     );
     const draft = await createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId }));
-    await assert.rejects(() => addOfferSet(userId, draft, [copy]), /already in an active Facebook auction/);
+    await assert.rejects(() => addOfferSet(userId, draft, [copy]), /already in an active Facebook offer/);
 
     // Listing the same copy on another platform is the collector's own business.
     const elsewhere = await createOffer(
@@ -302,8 +359,71 @@ describe("Facebook auction offers (#1544)", () => {
     const a = await auction([copy], "ready");
     const b = await auction([copy], "ready", otherGroupId); // drafts compete for nothing
     await setOfferState(userId, a, "active");
-    await assert.rejects(() => setOfferState(userId, b, "active"), /already in an active Facebook auction/);
+    await assert.rejects(() => setOfferState(userId, b, "active"), /already in an active Facebook offer/);
     assert.equal((await read(b)).state, "ready");
+  });
+
+  it("holds a copy in a quick buy that is up against a Facebook auction too (#1671)", async () => {
+    const copy = await newItem();
+    await createOffer(userId, collectionId, input({ listingType: "fixed", price: "20.00", state: "active" }), {
+      seedItemIds: [copy],
+    });
+    await assert.rejects(
+      () => createOffer(userId, collectionId, input({ facebookGroupId: otherGroupId }), { seedItemIds: [copy] }),
+      /already in an active Facebook offer/
+    );
+  });
+
+  it("keeps a post's lots to one type unless the group lets them mix (#1671)", async () => {
+    const closes = new Date("2026-10-11T18:00:00Z");
+    const a = await auction([await newItem()]);
+    await prisma.offer.update({ where: { id: a }, data: { endsAt: closes } });
+    const q = await createOffer(userId, collectionId, input({ listingType: "fixed", price: "20.00" }), {
+      seedItemIds: [await newItem()],
+    });
+    await assert.rejects(() => createFacebookPost(userId, collectionId, [a, q]), /share one listing type/);
+
+    // The group lets its posts mix: the quick buy goes in, and takes no closing time from the auction.
+    await updateFacebookGroup(
+      userId,
+      groupId,
+      groupValues({
+        postTemplate: "Lot {lot}: {description}, start {startingPrice}",
+        standingNote: "Shipping 5 EUR.",
+        startingPriceMode: "amount",
+        startingPriceValue: 4,
+        bidIncrement: 0.5,
+        currency: "EUR",
+        mixedListingTypes: true,
+        custom: ["postTemplate", "standingNote", "startingPrice", "bidIncrement", "currency", "mixedListingTypes"],
+      })
+    );
+    await createFacebookPost(userId, collectionId, [a, q]);
+    assert.equal((await read(q)).endsAt, null);
+    assert.equal((await read(a)).endsAt?.toISOString(), closes.toISOString());
+
+    // Back to one type per post: a lot of the post cannot change type while it is in it.
+    await updateFacebookGroup(
+      userId,
+      groupId,
+      groupValues({
+        postTemplate: "Lot {lot}: {description}, start {startingPrice}",
+        standingNote: "Shipping 5 EUR.",
+        startingPriceMode: "amount",
+        startingPriceValue: 4,
+        bidIncrement: 0.5,
+        currency: "EUR",
+        custom: ["postTemplate", "standingNote", "startingPrice", "bidIncrement", "currency"],
+      })
+    );
+    const b = await auction([await newItem()]);
+    const c = await auction([await newItem()]);
+    await createFacebookPost(userId, collectionId, [b, c]);
+    await assert.rejects(
+      () => updateOffer(userId, b, input({ listingType: "fixed", price: "20.00" })),
+      /take it out of the post before changing its type/
+    );
+    assert.equal((await read(b)).listingType, "auction");
   });
 
   it("puts auctions in one group into a post, as lots in the order given, closing together", async () => {

@@ -9,17 +9,19 @@ import {
 import { readFacebookDefaults, toCustomSettings, toPostingSettings } from "./facebook-groups";
 import {
   describeFacebookAuctionCopies,
+  facebookMixedTypesRefusal,
   type FacebookAuctionCopy,
 } from "./facebook-post-rules";
 import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { compactCatalogNumberGroups, type CatalogNumberGroupEntry } from "./offer-title-template";
-import type { OfferState } from "./offer-rules";
+import { normalizeListingType, type OfferListingType, type OfferState } from "./offer-rules";
 
-// A Facebook auction offer (#1544; ADR-0061 §2, §3, §5) — the half the offers domain reads.
+// A Facebook offer (#1544; ADR-0061 §2, §3, §5) — the half the offers domain reads.
 //
-// An offer on Facebook is an **auction in one group**: it names the group (`Offer.facebookGroupId`),
-// takes the group's defaults when it is created and owns them from then on. This module answers what
+// An offer on Facebook is **in one group**: it names the group (`Offer.facebookGroupId`), takes the
+// group's defaults when it is created and owns them from then on. It is an auction or, since #1671, a
+// quick buy — the group says which a new one starts as, and the offer can change it. This module answers what
 // `offers.ts` has to ask while it creates, edits and composes one — which group, which currency, which
 // figures, and whether a copy is already in another Facebook auction — and reads the card the offer's
 // own screen draws its kit from.
@@ -52,6 +54,8 @@ export interface FacebookGroupChoice {
   id: string;
   name: string;
   archived: boolean;
+  /** How a new offer here is sold (#1671) — the group's own, or Facebook's it follows. */
+  listingType: OfferListingType;
   /** The group's own currency, else the platform's, else null when neither states one yet. */
   currency: string | null;
   startingPriceMode: FacebookStartingPriceMode | null;
@@ -103,6 +107,7 @@ export async function listFacebookGroupChoices(
         id: g.id,
         name: g.name,
         archived: g.archivedAt !== null,
+        listingType: settings.listingType,
         currency: settings.currency ?? platform.platformCurrency,
         startingPriceMode: settings.startingPriceMode,
         startingPriceValue: settings.startingPriceValue,
@@ -121,6 +126,10 @@ export type FacebookOfferResolution =
       ok: true;
       /** Null on every platform that is not Facebook — and then everything below is null too. */
       facebookGroupId: string | null;
+      /** How a new offer in the group is sold when the form says nothing (#1671) — on create only. */
+      listingType: OfferListingType | null;
+      /** The increment, whatever the offer's type: the caller drops it on a quick buy, once the
+       *  type is resolved. */
       bidIncrement: string | null;
       /** The group's own currency (ADR-0061 consequences, settled 2026-10-03: an auction in a group
        *  with a currency of its own is in that currency), or null for the platform's (#196). */
@@ -155,6 +164,7 @@ export async function resolveFacebookOffer(
     return {
       ok: true,
       facebookGroupId: null,
+      listingType: null,
       bidIncrement: null,
       currency: null,
       defaultStartingPrice: null,
@@ -163,7 +173,7 @@ export async function resolveFacebookOffer(
   }
   const groupId = input.facebookGroupId?.trim() || null;
   if (!groupId) {
-    return { ok: false, message: "Choose the Facebook group this auction is in." };
+    return { ok: false, message: "Choose the Facebook group this offer is in." };
   }
   const group = await prisma.facebookGroup.findFirst({
     where: { id: groupId, collectionId, platformId: platform.id },
@@ -172,7 +182,7 @@ export async function resolveFacebookOffer(
   if (group.archivedAt !== null && group.id !== mode.currentGroupId) {
     return {
       ok: false,
-      message: `${group.name} is archived — restore it in Settings → Facebook to auction in it again.`,
+      message: `${group.name} is archived — restore it in Settings → Facebook to post in it again.`,
     };
   }
   const settings = groupSettings(group, await readFacebookDefaults(group.platformId));
@@ -180,6 +190,7 @@ export async function resolveFacebookOffer(
   return {
     ok: true,
     facebookGroupId: group.id,
+    listingType: mode.create ? settings.listingType : null,
     bidIncrement:
       submittedIncrement ?? (mode.create ? (settings.bidIncrement?.toFixed(2) ?? null) : null),
     currency: settings.currency,
@@ -242,6 +253,36 @@ export async function facebookAuctionRefusal(
   return describeFacebookAuctionCopies(copies);
 }
 
+/** Whether a group's posts may mix auctions and quick buys (#1671) — its own setting, or Facebook's. */
+export async function facebookGroupMixesTypes(groupId: string): Promise<boolean> {
+  const group = await prisma.facebookGroup.findUniqueOrThrow({ where: { id: groupId } });
+  return groupSettings(group, await readFacebookDefaults(group.platformId)).mixedListingTypes;
+}
+
+/**
+ * Why a lot of a post cannot become `listingType` while it stays in the post (#1671), or null: in a
+ * group keeping one type per post, it would leave the post holding both. The lot leaves the post
+ * first, or the group's posts are allowed to mix.
+ */
+export async function facebookLotTypeRefusal(
+  postId: string,
+  offerId: string,
+  listingType: OfferListingType
+): Promise<string | null> {
+  const post = await prisma.facebookPost.findUniqueOrThrow({
+    where: { id: postId },
+    select: { groupId: true, lots: { select: { id: true, offerNo: true, listingType: true } } },
+  });
+  if (await facebookGroupMixesTypes(post.groupId)) return null;
+  const lots = post.lots.map((lot) => ({
+    offerNo: lot.offerNo,
+    listingType: lot.id === offerId ? listingType : normalizeListingType(lot.listingType),
+  }));
+  return facebookMixedTypesRefusal(lots)
+    ? "This offer is a lot of a post whose lots share one listing type — take it out of the post before changing its type, or let the group's posts mix types in Settings → Facebook."
+    : null;
+}
+
 /** The copies an offer holds now — what its activation is asked about. */
 export async function offerItemIds(offerId: string): Promise<string[]> {
   const rows = await prisma.offerSetItem.findMany({
@@ -299,10 +340,14 @@ export interface FacebookKitLot {
   offerNo: number;
   /** Null for an offer posted alone. */
   lotNo: number | null;
+  /** Which template the lot's text is built from (#1671): an auction's, or a quick buy's. */
+  listingType: OfferListingType;
+  /** `{title}`: the offer's display title. */
   title: string;
   /** `{description}`: the offer's description, else its title. */
   description: string;
-  /** `{catalog}`: every copy's catalogue number, compacted as a title's `{catalog}` is. */
+  /** `{catalog}`, retired (#1671) but still filled in: every copy's catalogue number, compacted as a
+   *  title's `{catalog}` is. */
   catalog: string;
   startingPrice: string | null;
   bidIncrement: string | null;
@@ -312,15 +357,26 @@ export interface FacebookKitLot {
   state: OfferState;
   /** The lot's listing link — the post's, or in a multi-lot post its own photo's where it has one. */
   url: string | null;
-  /** The standing bid typed while it runs (#1545), `0.00` when none is, and when it was recorded. */
+  /** An auction's standing bid typed while it runs (#1545), `0.00` when none is, and when it was
+   *  recorded; a quick buy's asking price (#1671). */
   price: string;
   priceCheckedAt: string | null;
 }
 
 /** What the offer's Facebook card draws (ADR-0061 §3): the group, the post and its lots, and where
- *  the photos come from. Null on an offer that is not a Facebook auction. */
+ *  the photos come from. Null on an offer that is not on Facebook. */
 export interface FacebookOfferKit {
-  group: { id: string; name: string; url: string; archived: boolean; postTemplate: string; standingNote: string };
+  group: {
+    id: string;
+    name: string;
+    url: string;
+    archived: boolean;
+    /** An auction's post template. */
+    postTemplate: string;
+    /** A quick buy's post template (#1671). */
+    quickBuyTemplate: string;
+    standingNote: string;
+  };
   /** The multi-lot post this offer is a lot of, or null when it is posted alone. Its link is each
    *  lot's own `url` (#1668), so the post carries none. */
   post: { id: string } | null;
@@ -349,6 +405,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       id: true,
       offerNo: true,
       facebookLotNo: true,
+      listingType: true,
       name: true,
       description: true,
       startingPrice: true,
@@ -379,6 +436,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       offerId: row.id,
       offerNo: row.offerNo,
       lotNo: offer.facebookPostId ? row.facebookLotNo : null,
+      listingType: normalizeListingType(row.listingType),
       title,
       description: row.description?.trim() || title,
       catalog: compactCatalogNumberGroups(numbers),
@@ -405,6 +463,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       url: offer.facebookGroup.url,
       archived: offer.facebookGroup.archivedAt !== null,
       postTemplate: settings.postTemplate,
+      quickBuyTemplate: settings.quickBuyTemplate,
       standingNote: settings.standingNote,
     },
     post: offer.facebookPost,

@@ -639,7 +639,7 @@ function ComposeSeriesDialog({
   const targetId = composeTargetOf(targets, picked);
   const target = targetId ? similarById.get(targetId) : undefined;
   const radioName = useId();
-  // A new offer on Facebook is an auction in a group (#1663), asked here; a similar offer already has
+  // A new offer on Facebook is in a group (#1663), asked here; a similar offer already has
   // its own, so the question goes away when the series is going into one.
   const facebook = useFacebookGroupChoice(collectionId, platformId);
   const asksGroup = !target && facebook.isFacebook;
@@ -714,7 +714,7 @@ function ComposeSeriesDialog({
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
               <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>Facebook group</span>
               <FacebookGroupSelect
-                ariaLabel="Facebook group the new offer is auctioned in"
+                ariaLabel="Facebook group the new offer is in"
                 groups={facebook.groups}
                 value={facebook.groupId}
                 onChange={facebook.choose}

@@ -2804,7 +2804,7 @@ model DelcampeCategory {
   @@map("delcampe_category")
 }
 
-// A Facebook group the collector auctions in (#1543; ADR-0061).
+// A Facebook group the collector sells in — by auction, or as quick buys (#1671) (#1543; ADR-0061).
 //
 // Facebook is **one platform** — one `Contact`, named as Facebook on its own Settings page through the
 // same `platformModule` marker Delcampe and Allegro use — and the groups sit under it. A group is not a
@@ -2841,9 +2841,18 @@ model FacebookGroup {
   customSettings String[] @default([])
 
   // ── How a post here reads ─────────────────────────────────────────────────────────────────────
-  // The text a post is prepared from (#1544), with `{token}` placeholders — the vocabulary is
-  // `facebook-group-rules.ts`'s. Empty is allowed and means the post carries no template text yet.
+  // How a new offer here is sold (#1671): `auction` or `fixed` (a quick buy), the offer's own
+  // `listingType` vocabulary. Changeable on the offer.
+  listingType  String @default("auction")
+  // The text an **auction's** post is prepared from (#1544), with `{token}` placeholders — the
+  // vocabulary is `facebook-group-rules.ts`'s. Empty is allowed and means the post carries no
+  // template text yet.
   postTemplate String @default("")
+  // The text a **quick buy's** post is prepared from (#1671), the same way: a post is built from the
+  // template matching its offer's type, never the other.
+  quickBuyTemplate String @default("")
+  // Whether the lots of one post may be of both types (#1671). Off, a post's lots share one type.
+  mixedListingTypes Boolean @default(false)
   // Shipping, payment and terms, appended to every post in this group as written.
   standingNote String @default("")
 
@@ -2887,8 +2896,12 @@ model FacebookGroup {
 model FacebookDefaults {
   platformId String @id
 
-  postTemplate String @default("")
-  standingNote String @default("")
+  // Every Facebook offer was an auction until #1671, so that is what a platform starts as.
+  listingType       String  @default("auction")
+  postTemplate      String  @default("")
+  quickBuyTemplate  String  @default("")
+  mixedListingTypes Boolean @default(false)
+  standingNote      String  @default("")
 
   startingPriceMode  String?
   startingPriceValue Decimal? @db.Decimal(10, 2)
@@ -4947,13 +4960,13 @@ model Offer {
   // concrete one: a heavier lot needs the other shipping model, and a shipping model on Delcampe
   // travels in a profile rather than on its own (ADR-0034 §1). Also `SetNull`, for the same reason.
   delcampeListingProfileId String?
-  // The Facebook group this offer is auctioned in (#1543; ADR-0061), or null on every platform that
-  // is not Facebook. `Restrict`, unlike the profiles above: a group is where a sale happened, not a
-  // preference about one, so a group with offers is archived and never deleted — the reports per
-  // group need it to still be there.
+  // The Facebook group this offer is in (#1543; ADR-0061) — an auction or a quick buy (#1671) — or
+  // null on every platform that is not Facebook. `Restrict`, unlike the profiles above: a group is
+  // where a sale happened, not a preference about one, so a group with offers is archived and never
+  // deleted — the reports per group need it to still be there.
   facebookGroupId String?
   // How much a bid must beat the last by (#1544), on a Facebook auction: read from the group when the
-  // offer is created, then the offer's own. Null on every other offer.
+  // offer is created, then the offer's own. Null on every other offer, a Facebook quick buy included.
   bidIncrement Decimal? @db.Decimal(10, 2)
   // The multi-lot post this offer is a lot of, and its number there (#1544; ADR-0061 §2) — both null
   // on an offer posted alone. `SetNull`: a post is removed only by the app, which renumbers first.

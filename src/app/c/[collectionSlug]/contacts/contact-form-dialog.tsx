@@ -603,6 +603,13 @@ export function ContactFormDialog({
                 <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
                   {/* Blank is "no preference", not "quick buy": the two behave identically today, so
                       a platform nobody has answered for needs nothing written to it. */}
+                  {/* Not on the Facebook platform either: there a new offer is sold as its group
+                      says, and Facebook's own listing type is on Settings → Facebook (#1671). */}
+                  {contact?.platformModule === FACEBOOK_PLATFORM_MODULE ? (
+                    <p style={{ flex: 1, fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0 }}>
+                      Whether a new offer here is an auction or a quick buy is set in Settings → Facebook.
+                    </p>
+                  ) : (
                   <div style={{ flex: 1 }}>
                     <LabelWithError htmlFor="contact-default-listing-type">
                       Default listing type (optional)
@@ -627,6 +634,7 @@ export function ContactFormDialog({
                       on (or never do). Changeable per offer.
                     </p>
                   </div>
+                  )}
                   {/* Not on the Facebook platform: there the opening figure is Facebook's own
                       setting, an amount or a share of catalogue value, on Settings → Facebook
                       (#1661) — stated once, where its groups follow it. */}

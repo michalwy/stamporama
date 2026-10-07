@@ -156,7 +156,7 @@ export function OfferGeneratorDialog({
   platformId: string;
   platformName: string;
   state: OfferState;
-  /** On Facebook, the group every new offer is an auction in and when it closes (#1663). */
+  /** On Facebook, the group every new offer is in and when an auction there closes (#1663). */
   facebook: FacebookCreateChoice;
   input: OfferGeneratorInput;
   onClose: () => void;

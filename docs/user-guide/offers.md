@@ -182,10 +182,10 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    On the platform named as **Delcampe**, an offer carries an **On Delcampe** card instead, naming
    the [listing profile](delcampe.md#on-an-offer) its upload row is built from — the shipping model,
    the renewal setting and the bid step it will state.
-   On the platform named as **Facebook**, an offer is an auction in a group and carries a
-   **Facebook** card: the post's text and photos to paste by hand. Its listing URL is the post's
-   link, asked for by **Activate** as on any platform. Several auctions in one group can be **posted together** as lots of
-   one post. See [Facebook](facebook.md#auctioning-in-a-group).
+   On the platform named as **Facebook**, an offer — an auction or a quick buy — is in a group and
+   carries a **Facebook** card: the post's text and photos to paste by hand. Its listing URL is the
+   post's link, asked for by **Activate** as on any platform. Several offers in one group can be
+   **posted together** as lots of one post. See [Facebook](facebook.md#selling-in-a-group).
 
 The asking price sits on one line with the two figures you weigh it against, in the order
 **min · suggested · price** — for example *min 0.05 · suggested 0.60 · no price yet*:
@@ -1351,9 +1351,10 @@ is **named on screen** and left out, never quietly released.
 the chosen copies, and takes you to it. One set, not one per copy: a set is the thing a buyer buys,
 and one set per copy would describe your lot as a hundred alternative listings.
 
-On Facebook the section also asks for the **Facebook group** the lot is auctioned in, starting on
-the last one you used. The button stays greyed out until one is chosen, and the lot takes the
-group's starting price, increment and closing time — see [Facebook](facebook.md#without-the-form).
+On Facebook the section also asks for the **Facebook group** the lot is offered in, starting on
+the last one you used. The button stays greyed out until one is chosen, and the lot is an auction or
+a quick buy as the group says — an auction taking the group's starting price, increment and closing
+time — see [Facebook](facebook.md#without-the-form).
 
 The lot is **picked again** as the offer is created. Between opening this screen and pressing the
 button a copy may have been listed elsewhere or promised in a trade, so the offer is built from a

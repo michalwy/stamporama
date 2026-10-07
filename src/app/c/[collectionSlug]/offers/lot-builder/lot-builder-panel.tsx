@@ -336,7 +336,7 @@ export function LotBuilderPanel({
       rejectedItemIds: [...new Set([...request.rejectedItemIds, itemId])],
     });
 
-  // On Facebook the lot is an auction in a group (#1663): asked beside the create button, and kept
+  // On Facebook the lot is an offer in a group (#1663): asked beside the create button, and kept
   // out of the criteria — no preset or shared address carries it, since it is not about the copies.
   const facebook = useFacebookGroupChoice(collectionId, criteria.platformId);
 
@@ -700,7 +700,7 @@ export function LotBuilderPanel({
               title="Create the offer"
               note={
                 facebook.group
-                  ? `A draft auction in ${facebook.group.name}, one set of ${proposal.plan.itemIds.length}`
+                  ? `A draft ${facebook.group.listingType === "auction" ? "auction" : "quick buy"} in ${facebook.group.name}, one set of ${proposal.plan.itemIds.length}`
                   : `A draft on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`
               }
             />
@@ -743,13 +743,14 @@ export function LotBuilderPanel({
               description="Same engine as a platform's description template, over this lot's copies."
               emptyPreview="This platform's own description template renders instead."
             />
-            {/* The group a Facebook lot is auctioned in (#1663), starting on the last one used there.
-                The server prices the auction from it — starting price, increment, currency — exactly
-                as the offer form does, and the closing time is worked out here from its length. */}
+            {/* The group a Facebook lot is offered in (#1663), starting on the last one used there.
+                The server types and prices the offer from it — auction or quick buy (#1671), starting
+                price, increment, currency — exactly as the offer form does, and an auction's closing
+                time is worked out here from its length. */}
             {facebook.isFacebook && (
               <Field label="Facebook group">
                 <FacebookGroupSelect
-                  ariaLabel="Facebook group the lot is auctioned in"
+                  ariaLabel="Facebook group the lot is offered in"
                   groups={facebook.groups}
                   value={facebook.groupId}
                   onChange={facebook.choose}
