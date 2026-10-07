@@ -1249,6 +1249,8 @@ Two choices:
     lowest-numbered is proposed, and you can pick another. An Active or Paused offer that receives
     sets is marked as [changed after listing](offers.md#keeping-platforms-in-sync--needs-action), so it turns up in *Needs action*. An offer in
     **active bidding** never receives sets: a new offer is made instead, and the preview says why.
+    On Facebook only an auction **in the group chosen in the bar** receives sets; one in another
+    group is left alone and a new auction is made in the chosen group.
   - **Separate offers** — every set becomes a new offer of its own, even where a similar offer exists.
 
 The preview lists every offer on **one line**: the checklist's name (or the stamp's), the condition

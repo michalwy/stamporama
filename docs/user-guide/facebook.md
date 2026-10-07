@@ -123,7 +123,7 @@ Every other way of making an offer asks for the group too when the platform is F
 
 - the **Lot builder**, under *Create the offer*;
 - **Quick offer mode** on your copies, in its bar beside the platform, which also covers
-  **Generate offers…**;
+  **Generate offers…** — whose sets go only into auctions already in that group;
 - **Series from singles**, when you compose a series into a new offer. A series added to an offer
   that already lists it keeps that offer's group.
 
@@ -132,6 +132,10 @@ a group is chosen the create button stays greyed out, and the reason is shown be
 auction takes the group's settings as the form does: the starting price, worked out from the
 copies' catalogue value when the group gives a percentage, the bid increment, the currency, and the
 closing time. The listing's link and anything else are set on the offer itself afterwards.
+
+An assistant drafting an offer for you on Facebook names the group as well, from the groups you have
+in use. Its draft takes the group's settings in the same way, except the closing time, which it
+leaves for you to set.
 
 ### A copy is in one auction at a time
 

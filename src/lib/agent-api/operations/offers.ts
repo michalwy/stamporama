@@ -493,6 +493,14 @@ const DRAFT_PARAMETERS: readonly ParameterSpec[] = [
     description:
       "How the copies are packaged. Left out, they become **one set** — a group sold together, which is what a series is. Set it to true for a stock of duplicates, where each copy is its own set and the listing offers the same thing several times over.",
   },
+  {
+    name: "facebook_group",
+    in: "body",
+    type: "string",
+    required: false,
+    description:
+      "The group the auction is in — **required on the Facebook platform** and refused on any other. Takes a name from that platform's `facebookGroups` in `get_collection_vocabulary`, or its id. The draft takes the group's starting price (its amount, or its percentage of one set's catalogue value), bid increment and currency. Its closing time is left unset: it is a local time, and this surface does not know the collector's zone.",
+  },
 ];
 
 export async function draftOffer(
@@ -504,6 +512,24 @@ export async function draftOffer(
     vocabulary: "platform",
     parameter: "platform",
   });
+  // A Facebook offer is an auction in one of the platform's groups (#1663), named like any other term.
+  const platform = vocabulary.platforms.find((p) => p.id === platformId)!;
+  const groupValue = optionalString(params, "facebook_group");
+  if (platform.facebookGroups && !groupValue) {
+    throw invalidRequest(
+      `"facebook_group" is required on ${platform.name}: an auction there is in one of its groups. Name one of ${platform.facebookGroups.map((g) => `"${g.name}"`).join(", ") || "its groups — it has none yet, which the collector adds in Settings → Facebook"}.`
+    );
+  }
+  if (!platform.facebookGroups && groupValue) {
+    throw invalidRequest(`"facebook_group" is only taken on the Facebook platform, and ${platform.name} is not it.`);
+  }
+  const facebookGroupId =
+    platform.facebookGroups && groupValue
+      ? resolveVocabularyValue(groupValue, platform.facebookGroups, {
+          vocabulary: "Facebook group",
+          parameter: "facebook_group",
+        })
+      : null;
   const copyIds = stringList(params, "copy_ids");
   if (copyIds.length === 0) {
     throw invalidRequest(
@@ -534,6 +560,9 @@ export async function draftOffer(
         // is assembled and about to be posted. This is the boundary as absence rather than as a
         // flag — there is nothing here to set.
         state: "preparing",
+        // The group, on Facebook (#1663); its settings are read as the offer is made. No closing
+        // time: it is a local time and only a browser knows the zone (#490).
+        facebookGroupId,
       },
       {
         seedItemIds: [...copyIds],

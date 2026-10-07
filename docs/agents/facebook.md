@@ -75,9 +75,14 @@ read together.
   currency, the offer screen's suggested price (#230); decided with the collector on 2026-10-07. No
   catalogue value is no price, so a `ready`/`active` creation over unvalued copies is refused as
   unpriced. `quickOfferCreationBlock` takes the group, so the generator's preview names a missing one;
-  a percentage blocks nothing there, since it is per offer. The generator's *additions* go into
-  existing offers in whatever group they are in. The agent API's `draft_offer` names no group, so it
-  still cannot draft a Facebook offer.
+  a percentage blocks nothing there, since it is per offer. The generator's *additions* go only into
+  auctions **in the chosen group** (decided with the collector, 2026-10-07): `readOffers` in
+  `offer-generator.ts` reads no other group's offers, so a line one of them would have matched plans a
+  new auction instead, and `writeGeneratedOffers` re-checks the group with the rest of the receiving
+  offer. The agent API names the group too: the Facebook platform's vocabulary entry carries
+  `facebookGroups` (in use, by name), and `draft_offer` requires `facebook_group` there and refuses it
+  anywhere else — resolved by `resolveVocabularyValue`, so a wrong name returns the accepted ones. Its
+  draft has **no closing time**: the API has no zone to turn the group's time of day into an instant.
 
 - **A group's currency wins over the platform's** (settled with the collector on 2026-10-03, the
   question ADR-0061 left to #1544). An auction in a group with `currency` set is created in it and

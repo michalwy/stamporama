@@ -6557,7 +6557,13 @@ export async function writeGeneratedOffers(
   const additions: (GeneratedOffersInput["additions"][number] & { titles: (string | null)[] })[] = [];
   for (const addition of input.additions) {
     const ref = await assertOfferOwner(ownerId, addition.offerId);
-    if (ref.collectionId !== collectionId || ref.platformId !== input.platformId || ref.state !== addition.state) {
+    if (
+      ref.collectionId !== collectionId ||
+      ref.platformId !== input.platformId ||
+      ref.state !== addition.state ||
+      // On Facebook a pass grows only the auctions in its own group (#1663).
+      (platform.platformModule === FACEBOOK_PLATFORM_MODULE && ref.facebookGroupId !== input.facebookGroupId)
+    ) {
       throw new GenerationChangedError({ kind: "offer", offerId: addition.offerId });
     }
     await assertNotCommittedElsewhere(collectionId, ref.state, addition.sets.flat()); // #639

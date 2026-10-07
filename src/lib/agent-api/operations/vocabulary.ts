@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "../../db";
 import { notFound } from "../errors";
+import { FACEBOOK_PLATFORM_MODULE } from "../../platform-modules";
 import type {
   CatalogVocabularyEntry,
   CollectionVocabulary,
@@ -195,7 +196,14 @@ export async function readCollectionVocabulary(
       prisma.contact.findMany({
         where: { collectionId, platform: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, platformCurrency: true },
+        select: {
+          id: true,
+          name: true,
+          platformCurrency: true,
+          platformModule: true,
+          // The groups a Facebook auction may be in (#1663) — in use only, as the offer form offers them.
+          facebookGroups: { where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } },
+        },
       }),
       // **The same three guards over the same table, and here the mapper matters more** (#712).
       // A platform is a marketplace; an exchange partner is a **person** — and `Contact` is the row
@@ -276,6 +284,9 @@ export async function readCollectionVocabulary(
     platforms: platforms.map((row): PlatformVocabularyEntry => ({
       ...entry(row.id, row.name, null, undefined),
       currency: row.platformCurrency,
+      ...(row.platformModule === FACEBOOK_PLATFORM_MODULE
+        ? { facebookGroups: row.facebookGroups.map((g) => entry(g.id, g.name, null, undefined)) }
+        : {}),
     })),
     exchangePartners: exchangePartners.map((row) => entry(row.id, row.name, null, undefined)),
     colors: colors.map(attribute),
