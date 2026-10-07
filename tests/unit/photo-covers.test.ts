@@ -105,7 +105,7 @@ describe("coverWalkPhotos", () => {
 
 describe("the covers in an offer's photo fingerprint", () => {
   const base: OfferPhotoFingerprintInput = {
-    sets: [{ id: "s1", sortOrder: 0, items: [{ itemId: "i1", sortOrder: 0, frontPhotoId: "f1", backPhotoId: null }] }],
+    sets: [{ id: "s1", sortOrder: 0, items: [{ itemId: "i1", sortOrder: 0, catalogSortKey: null, frontPhotoId: "f1", backPhotoId: null }] }],
     photoSides: "front",
     photoLabelLeftTemplate: null,
     photoLabelRightTemplate: null,
