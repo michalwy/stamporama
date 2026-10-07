@@ -146,6 +146,8 @@ export interface PhotoSettingsDialogProps {
   /** The platform's live limits, shown read-only — they belong to the platform, not the offer. */
   limits: PlatformPhotoLimits;
   platformName: string;
+  /** Whether the platform needs symbols covered (#1665) — what *follow the platform* means here. */
+  platformCoverSymbols: boolean;
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -164,6 +166,7 @@ export function PhotoSettingsDialog({
   config,
   limits,
   platformName,
+  platformCoverSymbols,
   isPending,
   error,
   onClose,
@@ -248,6 +251,25 @@ export function PhotoSettingsDialog({
             {limitText(limits.maxPhotoEdge, " px")}, up to{" "}
             {limitText(limits.maxPhotoFileSizeMib, " MiB")} each. Change those on the platform.
           </p>
+
+          {/* Covering symbols (#1665): the platform's rule unless this listing says otherwise. Read
+              live, so *follow* keeps tracking the platform. */}
+          <div style={{ marginBottom: "1.25rem" }}>
+            <LabelWithError htmlFor="offer-cover-symbols">Cover symbols</LabelWithError>
+            <select
+              id="offer-cover-symbols"
+              name="coverSymbols"
+              defaultValue={config.coverSymbols == null ? "" : config.coverSymbols ? "on" : "off"}
+              disabled={isPending}
+              style={{ ...INPUT_STYLE, cursor: "pointer", maxWidth: "20rem" }}
+            >
+              <option value="">
+                As {platformName} ({platformCoverSymbols ? "covered" : "not covered"})
+              </option>
+              <option value="on">Covered on this offer</option>
+              <option value="off">Not covered on this offer</option>
+            </select>
+          </div>
 
           <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem" }}>
             <div style={{ flex: 1 }}>

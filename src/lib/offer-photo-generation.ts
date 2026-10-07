@@ -33,6 +33,18 @@ import {
   type PlanImageSide,
 } from "./offer-photo-plan";
 import { fingerprintOfferPhotoInputs } from "./offer-photo-fingerprint";
+import { applyPhotoCovers } from "./photos/covers";
+import {
+  coverFingerprintRows,
+  coverWalkPhotos,
+  isPhotoCoverShape,
+  isPhotoCoverStyle,
+  normalizePhotoCoverStyle,
+  offerNeedsCovers,
+  type CoverWalkCandidate,
+  type PhotoCover,
+  type PhotoCoverStyle,
+} from "./photo-cover-rules";
 import { renderTitleTemplate } from "./offer-title-template";
 import { makeTitleCopyMapper, TITLE_COPY_SELECT, type TitleCopyRow } from "./title-copy";
 import type { PlanCopy, PlanSet } from "./offer-photo-plan";
@@ -273,6 +285,17 @@ export interface OfferPhotoPlanState {
   finishedAt: Date | null;
   images: OfferPhotoImage[];
   plan: OfferPhotoPlanPreview;
+  /** Covering symbols (#1665): whether this offer's images apply covers, and how many of the photos
+   *  they are made from are still to be checked. */
+  covers: OfferPhotoCoverState;
+}
+
+export interface OfferPhotoCoverState {
+  needed: boolean;
+  /** Copy photos the plan's images are made from. */
+  photoCount: number;
+  /** Of those, the ones never checked — what keeps the offer from being marked Ready. */
+  uncheckedCount: number;
 }
 
 // ── Inputs ───────────────────────────────────────────────────────────────────
@@ -290,6 +313,14 @@ interface SourcePhoto {
   height: number;
   originalWidth: number | null;
   originalHeight: number | null;
+  /** The copy the photo belongs to; null for an image uploaded straight to the offer (#313). */
+  itemId: string | null;
+  /** `front` / `back`, or null for an extra (whose `title` names it). */
+  role: string | null;
+  title: string | null;
+  /** Whether the collector has gone over it for symbols (#1665), and what they covered. */
+  coversCheckedAt: Date | null;
+  covers: { shape: string; style: string; x: number; y: number; width: number; height: number }[];
 }
 
 /** Every read that feeds `sourceById` selects exactly this — the renderer needs the same columns
@@ -303,7 +334,25 @@ const SOURCE_PHOTO_SELECT = {
   height: true,
   originalWidth: true,
   originalHeight: true,
+  itemId: true,
+  role: true,
+  title: true,
+  coversCheckedAt: true,
+  covers: {
+    orderBy: { sortOrder: "asc" },
+    select: { shape: true, style: true, x: true, y: true, width: true, height: true },
+  },
 } as const;
+
+/** A photo's stored covers as the renderer reads them; a row naming a shape or style this code does
+ *  not know is skipped rather than guessed at (the table's CHECK makes that unreachable). */
+function coversOf(source: SourcePhoto): PhotoCover[] {
+  return source.covers.flatMap((c) =>
+    isPhotoCoverShape(c.shape) && isPhotoCoverStyle(c.style)
+      ? [{ shape: c.shape, style: c.style, x: c.x, y: c.y, width: c.width, height: c.height }]
+      : []
+  );
+}
 
 /** Display labels for the ids a plan is written in terms of — the panel's only job for them. */
 interface PlanLabels {
@@ -388,6 +437,11 @@ interface GenerationInputs {
   attachmentTitles: Map<string, string | null>;
   /** Which mode each attachment is, by attachment id (#313, #331). */
   attachmentSources: Map<string, AttachmentSource>;
+  /** Whether this offer's images apply the covers on its copies' photos (#1665): the offer's own
+   *  override, else its platform's flag, read live. */
+  needsCovers: boolean;
+  /** The style a newly drawn cover starts as — the platform's, for the walk only. */
+  coverStyle: PhotoCoverStyle;
 }
 
 const SIDE_ROLES = ["front", "back"];
@@ -475,6 +529,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       collageLabelPercent: true,
       photoPlanOrder: true,
       photoPlanUnpublished: true,
+      coverSymbols: true,
       collection: { select: { ownerId: true } },
       // Limits are read **live** from the platform (#308): they say what it accepts today. The
       // listing language comes along so a tile label reads the way the listing does (#293).
@@ -484,6 +539,8 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
           maxPhotoEdge: true,
           maxPhotoFileSizeMib: true,
           titleLanguage: true,
+          coverSymbols: true,
+          coverStyle: true,
         },
       },
       sets: {
@@ -691,7 +748,28 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     attachments,
     attachmentTitles,
     attachmentSources,
+    needsCovers: offerNeedsCovers(offer.coverSymbols, offer.platform.coverSymbols),
+    coverStyle: normalizePhotoCoverStyle(offer.platform.coverStyle),
   };
+}
+
+/**
+ * The copy photos this plan's images are rendered from, each once and in plan order, with whether it
+ * has been checked for symbols (#1665). Empty when the offer needs no covers: then nothing is asked
+ * and nothing is applied.
+ */
+function coverCandidatesFor(
+  inputs: GenerationInputs,
+  plan: ReturnType<typeof planFor>
+): CoverWalkCandidate[] {
+  if (!inputs.needsCovers) return [];
+  const checked = new Set<string>();
+  const copyPhotos = new Set<string>();
+  for (const [id, source] of inputs.sourceById) {
+    if (source.itemId) copyPhotos.add(id);
+    if (source.coversCheckedAt) checked.add(id);
+  }
+  return coverWalkPhotos(plan.images, checked, copyPhotos);
 }
 
 /**
@@ -769,6 +847,13 @@ function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFo
       inputs.photoPlanOrder.length > 0 || inputs.photoPlanUnpublished.length > 0
         ? plan.images.map((image) => image.token)
         : undefined,
+    // The covers drawn on the photos the images are made from (#1665), when the offer applies them.
+    covers: coverFingerprintRows(
+      inputs.needsCovers,
+      new Map(
+        coverCandidatesFor(inputs, plan).map((c) => [c.photoId, coversOf(inputs.sourceById.get(c.photoId)!)])
+      )
+    ),
   });
 }
 
@@ -817,6 +902,7 @@ export async function getOfferPhotoPlanState(
   ]);
 
   const plan = planFor(inputs);
+  const coverCandidates = coverCandidatesFor(inputs, plan);
   // The plan's marks, by token, so a stored image can say whether it is part of the upload set. A
   // stored image whose token the plan no longer holds (its set sold, its attachment removed) is
   // treated as published: it *was* uploaded, and the plan not planning it any more is what
@@ -879,6 +965,11 @@ export async function getOfferPhotoPlanState(
     startedAt: generation?.startedAt ?? null,
     finishedAt: generation?.finishedAt ?? null,
     images,
+    covers: {
+      needed: inputs.needsCovers,
+      photoCount: coverCandidates.length,
+      uncheckedCount: coverCandidates.filter((c) => !c.checked).length,
+    },
     plan: {
       configured: plan.configured,
       imageCount: plan.images.length,
@@ -960,6 +1051,9 @@ export async function readOfferPhotoReadiness(offerId: string): Promise<{
   outOfDate: boolean;
   storedCount: number;
   plannedCount: number;
+  /** Photos the images are made from that still need checking for symbols (#1665); 0 when the offer
+   *  needs no covers. */
+  uncheckedCoverCount: number;
 } | null> {
   const inputs = await readInputs(offerId);
   if (!inputs) return null;
@@ -981,6 +1075,67 @@ export async function readOfferPhotoReadiness(offerId: string): Promise<{
       generation.fingerprint !== fingerprintFor(inputs, plan),
     storedCount,
     plannedCount: plan.images.length,
+    uncheckedCoverCount: coverCandidatesFor(inputs, plan).filter((c) => !c.checked).length,
+  };
+}
+
+// ── Covering symbols (#1665) ─────────────────────────────────────────────────
+
+/** One photo the cover walk shows, with what is already drawn on it. */
+export interface OfferCoverWalkPhoto {
+  photoId: string;
+  itemId: string;
+  /** The copy, named as the photo plan names it. */
+  copyLabel: string;
+  /** `front` / `back`, or null for an extra attached on its own. */
+  side: "front" | "back" | null;
+  /** An extra's own caption. */
+  title: string | null;
+  width: number;
+  height: number;
+  checked: boolean;
+  covers: PhotoCover[];
+}
+
+export interface OfferCoverWalk {
+  /** Whether this offer applies covers at all — the walk is only offered when it does. */
+  needed: boolean;
+  /** What a newly drawn cover starts as: the platform's choice. */
+  defaultStyle: PhotoCoverStyle;
+  /** Every copy photo the offer's images are made from, checked or not, in plan order. The walk
+   *  itself shows the unchecked ones; revisiting shows them all. */
+  photos: OfferCoverWalkPhoto[];
+}
+
+/**
+ * The photos an offer's cover walk goes through (#1665): the copy photos its plan renders from,
+ * once each and in plan order — so a side the offer does not photograph is never asked about, and an
+ * extra attached on its own is. Owner-checked.
+ */
+export async function readOfferCoverWalk(ownerId: string, offerId: string): Promise<OfferCoverWalk> {
+  await assertOfferOwner(ownerId, offerId);
+  const inputs = await readInputs(offerId);
+  if (!inputs) throw new OfferPhotoGenerationError("Offer not found.");
+  // The candidates are worked out as if covers applied, so an offer that does not need them can
+  // still show what is drawn — the answer to "needed" is carried beside them.
+  const candidates = coverCandidatesFor({ ...inputs, needsCovers: true }, planFor(inputs));
+  return {
+    needed: inputs.needsCovers,
+    defaultStyle: inputs.coverStyle,
+    photos: candidates.map((candidate) => {
+      const source = inputs.sourceById.get(candidate.photoId)!;
+      return {
+        photoId: candidate.photoId,
+        itemId: candidate.itemId,
+        copyLabel: inputs.labels.copies.get(candidate.itemId) ?? REMOVED_LABEL,
+        side: source.role === "front" || source.role === "back" ? source.role : null,
+        title: source.title,
+        width: source.width,
+        height: source.height,
+        checked: candidate.checked,
+        covers: coversOf(source),
+      };
+    }),
   };
 }
 
@@ -1541,10 +1696,16 @@ async function scanSource(
     // The plan was built from the same read, so a missing source is a bug, not a race.
     throw new Error(`Planned tile references unknown photo ${photoId}.`);
   }
+  const bytes = await readFullBytes(source, "work");
   return {
     // `work` (#591): a tile's bytes are decoded and composed here, and the same sources are read
-    // again on every regeneration while the collector tunes the collage.
-    buffer: await readFullBytes(source, "work"),
+    // again on every regeneration while the collector tunes the collage. Covers (#1665) are drawn
+    // in here, on the way into the collage and nowhere else, so the copy's own photo never shows
+    // them; an image uploaded to the offer carries none.
+    buffer:
+      inputs.needsCovers && source.itemId && source.covers.length > 0
+        ? await applyPhotoCovers(bytes, coversOf(source))
+        : bytes,
     // Null on anything uploaded before the originals were recorded; the renderer reads that as
     // "never downscaled", which is what it assumed of every scan until then.
     originalSize:

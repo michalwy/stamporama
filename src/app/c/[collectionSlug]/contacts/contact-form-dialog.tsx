@@ -38,6 +38,11 @@ import {
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
 import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { FACEBOOK_PLATFORM_MODULE } from "@/lib/platform-modules";
+import {
+  DEFAULT_PHOTO_COVER_STYLE,
+  PHOTO_COVER_STYLE_LABELS,
+  PHOTO_COVER_STYLES,
+} from "@/lib/photo-cover-rules";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -855,6 +860,50 @@ export function ContactFormDialog({
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0.75rem" }}>
                     What this platform accepts. Leave a field blank when it states no limit.
                   </p>
+
+                  {/* Covering symbols (#1665): a rule of the platform's, read live like the limits
+                      above, so turning it on reaches every offer still following it. */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", margin: "0 0 0.75rem" }}>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.4375rem",
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text-secondary)",
+                        cursor: isPending ? "default" : "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        name="coverSymbols"
+                        value="true"
+                        defaultChecked={contact?.coverSymbols ?? false}
+                        disabled={isPending}
+                        style={{ cursor: isPending ? "default" : "pointer" }}
+                      />
+                      Cover symbols on offer photos
+                    </label>
+                    <label
+                      htmlFor="contact-cover-style"
+                      style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginLeft: "auto" }}
+                    >
+                      New covers start as
+                    </label>
+                    <select
+                      id="contact-cover-style"
+                      name="coverStyle"
+                      defaultValue={contact?.coverStyle ?? DEFAULT_PHOTO_COVER_STYLE}
+                      disabled={isPending}
+                      style={{ ...INPUT_STYLE, width: "auto", cursor: "pointer" }}
+                    >
+                      {PHOTO_COVER_STYLES.map((style) => (
+                        <option key={style} value={style}>
+                          {PHOTO_COVER_STYLE_LABELS[style]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   <div style={{ display: "flex", gap: "0.75rem" }}>
                     <div style={{ flex: 1 }}>

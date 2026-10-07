@@ -662,6 +662,7 @@ export async function updateOfferPhotoConfigAction(
     collageGapPercent: str(formData, "collageGapPercent"),
     collageBackground: str(formData, "collageBackground"),
     collageLabelPercent: str(formData, "collageLabelPercent"),
+    coverSymbols: str(formData, "coverSymbols"),
   });
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {

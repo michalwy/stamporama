@@ -160,6 +160,9 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // #521's grouping default. A checkbox, so an unticked box posts nothing and reads false; a
     // non-platform contact leaves it null and the domain's own default (on) stands.
     photoPreferSingles: isPlatform ? bool(formData, "photoPreferSingles") : null,
+    // #1665: whether offers here need symbols covered, and what a new cover starts as.
+    coverSymbols: isPlatform ? bool(formData, "coverSymbols") : null,
+    coverStyle: isPlatform ? str(formData, "coverStyle") || null : null,
     tileLabelLeftTemplate: isPlatform ? str(formData, "tileLabelLeftTemplate") || null : null,
     tileLabelRightTemplate: isPlatform ? str(formData, "tileLabelRightTemplate") || null : null,
     defaultCollageTemplateId: isPlatform

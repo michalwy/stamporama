@@ -3,6 +3,7 @@ import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
 import { normalizePhotoSides } from "./offer-photo-config";
+import { normalizePhotoCoverStyle } from "./photo-cover-rules";
 import { normalizeDescriptionFormat } from "./description-format";
 import { isOfferListingType } from "./offer-rules";
 import { normalizeFacebookProfileUrl } from "./facebook-result-rules";
@@ -187,6 +188,10 @@ export interface ContactData extends ContactRoles {
   /** #521's grouping, seeded onto new offers: single-copy sets photographed on their own while this
    * platform's photo limit has room. */
   photoPreferSingles: boolean;
+  /** Whether offers here need symbols covered on their photos (#1665), and the style a new cover
+   * starts as. Read live, unlike the seeded defaults around them. */
+  coverSymbols: boolean;
+  coverStyle: string;
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
@@ -236,6 +241,8 @@ const CONTACT_SELECT = {
   platformModule: true,
   photoSides: true,
   photoPreferSingles: true,
+  coverSymbols: true,
+  coverStyle: true,
   tileLabelLeftTemplate: true,
   tileLabelRightTemplate: true,
   defaultCollageTemplateId: true,
@@ -379,6 +386,10 @@ export interface ContactCreateInput {
   /** #521's grouping default. Absent leaves it on, which is what a platform stating a photo limit
    * wants: the limit is the fact the rule reads. */
   photoPreferSingles?: boolean | null;
+  /** #1665: whether offers here need symbols covered (absent is off), and the style new covers
+   * start as (normalised; unknown is pixelate). */
+  coverSymbols?: boolean | null;
+  coverStyle?: string | null;
   tileLabelLeftTemplate?: string | null;
   tileLabelRightTemplate?: string | null;
   /** The collage template (#307) new offers copy their render numbers from, or null for none. A
@@ -514,6 +525,10 @@ async function photoData(
   maxPhotoFileSizeMib: number | null;
   photoSides: string;
   photoPreferSingles: boolean;
+  /** Whether offers here need symbols covered on their photos (#1665), and the style a new cover
+   * starts as. Read live, unlike the seeded defaults around them. */
+  coverSymbols: boolean;
+  coverStyle: string;
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
@@ -531,6 +546,8 @@ async function photoData(
     maxPhotoFileSizeMib: data.maxPhotoFileSizeMib ?? null,
     photoSides: normalizePhotoSides(data.photoSides),
     photoPreferSingles: data.photoPreferSingles ?? true,
+    coverSymbols: data.coverSymbols ?? false,
+    coverStyle: normalizePhotoCoverStyle(data.coverStyle),
     tileLabelLeftTemplate: data.tileLabelLeftTemplate ?? null,
     tileLabelRightTemplate: data.tileLabelRightTemplate ?? null,
     defaultCollageTemplateId: template?.id ?? null,

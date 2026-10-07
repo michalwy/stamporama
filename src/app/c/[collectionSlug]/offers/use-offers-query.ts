@@ -68,6 +68,8 @@ export const offerKeys = {
     ["offers", collectionId, "detail", offerId] as const,
   photoPlan: (collectionId: string, offerId: string) =>
     ["offers", collectionId, "photo-plan", offerId] as const,
+  coverWalk: (collectionId: string, offerId: string) =>
+    ["offers", collectionId, "cover-walk", offerId] as const,
 };
 
 export function useOffersInfinite(collectionId: string, filters: OfferFilters) {

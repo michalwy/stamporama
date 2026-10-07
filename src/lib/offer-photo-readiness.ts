@@ -32,6 +32,22 @@ export interface PhotoReadinessBlocker {
   stampIds: string[];
 }
 
+/**
+ * The offer needs covers and some of the photos its images are made from have never been checked
+ * for symbols (#1665). Kept apart from {@link PhotoReadinessBlocker} on purpose: **List via
+ * Assistant** fixes a photo gap by generating, and no run can decide what to cover — that is the
+ * collector's walk through the photos, so this one stays a reason to withhold it.
+ */
+export interface CoverReadinessBlocker {
+  code: "photo-covers-unchecked";
+  title: string;
+  message: string;
+  subjects: string[];
+  stampIds: string[];
+  /** How many photos are still to be checked — what the surfaces offering the walk say. */
+  count: number;
+}
+
 /** What a **listing** surface reports about one offer: the Assistant's own preconditions (#406) and
  *  the platform's listing-text caps (#636). The bulk workspace's card and the offer's own screen ask
  *  for exactly this pair — a photo gap is a different question, answered by the photo chip beside
@@ -41,7 +57,7 @@ export type ListingCardBlocker = ListingBlocker | ListingTextLimitBlocker;
 /** Everything the ready gate reports, whatever it is about: the Assistant's listing preconditions
  *  (#406/#418), the platform's text caps (#636) and the photo plan's own state. Same shape, so a
  *  surface renders one list. */
-export type ReadyBlocker = ListingCardBlocker | PhotoReadinessBlocker;
+export type ReadyBlocker = ListingCardBlocker | PhotoReadinessBlocker | CoverReadinessBlocker;
 
 /** The four codes above as a set, so a mixed list of ready-gate reasons can be told apart. */
 const PHOTO_READINESS_CODES = new Set<string>([
@@ -72,6 +88,30 @@ export interface PhotoReadinessInput {
   storedCount: number;
   /** Images a Generate right now would produce — what makes the check apply at all. */
   plannedCount: number;
+}
+
+/**
+ * Whether the offer's photos still have to be checked for symbols before it can be marked Ready
+ * (#1665): one blocker naming how many, or none. `uncheckedCount` is 0 for an offer that needs no
+ * covers, so the rule needs no second flag.
+ */
+export function evaluateCoverReadiness(uncheckedCount: number): CoverReadinessBlocker[] {
+  if (uncheckedCount <= 0) return [];
+  const photos = uncheckedCount === 1 ? "1 photo" : `${uncheckedCount} photos`;
+  return [
+    {
+      code: "photo-covers-unchecked",
+      title: `${photos} not yet checked for symbols to cover`,
+      message: `This offer's platform needs symbols covered, and ${photos} its images are made from ${uncheckedCount === 1 ? "has" : "have"} not been checked yet. Check them on the Photos card — cover what must not show, or mark nothing to cover — before marking it ready.`,
+      subjects: [],
+      stampIds: [],
+      count: uncheckedCount,
+    },
+  ];
+}
+
+export function isCoverReadinessBlocker(blocker: ReadyBlocker): blocker is CoverReadinessBlocker {
+  return blocker.code === "photo-covers-unchecked";
 }
 
 function blocker(

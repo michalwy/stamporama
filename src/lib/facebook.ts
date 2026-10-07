@@ -34,5 +34,12 @@ export async function setFacebookPlatform(
   contactId: string | null
 ): Promise<void> {
   await assertCollectionOwner(ownerId, collectionId);
+  const before = await getModulePlatform(collectionId, FACEBOOK_PLATFORM_MODULE);
   await setModulePlatform(collectionId, FACEBOOK_PLATFORM_MODULE, contactId);
+  // Facebook's rules are why covering symbols exists (#1665), so a platform **newly** named as
+  // Facebook starts needing covers. Only at that moment and only ever on: naming the same platform
+  // again must not undo a collector who turned it off on the contact.
+  if (contactId && before?.id !== contactId) {
+    await prisma.contact.update({ where: { id: contactId }, data: { coverSymbols: true } });
+  }
 }
