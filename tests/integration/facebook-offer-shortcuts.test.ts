@@ -1,5 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import {
@@ -13,12 +14,31 @@ import type { LotBuilderRequest } from "../../src/lib/lot-builder-criteria";
 import { setFacebookPlatform } from "../../src/lib/facebook";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS, type FacebookGroupValues } from "../../src/lib/facebook-group-rules";
+import { createAssistantToken } from "../../src/lib/api-tokens";
+import { GET, POST } from "../../src/app/api/v1/[...path]/route";
+import type { AgentOfferDetail } from "../../src/lib/agent-api/offer-reads";
+import type { CollectionVocabulary } from "../../src/lib/agent-api/vocabulary";
 
 // A Facebook offer made without the offer form (#1663): the Lot builder, quick offer mode and the
 // generator on the Copies list, *Series from singles*. Each sends the group picked beside its create
 // button and the closing time the browser worked out from it; the server reads the rest of the group's
 // defaults as it does for the form — and works out a starting price given as a share of catalogue value
 // over the offer's own copies, since no form did. The picker itself is client state and not here.
+
+/** One call to `/api/v1`, answered with its status and body. */
+async function v1(token: string, method: "GET" | "POST", path: string, body?: unknown) {
+  const request = new NextRequest(`http://localhost/api/v1${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const context = { params: Promise.resolve({ path: path.split("/").filter(Boolean) }) };
+  const response = await (method === "GET" ? GET : POST)(request, context);
+  return { status: response.status, body: await response.json() };
+}
 
 function groupValues(overrides: Partial<FacebookGroupValues> = {}): FacebookGroupValues {
   return {
@@ -256,6 +276,74 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
         }),
       /Choose the Facebook group/
     );
+  });
+
+  it("grows only auctions in the pass's own group, and refuses one in another (D2 of #1663)", async () => {
+    const held = await copy("10.00");
+    const elsewhere = await createOffer(userId, collectionId, quick({ facebookGroupId: amountGroupId }), {
+      seedItemIds: [held],
+    });
+    const extra = await copy("10.00");
+    await assert.rejects(
+      () =>
+        writeGeneratedOffers(userId, collectionId, {
+          platformId: facebookId,
+          state: "preparing",
+          facebookGroupId: percentGroupId,
+          endsAt: null,
+          newOffers: [],
+          additions: [{ offerId: elsewhere, state: "preparing", setCount: 1, sets: [[extra]] }],
+        }),
+      (e: unknown) => e instanceof Error && e.message.includes("changed since the preview")
+    );
+    // The same addition, in the offer's own group, goes through.
+    const written = await writeGeneratedOffers(userId, collectionId, {
+      platformId: facebookId,
+      state: "preparing",
+      facebookGroupId: amountGroupId,
+      endsAt: null,
+      newOffers: [],
+      additions: [{ offerId: elsewhere, state: "preparing", setCount: 1, sets: [[extra]] }],
+    });
+    assert.deepEqual(written.changedOfferIds, [elsewhere]);
+  });
+
+  it("drafts a Facebook auction through the agent API in a group named from the vocabulary (D1 of #1663)", async () => {
+    const token = (
+      await createAssistantToken(userId, collectionId, { label: "fb agent", scope: "read_write", kind: "agent" })
+    ).token;
+    const vocabulary = (await v1(token, "GET", "/vocabulary")).body as CollectionVocabulary;
+    const facebook = vocabulary.platforms.find((p) => p.id === facebookId);
+    assert.deepEqual(
+      facebook?.facebookGroups?.map((g) => g.name),
+      ["Filatelistyka", "Znaczki — aukcje"],
+      "the platform's groups in use, by name"
+    );
+
+    const a = await copy("12.00");
+    const missing = await v1(token, "POST", "/offers", { platform: "Facebook", copy_ids: [a] });
+    assert.equal(missing.status, 400);
+    assert.match(missing.body.error.message, /"facebook_group" is required on Facebook/);
+    assert.match(missing.body.error.message, /"Filatelistyka"/);
+
+    const unknown = await v1(token, "POST", "/offers", {
+      platform: "Facebook",
+      copy_ids: [a],
+      facebook_group: "No such group",
+    });
+    assert.equal(unknown.status, 400);
+    assert.deepEqual(unknown.body.error.accepted, ["Filatelistyka", "Znaczki — aukcje"]);
+
+    const drafted = await v1(token, "POST", "/offers", {
+      platform: "Facebook",
+      copy_ids: [a],
+      facebook_group: "znaczki — aukcje",
+    });
+    assert.equal(drafted.status, 200, JSON.stringify(drafted.body));
+    const offer = await read((drafted.body as AgentOfferDetail).offerId);
+    assert.equal(offer.facebookGroupId, percentGroupId);
+    assert.equal(offer.startingPrice?.toFixed(2), "6.00", "half of the copy's 12.00");
+    assert.equal(offer.endsAt, null, "no zone, so no closing time");
   });
 
   it("creates the Lot builder's lot in the group picked beside its button", async () => {

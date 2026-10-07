@@ -451,6 +451,10 @@ row. The other two are depth behind it, so do not replace the mapper with a spre
 combinable (ADR-0007 §4), so a contact that is a platform *and* a seller is returned — `platform` is
 the whole test — and its personal columns still are not.
 
+**The Facebook platform alone also carries `facebookGroups`** (#1663): its groups in use, as
+`{id, name}` entries, because `draft_offer` cannot make an auction there without naming one. The key
+is absent on every other platform, so they pay nothing for it, and it goes through the same mapper.
+
 **Exchange partners joined on the same test, and the projection matters more there than it does for
 a platform** (#712). A platform is a marketplace; an exchange partner is a **person**, and the row
 carrying one is the same row that carries their email, their telephone number and the collector's
@@ -738,7 +742,7 @@ first writes on this surface.
 | `find_unlisted_copies` | no | for-sale copies with no open listing on a marketplace, with what each is worth |
 | `list_offers` | no | the listings, narrowed to a marketplace, a state or a piece of text |
 | `get_offer` | no | one listing in full, **including what it could be priced at** |
-| `draft_offer` | yes | a new `preparing` listing around some copies, titled from the marketplace's template |
+| `draft_offer` | yes | a new `preparing` listing around some copies, titled from the marketplace's template — on Facebook, in the `facebook_group` named (#1663) |
 | `set_offer_price` | yes | what the seller is asking |
 | `set_offer_text` | yes | write a text, or hand it back to the marketplace's template |
 

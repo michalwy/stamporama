@@ -11,7 +11,7 @@ import { CLOSED_OFFER_STATES, isOfferState, type OfferState } from "./offer-rule
 import { TRADED_AWAY } from "./trade-exit";
 import { formatItemNo } from "./item-number";
 import { formatEntityNo } from "./quick-jump";
-import { usesPlatformCatalogue } from "./platform-modules";
+import { FACEBOOK_PLATFORM_MODULE, usesPlatformCatalogue } from "./platform-modules";
 import { resolveListedStampIds } from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import { sortPhotos, type PhotoSummary } from "./photos";
@@ -173,7 +173,18 @@ async function readGeneratorState(
     ),
     loadCollisionMembers(collectionId, collisionStampIds(copies), { platformId: input.platformId }),
   ]);
-  const offers = await readOffers(collectionId, [...new Set(members.map((member) => member.offerId))]);
+  // On Facebook a set goes only into an auction **in the group the pass is for** (#1663): an offer in
+  // another group is not one this pass may grow, so a line it would have matched becomes a new auction
+  // in the chosen group instead. Off Facebook every offer on the platform is a target, as before.
+  const facebookGroupId =
+    platform.platformModule === FACEBOOK_PLATFORM_MODULE
+      ? (readFacebookCreateChoice(input.facebook).facebookGroupId ?? "")
+      : undefined;
+  const offers = await readOffers(
+    collectionId,
+    [...new Set(members.map((member) => member.offerId))],
+    facebookGroupId
+  );
 
   const plan = planOffers({
     copies,
@@ -216,10 +227,19 @@ async function orderedChecklists(
   });
 }
 
-async function readOffers(collectionId: string, offerIds: string[]): Promise<Map<string, GeneratorOffer>> {
+/** The offers a pass may add sets to — on Facebook, only those in `facebookGroupId` (none without one). */
+async function readOffers(
+  collectionId: string,
+  offerIds: string[],
+  facebookGroupId?: string
+): Promise<Map<string, GeneratorOffer>> {
   if (offerIds.length === 0) return new Map();
   const rows = await prisma.offer.findMany({
-    where: { id: { in: offerIds }, collectionId },
+    where: {
+      id: { in: offerIds },
+      collectionId,
+      ...(facebookGroupId !== undefined ? { facebookGroupId } : {}),
+    },
     select: { id: true, offerNo: true, state: true, inActiveBidding: true, _count: { select: { sets: true } } },
   });
   const out = new Map<string, GeneratorOffer>();

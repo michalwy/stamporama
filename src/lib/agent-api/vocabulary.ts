@@ -82,6 +82,13 @@ export interface PlatformVocabularyEntry extends VocabularyEntry {
    * platform, and the currency follows from this field.
    */
   readonly currency: string | null;
+  /**
+   * The groups an auction on this platform may be in — present on the **Facebook** platform only
+   * (#1663), and only the groups in use. A Facebook offer is an auction in one group (#1544), so
+   * `draft_offer` takes one of these in `facebook_group`. Omitted everywhere else, so no other
+   * platform pays for the key.
+   */
+  readonly facebookGroups?: readonly VocabularyEntry[];
 }
 
 /**
@@ -206,6 +213,7 @@ export type VocabularyName =
   | "catalog"
   | "catalog edition"
   | "platform"
+  | "Facebook group"
   | "exchange partner"
   | "size preset"
   | "album"
