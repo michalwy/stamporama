@@ -51,7 +51,11 @@ import {
 } from "@/lib/offer-photo-attachments";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { resolvePurchaseContact } from "@/lib/contacts";
-import { parseBidIncrement } from "@/lib/facebook-post-rules";
+import {
+  NO_FACEBOOK_CHOICE,
+  parseBidIncrement,
+  type FacebookCreateChoice,
+} from "@/lib/facebook-post-rules";
 import { commitLotProposal, type MissingPinnedCopy } from "@/lib/lot-builder";
 import { composeSeriesOffer, type ComposeSeriesResult } from "@/lib/series-recombination";
 import {
@@ -221,7 +225,8 @@ export async function commitLotBuilderAction(
   collectionId: string,
   search: string,
   name: string,
-  description: string
+  description: string,
+  facebook: FacebookCreateChoice = NO_FACEBOOK_CHOICE
 ): Promise<CommitLotActionState> {
   const session = await getSession();
   const parsed = parseLotBuilderRequest(new URLSearchParams(search));
@@ -232,7 +237,7 @@ export async function commitLotBuilderAction(
     const result = await commitLotProposal(
       session.user.id,
       collectionId,
-      { ...parsed, name, description },
+      { ...parsed, name, description, facebook },
       await readIncludeSpecialised(collectionId)
     );
     return {
@@ -267,7 +272,8 @@ export async function composeSeriesOfferAction(
   combination: unknown,
   criteriaQuery: string,
   picks: Record<string, string>,
-  target: unknown
+  target: unknown,
+  facebook: FacebookCreateChoice = NO_FACEBOOK_CHOICE
 ): Promise<ComposeSeriesActionState> {
   const session = await getSession();
   // A malformed card identity refuses rather than reading as "every axis mixed".
@@ -284,6 +290,7 @@ export async function composeSeriesOfferAction(
       criteria: parseSeriesCriteria(new URLSearchParams(criteriaQuery)),
       picks,
       target: targetPlan,
+      facebook,
     });
     return { status: "success", ...result };
   } catch (e) {

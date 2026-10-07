@@ -112,6 +112,7 @@ describe("offer generator (#1287)", () => {
       itemIds,
       filters: {},
       targets: {},
+      facebook: { facebookGroupId: null, endsAt: null },
       ...extra,
     };
   }

@@ -37,6 +37,8 @@ import { LotPresetBar, applyLotRecipe } from "./lot-preset-bar";
 import { useLotPoolSummary, useLotProposal } from "../use-offers-query";
 import { LotProposalView } from "./lot-proposal-view";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
+import { FacebookGroupSelect } from "../facebook-group-select";
+import { useFacebookGroupChoice } from "../use-facebook-group-choice";
 
 // The bulk-lot builder's screen (#760), over #758's rules and #759's two reads.
 //
@@ -334,6 +336,10 @@ export function LotBuilderPanel({
       rejectedItemIds: [...new Set([...request.rejectedItemIds, itemId])],
     });
 
+  // On Facebook the lot is an auction in a group (#1663): asked beside the create button, and kept
+  // out of the criteria — no preset or shared address carries it, since it is not about the copies.
+  const facebook = useFacebookGroupChoice(collectionId, criteria.platformId);
+
   function commit() {
     setError(undefined);
     startTransition(async () => {
@@ -342,9 +348,11 @@ export function LotBuilderPanel({
         collectionId,
         lotBuilderSearchParams(request).toString(),
         effectiveName,
-        effectiveDescription
+        effectiveDescription,
+        facebook.choice()
       );
       if (result.status === "success") {
+        facebook.remember();
         router.push(`/c/${collectionSlug}/offers/${result.id}`);
       } else setError(result.message);
     });
@@ -690,7 +698,11 @@ export function LotBuilderPanel({
           <section style={BAND}>
             <SectionHeading
               title="Create the offer"
-              note={`A draft on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`}
+              note={
+                facebook.group
+                  ? `A draft auction in ${facebook.group.name}, one set of ${proposal.plan.itemIds.length}`
+                  : `A draft on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`
+              }
             />
             {/* **Templates, not finished text** (#774). The lot writes its own template onto the
                 offer, so the wording follows the composition the way every other listing's does —
@@ -731,6 +743,20 @@ export function LotBuilderPanel({
               description="Same engine as a platform's description template, over this lot's copies."
               emptyPreview="This platform's own description template renders instead."
             />
+            {/* The group a Facebook lot is auctioned in (#1663), starting on the last one used there.
+                The server prices the auction from it — starting price, increment, currency — exactly
+                as the offer form does, and the closing time is worked out here from its length. */}
+            {facebook.isFacebook && (
+              <Field label="Facebook group">
+                <FacebookGroupSelect
+                  ariaLabel="Facebook group the lot is auctioned in"
+                  groups={facebook.groups}
+                  value={facebook.groupId}
+                  onChange={facebook.choose}
+                  style={{ ...FILTER_CONTROL_STYLE, minWidth: "14rem", alignSelf: "flex-start", cursor: "pointer" }}
+                />
+              </Field>
+            )}
             <div
               style={{
                 display: "flex",
@@ -739,13 +765,22 @@ export function LotBuilderPanel({
                 flexWrap: "wrap",
               }}
             >
-              <DialogPrimaryButton type="button" onClick={commit} disabled={busy}>
+              <DialogPrimaryButton
+                type="button"
+                onClick={commit}
+                disabled={busy || facebook.loading || facebook.missing !== null}
+              >
                 <Icon name="newOffer" /> Create the offer
               </DialogPrimaryButton>
-              <span style={NOTE}>
-                The lot is picked again as it is created, so anything listed elsewhere since
-                is left out and named.
-              </span>
+              {/* Why the button is off, beside it, rather than a refusal after the click (#1663). */}
+              {facebook.missing ? (
+                <span style={{ ...NOTE, color: "var(--color-warning)" }}>{facebook.missing}</span>
+              ) : (
+                <span style={NOTE}>
+                  The lot is picked again as it is created, so anything listed elsewhere since
+                  is left out and named.
+                </span>
+              )}
             </div>
           </section>
         )}

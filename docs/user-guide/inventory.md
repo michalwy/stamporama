@@ -1182,6 +1182,9 @@ Press **Quick offer mode** at the top of the list. A bar appears under the toolb
 while you scroll, with two things in it:
 
 - **Platform** — which marketplace these offers are listed on.
+- **Group** — on Facebook only, the group the auctions are in. It starts on the last group you
+  used there, and until one is chosen the mode creates nothing on its own: **Add to new offer** opens
+  the form instead, and the bar says why. See [Facebook](facebook.md#without-the-form).
 - **Status** — what each new offer starts as: *Preparing*, *Ready* or *Active*.
 
 When copies are ticked as well, this bar sits **above** the selection bar: quick offer mode is the
@@ -1194,7 +1197,8 @@ row, and the **New offer** buttons in the selection bar — creates the offer **
 no dialog. The menu entry says so while the mode is on: it reads *New offer on Colnect* rather than
 *Add to new offer*. The bar counts what the pass has created so far, and reports anything that failed.
 
-The new offers carry **no asking price and no listing URL**. That is the point: the pass is about
+The new offers carry **no asking price and no listing URL** — except on Facebook, where each is an
+auction opening at the group's starting price. That is the point: the pass is about
 getting the listings made, and both of those belong on the offer's own screen once the listing
 exists. If you want the price filled in from the copy's catalog value, use the ordinary
 [create form](#the-new-offer-shortcuts) instead — quick mode is for the bulk case.

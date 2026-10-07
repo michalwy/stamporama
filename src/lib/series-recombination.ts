@@ -24,6 +24,7 @@ import type { CollisionCopy, OfferMemberCopy } from "./offer-collision-rules";
 import type { DbTransaction } from "./db";
 import { formatEntityNo } from "./quick-jump";
 import { markListingContentChanged } from "./offer-listing-sync";
+import { readFacebookCreateChoice, type FacebookCreateChoice } from "./facebook-post-rules";
 import { formatItemNo } from "./item-number";
 import { sortPhotos, type PhotoSummary } from "./photos";
 import {
@@ -356,7 +357,9 @@ export interface ComposeSeriesInput {
   picks: SeriesPicks;
   /** Where the series goes (#1369): a similar offer as a further set, or a new offer — with the
    *  matches the screen showed, compared with a fresh read. */
-  target: ComposeTargetPlan;
+  target: ComposeTargetPlan;  /** On Facebook, the group a new offer is auctioned in and when it closes (#1663). Unread when the
+   *  series goes into a similar offer, which has its group already. */
+  facebook?: FacebookCreateChoice;
 }
 
 export interface ComposeSeriesResult {
@@ -540,6 +543,7 @@ export async function composeSeriesOffer(
         currency: "",
         listingDate: null,
         state: "preparing",
+        ...readFacebookCreateChoice(input.facebook), // #1663, as the lot builder's commit does
       },
       {
         seedItemIds: itemIds,

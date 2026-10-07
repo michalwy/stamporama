@@ -128,6 +128,10 @@ export type FacebookOfferResolution =
       /** The group's starting price as a fallback for a blank submission — `amount` only, since a
        *  percentage of catalogue value is worked out by the form over the copies it was opened on. */
       defaultStartingPrice: string | null;
+      /** The group's starting price as a share of the copies' catalogue value, in percent — `catalogPercent`
+       *  only, on create only. The offer's own creation works it out over the copies it is seeded with
+       *  (#1663), the figure a shortcut with no form has nowhere else to come from. */
+      startingPricePercent: number | null;
     };
 
 /**
@@ -148,7 +152,14 @@ export async function resolveFacebookOffer(
   mode: { create: boolean; currentGroupId?: string | null }
 ): Promise<FacebookOfferResolution> {
   if (platform.platformModule !== FACEBOOK_PLATFORM_MODULE) {
-    return { ok: true, facebookGroupId: null, bidIncrement: null, currency: null, defaultStartingPrice: null };
+    return {
+      ok: true,
+      facebookGroupId: null,
+      bidIncrement: null,
+      currency: null,
+      defaultStartingPrice: null,
+      startingPricePercent: null,
+    };
   }
   const groupId = input.facebookGroupId?.trim() || null;
   if (!groupId) {
@@ -176,6 +187,8 @@ export async function resolveFacebookOffer(
       mode.create && settings.startingPriceMode === "amount"
         ? (settings.startingPriceValue?.toFixed(2) ?? null)
         : null,
+    startingPricePercent:
+      mode.create && settings.startingPriceMode === "catalogPercent" ? settings.startingPriceValue : null,
   };
 }
 

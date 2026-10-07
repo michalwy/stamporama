@@ -7,6 +7,7 @@ import {
   facebookMoney,
   facebookPostRefusal,
   parseBidIncrement,
+  readFacebookCreateChoice,
   renderFacebookLotText,
   renderFacebookPostText,
   type FacebookPostCandidate,
@@ -157,5 +158,29 @@ describe("describeFacebookAuctionCopies (ADR-0061 §5)", () => {
       ]),
       /^Copies #12, #13 are already in an active Facebook auction: offer #41 in Znaczki\./
     );
+  });
+});
+
+describe("readFacebookCreateChoice (#1663)", () => {
+  it("reads the group and the closing time a shortcut sends", () => {
+    assert.deepEqual(
+      readFacebookCreateChoice({ facebookGroupId: " g1 ", endsAt: "2026-11-01T19:00:00.000Z" }),
+      { facebookGroupId: "g1", endsAt: new Date("2026-11-01T19:00:00.000Z") }
+    );
+  });
+
+  it("is nothing off Facebook, and a closing time without a group is none", () => {
+    assert.deepEqual(readFacebookCreateChoice(undefined), { facebookGroupId: null, endsAt: null });
+    assert.deepEqual(readFacebookCreateChoice({ facebookGroupId: "", endsAt: "2026-11-01T19:00:00.000Z" }), {
+      facebookGroupId: null,
+      endsAt: null,
+    });
+  });
+
+  it("drops an unreadable closing time rather than refusing the group", () => {
+    assert.deepEqual(readFacebookCreateChoice({ facebookGroupId: "g1", endsAt: "soon" }), {
+      facebookGroupId: "g1",
+      endsAt: null,
+    });
   });
 });

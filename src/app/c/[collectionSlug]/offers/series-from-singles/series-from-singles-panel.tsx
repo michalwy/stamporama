@@ -45,6 +45,9 @@ import { OfferStateChip } from "../offer-badges";
 import { BAND, Callout, Empty, NOTE, SectionHeading, SkeletonBlock } from "../lot-builder/lot-builder-chrome";
 import { useInvalidateOffers, useSeriesFromSingles } from "../use-offers-query";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
+import { NO_FACEBOOK_CHOICE } from "@/lib/facebook-post-rules";
+import { FacebookGroupSelect } from "../facebook-group-select";
+import { useFacebookGroupChoice } from "../use-facebook-group-choice";
 
 // The series-recombination screen (#1210). The platform comes first, as on the lot builder, because
 // availability is a per-platform question; it lives in the URL, so a refresh or a shared link lands on
@@ -636,6 +639,11 @@ function ComposeSeriesDialog({
   const targetId = composeTargetOf(targets, picked);
   const target = targetId ? similarById.get(targetId) : undefined;
   const radioName = useId();
+  // A new offer on Facebook is an auction in a group (#1663), asked here; a similar offer already has
+  // its own, so the question goes away when the series is going into one.
+  const facebook = useFacebookGroupChoice(collectionId, platformId);
+  const asksGroup = !target && facebook.isFacebook;
+  const groupMissing = target ? null : facebook.missing;
 
   const chosen = series.slots.flatMap((slot) => {
     const filler = slot.fillers.find((f) => f.itemId === picks[slot.stamp.stampId]);
@@ -675,9 +683,11 @@ function ComposeSeriesDialog({
                 ]
               : [];
           }),
-        }
+        },
+        target ? NO_FACEBOOK_CHOICE : facebook.choice()
       );
       if (result.status === "success") {
+        if (!target) facebook.remember();
         await invalidateAll(collectionId);
         router.push(`/c/${collectionSlug}/offers/${result.offerId}`);
       } else setError(result.message);
@@ -699,6 +709,19 @@ function ComposeSeriesDialog({
               A new <strong>Preparing</strong> offer on {platformName} holding <strong>{series.checklistName}</strong>{" "}
               as one set of {chosen.length} {chosen.length === 1 ? "copy" : "copies"}.
             </p>
+          )}
+          {asksGroup && (
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>Facebook group</span>
+              <FacebookGroupSelect
+                ariaLabel="Facebook group the new offer is auctioned in"
+                groups={facebook.groups}
+                value={facebook.groupId}
+                onChange={facebook.choose}
+                disabled={pending}
+                style={{ ...FILTER_CONTROL_STYLE, minWidth: "14rem", cursor: "pointer" }}
+              />
+            </label>
           )}
           {targets.matches.length > 0 ? (
             <div role="radiogroup" aria-label="Where the series goes" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -785,7 +808,12 @@ function ComposeSeriesDialog({
         actionLabel={pending ? "Composing…" : target ? "Add to the offer" : "Compose offer"}
         onCancel={onClose}
         onAction={commit}
-        disabled={pending}
+        disabled={pending || (!target && facebook.loading) || groupMissing !== null}
+        cancelDisabled={pending}
+        // Why the action is off, beside it, rather than a refusal after the click (#1663).
+        leading={
+          groupMissing ? <span style={{ ...NOTE, color: "var(--color-warning)" }}>{groupMissing}</span> : undefined
+        }
         error={error}
       />
     </DialogShell>

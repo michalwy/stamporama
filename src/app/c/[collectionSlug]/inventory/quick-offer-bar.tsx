@@ -5,6 +5,8 @@ import { CREATABLE_OFFER_STATES, OFFER_STATE_LABEL, type OfferState } from "@/li
 import { LIST_BANNER_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { FacebookGroupSelect } from "@/app/c/[collectionSlug]/offers/facebook-group-select";
+import type { FacebookGroupChoiceState } from "@/app/c/[collectionSlug]/offers/use-facebook-group-choice";
 
 /**
  * Quick offer mode (#537): the parameters every offer of this listing pass shares, set once, so that
@@ -23,7 +25,8 @@ import { Icon } from "@/app/icons";
  * a collector returning tomorrow and clicking the same row entry would get an offer with no dialog
  * and no warning, which is the one thing this must never do. Arming it is one click and it says so.
  *
- * Only the two parameters an offer cannot be created without are here. The price and the URL are
+ * Only the parameters an offer cannot be created without are here — the platform, the status and,
+ * on Facebook, the group the auction is in (#1663), whose defaults then price it. The price and the URL are
  * left unset on purpose (the offer's own screen is where they land, once the listing exists) — that
  * is what makes this pass a *bulk* one, and it is exactly what #234's remembered values could not
  * do, since pre-filling a dialog still leaves the dialog.
@@ -32,6 +35,7 @@ export function QuickOfferBar({
   platforms,
   platformId,
   onPlatformIdChange,
+  facebook,
   state,
   onStateChange,
   created,
@@ -45,6 +49,8 @@ export function QuickOfferBar({
   platforms: ContactData[];
   platformId: string;
   onPlatformIdChange: (id: string) => void;
+  /** On Facebook, the group every offer of the pass is an auction in (#1663). */
+  facebook: FacebookGroupChoiceState;
   state: OfferState;
   onStateChange: (state: OfferState) => void;
   /** How many offers this pass has created — the only feedback a dialog-less create leaves behind. */
@@ -66,7 +72,9 @@ export function QuickOfferBar({
     ? "Choose the platform these offers are listed on."
     : !platform.platformCurrency
       ? `${platform.name} has no currency yet. List one offer on it through the ordinary form first — that is where its currency is set.`
-      : null;
+      : facebook.missing;
+  // Still asking whether the platform is Facebook: nothing is said, but nothing is created either.
+  const waiting = !blocked && facebook.loading;
 
   // Shape and colour come from `LIST_BANNER_STYLE`, shared with the selection bar this stacks with
   // (#848), and the width from the pinned toolbar block it now lives inside — the bar used to set
@@ -103,6 +111,21 @@ export function QuickOfferBar({
         </select>
       </label>
 
+      {/* A Facebook auction is in a group (#1544), so on Facebook the bar asks which (#1663) — starting
+          on the group last used there. */}
+      {facebook.isFacebook && (
+        <label style={FIELD}>
+          <span style={FIELD_LABEL}>Group</span>
+          <FacebookGroupSelect
+            groups={facebook.groups}
+            value={facebook.groupId}
+            onChange={facebook.choose}
+            ariaLabel="Facebook group for quick offers"
+            style={SELECT_STYLE}
+          />
+        </label>
+      )}
+
       <label style={FIELD}>
         <span style={FIELD_LABEL}>Status</span>
         <select
@@ -122,7 +145,9 @@ export function QuickOfferBar({
       <Tooltip
         content={
           blocked ??
-          `Every "Add to new offer" now creates the offer straight away on ${platform?.name} as ${OFFER_STATE_LABEL[state]}, with no asking price and no listing URL — set those on the offer itself once the listing exists.`
+          (facebook.group
+            ? `Every "Add to new offer" now creates an auction straight away in ${facebook.group.name} as ${OFFER_STATE_LABEL[state]}, with the group's starting price, increment and closing time and no listing URL — set that on the offer itself once the post exists.`
+            : `Every "Add to new offer" now creates the offer straight away on ${platform?.name} as ${OFFER_STATE_LABEL[state]}, with no asking price and no listing URL — set those on the offer itself once the listing exists.`)
         }
       >
         <span
@@ -154,7 +179,7 @@ export function QuickOfferBar({
           <button
             type="button"
             onClick={onGenerate}
-            disabled={!!blocked || isPending}
+            disabled={!!blocked || waiting || isPending}
             style={{
               padding: "0.375rem 0.75rem",
               border: "1px solid var(--color-accent)",
@@ -163,8 +188,8 @@ export function QuickOfferBar({
               color: "var(--color-accent)",
               fontSize: "0.8125rem",
               fontWeight: 600,
-              cursor: blocked || isPending ? "not-allowed" : "pointer",
-              opacity: blocked || isPending ? 0.6 : 1,
+              cursor: blocked || waiting || isPending ? "not-allowed" : "pointer",
+              opacity: blocked || waiting || isPending ? 0.6 : 1,
             }}
           >
             Generate offers…

@@ -1303,6 +1303,10 @@ is **named on screen** and left out, never quietly released.
 the chosen copies, and takes you to it. One set, not one per copy: a set is the thing a buyer buys,
 and one set per copy would describe your lot as a hundred alternative listings.
 
+On Facebook the section also asks for the **Facebook group** the lot is auctioned in, starting on
+the last one you used. The button stays greyed out until one is chosen, and the lot takes the
+group's starting price, increment and closing time — see [Facebook](facebook.md#without-the-form).
+
 The lot is **picked again** as the offer is created. Between opening this screen and pressing the
 button a copy may have been listed elsewhere or promised in a trade, so the offer is built from a
 fresh look rather than from what is on your screen — and anything that dropped out is named.
@@ -1480,7 +1484,9 @@ composing the series offer afterwards.
 - **Check the outcome.** The dialog says what is about to happen: the series added to the offer that
   already lists it — the **lowest-numbered** one when there are several, with a radio button to pick
   another, and **Create a new Preparing offer instead** if you want them kept apart — or, when no offer
-  lists it, a new **Preparing** offer on the platform holding the series as **one set**. It also lists
+  lists it, a new **Preparing** offer on the platform holding the series as **one set**. A new offer on
+  Facebook also asks for the **Facebook group**, and **Compose offer** waits until one is chosen
+  ([Facebook](facebook.md#without-the-form)). It also lists
   every single offer that loses a set — whether it
   keeps other sets or is left with nothing, whether it is **live** (Active or Paused), and what
   happens to it: a live offer left empty says it **stays in its state and appears in Needs action**,

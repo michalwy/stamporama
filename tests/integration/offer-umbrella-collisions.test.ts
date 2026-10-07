@@ -247,6 +247,7 @@ describe("umbrella collisions by listed variant (#1347)", () => {
       itemIds,
       filters: {},
       targets: {},
+      facebook: { facebookGroupId: null, endsAt: null },
     });
 
     it("adds an umbrella copy to the offer on the variant it is listed under", async () => {

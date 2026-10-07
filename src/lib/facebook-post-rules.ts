@@ -50,6 +50,33 @@ export function facebookDefaultStartingPrice(
   return Number(figure) > 0 ? figure : null;
 }
 
+/**
+ * What a creation with no offer form says about its Facebook half (#1663): the group picked beside the
+ * create button, and when the auction closes — worked out from that group's defaults in the browser,
+ * the one place the zone is known (#490), and carried as an ISO instant. Both null off Facebook. The
+ * rest of the group's defaults — the increment, the currency, the starting price — are read by the
+ * server as the offer is made, exactly as for an offer from the form.
+ */
+export interface FacebookCreateChoice {
+  facebookGroupId: string | null;
+  endsAt: string | null;
+}
+
+export const NO_FACEBOOK_CHOICE: FacebookCreateChoice = { facebookGroupId: null, endsAt: null };
+
+/** The choice a shortcut sends, as the group it names and its closing time — an unreadable time is
+ *  none rather than a refusal: the collector never typed it, the browser worked it out. */
+export function readFacebookCreateChoice(
+  choice: FacebookCreateChoice | null | undefined
+): { facebookGroupId: string | null; endsAt: Date | null } {
+  const facebookGroupId = choice?.facebookGroupId?.trim() || null;
+  const endsAt = choice?.endsAt ? new Date(choice.endsAt) : null;
+  return {
+    facebookGroupId,
+    endsAt: facebookGroupId && endsAt && !Number.isNaN(endsAt.getTime()) ? endsAt : null,
+  };
+}
+
 /** A bid increment as typed on the offer form: blank is none, anything else a figure above zero. */
 export function parseBidIncrement(
   raw: string

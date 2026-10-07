@@ -24,6 +24,7 @@ import {
   writeGeneratedOffers,
 } from "./offers";
 import type { LotChecklist } from "./lot-builder-rules";
+import { readFacebookCreateChoice } from "./facebook-post-rules";
 import {
   findPlanDrift,
   fingerprintPlan,
@@ -368,7 +369,13 @@ export async function previewOfferGeneration(
   const state = await readGeneratorState(ownerId, collectionId, input, includeSpecialised);
   const [lines, creationBlock] = await Promise.all([
     nameLines(collectionId, state),
-    quickOfferCreationBlock(ownerId, collectionId, input.platformId, input.state),
+    quickOfferCreationBlock(
+      ownerId,
+      collectionId,
+      input.platformId,
+      input.state,
+      readFacebookCreateChoice(input.facebook).facebookGroupId
+    ),
   ]);
   const { plan } = state;
   return {
@@ -565,7 +572,13 @@ export async function commitOfferGeneration(
   if (lines.length === 0) {
     throw new OfferActionBlockedError("empty", "There is nothing to generate: none of these copies makes an offer in this mode.");
   }
-  const block = await quickOfferCreationBlock(ownerId, collectionId, input.platformId, input.state);
+  const block = await quickOfferCreationBlock(
+    ownerId,
+    collectionId,
+    input.platformId,
+    input.state,
+    readFacebookCreateChoice(input.facebook).facebookGroupId
+  );
   if (block) throw new OfferActionBlockedError("unpriced", block);
 
   const additions = new Map<string, { offerId: string; state: OfferState; setCount: number; sets: string[][] }>();
@@ -584,6 +597,7 @@ export async function commitOfferGeneration(
     const written = await writeGeneratedOffers(ownerId, collectionId, {
       platformId: input.platformId,
       state: input.state,
+      ...readFacebookCreateChoice(input.facebook),
       newOffers,
       additions: [...additions.values()],
     });

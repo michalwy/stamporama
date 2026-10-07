@@ -113,6 +113,26 @@ made. Only groups
 in use are offered; an archived group can be kept by an auction already in it, but not chosen for a
 new one.
 
+If you leave the starting price empty, the auction still opens at the group's: its amount, or its
+percentage of what one set of the offer's copies is worth in the catalogue. Copies with no
+catalogue value leave it empty.
+
+### Without the form
+
+Every other way of making an offer asks for the group too when the platform is Facebook:
+
+- the **Lot builder**, under *Create the offer*;
+- **Quick offer mode** on your copies, in its bar beside the platform, which also covers
+  **Generate offers…**;
+- **Series from singles**, when you compose a series into a new offer. A series added to an offer
+  that already lists it keeps that offer's group.
+
+The picker starts on the last group you used on Facebook, from any of these or from the form. Until
+a group is chosen the create button stays greyed out, and the reason is shown beside it. The new
+auction takes the group's settings as the form does: the starting price, worked out from the
+copies' catalogue value when the group gives a percentage, the bid increment, the currency, and the
+closing time. The listing's link and anything else are set on the offer itself afterwards.
+
 ### A copy is in one auction at a time
 
 A copy that is in a Facebook auction which is up — active or paused — cannot be put in another
