@@ -359,10 +359,17 @@ describe("the generator request (#1287)", () => {
       itemIds: ["i1", "i2"],
       filters: "",
       targets: { abc: "o1" },
+      facebook: { facebookGroupId: null, endsAt: null },
     };
     assert.deepEqual(parseGeneratorRequest(generatorRequestParams(request)), request);
     const filtered = { ...request, itemIds: null, filters: "conditionIds=mnh&areaIds=a1", targets: {} };
     assert.deepEqual(parseGeneratorRequest(generatorRequestParams(filtered)), filtered);
+    // On Facebook the group and its closing time travel with the rest (#1663).
+    const facebook = {
+      ...request,
+      facebook: { facebookGroupId: "g1", endsAt: "2026-10-10T18:00:00.000Z" },
+    };
+    assert.deepEqual(parseGeneratorRequest(generatorRequestParams(facebook)), facebook);
   });
 
   it("refuses a request missing a choice, rather than guessing it", () => {
@@ -374,6 +381,7 @@ describe("the generator request (#1287)", () => {
       itemIds: null,
       filters: "",
       targets: {},
+      facebook: { facebookGroupId: null, endsAt: null },
     });
     for (const key of ["platformId", "state", "mode", "packaging"]) {
       const without = new URLSearchParams(params);

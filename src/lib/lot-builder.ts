@@ -38,6 +38,7 @@ import {
 import { findCommittedCopies } from "./trade-reservations";
 import type { CommittedCopy } from "./trade-reservation-rules";
 import { createOffer, syncGeneratedTexts } from "./offers";
+import { readFacebookCreateChoice, type FacebookCreateChoice } from "./facebook-post-rules";
 import { shownChecklistWhere } from "./checklist-kind";
 
 // The server half of the bulk-lot builder (#759; #756's design, #758's rules).
@@ -647,6 +648,9 @@ export interface LotCommitInput extends LotBuilderRequest {
   name: string | null;
   /** The listing description, on the same contract. */
   description: string | null;
+  /** On Facebook, the group the lot is auctioned in and when it closes (#1663) — the one choice the
+   *  create step asks beside the platform. Not a criterion: no preset or address carries it. */
+  facebook?: FacebookCreateChoice;
 }
 
 export interface LotCommitResult {
@@ -698,6 +702,9 @@ export async function commitLotProposal(
       currency: "",
       listingDate: null,
       state: "preparing",
+      // On Facebook, the group and its closing time (#1663); the rest of the group's defaults are
+      // read as the offer is made.
+      ...readFacebookCreateChoice(input.facebook),
     },
     { seedItemIds: proposal.plan.itemIds }
   );

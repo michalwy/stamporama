@@ -53,10 +53,31 @@ read together.
   name only one in use (an edit may keep its archived one), and everything Facebook is null off it —
   so moving an offer away clears it. The listing type is forced to `auction` before
   `resolveOfferPricing`, and the group's `amount` stands in for `Contact.defaultStartingPrice` as the
-  blank-submission fallback (`facebookPricingDefaults`); `catalogPercent` is the **form's** job,
-  over the catalogue suggestion it already holds (#230), because the server has no figure in the
-  offer's currency to take a share of. `Offer.bidIncrement` is seeded from the group on create only.
+  blank-submission fallback (`facebookPricingDefaults`); `catalogPercent` was the **form's** job
+  alone, over the catalogue suggestion it already holds (#230), until #1663 gave the server the same
+  figure over the seed (below) — the form's stated figure still outranks it. `Offer.bidIncrement` is seeded from the group on create only.
   `patchOffer` refuses moving an offer onto or off Facebook in place — only the form asks the group.
+
+- **Every creation without the form asks the group too** (#1663). The Lot builder, quick offer mode
+  and its generator on the Copies list, and *Series from singles* (a new offer only) each draw
+  `FacebookGroupSelect` beside their create button through `useFacebookGroupChoice`
+  (`offers/use-facebook-group-choice.ts`), which starts on the **last group used on that platform**
+  (localStorage per collection and platform, written by the shortcuts and by the form on create) and
+  holds the button off with the reason beside it until one is chosen — the server's refusal stays
+  behind it. What travels is `FacebookCreateChoice` (`facebook-post-rules.ts`): the group and the
+  closing time the browser worked out from it (#490's rule), read server-side by
+  `readFacebookCreateChoice` into `createOffer`'s input — an action argument for the Lot builder and
+  the series, FormData for quick mode, the query string for the generator (not a lot criterion, so no
+  preset or address carries it). Everything else is the ordinary create: the increment, currency and
+  `amount` from `resolveFacebookOffer`, and a **`catalogPercent`** starting price now worked out
+  server-side by `prepareOfferCreation` (`catalogShareOfSets`) over the seed whenever none was
+  submitted — the share of one set's catalogue value, averaged over the valued sets in the offer's
+  currency, the offer screen's suggested price (#230); decided with the collector on 2026-10-07. No
+  catalogue value is no price, so a `ready`/`active` creation over unvalued copies is refused as
+  unpriced. `quickOfferCreationBlock` takes the group, so the generator's preview names a missing one;
+  a percentage blocks nothing there, since it is per offer. The generator's *additions* go into
+  existing offers in whatever group they are in. The agent API's `draft_offer` names no group, so it
+  still cannot draft a Facebook offer.
 
 - **A group's currency wins over the platform's** (settled with the collector on 2026-10-03, the
   question ADR-0061 left to #1544). An auction in a group with `currency` set is created in it and

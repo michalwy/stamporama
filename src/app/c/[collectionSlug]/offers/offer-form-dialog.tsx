@@ -29,6 +29,8 @@ import {
 import { useLastOfferDefaults } from "./use-last-offer-defaults";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import type { FacebookGroupChoice } from "@/lib/facebook-auctions";
+import { FacebookGroupSelect } from "./facebook-group-select";
+import { rememberFacebookGroup } from "./use-facebook-group-choice";
 import {
   facebookDefaultEndsAt,
   facebookDefaultStartingPrice,
@@ -325,6 +327,8 @@ export function OfferFormDialog({
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // The group a new auction is made in becomes the one every shortcut starts on (#1663).
+    if (!isEdit && facebookGroup) rememberFacebookGroup(collectionId, platformId, facebookGroup.id);
     onSubmit(new FormData(e.currentTarget));
   }
 
@@ -389,24 +393,16 @@ export function OfferFormDialog({
               <div style={{ flex: 2 }}>
                 <LabelWithError htmlFor="offer-facebook-group">Group</LabelWithError>
                 {inFacebookPost && <input type="hidden" name="facebookGroupId" value={facebookGroupId} />}
-                <select
+                <FacebookGroupSelect
                   id="offer-facebook-group"
                   name={inFacebookPost ? undefined : "facebookGroupId"}
+                  groups={facebookGroups}
                   value={facebookGroupId}
-                  onChange={(e) => chooseFacebookGroup(e.target.value)}
+                  onChange={chooseFacebookGroup}
                   disabled={isPending || inFacebookPost}
                   required
                   style={{ ...INPUT_STYLE, cursor: inFacebookPost ? "not-allowed" : "pointer" }}
-                >
-                  <option value="">
-                    {facebookGroups.length === 0 ? "No groups yet — add one in Settings → Facebook" : "Choose a group…"}
-                  </option>
-                  {facebookGroups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.archived ? `${g.name} (archived)` : g.name}
-                    </option>
-                  ))}
-                </select>
+                />
                 {inFacebookPost && (
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
                     A lot shares its post&apos;s group.

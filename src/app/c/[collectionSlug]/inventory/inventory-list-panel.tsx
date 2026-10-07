@@ -63,6 +63,11 @@ import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
 import { QuickOfferBar } from "./quick-offer-bar";
 import { OfferGeneratorDialog, type OfferGeneratorInput } from "./offer-generator-dialog";
 import {
+  rememberFacebookGroup,
+  useFacebookGroupChoice,
+} from "@/app/c/[collectionSlug]/offers/use-facebook-group-choice";
+import type { FacebookCreateChoice } from "@/lib/facebook-post-rules";
+import {
   itemFilterParams,
   useInventoryItemsInfinite,
   useCopyGroupsInfinite,
@@ -147,6 +152,8 @@ type DialogState =
       platformId: string;
       platformName: string;
       state: OfferState;
+      /** The bar's Facebook group and closing time, read when the dialog opened (#1663). */
+      facebook: FacebookCreateChoice;
       input: OfferGeneratorInput;
     };
 
@@ -873,10 +880,18 @@ export function InventoryListPanel({
     () => offerPlatforms.find((p) => p.id === quickPlatformId) ?? null,
     [offerPlatforms, quickPlatformId]
   );
+  // On Facebook every offer is an auction in a group (#1663), picked in the bar beside the platform.
+  const quickFacebook = useFacebookGroupChoice(collectionId, quickPlatformId);
+  const { choice: quickFacebookChoice, remember: rememberQuickFacebook } = quickFacebook;
   // Armed only once the bar carries a platform that can actually take an offer: its currency is
   // fixed at the platform (#196) and choosing one belongs in the create form, so a platform without
-  // one falls back to the ordinary dialog rather than failing per click.
-  const quickOfferActive = quickOffer && !!quickPlatform?.platformCurrency;
+  // one falls back to the ordinary dialog rather than failing per click — and so does Facebook until
+  // the bar names the group.
+  const quickOfferActive =
+    quickOffer &&
+    !!quickPlatform?.platformCurrency &&
+    !quickFacebook.loading &&
+    quickFacebook.missing === null;
 
   /** Create one offer from `items`, seeded with them, using the bar's platform and status (#537).
    * `perCopy` splits several copies into one single-copy set each — the same packaging choice the
@@ -890,6 +905,10 @@ export function InventoryListPanel({
         const formData = new FormData();
         formData.set("platformId", quickPlatform.id);
         formData.set("state", quickState);
+        // On Facebook, the bar's group and the closing time it gives (#1663).
+        const facebook = quickFacebookChoice();
+        if (facebook.facebookGroupId) formData.set("facebookGroupId", facebook.facebookGroupId);
+        if (facebook.endsAt) formData.set("endsAt", facebook.endsAt);
         const { createOfferAction } = await import("@/app/actions/offers");
         const created = await createOfferAction(
           collectionId,
@@ -902,6 +921,7 @@ export function InventoryListPanel({
           return;
         }
         rememberPlatform(quickPlatform.id);
+        rememberQuickFacebook();
         setQuickCreated((n) => n + 1);
         invalidateOffers(collectionId);
         invalidateList(collectionId);
@@ -913,6 +933,8 @@ export function InventoryListPanel({
     [
       quickPlatform,
       quickState,
+      quickFacebookChoice,
+      rememberQuickFacebook,
       collectionId,
       rememberPlatform,
       invalidateOffers,
@@ -1335,6 +1357,7 @@ export function InventoryListPanel({
                     platforms={offerPlatforms}
                     platformId={quickPlatformId}
                     onPlatformIdChange={setQuickPlatformId}
+                    facebook={quickFacebook}
                     state={quickState}
                     onStateChange={setQuickState}
                     created={quickCreated}
@@ -1352,6 +1375,7 @@ export function InventoryListPanel({
                         platformId: quickPlatform.id,
                         platformName: quickPlatform.name,
                         state: quickState,
+                        facebook: quickFacebook.choice(),
                         // What the collector can see (#1021): the ticked rows in view when there are
                         // any, else the list's filters — never a copy a filter hides.
                         input:
@@ -2081,11 +2105,15 @@ export function InventoryListPanel({
           platformId={dialog.platformId}
           platformName={dialog.platformName}
           state={dialog.state}
+          facebook={dialog.facebook}
           input={dialog.input}
           onClose={() => setDialog({ kind: "none" })}
           onDone={({ createdOffers, changedOffers }) => {
             setDialog({ kind: "none" });
             rememberPlatform(dialog.platformId);
+            if (dialog.facebook.facebookGroupId) {
+              rememberFacebookGroup(collectionId, dialog.platformId, dialog.facebook.facebookGroupId);
+            }
             setQuickCreated((n) => n + createdOffers);
             invalidateOffers(collectionId);
             invalidateList(collectionId);

@@ -158,6 +158,7 @@ import {
   type FacebookOfferKit,
   type FacebookOfferResolution,
 } from "./facebook-auctions";
+import { facebookDefaultStartingPrice } from "./facebook-post-rules";
 import type { PlanDrift } from "./offer-generator-rules";
 
 // Server-side domain logic for **offer-owned composition** (ADR-0013, supersedes ADR-0012 §1–§2).
@@ -5048,6 +5049,43 @@ function facebookPricingDefaults(
   return { defaultListingType: "auction", defaultStartingPrice: facebook.defaultStartingPrice };
 }
 
+/** A Facebook group's `catalogPercent` opening figure over the copies an offer is created with (#1663),
+ *  or null where none of them carries a catalogue value. The share is of **one set's** worth — the
+ *  copies' catalogue value averaged over the sets that carry one, in the offer's currency — because a
+ *  buyer takes one set: the figure the offer's own suggested price is (#230), and what the offer form
+ *  takes its share of. No rate to the offer's currency is no figure, never one in the wrong currency. */
+async function catalogShareOfSets(
+  collectionId: string,
+  sets: string[][],
+  currency: string,
+  percent: number
+): Promise<string | null> {
+  const valued = sets.filter((itemIds) => itemIds.length > 0);
+  if (valued.length === 0) return null;
+  const [collection, holdings] = await Promise.all([
+    prisma.collection.findUniqueOrThrow({ where: { id: collectionId }, select: { baseCurrency: true } }),
+    getHoldingsValuationByGroup(
+      collectionId,
+      valued.map((itemIds, index) => ({ key: String(index), itemIds }))
+    ),
+  ]);
+  let sum = 0;
+  let count = 0;
+  for (const summary of holdings.values()) {
+    if (summary.pricedCount === 0) continue;
+    sum += Number(summary.totalBaseAmount);
+    count++;
+  }
+  if (count === 0) return null;
+  let rate: number;
+  try {
+    rate = (await getOrFetchRate(collectionId, collection.baseCurrency, currency)).rate;
+  } catch {
+    return null;
+  }
+  return facebookDefaultStartingPrice("catalogPercent", percent, ((sum / count) * rate).toFixed(2));
+}
+
 /** A copy is in one active Facebook auction at a time (ADR-0061 §5), so a Facebook offer refuses a
  *  copy another Facebook auction that is up already holds — by name, the whole add, #639's shape:
  *  that auction may have ended without being closed here, and dropping the copy quietly would hide
@@ -5106,19 +5144,6 @@ async function prepareOfferCreation(
     facebook.currency ??
     (await resolvePlatformCurrency(input.platformId, platform.platformCurrency, input.currency));
 
-  // Everything about how this listing is priced (#449): its format, the auction's opening figure and
-  // the live price that follows from it — each falling back to the platform's own defaults (#362).
-  // Those defaults are the *lowest* priority suggestion: a lot's suggested price (#190) and the
-  // copies' catalog value (#230) both reach the form as a filled-in figure, so anything submitted
-  // here already outranks them. Resolved before the live-status checks, so creating an auction
-  // straight as `ready` on a house one always opens at the same figure is not rejected as unpriced.
-  const pricing = resolveOfferPricing(
-    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
-    input.price,
-    facebookPricingDefaults(platform, facebook)
-  );
-  const price = pricing.price;
-
   const targetState = input.state;
   if (isTerminalState(targetState)) {
     throw new OfferActionBlockedError("bad-transition", "An offer cannot be created already closed.");
@@ -5151,6 +5176,48 @@ async function prepareOfferCreation(
   // A Facebook auction refuses copies another one that is up already holds (ADR-0061 §5), at any
   // state: putting them in is what the rule forbids, not only going live with them.
   await assertNotInAnotherFacebookAuction(collectionId, { id: null, facebookGroupId: facebook.facebookGroupId }, seedIds);
+
+  // How the seed is packaged (#372): one set holding everything (a series sold together), or —
+  // `seedPerCopy` — one single-copy set each, the quantity listing a stock of duplicates has to be
+  // on a platform that refuses a second offer for the same stamp in the same condition.
+  const addable = new Set(seedIds);
+  const seedComposition = opts.seedSets
+    ? opts.seedSets
+        .map((set) => ({ title: null, itemIds: set.filter((itemId) => addable.has(itemId)) }))
+        .filter((set) => set.itemIds.length > 0)
+    : opts.seedPerCopy
+      ? seedIds.map((itemId) => ({ title: null, itemIds: [itemId] }))
+      : [{ title: null, itemIds: seedIds }];
+
+  // Everything about how this listing is priced (#449): its format, the auction's opening figure and
+  // the live price that follows from it — each falling back to the platform's own defaults (#362).
+  // Those defaults are the *lowest* priority suggestion: a lot's suggested price (#190) and the
+  // copies' catalog value (#230) both reach the form as a filled-in figure, so anything submitted
+  // here already outranks them. Resolved before the live-status checks, so creating an auction
+  // straight as `ready` on a house one always opens at the same figure is not rejected as unpriced.
+  //
+  // A Facebook group opening at a share of catalogue value (#1663) has that share worked out here,
+  // over the seed, for a creation no form priced — the Lot builder, quick offer mode, a composed
+  // series, the generator. The form states its own figure, which outranks this one as above.
+  const facebookDefaults =
+    facebook.startingPricePercent !== null && !hasPrice(input.startingPrice ?? "")
+      ? {
+          ...facebook,
+          defaultStartingPrice: await catalogShareOfSets(
+            collectionId,
+            seedComposition.map((set) => set.itemIds),
+            currency,
+            facebook.startingPricePercent
+          ),
+        }
+      : facebook;
+  const pricing = resolveOfferPricing(
+    facebook.facebookGroupId ? { ...input, listingType: "auction" } : input,
+    input.price,
+    facebookPricingDefaults(platform, facebookDefaults)
+  );
+  const price = pricing.price;
+
   // A prepared or live listing needs an asking price (#336) — creating one straight as `ready` /
   // `active` skips the transition, so the same rule applies here.
   //
@@ -5168,17 +5235,6 @@ async function prepareOfferCreation(
   // the seed copies — the seed is the offer's first (and so far only) set. A field with no template
   // configured, or no seed copies yet, stays null: the name falls back to the derived label and the
   // longer texts stay empty until the collector composes and regenerates.
-  // How the seed is packaged (#372): one set holding everything (a series sold together), or —
-  // `seedPerCopy` — one single-copy set each, the quantity listing a stock of duplicates has to be
-  // on a platform that refuses a second offer for the same stamp in the same condition.
-  const addable = new Set(seedIds);
-  const seedComposition = opts.seedSets
-    ? opts.seedSets
-        .map((set) => ({ title: null, itemIds: set.filter((itemId) => addable.has(itemId)) }))
-        .filter((set) => set.itemIds.length > 0)
-    : opts.seedPerCopy
-      ? seedIds.map((itemId) => ({ title: null, itemIds: [itemId] }))
-      : [{ title: null, itemIds: seedIds }];
   const texts = await generateListingTexts(
     ownerId,
     collectionId,
@@ -6411,14 +6467,30 @@ export async function quickOfferCreationBlock(
   ownerId: string,
   collectionId: string,
   platformId: string,
-  state: OfferState
+  state: OfferState,
+  facebookGroupId: string | null = null
 ): Promise<string | null> {
   await assertCollectionOwner(ownerId, collectionId);
   const platform = await assertPlatform(collectionId, platformId);
-  if (!platform.platformCurrency) {
+  // On Facebook the offers are auctions in the group picked beside the button (#1663), priced from it.
+  const facebook = await resolveFacebookOffer(
+    collectionId,
+    { id: platformId, platformModule: platform.platformModule },
+    { facebookGroupId },
+    { create: true }
+  );
+  if (!facebook.ok) return facebook.message;
+  if (!platform.platformCurrency && !facebook.currency) {
     return "This platform has no currency yet. List one offer on it through the ordinary form first — that is where its currency is set.";
   }
-  const pricing = resolveOfferPricing({}, "0.00", platform);
+  // A share of catalogue value is worked out per offer, over its own copies, as each is written; an
+  // offer whose copies carry none is refused then, by name, like any unpriced creation.
+  if (facebook.startingPricePercent !== null) return null;
+  const pricing = resolveOfferPricing(
+    facebook.facebookGroupId ? { listingType: "auction" } : {},
+    "0.00",
+    facebookPricingDefaults(platform, facebook)
+  );
   const missing = missingPriceField(pricing.listingType, state, pricing.price, pricing.startingPrice);
   return missing
     ? `An offer can't start ${OFFER_STATE_LABEL_LOWER[state]} with no ${missing}, and these offers are created without one. Start them as Preparing instead.`
@@ -6447,6 +6519,9 @@ export class GenerationChangedError extends OfferActionBlockedError {
 export interface GeneratedOffersInput {
   platformId: string;
   state: OfferState;
+  /** On Facebook, the group every new offer is an auction in and when it closes (#1663). */
+  facebookGroupId: string | null;
+  endsAt: Date | null;
   /** One entry per new offer: its sets, each a list of copies sold together. */
   newOffers: string[][][];
   /** Sets added to existing offers, one entry per offer, with the offer as the plan read it. */
@@ -6500,8 +6575,19 @@ export async function writeGeneratedOffers(
       await prepareOfferCreation(
         ownerId,
         collectionId,
-        // What `readOfferInput` makes of quick offer mode's form: a platform, a status, nothing else.
-        { platformId: input.platformId, url: null, price: "0.00", startingPrice: null, endsAt: null, currency: "", listingDate: null, state: input.state },
+        // What `readOfferInput` makes of quick offer mode's form: a platform, a status and — on
+        // Facebook — the group and its closing time (#1663), nothing else.
+        {
+          platformId: input.platformId,
+          url: null,
+          price: "0.00",
+          startingPrice: null,
+          endsAt: input.endsAt,
+          currency: "",
+          listingDate: null,
+          state: input.state,
+          facebookGroupId: input.facebookGroupId,
+        },
         { seedSets: sets }
       )
     );

@@ -8,6 +8,7 @@ import {
   type GeneratorPackaging,
 } from "@/lib/offer-generator-rules";
 import { OFFER_STATE_LABEL, type OfferState } from "@/lib/offer-rules";
+import type { FacebookCreateChoice } from "@/lib/facebook-post-rules";
 import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
@@ -146,6 +147,7 @@ export function OfferGeneratorDialog({
   platformId,
   platformName,
   state,
+  facebook,
   input,
   onClose,
   onDone,
@@ -154,6 +156,8 @@ export function OfferGeneratorDialog({
   platformId: string;
   platformName: string;
   state: OfferState;
+  /** On Facebook, the group every new offer is an auction in and when it closes (#1663). */
+  facebook: FacebookCreateChoice;
   input: OfferGeneratorInput;
   onClose: () => void;
   onDone: (outcome: OfferGeneratorOutcome) => void;
@@ -175,8 +179,9 @@ export function OfferGeneratorDialog({
         itemIds: input.kind === "ticked" ? input.itemIds : null,
         filters: input.kind === "filtered" ? input.filters : "",
         targets,
+        facebook,
       }).toString(),
-    [platformId, state, mode, packaging, input, targets]
+    [platformId, state, mode, packaging, input, targets, facebook]
   );
   const { data: preview, isLoading, isError } = useOfferGeneratorPreview(collectionId, query);
 

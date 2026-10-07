@@ -26,6 +26,7 @@ import { collidingItemIdsByOffer, type OfferMemberCopy } from "./offer-collision
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { LISTABLE_DELIVERY_STATES } from "./delivery-state";
 import { isCreatableOfferState, type OfferState } from "./offer-rules";
+import type { FacebookCreateChoice } from "./facebook-post-rules";
 
 // The choices ------------------------------------------------------------------------------------
 
@@ -483,6 +484,8 @@ export interface GeneratorRequest {
   itemIds: string[] | null;
   filters: string;
   targets: Record<string, string>;
+  /** The group every new offer is an auction in, and when it closes, on Facebook (#1663). */
+  facebook: FacebookCreateChoice;
 }
 
 export function generatorRequestParams(request: GeneratorRequest): URLSearchParams {
@@ -497,6 +500,8 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([lineId, offerId]) => `${lineId}:${offerId}`);
   if (targets.length > 0) params.set("targets", targets.join(","));
+  if (request.facebook.facebookGroupId) params.set("facebookGroupId", request.facebook.facebookGroupId);
+  if (request.facebook.endsAt) params.set("endsAt", request.facebook.endsAt);
   return params;
 }
 
@@ -524,6 +529,7 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     itemIds: sp.has("ids") ? (ids ?? "").split(",").filter(Boolean) : null,
     filters: sp.get("filters") ?? "",
     targets,
+    facebook: { facebookGroupId: sp.get("facebookGroupId"), endsAt: sp.get("endsAt") },
   };
 }
 
