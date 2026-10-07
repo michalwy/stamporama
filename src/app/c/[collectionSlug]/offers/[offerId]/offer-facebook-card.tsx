@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 import type { FacebookOfferKit } from "@/lib/facebook-auctions";
 import {
   facebookMoney,
+  isFacebookLotPosted,
   renderFacebookPostText,
   type FacebookPostLotText,
 } from "@/lib/facebook-post-rules";
 import { OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { ConfirmDialog, DialogPrimaryButton, DialogSecondaryButton } from "@/app/dialog-shell";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
@@ -20,8 +20,9 @@ import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-que
 import { FacebookResultDialog } from "./facebook-result-dialog";
 
 // A Facebook auction's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
-// alone, or as a numbered lot of a post holding several — the post's text and photos, each taken in
-// one click, and the post's link, which, pasted once the post is up, activates the offers in it.
+// alone, or as a numbered lot of a post holding several — and the post's text and photos, each taken
+// in one click. Where the post went up is the offer's own listing link (#1668): *Activate* in the
+// header asks for it, as on every platform, and for a lot it is written into every lot of the post.
 //
 // Facebook has no API for posting in groups, so the kit is the whole of posting: the collector pastes
 // the text and uploads the photos by hand. The text is rendered **here**, in the browser, because the
@@ -116,7 +117,6 @@ export function OfferFacebookCard({
 }) {
   const router = useRouter();
   const { invalidateAll: invalidateSales } = useInvalidateSales();
-  const [link, setLink] = useState("");
   const [bid, setBid] = useState("");
   const [resultOpen, setResultOpen] = useState(false);
   const [confirmNoBids, setConfirmNoBids] = useState(false);
@@ -138,9 +138,8 @@ export function OfferFacebookCard({
     return renderFacebookPostText(kit.group.postTemplate, kit.group.standingNote, lots);
   }, [kit]);
 
-  // Posted: a multi-lot post once its link is recorded, an offer posted alone once it is up.
-  const postedUrl = multiLot ? kit.post!.url : self.state === "active" || self.state === "paused" ? self.url : null;
-  const posted = multiLot ? kit.post!.url !== null : self.state !== "preparing" && self.state !== "ready";
+  // Posted: once any lot has gone up — the lots of a post go up together.
+  const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
   // What stands between the post and going up: every lot must be Ready, the gate publishing asks.
   const waiting = kit.lots.filter((l) => l.state !== "ready" && l.state !== "active");
 
@@ -156,7 +155,6 @@ export function OfferFacebookCard({
       const result = await task();
       if (result.status === "error") setError(result.message);
       else {
-        setLink("");
         setBid("");
         setConfirmNoBids(false);
         onChanged();
@@ -175,18 +173,6 @@ export function OfferFacebookCard({
     run(async () => {
       const { recordFacebookAuctionNoBidsAction } = await import("@/app/actions/facebook");
       return recordFacebookAuctionNoBidsAction(offerId);
-    });
-  }
-
-  function recordLink() {
-    run(async () => {
-      if (multiLot) {
-        const { recordFacebookPostLinkAction } = await import("@/app/actions/facebook");
-        const result = await recordFacebookPostLinkAction(kit.post!.id, link);
-        return result.status === "success" ? { status: "success" } : result;
-      }
-      const { publishOfferAction } = await import("@/app/actions/offers");
-      return publishOfferAction(offerId, link);
     });
   }
 
@@ -235,7 +221,7 @@ export function OfferFacebookCard({
                       {" "}
                       ·{" "}
                       <a href={lot.url} target="_blank" rel="noreferrer" style={{ color: "var(--color-accent)" }}>
-                        photo ↗
+                        link ↗
                       </a>
                     </>
                   )}
@@ -276,45 +262,25 @@ export function OfferFacebookCard({
         )}
       </div>
 
-      {/* The post's link: pasted once it is up, which activates the offers in it. */}
+      {/* Where the post went up: the offer's own listing link, asked by Activate (#1668). */}
       <div style={{ marginTop: "0.875rem" }}>
-        <p style={SECTION_LABEL}>Post link</p>
-        {posted && postedUrl ? (
-          <a href={postedUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.875rem", color: "var(--color-accent)", wordBreak: "break-all" }}>
-            {postedUrl} ↗
+        <p style={SECTION_LABEL}>Listing link</p>
+        {posted && self.url ? (
+          <a href={self.url} target="_blank" rel="noreferrer" style={{ fontSize: "0.875rem", color: "var(--color-accent)", wordBreak: "break-all" }}>
+            {self.url} ↗
           </a>
         ) : posted ? (
-          <p style={{ ...MUTED, margin: 0 }}>Up, with no link recorded — add it as the offer&apos;s listing URL.</p>
+          <p style={{ ...MUTED, margin: 0 }}>Up, with no link recorded — add the post&apos;s link as the listing link.</p>
         ) : (
-          <>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <TextInput
-                type="url"
-                placeholder="https://www.facebook.com/groups/…"
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                disabled={isPending || waiting.length > 0}
-                style={INPUT}
-                aria-label="Post link"
-              />
-              {waiting.length > 0 ? (
-                <DialogSecondaryButton disabled>Record link</DialogSecondaryButton>
-              ) : (
-                <DialogPrimaryButton type="button" disabled={isPending || !link.trim()} onClick={recordLink}>
-                  {isPending ? "Recording…" : "Record link"}
-                </DialogPrimaryButton>
-              )}
-            </div>
-            <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
-              {waiting.length > 0
-                ? multiLot
-                  ? `Every lot must be Ready first: ${waiting.map((l) => `lot ${l.lotNo}`).join(", ")}.`
-                  : "Mark the offer Ready first."
-                : multiLot
-                  ? `Recording it activates all ${kit.lots.length} lots.`
-                  : "Recording it activates the offer."}
-            </p>
-          </>
+          <p style={{ ...MUTED, margin: 0 }}>
+            {waiting.length > 0
+              ? multiLot
+                ? `Every lot must be Ready first: ${waiting.map((l) => `lot ${l.lotNo}`).join(", ")}.`
+                : "Mark the offer Ready first."
+              : multiLot
+                ? `The post's link. Activate asks for it once and it activates all ${kit.lots.length} lots.`
+                : "The post's link. Activate asks for it once the post is up."}
+          </p>
         )}
       </div>
 

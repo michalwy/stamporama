@@ -5,7 +5,8 @@
 Accepted. Designed with the collector on 2026-10-03 and written down by #1543, which builds the
 platform and its groups (§1, §6). The offer, the post and its kit are #1544 (§2, §3, §5), the running
 bid and the result #1545 (§4), the Assistant filling a post #1546 (§3), and several groups at once
-#1547 (§5). §6 is amended by #1661: a group's settings follow the platform's unless set custom.
+#1547 (§5). §6 is amended by #1661: a group's settings follow the platform's unless set custom. §3
+is amended by #1668: the post's link is recorded as the offer's own listing link, asked by *Activate*.
 
 ## Context
 
@@ -44,7 +45,9 @@ an exception.
 ### 3. Posting starts as a kit to paste
 
 The app prepares the post's text from the group's template and the photos to download; the collector
-posts by hand and records the post's link. **The Assistant filling in the post comes later**, as a
+posts by hand and records the post's link — as the offer's own listing link, which *Activate* asks
+for as on every platform (#1668); for a post holding several lots it is given once and written into
+every lot that has no link of its own. **The Assistant filling in the post comes later**, as a
 step of its own (#1546), and never presses *Post* itself.
 
 ### 4. The running bid is recorded by hand, and the result when it ends
@@ -122,6 +125,8 @@ apart, offered to no new auction, and brought back with one click. `Offer.facebo
   none follows the lock.
 - A post holding several lots is a `FacebookPost` row (#1544) and a single post is not: an offer
   posted alone carries its post's link as its own `url`. The lots share their group and closing time;
-  the closing time is kept on each lot's `endsAt` and written to all of them together.
+  the closing time is kept on each lot's `endsAt` and written to all of them together. **Amended by
+  #1668:** the post's link is likewise each lot's own `url` — the post row kept it in a column of its
+  own until then, which the collector saw as a second field for one address.
 - Moving the Facebook marker to another contact leaves the groups with the contact that owns them,
   as Delcampe's profiles are left; the page then shows the new platform's groups, which start empty.

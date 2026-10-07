@@ -469,7 +469,10 @@ export function OfferDetailPanel({
   // it is in the clipboard, so activating asks for it exactly as the bulk listing workspace does
   // (#322) — but only while the offer carries none. One that already has a URL has nothing to hand
   // over, and the header's own field takes a correction.
-  const needsUrlToActivate = offer.state === "ready" && !offer.url;
+  // A lot of a Facebook post holding several is asked every time (#1668): Activate takes the whole
+  // post live, and the link it asks for is the post's — the lot's own, if it has one, is its photo's.
+  const facebookPostLots = offer.facebook?.post ? offer.facebook.lots.length : null;
+  const needsUrlToActivate = offer.state === "ready" && (!offer.url || facebookPostLots !== null);
 
   /** Patch a single header field in place, then refresh. */
   function patch(
@@ -1510,7 +1513,8 @@ export function OfferDetailPanel({
         <ActivateOfferDialog
           offerLabel={offer.name ?? offer.label}
           platformName={offer.platformName}
-          initialUrl={offer.url}
+          initialUrl={facebookPostLots !== null ? null : offer.url}
+          facebookLots={offer.facebook ? (facebookPostLots ?? 1) : null}
           isPending={isPending}
           error={actionError}
           onClose={() => {

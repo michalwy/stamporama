@@ -99,20 +99,30 @@ read together.
   fails with the activation guard removed (checked when written). Another platform holding the same
   copy is not asked: listing in two places is the collector's business.
 
-- **A multi-lot post is a row; a single post is not** (ADR-0061 §2). `FacebookPost` (group, `url`)
+- **A multi-lot post is a row; a single post is not** (ADR-0061 §2). `FacebookPost` (group only)
   exists only for several lots; its lots are offers with `facebookPostId` + `facebookLotNo`, unique
   per post. An offer posted alone has no post row and its own `url` is the post's link, so publishing
-  it is the ordinary `publishOffer`. The **closing time stays on each offer** (`endsAt`, where the
+  it is the ordinary `publishOffer`. **The post's link is every lot's own `url` too** (#1668, decided
+  with the collector on 2026-10-07): the post's own column and the card's *Post link* field were a
+  second field for one address, and both are gone — the migration moved a recorded post link into
+  each lot whose `url` was empty, then dropped the column. A post is up once any lot is
+  (`isFacebookLotPosted`, past Ready), the same reading `facebookPostRefusal` already used. The **closing time stays on each offer** (`endsAt`, where the
   ended-auction flag and every list read it) and `updateOffer` writes it to every lot of the post —
   one fact written in several places rather than a second column readers would have to join.
   `detachFacebookLot` is the one way out: renumbers in two passes (the unique index), dissolves a
   post left with one lot, and runs on take-out and on `deleteOffer`.
 
-- **Posting a multi-lot post goes through `setOfferState` per lot** (`facebook-posts.ts`, which
-  imports `offers.ts`; `facebook-auctions.ts` is the half `offers.ts` imports — keep it that way, lib
-  cycles throw at module-init). Every lot must be `ready` or already `active` before anything moves;
-  ready lots are activated one by one, then the link is written, so a refusal halfway through is
-  finished by pasting again. A posted post's lots cannot be taken out.
+- **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
+  `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot
+  is `publishFacebookPost`, which goes through `setOfferState` per lot (`facebook-posts.ts` imports
+  `offers.ts`; `facebook-auctions.ts` is the half `offers.ts` imports — keep it that way, lib cycles
+  throw at module-init). Every lot must be `ready` or already `active` before anything moves; ready
+  lots are activated one by one, then the link is written into **every lot with no `url` of its own**
+  — a lot carrying its own photo's link keeps it — so a refusal halfway through is finished by
+  activating again. A blank link activates and writes nothing, as on every platform. On the offer's
+  screen a lot is asked for the link every time, starting blank (its own `url`, if any, is its
+  photo's); an offer posted alone is asked only while it has no `url`, the ordinary rule. A posted
+  post's lots cannot be taken out.
 
 - **The kit's text is rendered in the browser** (`renderFacebookPostText`, pure): `{closesAt}` is a
   local time and the browser is the only place the zone is known (#490's rule). `{description}` is

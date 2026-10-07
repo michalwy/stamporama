@@ -6,6 +6,7 @@ import {
   facebookDefaultStartingPrice,
   facebookMoney,
   facebookPostRefusal,
+  isFacebookLotPosted,
   parseBidIncrement,
   readFacebookCreateChoice,
   renderFacebookLotText,
@@ -121,6 +122,14 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
   it("writes a figure with its currency, and nothing for none", () => {
     assert.equal(facebookMoney("1.00", "PLN"), "1.00 PLN");
     assert.equal(facebookMoney(null, "PLN"), "");
+  });
+});
+
+describe("isFacebookLotPosted (#1668)", () => {
+  it("reads a lot as up once it is past Ready", () => {
+    assert.equal(isFacebookLotPosted("preparing"), false);
+    assert.equal(isFacebookLotPosted("ready"), false);
+    for (const state of ["active", "paused", "sold", "withdrawn"]) assert.equal(isFacebookLotPosted(state), true);
   });
 });
 
