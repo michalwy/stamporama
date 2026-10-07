@@ -201,6 +201,15 @@ export interface OfferPhotoConfigInput {
   photoLabelLeftTemplate: string | null;
   photoLabelRightTemplate: string | null;
   collage: OfferCollageValues | null;
+  /** Whether symbols are covered on this listing's photos (#1665): null follows the platform, read
+   *  live; true or false overrides it. Left out of a write, it is left as it is. */
+  coverSymbols?: boolean | null;
+}
+
+/** The cover override as the settings dialog posts it: `on`, `off`, or anything else for *follow
+ *  the platform*. */
+export function parseCoverSymbolsOverride(raw: string | null | undefined): boolean | null {
+  return raw === "on" ? true : raw === "off" ? false : null;
 }
 
 /**
@@ -220,8 +229,11 @@ export function parseOfferPhotoConfigInput(raw: {
   collageGapPercent: string;
   collageBackground: string;
   collageLabelPercent: string;
+  /** `on` | `off` | blank (follow the platform), #1665. */
+  coverSymbols?: string;
 }): PhotoConfigParseResult<OfferPhotoConfigInput> {
   const photoSides = normalizePhotoSides(raw.photoSides);
+  const coverSymbols = parseCoverSymbolsOverride(raw.coverSymbols);
   const preferSingles = isChecked(raw.preferSingles);
   const photoLabelLeftTemplate = raw.photoLabelLeftTemplate.trim() || null;
   const photoLabelRightTemplate = raw.photoLabelRightTemplate.trim() || null;
@@ -245,6 +257,7 @@ export function parseOfferPhotoConfigInput(raw: {
         photoLabelLeftTemplate,
         photoLabelRightTemplate,
         collage: null,
+        coverSymbols,
       },
     };
   }
@@ -304,6 +317,7 @@ export function parseOfferPhotoConfigInput(raw: {
         collageBackground: background,
         collageLabelPercent: labelPercent.value,
       },
+      coverSymbols,
     },
   };
 }

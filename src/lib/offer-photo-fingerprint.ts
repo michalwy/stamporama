@@ -104,6 +104,13 @@ export interface OfferPhotoFingerprintInput {
    * leaving it out keeps every such offer hashing exactly as it did before this existed.
    */
   renderedTokens?: readonly string[];
+  /**
+   * The covers drawn into the images (#1665): one row per source photo carrying covers, from
+   * `coverFingerprintRows`. Passed only for an offer that applies covers, and empty unless a photo it
+   * renders actually has one — so neither the upgrade nor a photo marked *nothing to cover* changes
+   * the hash of an image that is unchanged by a pixel.
+   */
+  covers?: readonly (readonly [string, readonly (readonly [string, string, number, number, number, number])[]])[];
 }
 
 /** One manual attachment as the fingerprint sees it: what it shows, from which copy, and where it
@@ -192,6 +199,7 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
   // grouped before the flag existed, and the migration leaves already-rendered offers there — so
   // nothing generated under the old rule is declared stale by the upgrade alone.
   if (input.preferSingles) payload.push(["singles"]);
+  if (input.covers && input.covers.length > 0) payload.push(["covers", input.covers]);
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }

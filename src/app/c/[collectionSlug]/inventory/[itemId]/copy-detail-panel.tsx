@@ -29,7 +29,7 @@ import { RelatedWantsCard } from "@/app/c/[collectionSlug]/wants/related-wants-c
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { buildLocationPath } from "@/app/c/[collectionSlug]/shared/location-helpers";
-import { PhotoStrip } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { CopyPhotosCard } from "./copy-photos-card";
 import {
   useCollectionCertificateStatuses,
   useCollectionItemNoPad,
@@ -434,9 +434,7 @@ export function CopyDetailPanel({
               <div style={{ fontSize: "0.875rem", whiteSpace: "pre-wrap" }}>{item.notes}</div>
             </DetailCard>
 
-            <DetailCard title="Photos" count={item.photos.length} empty={item.photos.length === 0}>
-              <PhotoStrip collectionId={collectionId} photos={item.photos} size="7rem" />
-            </DetailCard>
+            <CopyPhotosCard collectionId={collectionId} itemId={item.id} photos={item.photos} />
 
             <CatalogPricesCard target={{ kind: "stamp", stampId: item.stampId }} />
           </DetailColumn>

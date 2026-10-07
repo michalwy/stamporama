@@ -63,7 +63,8 @@ import {
 } from "@/lib/offer-rules";
 import { isEmptiedListing, isListedState } from "@/lib/offer-listing-drift";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
-import { isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
+import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
+import { OfferCoverWalk } from "./offer-cover-walk";
 import { describeCommittedCopies } from "@/lib/trade-reservation-rules";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -276,6 +277,8 @@ export function OfferDetailPanel({
   // effect is a chip disappearing or a state word changing at the top of a long page.
   const { toast } = useToast();
   const [composing, setComposing] = useState(false);
+  // The cover walk opened from beside Mark ready (#1665).
+  const [checkingCovers, setCheckingCovers] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   // Quick-sell (#390): the Offer list's own flow (#225), opened from here so recording a sale does
   // not mean navigating back to the list first. The same flow sells a **single set** (#473) when it
@@ -432,6 +435,9 @@ export function OfferDetailPanel({
   // withhold it. What is left is the gate's other half, which is nobody's errand but the
   // collector's: a wrong grade or an over-long title is fixed before anything is posted.
   const photoGap = readyBlockers.some(isPhotoReadinessBlocker);
+  // Photos never checked for symbols (#1665) — the one ready-gate reason fixed in a dialog that opens
+  // right here, so the button beside Mark ready opens it, saying how many are left.
+  const coverBlocker = readyBlockers.find(isCoverReadinessBlocker) ?? null;
   const listingReadyBlockers = readyBlockers.filter((b) => !isPhotoReadinessBlocker(b));
   // Listing straight out of **Preparing** (#554): the collector who has just finished assembling an
   // offer wants to post it, and making them press **Mark ready** first is a click that decides
@@ -855,6 +861,26 @@ export function OfferDetailPanel({
                 </Tooltip>
               );
             })()}
+            {coverBlocker && (
+              <Tooltip content={coverBlocker.message} maxWidth="26rem">
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setCheckingCovers(true)}
+                  style={{ ...QUICK_ADVANCE_BTN, opacity: isPending ? 0.55 : 1 }}
+                >
+                  Check {coverBlocker.count} photo{coverBlocker.count === 1 ? "" : "s"}
+                </button>
+              </Tooltip>
+            )}
+            {checkingCovers && (
+              <OfferCoverWalk
+                collectionId={collectionId}
+                offerId={offer.id}
+                mode="unchecked"
+                onClose={() => setCheckingCovers(false)}
+              />
+            )}
             {/* The same handoff the bulk workspace offers (#407/#414). A single listing is routinely
                 posted from here rather than from a batch, and a step offered on one screen only is
                 the step that gets skipped on the other — the same reasoning that made activation ask
@@ -1302,6 +1328,7 @@ export function OfferDetailPanel({
         photoConfig={offer.photoConfig}
         photoLimits={offer.platformPhotoLimits}
         platformName={offer.platformName}
+        platformCoverSymbols={offer.platformCoverSymbols}
         offerState={offer.state}
       />
 

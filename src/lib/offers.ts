@@ -100,7 +100,9 @@ import {
   type DelcampeOfferListingConfig,
 } from "./delcampe-offer-listing";
 import {
+  evaluateCoverReadiness,
   evaluatePhotoReadiness,
+  type CoverReadinessBlocker,
   type ListingCardBlocker,
   type PhotoReadinessBlocker,
   type ReadyBlocker,
@@ -3538,9 +3540,13 @@ async function readReadyBlockers(collectionId: string, offerId: string): Promise
 
 /** The photo half of the ready gate (#311) for one offer: the plan's state, judged by the pure
  *  rules. Empty for an offer that has vanished under the read. */
-async function readOfferPhotoBlockers(offerId: string): Promise<PhotoReadinessBlocker[]> {
+async function readOfferPhotoBlockers(
+  offerId: string
+): Promise<(PhotoReadinessBlocker | CoverReadinessBlocker)[]> {
   const readiness = await readOfferPhotoReadiness(offerId);
-  return readiness ? evaluatePhotoReadiness(readiness) : [];
+  return readiness
+    ? [...evaluatePhotoReadiness(readiness), ...evaluateCoverReadiness(readiness.uncheckedCoverCount)]
+    : [];
 }
 
 type AreaLinkedSet = {
@@ -3868,6 +3874,9 @@ export interface OfferDetail {
   /** This listing's own photo configuration (#308) — sides, tile label template and the collage
    * numbers copied from a template. Seeded at creation, edited from the photo-settings dialog. */
   photoConfig: OfferPhotoConfigInput;
+  /** Whether the platform needs symbols covered on its offers' photos (#1665), read live — what
+   * `photoConfig.coverSymbols` null follows. */
+  platformCoverSymbols: boolean;
   /** The platform's hard photo limits (#308), read **live** rather than from the offer: they say
    * what the platform accepts today, and the renderer (#310) obeys the current values. */
   platformPhotoLimits: PlatformPhotoLimits;
@@ -4076,6 +4085,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       collageGapPercent: true,
       collageBackground: true,
       collageLabelPercent: true,
+      coverSymbols: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: {
         select: {
@@ -4087,6 +4097,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
           maxPhotos: true,
           maxPhotoEdge: true,
           maxPhotoFileSizeMib: true,
+          coverSymbols: true,
           maxTitleLength: true,
           maxDescriptionLength: true,
           maxPrivateNoteLength: true,
@@ -4446,7 +4457,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
               collageLabelPercent: offer.collageLabelPercent,
             }
           : null,
+      coverSymbols: offer.coverSymbols,
     },
+    // The platform's cover rule (#1665), read live: what an offer following it gets.
+    platformCoverSymbols: offer.platform.coverSymbols,
     platformPhotoLimits: {
       maxPhotos: offer.platform.maxPhotos,
       maxPhotoEdge: offer.platform.maxPhotoEdge,
@@ -5836,6 +5850,7 @@ export async function updateOfferPhotoConfig(
       collageGapPercent: config.collage?.collageGapPercent ?? null,
       collageBackground: config.collage?.collageBackground ?? null,
       collageLabelPercent: config.collage?.collageLabelPercent ?? null,
+      coverSymbols: config.coverSymbols,
     },
   });
 }

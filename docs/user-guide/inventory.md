@@ -1629,6 +1629,10 @@ space reserved for photos, giving you one large, easy target to drop the first f
 Once at least one photo is attached, the strip of photo cards returns above a normal-sized
 add-photos area.
 
+Once a copy has been [listed on an offer that covers symbols](offers.md#covering-symbols), its page
+shows **Offer covers** on the Photos card: tick it to see the covers laid over the photos, and click
+a photo to change them. The photo itself never changes — covers are only drawn into offer images.
+
 Accepted formats are **JPEG, PNG, and WebP**, up to **200 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.
 

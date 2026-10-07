@@ -3718,6 +3718,13 @@ model Photo {
   sizeBytes      Int
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
+  /** When the collector last went over this photo for symbols to cover (#1665) — with covers drawn
+   * or marked *nothing to cover*, both of which count as checked. Null is *never checked*, which is
+   * every photo that existed before covers did. Meaningful on a copy's photo only. */
+  coversCheckedAt DateTime? @map("covers_checked_at")
+  /** Areas hidden on the **offer** images rendered from this photo (#1665); the photo itself, and
+   * whatever shows it as the copy's or the stamp's photo, never changes. */
+  covers PhotoCover[]
 
   item  Item?  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   stamp Stamp? @relation(fields: [stampId], references: [id], onDelete: Cascade)
@@ -3737,6 +3744,31 @@ model Photo {
   @@index([offerId])
   @@index([tileId])
   @@map("photo")
+}
+
+// One area of a copy's photo hidden on offer images (#1665; ADR-0066): a layer kept with the photo
+// and applied only when an offer that needs covers renders it, so the work done once for a piece is
+// reused by every later listing of it. Geometry is in **fractions of the photo** (0–1), so it does
+// not depend on which derivative it is drawn over; a saved photo's bytes never change (#1006), so
+// the fractions stay true. Replaced whole on every save of the photo's covers.
+model PhotoCover {
+  id        String   @id @default(cuid())
+  photoId   String   @map("photo_id")
+  // `rect` | `ellipse`.
+  shape     String
+  // `pixelate` | `blur` | `bar`.
+  style     String
+  x         Float
+  y         Float
+  width     Float
+  height    Float
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  photo Photo @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@index([photoId])
+  @@map("photo_cover")
 }
 
 // Staging row for an eager, pre-Save photo upload (#112). On drop, the file is processed by
@@ -4894,6 +4926,12 @@ model Offer {
   // upload set. They take no upload number, are absent from the plan's ZIP, and do not count toward
   // the platform's photo limit, so hiding one can let a truncated image back in.
   photoPlanUnpublished String[] @default([])
+  // Whether this listing's photos must have symbols covered (#1665) — **an override of the
+  // platform's `Contact.coverSymbols`, read live**, not a seeded copy: null follows the platform,
+  // true and false override it either way. A platform's rules are a fact about the platform (#310),
+  // so turning the flag on reaches every listing still following it at once. The covers themselves
+  // live on the copy's photo (`PhotoCover`), never on the offer.
+  coverSymbols Boolean?
   // Which Allegro listing profile (#486) this listing is published with — the seller-side settings
   // no offer has any notion of: the shipping rate set, the after-sales services, where the parcel is
   // sent from. Null is the ordinary case and means *the platform's default*, which is what almost
@@ -6349,6 +6387,12 @@ model Contact {
   // platform's photo limit is exactly the fact the rule reads, so the platform is where a collector
   // who always wants collages says so once.
   photoPreferSingles Boolean @default(true)
+  // Whether offers on this platform need symbols covered on their photos (#1665) — on for Facebook,
+  // whose rules punish a swastika or a portrait of Hitler on German Reich material. **Read live**,
+  // like the limits above, and overridable per offer (`Offer.coverSymbols`). `coverStyle` is the
+  // style a newly drawn cover starts as (`pixelate` | `blur` | `bar`); each cover keeps its own.
+  coverSymbols Boolean @default(false)
+  coverStyle   String  @default("pixelate")
   tileLabelLeftTemplate String?
   tileLabelRightTemplate String?
   // Which collage template (#307) a new offer on this platform copies its render numbers from.

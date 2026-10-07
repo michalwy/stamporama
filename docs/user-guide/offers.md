@@ -550,6 +550,11 @@ listing:
 
 Rows × columns is a maximum, not a frame in either grid: fewer stamps simply make a smaller image.
 
+**Cover symbols** at the top says whether symbols are covered on this listing's photos. The first
+choice, named after the platform (*As Facebook (covered)*), follows the platform's own setting and
+keeps following it; *Covered on this offer*
+and *Not covered on this offer* override it either way. See [covering symbols](#covering-symbols).
+
 Changing any of these puts images you have already generated **out of date**, so the dialog's footer
 carries **Regenerate photos after saving**, ticked by default — saving then queues the run for you
 and the Save button reads **Save & regenerate**. Untick it when the settings should change but the
@@ -834,6 +839,49 @@ title yet falls back to a short piece of its id, so two untitled offers still do
 
 The numbering is Stamporama's own. On the platform, an image sits wherever it was uploaded, and that
 is fine: nothing depends on the numbers matching afterwards.
+
+### Covering symbols
+
+Some platforms punish photos showing certain symbols — Facebook warns over a portrait of Hitler or a
+swastika on German Reich material. On a platform set to
+[cover symbols](contacts.md#offer-photos), or an offer you set to *Covered* in its
+[photo settings](#photo-settings), you cover them on the photos **of the offer** — the copy's and
+the stamp's own photos never change.
+
+**Each photo is checked once.** The Photos card says how many of the photos the offer's images are
+made from have not been checked yet, and **Check N photos** in its header (also beside **Mark
+ready** while those photos are what holds the offer back) walks you through them one at a time:
+
+- The photo is shown large. **Drag** across a symbol to cover it; drag a cover to move it, its
+  corners to resize it, and press **Delete** to remove the selected one. **R** and **E** switch the
+  next cover between a rectangle and an ellipse.
+- Each cover is **pixelated**, **blurred** or a **solid bar** — chosen per cover in the toolbar,
+  starting as the platform's *New covers start as*. What you see in the editor is an indication; the
+  real one is drawn into the offer's images.
+- **Enter** saves the photo and brings the next. With nothing drawn the button reads **Nothing to
+  cover** — that counts as checked too, so a photo with nothing to hide is never asked about again.
+  **Skip** and **Previous** move without saving.
+- The counter says how many are left. Only the sides the offer actually photographs are asked
+  about, plus any extra you attached on its own; an image you uploaded to the offer is not a copy's
+  photo and is never asked.
+
+**Covers are remembered.** They are kept with the copy's photo, so listing the same piece again —
+on this offer or another — needs nothing redone, and a hundred-stamp lot is a walk you make once.
+Photos added to the collection before covers existed simply start unchecked.
+
+**Every image the offer generates applies them**: single photos, collages, paired cells and
+attachments alike. Changing a cover marks the stored images **out of date**, like any other change;
+the walk's **Regenerate photos when done** (ticked by default) queues the new run when you close it
+having saved something.
+
+**An offer needing covers cannot be marked Ready while any of its photos is unchecked** — the ready
+button's hint says how many. Marking a photo *nothing to cover* changes no image, so it does not make
+anything out of date.
+
+To look at the covers again, press **Covers** (once every photo is checked) or **Review every photo**
+under the card's summary — the walk then shows every photo, checked ones included. A copy's own page
+shows them too: tick **Offer covers** on its Photos card to see them laid over the photos, and click
+a photo to edit them there.
 
 ### When the listing is over
 

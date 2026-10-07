@@ -578,6 +578,14 @@ field blank when the platform states no limit for it. These are read **live** wh
 generated, so tightening a limit applies to every offer at once, including ones you prepared
 earlier.
 
+**Cover symbols on offer photos** says whether this platform's offers need symbols covered on their
+photos — a swastika or a portrait on German Reich material, which Facebook's rules punish. Like the
+limits it is read **live**: turning it on reaches every offer on the platform that has not said
+otherwise. **New covers start as** picks the style a newly drawn cover begins with — *Pixelate*,
+*Blur* or *Solid bar* — and each cover can still be changed on its own. The platform you name as
+Facebook in Settings starts with it ticked. See
+[Offers → Covering symbols](offers.md#covering-symbols).
+
 Below them sit the defaults each **new** offer on this platform is seeded from:
 
 - **Sides to photograph** — *Front only*, *Back only*, *Front and back*, or *Front and back,

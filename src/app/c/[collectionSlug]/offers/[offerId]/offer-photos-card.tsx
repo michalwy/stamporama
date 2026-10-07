@@ -6,6 +6,7 @@ import { formatBytes } from "@/lib/format-bytes";
 import { PhotoLightbox, ThumbPreview, THUMB_OBJECT_FIT } from "../../inventory/photo-thumb";
 import { PhotoSettingsDialog } from "./photo-settings-dialog";
 import { AddAttachmentDialog } from "./add-attachment-dialog";
+import { OfferCoverWalk } from "./offer-cover-walk";
 import {
   useReorderList,
   showLineAt,
@@ -99,6 +100,17 @@ const NOTE: React.CSSProperties = {
 };
 
 /** Separates the card's two lists: the plan (what Generate would produce) and the stored files. */
+/** An inline action inside a sentence of the card's notes. */
+const LINK_BTN: React.CSSProperties = {
+  padding: 0,
+  border: "none",
+  background: "none",
+  color: "var(--color-accent)",
+  cursor: "pointer",
+  fontSize: "inherit",
+  textDecoration: "underline",
+};
+
 const SECTION_HEADING: React.CSSProperties = {
   margin: "0.25rem 0 0",
   fontSize: "0.75rem",
@@ -785,6 +797,7 @@ export function OfferPhotosCard({
   photoConfig,
   photoLimits,
   platformName,
+  platformCoverSymbols,
   offerState,
 }: {
   collectionId: string;
@@ -793,6 +806,8 @@ export function OfferPhotosCard({
   photoConfig: OfferPhotoConfigInput;
   photoLimits: PlatformPhotoLimits;
   platformName: string;
+  /** The platform's cover rule (#1665), for the settings dialog's *follow the platform*. */
+  platformCoverSymbols: boolean;
   /** Where the offer is in its lifecycle: while `preparing` the images are the work in hand, so the
    * card opens by default instead of collapsed. */
   offerState: string;
@@ -820,7 +835,7 @@ export function OfferPhotosCard({
   // the answer the detail query already arrived with, and every offer list on the collection would be
   // a lot of refetching for one button.
   const readiness = plan
-    ? `${plan.status}|${plan.outOfDate}|${plan.images.length}|${plan.plan.imageCount}`
+    ? `${plan.status}|${plan.outOfDate}|${plan.images.length}|${plan.plan.imageCount}|${plan.covers.uncheckedCount}`
     : null;
   const lastReadiness = useRef<string | null>(null);
   useEffect(() => {
@@ -835,6 +850,8 @@ export function OfferPhotosCard({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | undefined>();
   const [attachOpen, setAttachOpen] = useState(false);
+  // The cover walk (#1665): the unchecked photos, or every one to revisit.
+  const [coverWalk, setCoverWalk] = useState<"unchecked" | "all" | null>(null);
   const [attachError, setAttachError] = useState<string | undefined>();
   // What the last "one photo per copy" run did (#434) — kept until the next one, because the copies
   // it could not cover are the point of the action having an answer at all.
@@ -924,6 +941,7 @@ export function OfferPhotosCard({
       config={photoConfig}
       limits={photoLimits}
       platformName={platformName}
+      platformCoverSymbols={platformCoverSymbols}
       isPending={isPending}
       error={settingsError}
       onClose={() => !isPending && setSettingsOpen(false)}
@@ -1063,6 +1081,17 @@ export function OfferPhotosCard({
                       : `${plan.plan.skipped.length} sides skipped`,
                     "A group has no complete set of scans for that side — expand for which copies"
                   ))}
+            {/* Collapsed, this is what says photos still wait to be checked for symbols (#1665) —
+                the reason the offer cannot be marked ready. */}
+            {plan.covers.needed &&
+              plan.covers.uncheckedCount > 0 &&
+              tinted(
+                "warning",
+                plan.covers.uncheckedCount === 1
+                  ? "1 photo to check"
+                  : `${plan.covers.uncheckedCount} photos to check`,
+                "This platform needs symbols covered — check each photo before marking the offer ready"
+              )}
             {stored > 0 && (
               <span style={{ ...NOTE, fontSize: "0.75rem" }}>
                 {stored} image{stored === 1 ? "" : "s"} · {formatBytes(storedBytes)}
@@ -1108,6 +1137,28 @@ export function OfferPhotosCard({
               {stored > 0 ? "Regenerate" : "Generate"}
             </button>
           </Tooltip>
+          {/* Covering symbols (#1665): the walk through the unchecked photos while there are any, a
+              revisit of every one afterwards. Offered only where the offer needs covers. */}
+          {plan.covers.needed && plan.covers.photoCount > 0 && (
+            <Tooltip
+              content={
+                plan.covers.uncheckedCount > 0
+                  ? "Go through the photos not yet checked, covering what must not show"
+                  : "Revisit the covers on this offer's photos"
+              }
+            >
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setCoverWalk(plan.covers.uncheckedCount > 0 ? "unchecked" : "all")}
+                style={{ ...BTN, opacity: isPending ? 0.5 : 1, cursor: isPending ? "default" : "pointer" }}
+              >
+                {plan.covers.uncheckedCount > 0
+                  ? `Check ${plan.covers.uncheckedCount} photo${plan.covers.uncheckedCount === 1 ? "" : "s"}`
+                  : "Covers"}
+              </button>
+            </Tooltip>
+          )}
           {/* Photo settings (#308) live here rather than in the offer's ⋮ menu: the configuration is
               what this card renders from, so it is edited where its effect is read. */}
           <Tooltip content="Photo settings — sides, tile label and collage numbers" align="end">
@@ -1141,6 +1192,23 @@ export function OfferPhotosCard({
             <p style={NOTE}>
               The stored images no longer match this offer. They are kept and served unchanged —
               regenerate when you are ready to re-upload them to the platform.
+            </p>
+          )}
+
+          {plan.covers.needed && plan.covers.photoCount > 0 && (
+            <p style={NOTE}>
+              Symbols are covered on this offer&apos;s images:{" "}
+              {plan.covers.uncheckedCount === 0
+                ? `all ${plan.covers.photoCount} photos checked.`
+                : `${plan.covers.photoCount - plan.covers.uncheckedCount} of ${plan.covers.photoCount} photos checked.`}{" "}
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setCoverWalk("all")}
+                style={LINK_BTN}
+              >
+                Review every photo
+              </button>
             </p>
           )}
 
@@ -1240,6 +1308,14 @@ export function OfferPhotosCard({
 
       {settingsDialog}
       {attachDialog}
+      {coverWalk && (
+        <OfferCoverWalk
+          collectionId={collectionId}
+          offerId={offerId}
+          mode={coverWalk}
+          onClose={() => setCoverWalk(null)}
+        />
+      )}
     </div>
   );
 }
