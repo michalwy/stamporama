@@ -6,7 +6,6 @@ import {
   addOfferSet,
   createOffer,
   deleteOffer,
-  getOfferDetail,
   setOfferState,
   updateOffer,
   type OfferInput,
@@ -26,14 +25,14 @@ import {
 import { getFacebookOfferKit, listFacebookGroupChoices } from "../../src/lib/facebook-auctions";
 import {
   createFacebookPost,
-  recordFacebookPostLink,
+  publishOfferOrPost,
   removeFacebookLot,
 } from "../../src/lib/facebook-posts";
 
 // A Facebook auction offer (#1544; ADR-0061 §2, §3, §5). The rules worth a database: an offer on
 // Facebook names a group in use and starts from its defaults — its currency over the platform's —
 // a copy is in one Facebook auction that is up at a time, and several auctions in one group become
-// one post whose link activates them all. The pure half is `tests/unit/facebook-post-rules.test.ts`.
+// one post that goes up together, its link written into each lot's own listing link (#1668). The pure half is `tests/unit/facebook-post-rules.test.ts`.
 
 function groupValues(overrides: Partial<FacebookGroupValues> = {}): FacebookGroupValues {
   return {
@@ -156,6 +155,7 @@ describe("Facebook auction offers (#1544)", () => {
         facebookLotNo: true,
         endsAt: true,
         state: true,
+        url: true,
       },
     });
 
@@ -341,29 +341,37 @@ describe("Facebook auction offers (#1544)", () => {
     assert.match(kit!.photoZipPath, new RegExp(`/facebook-posts/${postId}/photos/zip$`));
   });
 
-  it("activates every lot when the post's link is recorded, once every lot is Ready", async () => {
+  it("activates every lot from any one of them, writing the post's link into each lot without its own", async () => {
+    const link = "https://www.facebook.com/groups/1/posts/2";
+    const photo = "https://www.facebook.com/photo/?fbid=3";
     const a = await auction([await newItem()], "ready");
     const b = await auction([await newItem()]);
-    const { postId } = await createFacebookPost(userId, collectionId, [a, b]);
+    const c = await auction([await newItem()], "ready");
+    await prisma.offer.update({ where: { id: c }, data: { url: photo } });
+    await createFacebookPost(userId, collectionId, [a, b, c]);
 
-    await assert.rejects(
-      () => recordFacebookPostLink(userId, postId, "https://www.facebook.com/groups/1/posts/2"),
-      /Every lot must be Ready.*lot 2/
-    );
+    await assert.rejects(() => publishOfferOrPost(userId, a, link), /Every lot must be Ready.*lot 2/);
     assert.equal((await read(a)).state, "ready", "nothing moved");
+    assert.equal((await read(a)).url, null, "nor was the link written");
 
     await setOfferState(userId, b, "ready");
-    const { activated } = await recordFacebookPostLink(userId, postId, "https://www.facebook.com/groups/1/posts/2");
-    assert.equal(activated, 2);
-    assert.equal((await read(a)).state, "active");
-    assert.equal((await read(b)).state, "active");
-    const post = await prisma.facebookPost.findUniqueOrThrow({ where: { id: postId } });
-    assert.equal(post.url, "https://www.facebook.com/groups/1/posts/2");
+    await publishOfferOrPost(userId, b, link);
+    for (const id of [a, b, c]) assert.equal((await read(id)).state, "active");
+    assert.equal((await read(a)).url, link);
+    assert.equal((await read(b)).url, link);
+    assert.equal((await read(c)).url, photo, "a lot with its own photo's link keeps it");
 
     // Up, the lots are what was posted.
     await assert.rejects(() => removeFacebookLot(userId, a), /post is up/);
-    const detail = await getOfferDetail(userId, a);
-    assert.equal(detail?.facebook?.post?.url, post.url);
+  });
+
+  it("activates an auction posted alone the ordinary way, its link the listing link", async () => {
+    const link = "https://www.facebook.com/groups/1/posts/9";
+    const a = await auction([await newItem()], "ready");
+    await publishOfferOrPost(userId, a, link);
+    const offer = await read(a);
+    assert.equal(offer.state, "active");
+    assert.equal(offer.url, link);
   });
 
   it("renumbers the lots when one leaves, and dissolves a post left with one", async () => {

@@ -1,16 +1,16 @@
 import "server-only";
 import { prisma } from "./db";
 import { detachFacebookLot } from "./facebook-auctions";
-import { facebookPostRefusal } from "./facebook-post-rules";
-import { isFacebookGroupUrl } from "./facebook-group-rules";
-import { OfferActionBlockedError, setOfferState } from "./offers";
+import { facebookPostRefusal, isFacebookLotPosted } from "./facebook-post-rules";
+import { OfferActionBlockedError, publishOffer, setOfferState } from "./offers";
 
 // A post holding several lots in one Facebook group (#1544; ADR-0061 §2, §3).
 //
 // The lots are ordinary Facebook auction offers; what a post adds is that they go up **together**:
-// one group, one closing time, numbered in the order they were put in, and one link that — pasted
-// once the post is up — activates all of them. An offer posted alone needs none of this; its own
-// header records its link and activates it the way every other listing is published.
+// one group, one closing time, numbered in the order they were put in, and one activation that takes
+// all of them live. The post's link is each lot's own listing link (#1668), given once when any lot is
+// activated. An offer posted alone needs none of this; it is activated and its link recorded the way
+// every other listing is published.
 //
 // This module sits on the far side of `offers.ts` (it goes through `setOfferState`, so every gate an
 // activation asks is asked of each lot); `facebook-auctions.ts` is the half `offers.ts` imports.
@@ -23,13 +23,10 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
   if (!collection) throw new Error("Collection not found");
 }
 
-async function assertPostOwner(
-  ownerId: string,
-  postId: string
-): Promise<{ collectionId: string; groupId: string; url: string | null }> {
+async function assertPostOwner(ownerId: string, postId: string): Promise<{ collectionId: string }> {
   const post = await prisma.facebookPost.findUnique({
     where: { id: postId },
-    select: { collectionId: true, groupId: true, url: true },
+    select: { collectionId: true },
   });
   if (!post) throw new Error("Post not found.");
   await assertCollectionOwner(ownerId, post.collectionId);
@@ -87,18 +84,22 @@ export async function createFacebookPost(
 
 /**
  * Take a lot out of its post before the post is up: the lots after it move up one, and a post left
- * with one lot is dissolved, that offer becoming a post of its own. Once the post's link is recorded
- * its lots are what was posted, and stay.
+ * with one lot is dissolved, that offer becoming a post of its own. Once one lot has gone up the lots
+ * are what was posted, and stay.
  */
 export async function removeFacebookLot(ownerId: string, offerId: string): Promise<void> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
-    select: { collectionId: true, facebookPost: { select: { url: true } } },
+    select: { collectionId: true, facebookPostId: true },
   });
   if (!offer) throw new Error("Offer not found or access denied.");
   await assertCollectionOwner(ownerId, offer.collectionId);
-  if (!offer.facebookPost) return;
-  if (offer.facebookPost.url) {
+  if (!offer.facebookPostId) return;
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: offer.facebookPostId },
+    select: { state: true },
+  });
+  if (lots.some((l) => isFacebookLotPosted(l.state))) {
     throw new OfferActionBlockedError(
       "facebook-group",
       "The post is up, so its lots stay as they were posted. Withdraw this lot instead."
@@ -108,40 +109,47 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
 }
 
 /**
- * Record the post's link, which activates its lots (ADR-0061 §3): the collector has posted the kit by
- * hand and pastes back where it went up.
+ * Activate an offer with the listing link the collector pasted back (#1668) — for a Facebook auction
+ * that is the post's link. An offer posted alone, and every offer off Facebook, is the ordinary
+ * `publishOffer`; a lot of a post holding several takes the whole post live with it.
+ */
+export async function publishOfferOrPost(
+  ownerId: string,
+  offerId: string,
+  url: string | null
+): Promise<void> {
+  const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
+  if (!offer?.facebookPostId) return publishOffer(ownerId, offerId, url);
+  await publishFacebookPost(ownerId, offer.facebookPostId, url);
+}
+
+/**
+ * Take a post holding several lots live (ADR-0061 §3, amended by #1668): the collector has posted the
+ * kit by hand and pastes back where it went up.
  *
  * Each lot goes `ready → active` through the ordinary transition, so every gate an activation asks —
  * the price, a promised copy (#639), a copy in another Facebook auction (§5) — is asked of each. A lot
  * not yet Ready refuses the whole post, by number, before anything moves. A lot already active is
- * left as it is, so a refusal halfway through is finished by pasting the link again; the link itself
- * is written last, once every lot is up. On a post already up, pasting again corrects the link.
+ * left as it is, so a refusal halfway through is finished by activating again. The link is written
+ * last, once every lot is up, into **every lot with no listing link of its own** — a lot already
+ * carrying its own photo's link keeps it. A blank link activates the lots and writes nothing, as it
+ * does on every other platform.
  */
-export async function recordFacebookPostLink(
+export async function publishFacebookPost(
   ownerId: string,
   postId: string,
-  rawUrl: string
+  url: string | null
 ): Promise<{ activated: number }> {
-  const post = await assertPostOwner(ownerId, postId);
-  const url = rawUrl.trim();
-  if (!url) throw new OfferActionBlockedError("no-url", "Paste the post's link.");
-  if (!isFacebookGroupUrl(url)) {
-    throw new OfferActionBlockedError("no-url", "The link must be a web address, starting with https://.");
-  }
+  await assertPostOwner(ownerId, postId);
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: postId },
     orderBy: { facebookLotNo: "asc" },
     select: { id: true, offerNo: true, facebookLotNo: true, state: true },
   });
-  if (post.url === null) {
-    const waiting = lots.filter((l) => l.state !== "ready" && l.state !== "active");
-    if (waiting.length > 0) {
-      const named = waiting.map((l) => `lot ${l.facebookLotNo} (offer #${l.offerNo}, ${l.state})`).join(", ");
-      throw new OfferActionBlockedError(
-        "bad-transition",
-        `Every lot must be Ready before the post goes up: ${named}.`
-      );
-    }
+  const waiting = lots.filter((l) => l.state !== "ready" && l.state !== "active");
+  if (waiting.length > 0) {
+    const named = waiting.map((l) => `lot ${l.facebookLotNo} (offer #${l.offerNo}, ${l.state})`).join(", ");
+    throw new OfferActionBlockedError("bad-transition", `Every lot must be Ready before the post goes up: ${named}.`);
   }
   let activated = 0;
   for (const lot of lots) {
@@ -149,6 +157,12 @@ export async function recordFacebookPostLink(
     await setOfferState(ownerId, lot.id, "active");
     activated += 1;
   }
-  await prisma.facebookPost.update({ where: { id: postId }, data: { url } });
+  const link = url?.trim();
+  if (link) {
+    await prisma.offer.updateMany({
+      where: { facebookPostId: postId, OR: [{ url: null }, { url: "" }] },
+      data: { url: link },
+    });
+  }
   return { activated };
 }

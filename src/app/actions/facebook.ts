@@ -14,7 +14,7 @@ import {
   updateFacebookGroup,
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
-import { createFacebookPost, recordFacebookPostLink, removeFacebookLot } from "@/lib/facebook-posts";
+import { createFacebookPost, removeFacebookLot } from "@/lib/facebook-posts";
 import {
   lookupFacebookWinner,
   recordFacebookAuctionNoBids,
@@ -159,24 +159,6 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to take the lot out of its post.");
-  }
-}
-
-export type FacebookPostLinkState =
-  | { status: "success"; activated: number }
-  | { status: "error"; message: string };
-
-/** Record a multi-lot post's link, which activates its lots. */
-export async function recordFacebookPostLinkAction(
-  postId: string,
-  url: string
-): Promise<FacebookPostLinkState> {
-  const session = await getSession();
-  try {
-    const { activated } = await recordFacebookPostLink(session.user.id, postId, url);
-    return { status: "success", activated };
-  } catch (err) {
-    return failure(err, "Failed to record the post's link.");
   }
 }
 

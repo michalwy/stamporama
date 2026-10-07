@@ -12,7 +12,6 @@ import {
   acknowledgeOfferBiddingNotice,
   markOfferListingSynced,
   setOfferInActiveBidding,
-  publishOffer,
   deleteOffer,
   patchOffer,
   regenerateOfferText,
@@ -35,6 +34,7 @@ import {
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
+import { publishOfferOrPost } from "@/lib/facebook-posts";
 import {
   attachOfferCopyPhotos,
   attachOfferItemFrontPhotos,
@@ -985,14 +985,15 @@ export async function deleteOffersAction(offerIds: string[]): Promise<BulkOfferA
 
 /** Publish a prepared offer from the bulk listing workspace (#322): `ready → active`, stamping the
  * listing date (#320), plus the listing URL the platform gave back. A blank URL is accepted — the
- * listing may not have one to copy yet — and clears whatever was there. */
+ * listing may not have one to copy yet — and clears whatever was there. A lot of a Facebook post
+ * holding several takes the whole post live, the URL being the post's (#1668). */
 export async function publishOfferAction(
   offerId: string,
   rawUrl: string
 ): Promise<OfferActionState> {
   const session = await getSession();
   try {
-    await publishOffer(session.user.id, offerId, normalizeUrl(rawUrl));
+    await publishOfferOrPost(session.user.id, offerId, normalizeUrl(rawUrl));
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to publish the offer.");

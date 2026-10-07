@@ -310,7 +310,7 @@ export interface FacebookKitLot {
   /** ISO-8601, or null. */
   endsAt: string | null;
   state: OfferState;
-  /** The lot's own link — in a multi-lot post, the link of its photo. */
+  /** The lot's listing link — the post's, or in a multi-lot post its own photo's where it has one. */
   url: string | null;
   /** The standing bid typed while it runs (#1545), `0.00` when none is, and when it was recorded. */
   price: string;
@@ -321,8 +321,9 @@ export interface FacebookKitLot {
  *  the photos come from. Null on an offer that is not a Facebook auction. */
 export interface FacebookOfferKit {
   group: { id: string; name: string; url: string; archived: boolean; postTemplate: string; standingNote: string };
-  /** The multi-lot post this offer is a lot of, or null when it is posted alone. */
-  post: { id: string; url: string | null } | null;
+  /** The multi-lot post this offer is a lot of, or null when it is posted alone. Its link is each
+   *  lot's own `url` (#1668), so the post carries none. */
+  post: { id: string } | null;
   /** The post's lots in lot order — or this offer alone. */
   lots: FacebookKitLot[];
   /** Where one click downloads the photos, in lot order: the offer's own archive when it is posted
@@ -336,7 +337,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     select: {
       collectionId: true,
       facebookPostId: true,
-      facebookPost: { select: { id: true, url: true } },
+      facebookPost: { select: { id: true } },
       facebookGroup: true,
     },
   });

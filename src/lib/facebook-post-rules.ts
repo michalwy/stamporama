@@ -149,6 +149,12 @@ export function facebookMoney(amount: string | null, currency: string): string {
   return amount ? `${amount} ${currency}` : "";
 }
 
+/** Whether a lot has gone up with its post — anything past Ready. A post is up once one of its lots
+ *  is (#1668): the post's link is each lot's own listing link, so there is no post-level mark to read. */
+export function isFacebookLotPosted(state: string): boolean {
+  return state !== "preparing" && state !== "ready";
+}
+
 /** Why a set of offers cannot be posted together, or null when they can (ADR-0061 §2). The server
  *  asks this before writing anything; the reasons are the collector's to fix, so each is named. */
 export interface FacebookPostCandidate {
@@ -172,7 +178,7 @@ export function facebookPostRefusal(offers: readonly FacebookPostCandidate[]): s
   if (inPost.length > 0) {
     return `${listOfferNos(inPost)} ${inPost.length === 1 ? "is" : "are"} already a lot of another post.`;
   }
-  const posted = offers.filter((o) => o.state !== "preparing" && o.state !== "ready");
+  const posted = offers.filter((o) => isFacebookLotPosted(o.state));
   if (posted.length > 0) {
     return `${listOfferNos(posted)} ${posted.length === 1 ? "is" : "are"} already up or closed — only offers not yet posted can be put in a post.`;
   }

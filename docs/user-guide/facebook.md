@@ -157,9 +157,10 @@ the offer's screen, which holds everything the post needs:
   no template posts each lot's description;
 - **↓ Photos**: the offer's photos as one download.
 
-Once the post is up, paste its link into **Post link** and choose **Record link**. That activates the
-offer, the same as publishing any other listing — so the offer has to be **Ready** first, and the card
-says so until it is.
+Once the post is up, choose **Activate** on the offer and paste the post's link as its **listing
+URL** — on Facebook the listing link *is* the post's address. That activates the offer, the same as
+publishing on any other platform, so the offer has to be **Ready** first; the card says so until it
+is, and shows the link once the auction is up.
 
 ## A post with several lots
 
@@ -175,10 +176,14 @@ Each lot's Facebook card then shows the whole post:
 - the **post text** for the whole post — each lot's text in lot order, the standing note once under
   the last — and **↓ Photos, in lot order**, every lot's photos in one download, each file starting
   with its lot (`lot-01-…`), so the album uploads in the right order;
-- **Post link**: recording it activates **every** lot, so every lot has to be Ready first. A lot's own
-  photo link, if you want it, is that offer's listing URL.
+- the **listing link** of this lot, once the post is up.
 
-Until the post's link is recorded, **Take this lot out of the post** removes a lot: the lots after it
+The post goes up as one: **Activate** on any lot asks for the post's link once and activates **every**
+lot, so every lot has to be Ready first. The link becomes the listing URL of every lot that has none
+of its own. A lot can carry its own photo's link instead: enter it as that offer's listing URL before
+activating, and it is kept.
+
+Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
 move up, and a post left with one lot becomes an ordinary single post. Once the post is up, its lots
 stay as they were posted. Deleting a lot's offer works the same way as taking it out.
 

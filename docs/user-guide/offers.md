@@ -183,8 +183,8 @@ gap in your data, not a set worth nothing — and the hover says how many of you
    the [listing profile](delcampe.md#on-an-offer) its upload row is built from — the shipping model,
    the renewal setting and the bid step it will state.
    On the platform named as **Facebook**, an offer is an auction in a group and carries a
-   **Facebook** card: the post's text and photos to paste by hand, and the post's link, which
-   activates it once recorded. Several auctions in one group can be **posted together** as lots of
+   **Facebook** card: the post's text and photos to paste by hand. Its listing URL is the post's
+   link, asked for by **Activate** as on any platform. Several auctions in one group can be **posted together** as lots of
    one post. See [Facebook](facebook.md#auctioning-in-a-group).
 
 The asking price sits on one line with the two figures you weigh it against, in the order

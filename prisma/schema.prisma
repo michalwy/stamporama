@@ -2907,14 +2907,13 @@ model FacebookDefaults {
 // A post holding several lots in one Facebook group (#1544; ADR-0061 §2): an album, each photo a lot
 // bid on in its own comments. Its lots are offers naming it (`Offer.facebookPostId`), numbered by
 // `Offer.facebookLotNo`, sharing its group and their closing time. An offer posted alone has no post
-// row — its own `url` is the post's link. The closing time is kept on each lot (`Offer.endsAt`),
-// where everything that reads an auction's end already looks, and written to all of them together.
+// row. The closing time is kept on each lot (`Offer.endsAt`), where everything that reads an
+// auction's end already looks, and written to all of them together. The post's link is likewise each
+// lot's own `url` (#1668): activating the post writes it into every lot that has no link of its own.
 model FacebookPost {
   id           String   @id @default(cuid())
   collectionId String
   groupId      String
-  // The post's link, pasted once it is up — recording it activates the lots. Null until then.
-  url          String?
   createdAt    DateTime @default(now())
 
   collection Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)

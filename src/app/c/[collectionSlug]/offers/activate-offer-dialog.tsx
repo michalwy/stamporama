@@ -17,6 +17,10 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 // meant the URL was silently skipped on the surface a single listing is posted from. It is asked
 // **only when the offer has no URL yet**: with one already recorded there is nothing to hand over,
 // and the header's own field is right there for a correction.
+//
+// A Facebook auction asks the same question (#1668): its listing URL is the post's link. A lot of a
+// post holding several asks it for the whole post — every lot goes live, and the link is written into
+// each lot that has none of its own.
 
 const INPUT: React.CSSProperties = {
   width: "100%",
@@ -34,6 +38,7 @@ export function ActivateOfferDialog({
   offerLabel,
   platformName,
   initialUrl,
+  facebookLots,
   isPending,
   error,
   onClose,
@@ -43,12 +48,15 @@ export function ActivateOfferDialog({
   platformName: string;
   /** A URL already on the offer — a re-listing starts from what is there, not from blank. */
   initialUrl: string | null;
+  /** On a Facebook auction, how many lots its post holds — 1 when it is posted alone. Null elsewhere. */
+  facebookLots?: number | null;
   isPending: boolean;
   error?: string;
   onClose: () => void;
   onConfirm: (url: string) => void;
 }) {
   const [url, setUrl] = useState(initialUrl ?? "");
+  const lots = facebookLots ?? 0;
 
   return (
     <DialogShell title="Publish offer" onClose={onClose}>
@@ -61,9 +69,19 @@ export function ActivateOfferDialog({
             color: "var(--color-text-primary)",
           }}
         >
-          Mark <strong>{offerLabel}</strong> live on {platformName}. Today becomes its listing date.
+          {lots > 1 ? (
+            <>
+              Mark all {lots} lots of this post live on {platformName}. Today becomes their listing date.
+            </>
+          ) : (
+            <>
+              Mark <strong>{offerLabel}</strong> live on {platformName}. Today becomes its listing date.
+            </>
+          )}
         </p>
-        <LabelWithError htmlFor="f-listing-url">Listing URL (optional)</LabelWithError>
+        <LabelWithError htmlFor="f-listing-url">
+          {lots > 0 ? "Listing URL — the post's link (optional)" : "Listing URL (optional)"}
+        </LabelWithError>
         <TextInput
           id="f-listing-url"
           data-autofocus-select
@@ -85,8 +103,9 @@ export function ActivateOfferDialog({
             color: "var(--color-text-muted)",
           }}
         >
-          Paste the link the platform gave you. Leave it blank if there is none yet — you can add it
-          from the offer later.
+          {lots > 1
+            ? "Every lot without a link of its own gets this one. Leave it blank if you have none yet."
+            : "Paste the link the platform gave you. Leave it blank if there is none yet — you can add it from the offer later."}
         </p>
       </DialogBody>
       <DialogActions
