@@ -404,6 +404,7 @@ export function OfferFormDialog({
                   disabled={isPending || inFacebookPost}
                   required
                   style={{ ...INPUT_STYLE, cursor: inFacebookPost ? "not-allowed" : "pointer" }}
+                  wrapperStyle={{ display: "flex" }}
                 />
                 {inFacebookPost && (
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>

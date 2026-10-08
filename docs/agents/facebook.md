@@ -89,7 +89,11 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (`offers/use-facebook-group-choice.ts`), which starts on the **last group used on that platform**
   (localStorage per collection and platform, written by the shortcuts and by the form on create) and
   holds the button off with the reason beside it until one is chosen — the server's refusal stays
-  behind it. What travels is `FacebookCreateChoice` (`facebook-post-rules.ts`): the group and the
+  behind it. Each place labels and styles the select as its own fields are — in the Lot builder's
+  create step that is the templates' frame, inset and label, with their gap above the action row
+  (#1669) — while the component itself carries the width rule everywhere: only as wide as its longest
+  name, never wider than its field, a name that does not fit ellipsised and the chosen group's full
+  name in the `Tooltip`. What travels is `FacebookCreateChoice` (`facebook-post-rules.ts`): the group and the
   closing time the browser worked out from it (#490's rule), read server-side by
   `readFacebookCreateChoice` into `createOffer`'s input — an action argument for the Lot builder and
   the series, FormData for quick mode, the query string for the generator (not a lot criterion, so no

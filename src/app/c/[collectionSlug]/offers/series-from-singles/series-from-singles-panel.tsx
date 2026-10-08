@@ -719,7 +719,7 @@ function ComposeSeriesDialog({
                 value={facebook.groupId}
                 onChange={facebook.choose}
                 disabled={pending}
-                style={{ ...FILTER_CONTROL_STYLE, minWidth: "14rem", cursor: "pointer" }}
+                style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer" }}
               />
             </label>
           )}

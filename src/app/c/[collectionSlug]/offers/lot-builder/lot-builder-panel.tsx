@@ -101,6 +101,37 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+/** A field of the create step that is not a template (#1669) — the same frame, inset, label and gap
+ *  below as `TemplateBuilder`'s, so it reads as one of the step's fields and not as part of the
+ *  action row under it. */
+const STEP_FIELD: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: "0.5rem",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.5rem",
+  padding: "0.75rem 1rem",
+  marginBottom: "0.75rem",
+};
+
+const STEP_FIELD_LABEL: React.CSSProperties = {
+  fontSize: "0.9375rem",
+  fontWeight: 600,
+  color: "var(--color-text-primary)",
+};
+
+/** The template fields' input, minus the full width and the monospace a template is written in. */
+const STEP_SELECT_STYLE: React.CSSProperties = {
+  padding: "0.5rem 0.625rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.875rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  cursor: "pointer",
+};
+
 /**
  * A number that reaches the criteria **when it is finished being typed** — on blur, or on Enter.
  *
@@ -746,17 +777,23 @@ export function LotBuilderPanel({
             {/* The group a Facebook lot is offered in (#1663), starting on the last one used there.
                 The server types and prices the offer from it — auction or quick buy (#1671), starting
                 price, increment, currency — exactly as the offer form does, and an auction's closing
-                time is worked out here from its length. */}
+                time is worked out here from its length.
+
+                Framed, labelled and spaced as the two templates above it are (#1669): the criteria
+                bands' small `Field` label read as a stray control glued to the button below. */}
             {facebook.isFacebook && (
-              <Field label="Facebook group">
+              <div style={STEP_FIELD}>
+                <label htmlFor="lot-facebook-group" style={STEP_FIELD_LABEL}>
+                  Facebook group
+                </label>
                 <FacebookGroupSelect
-                  ariaLabel="Facebook group the lot is offered in"
+                  id="lot-facebook-group"
                   groups={facebook.groups}
                   value={facebook.groupId}
                   onChange={facebook.choose}
-                  style={{ ...FILTER_CONTROL_STYLE, minWidth: "14rem", alignSelf: "flex-start", cursor: "pointer" }}
+                  style={STEP_SELECT_STYLE}
                 />
-              </Field>
+              </div>
             )}
             <div
               style={{

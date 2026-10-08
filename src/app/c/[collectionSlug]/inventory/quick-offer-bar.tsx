@@ -114,7 +114,7 @@ export function QuickOfferBar({
       {/* A Facebook offer is in a group (#1544), so on Facebook the bar asks which (#1663) — starting
           on the group last used there. */}
       {facebook.isFacebook && (
-        <label style={FIELD}>
+        <label style={{ ...FIELD, minWidth: 0 }}>
           <span style={FIELD_LABEL}>Group</span>
           <FacebookGroupSelect
             groups={facebook.groups}
