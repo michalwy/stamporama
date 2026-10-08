@@ -117,10 +117,9 @@ section, where **Try again** prepares it once more from what was already uploade
 throws it away. Left alone, it is cleaned up after a while like any upload that never finished
 ([how scans are prepared](purchases.md#while-the-scan-is-uploading)).
 
-**Card scans ready to cut** — blue. A card scan that has been prepared and that nothing has been cut
-from yet — the batch that offers **Review the front cut** (or the back). Since a scan is prepared in
-the background, this is how you hear it is ready when you have gone elsewhere in the app. Newest
-first; the row names the batch and the order, and goes once the cut is saved.
+A card scan that has been prepared and is **ready to cut** does not appear here. Scans go up many at
+a time, and the order's **Card scans** section already shows each one waiting with **Review the
+front cut** (or the back).
 
 The three red groups, and *Changed since listed*, are the same **needs action** flag the offers list
 shows, split by *why* it fired, because each asks for something different: a sold copy has to come

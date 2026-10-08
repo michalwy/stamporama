@@ -540,8 +540,8 @@ When a scan is ready:
   batch is cut card after card while the rest are still uploading. Closing the editor without
   committing stops that: the cards ready by then wait for you;
 - if you are not, the card waits for you as a batch with **Review the front cut** (or **Review the
-  back cut**), and the [notification bell](action-items.md) lists it under **Card scans ready to
-  cut**.
+  back cut**). The [notification bell](action-items.md) does not mention it — with a sitting's worth
+  of scans it would fill up with cards that only need cutting here.
 
 If a scan **could not be prepared**, its card says so in red, with the reason. **Try again** prepares
 it once more from what was already uploaded — nothing is sent again — and **Discard** throws it away.

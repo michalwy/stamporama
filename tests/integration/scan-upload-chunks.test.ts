@@ -338,13 +338,17 @@ describe("chunked card scan upload (#590)", () => {
     await rm(path.join(DATA_DIR, "scan-uploads", opened.id), { recursive: true, force: true });
   });
 
-  it("reports a prepared card as ready to cut until it is cut", async () => {
+  it("raises no notification for a prepared card waiting to be cut (#1675)", async () => {
     const bytes = await card();
     const { sheet } = await sendAll(bytes);
     const items = await getActionItems(userId, collectionId);
-    const group = items.groups.find((g) => g.id === "scan-to-cut");
-    assert.ok(group?.items.some((i) => i.key === sheet.id), "the newest uncut card leads the group");
-    assert.equal(group?.severity, "info");
+    // Nothing has been cut from it, and no group mentions it: the purchase's own card says it is
+    // ready, and with scans uploaded many at a time the panel would fill with them.
+    assert.equal(
+      items.groups.some((g) => g.items.some((i) => i.key === sheet.id)),
+      false,
+      "an uncut card is not in the notification centre"
+    );
   });
 
   it("keeps the parts on local disk and out of the storage backend", async () => {
