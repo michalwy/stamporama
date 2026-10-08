@@ -437,14 +437,15 @@ function DefaultsFields({
         <GroupLabel hint={HINTS.shared}>Every offer</GroupLabel>
         <div style={FIGURE_GRID}>
           <div>
+            <span style={SMALL_LABEL}>A new offer starts as</span>
             <ListingTypeField initial={defaults.listingType} />
-            <FieldNote>A new offer starts as</FieldNote>
           </div>
           <div>
+            <span style={SMALL_LABEL}>Currency</span>
             <div style={{ ...INPUT_STYLE, display: "flex", alignItems: "center", color: "var(--color-text-muted)" }}>
               {platformCurrency ?? "Not set yet"}
             </div>
-            <FieldNote>Currency — the platform&rsquo;s own, set on its contact</FieldNote>
+            <FieldNote>The platform&rsquo;s own, set on its contact</FieldNote>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <MixedListingTypesField initial={defaults.mixedListingTypes} />
@@ -465,19 +466,22 @@ function DefaultsFields({
             <PostTemplateField id="facebook-post-template" listingType="auction" initial={defaults.postTemplate} />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
+            <span style={SMALL_LABEL}>Starting price</span>
             <StartingPriceField initial={defaults} currency={platformCurrency} />
           </div>
           <div>
+            <span style={SMALL_LABEL}>Bid increment</span>
             <BidIncrementField initial={defaults.bidIncrement} />
-            <FieldNote>Bid increment{platformCurrency ? `, in ${platformCurrency}` : ""}</FieldNote>
+            {platformCurrency && <FieldNote>In {platformCurrency}</FieldNote>}
           </div>
           <div>
+            <span style={SMALL_LABEL}>Days an auction runs</span>
             <AuctionDaysField initial={defaults.auctionDays} />
-            <FieldNote>Days an auction runs</FieldNote>
           </div>
           <div>
+            <span style={SMALL_LABEL}>Closing time</span>
             <ClosingTimeField initial={defaults.closingTime} />
-            <FieldNote>Closing time, on its last day</FieldNote>
+            <FieldNote>On its last day</FieldNote>
           </div>
         </div>
       </div>
@@ -635,7 +639,8 @@ function GroupFields({
             </FollowableSetting>
           </div>
           <FollowableSetting
-            label={`Bid increment${shownCurrency ? `, in ${shownCurrency}` : ""}`}
+            label="Bid increment"
+            note={shownCurrency ? `In ${shownCurrency}` : undefined}
             small
             {...setting("bidIncrement")}
           >
@@ -644,7 +649,7 @@ function GroupFields({
           <FollowableSetting label="Days an auction runs" small {...setting("auctionDays")}>
             <AuctionDaysField initial={start.auctionDays} />
           </FollowableSetting>
-          <FollowableSetting label="Closing time, on its last day" small {...setting("closingTime")}>
+          <FollowableSetting label="Closing time" note="On its last day" small {...setting("closingTime")}>
             <ClosingTimeField initial={start.closingTime} />
           </FollowableSetting>
         </div>
@@ -669,6 +674,7 @@ function FollowableSetting({
   label,
   htmlFor,
   hint,
+  note,
   small,
   settingKey,
   custom,
@@ -679,6 +685,8 @@ function FollowableSetting({
   label: string;
   htmlFor?: string;
   hint?: React.ReactNode;
+  /** What the label leaves out, said under the field while it is the group's own (#1670). */
+  note?: React.ReactNode;
   /** A figure under *New auctions*: its label is the small one the grid's fields carry. */
   small?: boolean;
   settingKey: FacebookGroupSetting;
@@ -722,7 +730,10 @@ function FollowableSetting({
         </label>
       </div>
       {custom ? (
-        children
+        <>
+          {children}
+          {note && <FieldNote>{note}</FieldNote>}
+        </>
       ) : (
         <div
           style={{
