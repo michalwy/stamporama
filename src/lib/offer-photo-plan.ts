@@ -21,6 +21,28 @@
 //   in order, a run of single-copy sets accumulates, and a multi-copy set flushes whatever has
 //   accumulated before emitting its own group. Plan order therefore always follows set order.
 //
+// Checklist groups (#1673)
+// ------------------------
+// A bulk lot is one set of a few dozen stamps, singles and series together, and the rule above
+// photographs it as one run of copies — a series lands scattered among the singles. With
+// `checklistGroups` on, a **multi-copy set** is split before it is chunked:
+//
+// - Every standard checklist the set holds **at least two** copies of is a group (decided with the
+//   collector: one copy of a checklist is a single, or a lot of thirty singles from thirty issues
+//   would be thirty photos). Complete or not makes no difference.
+// - A copy on several checklists joins the one holding most of the set's copies, so it is drawn
+//   once. Taken greedily: the checklist covering the most copies not yet placed forms its group,
+//   then the next, until none covers two — so the count is always over the copies still free, and a
+//   group never shrinks below two after it is formed. Ties go to the checklist met first in set
+//   order, then to the id, so the answer does not depend on read order.
+// - Groups come first, in the order their first copy appears in the set; each holds its copies in
+//   the **checklist's own order** (#764), and is chunked to the *group* collage's capacity — a group
+//   too large for one image continues on the next, which again holds only that group.
+// - The copies on no group follow, in set order, chunked to the ordinary capacity as today.
+// - Nothing marks a group on the image: the labels are per stamp as always, and an image of its own
+//   is the only separation. Single-copy sets, the #521 budget and everything below are untouched —
+//   a group is just another multi-copy group, rendered on its own template.
+//
 // Single photos first (#521)
 // --------------------------
 // With `preferSingles`, the single-copy pool is grouped against the platform's **photo limit**
@@ -114,6 +136,15 @@ export interface PlanCopy extends SetItemOrderRow {
   frontPhotoId: string | null;
   /** Id of the copy's `back`-role photo, or null when it has none. */
   backPhotoId: string | null;
+  /** The standard checklists (#1617) this copy fills a slot of, for #1673's grouping. Read only
+   *  when grouping is on; absent or empty is a copy on no checklist. */
+  checklists?: readonly PlanChecklistSlot[];
+}
+
+/** A checklist slot a copy fills (#1673): which checklist, and where in its own order (#764). */
+export interface PlanChecklistSlot {
+  checklistId: string;
+  position: number;
 }
 
 /** One offer set with its copies, in whatever order the caller read them. */
@@ -176,6 +207,9 @@ export interface OfferPhotoPlanInput {
   /** Image tokens marked **do not publish** (#313): planned and rendered, but out of the upload set,
    * so they take no upload number and do not count toward `maxPhotos`. */
   unpublished?: readonly string[];
+  /** Group a multi-copy set's copies by checklist (#1673), laid out at this capacity — the group
+   *  template's, or the ordinary one when the offer has none. Absent or null is off. */
+  checklistGroups?: { collage: PlanCollageCapacity } | null;
 }
 
 // ── Output ───────────────────────────────────────────────────────────────────
@@ -231,6 +265,9 @@ export interface PlannedCollage extends PlannedImageBase {
    * several for a chunk of single-copy sets. */
   setIds: string[];
   tiles: PlannedTile[];
+  /** The checklist this image shows a group of (#1673), laid out on the group collage. Absent on
+   *  every other image, which is laid out on the ordinary one. */
+  checklistId?: string;
 }
 
 /** A manual attachment placed in the plan (#313). Not derived from a rule: the collector put it
@@ -378,6 +415,75 @@ function groupImages(
 interface CopyGroup {
   setIds: string[];
   copies: PlanCopy[];
+  /** Set on a checklist group (#1673), which is laid out on the group collage. */
+  checklistId?: string;
+}
+
+/** A checklist needs this many of a set's copies to be photographed as a group (#1673). */
+export const MIN_CHECKLIST_GROUP = 2;
+
+/** One checklist group of a set (#1673): its copies in the checklist's own order. */
+export interface ChecklistGroup {
+  checklistId: string;
+  copies: PlanCopy[];
+}
+
+/**
+ * Splits one set's copies (#1673) into its checklist groups and the rest — the rules are in the
+ * header. `copies` are in set order; `rest` keeps it.
+ */
+export function checklistGroupsOf(copies: readonly PlanCopy[]): {
+  groups: ChecklistGroup[];
+  rest: PlanCopy[];
+} {
+  const setIndex = new Map(copies.map((copy, index) => [copy.itemId, index] as const));
+  const positionIn = (copy: PlanCopy, checklistId: string) =>
+    Math.min(
+      ...(copy.checklists ?? []).filter((s) => s.checklistId === checklistId).map((s) => s.position)
+    );
+
+  let open = [...copies];
+  const groups: ChecklistGroup[] = [];
+  for (;;) {
+    // How many free copies each checklist covers, and the first of them in set order.
+    const tally = new Map<string, { count: number; first: number }>();
+    open.forEach((copy, index) => {
+      for (const checklistId of new Set((copy.checklists ?? []).map((s) => s.checklistId))) {
+        const entry = tally.get(checklistId);
+        if (entry) entry.count += 1;
+        else tally.set(checklistId, { count: 1, first: index });
+      }
+    });
+    let best: { checklistId: string; count: number; first: number } | null = null;
+    for (const [checklistId, entry] of tally) {
+      if (
+        !best ||
+        entry.count > best.count ||
+        (entry.count === best.count &&
+          (entry.first < best.first || (entry.first === best.first && checklistId < best.checklistId)))
+      ) {
+        best = { checklistId, ...entry };
+      }
+    }
+    if (!best || best.count < MIN_CHECKLIST_GROUP) break;
+
+    const chosen = best.checklistId;
+    const members = open.filter((copy) => copy.checklists?.some((s) => s.checklistId === chosen));
+    open = open.filter((copy) => !members.includes(copy));
+    // The checklist's own order; two copies of one slot keep their set order.
+    members.sort(
+      (a, b) =>
+        positionIn(a, chosen) - positionIn(b, chosen) ||
+        setIndex.get(a.itemId)! - setIndex.get(b.itemId)!
+    );
+    groups.push({ checklistId: chosen, copies: members });
+  }
+
+  // Groups read in the order the set first reaches them, whatever order the tally picked them in.
+  const firstOf = (group: ChecklistGroup) =>
+    Math.min(...group.copies.map((copy) => setIndex.get(copy.itemId)!));
+  groups.sort((a, b) => firstOf(a) - firstOf(b));
+  return { groups, rest: open };
 }
 
 function chunk<T>(rows: readonly T[], size: number): T[][] {
@@ -396,13 +502,33 @@ interface SingleEntry {
  * lone copy the two grouping rules treat differently. */
 type SetSlot = { kind: "multi"; group: CopyGroup } | { kind: "single"; entry: SingleEntry };
 
-function walkSets(sets: readonly PlanSet[], capacity: number): SetSlot[] {
+function walkSets(
+  sets: readonly PlanSet[],
+  capacity: number,
+  /** The group collage's capacity when #1673's grouping is on; null when it is off. */
+  groupCapacity: number | null
+): SetSlot[] {
   const slots: SetSlot[] = [];
   for (const set of [...sets].sort(compareSets)) {
     const copies = sortSetItems(set.items);
     if (copies.length === 0) continue;
     if (copies.length === 1) {
       slots.push({ kind: "single", entry: { setId: set.id, copy: copies[0] } });
+      continue;
+    }
+    if (groupCapacity != null) {
+      const { groups, rest } = checklistGroupsOf(copies);
+      for (const group of groups) {
+        for (const part of chunk(group.copies, groupCapacity)) {
+          slots.push({
+            kind: "multi",
+            group: { setIds: [set.id], copies: part, checklistId: group.checklistId },
+          });
+        }
+      }
+      for (const part of chunk(rest, capacity)) {
+        slots.push({ kind: "multi", group: { setIds: [set.id], copies: part } });
+      }
       continue;
     }
     for (const part of chunk(copies, capacity)) {
@@ -473,6 +599,8 @@ function singlesThatFit(
 
 interface GroupingOptions {
   capacity: number;
+  /** The group collage's capacity under #1673, or null when grouping is off. */
+  groupCapacity: number | null;
   sides: readonly PlanImageSide[];
   unpublished: ReadonlySet<string>;
   /** #521's rule; off is the grouping as it stood before it. */
@@ -485,8 +613,9 @@ interface GroupingOptions {
 
 /** Walks the sets in explicit order and splits their copies into collage-sized groups. */
 function buildGroups(sets: readonly PlanSet[], options: GroupingOptions): CopyGroup[] {
-  const { capacity, preferSingles, maxPhotos, sides, unpublished, attachmentCost } = options;
-  const slots = walkSets(sets, capacity);
+  const { capacity, groupCapacity, preferSingles, maxPhotos, sides, unpublished, attachmentCost } =
+    options;
+  const slots = walkSets(sets, capacity, groupCapacity);
   const singles = slots.flatMap((slot) => (slot.kind === "single" ? [slot.entry] : []));
 
   // How many of the pool's copies stand alone. Without #521's rule none of them do, which is the
@@ -579,6 +708,7 @@ function renderGroup(group: CopyGroup, sides: PlanImageSide[], groupKey: string)
       token: collageToken(image.side, image.tiles.map((t) => t.itemId)),
       setIds: group.setIds,
       tiles: image.tiles,
+      ...(group.checklistId ? { checklistId: group.checklistId } : {}),
       // Publishing and the limit are decided once, over the whole ordered plan, so grouping stays
       // about grouping.
       publish: true,
@@ -674,6 +804,12 @@ export function planOfferPhotos(input: OfferPhotoPlanInput): OfferPhotoPlan {
   const groups = configured
     ? buildGroups(input.sets, {
         capacity,
+        groupCapacity: input.checklistGroups
+          ? Math.max(
+              1,
+              input.checklistGroups.collage.collageRows * input.checklistGroups.collage.collageColumns
+            )
+          : null,
         sides,
         unpublished,
         preferSingles: input.preferSingles ?? false,

@@ -195,6 +195,10 @@ export interface ContactData extends ContactRoles {
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
+  /** #1673, seeded onto new offers: group a set's copies by checklist on photos of their own, laid
+   * out on this template — null leaves the groups on the template above. */
+  photoGroupByChecklist: boolean;
+  defaultGroupCollageTemplateId: string | null;
   /** Seller defaults for auction sales (#350, ADR-0021): the currency and fees this seller normally
    * trades on. **Seeded** onto an `AuctionSale` at creation and editable there, so changing them
    * here never re-prices a sale already tracked or settled. Only meaningful for the `seller` /
@@ -246,6 +250,8 @@ const CONTACT_SELECT = {
   tileLabelLeftTemplate: true,
   tileLabelRightTemplate: true,
   defaultCollageTemplateId: true,
+  photoGroupByChecklist: true,
+  defaultGroupCollageTemplateId: true,
   defaultCurrency: true,
   defaultShippingCost: true,
   buyerPremiumPercent: true,
@@ -395,6 +401,9 @@ export interface ContactCreateInput {
   /** The collage template (#307) new offers copy their render numbers from, or null for none. A
    * template id from another collection is rejected. */
   defaultCollageTemplateId?: string | null;
+  /** #1673's grouping default (absent is off), and the group template — verified like the one above. */
+  photoGroupByChecklist?: boolean | null;
+  defaultGroupCollageTemplateId?: string | null;
   /** The seller's defaults for auction sales (#350) — currency and fees, each null when the seller
    * states none. Only meaningful for the `seller` / `auctionHouse` roles; amounts arrive as
    * decimal strings from the form. */
@@ -532,14 +541,19 @@ async function photoData(
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
+  photoGroupByChecklist: boolean;
+  defaultGroupCollageTemplateId: string | null;
 }> {
-  const templateId = data.defaultCollageTemplateId?.trim() || null;
-  const template = templateId
-    ? await prisma.collageTemplate.findFirst({
-        where: { id: templateId, collectionId },
-        select: { id: true },
-      })
-    : null;
+  const ownTemplate = async (raw: string | null | undefined) => {
+    const id = raw?.trim() || null;
+    return id
+      ? prisma.collageTemplate.findFirst({ where: { id, collectionId }, select: { id: true } })
+      : null;
+  };
+  const [template, groupTemplate] = await Promise.all([
+    ownTemplate(data.defaultCollageTemplateId),
+    ownTemplate(data.defaultGroupCollageTemplateId),
+  ]);
   return {
     maxPhotos: data.maxPhotos ?? null,
     maxPhotoEdge: data.maxPhotoEdge ?? null,
@@ -551,6 +565,8 @@ async function photoData(
     tileLabelLeftTemplate: data.tileLabelLeftTemplate ?? null,
     tileLabelRightTemplate: data.tileLabelRightTemplate ?? null,
     defaultCollageTemplateId: template?.id ?? null,
+    photoGroupByChecklist: data.photoGroupByChecklist ?? false,
+    defaultGroupCollageTemplateId: groupTemplate?.id ?? null,
   };
 }
 

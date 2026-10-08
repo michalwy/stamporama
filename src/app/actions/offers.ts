@@ -663,6 +663,16 @@ export async function updateOfferPhotoConfigAction(
     collageBackground: str(formData, "collageBackground"),
     collageLabelPercent: str(formData, "collageLabelPercent"),
     coverSymbols: str(formData, "coverSymbols"),
+    // #1673: the switch, and the group template's numbers as the dialog's hidden fields.
+    groupByChecklist: str(formData, "groupByChecklist"),
+    groupCollage: {
+      collageGridMode: str(formData, "groupCollageGridMode"),
+      collageRows: str(formData, "groupCollageRows"),
+      collageColumns: str(formData, "groupCollageColumns"),
+      collageGapPercent: str(formData, "groupCollageGapPercent"),
+      collageBackground: str(formData, "groupCollageBackground"),
+      collageLabelPercent: str(formData, "groupCollageLabelPercent"),
+    },
   });
   if (!parsed.ok) return { status: "error", message: parsed.message };
   try {

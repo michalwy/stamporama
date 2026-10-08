@@ -168,6 +168,11 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     defaultCollageTemplateId: isPlatform
       ? str(formData, "defaultCollageTemplateId") || null
       : null,
+    // #1673: group a set's copies by checklist on new offers, and the template the groups copy.
+    photoGroupByChecklist: isPlatform ? bool(formData, "photoGroupByChecklist") : null,
+    defaultGroupCollageTemplateId: isPlatform
+      ? str(formData, "defaultGroupCollageTemplateId") || null
+      : null,
     // The seller's defaults for auction sales (#350). Role-gated exactly like the platform fields
     // above — an `auctionHouse` counts as a seller here, since a house is who one buys from — and
     // the amounts accept either decimal separator (#233).

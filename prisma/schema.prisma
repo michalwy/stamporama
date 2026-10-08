@@ -595,8 +595,9 @@ model StampPrintingTranslation {
 //  - **Seeded, not referenced.** A template is chosen on an offer and its values are *copied* onto
 //    the offer (#308), exactly as `Contact.descriptionTemplate` seeds `Offer.description`. Editing
 //    a template therefore never retroactively changes offers that were already prepared, and no
-//    *offer* points back here. The single reference is `Contact.defaultCollageTemplateId` (#308) —
-//    which template a new offer on that platform seeds from — and it is `onDelete: SetNull`, so a
+//    *offer* points back here. The only references are the platform's defaults —
+//    `Contact.defaultCollageTemplateId` (#308) and `defaultGroupCollageTemplateId` (#1673), which
+//    templates a new offer on that platform seeds from — and both are `onDelete: SetNull`, so a
 //    template stays freely deletable.
 //
 // Templates carry no platform limits (max photos / edge / file size); those live on `Contact` and
@@ -644,6 +645,8 @@ model CollageTemplate {
   // Platforms that seed new offers from this template (#308). `onDelete: SetNull` on that FK — a
   // template deleted while a platform points at it simply leaves the platform without a default.
   defaultForPlatforms Contact[] @relation("PlatformDefaultCollage")
+  // Platforms whose checklist-group photos (#1673) seed from this template, on the same terms.
+  defaultGroupForPlatforms Contact[] @relation("PlatformDefaultGroupCollage")
 
   @@index([collectionId])
   @@map("collage_template")
@@ -4944,6 +4947,22 @@ model Offer {
   // so turning the flag on reaches every listing still following it at once. The covers themselves
   // live on the copy's photo (`PhotoCover`), never on the offer.
   coverSymbols Boolean?
+  // Whether this listing's photos **group a set's copies by checklist** (#1673): every standard
+  // checklist (#1617) the set holds at least two copies of gets photos of its own, in the
+  // checklist's order, and the copies on none follow as today. Seeded from the platform, off unless
+  // it says otherwise; off renders exactly as before. A series inside a bulk lot is then a photo of
+  // its own rather than scattered among the singles.
+  photoGroupByChecklist Boolean @default(false)
+  // The collage numbers the **group** photos are laid out with (#1673), copied from a collage
+  // template exactly as the `collage*` columns above are — seeded, never referenced. All null
+  // together when no group template was picked: the groups then use the numbers above. Separate
+  // because the two want different grids — a single on Facebook is a 1×2, a series a larger page.
+  groupCollageGridMode String?
+  groupCollageRows  Int?
+  groupCollageColumns Int?
+  groupCollageGapPercent Int?
+  groupCollageBackground String?
+  groupCollageLabelPercent Float?
   // Which Allegro listing profile (#486) this listing is published with — the seller-side settings
   // no offer has any notion of: the shipping rate set, the after-sales services, where the parcel is
   // sent from. Null is the ordinary case and means *the platform's default*, which is what almost
@@ -6411,6 +6430,11 @@ model Contact {
   // Null — or a template later deleted — leaves the offer without collage numbers until one is
   // picked on the offer itself.
   defaultCollageTemplateId String?
+  // Seeded onto a new offer's `photoGroupByChecklist` (#1673), with the template its group photos
+  // copy their numbers from — null, or a template since deleted, leaves the groups on the template
+  // above. Off by default, so nothing changes until the collector turns it on.
+  photoGroupByChecklist Boolean @default(false)
+  defaultGroupCollageTemplateId String?
   // ── Seller defaults for auction sales (#350; ADR-0021) ─────────────────────────────────────
   // The currency and fees this seller normally trades on, all optional. **Seeded** onto an
   // `AuctionSale` at creation and freely editable there — the same rule as the listing templates
@@ -6448,6 +6472,7 @@ model Contact {
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   defaultCollageTemplate CollageTemplate? @relation("PlatformDefaultCollage", fields: [defaultCollageTemplateId], references: [id], onDelete: SetNull)
+  defaultGroupCollageTemplate CollageTemplate? @relation("PlatformDefaultGroupCollage", fields: [defaultGroupCollageTemplateId], references: [id], onDelete: SetNull)
   // Purchases sourced from this contact (supplier). `onDelete: Restrict` on the FK
   // (from `Purchase`) means a referenced contact cannot be deleted without first
   // detaching it (ADR-0008 §4, ADR-0009 — supersedes the old `Item` acquisition link).
@@ -6504,6 +6529,7 @@ model Contact {
   @@index([collectionId])
   @@index([collectionId, facebookProfileUrl])
   @@index([defaultCollageTemplateId])
+  @@index([defaultGroupCollageTemplateId])
   @@index([defaultAuctionPlatformId])
   @@index([defaultAllegroListingProfileId])
   @@map("contact")

@@ -335,27 +335,40 @@ interface PlatformPhotoDefaults {
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
+  /** #1673: group a set's copies by checklist, and the template the groups copy their numbers from. */
+  photoGroupByChecklist: boolean;
+  defaultGroupCollageTemplateId: string | null;
 }
+
+const SEED_TEMPLATE_SELECT = {
+  gridMode: true,
+  pairSides: true,
+  rows: true,
+  columns: true,
+  gapPercent: true,
+  background: true,
+  labelPercent: true,
+} as const;
 
 /** The offer photo columns a newly created offer starts with (#308) — the platform's sides and label
  * template, plus the collage numbers copied from its default template. A platform with no default
  * template (or one deleted since) leaves the collage numbers null: there is nothing to render until
  * a template is picked on the offer itself. */
 async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
-  const template = platform.defaultCollageTemplateId
-    ? await prisma.collageTemplate.findUnique({
-        where: { id: platform.defaultCollageTemplateId },
-        select: {
-          gridMode: true,
-          pairSides: true,
-          rows: true,
-          columns: true,
-          gapPercent: true,
-          background: true,
-          labelPercent: true,
-        },
-      })
-    : null;
+  const [template, groupTemplate] = await Promise.all([
+    platform.defaultCollageTemplateId
+      ? prisma.collageTemplate.findUnique({
+          where: { id: platform.defaultCollageTemplateId },
+          select: SEED_TEMPLATE_SELECT,
+        })
+      : null,
+    platform.defaultGroupCollageTemplateId
+      ? prisma.collageTemplate.findUnique({
+          where: { id: platform.defaultGroupCollageTemplateId },
+          select: SEED_TEMPLATE_SELECT,
+        })
+      : null,
+  ]);
   return {
     // The platform says *which* sides; its template says how the two are arranged (#694), so a
     // paired template upgrades a both-sides platform to `paired` and leaves a front-only or
@@ -376,6 +389,15 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
     collageGapPercent: template?.gapPercent ?? null,
     collageBackground: template?.background ?? null,
     collageLabelPercent: template?.labelPercent ?? null,
+    // #1673: the switch, and the group template's numbers copied the same way. Its pairing is not
+    // read — which sides are photographed is one answer for the whole offer.
+    photoGroupByChecklist: platform.photoGroupByChecklist,
+    groupCollageGridMode: groupTemplate ? normalizeCollageGridMode(groupTemplate.gridMode) : null,
+    groupCollageRows: groupTemplate?.rows ?? null,
+    groupCollageColumns: groupTemplate?.columns ?? null,
+    groupCollageGapPercent: groupTemplate?.gapPercent ?? null,
+    groupCollageBackground: groupTemplate?.background ?? null,
+    groupCollageLabelPercent: groupTemplate?.labelPercent ?? null,
   };
 }
 
@@ -420,6 +442,8 @@ async function assertPlatform(
       tileLabelLeftTemplate: true,
       tileLabelRightTemplate: true,
       defaultCollageTemplateId: true,
+      photoGroupByChecklist: true,
+      defaultGroupCollageTemplateId: true,
     },
   });
   if (!contact) {
@@ -440,6 +464,8 @@ async function assertPlatform(
     tileLabelLeftTemplate: contact.tileLabelLeftTemplate,
     tileLabelRightTemplate: contact.tileLabelRightTemplate,
     defaultCollageTemplateId: contact.defaultCollageTemplateId,
+    photoGroupByChecklist: contact.photoGroupByChecklist,
+    defaultGroupCollageTemplateId: contact.defaultGroupCollageTemplateId,
   };
 }
 
@@ -4086,6 +4112,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       collageGapPercent: true,
       collageBackground: true,
       collageLabelPercent: true,
+      photoGroupByChecklist: true,
+      groupCollageGridMode: true,
+      groupCollageRows: true,
+      groupCollageColumns: true,
+      groupCollageGapPercent: true,
+      groupCollageBackground: true,
+      groupCollageLabelPercent: true,
       coverSymbols: true,
       collection: { select: { ownerId: true, baseCurrency: true } },
       platform: {
@@ -4459,6 +4492,23 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
             }
           : null,
       coverSymbols: offer.coverSymbols,
+      groupByChecklist: offer.photoGroupByChecklist,
+      // Written as a group like the numbers above (#1673); null leaves the groups on those.
+      groupCollage:
+        offer.groupCollageRows != null &&
+        offer.groupCollageColumns != null &&
+        offer.groupCollageGapPercent != null &&
+        offer.groupCollageBackground != null &&
+        offer.groupCollageLabelPercent != null
+          ? {
+              collageGridMode: normalizeCollageGridMode(offer.groupCollageGridMode),
+              collageRows: offer.groupCollageRows,
+              collageColumns: offer.groupCollageColumns,
+              collageGapPercent: offer.groupCollageGapPercent,
+              collageBackground: offer.groupCollageBackground,
+              collageLabelPercent: offer.groupCollageLabelPercent,
+            }
+          : null,
     },
     // The platform's cover rule (#1665), read live: what an offer following it gets.
     platformCoverSymbols: offer.platform.coverSymbols,
@@ -5865,6 +5915,18 @@ export async function updateOfferPhotoConfig(
       collageBackground: config.collage?.collageBackground ?? null,
       collageLabelPercent: config.collage?.collageLabelPercent ?? null,
       coverSymbols: config.coverSymbols,
+      // #1673 — each left as it is when the write does not carry it.
+      photoGroupByChecklist: config.groupByChecklist,
+      ...(config.groupCollage !== undefined
+        ? {
+            groupCollageGridMode: config.groupCollage?.collageGridMode ?? null,
+            groupCollageRows: config.groupCollage?.collageRows ?? null,
+            groupCollageColumns: config.groupCollage?.collageColumns ?? null,
+            groupCollageGapPercent: config.groupCollage?.collageGapPercent ?? null,
+            groupCollageBackground: config.groupCollage?.collageBackground ?? null,
+            groupCollageLabelPercent: config.groupCollage?.collageLabelPercent ?? null,
+          }
+        : {}),
     },
   });
 }

@@ -77,8 +77,7 @@ const EMPTY_COLLAGE: CollageDraft = {
   collageLabelPercent: "",
 };
 
-function toDraft(config: OfferPhotoConfigInput): CollageDraft {
-  const c = config.collage;
+function toDraft(c: OfferPhotoConfigInput["collage"]): CollageDraft {
   if (!c) return EMPTY_COLLAGE;
   return {
     collageGridMode: c.collageGridMode,
@@ -88,6 +87,25 @@ function toDraft(config: OfferPhotoConfigInput): CollageDraft {
     collageBackground: c.collageBackground,
     collageLabelPercent: String(c.collageLabelPercent),
   };
+}
+
+/** A template's numbers as the form holds them. */
+function templateDraft(t: CollageTemplateData): CollageDraft {
+  return {
+    collageGridMode: normalizeCollageGridMode(t.gridMode),
+    collageRows: String(t.rows),
+    collageColumns: String(t.columns),
+    collageGapPercent: String(t.gapPercent),
+    collageBackground: t.background,
+    collageLabelPercent: String(t.labelPercent),
+  };
+}
+
+/** A grid in a word: `3 × 4`, or `auto, up to 3 × 4`. */
+function gridText(gridMode: string, rows: string | number, columns: string | number): string {
+  return normalizeCollageGridMode(gridMode) === "auto"
+    ? `auto, up to ${rows} × ${columns}`
+    : `${rows} × ${columns}`;
 }
 
 /** How a platform limit reads when it states none. */
@@ -176,7 +194,12 @@ export function PhotoSettingsDialog({
   const [labelLeft, setLabelLeft] = useState(config.photoLabelLeftTemplate ?? "");
   const [labelRight, setLabelRight] = useState(config.photoLabelRightTemplate ?? "");
   const [preferSingles, setPreferSingles] = useState(config.preferSingles);
-  const [collage, setCollage] = useState<CollageDraft>(() => toDraft(config));
+  const [collage, setCollage] = useState<CollageDraft>(() => toDraft(config.collage));
+  // #1673: series on photos of their own, laid out with a template of their own.
+  const [groupByChecklist, setGroupByChecklist] = useState(config.groupByChecklist ?? false);
+  const [groupCollage, setGroupCollage] = useState<CollageDraft>(() =>
+    toDraft(config.groupCollage ?? null)
+  );
   const [templates, setTemplates] = useState<CollageTemplateData[]>([]);
   // Regenerate on save (#328), on by default — see the note by the footer checkbox.
   const [regenerate, setRegenerate] = useState(true);
@@ -210,15 +233,17 @@ export function PhotoSettingsDialog({
     const t = templates.find((row) => row.id === templateId);
     if (!t) return;
     setPhotoSides((sides) => applyCollagePairing(sides, t.pairSides));
-    setCollage({
-      collageGridMode: normalizeCollageGridMode(t.gridMode),
-      collageRows: String(t.rows),
-      collageColumns: String(t.columns),
-      collageGapPercent: String(t.gapPercent),
-      collageBackground: t.background,
-      collageLabelPercent: String(t.labelPercent),
-    });
+    setCollage(templateDraft(t));
   }
+
+  /** Copy a template's numbers onto the series photos (#1673). Its pairing is not read: which sides
+   * are photographed is one answer for the whole offer, set by the template above. */
+  function applyGroupTemplate(templateId: string) {
+    const t = templates.find((row) => row.id === templateId);
+    if (t) setGroupCollage(templateDraft(t));
+  }
+
+  const hasGroupCollage = groupCollage.collageRows.trim() !== "";
 
   /** Any collage field filled in — what "Clear" acts on and what the save writes as a group. */
   const hasCollage = Object.entries(collage).some(
@@ -371,6 +396,95 @@ export function PhotoSettingsDialog({
               : `Single-stamp sets go up one per photo while the ${limits.maxPhotos} allowed last; whatever is left over is collaged. Off, they are always collaged.`}
           </span>
 
+          {/* Series on photos of their own (#1673): a set's copies grouped by checklist, each group
+              on its own images in the checklist's order, the rest after them. The rules — two
+              copies make a group, a copy on several checklists joins the largest — are in the user
+              guide; the tooltip says the one thing worth knowing before ticking it. */}
+          <Tooltip content="Every series this offer's set holds two or more stamps of gets photos of its own, in the series' order; the other stamps follow on photos of their own.">
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4375rem",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-secondary)",
+                cursor: isPending ? "default" : "pointer",
+                marginBottom: "0.25rem",
+                width: "fit-content",
+              }}
+            >
+              <input
+                type="checkbox"
+                name="groupByChecklist"
+                checked={groupByChecklist}
+                onChange={(e) => setGroupByChecklist(e.target.checked)}
+                disabled={isPending}
+                style={{ cursor: isPending ? "default" : "pointer" }}
+              />
+              Group series on their own photos
+            </label>
+          </Tooltip>
+          {/* The group template's numbers travel in hidden fields whether or not the box is
+              ticked, so turning grouping off and on again keeps the template. */}
+          <input type="hidden" name="groupCollageGridMode" value={groupCollage.collageGridMode} />
+          <input type="hidden" name="groupCollageRows" value={groupCollage.collageRows} />
+          <input type="hidden" name="groupCollageColumns" value={groupCollage.collageColumns} />
+          <input type="hidden" name="groupCollageGapPercent" value={groupCollage.collageGapPercent} />
+          <input type="hidden" name="groupCollageBackground" value={groupCollage.collageBackground} />
+          <input
+            type="hidden"
+            name="groupCollageLabelPercent"
+            value={groupCollage.collageLabelPercent}
+          />
+          {groupByChecklist ? (
+            <div style={{ margin: "0.5rem 0 1.25rem" }}>
+              <LabelWithError htmlFor="offer-group-collage-template">Series template</LabelWithError>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {/* One-shot, like the picker below: it copies the numbers and falls back. */}
+                <select
+                  id="offer-group-collage-template"
+                  value=""
+                  onChange={(e) => applyGroupTemplate(e.target.value)}
+                  disabled={isPending || templates.length === 0}
+                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                >
+                  <option value="">
+                    {hasGroupCollage
+                      ? `${gridText(
+                          groupCollage.collageGridMode,
+                          groupCollage.collageRows,
+                          groupCollage.collageColumns
+                        )} — pick another template`
+                      : "Same as the collage below — pick a template"}
+                  </option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({gridText(t.gridMode, t.rows, t.columns)})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setGroupCollage(EMPTY_COLLAGE)}
+                  disabled={isPending || !hasGroupCollage}
+                  style={{
+                    ...INPUT_STYLE,
+                    width: "auto",
+                    whiteSpace: "nowrap",
+                    cursor: hasGroupCollage ? "pointer" : "not-allowed",
+                    color: hasGroupCollage
+                      ? "var(--color-text-primary)"
+                      : "var(--color-text-muted)",
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: "1.25rem" }} />
+          )}
+
           <div style={{ marginBottom: "1rem" }}>
             <LabelWithError htmlFor="offer-collage-template">Copy from template</LabelWithError>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -388,11 +502,7 @@ export function PhotoSettingsDialog({
                 </option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} (
-                    {normalizeCollageGridMode(t.gridMode) === "auto"
-                      ? `auto, up to ${t.rows} × ${t.columns}`
-                      : `${t.rows} × ${t.columns}`}
-                    )
+                    {t.name} ({gridText(t.gridMode, t.rows, t.columns)})
                   </option>
                 ))}
               </select>

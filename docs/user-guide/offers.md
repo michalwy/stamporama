@@ -515,6 +515,14 @@ listing:
   one per image while the listing has slots for them, with only the leftovers collaged, or always
   collaged. On by default, seeded from the platform. Multi-copy sets are one collage each either
   way. See [single photos and the limit](#single-photos-and-the-limit).
+- **Group series on their own photos** — whether a set's copies are grouped by series, each series
+  on photos of its own, with the rest after them. Off by default, seeded from the platform. Ticked,
+  a **Series template** picker appears beside it: pick one of your
+  [collage templates](collections.md#collage-templates) and the series photos are laid out with its
+  numbers, while everything else keeps the collage below; with none picked (or after **Clear**) the
+  series use the collage below too. The series template's **Front and back in one cell** is not
+  read — which sides are photographed is one answer for the whole listing. See
+  [series in a lot](#series-in-a-lot).
 - **Tile label (left)** and **Tile label (right)** — two `{token}` templates written under each
   stamp, one flush left and one flush right at the same size. Each is resolved **per stamp**, so
   `{ref}` writes that copy's own location ref (`A234`) under it and a buyer asking for "the one
@@ -667,6 +675,38 @@ Two things fall out of this:
 Turn **Single photos while the limit allows** off in the [photo settings](#photo-settings) and the
 single-stamp sets are always collaged instead, as they were before this rule existed. It is
 per-offer, so one listing can be arranged differently from the next.
+
+### Series in a lot
+
+A [bulk lot](#building-a-bulk-lot) is one set of a few dozen stamps — singles and series together,
+sold as a whole. Photographed as one set, its stamps go onto the images in catalogue order, so a
+series ends up scattered among the singles and across images, and a buyer cannot see it is there.
+Tick **Group series on their own photos** in the [photo settings](#photo-settings) and the set's
+photos know the series inside it:
+
+- **A series is a checklist the set holds at least two stamps of.** Complete or not makes no
+  difference: three stamps of a set of five are still shown together. Only **standard** checklists
+  count; specialised ones (every colour of one stamp, say) never group. A stamp identified down to a
+  variety counts for the stamp the checklist names, as it does when the lot builder looks for series.
+- **Each series is a photo of its own**, with its stamps in the checklist's own order. It never
+  shares an image with another series or with singles; a series too large for one image continues on
+  the next, which again holds only that series. Series come in the order the set first reaches
+  them.
+- **The other stamps follow**, on images of their own, in catalogue order — exactly as the set's
+  photos would have been without grouping. A stamp that is the only one of its checklist in the set
+  is one of these.
+- **A stamp on several checklists is drawn once**, in the series holding the most of the set's
+  stamps.
+- **Nothing is written on the photo for a series**: every stamp keeps its own tile label, as always,
+  and no series name or separator is drawn. The image of its own is the grouping.
+- The series photos use the **Series template**, the rest the collage below it — so the singles of a
+  Facebook lot can stay on a 1×2 while a series gets a larger grid.
+
+Only a set of several stamps is grouped; single-stamp sets are photographed as they always are. The
+grouping is worked out each time the photos are generated, so a lot whose contents change — or a
+checklist you edit — keeps its series together on the next **Regenerate**, and the card says the
+stored photos are *Out of date* until then. Turn it off and the photos are generated exactly as
+before.
 
 ### When the offer changes afterwards
 
