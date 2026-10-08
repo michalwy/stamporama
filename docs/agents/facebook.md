@@ -206,7 +206,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the note, *New auctions* (auction template and figures), *Quick buys* (its template).
   An offer is the offer form (group, the listing type seeded from it until touched, and an auction's
   increment, shown only on the Facebook platform, the group locked on a lot of a post), the
-  **Facebook** card on the offer's screen (`offer-facebook-card.tsx`, with a **Bidding** part while an
+  **Facebook** card on the offer's screen, directly under the description like every platform's card
+  (#1667: the post text is read and copied right after it) (`offer-facebook-card.tsx`, with a **Bidding** part while an
   auction is up, a **Sale** part while a quick buy is, and the result dialog,
   `facebook-result-dialog.tsx`, in either's words), and **Post together** in the offers list's
   selection bar, offered while every ticked offer in view is a Facebook offer and numbering the lots

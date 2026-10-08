@@ -307,8 +307,8 @@ moment they went out.
 
 ## The offer's Allegro card
 
-An offer on your Allegro platform carries an **On Allegro** card on its own screen, next to the
-photos and the sets. It holds the three things a listing needs that are not already on the offer:
+An offer on your Allegro platform carries an **On Allegro** card on its own screen, directly under
+the description. It holds the three things a listing needs that are not already on the offer:
 
 - **Category.** Worked out by itself the moment the offer gains its first copy — first from what you
   have listed before, then from Allegro's own guess at the title — with a line saying which of those

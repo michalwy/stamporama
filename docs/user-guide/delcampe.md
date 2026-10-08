@@ -346,8 +346,8 @@ quietly missing a line looks exactly like a complete one while understating what
 
 ## On an offer
 
-An offer on the Delcampe platform carries an **On Delcampe** card on its own screen, under the
-photos.
+An offer on the Delcampe platform carries an **On Delcampe** card on its own screen, directly under
+the description.
 
 Once an import has seen this offer's listing, the card leads with it: the item number, a link to the
 listing, and whether it is still up or has come down — with the date it was last seen up. That part
