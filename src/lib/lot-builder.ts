@@ -655,6 +655,12 @@ export interface LotCommitInput extends LotBuilderRequest {
 
 export interface LotCommitResult {
   offerId: string;
+  /** The offer's short listing number (#416), which is what the builder's confirmation names it by
+   *  now that it stays open after the commit (#1680). */
+  offerNo: number;
+  /** The copies the offer's one set holds, in the pick's order. The builder drops them from its
+   *  pins, since a copy on this offer is out of the pool the next lot is drawn from (#1680). */
+  itemIds: string[];
   /** How many copies the offer's one set holds. */
   copies: number;
   /** Pinned copies that had stopped being listable by the time commit ran — dropped from the lot
@@ -730,8 +736,15 @@ export async function commitLotProposal(
     await syncGeneratedTexts(ownerId, offerId);
   }
 
+  const { offerNo } = await prisma.offer.findUniqueOrThrow({
+    where: { id: offerId },
+    select: { offerNo: true },
+  });
+
   return {
     offerId,
+    offerNo,
+    itemIds: proposal.plan.itemIds,
     copies: proposal.plan.itemIds.length,
     missingPinned: proposal.missingPinned,
   };

@@ -702,6 +702,14 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       const sets = await setsOf(result.offerId);
       assert.equal(sets.length, 1, "a bulk lot is one indivisible thing (ADR-0013 §2)");
       assert.equal(result.copies, 3);
+      // The builder stays open after the commit (#1680): it names the offer by its number and drops
+      // the committed copies from its pins, so both come back with the result.
+      const { offerNo } = await prisma.offer.findUniqueOrThrow({
+        where: { id: result.offerId },
+        select: { offerNo: true },
+      });
+      assert.equal(result.offerNo, offerNo);
+      assert.deepEqual(result.itemIds, proposal.plan.itemIds);
       assert.deepEqual(
         sets[0].items.map((i) => i.itemId).sort(),
         [...proposal.plan.itemIds].sort(),
