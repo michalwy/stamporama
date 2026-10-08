@@ -9,7 +9,7 @@ import {
   offersWithPlatformSale,
 } from "./offers";
 import { unseenFailedMail } from "./mail/messages";
-import { failedScanPreparations, scanSheetsToCut } from "./scan-notices";
+import { failedScanPreparations } from "./scan-notices";
 
 /**
  * The **action items** the notification centre reports (#367) — the states already tracked
@@ -34,9 +34,10 @@ import { failedScanPreparations, scanSheetsToCut } from "./scan-notices";
  * - mail that could not be delivered after every retry (#1372) — a reminder that failed to arrive
  *   looks exactly like having no reminder, so the one place that can say so is here. It lasts until
  *   Settings → Email is opened;
- * - card scans ready to cut, and card scans that could not be prepared (#1567) — preparing a scan
- *   runs in the background, so the collector may be anywhere in the app when it finishes. Both are
- *   the Card scans section's own state: a sheet with no cut is the batch offering *Review the cut*.
+ * - card scans that could not be prepared (#1567) — preparing a scan runs in the background, so the
+ *   collector may be anywhere in the app when it fails, and nothing else would say so. A scan that
+ *   is *ready to cut* is not here (#1675): scans go up many at a time, and the purchase's own cards
+ *   already say which are waiting.
  *
  * **Providers, not sources**, is the extension point: a provider returns one *or more* groups, so
  * two groups that come out of one read (the offers pair) stay one read. Adding a source is one
@@ -78,7 +79,6 @@ export type ActionItemGroupId =
   | "offer-platform-sale-conflict"
   | "offer-listing-changed"
   | "mail-undelivered"
-  | "scan-to-cut"
   | "scan-preparation-failed";
 
 /**
@@ -531,19 +531,18 @@ const mailProvider: ActionItemProvider = {
 
 /**
  * Card scans (#1567). Preparing an uploaded scan runs in the background, one at a time, and the
- * collector may have gone elsewhere by the time it is done — so this is where they learn a card is
- * ready to cut, or that it could not be prepared.
+ * collector may have gone elsewhere by the time it fails — so this is where they learn it could not
+ * be prepared. It is `warning`: the scan is waiting on a decision only the collector can take (try
+ * again, or throw it away), and nothing else will mention it.
  *
- * A failure is `warning`: the scan is waiting on a decision only the collector can take (try again,
- * or throw it away), and nothing else will mention it. A card ready to cut is `info` — work waiting,
- * nothing at risk — and lasts until it is cut, because it is read off the sheet itself.
+ * **A scan that is ready to cut raises nothing** (#1675, amending #1567). Scans go up many at a time
+ * (#1568), so a group of them filled the panel with work that needs no action anywhere but the
+ * purchase itself, where each card already offers *Review the front cut*. Being derived on read,
+ * the group took every notice it had raised with it.
  */
 const scanProvider: ActionItemProvider = {
   async load({ ownerId, collectionId, limit }) {
-    const [toCut, failed] = await Promise.all([
-      scanSheetsToCut(ownerId, collectionId, limit),
-      failedScanPreparations(ownerId, collectionId, limit),
-    ]);
+    const failed = await failedScanPreparations(ownerId, collectionId, limit);
     return [
       {
         id: "scan-preparation-failed" as const,
@@ -556,20 +555,6 @@ const scanProvider: ActionItemProvider = {
           detail: upload.detail,
           at: upload.at?.toISOString() ?? null,
           href: `purchases/${upload.purchaseId}`,
-        })),
-        href: "purchases",
-      },
-      {
-        id: "scan-to-cut" as const,
-        title: "Card scans ready to cut",
-        severity: "info" as const,
-        count: toCut.total,
-        items: toCut.sheets.map((sheet) => ({
-          key: sheet.id,
-          label: sheet.label,
-          detail: sheet.detail,
-          at: sheet.at?.toISOString() ?? null,
-          href: `purchases/${sheet.purchaseId}`,
         })),
         href: "purchases",
       },
