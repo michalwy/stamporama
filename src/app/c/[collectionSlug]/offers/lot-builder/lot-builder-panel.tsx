@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { StampConditionData } from "@/lib/conditions";
 import type { LocationData } from "@/lib/locations";
@@ -39,6 +41,7 @@ import { LotProposalView } from "./lot-proposal-view";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import { FacebookGroupSelect } from "../facebook-group-select";
 import { useFacebookGroupChoice } from "../use-facebook-group-choice";
+import { useToast } from "@/app/toast-provider";
 
 // The bulk-lot builder's screen (#760), over #758's rules and #759's two reads.
 //
@@ -239,6 +242,17 @@ function RangeField({
   );
 }
 
+/** An offer created in this sitting (#1680), as the builder lists it until it is left. */
+interface CreatedLot {
+  id: string;
+  offerNo: number;
+  copies: number;
+}
+
+function newSeed(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 function numberOrNull(raw: string): number | null {
   const trimmed = raw.trim();
   if (trimmed === "") return null;
@@ -269,6 +283,8 @@ export function LotBuilderPanel({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   // The texts the commit sends. Held here rather than in the URL: they are a draft being typed, not
@@ -280,6 +296,10 @@ export function LotBuilderPanel({
   // Which of the two template editors is expanded — one at a time, the rule the shared builder is
   // written for: several stacked, and the one being worked on needs the room.
   const [openTemplate, setOpenTemplate] = useState<"name" | "description" | null>("name");
+  // The offers created since the screen was opened (#1680), newest first. Component state and not
+  // the address: it is a record of what this sitting did, not a question the screen answers, and it
+  // is meant to go when the builder is left.
+  const [created, setCreated] = useState<CreatedLot[]>([]);
 
   const parsed = useMemo(
     () => parseLotBuilderRequest(new URLSearchParams(searchParams.toString())),
@@ -345,7 +365,7 @@ export function LotBuilderPanel({
   const effectiveName = criteria.nameTemplate ?? suggestedName;
   const effectiveDescription = criteria.descriptionTemplate ?? suggestedDescription;
 
-  const roll = () => write({ ...request, seed: Math.random().toString(36).slice(2, 10) });
+  const roll = () => write({ ...request, seed: newSeed() });
 
   const pin = (itemId: string) =>
     write({
@@ -382,10 +402,43 @@ export function LotBuilderPanel({
         effectiveDescription,
         facebook.choice()
       );
-      if (result.status === "success") {
-        facebook.remember();
-        router.push(`/c/${collectionSlug}/offers/${result.id}`);
-      } else setError(result.message);
+      if (result.status !== "success") {
+        setError(result.message);
+        return;
+      }
+      facebook.remember();
+      // **The builder stays where it is** (#1680). A collector builds several lots in a row with the
+      // same criteria, and opening each new offer meant coming back and setting the builder up again.
+      // So every setting stays — the criteria, the platform and its group, the wording — and the
+      // offer is named in a confirmation whose link is a plain one, so ⌘ or Ctrl opens it beside.
+      const href = `/c/${collectionSlug}/offers/${result.id}`;
+      toast({ message: `Offer #${result.offerNo} created`, href, linkLabel: "Open" });
+      if (result.missingPinned.length > 0) {
+        const named = result.missingPinned
+          .map((m) => (m.itemNo !== null ? `#${m.itemNo}` : (m.stampName ?? "a removed copy")))
+          .join(", ");
+        toast({
+          tone: "info",
+          message: `Left out, no longer listable here: ${named}`,
+          durationMs: 12_000,
+        });
+      }
+      setCreated((prev) => [
+        { id: result.id, offerNo: result.offerNo, copies: result.copies },
+        ...prev,
+      ]);
+      // The next lot comes from what is left. The copies just committed are on a `preparing` offer
+      // on this platform, which is already outside the pool (#259), so re-asking is all it takes —
+      // the whole offers namespace, since the pool readout moved as well. A fresh seed is the next
+      // proposal; the pins it consumed go, and so do the ones the commit found no longer listable.
+      // Rejections stay: they are the collector's word about a copy, not about this lot.
+      const gone = new Set([...result.itemIds, ...result.missingPinned.map((m) => m.itemId)]);
+      write({
+        ...request,
+        seed: newSeed(),
+        pinnedItemIds: request.pinnedItemIds.filter((id) => !gone.has(id)),
+      });
+      void queryClient.invalidateQueries({ queryKey: ["offers", collectionId] });
     });
   }
 
@@ -718,6 +771,39 @@ export function LotBuilderPanel({
             />
           )}
         </section>
+
+        {/* What this sitting has made (#1680), above the step that makes the next one, so the count
+            and the links are in view while the next lot is being read. Each link is a plain one —
+            ⌘ or Ctrl opens it beside — and the list goes when the builder is left. */}
+        {created.length > 0 && (
+          <section style={BAND}>
+            <SectionHeading
+              title="Created in this sitting"
+              note={`${created.length} ${created.length === 1 ? "offer" : "offers"} so far — the list goes when you leave the builder`}
+            />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1.25rem" }}>
+              {created.map((lot) => (
+                <Link
+                  key={lot.id}
+                  href={`/c/${collectionSlug}/offers/${lot.id}`}
+                  style={{
+                    color: "var(--color-accent)",
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Offer #{lot.offerNo}
+                  <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
+                    {" "}
+                    · {lot.copies} {lot.copies === 1 ? "copy" : "copies"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* **Name the listing before reading the lot, not after** (#773's pass). The block used to
             sit under the proposal, which put the button that finishes the job a hundred rows down

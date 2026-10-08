@@ -1388,7 +1388,7 @@ is **named on screen** and left out, never quietly released.
 ### Creating the offer
 
 **Create the offer** makes an ordinary **Preparing** offer on that platform holding **one set** with
-the chosen copies, and takes you to it. One set, not one per copy: a set is the thing a buyer buys,
+the chosen copies. One set, not one per copy: a set is the thing a buyer buys,
 and one set per copy would describe your lot as a hundred alternative listings.
 
 On Facebook the section also asks for the **Facebook group** the lot is offered in, starting on
@@ -1399,6 +1399,20 @@ time — see [Facebook](facebook.md#without-the-form).
 The lot is **picked again** as the offer is created. Between opening this screen and pressing the
 button a copy may have been listed elsewhere or promised in a trade, so the offer is built from a
 fresh look rather than from what is on your screen — and anything that dropped out is named.
+
+### Building several lots in a row
+
+The builder **stays open** after **Create the offer**, with every setting where you left it — the
+area, the pool and the pick, the platform and its Facebook group, the title and the description. A
+confirmation names the new offer (*Offer #412 created · Open*); **Open** takes you there, or opens it
+in a new tab with ⌘ or Ctrl.
+
+The next lot is then **proposed from what is left**: the copies you just put into the offer are
+listed there now, so they are out of the pool, and the figures and the proposal are read again
+without them. Pins on those copies go with them; your rejections stay.
+
+**Created in this sitting**, above *Create the offer*, lists the offers made since you opened the
+builder, each with its piece count and a link to it. The list is cleared when you leave the screen.
 
 ### Naming the listing
 

@@ -206,7 +206,14 @@ async function readOfferInput(
 }
 
 export type CommitLotActionState =
-  | { status: "success"; id: string; copies: number; missingPinned: MissingPinnedCopy[] }
+  | {
+      status: "success";
+      id: string;
+      offerNo: number;
+      itemIds: string[];
+      copies: number;
+      missingPinned: MissingPinnedCopy[];
+    }
   | { status: "error"; message: string };
 
 /**
@@ -243,6 +250,8 @@ export async function commitLotBuilderAction(
     return {
       status: "success",
       id: result.offerId,
+      offerNo: result.offerNo,
+      itemIds: result.itemIds,
       copies: result.copies,
       missingPinned: result.missingPinned,
     };
