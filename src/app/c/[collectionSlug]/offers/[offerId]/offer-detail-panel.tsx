@@ -1303,59 +1303,14 @@ export function OfferDetailPanel({
         onFormatChange={(format) => patch("descriptionFormat", format)}
       />
 
-      {/* Missing translations behind those texts (#299) — filled here rather than by touring
-          Settings and the stamp / issue screens. Each save is an entity mutation of its own; the
-          generated texts are *not* re-rendered by it, since they may have been edited by hand — the
-          field's own ↻ regenerates when you want the new wording. */}
-      {gaps.length > 0 && (
-        <div style={CARD}>
-          <TranslationGapsPanel
-            collectionId={collectionId}
-            language={gapLanguage}
-            gaps={gaps}
-            onSaved={() => invalidateAll(collectionId)}
-            note={`Used by this platform's generated texts. Regenerate a text to pick up a new translation.`}
-            maxHeight="14rem"
-          />
-        </div>
-      )}
+      {/* The platform's own card sits directly under the description (#1667): what the collector
+          reads and copies there follows the description itself, and every platform's card reads in
+          the same place.
 
-      {/* Generated listing images (#311, #314) — under the listing texts, because the texts and the
-          images are the two halves of what actually goes to the platform, and this is where you leave
-          the screen from. Collapsed by default: expanded it previews the whole plan and would push
-          the sets far down. Photo settings live in the card's own button row (⚙) — the configuration
-          is what the card renders from, so it is edited where its effect is read. */}
-      <OfferPhotosCard
-        collectionId={collectionId}
-        offerId={offerId}
-        photoConfig={offer.photoConfig}
-        photoLimits={offer.platformPhotoLimits}
-        platformName={offer.platformName}
-        platformCoverSymbols={offer.platformCoverSymbols}
-        offerState={offer.state}
-      />
-
-      {/* The offer's stamps and what Colnect knows them as (#423), between the images and the sets:
-          it is the last thing consulted before posting and the first place one leaves the screen
-          from, and it is keyed on `stamp × condition` rather than on the copy, so it belongs beside
-          the sets rather than inside them. Drawn on every platform (#669) — Colnect linking is how a
-          stamp's own numbers and date get filled in, wherever it is being sold — so it renders
-          nothing only for an offer that holds no copies yet. */}
-      <OfferPlatformItemsCard
-        items={offer.platformItems}
-        offerId={offer.id}
-        platformModule={offer.platformModule}
-        offerState={offer.state}
-        collectionId={collectionId}
-        copies={copies}
-        areas={areas}
-      />
-
-      {/* What this offer is published as on Allegro (#494) — the category, its parameter answers and
-          the listing profile — beside the platform-catalogue card, for the same reason that one sits
-          here: it is what is consulted while a listing is being prepared. Both listing paths read
-          it, so the values are settled once, here, rather than inside whichever dialog happens to
-          post. Null (and so absent) on every platform that is not Allegro. */}
+          What this offer is published as on Allegro (#494) — the category, its parameter answers and
+          the listing profile. It is what is consulted while a listing is being prepared, and both
+          listing paths read it, so the values are settled once, here, rather than inside whichever
+          dialog happens to post. Null (and so absent) on every platform that is not Allegro. */}
       {offer.allegroListing && (
         <OfferAllegroCard
           collectionId={collectionId}
@@ -1391,6 +1346,54 @@ export function OfferDetailPanel({
           onChanged={() => invalidateAll(collectionId)}
         />
       )}
+
+      {/* Missing translations behind those texts (#299) — filled here rather than by touring
+          Settings and the stamp / issue screens. Each save is an entity mutation of its own; the
+          generated texts are *not* re-rendered by it, since they may have been edited by hand — the
+          field's own ↻ regenerates when you want the new wording. */}
+      {gaps.length > 0 && (
+        <div style={CARD}>
+          <TranslationGapsPanel
+            collectionId={collectionId}
+            language={gapLanguage}
+            gaps={gaps}
+            onSaved={() => invalidateAll(collectionId)}
+            note={`Used by this platform's generated texts. Regenerate a text to pick up a new translation.`}
+            maxHeight="14rem"
+          />
+        </div>
+      )}
+
+      {/* Generated listing images (#311, #314) — under the listing texts and the platform's card,
+          because the texts and the images are the two halves of what actually goes to the platform,
+          and this is where you leave the screen from. Collapsed by default: expanded it previews the
+          whole plan and would push the sets far down. Photo settings live in the card's own button row (⚙) — the configuration
+          is what the card renders from, so it is edited where its effect is read. */}
+      <OfferPhotosCard
+        collectionId={collectionId}
+        offerId={offerId}
+        photoConfig={offer.photoConfig}
+        photoLimits={offer.platformPhotoLimits}
+        platformName={offer.platformName}
+        platformCoverSymbols={offer.platformCoverSymbols}
+        offerState={offer.state}
+      />
+
+      {/* The offer's stamps and what Colnect knows them as (#423), between the images and the sets:
+          it is the last thing consulted before posting and the first place one leaves the screen
+          from, and it is keyed on `stamp × condition` rather than on the copy, so it belongs beside
+          the sets rather than inside them. Drawn on every platform (#669) — Colnect linking is how a
+          stamp's own numbers and date get filled in, wherever it is being sold — so it renders
+          nothing only for an offer that holds no copies yet. */}
+      <OfferPlatformItemsCard
+        items={offer.platformItems}
+        offerId={offer.id}
+        platformModule={offer.platformModule}
+        offerState={offer.state}
+        collectionId={collectionId}
+        copies={copies}
+        areas={areas}
+      />
 
       {/* Sets. The heading and Add set are handed to the view, which lays them out in one band with
           its own controls and the listing's figures (#378) — two separately-rendered rows aligned to

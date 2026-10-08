@@ -188,7 +188,7 @@ Listing the same copy on another platform at the same time is not affected.
 ## Posting
 
 Facebook has no way for an app to post in a group, so you post by hand from the **Facebook** card on
-the offer's screen, which holds everything the post needs:
+the offer's screen, directly under the description, which holds everything the post needs:
 
 - the **group**, with a link to open it;
 - the **post text**: the group's post template for the offer's type — the auction or the quick-buy
