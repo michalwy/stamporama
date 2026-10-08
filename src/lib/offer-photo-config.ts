@@ -9,7 +9,8 @@
  *    platform, so the renderer reads them live (#310).
  *  - **Offer configuration** — what this listing's photos should look like: which scan sides to
  *    include, the two per-tile label templates (#312) and the collage numbers copied from a collage
- *    template (#307). Seeded at creation from the platform, then freely editable.
+ *    template (#307) — plus, for #1673's checklist groups, a switch and a second set of numbers.
+ *    Seeded at creation from the platform, then freely editable.
  *
  * The collage numbers are all-or-nothing: an offer either carries a complete set copied from a
  * template, or none at all (the platform had no default template and none has been picked yet).
@@ -204,6 +205,12 @@ export interface OfferPhotoConfigInput {
   /** Whether symbols are covered on this listing's photos (#1665): null follows the platform, read
    *  live; true or false overrides it. Left out of a write, it is left as it is. */
   coverSymbols?: boolean | null;
+  /** Whether a set's copies are grouped by checklist on photos of their own (#1673). Left out of a
+   *  write, it is left as it is. */
+  groupByChecklist?: boolean;
+  /** The collage numbers the checklist groups are laid out with (#1673), copied from a template like
+   *  `collage`; null leaves the groups on `collage`. Left out of a write, it is left as it is. */
+  groupCollage?: OfferCollageValues | null;
 }
 
 /** The cover override as the settings dialog posts it: `on`, `off`, or anything else for *follow
@@ -212,32 +219,25 @@ export function parseCoverSymbolsOverride(raw: string | null | undefined): boole
   return raw === "on" ? true : raw === "off" ? false : null;
 }
 
-/**
- * Validates what the offer's photo-settings dialog submits. The collage numbers arrive as one
- * group: every field blank means "no collage numbers on this offer yet", and anything else must be
- * a complete, valid set — a half-filled collage would render nothing sensible.
- */
-export function parseOfferPhotoConfigInput(raw: {
-  photoSides: string;
-  /** A checkbox, so absent is unticked — the form always posts the field it does have. */
-  preferSingles?: string;
-  photoLabelLeftTemplate: string;
-  photoLabelRightTemplate: string;
+/** The collage fields as a form posts them — one group, written together. */
+export interface CollageFieldsRaw {
   collageGridMode?: string;
   collageRows: string;
   collageColumns: string;
   collageGapPercent: string;
   collageBackground: string;
   collageLabelPercent: string;
-  /** `on` | `off` | blank (follow the platform), #1665. */
-  coverSymbols?: string;
-}): PhotoConfigParseResult<OfferPhotoConfigInput> {
-  const photoSides = normalizePhotoSides(raw.photoSides);
-  const coverSymbols = parseCoverSymbolsOverride(raw.coverSymbols);
-  const preferSingles = isChecked(raw.preferSingles);
-  const photoLabelLeftTemplate = raw.photoLabelLeftTemplate.trim() || null;
-  const photoLabelRightTemplate = raw.photoLabelRightTemplate.trim() || null;
+}
 
+/**
+ * One group of collage numbers, validated. Every field blank means "none on this offer yet", and
+ * anything else must be a complete, valid set — a half-filled collage would render nothing sensible.
+ * `prefix` names the group in a message, for an offer carrying two of them (#1673).
+ */
+function parseCollageValues(
+  raw: CollageFieldsRaw,
+  prefix = ""
+): PhotoConfigParseResult<OfferCollageValues | null> {
   // The mode is deliberately **not** one of the fields that decide whether a collage is configured
   // at all: it is a toggle, so it always carries a value, and counting it would make "no collage on
   // this offer yet" unsayable — the same reason the background travels in a hidden field.
@@ -248,26 +248,14 @@ export function parseOfferPhotoConfigInput(raw: {
     raw.collageBackground,
     raw.collageLabelPercent,
   ];
-  if (collageFields.every((f) => !f.trim())) {
-    return {
-      ok: true,
-      value: {
-        photoSides,
-        preferSingles,
-        photoLabelLeftTemplate,
-        photoLabelRightTemplate,
-        collage: null,
-        coverSymbols,
-      },
-    };
-  }
+  if (collageFields.every((f) => !f.trim())) return { ok: true, value: null };
 
   const collageGridMode = normalizeCollageGridMode(raw.collageGridMode);
   const axisLabels = collageAxisLabels(collageGridMode);
 
   const rows = parseBoundedInteger(
     raw.collageRows,
-    axisLabels.rows,
+    `${prefix}${axisLabels.rows}`,
     MIN_COLLAGE_AXIS,
     MAX_COLLAGE_AXIS
   );
@@ -275,7 +263,7 @@ export function parseOfferPhotoConfigInput(raw: {
 
   const columns = parseBoundedInteger(
     raw.collageColumns,
-    axisLabels.columns,
+    `${prefix}${axisLabels.columns}`,
     MIN_COLLAGE_AXIS,
     MAX_COLLAGE_AXIS
   );
@@ -283,7 +271,7 @@ export function parseOfferPhotoConfigInput(raw: {
 
   const gapPercent = parseBoundedInteger(
     raw.collageGapPercent,
-    "Gap",
+    `${prefix}Gap`,
     MIN_COLLAGE_PERCENT,
     MAX_COLLAGE_PERCENT
   );
@@ -291,7 +279,7 @@ export function parseOfferPhotoConfigInput(raw: {
 
   const labelPercent = parseBoundedDecimal(
     raw.collageLabelPercent,
-    "Label strip",
+    `${prefix}Label strip`,
     MIN_COLLAGE_LABEL_PERCENT,
     MAX_COLLAGE_LABEL_PERCENT
   );
@@ -299,25 +287,60 @@ export function parseOfferPhotoConfigInput(raw: {
 
   const background = normalizeHexColor(raw.collageBackground);
   if (!background) {
-    return { ok: false, message: "Background must be a hex colour such as #ffffff." };
+    return { ok: false, message: `${prefix}Background must be a hex colour such as #ffffff.` };
   }
 
   return {
     ok: true,
     value: {
-      photoSides,
-      preferSingles,
-      photoLabelLeftTemplate,
-      photoLabelRightTemplate,
-      collage: {
-        collageGridMode,
-        collageRows: rows.value,
-        collageColumns: columns.value,
-        collageGapPercent: gapPercent.value,
-        collageBackground: background,
-        collageLabelPercent: labelPercent.value,
-      },
-      coverSymbols,
+      collageGridMode,
+      collageRows: rows.value,
+      collageColumns: columns.value,
+      collageGapPercent: gapPercent.value,
+      collageBackground: background,
+      collageLabelPercent: labelPercent.value,
+    },
+  };
+}
+
+/**
+ * Validates what the offer's photo-settings dialog submits. Each group of collage numbers arrives
+ * whole: every field blank means "no collage numbers on this offer yet", and anything else must be
+ * a complete, valid set.
+ */
+export function parseOfferPhotoConfigInput(
+  raw: CollageFieldsRaw & {
+    photoSides: string;
+    /** A checkbox, so absent is unticked — the form always posts the field it does have. */
+    preferSingles?: string;
+    photoLabelLeftTemplate: string;
+    photoLabelRightTemplate: string;
+    /** `on` | `off` | blank (follow the platform), #1665. */
+    coverSymbols?: string;
+    /** #1673: a checkbox, so absent is unticked. */
+    groupByChecklist?: string;
+    /** #1673: the group template's numbers, as hidden fields; absent is none. */
+    groupCollage?: CollageFieldsRaw;
+  }
+): PhotoConfigParseResult<OfferPhotoConfigInput> {
+  const collage = parseCollageValues(raw);
+  if (!collage.ok) return collage;
+  const groupCollage = raw.groupCollage
+    ? parseCollageValues(raw.groupCollage, "Group collage: ")
+    : ({ ok: true, value: null } as const);
+  if (!groupCollage.ok) return groupCollage;
+
+  return {
+    ok: true,
+    value: {
+      photoSides: normalizePhotoSides(raw.photoSides),
+      preferSingles: isChecked(raw.preferSingles),
+      photoLabelLeftTemplate: raw.photoLabelLeftTemplate.trim() || null,
+      photoLabelRightTemplate: raw.photoLabelRightTemplate.trim() || null,
+      collage: collage.value,
+      coverSymbols: parseCoverSymbolsOverride(raw.coverSymbols),
+      groupByChecklist: isChecked(raw.groupByChecklist),
+      groupCollage: groupCollage.value,
     },
   };
 }

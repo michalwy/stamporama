@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   DialogShell,
   DialogBody,
@@ -208,6 +209,10 @@ export function ContactFormDialog({
   const [collageTemplates, setCollageTemplates] = useState<CollageTemplateData[]>([]);
   const [defaultCollageTemplateId, setDefaultCollageTemplateId] = useState(
     contact?.defaultCollageTemplateId ?? ""
+  );
+  // #1673: the template series photos copy their numbers from, held like the one above.
+  const [defaultGroupCollageTemplateId, setDefaultGroupCollageTemplateId] = useState(
+    contact?.defaultGroupCollageTemplateId ?? ""
   );
   useEffect(() => {
     if (!isPlatform) return;
@@ -988,6 +993,58 @@ export function ContactFormDialog({
                     />
                     Single photos while the photo limit allows
                   </label>
+                  {/* #1673: a set's series on photos of their own, seeded onto new offers like the
+                      rest of this block; the template beside it lays the series photos out. */}
+                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", margin: "0.5rem 0 0" }}>
+                    <Tooltip content="Every series a set holds two or more stamps of gets photos of its own, in the series' order, laid out with the template beside; with none, the collage template above.">
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.4375rem",
+                          fontSize: "0.8125rem",
+                          color: "var(--color-text-secondary)",
+                          cursor: isPending ? "default" : "pointer",
+                          flex: 1,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          name="photoGroupByChecklist"
+                          value="true"
+                          defaultChecked={contact?.photoGroupByChecklist ?? false}
+                          disabled={isPending}
+                          style={{ cursor: isPending ? "default" : "pointer" }}
+                        />
+                        Group series on their own photos
+                      </label>
+                    </Tooltip>
+                    <div style={{ flex: 1 }}>
+                      <input
+                        type="hidden"
+                        name="defaultGroupCollageTemplateId"
+                        value={defaultGroupCollageTemplateId}
+                      />
+                      <select
+                        aria-label="Series template"
+                        value={defaultGroupCollageTemplateId}
+                        onChange={(e) => setDefaultGroupCollageTemplateId(e.target.value)}
+                        disabled={isPending || collageTemplates.length === 0}
+                        style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                      >
+                        <option value="">Series: same as the collage template</option>
+                        {collageTemplates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            Series: {t.name} (
+                            {normalizeCollageGridMode(t.gridMode) === "auto"
+                              ? `auto, up to ${t.rows} × ${t.columns}`
+                              : `${t.rows} × ${t.columns}`}
+                            )
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                   <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
                     Copied onto every new offer on this platform, along with the photo tile label from
                     the templates above. Changing them here leaves prepared offers untouched.

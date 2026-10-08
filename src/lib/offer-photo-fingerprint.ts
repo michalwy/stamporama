@@ -111,6 +111,16 @@ export interface OfferPhotoFingerprintInput {
    * the hash of an image that is unchanged by a pixel.
    */
   covers?: readonly (readonly [string, readonly (readonly [string, string, number, number, number, number])[]])[];
+  /**
+   * #1673's grouping, passed **only when it is on**: the group collage's numbers (null when the
+   * groups use the ordinary ones) and the checklist slots each copy fills, as `[itemId, [[checklistId,
+   * position], …]]` rows in any order. The slots decide which images exist and what each shows, so a
+   * copy added to a checklist, or a checklist reordered, puts the photos out of date.
+   */
+  checklistGroups?: {
+    collage: OfferCollageValues | null;
+    slots: readonly (readonly [string, readonly (readonly [string, number])[]])[];
+  };
 }
 
 /** One manual attachment as the fingerprint sees it: what it shows, from which copy, and where it
@@ -200,6 +210,29 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
   // nothing generated under the old rule is declared stale by the upgrade alone.
   if (input.preferSingles) payload.push(["singles"]);
   if (input.covers && input.covers.length > 0) payload.push(["covers", input.covers]);
+  // Appended only when on (#1673), the same rule again: off is how every offer rendered before it.
+  if (input.checklistGroups) {
+    const byId = (a: readonly [string, unknown], b: readonly [string, unknown]) =>
+      a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
+    const groupCollage = input.checklistGroups.collage;
+    payload.push([
+      "checklists",
+      groupCollage
+        ? [
+            groupCollage.collageGridMode,
+            groupCollage.collageRows,
+            groupCollage.collageColumns,
+            groupCollage.collageGapPercent,
+            groupCollage.collageBackground,
+            groupCollage.collageLabelPercent,
+          ]
+        : null,
+      [...input.checklistGroups.slots]
+        .map(([itemId, slots]) => [itemId, [...slots].sort(byId)] as const)
+        .filter(([, slots]) => slots.length > 0)
+        .sort(byId),
+    ]);
+  }
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }

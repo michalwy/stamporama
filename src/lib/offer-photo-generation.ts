@@ -30,8 +30,10 @@ import {
   type PlanAttachment,
   type PlannedAttachment,
   type PlannedCollage,
+  type PlannedImage,
   type PlanImageSide,
 } from "./offer-photo-plan";
+import { loadChecklistSlots } from "./offer-photo-checklists";
 import { fingerprintOfferPhotoInputs } from "./offer-photo-fingerprint";
 import { applyPhotoCovers } from "./photos/covers";
 import {
@@ -424,6 +426,10 @@ interface GenerationInputs {
    * without a copy, which is the common case and yields an unlabelled tile. */
   uploadTileLabel: TileLabelTexts | null;
   collage: OfferCollageValues | null;
+  /** #1673: whether a set's copies are grouped by checklist, and the collage the groups are laid out
+   *  with — null for the ordinary one. The copies' slots ride on `sets`. */
+  groupByChecklist: boolean;
+  groupCollage: OfferCollageValues | null;
   limits: PlatformPhotoLimits;
   sourceById: Map<string, SourcePhoto>;
   /** The offer's manual plan order (#313): image tokens in the collector's chosen order. Empty means
@@ -527,6 +533,13 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       collageGapPercent: true,
       collageBackground: true,
       collageLabelPercent: true,
+      photoGroupByChecklist: true,
+      groupCollageGridMode: true,
+      groupCollageRows: true,
+      groupCollageColumns: true,
+      groupCollageGapPercent: true,
+      groupCollageBackground: true,
+      groupCollageLabelPercent: true,
       photoPlanOrder: true,
       photoPlanUnpublished: true,
       coverSymbols: true,
@@ -556,6 +569,8 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
               sortOrder: true,
               item: {
                 select: {
+                  // What a copy's checklist slots are read from (#1673).
+                  stampId: true,
                   stamp: {
                     // Labels are for the panel only; they never reach the plan or the fingerprint.
                     select: STAMP_LABEL_SELECT.stamp.select,
@@ -604,6 +619,16 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
   // above it does. Labels are display-only here — no stored image goes out of date over one.
   const labeller = await makeOfferLabeller(offer.collectionId);
   const labels: PlanLabels = { copies: new Map(), sets: new Map() };
+  // The checklist slots (#1673) are read only for an offer that groups by them: they cost a chain
+  // walk, and an offer that does not group must hash exactly as it did.
+  const checklistSlots = offer.photoGroupByChecklist
+    ? await loadChecklistSlots(
+        offer.collectionId,
+        offer.sets.flatMap((set) =>
+          set.items.map((li) => ({ itemId: li.itemId, stampId: li.item.stampId }))
+        )
+      )
+    : null;
   const allSets: PlanSet[] = offer.sets.map((set) => ({
     id: set.id,
     sortOrder: set.sortOrder,
@@ -619,6 +644,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
         catalogSortKey: li.item.stamp.primaryCatalogSortKey,
         frontPhotoId: bySide.get("front")?.id ?? null,
         backPhotoId: bySide.get("back")?.id ?? null,
+        ...(checklistSlots ? { checklists: checklistSlots.get(li.itemId) ?? [] } : {}),
       };
     }),
   }));
@@ -647,6 +673,13 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     offer.collageGapPercent != null &&
     offer.collageBackground != null &&
     offer.collageLabelPercent != null;
+  // The group template's numbers (#1673) are written as one group as well.
+  const hasGroupCollage =
+    offer.groupCollageRows != null &&
+    offer.groupCollageColumns != null &&
+    offer.groupCollageGapPercent != null &&
+    offer.groupCollageBackground != null &&
+    offer.groupCollageLabelPercent != null;
 
   // The copies the offer can still sell: the members of the sets that survived the exclusion above.
   // A manual attachment naming anything else is showing a stamp the buyer cannot get (#461).
@@ -737,6 +770,17 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
           collageLabelPercent: offer.collageLabelPercent!,
         }
       : null,
+    groupByChecklist: offer.photoGroupByChecklist,
+    groupCollage: hasGroupCollage
+      ? {
+          collageGridMode: normalizeCollageGridMode(offer.groupCollageGridMode),
+          collageRows: offer.groupCollageRows!,
+          collageColumns: offer.groupCollageColumns!,
+          collageGapPercent: offer.groupCollageGapPercent!,
+          collageBackground: offer.groupCollageBackground!,
+          collageLabelPercent: offer.groupCollageLabelPercent!,
+        }
+      : null,
     limits: {
       maxPhotos: offer.platform.maxPhotos,
       maxPhotoEdge: offer.platform.maxPhotoEdge,
@@ -800,7 +844,19 @@ function planFor(inputs: GenerationInputs) {
     attachments: inputs.attachments,
     order: inputs.photoPlanOrder,
     unpublished: inputs.photoPlanUnpublished,
+    checklistGroups:
+      inputs.groupByChecklist && inputs.collage
+        ? { collage: inputs.groupCollage ?? inputs.collage }
+        : null,
   });
+}
+
+/** The collage an image is laid out with: the group template's for a checklist group (#1673), with
+ *  the ordinary numbers standing in when the offer has none, and the ordinary ones otherwise. */
+function collageFor(image: PlannedImage, inputs: GenerationInputs): OfferCollageValues {
+  return image.kind === "collage" && image.checklistId
+    ? inputs.groupCollage ?? inputs.collage!
+    : inputs.collage!;
 }
 
 function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFor>): string {
@@ -847,6 +903,20 @@ function fingerprintFor(inputs: GenerationInputs, plan: ReturnType<typeof planFo
       inputs.photoPlanOrder.length > 0 || inputs.photoPlanUnpublished.length > 0
         ? plan.images.map((image) => image.token)
         : undefined,
+    checklistGroups: inputs.groupByChecklist
+      ? {
+          collage: inputs.groupCollage,
+          slots: inputs.sets.flatMap((set) =>
+            set.items.map(
+              (copy) =>
+                [
+                  copy.itemId,
+                  (copy.checklists ?? []).map((slot) => [slot.checklistId, slot.position] as const),
+                ] as const
+            )
+          ),
+        }
+      : undefined,
     // The covers drawn on the photos the images are made from (#1665), when the offer applies them.
     covers: coverFingerprintRows(
       inputs.needsCovers,
@@ -1719,14 +1789,16 @@ async function scanSource(
  * Render one image from its tiles and store it. `columns` is the collage's own width for a group and
  * 1 for an attachment; everything else — gap, label strip, background, the platform's output limits
  * — is identical, so an attachment looks like the images around it rather than like a pass-through.
+ * `collage` is the one the image is laid out with (`collageFor`): a checklist group's (#1673) may
+ * differ from the rest.
  */
 async function renderTiles(
   sources: CollageTileSource[],
   columns: number,
   index: number,
-  inputs: GenerationInputs
+  inputs: GenerationInputs,
+  collage: OfferCollageValues
 ): Promise<Omit<RenderedImage, "token" | "source" | "side" | "pairKey" | "setIds" | "itemIds">> {
-  const collage = inputs.collage!;
   const rendered = await renderCollage(
     sources,
     {
@@ -1833,6 +1905,7 @@ async function renderPlannedCollage(
       )
     );
   }
+  const collage = collageFor(image, inputs);
   return {
     // The width is resolved per image (#413): in `fixed` mode it is the offer's `collageColumns`,
     // in `auto` it is solved from the tiles this group actually holds — from their sizes (#514),
@@ -1840,12 +1913,13 @@ async function renderPlannedCollage(
     ...(await renderTiles(
       sources,
       collageColumnsFor(plannedTileSizes(image, inputs), {
-        gridMode: inputs.collage!.collageGridMode,
-        rows: inputs.collage!.collageRows,
-        columns: inputs.collage!.collageColumns,
+        gridMode: collage.collageGridMode,
+        rows: collage.collageRows,
+        columns: collage.collageColumns,
       }),
       index,
-      inputs
+      inputs,
+      collage
     )),
     token: image.token,
     source: "collage",
@@ -1878,7 +1952,7 @@ async function renderPlannedAttachment(
     sources.push(await tileSource(tile.photoId, labels, inputs));
   }
   return {
-    ...(await renderTiles(sources, image.columns, index, inputs)),
+    ...(await renderTiles(sources, image.columns, index, inputs, collageFor(image, inputs))),
     token: image.token,
     source: inputs.attachmentSources.get(image.attachmentId) ?? "upload",
     side: null,

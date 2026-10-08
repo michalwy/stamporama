@@ -605,6 +605,11 @@ Below them sit the defaults each **new** offer on this platform is seeded from:
   [single photos and the limit](offers.md#single-photos-and-the-limit)). On unless you say
   otherwise: the limit right above it is the very fact the rule reads, so a platform is where a
   collector who always wants collages says so once.
+- **Group series on their own photos**, with the template beside it — whether a new offer here
+  shows each series its set holds two or more stamps of on photos of its own, laid out with the
+  chosen template (*same as the collage template* uses the one above). Off unless you tick it: a
+  Facebook lot can then keep its singles on a 1×2 while its series get a larger grid. See
+  [series in a lot](offers.md#series-in-a-lot).
 
 These — plus the **photo tile labels** from the templates dialog — are **copied onto the offer**
 when it is created, not looked up later. Changing them here therefore affects only offers you create
