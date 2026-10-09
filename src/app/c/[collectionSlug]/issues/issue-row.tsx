@@ -1084,7 +1084,7 @@ export function IssueRow({
           <EntityNoChip entity="issue" no={issue.issueNo} prefix="iss" />
           {/* The collector's own labels on the issue (#152), beside its number. They say nothing
               about the stamps inside it — those carry their own. */}
-          <TagChips tags={issue.tags} />
+          <TagChips tags={issue.tags} size="medium" />
           {(issue.catalogNumbers.length > 0 || issue.memberCount > 0) && (
             <>
             <IssueCatalogChips

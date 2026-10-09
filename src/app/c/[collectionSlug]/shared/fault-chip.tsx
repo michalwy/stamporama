@@ -1,7 +1,7 @@
 "use client";
 
 import type { FaultSummary } from "@/lib/faults";
-import { STAMP_SECONDARY_CHIP } from "./chip-styles";
+import { CHIP_SIZE, STAMP_SECONDARY_CHIP, type ChipSize } from "./chip-styles";
 import { Tooltip } from "./tooltip";
 
 // A copy's faults (#1557), on its Copies row and on its own screen beside the condition.
@@ -26,17 +26,16 @@ export function FaultChip({
   size = "small",
 }: {
   fault: FaultSummary;
-  /** The larger variant for the copy's own screen, as `TagChip` sizes up there. */
-  size?: "small" | "medium";
+  /** The size of the chips it stands beside, as `TagChip` takes it: `row` on the Copies row, beside
+   *  the condition, and `medium` on the copy's own screen. */
+  size?: ChipSize;
 }) {
-  const medium = size === "medium";
   return (
     <Tooltip content={`Fault: ${fault.name}`}>
       <span
         style={{
           ...CHIP,
-          fontSize: medium ? "0.75rem" : "0.6875rem",
-          padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
+          ...CHIP_SIZE[size],
         }}
       >
         {fault.name}
@@ -52,7 +51,7 @@ export function FaultChips({
   size = "small",
 }: {
   faults: FaultSummary[];
-  size?: "small" | "medium";
+  size?: ChipSize;
 }) {
   if (faults.length === 0) return null;
   return (

@@ -9,7 +9,7 @@ import {
   type CopyBreakdownGroupKey,
   type CopyBreakdownLine,
 } from "@/lib/copy-breakdown";
-import { ROW_CHIP, STAMP_SECONDARY_CHIP } from "./chip-styles";
+import { CHIP_SIZE, ROW_CHIP, STAMP_SECONDARY_CHIP } from "./chip-styles";
 import { CertificateStatusChip, ConditionChip } from "./dictionary-chip";
 import { Tooltip } from "./tooltip";
 import { useCollectionConditions } from "./use-display-condition";
@@ -245,7 +245,6 @@ function HeldCopiesChip({
   const { data: formats } = useCollectionFormats(collectionId);
 
   const total = counts.total;
-  const medium = size === "medium";
   // Presence, not quantity: a dot says *there is at least one copy marked this way*, which is the
   // one thing about the breakdown that can be said beside a total without inviting the eye to add
   // it up. The figures are a hover away in the panel. The unmarked copies get no dot — they have
@@ -299,8 +298,7 @@ function HeldCopiesChip({
 
   const chipStyle: React.CSSProperties = {
     ...CHIP,
-    fontSize: medium ? "0.75rem" : "0.6875rem",
-    padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
+    ...CHIP_SIZE[size],
     cursor: onOpenCopies ? "pointer" : "default",
   };
 

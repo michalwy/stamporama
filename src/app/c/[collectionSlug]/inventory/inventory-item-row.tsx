@@ -1046,7 +1046,7 @@ export function InventoryItemRow({
           )}
           {/* What is wrong with the piece (#1557), with the three axes that describe it rather than
               among the labels at the end: a fault qualifies the condition. */}
-          <FaultChips faults={item.faults} />
+          <FaultChips faults={item.faults} size="row" />
           {onSetLocation ? (
             <Tooltip
               content={
@@ -1178,7 +1178,7 @@ export function InventoryItemRow({
               than the one above it, which is about the stamp: *to check* and *for the swap box* are
               things said about the piece in hand. Last of the chips, because they are the one thing
               on the line the app did not put there, and nothing at all when there are none. */}
-          <TagChips tags={item.tags} />
+          <TagChips tags={item.tags} size="row" />
           {showCostBasis && <CostBasisChip item={item} baseCurrency={baseCurrency} />}
           {trailingChips}
         </div>

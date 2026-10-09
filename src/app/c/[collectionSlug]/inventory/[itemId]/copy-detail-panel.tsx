@@ -204,7 +204,7 @@ export function CopyDetailPanel({
           )}
           {/* The collector's own labels on this copy (#1181), on the line that says which copy this
               is — the same chips the Copies list draws, from the same source. */}
-          <TagChips tags={item.tags} size="medium" />
+          <TagChips tags={item.tags} size="row" />
           {/* What this screen can start (#673), at the end of the line that says which copy it is
               about. Both open the Copies list's own dialogs. */}
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
