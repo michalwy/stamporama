@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { getCollectionBaseCurrency } from "./pricing";
+import { loadCostEstimates } from "./cost-estimates";
 import {
   aggregatePurchaseCostsByKey,
   lotCostInputs,
@@ -111,6 +112,7 @@ export async function getStampPurchaseCosts(
       OR: [{ lotId: null }, { lot: { purchase: { kind: "purchase" } } }],
     },
     select: {
+      id: true,
       costBasis: true,
       lotId: true,
       lot: { select: { status: true, price: true, purchase: { select: { purchasedAt: true } } } },
@@ -137,6 +139,18 @@ export async function getStampPurchaseCosts(
   >;
   const labels = new Map<string, Labels>();
 
+  // A pending copy's estimate (#1696), the one its purchase order and its own page show — beside the
+  // pending count, never averaged in.
+  const estimates = await loadCostEstimates(
+    stamp.collectionId,
+    items.map((item) => ({
+      id: item.id,
+      costBasis: item.costBasis?.toString() ?? null,
+      lotId: item.lotId,
+      ...lotCostInputs(item.lot),
+    }))
+  );
+
   const inputs = items.map<PurchaseCostInput>((item) => {
     const key = `${item.condition.id}~${item.certificateStatus?.id ?? ""}~${item.format?.id ?? ""}`;
     if (!labels.has(key)) {
@@ -162,6 +176,7 @@ export async function getStampPurchaseCosts(
       lotId: item.lotId,
       ...lotCostInputs(item.lot),
       purchasedAt: item.lot?.purchase?.purchasedAt ?? null,
+      estimate: estimates.get(item.id)?.amount ?? null,
     };
   });
 

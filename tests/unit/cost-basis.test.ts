@@ -241,6 +241,8 @@ describe("aggregatePurchaseCostsByKey", () => {
       max: "30.00",
       knownCount: 3,
       pendingCount: 0,
+      pendingEstimate: null,
+      pendingEstimatedCount: 0,
       noneCount: 0,
       latestPurchasedAt: new Date("2026-03-09"),
     });
@@ -272,6 +274,33 @@ describe("aggregatePurchaseCostsByKey", () => {
     assert.equal(cell.pendingCount, 2);
     // The date describes the priced copies; a pending one has no figure for it to date.
     assert.equal(cell.latestPurchasedAt, null);
+  });
+
+  it("carries the pending copies' estimate beside their count, never into the figures (#1696)", () => {
+    const [cell] = aggregatePurchaseCostsByKey([
+      copy({ costBasis: "8.00", lotId: "l1", lotStatus: "closed", lotValued: true }),
+      copy({ costBasis: null, lotId: "l2", lotStatus: "open", lotValued: true, estimate: 12 }),
+      copy({ costBasis: null, lotId: "l2", lotStatus: "open", lotValued: true, estimate: 15 }),
+      // Pending with no estimate: counted, and the estimate says it is over two of three.
+      copy({ costBasis: null, lotId: "l3", lotStatus: "open", lotValued: true, estimate: null }),
+      // An estimate on a copy that is not pending is never read.
+      copy({ costBasis: "4.00", lotId: "l4", lotStatus: "closed", lotValued: true, estimate: 99 }),
+    ]);
+    assert.equal(cell.average, "6.00");
+    assert.equal(cell.min, "4.00");
+    assert.equal(cell.max, "8.00");
+    assert.equal(cell.knownCount, 2);
+    assert.equal(cell.pendingCount, 3);
+    assert.equal(cell.pendingEstimate, "13.50");
+    assert.equal(cell.pendingEstimatedCount, 2);
+  });
+
+  it("has no pending estimate when no pending copy has one", () => {
+    const [cell] = aggregatePurchaseCostsByKey([
+      copy({ costBasis: null, lotId: "l1", lotStatus: "open", lotValued: true }),
+    ]);
+    assert.equal(cell.pendingEstimate, null);
+    assert.equal(cell.pendingEstimatedCount, 0);
   });
 
   it("keeps a key whose copies have no cost recorded at all", () => {

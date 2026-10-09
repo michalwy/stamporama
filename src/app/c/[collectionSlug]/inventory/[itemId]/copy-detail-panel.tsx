@@ -10,6 +10,12 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { formatItemNo } from "@/lib/item-number";
 import { deliveryStateLabel, deliveryStateToken } from "@/lib/delivery-state";
+import { resolveCostBasis } from "@/lib/cost-basis";
+import {
+  COST_ESTIMATE_HINT,
+  COST_ESTIMATE_STYLE,
+  costPendingHint,
+} from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { disposalReasonLabel } from "@/lib/disposal";
 import { saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
 import {
@@ -336,10 +342,10 @@ export function CopyDetailPanel({
                 <Field label="Cost basis">
                   {item.costBasis ? (
                     `${item.costBasis} ${baseCurrency}`
+                  ) : resolveCostBasis(item).state === "pending" ? (
+                    <PendingCost item={item} baseCurrency={baseCurrency} />
                   ) : item.lotId ? (
-                    <Tooltip content="The purchase lot is still open — the cost per copy is not settled yet">
-                      <span style={{ color: "var(--color-text-muted)" }}>Pending</span>
-                    </Tooltip>
+                    <MissingFigure label="Pending" reason={costPendingHint(null)} />
                   ) : null}
                 </Field>
                 {/* A piece carrying several stamps is priced by no catalog (#745); its figure is the
@@ -500,10 +506,9 @@ export function CopyDetailPanel({
                     {sale.profit.cost.state === "known" ? (
                       `${sale.profit.cost.amount} ${sale.baseCurrency}`
                     ) : sale.profit.cost.state === "pending" ? (
-                      <MissingFigure
-                        label="Pending"
-                        reason="The purchase lot is still open — the cost per copy is not settled yet"
-                      />
+                      // The same copy, so the same estimate (#1696) — beside a profit that stays
+                      // unworked until the lot closes, since an estimate is not a cost basis.
+                      <PendingCost item={item} baseCurrency={sale.baseCurrency} />
                     ) : sale.profit.cost.reason === "no_opening_value" ? (
                       <MissingFigure
                         label="No opening value"
@@ -605,6 +610,21 @@ export function CopyDetailPanel({
 }
 
 /** A money figure that does not exist, named with why (#168) — muted, never a zero. */
+/** A cost basis still pending on an open lot (#1696): the copy's estimated share of the lot, marked as
+ *  an estimate, as its purchase order shows it — or *Pending* with the reason there is none. */
+function PendingCost({ item, baseCurrency }: { item: ItemListItem; baseCurrency: string }) {
+  if (item.costEstimate == null) {
+    return <MissingFigure label="Pending" reason={costPendingHint(item.costEstimateGap)} />;
+  }
+  return (
+    <Tooltip content={COST_ESTIMATE_HINT}>
+      <span style={COST_ESTIMATE_STYLE}>
+        ~{item.costEstimate} {baseCurrency}
+      </span>
+    </Tooltip>
+  );
+}
+
 function MissingFigure({ label, reason }: { label: string; reason: string }) {
   return (
     <Tooltip content={reason}>

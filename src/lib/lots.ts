@@ -29,6 +29,9 @@ import type { ArrivingCopy } from "./want-rules";
 import {
   computeLotPool,
   allocateLot,
+  canExpressInBase,
+  lotPoolBase,
+  purchaseCostsOf,
   LotCloseBlockedError,
   type PurchaseCosts,
   type LotItem,
@@ -301,21 +304,11 @@ export async function getPurchaseDetail(
   const tilesInState = (state: string) =>
     tileStates.find((g) => g.state === state)?._count._all ?? 0;
 
-  const fxRateToBase = row.fxRateToBase != null ? Number(row.fxRateToBase) : null;
-  // The pool can be expressed in the base currency either when a rate is frozen, or when
-  // the transaction currency IS the base currency (an implicit 1:1 rate — `fxRateToBase`
-  // is deliberately left null in that case). Only a genuinely-unknown cross-currency rate
-  // leaves the base pool unavailable.
-  const canExpressBase =
-    fxRateToBase != null || row.currency === row.collection.baseCurrency;
-  const costs: PurchaseCosts = {
-    shippingCost: row.shippingCost != null ? Number(row.shippingCost) : 0,
-    // A lot with no value weighs nothing in the shipping split — and only an opening balance has one,
-    // which carries no shipping to split anyway (#1323).
-    lots: row.lots.map((l) => ({ id: l.id, price: l.price == null ? 0 : Number(l.price) })),
-    expenses: row.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
-    fxRateToBase,
-  };
+  // The same pool and rate rule the copy's own page reads its estimate by (#1696), from the shared
+  // helpers, so the order and the copy can never state two different estimates.
+  const costs = purchaseCostsOf(row);
+  const fxRateToBase = costs.fxRateToBase;
+  const canExpressBase = canExpressInBase(fxRateToBase, row.currency, row.collection.baseCurrency);
 
   const opening = isOpeningBalance(row);
   const openingValueOf = (scope: "order" | "lot", lotPrices: (number | null)[]) =>
@@ -339,7 +332,7 @@ export async function getPurchaseDetail(
       status: l.status,
       itemCount: l._count.items,
       poolTx: valued ? pool.poolTx.toFixed(2) : null,
-      poolBase: valued && canExpressBase ? pool.poolBase.toFixed(2) : null,
+      poolBase: lotPoolBase(costs, l.id, { valued, canExpressBase })?.toFixed(2) ?? null,
       // The lot's own two halves, straight off the engine (#852): its line price and the share
       // of the order's shipping the apportionment gave it. Named as a share, with the whole
       // charge beside it, because the lot did not incur it — ADR-0009 §3.1 spread it by price.

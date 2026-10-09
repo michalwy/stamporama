@@ -177,6 +177,9 @@ export interface PurchaseCostKey {
  * date of the order it came in on (null for a copy that came from no purchase). */
 export interface PurchaseCostInput extends PurchaseCostKey, CostBasisInput {
   purchasedAt: Date | null;
+  /** A pending copy's estimated cost (#1696), base currency, or null when it has none. Read only
+   *  for a pending copy, and never into the figures. */
+  estimate?: number | null;
 }
 
 /**
@@ -200,6 +203,11 @@ export interface PurchaseCostCell extends PurchaseCostKey {
   knownCount: number;
   /** Copies whose cost basis is still pending on an open lot. */
   pendingCount: number;
+  /** The average **estimated** cost of the pending copies that have an estimate (#1696), 2 dp, or
+   *  null when none has. Shown beside the pending count, never averaged into the figures above. */
+  pendingEstimate: string | null;
+  /** How many pending copies that estimate is over — short of `pendingCount` when some have none. */
+  pendingEstimatedCount: number;
   /** Copies with no cost basis recorded at all. */
   noneCount: number;
   /** Most recent order date among the **priced** copies, i.e. the ones the figures describe.
@@ -220,7 +228,17 @@ function purchaseCostKeyOf(key: PurchaseCostKey): string {
  * {@link aggregateCostBasis} has it.
  */
 export function aggregatePurchaseCostsByKey(inputs: PurchaseCostInput[]): PurchaseCostCell[] {
-  const groups = new Map<string, { key: PurchaseCostKey; amounts: number[]; dates: Date[]; pending: number; none: number }>();
+  const groups = new Map<
+    string,
+    {
+      key: PurchaseCostKey;
+      amounts: number[];
+      dates: Date[];
+      pending: number;
+      estimates: number[];
+      none: number;
+    }
+  >();
 
   for (const input of inputs) {
     const id = purchaseCostKeyOf(input);
@@ -235,6 +253,7 @@ export function aggregatePurchaseCostsByKey(inputs: PurchaseCostInput[]): Purcha
         amounts: [],
         dates: [],
         pending: 0,
+        estimates: [],
         none: 0,
       };
       groups.set(id, group);
@@ -246,6 +265,7 @@ export function aggregatePurchaseCostsByKey(inputs: PurchaseCostInput[]): Purcha
       if (input.purchasedAt) group.dates.push(input.purchasedAt);
     } else if (resolved.state === "pending") {
       group.pending++;
+      if (input.estimate != null) group.estimates.push(input.estimate);
     } else {
       group.none++;
     }
@@ -261,6 +281,11 @@ export function aggregatePurchaseCostsByKey(inputs: PurchaseCostInput[]): Purcha
       max: n === 0 ? null : Math.max(...group.amounts).toFixed(2),
       knownCount: n,
       pendingCount: group.pending,
+      pendingEstimate:
+        group.estimates.length === 0
+          ? null
+          : (group.estimates.reduce((total, e) => total + e, 0) / group.estimates.length).toFixed(2),
+      pendingEstimatedCount: group.estimates.length,
       noneCount: group.none,
       latestPurchasedAt:
         group.dates.length === 0

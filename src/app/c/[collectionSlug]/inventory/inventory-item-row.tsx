@@ -11,6 +11,11 @@ import {
 import type { CandidateStamp, CarriedStamp, ItemListItem } from "@/lib/items";
 import type { CopyValuation } from "@/lib/valuation";
 import { resolveCostBasis } from "@/lib/cost-basis";
+import {
+  COST_ESTIMATE_HINT,
+  COST_ESTIMATE_STYLE,
+  costPendingHint,
+} from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { deliveryStateLabel, deliveryStateToken, isDelivered } from "@/lib/delivery-state";
 import { describeDisposal, disposalReasonLabel, disposalReasonToken } from "@/lib/disposal";
 import { formatItemNo } from "@/lib/item-number";
@@ -452,8 +457,8 @@ export function CopyValue({
 }
 
 /** Acquisition cost-basis of a copy (ADR-0009, #123), resolved through the shared
- * `resolveCostBasis` accessor: a frozen base-currency amount, a **pending** marker while
- * the owning lot is still open, or nothing at all for copies with no cost-basis (added by
+ * `resolveCostBasis` accessor: a frozen base-currency amount, the **estimated** cost while
+ * the owning lot is still open (#1696) or a pending marker where there is none, or nothing at all for copies with no cost-basis (added by
  * hand, or dropped from a lot). This is the general-purpose read-only surface; the lot
  * intake screen renders its own editable cost chip. */
 function CostBasisChip({ item, baseCurrency }: { item: ItemListItem; baseCurrency: string }) {
@@ -468,8 +473,19 @@ function CostBasisChip({ item, baseCurrency }: { item: ItemListItem; baseCurrenc
     );
   }
   if (cb.state === "pending") {
+    // The estimate its purchase order shows (#1696), marked as one; *pending* only where there is
+    // none to show, with the reason.
+    if (item.costEstimate != null) {
+      return (
+        <Tooltip content={COST_ESTIMATE_HINT}>
+          <span style={{ ...CHIP, ...COST_ESTIMATE_STYLE }}>
+            ~{item.costEstimate} {baseCurrency}
+          </span>
+        </Tooltip>
+      );
+    }
     return (
-      <Tooltip content="Cost-basis is pending — it is frozen when this copy's purchase lot is closed.">
+      <Tooltip content={costPendingHint(item.costEstimateGap)}>
         <span style={{ ...CHIP, color: "var(--color-text-muted)", fontStyle: "italic" }}>
           cost pending
         </span>
