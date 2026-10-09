@@ -16,7 +16,8 @@ import type { OfferCoverWalk, OfferCoverWalkPhoto } from "@/lib/offer-photo-gene
 // An offer's cover walk (#1665): the copy photos its images are made from, read when the walk opens.
 // Opened from the Photos card and from beside **Mark ready** when unchecked photos are what holds the
 // offer back — one component, so both open the same walk. Beside it, the bulk *nothing to cover*
-// (#1701), offered on the Photos card and inside the walk.
+// (#1701), offered on the Photos card and inside the walk. Its walk carries covers from one photo to
+// the next of the same side (#1703); the copy page's, one copy's sides, has nothing to carry.
 
 /** Mark the offer's unchecked photos *nothing to cover* — all, or one copy's (#1701). */
 const markNothingToCover =
@@ -73,6 +74,7 @@ export function OfferCoverWalk({
       photoId: p.photoId,
       itemId: p.itemId,
       label: photoLabel(p),
+      side: p.side,
       checked: p.checked,
       covers: p.covers,
     }));
@@ -89,6 +91,7 @@ export function OfferCoverWalk({
       photos={photos}
       defaultStyle={data.defaultStyle}
       onMarkNothingToCover={markNothingToCover(offerId)}
+      carryCovers
       onSaved={refresh}
       footerNote={
         <label style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", color: "var(--color-text-secondary)" }}>

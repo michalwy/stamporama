@@ -175,3 +175,47 @@ export function coverWalkPhotos(
   }
   return out;
 }
+
+// ── Carrying covers to the next photo (#1703) ────────────────────────────────
+//
+// Listing a series, every stamp carries the same design, so the symbols sit in the same places on
+// each. The walk proposes the covers last used on a side to the next unchecked photo of that side.
+// A cover is already a share of the photo's width and height, so it lands on the same part of a
+// stamp photographed at another size or resolution with no conversion.
+
+/** The covers each side would pass on: what was last saved on a front, and on a back, in the walk. */
+export interface CarriedCovers {
+  front: readonly PhotoCover[];
+  back: readonly PhotoCover[];
+}
+
+export const NO_CARRIED_COVERS: CarriedCovers = { front: [], back: [] };
+
+/**
+ * After a photo is saved: its covers become what its side passes on. A photo saved with none —
+ * *nothing to cover* — passes nothing, so the next photo of that side starts empty. An extra (no
+ * side) neither passes covers on nor changes what the sides pass.
+ */
+export function carryAfterSave(
+  carried: CarriedCovers,
+  side: "front" | "back" | null | undefined,
+  covers: readonly PhotoCover[]
+): CarriedCovers {
+  if (side !== "front" && side !== "back") return carried;
+  return { ...carried, [side]: covers.map((c) => ({ ...c })) };
+}
+
+/**
+ * The covers proposed for a photo the walk arrives at, or null when none are: only to a photo not
+ * yet checked — one already checked keeps what the collector decided — and only from its own side,
+ * a back's from the previous back. An extra is never proposed anything.
+ */
+export function proposedCovers(
+  carried: CarriedCovers,
+  target: { side?: "front" | "back" | null; checked: boolean }
+): PhotoCover[] | null {
+  if (target.checked) return null;
+  if (target.side !== "front" && target.side !== "back") return null;
+  const covers = carried[target.side];
+  return covers.length > 0 ? covers.map((c) => ({ ...c })) : null;
+}

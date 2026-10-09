@@ -909,6 +909,14 @@ ready** while those photos are what holds the offer back) walks you through them
 - The counter says how many are left. Only the sides the offer actually photographs are asked
   about, plus any extra you attached on its own; an image you uploaded to the offer is not a copy's
   photo and is never asked.
+- **Covers carry on to the next photo.** Listing a series, the symbols sit in the same places on
+  every stamp, so the covers you save on a front are laid on the next unchecked front, and a back's
+  on the next back — in the same place on the stamp, whatever size the photo is. They are marked
+  **proposed**: move, resize or remove any of them, or **Clear all**, then **Enter** accepts what is
+  there. **Skip**, **Previous** or closing the walk leaves the photo unchecked. A photo saved with
+  **Nothing to cover** passes nothing on, so the next one starts empty; extras are never proposed
+  anything. **Carry covers to the next photo**, beside the counter, turns it off — it is on until
+  you do, and this browser remembers your choice.
 
 **When nothing needs covering, mark them all at once.** For a country whose stamps certainly show
 nothing to hide, **Nothing to cover on the remaining N photos** — beside **Check N photos** on the
