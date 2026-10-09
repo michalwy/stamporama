@@ -11,6 +11,10 @@ import {
   type ItemListItem,
 } from "./items";
 import type { HoldingsSummary } from "./valuation";
+import { lotCostInputs, lotIsOpeningBalance, resolveCostBasis } from "./cost-basis";
+import { loadCostEstimates } from "./cost-estimates";
+import { isHeld } from "./disposal";
+import { offerCostTotals, offerSetCost, type OfferSetCost } from "./offer-cost";
 import {
   collidingItemIdsByOffer,
   type CollisionCopy,
@@ -3873,6 +3877,10 @@ export interface OfferDetailSet {
    * price can be judged per set, which is what a buyer actually takes. Both are base-currency
    * figures: a catalog value is valued in base, and a cost basis is frozen there. */
   holdings: HoldingsSummary;
+  /** The set's COST as this screen states it (#1736): `holdings.cost`'s frozen cost bases **plus**
+   * the estimate of each copy whose lot is still open, marked as an estimate. Every other total keeps
+   * those copies pending (#1696); this one is what an asking price is set against. */
+  cost: OfferSetCost;
   /** The same two figures **in the offer's own currency**, converted at the current rate — the
    * currency the asking price is stated in, so the comparison needs no arithmetic in the reader's
    * head. Null when the offer already prices in the base currency (there is nothing to add) or no
@@ -3916,10 +3924,16 @@ export interface OfferSetsTotals {
    *  {@link catalogTotal} in base currency, 2-dp. */
   catalogFaultReducedCount: number;
   catalogFaultReduction: string;
+  /** Summed from each set's {@link OfferDetailSet.cost}, estimates included (#1736). */
   costTotal: string | null;
   costAverage: string | null;
-  /** Sets carrying a cost basis — the cost average's divisor. */
+  /** Sets carrying a cost figure — the cost average's divisor. */
   costKnownSets: number;
+  /** Copies whose cost is counted at an estimate, and the ones pending with no estimate (#1736). */
+  costEstimatedCount: number;
+  costUnestimated: string[];
+  /** The cost figures lean on an open lot, and are marked as an estimate. */
+  costEstimated: boolean;
   inOfferCurrency: {
     currency: string;
     catalogTotal: string | null;
@@ -4346,6 +4360,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
                   // A copy that is one of several candidates (#1651) is named by them and listed
                   // under the cheapest.
                   candidates: { select: { stampId: true, stamp: STAMP_LABEL_SELECT.stamp } },
+                  // Whether its cost is still pending on an open lot (#1736), read the way the
+                  // holdings summary reads it, so the set's COST estimates exactly its pending copies.
+                  costBasis: true,
+                  lotId: true,
+                  lot: { select: { status: true, price: true, purchase: { select: { kind: true } } } },
+                  disposedAt: true,
+                  deliveryState: true,
                 },
               },
             },
@@ -4396,14 +4417,29 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // (#669) is now drawn whatever the offer is being sold on, and the grade is what its market link
   // asks the question at. One small per-collection read for a screen that draws it either way.
   const platformModule = offer.platform.platformModule;
-  const [labeller, holdingsBySet, conditionMap] = await Promise.all([
+  // The copies whose cost is still pending (#1736) — held, off an opening balance, on an open lot:
+  // exactly the ones the holdings summary counts as `cost.pendingCount` — and their estimates.
+  const pendingCopies = offer.sets.flatMap((s) =>
+    s.items
+      .filter((li) => isHeld(li.item) && !lotIsOpeningBalance(li.item.lot))
+      .map((li) => ({
+        id: li.itemId,
+        costBasis: li.item.costBasis == null ? null : li.item.costBasis.toString(),
+        lotId: li.item.lotId,
+        ...lotCostInputs(li.item.lot),
+      }))
+      .filter((c) => resolveCostBasis(c).state === "pending")
+  );
+  const [labeller, holdingsBySet, conditionMap, costEstimates] = await Promise.all([
     makeOfferLabeller(offer.collectionId),
     getHoldingsValuationByGroup(
       offer.collectionId,
       offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }))
     ),
     loadColnectConditionMap(offer.collectionId),
+    loadCostEstimates(offer.collectionId, pendingCopies),
   ]);
+  const pendingIds = new Set(pendingCopies.map((c) => c.id));
   // What each copy is listed under (#616), resolved once for the screen and read by all four
   // surfaces below — the two blocker lists, the ready gate and the item list — so the page cannot
   // say a stamp is unmatched in one place and link its variant's catalogue page in another. Derived
@@ -4432,6 +4468,19 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   const sets: OfferDetailSet[] = offer.sets.map((s) => {
     const items = orderedItems(s.items);
     const holdings = holdingsBySet.get(s.id)!;
+    const cost = offerSetCost(
+      {
+        total: holdings.cost.totalCostBasis,
+        count: holdings.cost.knownCount,
+        noneCount: holdings.cost.noneCount,
+      },
+      items
+        .filter((li) => pendingIds.has(li.itemId))
+        .map((li) => ({
+          label: labeller.copyOf(li.item),
+          estimate: costEstimates.get(li.itemId)?.amount ?? null,
+        }))
+    );
     const sale = s.saleLines[0]?.sale ?? null;
     const sold = sale !== null;
     const needs =
@@ -4450,6 +4499,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       copyLabels: items.map((li) => labeller.copyOf(li.item)),
       manualCopyOrder: hasManualItemOrder(s.items),
       holdings,
+      cost,
       holdingsInOfferCurrency:
         baseToOffer === null
           ? null
@@ -4460,9 +4510,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
                   ? null
                   : (Number(holdings.totalBaseAmount) * baseToOffer).toFixed(2),
               costAmount:
-                holdings.cost.knownCount === 0
-                  ? null
-                  : (Number(holdings.cost.totalCostBasis) * baseToOffer).toFixed(2),
+                cost.amount === null ? null : (Number(cost.amount) * baseToOffer).toFixed(2),
             },
       sold,
       sale,
@@ -4502,20 +4550,15 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   // The same two figures over the whole listing (#378): summed, and averaged over the sets that
   // carried one. Summed from the per-set figures rather than re-aggregated, because an offer never
   // lists a copy twice — the sets partition its copies, so the parts add up to the whole exactly.
-  let sumCost = 0;
-  let costedSets = 0;
-  for (const s of sets) {
-    if (s.holdings.cost.knownCount === 0) continue;
-    sumCost += Number(s.holdings.cost.totalCostBasis);
-    costedSets++;
-  }
+  // The cost side sums each set's COST, estimates included (#1736).
+  const costTotals = offerCostTotals(sets.map((s) => s.cost));
   const money = (n: number | null) => (n === null ? null : n.toFixed(2));
   const inOffer = (n: number | null) =>
     n === null || baseToOffer === null ? null : (n * baseToOffer).toFixed(2);
   const catalogTotalNum = valuedSets > 0 ? sumSetCV : null;
   const catalogAverageNum = valuedSets > 0 ? sumSetCV / valuedSets : null;
-  const costTotalNum = costedSets > 0 ? sumCost : null;
-  const costAverageNum = costedSets > 0 ? sumCost / costedSets : null;
+  const costTotalNum = costTotals.total;
+  const costAverageNum = costTotals.average;
   const setsTotals: OfferSetsTotals = {
     setCount: sets.length,
     catalogTotal: money(catalogTotalNum),
@@ -4525,7 +4568,10 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     catalogFaultReduction: sumSetReduction.toFixed(2),
     costTotal: money(costTotalNum),
     costAverage: money(costAverageNum),
-    costKnownSets: costedSets,
+    costKnownSets: costTotals.countedSets,
+    costEstimatedCount: costTotals.estimatedCount,
+    costUnestimated: costTotals.unestimated,
+    costEstimated: costTotals.estimated,
     inOfferCurrency:
       baseToOffer === null
         ? null
