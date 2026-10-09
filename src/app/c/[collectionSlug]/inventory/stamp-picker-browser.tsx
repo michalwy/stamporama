@@ -79,6 +79,11 @@ import { PhotoThumb } from "./photo-thumb";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import {
+  IssueBlockBar,
+  issueBlockStyle,
+  issueHeaderBackground,
+} from "@/app/c/[collectionSlug]/shared/expanded-issue-block";
 
 /** An in-progress inline create from the picker popup (#105): a new issue in an
  * area, a new stamp / variant (parent set) in an issue, or a whole lettered run of variants
@@ -1213,10 +1218,9 @@ function PickIssueRow({
   );
 
   return (
-    <div
-      data-picker-issue={issue.id}
-      style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}
-    >
+    <div data-picker-issue={issue.id} style={issueBlockStyle(isExpanded, isLast)}>
+      {/* An open issue is one block, set apart from its neighbours (#1729). */}
+      {isExpanded && <IssueBlockBar />}
       <div
         className={justAdded ? "just-added-flash" : undefined}
         onMouseEnter={() => setHovered(true)}
@@ -1224,7 +1228,7 @@ function PickIssueRow({
         onClick={toggleIssue}
         style={{
           padding: "0.875rem 1.25rem",
-          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          background: issueHeaderBackground(isExpanded, hovered),
           transition: "background 0.1s ease",
           cursor: "pointer",
           display: "flex",
@@ -1361,7 +1365,7 @@ function PickIssueRow({
       {isExpanded && (
         <div
           style={{
-            background: "var(--color-bg-elevated)",
+            // On the block's tint, not a surface of its own.
             borderTop: "1px solid var(--color-border)",
             marginLeft: "1.25rem",
             borderLeft: "2px solid var(--color-border)",

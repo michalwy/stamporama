@@ -416,6 +416,8 @@ If a generated catalog number would duplicate one already in the collection, the
 
 If the added stamps fall **outside the issue's declared catalog range**, a follow-up prompt appears right away showing the proposed widened range (for example, `Mi 100–105 → 100–110`) and asks you to choose **Widen range** or **Keep as-is** — the same decision offered when adding a single stamp. Keeping it as-is leaves the range warning on the issue row, which you can act on later.
 
+An expanded issue stands apart from the issues around it: its row and everything under it, down to **+ Add stamp**, sit on one faintly tinted block with a coloured bar down its left edge and a little space above and below, and the issue's row stays tinted for as long as it is open. In a long list you can always tell where one issue's stamps end and the next issue begins. The **stamp picker** draws an expanded issue the same way.
+
 To add a **single** stamp instead, expand an issue row on the **Issues** list (the **caret**) and click the **+ Add stamp** button pinned at the bottom of its stamp tree — the same action as **Add stamp** in the issue's **⋮** menu, opening the Add stamp dialog with the issue already filled in. (An empty issue shows an **Add one** link in the same place.)
 
 #### Putting the stamps in your own order
