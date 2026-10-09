@@ -25,6 +25,7 @@ import {
   type FacebookStartingPriceMode,
 } from "@/lib/facebook-group-rules";
 import { OFFER_LISTING_TYPE_LABEL, OFFER_LISTING_TYPES, type OfferListingType } from "@/lib/offer-rules";
+import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
 import {
   createFacebookGroupAction,
   deleteFacebookGroupAction,
@@ -314,6 +315,7 @@ function settingsInput(fd: FormData): FacebookPostingSettings {
     bidIncrement: optionalNumber(text("bidIncrement")),
     auctionDays: optionalNumber(text("auctionDays")),
     closingTime: text("closingTime") || null,
+    refreshQuickBuysAfterDays: optionalNumber(text("refreshQuickBuysAfterDays")),
   };
 }
 
@@ -420,6 +422,10 @@ function describeSetting(
       return s.auctionDays == null ? "None" : countLabel(s.auctionDays, "day", "days");
     case "closingTime":
       return s.closingTime ?? "None";
+    case "refreshQuickBuysAfterDays":
+      return s.refreshQuickBuysAfterDays == null
+        ? "Never"
+        : countLabel(s.refreshQuickBuysAfterDays, "day", "days");
     case "currency":
       return platformCurrency ? `The platform's, ${platformCurrency}` : "The platform's";
   }
@@ -513,6 +519,11 @@ function DefaultsFields({
           value={texts.quickBuyTemplate}
           onChange={setText("quickBuyTemplate")}
         />
+        <div style={{ marginTop: "0.75rem" }}>
+          <span style={SMALL_LABEL}>{REFRESH_LABEL}</span>
+          <RefreshDaysField initial={defaults.refreshQuickBuysAfterDays} />
+          <FieldNote>{REFRESH_NOTE}</FieldNote>
+        </div>
       </div>
     </Fields>
   );
@@ -704,14 +715,24 @@ function GroupFields({
 
       <div>
         <GroupLabel hint={HINTS.quickBuys}>Quick buys</GroupLabel>
-        <FollowableSetting label="Post template" small {...setting("quickBuyTemplate")}>
-          <PostTemplateField
-            id="facebook-group-quick-buy-template"
-            listingType="fixed"
-            value={texts.quickBuyTemplate}
-            onChange={setText("quickBuyTemplate")}
-          />
-        </FollowableSetting>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <FollowableSetting label="Post template" small {...setting("quickBuyTemplate")}>
+            <PostTemplateField
+              id="facebook-group-quick-buy-template"
+              listingType="fixed"
+              value={texts.quickBuyTemplate}
+              onChange={setText("quickBuyTemplate")}
+            />
+          </FollowableSetting>
+          <FollowableSetting
+            label={REFRESH_LABEL}
+            note={REFRESH_NOTE}
+            small
+            {...setting("refreshQuickBuysAfterDays")}
+          >
+            <RefreshDaysField initial={start.refreshQuickBuysAfterDays} />
+          </FollowableSetting>
+        </div>
       </div>
     </Fields>
   );
@@ -1018,6 +1039,26 @@ function AuctionDaysField({ initial }: { initial: number | null }) {
       step={1}
       defaultValue={initial == null ? "" : String(initial)}
       placeholder="—"
+      style={INPUT_STYLE}
+    />
+  );
+}
+
+/** When an active quick buy needs posting again (#1718): a post a few days old is seen by nobody. */
+const REFRESH_LABEL = "Refresh quick buys after (days)";
+const REFRESH_NOTE = "Marks a quick buy up this long since it was posted. Empty: never";
+
+function RefreshDaysField({ initial }: { initial: number | null }) {
+  return (
+    <input
+      name="refreshQuickBuysAfterDays"
+      aria-label={REFRESH_LABEL}
+      type="number"
+      min={1}
+      max={REFRESH_QUICK_BUYS_DAYS_MAX}
+      step={1}
+      defaultValue={initial == null ? "" : String(initial)}
+      placeholder="Never"
       style={INPUT_STYLE}
     />
   );

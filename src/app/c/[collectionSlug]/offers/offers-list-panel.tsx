@@ -222,6 +222,10 @@ export function OffersListPanel({
   // done, not the shape the list should still have tomorrow.
   const listingOutOfDate = searchParams.get("listingOutOfDate") === "1";
 
+  // Active quick buys past their platform's refresh threshold (#1718). URL-only for the same reason:
+  // it is the batch to go and post again, and it empties as that is done.
+  const needsRefresh = searchParams.get("needsRefresh") === "1";
+
   const filters: OfferFilters = useMemo(
     () => ({
       platformId,
@@ -231,6 +235,7 @@ export function OffersListPanel({
       endedAuction,
       platformSale,
       listingOutOfDate,
+      needsRefresh,
       includeClosed,
       search: search || undefined,
     }),
@@ -242,6 +247,7 @@ export function OffersListPanel({
       endedAuction,
       platformSale,
       listingOutOfDate,
+      needsRefresh,
       includeClosed,
       search,
     ]
@@ -530,6 +536,7 @@ export function OffersListPanel({
     endedAuction ||
     platformSale ||
     listingOutOfDate ||
+    needsRefresh ||
     !!search;
 
   return (
@@ -663,6 +670,16 @@ export function OffersListPanel({
               alarm={!!counts && counts.platformSale > 0}
               active={platformSale}
               onClick={() => updateParams({ platformSale: platformSale ? "" : "1" })}
+            />
+          </Tooltip>
+          {/* Quick buys up long enough on their platform to be seen by nobody (#1718) — posted again
+              with *Repost* on the offer's screen. Not an alarm: nothing is wrong, it is housekeeping. */}
+          <Tooltip content="Active quick buys up longer than their platform's refresh threshold — post them again to be seen">
+            <FilterChip
+              label="Needs refresh"
+              count={counts?.needsRefresh}
+              active={needsRefresh}
+              onClick={() => updateParams({ needsRefresh: needsRefresh ? "" : "1" })}
             />
           </Tooltip>
           {/* Only while a link has narrowed the list to the offers under the hammer (#481). It is

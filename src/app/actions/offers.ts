@@ -30,6 +30,7 @@ import {
   type OfferTitlePreview,
   OfferActionBlockedError,
   type OfferInput,
+  repostOffer,
 } from "@/lib/offers";
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
@@ -1019,6 +1020,17 @@ export async function publishOfferAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to publish the offer.");
+  }
+}
+
+/** Post a quick buy again (#1718): the same offer, the new post's link, the count restarted. */
+export async function repostOfferAction(offerId: string, rawUrl: string): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await repostOffer(session.user.id, offerId, normalizeUrl(rawUrl) ?? "");
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to record the repost.");
   }
 }
 

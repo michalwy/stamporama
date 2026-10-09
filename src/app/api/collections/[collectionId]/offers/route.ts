@@ -30,6 +30,8 @@ export async function GET(
   // Ended auctions with a bid on them, waiting to be resolved (#490).
   const endedAuction = sp.get("endedAuction") === "1";
   const listingOutOfDate = sp.get("listingOutOfDate") === "1";
+  // Active quick buys past their platform's refresh threshold (#1718).
+  const needsRefresh = sp.get("needsRefresh") === "1";
   // Listings sold on a connected platform with no sale recorded here yet (#499).
   const platformSale = sp.get("platformSale") === "1";
   const search = readSearchParam(sp);
@@ -44,6 +46,7 @@ export async function GET(
       bidding,
       endedAuction,
       listingOutOfDate,
+      needsRefresh,
       platformSale,
       search,
       includeClosed,

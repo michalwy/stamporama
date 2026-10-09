@@ -125,6 +125,7 @@ export function OfferFacebookCard({
   offerId,
   kit,
   onChanged,
+  onRepost,
 }: {
   collectionId: string;
   collectionSlug: string;
@@ -132,6 +133,8 @@ export function OfferFacebookCard({
   kit: FacebookOfferKit;
   /** The offer screen re-reads itself after a write; the card holds no copy of its own. */
   onChanged: () => void;
+  /** Opens the offer screen's *Repost* dialog (#1718) — set only on an active quick buy. */
+  onRepost?: () => void;
 }) {
   const router = useRouter();
   const { invalidateAll: invalidateSales } = useInvalidateSales();
@@ -349,6 +352,16 @@ export function OfferFacebookCard({
                 ? `The post's link. Activate asks for it once and it activates all ${kit.lots.length} lots.`
                 : "The post's link. Activate asks for it once the post is up."}
           </p>
+        )}
+        {/* A quick-buy post a few days old is seen by nobody (#1718): delete it, post the text and
+            photos above again, and record the new post's link on the same offer. */}
+        {onRepost && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.375rem" }}>
+            <DialogSecondaryButton type="button" disabled={isPending} onClick={onRepost}>
+              Repost…
+            </DialogSecondaryButton>
+            <span style={MUTED}>Post the text and photos above again, then record the new link.</span>
+          </div>
         )}
       </div>
 

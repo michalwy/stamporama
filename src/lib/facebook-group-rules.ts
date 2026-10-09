@@ -12,6 +12,7 @@
 
 import { roundAmount } from "./decimal-input";
 import type { OfferListingType } from "./offer-rules";
+import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
 
 /** One placeholder a post template may carry, with the label and example the editor shows. */
 export interface FacebookPostPlaceholder {
@@ -104,6 +105,7 @@ export const FACEBOOK_GROUP_SETTINGS = [
   "auctionDays",
   "closingTime",
   "currency",
+  "refreshQuickBuysAfterDays",
 ] as const;
 export type FacebookGroupSetting = (typeof FACEBOOK_GROUP_SETTINGS)[number];
 
@@ -130,6 +132,8 @@ export interface FacebookPostingSettings {
   auctionDays: number | null;
   /** `HH:MM`, 24-hour, or null. */
   closingTime: string | null;
+  /** After how many days an active quick buy needs posting again (#1718); null is never. */
+  refreshQuickBuysAfterDays: number | null;
 }
 
 /** The platform's settings before anybody has stated any — what a platform with no row reads as.
@@ -145,6 +149,7 @@ export const FACEBOOK_BLANK_SETTINGS: FacebookPostingSettings = {
   bidIncrement: null,
   auctionDays: null,
   closingTime: null,
+  refreshQuickBuysAfterDays: null,
 };
 
 /** A group's values, as the editor holds them and the domain layer stores them. A setting not named
@@ -258,6 +263,7 @@ export function cleanFacebookDefaults(input: FacebookPostingSettings): FacebookP
     bidIncrement: optionalAmount(input.bidIncrement, "The bid increment"),
     auctionDays: cleanAuctionDays(input.auctionDays),
     closingTime: cleanClosingTime(input.closingTime),
+    refreshQuickBuysAfterDays: cleanRefreshQuickBuysAfterDays(input.refreshQuickBuysAfterDays),
   };
 }
 
@@ -298,6 +304,7 @@ export function cleanFacebookGroupValues(input: FacebookGroupValues): FacebookGr
     bidIncrement: own("bidIncrement") ? input.bidIncrement : null,
     auctionDays: own("auctionDays") ? input.auctionDays : null,
     closingTime: own("closingTime") ? input.closingTime : null,
+    refreshQuickBuysAfterDays: own("refreshQuickBuysAfterDays") ? input.refreshQuickBuysAfterDays : null,
   });
 
   let currency: string | null = null;
@@ -340,8 +347,23 @@ export function effectiveFacebookGroupSettings(
     bidIncrement: from("bidIncrement").bidIncrement,
     auctionDays: from("auctionDays").auctionDays,
     closingTime: from("closingTime").closingTime,
+    refreshQuickBuysAfterDays: from("refreshQuickBuysAfterDays").refreshQuickBuysAfterDays,
     currency: own("currency") ? group.currency : null,
   };
+}
+
+/**
+ * A group's refresh threshold for quick buys (#1718) on its own, for the reader that needs only it —
+ * the *Needs refresh* filter reads every group's — by the same rule
+ * {@link effectiveFacebookGroupSettings} applies to it.
+ */
+export function effectiveRefreshQuickBuysAfterDays(
+  group: { custom: readonly string[]; refreshQuickBuysAfterDays: number | null },
+  platform: { refreshQuickBuysAfterDays: number | null }
+): number | null {
+  return group.custom.includes("refreshQuickBuysAfterDays")
+    ? group.refreshQuickBuysAfterDays
+    : platform.refreshQuickBuysAfterDays;
 }
 
 function templateTokens(template: string): string[] {

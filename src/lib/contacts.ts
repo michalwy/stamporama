@@ -8,6 +8,7 @@ import { normalizeDescriptionFormat } from "./description-format";
 import { isOfferListingType } from "./offer-rules";
 import { normalizeFacebookProfileUrl } from "./facebook-result-rules";
 import { normalizeMarketCode } from "./market-anchoring";
+import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
 
 // Server-side domain logic for the per-collection Contact address book (ADR-0008,
 // #107). A Contact is everyone the collector deals with — sellers, buyers, exchange
@@ -64,6 +65,15 @@ export class ContactFieldError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ContactFieldError";
+  }
+}
+
+/** The quick-buy refresh threshold (#1718), held to its shape — the rule's own message on a bad one. */
+function refreshDays(value: number | null | undefined): number | null {
+  try {
+    return cleanRefreshQuickBuysAfterDays(value);
+  } catch (err) {
+    throw new ContactFieldError((err as Error).message);
   }
 }
 
@@ -164,6 +174,10 @@ export interface ContactData extends ContactRoles {
    * the platform states no preference (which reads as `fixed`). Read at offer creation exactly as
    * {@link defaultStartingPrice} is, never seeded-and-followed. Only meaningful for the `platform` role. */
   defaultListingType: string | null;
+  /** After how many days an active quick buy here needs posting again (#1718), or null for never.
+   * Not read for the Facebook platform, whose threshold is on Settings → Facebook (#1661). Only
+   * meaningful for the `platform` role. */
+  refreshQuickBuysAfterDays: number | null;
   /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
    * the renderer (#310) rather than seeded onto offers. Only meaningful for the `platform` role. */
   maxPhotos: number | null;
@@ -236,6 +250,7 @@ const CONTACT_SELECT = {
   defaultStartingPrice: true,
   minimumPrice: true,
   defaultListingType: true,
+  refreshQuickBuysAfterDays: true,
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
@@ -378,6 +393,8 @@ export interface ContactCreateInput {
    * unknown value stores null rather than being coerced: a preference nobody stated is exactly what
    * null means, and it reads as `fixed` wherever it is used. */
   defaultListingType?: string | null;
+  /** The quick-buy refresh threshold (#1718) in days, or null for never. Out of range is refused. */
+  refreshQuickBuysAfterDays?: number | null;
   /** The platform's photo limits (#308) — null each means "no limit stated". */
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
@@ -634,6 +651,7 @@ export async function createContact(
         // The platform's floor (#731). Written on its own rather than through the helper above,
         // because it is the one per-listing figure that does not depend on the listing type.
         minimumPrice: amount(data.minimumPrice),
+        refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxTitleLength: data.maxTitleLength ?? null,
@@ -692,6 +710,7 @@ export async function updateContact(
         // The platform's floor (#731). Written on its own rather than through the helper above,
         // because it is the one per-listing figure that does not depend on the listing type.
         minimumPrice: amount(data.minimumPrice),
+        refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxTitleLength: data.maxTitleLength ?? null,

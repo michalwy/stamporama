@@ -31,6 +31,7 @@ export async function GET(
       bidding: sp.get("bidding") === "1",
       endedAuction: sp.get("endedAuction") === "1",
       listingOutOfDate: sp.get("listingOutOfDate") === "1",
+      needsRefresh: sp.get("needsRefresh") === "1",
       platformSale: sp.get("platformSale") === "1",
       includeClosed: sp.get("includeClosed") === "1",
     });

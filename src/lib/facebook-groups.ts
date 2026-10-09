@@ -95,6 +95,7 @@ interface SettingsRow {
   bidIncrement: Decimal | null;
   auctionDays: number | null;
   closingTime: string | null;
+  refreshQuickBuysAfterDays: number | null;
 }
 
 /** A settings row's columns as the plain values the rules and the client hold. */
@@ -111,6 +112,7 @@ export function toPostingSettings(row: SettingsRow): FacebookPostingSettings {
     bidIncrement: row.bidIncrement?.toNumber() ?? null,
     auctionDays: row.auctionDays,
     closingTime: row.closingTime,
+    refreshQuickBuysAfterDays: row.refreshQuickBuysAfterDays,
   };
 }
 
@@ -148,6 +150,7 @@ const GROUP_SELECT = {
   bidIncrement: true,
   auctionDays: true,
   closingTime: true,
+  refreshQuickBuysAfterDays: true,
   currency: true,
   _count: { select: { offers: true } },
 } as const;
@@ -247,6 +250,7 @@ function settingsColumns(values: FacebookPostingSettings) {
     bidIncrement: values.bidIncrement,
     auctionDays: values.auctionDays,
     closingTime: values.closingTime,
+    refreshQuickBuysAfterDays: values.refreshQuickBuysAfterDays,
   };
 }
 

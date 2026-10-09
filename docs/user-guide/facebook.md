@@ -85,6 +85,10 @@ at once for every group that follows it, and never changes an auction already ma
 
   A quick buy has no price default here: its price is set on each offer.
 
+- **Refresh quick buys after (days)** — how long a quick buy may be up before it is seen by nobody
+  and wants posting again. Past it, the offer carries **Up N days · refresh** and is listed under
+  **Needs refresh** (see [Refreshing a quick buy](#refreshing-a-quick-buy)). Empty means never.
+
 A post is always written from the template of its own type — an auction's from the auction
 template, a quick buy's from the quick-buy one, never the other. In either template, anything else
 in braces stays exactly as you typed it, and the field says so under it while you type — so a
@@ -308,3 +312,16 @@ or created exactly as an auction's winner is.
 Saving records the sale and the offer becomes **Sold**. The offer keeps its own asking price; what the
 buyer paid is on the sale. A quick buy never closes by itself, so it never asks for a result: to take
 one down unsold, withdraw it as any offer.
+
+## Refreshing a quick buy
+
+A quick-buy post a few days old reaches nobody. Once one is up longer than **Refresh quick buys
+after** — Facebook's, or the group's own — the offer carries **Up N days · refresh** and appears
+under the offers list's **Needs refresh**.
+
+Delete the old post in the group and post it again: the card's **post text** and **↓ Photos** are
+there for it as they were the first time. Then choose **Repost…** on the card and paste the new
+post's link. The offer keeps its number — so `{offer}` and what buyers quote still match — and the
+count of days starts again from today; the old link stays on the offer as an earlier post. For a
+lot of a post with several lots, every quick buy of the post takes the new link at once. See
+[Reposting](offers.md#reposting).

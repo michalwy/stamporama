@@ -113,6 +113,13 @@ It is shown even when the suggested price beside it is already higher, since a c
 to list at the floor is exactly what it was added for. Leave it empty for platforms with no such
 figure.
 
+A platform also has **Refresh quick buys after (days)**: how long a quick buy may be up there before
+it has sunk out of sight and wants posting again — a few days on Delcampe, never on Allegro. An
+active quick buy up that long is marked on the offers list (see [Quick buys that need
+refreshing](offers.md#quick-buys-that-need-refreshing)). Leave it empty for never. The Facebook
+platform does not show it: there it is set in Settings → Facebook, where each group can follow it or
+set its own.
+
 Ticking **Seller** or **Auction house** reveals **Auction sale defaults** — the **currency**,
 **shipping**, and the two **buyer's premium** parts (a percentage and a per-lot fee) this seller
 normally trades on. They are **copied onto every new [auction sale](auctions.md)** with this seller

@@ -2891,6 +2891,11 @@ model FacebookGroup {
   // (`Contact.platformCurrency`, #196) — which is what nearly every group wants.
   currency           String?
 
+  // ── When a quick buy here needs posting again ──────────────────────────────────────────────────
+  // After how many days an active quick buy in this group is past being seen (#1718); null is never.
+  // A followed setting like the rest (`refreshQuickBuysAfterDays` in `customSettings`).
+  refreshQuickBuysAfterDays Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -2927,6 +2932,8 @@ model FacebookDefaults {
   bidIncrement       Decimal? @db.Decimal(10, 2)
   auctionDays        Int?
   closingTime        String?
+  // After how many days an active quick buy needs posting again (#1718); null is never.
+  refreshQuickBuysAfterDays Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -4847,6 +4854,11 @@ model Offer {
   // The date the listing went live on the platform (#257), captured at offer creation and remembered
   // across creations. Distinct from `createdAt` (when the record was made); null when not recorded.
   listingDate  DateTime? @db.Date
+  // When the listing was last **posted again** (#1718) — *Repost* stamps it with the new link. The
+  // listing date above stays the first listing, which time-to-sale figures read; the days an active
+  // quick buy has been up for its platform's refresh threshold run from the later of the two. Null on
+  // every offer never reposted.
+  lastPostedAt DateTime?
   // The listing on the platform no longer says what this record says (#542): stamped the moment an
   // offer that is **up** — `active` or `paused`, both of which are listings a buyer can see — has its
   // composition, its stated price or one of its texts changed, and cleared the moment the live entry
@@ -5139,6 +5151,8 @@ model Offer {
   /** Which variant this offer lists an unknown-variant umbrella under, where the collector has said
    * so by hand. See {@link OfferListedVariant}. */
   listedVariants    OfferListedVariant[]
+  /** The links this listing had before it was posted again (#1718), each with its dates. */
+  postings          OfferPosting[]
 
   // The short address `/o/<collectionSlug>/<offerNo>` (#416) resolves on this pair, and the
   // uniqueness is the guarantee that it names one listing.
@@ -5160,6 +5174,27 @@ model Offer {
   // The photo-purge sweep's own scan (#512): closed offers past the grace cutoff.
   @@index([state, closedAt])
   @@map("offer")
+}
+
+// An earlier posting of an offer (#1718): the link it had and when it was up, kept when *Repost*
+// gives the offer a new link. The offer stays the same offer — its number, its copies, its texts —
+// so buyers' references keep matching; only the address and the date it was posted move on. Written
+// once, never edited.
+model OfferPosting {
+  id       String   @id @default(cuid())
+  offerId  String
+  // The link the listing had, or null where it had none recorded.
+  url      String?
+  // When that posting went up — the offer's last repost, else its listing date — or null where
+  // neither was known.
+  postedAt DateTime?
+  // When it was replaced by a new posting.
+  endedAt  DateTime
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@index([offerId])
+  @@map("offer_posting")
 }
 
 // The state of one offer's photo generation (#311) — at most one row per offer, acting as both the
@@ -6489,6 +6524,12 @@ model Contact {
   // and five promotion flags, none of which is a fact about a stamp. Null on every platform that is
   // not Delcampe, and on a Delcampe platform whose first profile has not been written yet.
   defaultDelcampeListingProfileId String?
+  // After how many days an **active quick buy** here needs posting again to be seen (#1718): a
+  // Facebook post a few days old reaches nobody, and a Delcampe listing sinks; an Allegro listing
+  // does not. Null is never — the ordinary state, and every platform's before the column existed.
+  // Facebook's own is `FacebookDefaults.refreshQuickBuysAfterDays`, which its groups follow; this
+  // column is not read for the Facebook platform.
+  refreshQuickBuysAfterDays Int?
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)

@@ -161,6 +161,19 @@ export function ListingOutOfDateChip({ since }: { since: Date | string | null })
 }
 
 /**
+ * An active quick buy up longer than its platform's refresh threshold (#1718): a post that old is
+ * seen by nobody, so it wants posting again. `info`-tinted rather than `warning`: nothing about the
+ * listing is wrong, it has only sunk.
+ */
+export function RefreshDueChip({ days }: { days: number }) {
+  return tinted(
+    "info",
+    `Up ${days} ${days === 1 ? "day" : "days"} · refresh`,
+    "Up longer than this platform's refresh threshold — post it again and record the new link with Repost"
+  );
+}
+
+/**
  * An offer that was up on a platform and has **no sets left** (#1277) — see `isEmptiedListing`,
  * which decides where it is drawn.
  *

@@ -150,6 +150,12 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // the figure above means anything. Blank is "no preference", which is not the same claim as
     // "quick buy" even though both behave that way.
     defaultListingType: isPlatform ? str(formData, "defaultListingType") || null : null,
+    // When a quick buy here needs posting again (#1718), in days. Blank is never; the domain holds
+    // a stated figure to its range.
+    refreshQuickBuysAfterDays:
+      isPlatform && str(formData, "refreshQuickBuysAfterDays").trim() !== ""
+        ? Number(str(formData, "refreshQuickBuysAfterDays"))
+        : null,
     // The platform's photo limits, and the defaults new offers on this platform are seeded from
     // (#308). `photoSides` normalises to the default side; the collage template is verified against
     // the collection server-side.
