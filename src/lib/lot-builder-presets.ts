@@ -5,13 +5,15 @@ import {
   type LotRecipe,
 } from "./lot-builder-criteria";
 import type { DuplicatePolicy, SeriesPreference } from "./lot-builder-rules";
+import { isOfferListingType } from "./offer-rules";
 
 // Saved bulk-lot builder criteria (#773) — the database half.
 //
 // A preset is a **recipe**: how a lot of this kind is picked, with nothing about which lot. The
 // vocabulary is `LotRecipe` in `lot-builder-criteria.ts` and the table's columns are that type
-// spelled out; the reasoning for what is *not* in it — the platform, the area, the subtree scope,
-// the seed, the pins, the rejections — lives there and in the schema, not repeated here.
+// spelled out; the reasoning for what is *not* in it — the area, the subtree scope, the seed, the
+// pins, the rejections — and for the platform being in it (#1688) lives there and in the schema, not
+// repeated here.
 //
 // Read **live** and never copied onto anything: what a preset produces is a query string, and the
 // offer that query string commits records its own copies. So there is no in-use check and no
@@ -62,6 +64,9 @@ const SELECT = {
   maxPerStamp: true,
   nameTemplate: true,
   descriptionTemplate: true,
+  platformId: true,
+  listingType: true,
+  facebookGroupId: true,
 } as const;
 
 type PresetRow = {
@@ -81,6 +86,9 @@ type PresetRow = {
   maxPerStamp: number | null;
   nameTemplate: string | null;
   descriptionTemplate: string | null;
+  platformId: string | null;
+  listingType: string | null;
+  facebookGroupId: string | null;
 };
 
 /** A stored `Decimal` as the criteria carry it: a plain finite number, or null. */
@@ -122,6 +130,17 @@ function toData(row: PresetRow): LotBuilderPresetData {
       duplicates: duplicates(row.duplicates),
       nameTemplate: row.nameTemplate,
       descriptionTemplate: row.descriptionTemplate,
+      // No platform is the empty id the criteria use for one, and takes the two choices that depend
+      // on it with it — a type or a group with nothing to be the type or group *of* is not a choice.
+      // A stale id is kept as it is: whether it still names a platform or an open group is judged
+      // where the preset is loaded, which is where it has to be said (#1688).
+      ...(row.platformId
+        ? {
+            platformId: row.platformId,
+            listingType: isOfferListingType(row.listingType) ? row.listingType : null,
+            facebookGroupId: row.facebookGroupId,
+          }
+        : { platformId: "", listingType: null, facebookGroupId: null }),
     },
   };
 }
@@ -144,6 +163,9 @@ function toColumns(recipe: LotRecipe) {
     maxPerStamp: recipe.maxPerStamp,
     nameTemplate: recipe.nameTemplate,
     descriptionTemplate: recipe.descriptionTemplate,
+    platformId: recipe.platformId || null,
+    listingType: recipe.platformId ? recipe.listingType : null,
+    facebookGroupId: recipe.platformId ? recipe.facebookGroupId : null,
   } satisfies Record<(typeof LOT_RECIPE_KEYS)[number], unknown>;
 }
 

@@ -146,6 +146,8 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       duplicates: "neutral",
     nameTemplate: null,
     descriptionTemplate: null,
+      listingType: null,
+      facebookGroupId: null,
       ...overrides,
     };
   }
@@ -754,6 +756,33 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       // regenerates is one whose title still claims a hundred pieces after one sold elsewhere.
       assert.equal(offer.nameEdited, false);
       assert.equal(offer.descriptionEdited, false);
+    });
+
+    // The builder states the type (#1688); unstated, the offer starts as the platform says, which for
+    // this one — no default of its own — is a quick buy.
+    it("makes the offer as the listing type the screen stated (#1688)", async () => {
+      await copy(await stamp(commitAreaId, "Sold by auction", { price: "2.00" }));
+      await copy(await stamp(commitAreaId, "Sold as stated by nobody", { price: "2.00" }));
+      const typeOf = async (offerId: string) =>
+        (await prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { listingType: true } }))
+          .listingType;
+
+      const auction = await commitLotProposal(userId, collectionId, {
+        ...request({
+          seed: "auction",
+          criteria: { areaId: commitAreaId, countMin: 1, countMax: 1, listingType: "auction" },
+        }),
+        name: null,
+        description: null,
+      });
+      assert.equal(await typeOf(auction.offerId), "auction");
+
+      const unstated = await commitLotProposal(userId, collectionId, {
+        ...request({ seed: "unstated", criteria: { areaId: commitAreaId, countMin: 1, countMax: 1 } }),
+        name: null,
+        description: null,
+      });
+      assert.equal(await typeOf(unstated.offerId), "fixed");
     });
 
     it("re-plans rather than trusting the proposal the client is holding (#717)", async () => {

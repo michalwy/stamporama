@@ -657,13 +657,14 @@ model CollageTemplate {
 /// work of building a lot; a collector who builds the same kind of lot repeatedly retypes all eleven
 /// and mistypes some.
 ///
-/// **The platform and the area are deliberately absent**, and so is the area's subtree scope. The
-/// area is precisely what varies between two lots of one kind — one recipe is meant to be run over
-/// Germany and then over Poland — so carrying it would need one preset per area; the platform is a
-/// select the collector must state anyway before the screen answers at all. The seed, the pins and
-/// the rejections are not criteria but one lot's own closing-in, and a preset holding them would
-/// propose the same hundred copies for ever. The vocabulary is `LotRecipe` in
-/// `lot-builder-criteria.ts`, and these columns are that type spelled out.
+/// **The area is deliberately absent**, and so is the area's subtree scope. The area is precisely
+/// what varies between two lots of one kind — one recipe is meant to be run over Germany and then
+/// over Poland — so carrying it would need one preset per area. **The platform is kept** (#1688), with
+/// the listing type and the Facebook group that depend on it: a kind of lot is listed on one
+/// platform, so leaving it out meant choosing it by hand on every load. The seed, the pins and the
+/// rejections are not criteria but one lot's own closing-in, and a preset holding them would propose
+/// the same hundred copies for ever. The vocabulary is `LotRecipe` in `lot-builder-criteria.ts`, and
+/// these columns are that type spelled out.
 ///
 /// Read **live** and never copied onto anything, like {@link RefCardTemplate} and unlike
 /// {@link CollageTemplate}'s seeding: what a preset produces is a query string, and the offer that
@@ -714,6 +715,16 @@ model LotBuilderPreset {
   // reusable as "about a hundred, used, deepest piles first". Null leaves the platform's own.
   nameTemplate        String?
   descriptionTemplate String?
+
+  // The platform the lot is listed on, how it is sold there — `auction` | `fixed`, the offer's own
+  // `listingType` vocabulary — and on Facebook the group it is offered in (#1688). Null on a preset
+  // saved before them, which then leaves the platform on screen as it is. **Plain ids with no
+  // relation**, like `conditionIds`: a platform deleted or a group archived since must be *reported*
+  // when the preset is loaded, and a `SetNull` would make it indistinguishable from a preset that
+  // never had one.
+  platformId      String?
+  listingType     String?
+  facebookGroupId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

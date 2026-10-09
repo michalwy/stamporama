@@ -47,7 +47,13 @@ export default async function LotBuilderPage({ params }: LotBuilderPageProps) {
   // `offers/platforms` answers): a lot is a plausible *first* listing on a marketplace.
   const platforms = contacts
     .filter((c) => c.platform)
-    .map((c) => ({ id: c.id, name: c.name, platformCurrency: c.platformCurrency }));
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      platformCurrency: c.platformCurrency,
+      // What an offer there starts as when the builder states no type (#1688).
+      defaultListingType: c.defaultListingType,
+    }));
 
   // **`minHeight`, not the album page editor's `height`, and deliberately** (#838). The two screens
   // look alike — a card holding a rail and the work — but they answer *what scrolls* the opposite

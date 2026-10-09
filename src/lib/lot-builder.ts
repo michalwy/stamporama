@@ -648,8 +648,9 @@ export interface LotCommitInput extends LotBuilderRequest {
   name: string | null;
   /** The listing description, on the same contract. */
   description: string | null;
-  /** On Facebook, the group the lot is auctioned in and when it closes (#1663) — the one choice the
-   *  create step asks beside the platform. Not a criterion: no preset or address carries it. */
+  /** On Facebook, the group the lot is offered in and when it closes (#1663). The screen keeps the
+   *  group in its address too, so a preset can (#1688), but this is what the commit reads: the closing
+   *  time is worked out in the browser, and only the two together are the choice. */
   facebook?: FacebookCreateChoice;
 }
 
@@ -701,6 +702,9 @@ export async function commitLotProposal(
     {
       platformId: input.criteria.platformId,
       url: null,
+      // The type the screen showed (#1688). Unstated, the offer starts as the platform says — on
+      // Facebook as its group does (#1671) — exactly as before the builder could choose.
+      listingType: input.criteria.listingType ?? undefined,
       // A draft states no figure yet — the same `0.00` a blank price on the offer form produces.
       // The suggested price (#190) and the copies' catalogue value (#230) reach the collector on the
       // offer's own screen, where they always have.

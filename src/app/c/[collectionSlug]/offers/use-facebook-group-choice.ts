@@ -20,6 +20,11 @@ import { facebookDefaultEndsAt, NO_FACEBOOK_CHOICE, type FacebookCreateChoice } 
  * for one from the form. Only the closing time is worked out here (`choice()`), from the group's length
  * and time of day, because it is a local time and the browser is the only place the zone is known
  * (#490) — at the moment of the click, as the form does when the group is picked.
+ *
+ * A screen that keeps the group in its own state — the Lot builder, whose address carries it so a
+ * preset can (#1688) — passes it as `held`. A held group is the choice outright: one archived or
+ * deleted since is **not** replaced by the last used, but left unchosen and reported (`unavailable`),
+ * so the collector picks again rather than posting to a group they did not choose.
  */
 export interface FacebookGroupChoiceState {
   /** The platform is Facebook. False while it is still being asked, and on every other platform. */
@@ -33,6 +38,8 @@ export interface FacebookGroupChoiceState {
   choose: (groupId: string) => void;
   /** Why the create step cannot go ahead yet, in the collector's words — or null when it can. */
   missing: string | null;
+  /** The held group is archived or no longer exists, so none is chosen (#1688). */
+  unavailable: boolean;
   /** What the create sends: the group and its closing time, or nothing off Facebook. */
   choice: () => FacebookCreateChoice;
   /** Remember the chosen group as this platform's last used, after a create that went through. */
@@ -42,8 +49,21 @@ export interface FacebookGroupChoiceState {
 export const FACEBOOK_GROUP_MISSING = "Choose the Facebook group this offer is in.";
 export const FACEBOOK_NO_GROUPS =
   "This platform has no Facebook groups yet — add one in Settings → Facebook first.";
+export const FACEBOOK_GROUP_UNAVAILABLE =
+  "The Facebook group this lot was set to is archived or no longer exists — choose one.";
 
-export function useFacebookGroupChoice(collectionId: string, platformId: string): FacebookGroupChoiceState {
+/** A group held by the screen rather than by the hook (#1688): null is *not stated*, which starts on
+ *  the last group used there as the hook's own state does. */
+export interface HeldFacebookGroup {
+  groupId: string | null;
+  choose: (groupId: string) => void;
+}
+
+export function useFacebookGroupChoice(
+  collectionId: string,
+  platformId: string,
+  held?: HeldFacebookGroup
+): FacebookGroupChoiceState {
   const { data, isLoading } = useQuery({
     // The offer form's own key (with no group of an existing offer to keep), so the two share a read.
     queryKey: ["facebook-group-choices", collectionId, platformId, null],
@@ -60,11 +80,15 @@ export function useFacebookGroupChoice(collectionId: string, platformId: string)
   const [lastUsed, rememberGroup] = useLastFacebookGroup(collectionId, platformId);
   // The collector's own pick, held with the platform it was made on so a platform change drops it.
   const [picked, setPicked] = useState<{ platformId: string; groupId: string } | null>(null);
-  const ownPick = picked?.platformId === platformId ? picked.groupId : null;
-  const groupId = ownPick ?? (lastUsed && groups.some((g) => g.id === lastUsed) ? lastUsed : "");
+  const ownPick = held ? held.groupId : picked?.platformId === platformId ? picked.groupId : null;
+  // Judged only once the groups are in: before that every group is "not offered".
+  const unavailable = isFacebook && !!ownPick && !groups.some((g) => g.id === ownPick);
+  const groupId = unavailable
+    ? ""
+    : (ownPick ?? (lastUsed && groups.some((g) => g.id === lastUsed) ? lastUsed : ""));
   const group = groups.find((g) => g.id === groupId) ?? null;
 
-  const choose = (id: string) => setPicked({ platformId, groupId: id });
+  const choose = held ? held.choose : (id: string) => setPicked({ platformId, groupId: id });
   const choice = (): FacebookCreateChoice => {
     if (!group) return NO_FACEBOOK_CHOICE;
     const endsAt = facebookDefaultEndsAt(new Date(), group.auctionDays, group.closingTime);
@@ -81,7 +105,15 @@ export function useFacebookGroupChoice(collectionId: string, platformId: string)
     groupId,
     group,
     choose,
-    missing: !isFacebook || group ? null : groups.length === 0 ? FACEBOOK_NO_GROUPS : FACEBOOK_GROUP_MISSING,
+    missing:
+      !isFacebook || group
+        ? null
+        : groups.length === 0
+          ? FACEBOOK_NO_GROUPS
+          : unavailable
+            ? FACEBOOK_GROUP_UNAVAILABLE
+            : FACEBOOK_GROUP_MISSING,
+    unavailable,
     choice,
     remember,
   };
