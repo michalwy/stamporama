@@ -67,6 +67,11 @@ marked *nothing to cover* declares an unchanged image out of date. Nothing is re
 implicitly; the walk offers *Regenerate photos when done*, ticked by default, exactly as the photo
 settings dialog does (#328).
 
+*Amended by #1701:* checking need not be photo by photo. An offer's unchecked photos — all of them,
+or one copy's from inside the walk — can be marked *nothing to cover* in one confirmed action, which
+records exactly what an empty save on each would, and touches no photo with covers or already
+checked.
+
 ## Consequences
 
 - A copy photo can be shown to a buyer only through offer images for the covers to matter; anything

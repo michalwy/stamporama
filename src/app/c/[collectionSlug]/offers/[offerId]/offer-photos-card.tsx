@@ -6,7 +6,7 @@ import { formatBytes } from "@/lib/format-bytes";
 import { PhotoLightbox, ThumbPreview, THUMB_OBJECT_FIT } from "../../inventory/photo-thumb";
 import { PhotoSettingsDialog } from "./photo-settings-dialog";
 import { AddAttachmentDialog } from "./add-attachment-dialog";
-import { OfferCoverWalk } from "./offer-cover-walk";
+import { OfferCoverWalk, OfferNothingToCoverButton } from "./offer-cover-walk";
 import {
   useReorderList,
   showLineAt,
@@ -1138,7 +1138,8 @@ export function OfferPhotosCard({
             </button>
           </Tooltip>
           {/* Covering symbols (#1665): the walk through the unchecked photos while there are any, a
-              revisit of every one afterwards. Offered only where the offer needs covers. */}
+              revisit of every one afterwards — and, while any are unchecked, marking them all
+              *nothing to cover* at once (#1701). Offered only where the offer needs covers. */}
           {plan.covers.needed && plan.covers.photoCount > 0 && (
             <Tooltip
               content={
@@ -1158,6 +1159,15 @@ export function OfferPhotosCard({
                   : "Covers"}
               </button>
             </Tooltip>
+          )}
+          {plan.covers.needed && plan.covers.uncheckedCount > 0 && (
+            <OfferNothingToCoverButton
+              collectionId={collectionId}
+              offerId={offerId}
+              count={plan.covers.uncheckedCount}
+              disabled={isPending}
+              style={BTN}
+            />
           )}
           {/* Photo settings (#308) live here rather than in the offer's ⋮ menu: the configuration is
               what this card renders from, so it is edited where its effect is read. */}

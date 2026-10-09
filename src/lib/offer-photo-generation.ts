@@ -36,6 +36,7 @@ import {
 import { loadChecklistSlots } from "./offer-photo-checklists";
 import { fingerprintOfferPhotoInputs } from "./offer-photo-fingerprint";
 import { applyPhotoCovers } from "./photos/covers";
+import { markPhotosNothingToCover } from "./photo-covers";
 import {
   coverFingerprintRows,
   coverWalkPhotos,
@@ -1212,6 +1213,30 @@ export async function readOfferCoverWalk(ownerId: string, offerId: string): Prom
       };
     }),
   };
+}
+
+/**
+ * Mark an offer's unchecked photos *nothing to cover* in one action (#1701): every photo its walk
+ * would still ask about, or — with `itemId` — only that copy's. Photos with covers, and photos
+ * already checked, are left as they were. Owner-checked; returns the ids marked, which is what the
+ * walk needs to tick them off.
+ */
+export async function markOfferPhotosNothingToCover(
+  ownerId: string,
+  offerId: string,
+  itemId: string | null = null
+): Promise<string[]> {
+  await assertOfferOwner(ownerId, offerId);
+  const inputs = await readInputs(offerId);
+  if (!inputs) throw new OfferPhotoGenerationError("Offer not found.");
+  // The same candidates the walk lists, so the count the collector confirmed is the count marked.
+  const unchecked = coverCandidatesFor({ ...inputs, needsCovers: true }, planFor(inputs)).filter(
+    (c) => !c.checked && (itemId == null || c.itemId === itemId)
+  );
+  return markPhotosNothingToCover(
+    ownerId,
+    unchecked.map((c) => c.photoId)
+  );
 }
 
 // ── Archive ──────────────────────────────────────────────────────────────────

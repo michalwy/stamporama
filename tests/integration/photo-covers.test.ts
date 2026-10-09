@@ -19,6 +19,8 @@ import {
   claimNextOfferPhotoGeneration,
   enqueueOfferPhotoGeneration,
   getOfferPhotoPlanState,
+  markOfferPhotosNothingToCover,
+  OfferPhotoGenerationError,
   readOfferCoverWalk,
   runOfferPhotoGeneration,
 } from "../../src/lib/offer-photo-generation";
@@ -308,6 +310,54 @@ describe("covering symbols on offer photos (#1665)", () => {
     const states = await listItemPhotoCovers(userId, copy.itemId);
     assert.deepEqual(states, [{ photoId: copy.photoId, checked: false, covers: [] }]);
     assert.deepEqual(await listItemPhotoCovers(otherUserId, copy.itemId), []);
+  });
+
+  it("marks the remaining photos nothing to cover in one action, a copy's or all, touching only the unchecked (#1701)", async () => {
+    const covered = await scannedCopy();
+    const a = await scannedCopy();
+    const b = await scannedCopy();
+    const c = await scannedCopy();
+    const offerId = await preparingOffer(coveredPlatformId, [covered.itemId, a.itemId, b.itemId, c.itemId]);
+    await generate(offerId);
+    const bar = { shape: "rect" as const, style: "bar" as const, x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+    await savePhotoCovers(userId, covered.photoId, [bar]);
+    await generate(offerId);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).covers.uncheckedCount, 3);
+
+    // Someone else's offer is refused outright.
+    await assert.rejects(() => markOfferPhotosNothingToCover(otherUserId, offerId), OfferPhotoGenerationError);
+
+    // One copy's photos only.
+    assert.deepEqual(await markOfferPhotosNothingToCover(userId, offerId, a.itemId), [a.photoId]);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).covers.uncheckedCount, 2);
+
+    // Then every one remaining: the covered photo keeps its cover, and the marked ones are recorded
+    // exactly as pressing *nothing to cover* on each would be.
+    assert.deepEqual(
+      new Set(await markOfferPhotosNothingToCover(userId, offerId)),
+      new Set([b.photoId, c.photoId])
+    );
+    assert.deepEqual(await markOfferPhotosNothingToCover(userId, offerId), []);
+    const walk = await readOfferCoverWalk(userId, offerId);
+    assert.deepEqual(
+      walk.photos.map((p) => [p.photoId, p.checked, p.covers.length]),
+      [
+        [covered.photoId, true, 1],
+        [a.photoId, true, 0],
+        [b.photoId, true, 0],
+        [c.photoId, true, 0],
+      ]
+    );
+    // Nothing drawn changed, so the images stay current and the offer goes ready.
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, false);
+    assert.deepEqual(await codes(offerId), []);
+    await setOfferState(userId, offerId, "ready");
+
+    // A later offer reuses the check, and a marked photo can still be given covers.
+    const later = await preparingOffer(coveredPlatformId, [b.itemId]);
+    assert.equal((await getOfferPhotoPlanState(userId, later)).covers.uncheckedCount, 0);
+    await savePhotoCovers(userId, b.photoId, [bar]);
+    assert.equal((await readOfferCoverWalk(userId, later)).photos[0].covers.length, 1);
   });
 
   it("a platform newly named as Facebook starts needing covers, and naming it again keeps the collector's choice", async () => {

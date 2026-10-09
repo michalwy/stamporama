@@ -87,3 +87,31 @@ export async function listItemPhotoCovers(
     covers: storedCovers(row.covers),
   }));
 }
+
+/**
+ * Mark copy photos *nothing to cover* in one write (#1701) — the same record saving each with an
+ * empty list leaves, so a later offer reuses it and the photo can still be given covers afterwards.
+ * Only photos still unchecked are touched: one with covers keeps them, one already checked stays as
+ * it was. Photos that are not the owner's copy photos are passed over rather than refused, since the
+ * caller hands in a list it worked out itself. Returns the ids actually marked.
+ */
+export async function markPhotosNothingToCover(
+  ownerId: string,
+  photoIds: readonly string[]
+): Promise<string[]> {
+  if (photoIds.length === 0) return [];
+  const where = {
+    id: { in: [...photoIds] },
+    coversCheckedAt: null,
+    covers: { none: {} },
+    item: { collection: { ownerId } },
+  };
+  const rows = await prisma.photo.findMany({ where, select: { id: true } });
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  await prisma.photo.updateMany({
+    where: { id: { in: ids }, coversCheckedAt: null },
+    data: { coversCheckedAt: new Date() },
+  });
+  return ids;
+}
