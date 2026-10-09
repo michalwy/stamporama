@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
-import type { ContactPage, ContactPurchases, ContactSales } from "@/lib/contact-page";
+import type { ContactAuctions, ContactPage, ContactPurchases, ContactSales } from "@/lib/contact-page";
 import {
   CONTACT_PERIOD_LABELS,
   CONTACT_PERIODS,
@@ -15,6 +15,8 @@ import {
 } from "@/lib/contact-page-rules";
 import { costPercent, formatCostPercent, type CostToCatalog } from "@/lib/cost-to-catalog";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
+import { AUCTION_SALE_STATUS_LABEL, type AuctionLotOutcome } from "@/lib/auction-rules";
+import { TAG_FILTER_PARAM, TAG_MODE_PARAM } from "@/lib/tag-filter";
 import { PURCHASE_STATUS_META, type PurchaseStatus } from "@/lib/purchase-status";
 import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
@@ -114,6 +116,29 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
       search: "",
     })}`;
 
+  const lotsHref = ({
+    outcome = "",
+    includeClosed = false,
+    toReview = false,
+  }: { outcome?: AuctionLotOutcome | ""; includeClosed?: boolean; toReview?: boolean } = {}) =>
+    `/c/${collectionSlug}/auctions?${new URLSearchParams({
+      seller: contact.id,
+      outcome,
+      // With no outcome the list hides closed lots (#504); a figure counting them opens it with them.
+      includeClosed: includeClosed ? "1" : "",
+      toReview: toReview ? "1" : "",
+      // The list remembers every filter (#1018); named empty, none narrows what the figure counted.
+      platform: "",
+      search: "",
+      closing: "",
+      signal: "",
+      undescribed: "",
+      conditionToSettle: "",
+      duplicate: "",
+      [TAG_FILTER_PARAM]: "",
+      [TAG_MODE_PARAM]: "",
+    })}`;
+
   return (
     <DetailLayout>
       <DetailFullRow style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -155,11 +180,14 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
           {data.sales && (
             <SalesCard sales={data.sales} collectionSlug={collectionSlug} href={salesHref} />
           )}
-          {!data.purchases && !data.sales && (
+          {data.auctions && (
+            <AuctionsCard auctions={data.auctions} collectionSlug={collectionSlug} href={lotsHref} />
+          )}
+          {!data.purchases && !data.sales && !data.auctions && (
             <DetailCard title="Activity">
               <EmptyNote>
-                Nothing bought from or sold to {contact.name} yet. Give the contact the Seller or Buyer
-                role to see those sections before anything is recorded.
+                Nothing bought from or sold to {contact.name} yet. Give the contact the Seller, Buyer or
+                Auction house role to see those sections before anything is recorded.
               </EmptyNote>
             </DetailCard>
           )}
@@ -440,6 +468,111 @@ function SalesCard({
               </RowLinkItem>
             );
           })}
+        </RowList>
+      )}
+    </DetailCard>
+  );
+}
+
+function AuctionsCard({
+  auctions: a,
+  collectionSlug,
+  href,
+}: {
+  auctions: ContactAuctions;
+  collectionSlug: string;
+  href: (opts?: { outcome?: AuctionLotOutcome | ""; includeClosed?: boolean; toReview?: boolean }) => string;
+}) {
+  const e = a.exposure;
+  const exposureHint =
+    e.unconvertibleCount > 0
+      ? `${e.unconvertibleCount} lot${e.unconvertibleCount === 1 ? "" : "s"} without an exchange rate left out`
+      : undefined;
+  return (
+    <DetailCard title="Auctions · as seller or auction house">
+      <FieldGrid min="10rem">
+        <Figure label="Sales tracked" href={href({ includeClosed: true })}>
+          {a.saleCount}
+        </Figure>
+        <Figure label="Lots tracked" href={href({ includeClosed: true })}>
+          {a.lotCount}
+        </Figure>
+        <Figure label="Won" href={href({ outcome: "won" })}>
+          {a.wonCount}
+        </Figure>
+        <Figure label="Lost" href={href({ outcome: "lost" })}>
+          {a.lostCount}
+        </Figure>
+        <Figure label="Cancelled" href={href({ outcome: "cancelled" })}>
+          {a.cancelledCount}
+        </Figure>
+        <Figure
+          label="Win rate"
+          href={a.winRate == null ? null : href({ outcome: "won" })}
+          hint={a.winRate == null ? undefined : `of ${a.wonCount + a.lostCount} bid on and closed`}
+        >
+          <Tooltip content="Lots won of the lots closed with your bid on them — won and lost. A lot only watched, or cancelled, is neither.">
+            <span>{a.winRate == null ? "—" : `${Math.round(a.winRate * 100)}%`}</span>
+          </Tooltip>
+        </Figure>
+        <Figure label="Spent on won lots" href={href({ outcome: "won" })} hint={moneyHint(a.spent, "sale")}>
+          <Tooltip content="Every won lot's hammer price with the sale's premium on it, plus each sale's shipping once.">
+            <span>
+              <Money total={a.spent} noun="sale" />
+            </span>
+          </Tooltip>
+        </Figure>
+        <Figure label="Buyer's premium" href={a.premiumTerms.length > 0 ? href({ includeClosed: true }) : null}>
+          {a.premiumTerms.length > 0 ? a.premiumTerms.join(" · ") : "—"}
+        </Figure>
+      </FieldGrid>
+
+      {/* What is still running — as it stands now, whatever the period. */}
+      <div style={{ marginTop: "1rem" }}>
+        <FieldGrid min="10rem">
+          <Figure label="Open lots" href={href({ outcome: "pending" })}>
+            {a.openCount}
+          </Figure>
+          <Figure label="Committed" href={href({ outcome: "pending" })} hint={exposureHint}>
+            <Tooltip content="Each open lot at the maximum bid placed on it, premium included, plus each sale's shipping once — the lots list's own figure.">
+              <span>
+                {e.committedTotal} {e.baseCurrency}
+              </span>
+            </Tooltip>
+          </Figure>
+          <Figure label="At ceiling" href={href({ outcome: "pending" })} hint={exposureHint}>
+            <Tooltip content="The same if every open lot were bid up to its ceiling.">
+              <span>
+                {e.ceilingTotal} {e.baseCurrency}
+              </span>
+            </Tooltip>
+          </Figure>
+          <Figure label="To review" href={href({ includeClosed: true, toReview: true })}>
+            {a.toReviewCount}
+          </Figure>
+        </FieldGrid>
+      </div>
+
+      {a.rows.length === 0 ? (
+        <div style={{ marginTop: "1rem" }}>
+          <EmptyNote>No auction sales tracked in this period.</EmptyNote>
+        </div>
+      ) : (
+        <RowList>
+          {a.rows.map((r, i) => (
+            <RowLinkItem key={r.id} first={i === 0} href={`/c/${collectionSlug}/auctions/sales/${r.id}`}>
+              <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                {r.name}
+              </span>
+              <span style={META}>{r.trackedAt}</span>
+              <span style={MUTED}>on {r.platformName}</span>
+              <span style={CHIP}>{AUCTION_SALE_STATUS_LABEL[r.status]}</span>
+              <span style={{ flex: 1 }} />
+              <span style={MUTED}>
+                {r.openCount} open · {r.wonCount} won · {r.lostCount} lost
+              </span>
+            </RowLinkItem>
+          ))}
         </RowList>
       )}
     </DetailCard>

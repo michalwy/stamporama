@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  auctionPremiumTerms,
+  auctionWinRate,
+  auctionWonSpend,
   contactPeriodRange,
   isContactPeriod,
   NOT_DELIVERED_PURCHASE_STATUSES,
@@ -115,5 +118,57 @@ describe("the status sets the figures and their links share", () => {
   it("counts a sale as unpaid while ordered, and unsent until it is sent", () => {
     assert.deepEqual([...UNPAID_SALE_STATUSES], ["ordered"]);
     assert.deepEqual([...UNSENT_SALE_STATUSES], ["ordered", "paid", "packed"]);
+  });
+});
+
+describe("auction figures (#1709)", () => {
+  const fees = { premiumPercent: 20, premiumFixed: 1, shippingCost: 5 };
+
+  it("reads the win rate over the lots closed with a bid, and none before any", () => {
+    assert.equal(auctionWinRate(1, 3), 0.25);
+    assert.equal(auctionWinRate(0, 0), null);
+  });
+
+  it("costs won lots all-in with the shipping once, and nothing for a sale that won nothing", () => {
+    // (50 + 10 + 1) + (10 + 2 + 1) + 5.
+    assert.deepEqual(
+      auctionWonSpend(
+        [
+          { finalPrice: 50, fxRateToBase: null },
+          { finalPrice: 10, fxRateToBase: null },
+        ],
+        fees,
+        "EUR",
+        "EUR"
+      ),
+      { amount: 79, currency: "EUR", base: 79 }
+    );
+    assert.equal(auctionWonSpend([], fees, "EUR", "EUR"), null);
+  });
+
+  it("converts at each lot's frozen rate, and states no base figure when one has none", () => {
+    const won = auctionWonSpend(
+      [{ finalPrice: 80, fxRateToBase: 1.2 }],
+      { premiumPercent: 10, premiumFixed: null, shippingCost: 2 },
+      "GBP",
+      "EUR"
+    );
+    assert.deepEqual(won, { amount: 90, currency: "GBP", base: 108 });
+    const unrated = auctionWonSpend(
+      [
+        { finalPrice: 80, fxRateToBase: 1.2 },
+        { finalPrice: 10, fxRateToBase: null },
+      ],
+      { premiumPercent: null, premiumFixed: null, shippingCost: null },
+      "GBP",
+      "EUR"
+    );
+    assert.equal(unrated?.base, null);
+  });
+
+  it("states the premium as the sale's own screen does", () => {
+    assert.equal(auctionPremiumTerms("20", "1.50", "EUR"), "20% + 1.50 EUR/lot");
+    assert.equal(auctionPremiumTerms("18", null, "EUR"), "18%");
+    assert.equal(auctionPremiumTerms(null, null, "EUR"), "none");
   });
 });

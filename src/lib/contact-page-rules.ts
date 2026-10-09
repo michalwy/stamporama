@@ -123,3 +123,66 @@ export const UNPAID_SALE_STATUSES: readonly SaleStatus[] = ["ordered"];
 
 /** A sale not yet sent: everything before *Sent*. */
 export const UNSENT_SALE_STATUSES: readonly SaleStatus[] = ["ordered", "paid", "packed"];
+
+// ── Auctions (#1709) ────────────────────────────────────────────────────────
+
+/**
+ * How often the collector wins with this seller: lots won of the lots **closed with a bid** — won
+ * and lost. An *observed* lot (tracked without a bid) was never contested, and a cancelled one
+ * never ran, so neither is a loss; counting them would make watching look like losing. Null when
+ * nothing has been decided yet.
+ */
+export function auctionWinRate(won: number, lost: number): number | null {
+  const decided = won + lost;
+  return decided === 0 ? null : won / decided;
+}
+
+/** One won lot's money, as {@link auctionWonSpend} reads it. */
+export interface WonLotMoney {
+  /** The hammer price, in the sale's currency. */
+  finalPrice: number;
+  /** The rate frozen when the result was recorded — null in the base currency, and for a foreign
+   *  one whose rate could not be had. */
+  fxRateToBase: number | null;
+}
+
+/**
+ * What one sale's won lots cost **all-in**: every hammer price with the sale's premium on it, plus
+ * the sale's shipping **once** — the parcel's own figure (`summarizeAuctionSale`), over its won lots
+ * alone. Null when the sale won nothing: no parcel ships, so no shipping is owed.
+ *
+ * In the base currency at each lot's **frozen** rate (ADR-0009 §4: a recorded result keeps the rate
+ * of its day), the shipping at the first won lot's. A foreign-currency lot with no rate leaves the
+ * sale's base figure absent rather than partial — the rule at the top of this file.
+ */
+export function auctionWonSpend(
+  lots: readonly WonLotMoney[],
+  fees: { premiumPercent: number | null; premiumFixed: number | null; shippingCost: number | null },
+  currency: string,
+  baseCurrency: string
+): MoneyEntry | null {
+  if (lots.length === 0) return null;
+  const premium = (hammer: number) =>
+    hammer + (hammer * (fees.premiumPercent ?? 0)) / 100 + (fees.premiumFixed ?? 0);
+  const shipping = fees.shippingCost ?? 0;
+  const amount = lots.reduce((sum, l) => sum + premium(l.finalPrice), 0) + shipping;
+  if (currency === baseCurrency) return { amount, currency, base: amount };
+  if (lots.some((l) => l.fxRateToBase == null)) return { amount, currency, base: null };
+  const baseCents =
+    lots.reduce((sum, l) => sum + cents(premium(l.finalPrice) * l.fxRateToBase!), 0) +
+    cents(shipping * lots[0].fxRateToBase!);
+  return { amount, currency, base: baseCents / 100 };
+}
+
+/** A sale's buyer's premium as its own screen states it: `20% + 1.50 EUR/lot`, or `none`. */
+export function auctionPremiumTerms(
+  premiumPercent: string | null,
+  premiumFixed: string | null,
+  currency: string
+): string {
+  const parts = [
+    premiumPercent ? `${premiumPercent}%` : null,
+    premiumFixed ? `+ ${premiumFixed} ${currency}/lot` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : "none";
+}

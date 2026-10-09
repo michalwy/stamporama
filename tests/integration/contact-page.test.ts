@@ -5,7 +5,7 @@ import { closeLot, createLot, intakeStamps } from "../../src/lib/lots";
 import { createPurchase } from "../../src/lib/purchases";
 import { getContactPage } from "../../src/lib/contact-page";
 
-// A contact's own page (#1708), read back out of Prisma: which transactions each section counts,
+// A contact's own page (#1708, its auctions section #1709), read back out of Prisma: which transactions each section counts,
 // that the period narrows every figure, that a section shows by role **or** by data, and the money
 // rules — the order totals with their shipping (#852), the share of catalogue (#1395), and a total
 // that cannot be stated in the base currency stated as absent rather than partial.
@@ -23,6 +23,11 @@ describe("contact page (#1708)", () => {
   /** A contact with the Buyer role and nothing recorded. */
   let newBuyerId: string;
   let latestPurchaseId: string;
+  /** An auction house with two tracked sales, one this year and one last. */
+  let houseId: string;
+  /** An auction house with nothing tracked yet. */
+  let newHouseId: string;
+  let houseSaleId: string;
 
   before(async () => {
     userId = `test-user-contactpage-${TS}`;
@@ -172,6 +177,97 @@ describe("contact page (#1708)", () => {
       status: "ordered",
       buyer: otherId,
     });
+
+    // Auctions (#1709). The house's sale this year, in the base currency: 20% + 1 EUR a lot, 5 EUR
+    // shipping. One lot of each outcome; the open one is waiting for review.
+    houseId = (
+      await prisma.contact.create({ data: { collectionId, name: "House", auctionHouse: true } })
+    ).id;
+    newHouseId = (
+      await prisma.contact.create({ data: { collectionId, name: "New house", auctionHouse: true } })
+    ).id;
+    const auctionSale = (data: {
+      sellerId: string;
+      createdAt: string;
+      currency: string;
+      premiumPercent?: string;
+      premiumFixed?: string;
+      shippingCost?: string;
+    }) =>
+      prisma.auctionSale.create({
+        data: {
+          collectionId,
+          sellerId: data.sellerId,
+          platformId,
+          name: `Sale ${data.createdAt}`,
+          currency: data.currency,
+          premiumPercent: data.premiumPercent ?? null,
+          premiumFixed: data.premiumFixed ?? null,
+          shippingCost: data.shippingCost ?? null,
+          createdAt: new Date(`${data.createdAt}T12:00:00.000Z`),
+        },
+      });
+    let lotNo = 0;
+    const auctionLot = (
+      auctionSaleId: string,
+      data: {
+        status: string;
+        myBid?: string;
+        finalPrice?: string;
+        currentBid?: string;
+        fxRateToBase?: string;
+        apiReviewAt?: Date;
+      }
+    ) =>
+      prisma.auctionLot.create({
+        data: {
+          auctionSaleId,
+          auctionLotNo: ++lotNo,
+          endsAt: new Date("2026-10-20T12:00:00.000Z"),
+          status: data.status,
+          myBid: data.myBid ?? null,
+          finalPrice: data.finalPrice ?? null,
+          currentBid: data.currentBid ?? null,
+          fxRateToBase: data.fxRateToBase ?? null,
+          apiReviewAt: data.apiReviewAt ?? null,
+        },
+      });
+    houseSaleId = (
+      await auctionSale({
+        sellerId: houseId,
+        createdAt: "2026-09-01",
+        currency: "EUR",
+        premiumPercent: "20",
+        premiumFixed: "1",
+        shippingCost: "5",
+      })
+    ).id;
+    // Won at 50: 50 + 10 + 1 = 61 all-in.
+    await auctionLot(houseSaleId, { status: "closed", myBid: "100", finalPrice: "50" });
+    await auctionLot(houseSaleId, { status: "closed", myBid: "30", finalPrice: "40" });
+    // Open at a 10 bid: 13 all-in, the ceiling following the bid.
+    await auctionLot(houseSaleId, { status: "open", myBid: "10", currentBid: "5", apiReviewAt: new Date() });
+    await auctionLot(houseSaleId, { status: "cancelled" });
+    // Only watched: neither won nor lost.
+    await auctionLot(houseSaleId, { status: "closed", finalPrice: "20" });
+
+    // Last year, in pounds at a frozen 1.2: won at 80 + 10% = 88, plus 2 shipping.
+    const lastYear = (
+      await auctionSale({
+        sellerId: houseId,
+        createdAt: "2025-03-01",
+        currency: "GBP",
+        premiumPercent: "10",
+        shippingCost: "2",
+      })
+    ).id;
+    await auctionLot(lastYear, { status: "closed", myBid: "100", finalPrice: "80", fxRateToBase: "1.2" });
+    await auctionLot(lastYear, { status: "closed", myBid: "10", finalPrice: "20", fxRateToBase: "1.2" });
+
+    // Someone else's sale, which nothing here may count.
+    const elsewhere = (await auctionSale({ sellerId: otherId, createdAt: "2026-09-02", currency: "EUR" })).id;
+    await auctionLot(elsewhere, { status: "closed", myBid: "100", finalPrice: "70" });
+    await auctionLot(elsewhere, { status: "open", myBid: "50", apiReviewAt: new Date() });
   });
 
   after(async () => {
@@ -242,6 +338,55 @@ describe("contact page (#1708)", () => {
     const s = (await getContactPage(userId, buyerId, "all", TODAY))!.sales!;
     assert.equal(s.count, 3);
     assert.equal(s.revenue.base, "24.00");
+  });
+
+  it("shows no auctions section for a seller with no auction sale", async () => {
+    assert.equal((await getContactPage(userId, sellerId, "all", TODAY))!.auctions, null);
+  });
+
+  it("shows the auctions section for an auction house before anything is tracked", async () => {
+    const a = (await getContactPage(userId, newHouseId, "all", TODAY))!.auctions!;
+    assert.equal(a.saleCount, 0);
+    assert.equal(a.winRate, null);
+    assert.equal(a.openCount, 0);
+    assert.equal(a.exposure.committedTotal, "0.00");
+  });
+
+  it("counts the house's sales and lots over all time, and what the won ones cost all-in", async () => {
+    const a = (await getContactPage(userId, houseId, "all", TODAY))!.auctions!;
+    assert.equal(a.saleCount, 2);
+    assert.equal(a.lotCount, 7);
+    assert.equal(a.wonCount, 2);
+    assert.equal(a.lostCount, 2);
+    assert.equal(a.cancelledCount, 1);
+    // Won of won + lost; the watched lot is neither.
+    assert.equal(a.winRate, 0.5);
+    // 61 + 5 shipping in euros, and (88 + 2) GBP at 1.2 = 108: two currencies, so no tx total.
+    assert.deepEqual(a.spent, { baseCurrency: "EUR", base: "174.00", unconvertedCount: 0, tx: null });
+    assert.deepEqual(a.premiumTerms, ["20% + 1 EUR/lot", "10%"]);
+  });
+
+  it("narrows the sales and their lots to the period they were tracked in", async () => {
+    const a = (await getContactPage(userId, houseId, "year", TODAY))!.auctions!;
+    assert.equal(a.saleCount, 1);
+    assert.equal(a.lotCount, 5);
+    assert.equal(a.wonCount, 1);
+    assert.equal(a.lostCount, 1);
+    assert.equal(a.cancelledCount, 1);
+    assert.deepEqual(a.spent, { baseCurrency: "EUR", base: "66.00", unconvertedCount: 0, tx: null });
+    assert.deepEqual(
+      a.rows.map((r) => [r.id, r.trackedAt, r.openCount, r.wonCount, r.lostCount]),
+      [[houseSaleId, "2026-09-01", 1, 1, 1]]
+    );
+  });
+
+  it("reads open lots, exposure and review as the lots list does, the house's alone", async () => {
+    const a = (await getContactPage(userId, houseId, "year", TODAY))!.auctions!;
+    assert.equal(a.openCount, 1);
+    // 13 all-in on the open lot, plus the sale's 5 shipping once.
+    assert.equal(a.exposure.committedTotal, "18.00");
+    assert.equal(a.exposure.ceilingTotal, "18.00");
+    assert.equal(a.toReviewCount, 1);
   });
 
   it("is nothing for another collector", async () => {
