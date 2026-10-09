@@ -107,8 +107,9 @@ export function AuctionSaleRow({
             {sale.name}
           </span>
           {/* The chips and figures on line 1 carry tooltips of their own, so they sit above the
-              row's link overlay (#557) — the name to their left is the link's own surface. */}
-          <span style={ROW_LINK_ABOVE}>
+              row's link overlay (#557) — the name to their left is the link's own surface. Two
+              chips side by side keep the chip line's own gap, or they read as one (#1704). */}
+          <span style={{ ...ROW_LINK_ABOVE, display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
             <SaleStatusChip status={sale.status} />
             {/* Something the agent API wrote waits for review — the sale itself, or any of its lots,
                 with their count (#1626). */}
