@@ -17,6 +17,8 @@ interface SalesPage {
 
 export interface SaleFilters {
   platformId?: string;
+  /** One buyer (#1708), from a contact page's sales figures. */
+  buyerId?: string;
   /** Fulfillment statuses (#191) the list is narrowed to (#392), OR-matched — empty (or absent)
    * for all of them. Still a **list** although the chips became mutually exclusive (#972, reversing
    * #475), for the offers list's reason (#735): a link or a remembered value written while they
@@ -41,6 +43,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.platformId) params.set("platformId", filters.platformId);
+      if (filters.buyerId) params.set("buyerId", filters.buyerId);
       if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.search) params.set("search", filters.search);
       if (filters.setChoicePending) params.set("setChoice", "1");

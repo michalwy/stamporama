@@ -441,6 +441,29 @@ export async function listContacts(
   }));
 }
 
+/** One contact as its list row carries it, for the contact's own page (#1708) — whose *Edit* opens
+ * the list's dialog, so it reads the same shape. Null when not found or not the caller's. */
+export async function getContactListItem(
+  ownerId: string,
+  contactId: string
+): Promise<ContactListItem | null> {
+  const row = await prisma.contact.findUnique({
+    where: { id: contactId },
+    select: {
+      ...CONTACT_SELECT,
+      collection: { select: { ownerId: true } },
+      _count: { select: { purchases: true, platformPurchases: true } },
+    },
+  });
+  if (!row) return null;
+  const { _count, collection, ...contact } = row;
+  if (collection.ownerId !== ownerId) return null;
+  return {
+    ...toContactData(contact),
+    referenceCount: _count.purchases + _count.platformPurchases,
+  };
+}
+
 /** Case-insensitive search over the name **and the full name** (#463), capped at 20 rows, for the
  * acquisition-source autocomplete (#103b). Both, because a marketplace buyer is filed under their
  * login and looked for by the name you remember — typing "Bronisław" has to find `bronek_1980`, or

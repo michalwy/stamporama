@@ -7,6 +7,7 @@ import {
   RowQuickActions,
   pickRowActions,
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
+import { ROW_OPEN_STYLE, RowTitleLink, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { CONTACT_ROLES } from "./contact-roles";
 
 const CHIP: React.CSSProperties = {
@@ -28,16 +29,20 @@ const META_INLINE: React.CSSProperties = {
 
 interface ContactRowProps {
   contact: ContactListItem;
+  collectionSlug: string;
   isLast: boolean;
   onEdit: (contact: ContactListItem) => void;
   onDelete: (contact: ContactListItem) => void;
 }
 
 /** A single contact as a stacked card row (mirrors `PurchaseRow`): name + role badges on
- * top, then a meta line of full name / email / phone. Delete is disabled in the menu when the contact
- * is still referenced by purchases (`referenceCount > 0`), matching the server guard. */
-export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowProps) {
+ * top, then a meta line of full name / email / phone. The whole row opens the contact's own page
+ * (#1708, #1591). Delete is disabled in the menu when the contact is still referenced by purchases
+ * (`referenceCount > 0`), matching the server guard. */
+export function ContactRow({ contact: c, collectionSlug, isLast, onEdit, onDelete }: ContactRowProps) {
   const [hovered, setHovered] = useState(false);
+  const detailHref = `/c/${collectionSlug}/contacts/${c.id}`;
+  const rowOpen = useRowOpen(detailHref);
   const roles = CONTACT_ROLES.filter(({ key }) => c[key]);
   const inUse = c.referenceCount > 0;
 
@@ -59,7 +64,9 @@ export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowP
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        {...rowOpen}
         style={{
+          ...ROW_OPEN_STYLE,
           padding: "0.75rem 1.25rem",
           background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
           transition: "background 0.1s ease",
@@ -78,7 +85,7 @@ export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowP
               maxWidth: "50%",
             }}
           >
-            {c.name}
+            <RowTitleLink href={detailHref}>{c.name}</RowTitleLink>
           </span>
           {roles.map(({ key, label }) => (
             <span key={key} style={CHIP}>

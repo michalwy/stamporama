@@ -89,15 +89,15 @@ export function PurchasesListPanel({
     `/c/${collectionSlug}/purchases`,
     knownParties
   );
-  const { type, status, platforms, suppliers, sortBy, sortDir } = view;
+  const { type, statuses, platforms, suppliers, sortBy, sortDir } = view;
   // A delivery status is a purchase's own (#1323): under *Opening balances* there is none to filter
   // by, so only *Completed* is drawn (#1461) — and no other is in force (`resolveIntakeView`).
   const offeredStatuses = intakeViewStatusesFor(type);
   const statusFilters = STATUS_FILTERS.filter((f) => offeredStatuses.includes(f.value));
 
   const filters: PurchaseFilters = useMemo(
-    () => ({ type, status, platformIds: platforms, supplierIds: suppliers, sortBy, sortDir }),
-    [type, status, platforms, suppliers, sortBy, sortDir]
+    () => ({ type, statuses, platformIds: platforms, supplierIds: suppliers, sortBy, sortDir }),
+    [type, statuses, platforms, suppliers, sortBy, sortDir]
   );
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
@@ -134,8 +134,10 @@ export function PurchasesListPanel({
     switch (n.key) {
       case "type":
         return INTAKE_DOCUMENT_TYPES.find((t) => t.value === n.value)?.label ?? n.value;
-      case "status":
-        return STATUS_FILTERS.find((f) => f.value === n.value)?.label ?? n.value;
+      case "statuses":
+        return n.value
+          .map((s) => STATUS_FILTERS.find((f) => f.value === s)?.label ?? s)
+          .join(" or ");
       case "platforms":
         return `Platform: ${partyNames(n.value, parties?.platforms, "No platform", "Unknown platform")}`;
       case "suppliers":
@@ -182,12 +184,16 @@ export function PurchasesListPanel({
 
           <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
             {statusFilters.map(({ value, label }) => {
-              const active = status === value;
+              // Lit for every status in force, so a link naming several (#1708) is described
+              // honestly. A press picks one, replacing a set; only the sole lit toggle clears — the
+              // sales list's rule (#972).
+              const active = statuses.includes(value);
+              const onlyThis = active && statuses.length === 1;
               const toggle = (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setView({ status: active ? undefined : value })}
+                  onClick={() => setView({ statuses: onlyThis ? [] : [value] })}
                   style={{
                     ...FILTER_CONTROL_STYLE,
                     cursor: "pointer",

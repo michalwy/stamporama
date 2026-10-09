@@ -492,6 +492,10 @@ number of any copy** sold on the sale — so you can find a sale by what was in 
 bought it. The platform dropdown narrows the list to a single marketplace, and the status chips to
 particular [fulfillment steps](#fulfillment-status). All three combine.
 
+A [contact's page](contacts.md#a-contacts-page) opens this list narrowed to **one buyer**. The buyer
+shows as a lit **Buyer:** chip at the front of the toolbar; click it to go back to every buyer. The
+buyer filter is never remembered — it comes only from the link.
+
 The status chips select **one status at a time**: clicking a chip replaces whatever was chosen, and
 clicking the one lit chip again clears it back to every status. A sale is in exactly one status, and the
 list is worked through a status at a time — everything paid, then everything packed.

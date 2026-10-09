@@ -55,7 +55,7 @@ describe("resolveIntakeView", () => {
     );
     assert.deepEqual(resolved, {
       type: "purchase",
-      status: "in_transit",
+      statuses: ["in_transit"],
       platforms: ["p1", INTAKE_PARTY_NONE],
       suppliers: ["s1"],
       sortBy: "createdAt",
@@ -64,20 +64,31 @@ describe("resolveIntakeView", () => {
   });
 
   it("reads Completed as a status of its own (#1449)", () => {
-    assert.equal(resolveIntakeView(reader({ status: "completed" })).status, "completed");
+    assert.deepEqual(resolveIntakeView(reader({ status: "completed" })).statuses, ["completed"]);
+  });
+
+  it("reads a set of statuses back whole, in lifecycle order (#1708)", () => {
+    assert.deepEqual(resolveIntakeView(reader({ status: "in_transit,preparing" })).statuses, [
+      "preparing",
+      "in_transit",
+    ]);
+  });
+
+  it("drops a status that no longer exists and keeps the rest of the set", () => {
+    assert.deepEqual(resolveIntakeView(reader({ status: "lost,arrived" })).statuses, ["arrived"]);
   });
 
   it("never has a delivery status in force while only opening balances are listed", () => {
     for (const status of ["preparing", "in_transit", "arrived"]) {
       const resolved = resolveIntakeView(reader({ type: "opening_balance", status }));
       assert.equal(resolved.type, "opening_balance");
-      assert.equal(resolved.status, undefined);
+      assert.deepEqual(resolved.statuses, []);
     }
   });
 
   it("keeps Completed while only opening balances are listed (#1461)", () => {
     const resolved = resolveIntakeView(reader({ type: "opening_balance", status: "completed" }));
-    assert.equal(resolved.status, "completed");
+    assert.deepEqual(resolved.statuses, ["completed"]);
   });
 
   it("falls back to the default for a value that no longer exists", () => {
@@ -90,7 +101,8 @@ describe("resolveIntakeView", () => {
 
 describe("intakeViewUpdatesFor", () => {
   it("writes only what was pressed, and deletes a setting returned to its default", () => {
-    assert.deepEqual(intakeViewUpdatesFor({ status: "arrived" }), { status: "arrived" });
+    assert.deepEqual(intakeViewUpdatesFor({ statuses: ["arrived"] }), { status: "arrived" });
+    assert.deepEqual(intakeViewUpdatesFor({ statuses: [] }), { status: "" });
     assert.deepEqual(intakeViewUpdatesFor({ sortDir: "desc" }), { sortDir: "" });
     assert.deepEqual(intakeViewUpdatesFor({ suppliers: ["s1", "s2"] }), { supplier: "s1,s2" });
     assert.deepEqual(intakeViewUpdatesFor({ platforms: [] }), { platform: "" });
@@ -104,17 +116,25 @@ describe("intakeViewUpdatesFor", () => {
   });
 
   it("keeps Completed when Opening balances is picked, since it applies there too (#1461)", () => {
-    const current = view({ status: "completed" });
+    const current = view({ statuses: ["completed"] });
     assert.deepEqual(intakeViewUpdatesFor({ type: "opening_balance" }, current), {
       type: "opening_balance",
     });
   });
 
   it("clears a delivery status in force when Opening balances is picked", () => {
-    const current = view({ status: "arrived" });
+    const current = view({ statuses: ["arrived"] });
     assert.deepEqual(intakeViewUpdatesFor({ type: "opening_balance" }, current), {
       type: "opening_balance",
       status: "",
+    });
+  });
+
+  it("keeps only Completed of a set when Opening balances is picked", () => {
+    const current = view({ statuses: ["in_transit", "completed"] });
+    assert.deepEqual(intakeViewUpdatesFor({ type: "opening_balance" }, current), {
+      type: "opening_balance",
+      status: "completed",
     });
   });
 
@@ -139,11 +159,11 @@ describe("the narrowed-list band", () => {
 
   it("names every filter in force, in toolbar order", () => {
     const narrowings = intakeViewNarrowings(
-      view({ type: "purchase", status: "arrived", platforms: ["p1"], suppliers: ["none"] })
+      view({ type: "purchase", statuses: ["arrived"], platforms: ["p1"], suppliers: ["none"] })
     );
     assert.deepEqual(
       narrowings.map((n) => n.key),
-      ["type", "status", "platforms", "suppliers"]
+      ["type", "statuses", "platforms", "suppliers"]
     );
   });
 
@@ -182,6 +202,11 @@ describe("intakeViewUrlUpdates — the restore written back into the address (#8
       supplier: "s1,none",
       sortDir: "asc",
     });
+  });
+
+  it("writes a restored status set as one comma list", () => {
+    const restored = view({ statuses: ["preparing", "in_transit"] });
+    assert.deepEqual(intakeViewUrlUpdates(restored, reader({})), { status: "preparing,in_transit" });
   });
 
   it("writes once: nothing where the address already says what is on screen", () => {

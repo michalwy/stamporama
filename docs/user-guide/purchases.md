@@ -194,7 +194,10 @@ opening value* rather than `0.00`, and when only some do, a chip says how many l
   belongs to a purchase alone, so *Preparing*, *In transit* and *Arrived* never show an opening
   balance, and they are not offered while *Opening balances* is selected. **Completed** shows both
   kinds — every purchase and every opening balance marked completed — and stays on offer under
-  *Opening balances*, where it lists the finished ones.
+  *Opening balances*, where it lists the finished ones. A link can name several statuses at once — a
+  [contact's page](contacts.md#a-contacts-page) opens the list on *Preparing* and *In transit*
+  together for its *not yet delivered* figure — and then each of them is lit; clicking a toggle picks
+  that one alone.
 - **Filter** by platform and by supplier. Each takes several at once, and each has a *No platform* /
   *No supplier* option for documents recorded without one. An opening balance has neither, so it
   shows under *No platform* and *No supplier* and never under a named one. The supplier filter has a

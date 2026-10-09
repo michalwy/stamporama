@@ -22,6 +22,7 @@ import { isSaleStatus } from "@/lib/sale-status";
 import { SaleRow } from "./sale-row";
 import { SaleFormDialog } from "./sale-form-dialog";
 import { useToast } from "@/app/toast-provider";
+import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 
 type DialogState =
   | { kind: "none" }
@@ -46,6 +47,14 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const { data: platforms = [] } = useSalePlatforms(collectionId);
 
   const platformId = searchParams.get("platform") || undefined;
+
+  // One buyer (#1708) — how a contact page's sales figures open this list. URL-only and never
+  // remembered, as the platform is not: it is where a link from one contact lands, and a remembered
+  // buyer would narrow every later visit to one person with nothing on the toolbar asking for it.
+  // Drawn as a lit chip naming the buyer, and pressing it is the way back to every buyer.
+  const buyerId = searchParams.get("buyer") || undefined;
+  const { data: contacts } = useContacts(collectionId);
+  const buyerName = buyerId ? contacts?.find((c) => c.id === buyerId)?.name : undefined;
 
   // Fulfillment-status filter (#392), remembered per collection (#325): the URL stays authoritative
   // when it names one, so a link is still shareable, and a fresh navigation falls back to the last
@@ -98,8 +107,8 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const setChoicePending = searchParams.get("setChoice") === "1";
 
   const filters: SaleFilters = useMemo(
-    () => ({ platformId, statuses, search: search || undefined, setChoicePending }),
-    [platformId, statuses, search, setChoicePending]
+    () => ({ platformId, buyerId, statuses, search: search || undefined, setChoicePending }),
+    [platformId, buyerId, statuses, search, setChoicePending]
   );
 
   // Seed the Record a Sale dialog's platform from the list's own filter (#464): a sale being
@@ -173,6 +182,14 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
             </option>
           ))}
         </select>
+
+        {buyerId && (
+          <FilterChip
+            label={`Buyer: ${buyerName ?? "…"} ✕`}
+            active
+            onClick={() => updateParams({ buyer: "" })}
+          />
+        )}
 
         {/* Fulfillment status (#191/#392) — chips rather than a second select, so where a sale has
             got to is readable without opening anything. **Mutually exclusive** (#972): a sale is in
@@ -257,6 +274,8 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
           <div style={{ padding: "2rem", color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
             {search
               ? "No sales match your search."
+              : buyerId
+              ? "No sales to this buyer match these filters."
               : setChoicePending
               ? "Every sale has had its sets chosen — nothing is waiting on that decision."
               : statuses.length > 0

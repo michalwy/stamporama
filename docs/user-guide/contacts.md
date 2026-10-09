@@ -621,6 +621,54 @@ Every contact row has a **⋮** menu with **Edit** and **Delete**. **Edit** is a
 beside the menu, so the most common change is one click away. Editing replaces all the details and
 roles with whatever the dialog shows when you save.
 
+## A contact's page
+
+Click a contact's row to open its **page** — what you have done with that person or company. ⌘- or
+Ctrl-click, or the middle button, opens it in a new tab.
+
+The top of the page says **who** the contact is: the name, full name, roles, email, phone,
+Facebook profile, market and notes. **Edit** opens the same dialog as the row's pencil.
+
+Below it, a **period switch** — **This year**, **Last 12 months** or **All time** — narrows every
+figure on the page. *All time* is where a page starts; the period you pick is remembered for the
+collection, so the next contact you open is read over the same one. *Last 12 months* runs up to and
+including today.
+
+Then one section for each part the contact plays:
+
+- **Purchases** (the contact as **seller**) — how many purchases, the **total spent** (each order's
+  total: its lots, expenses and shipping), the **share of catalogue** paid across them, the
+  **copies bought**, the **last purchase**'s date and how many purchases are **not yet delivered**
+  (*Preparing* or *In transit*). The trades you made with the contact are not purchases and are not
+  counted here.
+- **Sales** (the contact as **buyer**) — how many sales, the **revenue** (what the buyer paid: the
+  prices plus any handling they paid, before commission and your own shipping), the **copies sold**,
+  the **last sale**'s date, and how many sales are **not yet paid** (*Ordered*) and **not yet sent**
+  (anything before *Sent*).
+
+Each section ends with the list of its purchases or sales in the period, and a row opens that
+purchase or sale.
+
+A section shows when the contact has the **role**, or when there is **something to show** for it — so
+a supplier created while recording a purchase, which has no roles yet, still shows its purchases.
+Switching the period never hides a section, only empties it.
+
+**Every figure opens the list it counts**, narrowed to this contact: the purchases list by supplier,
+the sales list by buyer, and the not-delivered, not-paid and not-sent figures by those statuses too.
+The lists are not narrowed to the period — they show everything with this contact. The date of the
+last purchase or sale opens that one.
+
+### Money on the page
+
+Money is stated in the collection's **base currency**, so purchases and sales in different currencies
+add up. Where every one of them was in the same other currency, its total is shown beside it.
+
+A purchase or sale in another currency with **no exchange rate** recorded cannot be stated in the
+base currency, and then the page states **no base total** rather than one that leaves it out — hover
+the figure to see how many are why. The share of catalogue is read the way a purchase's own screen
+reads it: `~` marks an estimate while lots are still open, and **at most** an upper bound while some
+of their copies have no catalogue price.
+
 ## Finding a contact
 
 Use the **search box** to filter by name, and the **role chips** to show only contacts of

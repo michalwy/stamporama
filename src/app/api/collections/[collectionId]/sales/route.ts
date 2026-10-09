@@ -5,8 +5,8 @@ import { listSalesPaginated } from "@/lib/sales";
 import { isSaleStatus } from "@/lib/sale-status";
 import { readSearchParam } from "@/lib/text-input";
 
-// Paginated sales list for the Sales screen (ADR-0012, #166). Filters by platform, fulfillment
-// status (#392), free text, and whether a set is still to be chosen (#697).
+// Paginated sales list for the Sales screen (ADR-0012, #166). Filters by platform, buyer (#1708),
+// fulfillment status (#392), free text, and whether a set is still to be chosen (#697).
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -21,6 +21,7 @@ export async function GET(
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const platformId = sp.get("platformId") || undefined;
+  const buyerId = sp.get("buyerId") || undefined;
   // A comma-separated set since the chips became multi-select (#475). It stays one now that they
   // are exclusive again (#972): a link written under #475 carries several and still has to mean
   // what it said, which is #735's rule for the offers list. An unrecognised status is
@@ -36,6 +37,7 @@ export async function GET(
     const result = await listSalesPaginated(session.user.id, collectionId, {
       offset,
       platformId,
+      buyerId,
       statuses,
       search,
       setChoicePending,
