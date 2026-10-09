@@ -351,6 +351,7 @@ describe("toTitleCopy language resolution (#294–#296)", () => {
         id: "cond-1",
         name: "Mint Never Hinged",
         abbreviation: "MNH",
+        symbol: null,
         // Polish translates the name but deliberately keeps the abbreviation.
         translations: [{ language: "pl", name: "Czyste bez podlepki", abbreviation: null }],
       },

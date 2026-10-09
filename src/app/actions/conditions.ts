@@ -38,6 +38,7 @@ export async function getStampConditionsAction(
 function parseFields(formData: FormData): {
   name: string;
   abbreviation: string;
+  symbol: string | null;
   color: TagColor | null;
 } {
   // An unset or unrecognised colour (#728) is *no colour* — the neutral chip — rather than an
@@ -46,6 +47,8 @@ function parseFields(formData: FormData): {
   return {
     name: ((formData.get("name") as string | null) ?? "").trim(),
     abbreviation: ((formData.get("abbreviation") as string | null) ?? "").trim(),
+    // Optional (#1739): blank is no symbol, never the abbreviation in its place.
+    symbol: ((formData.get("symbol") as string | null) ?? "").trim() || null,
     color: isTagColor(color) ? color : null,
   };
 }
@@ -55,13 +58,14 @@ export async function createStampConditionAction(
   formData: FormData
 ): Promise<ConditionActionState> {
   const session = await getSession();
-  const { name, abbreviation, color } = parseFields(formData);
+  const { name, abbreviation, symbol, color } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
     await createStampCondition(session.user.id, collectionId, {
       name,
       abbreviation,
+      symbol,
       color,
       translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
     });
@@ -76,13 +80,14 @@ export async function updateStampConditionAction(
   formData: FormData
 ): Promise<ConditionActionState> {
   const session = await getSession();
-  const { name, abbreviation, color } = parseFields(formData);
+  const { name, abbreviation, symbol, color } = parseFields(formData);
   if (!name) return { status: "error", message: "Name is required." };
   if (!abbreviation) return { status: "error", message: "Abbreviation is required." };
   try {
     await updateStampCondition(session.user.id, conditionId, {
       name,
       abbreviation,
+      symbol,
       color,
       translations: parseTranslationValues(formData, CONDITION_TRANSLATION_FIELDS),
     });

@@ -87,6 +87,11 @@ export interface TitleTemplateCopy {
   condition: string | null;
   /** Condition abbreviation (e.g. `MNH`). */
   conditionAbbr: string | null;
+  /** The condition's catalogue symbol (#1739) — `**`, `*` — or null when the copy has no condition
+   * **or** its condition has no symbol set. Never the abbreviation in its place (#1692): an unset
+   * symbol renders empty and is flagged by the preview instead ({@link templateEmptyConditionSymbols}).
+   * The same in every language, so it never falls back and never flags as untranslated. */
+  conditionSymbol: string | null;
   certificate: string | null;
   /** Certificate-status abbreviation, or null. */
   certificateAbbr: string | null;
@@ -231,6 +236,7 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{year}", label: "Year", example: "1850" },
   { token: "{condition}", label: "Condition", example: "Mint never hinged" },
   { token: "{conditionAbbr}", label: "Condition (abbr.)", example: "MNH" },
+  { token: "{conditionSymbol}", label: "Condition (symbol)", example: "**" },
   { token: "{certificate}", label: "Certificate", example: "Photo certificate" },
   { token: "{certificateAbbr}", label: "Certificate (abbr.)", example: "cert." },
   { token: "{area}", label: "Area", example: "Austria" },
@@ -991,6 +997,8 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.condition)).join(" / ");
     case "conditionabbr":
       return distinct(copies.map((c) => c.conditionAbbr)).join(" / ");
+    case "conditionsymbol":
+      return distinct(copies.map((c) => c.conditionSymbol)).join(" / ");
     case "certificate":
       return distinct(copies.map((c) => c.certificate)).join(" / ");
     case "certificateabbr":
@@ -1597,6 +1605,57 @@ export function templateFallbackTokens(
     if (!out.includes(label)) out.push(label);
   }
   return out;
+}
+
+/**
+ * The conditions in use whose **symbol is not set** where this template asks for it (#1739), named
+ * by the condition's own name, first-seen order, de-duplicated. Drives a preview's warning: an unset
+ * symbol renders empty — never the abbreviation in its place (#1692) — and a collector who wrote
+ * `{conditionSymbol}` should hear that it said nothing for these.
+ *
+ * Asked placeholder by placeholder and copy by copy, so a fallback group the collector wrote
+ * themselves (`{conditionSymbol|conditionAbbr}`) flags nothing for a copy it still had text for, and
+ * a template that never names the token flags nothing at all. Tokens inside a repeating block report
+ * against every copy in scope, like {@link templateFallbackTokens}.
+ */
+export function templateEmptyConditionSymbols(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[],
+  fallbackTemplate: string | null = null,
+  listingText = false
+): string[] {
+  const tpl = template?.trim() || fallbackTemplate?.trim() || "";
+  if (!tpl) return [];
+  const scope = rootScope(sets, NO_CONTEXT, listingText);
+  const unset = scope.copies.filter((c) => c.condition && !c.conditionSymbol?.trim());
+  if (unset.length === 0) return [];
+  const out: string[] = [];
+  for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
+    const asks = m[1].split("|").some((p) => p.split(":")[0].trim().toLowerCase() === "conditionsymbol");
+    if (!asks) continue;
+    for (const c of unset) {
+      if (out.includes(c.condition!)) continue;
+      const { value } = resolvePlaceholder(m[1], [c], scope.setTitle, scope.context, scope.listingText);
+      if (!value) out.push(c.condition!);
+    }
+  }
+  return out;
+}
+
+/** {@link templateEmptyConditionSymbols} for a one-line title over a flat copy list (#1739). */
+export function titleEmptyConditionSymbols(
+  template: string | null | undefined,
+  copies: readonly TitleTemplateCopy[]
+): string[] {
+  return templateEmptyConditionSymbols(template, [{ title: null, copies }], DEFAULT_TITLE_TEMPLATE);
+}
+
+/** {@link templateEmptyConditionSymbols} for a multi-line listing text over an offer's sets (#1739). */
+export function listingEmptyConditionSymbols(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[]
+): string[] {
+  return templateEmptyConditionSymbols(template, sets, null, true);
 }
 
 /** {@link templateFallbackTokens} for a one-line title over a flat copy list (#298). */

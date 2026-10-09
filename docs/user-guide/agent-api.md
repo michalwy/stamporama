@@ -87,7 +87,8 @@ what it does. If the client shows nothing, it is nearly always one of three thin
   *its* machine and not yours.
 
 Then ask it something small — *"what conditions are set up in this collection?"* — which is the one
-call every assistant makes first anyway.
+call every assistant makes first anyway. Each condition comes back with its name, its abbreviation
+and, where you set one, its catalogue symbol (`**`).
 
 ## What it can do, and what it will not
 

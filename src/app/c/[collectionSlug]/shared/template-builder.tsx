@@ -9,6 +9,8 @@ import {
   listingFallbackTokens,
   titleFallbacks,
   listingFallbacks,
+  titleEmptyConditionSymbols,
+  listingEmptyConditionSymbols,
   templatePreviewScope,
   EXAMPLE_OFFER_URL,
   AVAILABLE_LISTING_BLOCKS,
@@ -404,6 +406,11 @@ export function TemplateBuilder({
     ? listingFallbackTokens(value, previewSets)
     : titleFallbackTokens(value, titleCopies);
   const preview = segments.map((s) => s.text).join("");
+  // Conditions in the preview whose `{conditionSymbol}` came out empty (#1739) — an unset symbol
+  // prints nothing rather than the abbreviation, so the collector is told rather than left to notice.
+  const emptySymbols = multiline
+    ? listingEmptyConditionSymbols(value, previewSets)
+    : titleEmptyConditionSymbols(value, titleCopies);
   // The names behind those tokens, each translatable from the warning line (#1733) — the same walk
   // as the tokens, so the two cannot disagree about what fell back.
   const translate = samples.translate;
@@ -611,6 +618,12 @@ export function TemplateBuilder({
 
         {/* Tokens that are not really translated in this language (#298). */}
         {!samples.loading && <TitleFallbackNote tokens={fallbackTokens} fix={fix} />}
+        {!samples.loading && emptySymbols.length > 0 && (
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
+            {"{conditionSymbol}"} is empty for {emptySymbols.join(", ")} — no symbol set in Settings →
+            Conditions.
+          </p>
+        )}
       </div>
         </div>
       )}

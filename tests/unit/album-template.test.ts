@@ -439,6 +439,7 @@ const baseCopy: TitleTemplateCopy = {
   year: null,
   condition: null,
   conditionAbbr: null,
+  conditionSymbol: null,
   certificate: null,
   certificateAbbr: null,
   area: null,

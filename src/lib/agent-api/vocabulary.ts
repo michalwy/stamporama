@@ -44,6 +44,17 @@ export interface VocabularyEntry {
   readonly label?: string;
 }
 
+/** A condition carries a third text beside its name and abbreviation: the catalogue symbol (#1739). */
+export interface ConditionVocabularyEntry extends VocabularyEntry {
+  /**
+   * `**`, `*`, `(*)` — what catalogues and many listings print for the grade. **Omitted when the
+   * collector has not set one**, on `label`'s rule: an agent holds this response for a session, and
+   * most conditions in most collections have none. Reported, not matched: an agent sends the name or
+   * the abbreviation back, never the symbol.
+   */
+  readonly symbol?: string;
+}
+
 /** A vocabulary entry that also sits in a tree: areas and locations, and nothing else. */
 export interface TreeVocabularyEntry extends VocabularyEntry {
   /** The parent's id, or `null` at the root. */
@@ -160,7 +171,7 @@ export interface CollectionVocabulary {
    * own language, and the agent should quote the label to a person and send the name back here.
    */
   readonly defaultLanguage: string;
-  readonly conditions: readonly VocabularyEntry[];
+  readonly conditions: readonly ConditionVocabularyEntry[];
   readonly formats: readonly VocabularyEntry[];
   readonly certificateStatuses: readonly VocabularyEntry[];
   readonly subtypes: readonly SubtypeVocabularyEntry[];

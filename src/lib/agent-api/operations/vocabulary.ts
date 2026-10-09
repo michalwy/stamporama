@@ -5,6 +5,7 @@ import { FACEBOOK_PLATFORM_MODULE } from "../../platform-modules";
 import type {
   CatalogVocabularyEntry,
   CollectionVocabulary,
+  ConditionVocabularyEntry,
   PlatformVocabularyEntry,
   SubtypeVocabularyEntry,
   TreeVocabularyEntry,
@@ -120,6 +121,7 @@ export async function readCollectionVocabulary(
           id: true,
           name: true,
           abbreviation: true,
+          symbol: true,
           translations: { where: { language }, select: { name: true } },
         },
       }),
@@ -243,9 +245,14 @@ export async function readCollectionVocabulary(
   return {
     baseCurrency: collection.baseCurrency,
     defaultLanguage: language,
-    conditions: conditions.map((row) =>
-      entry(row.id, row.name, row.abbreviation, labelFor(row.name, row.translations[0]?.name))
-    ),
+    conditions: conditions.map((row): ConditionVocabularyEntry => {
+      const symbol = row.symbol?.trim();
+      return {
+        ...entry(row.id, row.name, row.abbreviation, labelFor(row.name, row.translations[0]?.name)),
+        // The catalogue symbol (#1739), omitted rather than null where none is set — `label`'s rule.
+        ...(symbol ? { symbol } : {}),
+      };
+    }),
     formats: formats.map((row) =>
       entry(row.id, row.name, row.abbreviation, labelFor(row.name, row.translations[0]?.name))
     ),
@@ -322,7 +329,7 @@ export const getCollectionVocabularyOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
+      "The collection's vocabularies, each as a flat array of `{id, name}` with `abbreviation` and `label` where the collection has them; a condition also carries its catalogue `symbol` (`**`, `*`) where the collector set one. `areas` and `locations` are trees, flattened, each row carrying `parentId` and `assignable`. `catalogs` carry `vendorId`, which joins to `catalogVendors`. `platforms` carry the `currency` an offer routed there is locked to. `exchangePartners` are the people this collection trades with, by name and id only — no contact details reach this surface. `colors`, `watermarks`, `papers` and `printings` are the names `update_stamp` accepts for a stamp's attributes, and any of them may be empty. `baseCurrency` is the currency every collection-level figure is stated in.",
   },
   handler: async (context) => readCollectionVocabulary(context),
 };

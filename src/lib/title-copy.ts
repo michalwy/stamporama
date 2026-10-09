@@ -149,6 +149,8 @@ export const TITLE_COPY_SELECT = {
       id: true,
       name: true,
       abbreviation: true,
+      // The catalogue symbol behind `{conditionSymbol}` (#1739) — one value in every language.
+      symbol: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
     },
   },
@@ -265,7 +267,13 @@ export type TitleCopyRow = {
    *  an album box, which is a catalogue slot and not something anybody owns yet. */
   itemNo: number | null;
   stamp: TitleCopyStampRow;
-  condition: { id: string; name: string; abbreviation: string; translations: LabelTranslation[] } | null;
+  condition: {
+    id: string;
+    name: string;
+    abbreviation: string;
+    symbol: string | null;
+    translations: LabelTranslation[];
+  } | null;
   certificateStatus: {
     id: string;
     name: string;
@@ -507,6 +515,9 @@ export function toTitleCopy(
           row.condition.abbreviation
         )
       : null,
+    // Not resolved through a language (#1739): a symbol is the same everywhere, so it never falls back
+    // and never reports a gap — an unset one is simply empty, which the preview flags on its own.
+    conditionSymbol: row.condition?.symbol?.trim() || null,
     certificate: row.certificateStatus
       ? resolve(
           "certificate",
