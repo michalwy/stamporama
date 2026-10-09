@@ -11,6 +11,8 @@ import type { ItemIssueRef, ItemListItem } from "@/lib/items";
 import { formatCatalogNumber } from "@/lib/catalog-number";
 import type { IssueHeader } from "@/lib/issues";
 import type { OfferDetailSet, OfferSetsTotals } from "@/lib/offers";
+import { offerCostEstimateNotes } from "@/lib/offer-cost";
+import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { InventoryItemRow } from "@/app/c/[collectionSlug]/inventory/inventory-item-row";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -478,10 +480,13 @@ function CopiesBody({
  * a worthless set; an uncertain (unknown-variant) share is marked with the same `~` the price columns
  * use (#238), and the exact breakdown — unpriced, unconvertible, cost still pending — lives on the
  * row's label, since it is the answer to "why is this lower than I expected", not a headline.
+ *
+ * COST counts a copy whose lot is still open at **its estimate** (#1736), and then reads as an
+ * estimate — `~`, muted italic, #238's look — with the label saying how many copies are estimated
+ * and naming any that have no figure at all.
  */
 function SetFigures({ set }: { set: OfferDetailSet }) {
-  const { holdings } = set;
-  const { cost } = holdings;
+  const { holdings, cost } = set;
   const converted = set.holdingsInOfferCurrency;
   const valueNotes = [
     `${holdings.pricedCount} priced`,
@@ -504,7 +509,7 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
   if (reducedHint) valueNotes.push(reducedHint);
   const costNotes = [
     `${cost.knownCount} costed`,
-    ...(cost.pendingCount > 0 ? [`${cost.pendingCount} pending`] : []),
+    ...offerCostEstimateNotes(cost.estimatedCount, cost.unestimated),
     ...(cost.noneCount > 0 ? [`${cost.noneCount} no cost recorded`] : []),
   ];
   return (
@@ -542,10 +547,11 @@ function SetFigures({ set }: { set: OfferDetailSet }) {
         <span style={FIGURE_LABEL}>cost</span>
       </Tooltip>
       <MoneyPair
-        baseAmount={cost.knownCount === 0 ? null : cost.totalCostBasis}
-        baseCurrency={cost.baseCurrency}
+        baseAmount={cost.amount}
+        baseCurrency={holdings.baseCurrency}
         offerAmount={converted?.costAmount ?? null}
         offerCurrency={converted?.currency ?? null}
+        estimated={cost.estimated}
       />
     </div>
   );
@@ -577,7 +583,8 @@ const FIGURE_LABEL: React.CSSProperties = {
  * around a row would be one grid item holding four.
  *
  * An average counts only the sets that carried a figure; the hover says how many, because "50.00
- * over 2 of 3 sets" and "50.00 over 3" are different claims.
+ * over 2 of 3 sets" and "50.00 over 3" are different claims. The cost row is summed from the sets'
+ * COST, estimates included, and marked as an estimate when any of them is (#1736).
  */
 function SetsTotalsBar({ totals, baseCurrency }: { totals: OfferSetsTotals; baseCurrency: string }) {
   if (totals.setCount === 0) return null;
@@ -603,6 +610,7 @@ function SetsTotalsBar({ totals, baseCurrency }: { totals: OfferSetsTotals; base
           : ""),
       convertedTotal: converted?.catalogTotal ?? null,
       convertedAverage: converted?.catalogAverage ?? null,
+      estimated: false,
     },
     {
       key: "cost",
@@ -610,9 +618,13 @@ function SetsTotalsBar({ totals, baseCurrency }: { totals: OfferSetsTotals; base
       total: totals.costTotal,
       average: totals.costAverage,
       counted: totals.costKnownSets,
-      hint: "What every set in this listing cost you",
+      hint: [
+        "What every set in this listing cost you",
+        ...offerCostEstimateNotes(totals.costEstimatedCount, totals.costUnestimated),
+      ].join(" — "),
       convertedTotal: converted?.costTotal ?? null,
       convertedAverage: converted?.costAverage ?? null,
+      estimated: totals.costEstimated,
     },
   ];
   return (
@@ -658,12 +670,14 @@ function SetsTotalsBar({ totals, baseCurrency }: { totals: OfferSetsTotals; base
             baseCurrency={baseCurrency}
             offerAmount={r.convertedTotal}
             offerCurrency={converted?.currency ?? null}
+            estimated={r.estimated}
           />
           <MoneyPair
             baseAmount={r.average}
             baseCurrency={baseCurrency}
             offerAmount={r.convertedAverage}
             offerCurrency={converted?.currency ?? null}
+            estimated={r.estimated}
             leadingStyle={{ paddingLeft: TOTALS_PAIR_GAP }}
           />
         </Fragment>
@@ -703,6 +717,7 @@ function MoneyPair({
   offerAmount,
   offerCurrency,
   uncertain = false,
+  estimated = false,
   leadingStyle,
 }: {
   baseAmount: string | null;
@@ -713,14 +728,17 @@ function MoneyPair({
   offerCurrency: string | null;
   /** Prefix the leading figure with `~`: it leans on an unknown-variant guess (#238). */
   uncertain?: boolean;
+  /** The figure counts an open lot's estimate (#1736): `~` and #238's muted italic, both cells. */
+  estimated?: boolean;
   /** Extra styling for the leading cell — the totals bar spaces its second pair with it. */
   leadingStyle?: React.CSSProperties;
 }) {
-  const mark = uncertain ? "~" : "";
+  const marked = estimated && baseAmount !== null;
+  const mark = uncertain || marked ? "~" : "";
   const leads = offerAmount !== null && offerCurrency !== null;
   return (
     <>
-      <span style={{ ...MONEY_LEAD, ...leadingStyle }}>
+      <span style={{ ...MONEY_LEAD, ...(marked ? COST_ESTIMATE_STYLE : {}), ...leadingStyle }}>
         {baseAmount === null
           ? "—"
           : leads
@@ -728,7 +746,7 @@ function MoneyPair({
             : `${mark}${baseAmount} ${baseCurrency}`}
       </span>
       {offerCurrency !== null && (
-        <span style={MONEY_EQUIVALENT}>
+        <span style={marked ? { ...MONEY_EQUIVALENT, fontStyle: "italic" } : MONEY_EQUIVALENT}>
           {baseAmount === null ? "" : `≈ ${baseAmount} ${baseCurrency}`}
         </span>
       )}

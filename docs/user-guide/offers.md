@@ -82,12 +82,23 @@ A figure reads `—` when nothing under it is priced or costed, and a `~` marks 
 an unknown-variant guess. Hover either one for the breakdown: how many copies are priced, unpriced,
 not convertible to your base currency, or still waiting on an open purchase lot to close.
 
+**Cost while a purchase lot is still open.** A copy whose lot is not closed yet has no settled cost,
+but its **estimated** cost — the figure its purchase order and its own page show — is counted into
+the set's cost here, so you can price the listing before you close the lot. Such a cost is shown
+`~`, muted and italic, and its hover says how many copies are estimated and that the figure settles
+when their lots are closed. A copy whose cost cannot be estimated (no catalog value, no exchange
+rate, not delivered) is left out and named in the hover; with nothing known at all the cost stays
+`—`. This applies to the offer's cost only: your holdings, the Overview and profit and loss keep
+counting such copies as pending.
+
 In the Sets header band — the strip holding the heading, the grouping and sorting controls, and the
 **Add set** / **Collapse all** buttons — the same two figures are given for the **whole listing**:
 the **total** across every set, and the **per set** average beside it. The total is what leaves the shelf if everything
 sells; the average is what one buyer takes, and is the same figure the suggested asking price is
 built from. An average divides only by the sets that actually carry a figure — an unpriced set is a
 gap in your data, not a set worth nothing — and the hover says how many of your sets were counted.
+The listing's cost is the sets' costs added up, estimates included, and is marked the same way when
+any of them is.
 
 ## Creating and composing an offer
 

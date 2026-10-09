@@ -6,6 +6,7 @@ import { createPurchase } from "../../src/lib/purchases";
 import { getItemListItem, getLotIntakeSummary, listItemsPaginated } from "../../src/lib/items";
 import { getStampPurchaseCosts } from "../../src/lib/purchase-costs";
 import { estimateCopyCost } from "../../src/lib/purchase-allocation";
+import { addOfferSet, createOffer, getOfferDetail } from "../../src/lib/offers";
 
 // What a copy on a still-open lot is estimated to cost, read for the screens outside its purchase
 // order (#1696): the copy's own page and the copies list (`ItemListItem.costEstimate`), and the
@@ -179,5 +180,45 @@ describe("an open lot's copy shows its estimated cost (#1696)", () => {
     assert.equal(cell.pendingCount, 1);
     assert.equal(cell.pendingEstimate, "4.00");
     assert.equal(cell.pendingEstimatedCount, 1);
+  });
+
+  it("is counted into an offer's COST, marked, while its holdings keep it pending (#1736)", async () => {
+    const platformId = (
+      await prisma.contact.create({ data: { collectionId, name: "Delcampe", platform: true } })
+    ).id;
+    const offerId = await createOffer(userId, collectionId, {
+      platformId,
+      url: null,
+      price: "5.00",
+      currency: "EUR",
+      listingDate: null,
+      state: "preparing",
+    });
+    // A pending copy beside a frozen one, and a pending copy beside one with no estimate.
+    await addOfferSet(userId, offerId, [cheapId, closedCheapId]);
+    await addOfferSet(userId, offerId, [dearId, unpricedId]);
+    const detail = (await getOfferDetail(userId, offerId))!;
+    const [mixed, partial] = detail.sets;
+
+    assert.equal(mixed.cost.amount, "5.33");
+    assert.equal(mixed.cost.knownCount, 1);
+    assert.equal(mixed.cost.estimatedCount, 1);
+    assert.equal(mixed.cost.estimated, true);
+    // The holdings figure is untouched: the open lot's copy is still pending there.
+    assert.equal(mixed.holdings.cost.totalCostBasis, "1.33");
+    assert.equal(mixed.holdings.cost.pendingCount, 1);
+
+    assert.equal(partial.cost.amount, "8.00");
+    assert.equal(partial.cost.estimatedCount, 1);
+    assert.equal(partial.cost.unestimated.length, 1);
+    assert.equal(partial.cost.estimated, true);
+    assert.equal(partial.holdings.cost.knownCount, 0);
+
+    const t = detail.setsTotals;
+    assert.equal(t.costTotal, "13.33");
+    assert.equal(t.costKnownSets, 2);
+    assert.equal(t.costEstimatedCount, 2);
+    assert.equal(t.costUnestimated.length, 1);
+    assert.equal(t.costEstimated, true);
   });
 });
