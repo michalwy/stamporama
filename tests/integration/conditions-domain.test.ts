@@ -57,6 +57,16 @@ describe("createStampCondition", () => {
     assert.equal(conditions[1].sortOrder, 1);
   });
 
+  it("stores a symbol when given one and none otherwise (#1739)", async () => {
+    await createStampCondition(userId, collectionId, { name: "Mint Hinged", abbreviation: "MH", symbol: " * " });
+    await createStampCondition(userId, collectionId, { name: "No Gum", abbreviation: "NG", symbol: "  " });
+    const conditions = await getStampConditions(userId, collectionId);
+    assert.equal(conditions.find((c) => c.abbreviation === "MH")?.symbol, "*");
+    assert.equal(conditions.find((c) => c.abbreviation === "NG")?.symbol, null);
+    // Nothing is filled in for a condition created without one — never the abbreviation (#1692).
+    assert.equal(conditions.find((c) => c.abbreviation === "MNH")?.symbol, null);
+  });
+
   it("throws when collection is not owned by user", async () => {
     await assert.rejects(
       () => createStampCondition("wrong-user", collectionId, { name: "X", abbreviation: "X" }),
@@ -91,6 +101,18 @@ describe("updateStampCondition", () => {
     assert.equal(c.name, "Mint No Gum");
     assert.equal(c.abbreviation, "MNG");
     assert.equal(c.sortOrder, 0);
+  });
+
+  it("sets, keeps and clears the symbol (#1739)", async () => {
+    await updateStampCondition(userId, conditionId, { name: "Mint No Gum", abbreviation: "MNG", symbol: "(*)" });
+    const read = async () => (await prisma.stampCondition.findUniqueOrThrow({ where: { id: conditionId } })).symbol;
+    assert.equal(await read(), "(*)");
+    // A caller that does not name the symbol leaves it as it was.
+    await updateStampCondition(userId, conditionId, { name: "Mint No Gum", abbreviation: "MNG" });
+    assert.equal(await read(), "(*)");
+    // Blank clears it.
+    await updateStampCondition(userId, conditionId, { name: "Mint No Gum", abbreviation: "MNG", symbol: "" });
+    assert.equal(await read(), null);
   });
 
   it("throws when condition does not belong to user", async () => {
@@ -208,6 +230,8 @@ describe("seedDefaultConditions via createCollection", () => {
       conditions.map((c) => c.sortOrder),
       DEFAULT_CONDITIONS.map((_, i) => i)
     );
+    // No symbol is seeded (#1739, #1692): the collector sets them, nothing guesses them.
+    assert.ok(conditions.every((c) => c.symbol === null));
   });
 
   it("seedDefaultConditions inserts directly for a collection", async () => {

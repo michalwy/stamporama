@@ -8,6 +8,8 @@ import {
   templatePreviewScope,
   titleFallbackTokens,
   titleFallbacks,
+  titleEmptyConditionSymbols,
+  listingEmptyConditionSymbols,
   DEFAULT_TITLE_TEMPLATE,
   AVAILABLE_TITLE_TOKENS,
   type TitleTemplateCopy,
@@ -63,6 +65,7 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     year: null,
     condition: null,
     conditionAbbr: null,
+    conditionSymbol: null,
     certificate: null,
     certificateAbbr: null,
     area: null,
@@ -881,5 +884,66 @@ describe("templatePreviewScope — a preview renders as the offer does (#1350)",
   it("previews nothing over no copies", () => {
     assert.deepEqual(templatePreviewScope([], true), { sets: [], titleCopies: [] });
     assert.deepEqual(templatePreviewScope([], false), { sets: [], titleCopies: [] });
+  });
+});
+
+// ── {conditionSymbol} (#1739) ────────────────────────────────────────────────
+
+describe("{conditionSymbol}", () => {
+  const mnh = copy({ name: "Mercury", condition: "Mint never hinged", conditionAbbr: "MNH", conditionSymbol: "**" });
+  const mh = copy({ name: "Venus", condition: "Mint hinged", conditionAbbr: "MH", conditionSymbol: null });
+
+  it("is offered beside {condition} and {conditionAbbr}", () => {
+    const tokens = AVAILABLE_TITLE_TOKENS.map((t) => t.token);
+    assert.equal(tokens.indexOf("{conditionSymbol}"), tokens.indexOf("{conditionAbbr}") + 1);
+  });
+
+  it("renders the symbol", () => {
+    assert.equal(renderTitleTemplate("{name} {conditionSymbol}", [mnh]), "Mercury **");
+  });
+
+  it("renders empty when unset — never the abbreviation in its place (#1692)", () => {
+    assert.equal(renderTitleTemplate("{name} {conditionSymbol}", [mh]), "Venus");
+  });
+
+  it("joins the distinct symbols across copies like every condition token", () => {
+    const mh2 = { ...mh, conditionSymbol: "*" };
+    assert.equal(renderTitleTemplate("{conditionSymbol}", [mnh, mh2, mnh]), "** / *");
+  });
+
+  it("works inside {#copy} and {#conditionLegend}", () => {
+    const mh2 = { ...mh, conditionSymbol: "*" };
+    const sets = [{ title: null, copies: [mnh, mh2] }];
+    assert.equal(renderListingTemplate("{#copy}{name} {conditionSymbol}\n{/copy}", sets), "Mercury **\nVenus *");
+    assert.equal(
+      renderListingTemplate("{#conditionLegend}{conditionSymbol} = {condition}\n{/conditionLegend}", sets),
+      "** = Mint never hinged\n* = Mint hinged"
+    );
+  });
+
+  it("never reports as untranslated", () => {
+    assert.deepEqual(titleFallbackTokens("{conditionSymbol}", [mnh]), []);
+  });
+
+  it("flags the conditions in use whose symbol is empty", () => {
+    assert.deepEqual(titleEmptyConditionSymbols("{name} {conditionSymbol}", [mnh, mh]), ["Mint hinged"]);
+  });
+
+  it("flags nothing when every symbol is set, or when the template does not ask for it", () => {
+    assert.deepEqual(titleEmptyConditionSymbols("{conditionSymbol}", [mnh]), []);
+    assert.deepEqual(titleEmptyConditionSymbols("{name} {conditionAbbr}", [mh]), []);
+  });
+
+  it("flags nothing for a copy without a condition", () => {
+    assert.deepEqual(titleEmptyConditionSymbols("{conditionSymbol}", [copy({ name: "Mars" })]), []);
+  });
+
+  it("flags nothing where the collector's own fallback group still has text", () => {
+    assert.deepEqual(titleEmptyConditionSymbols("{conditionSymbol|conditionAbbr}", [mh]), []);
+  });
+
+  it("flags a symbol asked for inside a block, once per condition", () => {
+    const sets = [{ title: null, copies: [mh, { ...mh, name: "Mars" }] }];
+    assert.deepEqual(listingEmptyConditionSymbols("{#copy}{name} {conditionSymbol}\n{/copy}", sets), ["Mint hinged"]);
   });
 });

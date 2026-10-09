@@ -366,6 +366,7 @@ function sampleCopy(checklist: SampleChecklist, stamp: SampleStamp): TitleTempla
     year: checklist.year,
     condition: null,
     conditionAbbr: null,
+    conditionSymbol: null,
     certificate: null,
     certificateAbbr: null,
     area: "Polska",

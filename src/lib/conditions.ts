@@ -44,6 +44,9 @@ export interface StampConditionData {
   /** Per-language overrides of {@link abbreviation} (#294). Falls back independently of the name —
    * a language often translates `Mint Never Hinged` but keeps `MNH`. */
   abbreviationByLanguage: Record<string, string>;
+  /** The catalogue symbol (#1739) — `**`, `*` — or null when the collector has not set one. The same
+   * in every language, so it has no per-language overrides. */
+  symbol: string | null;
   sortOrder: number;
   /** The chip colour (#728), or null for the neutral chip. A palette key from
    * {@link TAG_COLORS}; anything else stored reads as null rather than reaching a `var()`. */
@@ -101,6 +104,7 @@ export async function getStampConditions(
       id: true,
       name: true,
       abbreviation: true,
+      symbol: true,
       color: true,
       sortOrder: true,
       translations: { select: { language: true, name: true, abbreviation: true } },
@@ -112,6 +116,7 @@ export async function getStampConditions(
     abbreviation: c.abbreviation,
     nameByLanguage: translationsByLanguage(c.translations, (t) => t.name),
     abbreviationByLanguage: translationsByLanguage(c.translations, (t) => t.abbreviation),
+    symbol: c.symbol,
     sortOrder: c.sortOrder,
     color: isTagColor(c.color) ? c.color : null,
   }));
@@ -147,6 +152,8 @@ export async function createStampCondition(
   data: {
     name: string;
     abbreviation: string;
+    /** The catalogue symbol (#1739); blank is none. */
+    symbol?: string | null;
     color?: TagColor | null;
     translations?: TranslationValueMap;
   }
@@ -163,6 +170,7 @@ export async function createStampCondition(
       collectionId,
       name: data.name,
       abbreviation: data.abbreviation,
+      symbol: data.symbol?.trim() || null,
       color: data.color ?? null,
       sortOrder,
     },
@@ -177,6 +185,8 @@ export async function updateStampCondition(
   data: {
     name: string;
     abbreviation: string;
+    /** The catalogue symbol (#1739); blank is none. */
+    symbol?: string | null;
     color?: TagColor | null;
     translations?: TranslationValueMap;
   }
@@ -185,7 +195,13 @@ export async function updateStampCondition(
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.stampCondition.update({
     where: { id: conditionId },
-    data: { name: data.name, abbreviation: data.abbreviation, color: data.color ?? null },
+    data: {
+      name: data.name,
+      abbreviation: data.abbreviation,
+      // Absent leaves the symbol as it is; blank clears it (#1739).
+      ...(data.symbol !== undefined ? { symbol: data.symbol?.trim() || null } : {}),
+      color: data.color ?? null,
+    },
   });
   await syncConditionTranslations(conditionId, data.translations);
 }

@@ -186,6 +186,12 @@ language — and the preview re-reads at once; the line goes when nothing is lef
 - `{year}` — stamp year (a range like `1850–1867` when copies span several)
 - `{condition}` — condition (full name)
 - `{conditionAbbr}` — condition abbreviation (e.g. `MNH`)
+- `{conditionSymbol}` — the condition's catalogue symbol (e.g. `**`), set in
+  [**Settings → Conditions**](collections.md#stamp-conditions). A condition without one prints
+  **nothing** — never its abbreviation instead — and the preview says so beneath it
+  (*{conditionSymbol} is empty for Mint Hinged*). Write `{conditionSymbol|conditionAbbr}` if you want
+  the abbreviation where no symbol is set. It works inside `{#copy}`, `{#set}` and
+  `{#conditionLegend}` like the other condition tokens, and in the photo tile labels.
 - `{certificate}` — certificate status (full name)
 - `{certificateAbbr}` — certificate-status abbreviation
 - `{area}` — area (uses each area's optional **title name**, rolling up to a parent when blank — see below)

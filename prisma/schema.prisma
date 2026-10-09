@@ -212,6 +212,9 @@ model StampCondition {
   collectionId String
   name         String
   abbreviation String
+  /** The catalogue symbol (#1739) — `**`, `*`, `(*)` — behind `{conditionSymbol}`. Optional and
+   *  null until the collector sets it; the same in every language, so it has no translation. */
+  symbol       String?
   sortOrder    Int
   /** Chip colour (#728): one of `TAG_COLORS`, or null for the neutral chip. A palette key rather
    *  than a hex — the theme decides what the hue is worth on each background. */

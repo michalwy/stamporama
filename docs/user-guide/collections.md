@@ -850,6 +850,10 @@ Each collection keeps its own list of **conditions** — the grades used when va
 
 - Every new collection starts with a default set: **MNH**, **MH**, **MNG**, **U**, **CTO**, and **FDC**. These are ordinary conditions — rename, reorder, or delete any of them.
 - **Add** a condition with a full name (e.g. "Mint Never Hinged") and a short abbreviation (e.g. "MNH").
+- Give a condition its catalogue **symbol** — `**` for MNH, `*` for MH, `(*)` for no gum — in the
+  **Symbol** box beside the abbreviation. It is optional and empty until you fill it in, including on
+  the default conditions, and it is the same in every language. It feeds the `{conditionSymbol}`
+  token in [templates](contacts.md#adding-and-editing); a condition without one prints nothing there.
 - Give each condition a **colour**, so its chip stands out wherever copies are listed — see [Condition and certificate colours](#condition-and-certificate-colours) below.
 - **Reorder** conditions by dragging rows; the order controls how conditions are listed elsewhere in the app.
 - **Delete** a condition you no longer need. A condition that is already used by catalog prices cannot be deleted — remove those prices first.
@@ -861,6 +865,7 @@ Certificate and guarantee status is tracked as a separate dimension, not as part
 Once a platform lists in — or an album is printed in — a language other than your collection's [default language](#default-language), the **Name** and **Abbreviation** fields are labelled with your default language (e.g. *Name — English (en)*) and the condition's pane grows an **In other languages** block: a line per language, with an **Abbreviation** box and a **Name** box. The two are kept apart on purpose, since abbreviations like `MNH` are often left exactly as they are while the full name is translated. A blank box always falls back to the default text, which it shows greyed, so a title never ends up with a gap. The translations are saved together with the condition, so **Revert** — or discarding the change when you leave the row — drops them too.
 
 These feed the `{condition}` and `{conditionAbbr}` tokens in [listing titles](contacts.md#adding-and-editing).
+The **Symbol** has no translations — `**` reads the same in every language.
 
 ## Certificate statuses
 

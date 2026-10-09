@@ -172,7 +172,7 @@ function ConditionFields({
 
   return (
     <Fields>
-      <div style={{ display: "grid", gridTemplateColumns: "8rem minmax(0, 1fr)", gap: "0.75rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "8rem 6rem minmax(0, 1fr)", gap: "0.75rem" }}>
         <div>
           <LabelWithError htmlFor="f-cond-abbr">Abbreviation{suffix}</LabelWithError>
           <TextInput
@@ -181,6 +181,26 @@ function ConditionFields({
             value={abbreviation}
             onChange={(e) => setAbbreviation(e.target.value)}
             placeholder="e.g. MNH"
+            style={INPUT_STYLE}
+          />
+        </div>
+        {/* The catalogue symbol (#1739): optional, the same in every language — so no language
+            suffix and no translation row — and uncontrolled, since nothing else reads it live. */}
+        <div>
+          <LabelWithError htmlFor="f-cond-symbol">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem" }}>
+              Symbol
+              <InfoHint>
+                The catalogue symbol, for the <code>{"{conditionSymbol}"}</code> token in templates.
+                The same in every language; left blank, the token prints nothing.
+              </InfoHint>
+            </span>
+          </LabelWithError>
+          <TextInput
+            id="f-cond-symbol"
+            name="symbol"
+            defaultValue={condition?.symbol ?? ""}
+            placeholder="e.g. **"
             style={INPUT_STYLE}
           />
         </div>

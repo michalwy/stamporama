@@ -75,6 +75,8 @@ describe("the collection vocabulary operation", () => {
         collectionId,
         name: "Mint Never Hinged",
         abbreviation: "MNH",
+        // The catalogue symbol (#1739); `Used` below has none, which is the omitted half.
+        symbol: "**",
         sortOrder: 0,
       },
     });
@@ -275,6 +277,14 @@ describe("the collection vocabulary operation", () => {
     );
     // And the positive half beside it, so a filter that matched *nothing* would not pass either.
     assert.equal(conditions.find((row) => row.abbreviation === "MNH")?.label, "Czysty bez podlepki");
+  });
+
+  it("reports a condition's symbol, and omits the key where none is set (#1739)", async () => {
+    const conditions = (await readCollectionVocabulary(context)).conditions;
+    assert.equal(conditions.find((row) => row.abbreviation === "MNH")?.symbol, "**");
+    const used = conditions.find((row) => row.name === "Used");
+    assert.ok(used);
+    assert.ok(!("symbol" in used), "an unset symbol is omitted, not sent as null");
   });
 
   it("omits the label entirely where there is nothing to say", async () => {

@@ -341,6 +341,10 @@ the whole configurable vocabulary in one object. The agent fetches it once at th
 and keeps it, which is why **the shape matters more than the endpoint does**: every field is paid for
 in the agent's context on every later turn, not once on the wire.
 
+**A condition also carries its catalogue `symbol`** (#1739), omitted where none is set on `label`'s
+rule. It is reported and never matched: the resolver's aliases stay name, abbreviation and label, so
+an agent sends `MNH` back and never `**`.
+
 **Names are accepted wherever a name is unambiguous.** An operation taking a condition takes `"MNH"`
 as readily as its id. `resolveVocabularyValue` in the pure `agent-api/vocabulary.ts` is the one
 spelling of that rule, and it has exactly three branches:
