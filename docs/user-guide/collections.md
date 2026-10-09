@@ -1199,8 +1199,9 @@ rendered collage gets — the preview is laid out by the same rules the collage 
 **Stamps** above the drawing sets how many placeholders it lays out, from one up to a full image. It
 starts at a full image, and it is the way to see the **Grid** choice: at a full image a fixed and an
 automatic grid are the same picture, and the difference only shows with fewer stamps — four under a
-3 × 3 are a row of three and one trailing on the fixed grid, and a 2 × 2 on the automatic one. The
-count belongs to the preview and is never saved.
+3 × 3 are a row of three and one trailing on the fixed grid, and a 2 × 2 on the automatic one. It
+shows the **Shape** the same way: six stamps under an automatic 3 × 3 come out three across on
+**Landscape** and two across on **Portrait**. The count belongs to the preview and is never saved.
 
 **Edit…** opens the template in a window with the fields on the left and the same preview on the
 right, redrawn as you type. A value that could not be saved — a blank number, one out of range —
@@ -1209,6 +1210,7 @@ leaves the last drawing up and says what is wrong beneath it; nothing changes un
 ### What a template holds
 
 - **Grid** — how the two numbers below are read. **Fixed grid** fills every row to the number of columns you typed and leaves the last row as short as it needs to be. **Automatic** treats them as limits only and arranges each collage from however many stamps it actually holds: under a 3 × 3 template, four stamps come out 2 × 2 and five come out 3 + 2, instead of a full row with one stamp trailing under it. Pick automatic when your offers vary in size, which is most of them — it is what saves editing the template between listings. Templates you made before this existed are on the fixed grid.
+- **Shape** (automatic grid only) — the overall shape each automatic collage aims at: **Landscape** (4:3 to 16:9), **Portrait** (3:4 to 9:16) or **Square** (5:4 to 4:5). Any shape inside the range counts as equally good, and one outside it is chosen only when the stamps or the limits leave nothing inside worth having — a single tall stamp is still a tall image, and two rows at most cannot make nine stamps upright. **Landscape** is the default and suits most platforms, since a listing image is looked at on a monitor; **Portrait** suits Facebook, whose feed shows upright images larger — give the template your Facebook platform uses a portrait shape. Every template made before this setting existed is on **Landscape**. The shape is copied onto an offer with the rest of the template, where it can be changed for that listing.
 - **Front and back in one cell** — whether each cell holds a stamp's *two* scans side by side, under one label, instead of a single scan. Off by default. It changes what a cell holds, never the grid: a 3 × 3 template still fits nine stamps to an image, each one twice as wide. See [paired front and back](offers.md#paired-front-and-back) for what it does to a listing.
 - **Rows** and **Columns** (**Max rows** / **Max columns** on the automatic grid) — the collage's capacity. Their product is how many stamps go on one image in either grid.
 - **Gap (% of stamp)** — the spacing between stamps, used between columns and rows alike and around the whole collage.

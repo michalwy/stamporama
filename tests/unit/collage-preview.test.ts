@@ -12,6 +12,7 @@ import { renderCollage, type CollageTileSource } from "../../src/lib/photos/coll
 import {
   collageTemplateSummary,
   collageTemplateSummaryRows,
+  normalizeCollageGridShape,
 } from "../../src/lib/collage-template-rules";
 
 // The collage template preview (#1477) promises that it never shows a layout the rendered collage
@@ -20,6 +21,7 @@ import {
 
 const base: CollagePreviewValues = {
   gridMode: "fixed",
+  gridShape: "landscape",
   pairSides: false,
   rows: 3,
   columns: 3,
@@ -57,6 +59,16 @@ describe("planCollagePreview", () => {
     assert.deepEqual(planCollagePreview({ ...base, gridMode: "auto" }).columns, 3);
   });
 
+  it("shows the chosen shape's effect on an automatic grid (#1699)", () => {
+    // Six of the portrait placeholders under an automatic 3 × 3: landscape and square lay them three
+    // across (1500 × 1200), portrait two across (1000 × 1800). A fixed grid has no shape to aim at.
+    const auto = { ...base, gridMode: "auto" };
+    assert.equal(planCollagePreview({ ...auto, gridShape: "landscape" }, 6).columns, 3);
+    assert.equal(planCollagePreview({ ...auto, gridShape: "square" }, 6).columns, 3);
+    assert.equal(planCollagePreview({ ...auto, gridShape: "portrait" }, 6).columns, 2);
+    assert.equal(planCollagePreview({ ...base, gridShape: "portrait" }, 6).columns, 3);
+  });
+
   it("draws a front and a back in every cell of a paired template, half a gap apart", () => {
     const plan = planCollagePreview({ ...base, pairSides: true }, 2);
     for (const cell of plan.cells) {
@@ -84,7 +96,11 @@ describe("collage template summaries", () => {
   it("tells two templates apart in one line", () => {
     assert.equal(
       collageTemplateSummary(template),
-      "auto, up to 3 × 3 · front+back cells · gap 5% · strip 1.5%"
+      "auto, up to 3 × 3, landscape · front+back cells · gap 5% · strip 1.5%"
+    );
+    assert.equal(
+      collageTemplateSummary({ ...template, gridShape: "portrait" }),
+      "auto, up to 3 × 3, portrait · front+back cells · gap 5% · strip 1.5%"
     );
     assert.equal(
       collageTemplateSummary({ ...template, gridMode: "fixed", pairSides: false, labelPercent: 0 }),
@@ -92,9 +108,18 @@ describe("collage template summaries", () => {
     );
   });
 
+  it("names the shape only where the grid reads it", () => {
+    assert.ok(
+      !collageTemplateSummaryRows({ ...template, gridMode: "fixed", gridShape: "portrait" }).some(
+        (row) => row.label === "Shape"
+      )
+    );
+  });
+
   it("names every value beside the drawing", () => {
     assert.deepEqual(collageTemplateSummaryRows(template), [
       { label: "Grid", value: "Automatic, up to 3 × 3" },
+      { label: "Shape", value: "Landscape (4:3 – 16:9)" },
       { label: "Per image", value: "Up to 9 stamps" },
       { label: "Cells", value: "Front and back" },
       { label: "Gap", value: "5% of stamp" },
@@ -138,6 +163,7 @@ async function render(values: CollagePreviewValues, count: number) {
   }));
   const columns = collageColumnsFor(planned, {
     gridMode: values.gridMode === "auto" ? "auto" : "fixed",
+    gridShape: normalizeCollageGridShape(values.gridShape),
     rows: values.rows,
     columns: values.columns,
   });
@@ -167,6 +193,11 @@ const SAMPLES: { name: string; values: CollagePreviewValues; count: number }[] =
   { name: "a full fixed 3 × 3", values: base, count: 9 },
   { name: "a short last row on a fixed grid", values: { ...base, rows: 2, columns: 4 }, count: 6 },
   { name: "an automatic grid below capacity", values: { ...base, gridMode: "auto" }, count: 4 },
+  {
+    name: "an automatic grid aiming at portrait",
+    values: { ...base, gridMode: "auto", gridShape: "portrait" },
+    count: 6,
+  },
   {
     name: "paired cells on an automatic grid",
     values: { ...base, gridMode: "auto", pairSides: true, rows: 2, columns: 3, gapPercent: 12 },

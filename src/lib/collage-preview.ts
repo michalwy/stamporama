@@ -32,6 +32,7 @@ import {
   MAX_COLLAGE_AXIS,
   MIN_COLLAGE_AXIS,
   normalizeCollageGridMode,
+  normalizeCollageGridShape,
 } from "./collage-template-rules";
 
 /** The placeholder scan, in pixels: a portrait definitive at a common scanning resolution. The
@@ -43,6 +44,8 @@ export const COLLAGE_PREVIEW_SCAN: CollageTileSize = { width: 500, height: 600 }
  *  background: it is painted, never measured. */
 export interface CollagePreviewValues {
   gridMode: string;
+  /** The shape the automatic grid aims at (#1699) — so the drawing shows what choosing one does. */
+  gridShape: string;
   pairSides: boolean;
   rows: number;
   columns: number;
@@ -103,6 +106,7 @@ export function planCollagePreview(values: CollagePreviewValues, count?: number)
 
   const columns = collageColumnsFor(planned, {
     gridMode: normalizeCollageGridMode(values.gridMode),
+    gridShape: normalizeCollageGridShape(values.gridShape),
     rows: axis(values.rows),
     columns: axis(values.columns),
   });

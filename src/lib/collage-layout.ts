@@ -48,7 +48,11 @@
  * A single stamp is a 1×1 collage, so this is the only layout path there is.
  */
 
-import type { CollageGridMode } from "./collage-template-rules";
+import {
+  normalizeCollageGridShape,
+  type CollageGridMode,
+  type CollageGridShape,
+} from "./collage-template-rules";
 
 /** The native pixel size of one scan. */
 export interface CollageTileSize {
@@ -160,6 +164,8 @@ export interface CollageGrid {
   rows: number;
   /** Tiles per row in `fixed` mode; the widest a row may get in `auto`. */
   columns: number;
+  /** The canvas shape `auto` aims at (#1699); `fixed` ignores it. */
+  gridShape: CollageGridShape;
 }
 
 /** A tile to fall back to when a size is missing or degenerate: a unit square, so a collage with no
@@ -175,27 +181,39 @@ const UNIT_TILE: CollageTileSize = { width: 1, height: 1 };
 const SHAPE_WEIGHT = 3;
 
 /**
- * The canvas shape the auto grid aims at (#526) — **landscape**, and a *band* rather than a point.
+ * The canvas shapes the auto grid aims at (#526, made a choice by #1699) — each a *band* rather than
+ * a point.
  *
  * The first cut of the cost aimed at a square, which is nobody's viewing surface: a collage is looked
  * at on a monitor and as a marketplace listing image, both wider than they are tall, and aiming at 1:1
  * meant a set of tall stamps could come out as a portrait column with no hole in it to argue against.
  * Anything from 4:3 to 16:9 is a natural landscape shape and there is no reason to prefer one over
  * another, so the whole band is free and the term only bites outside it — growing with the log
- * distance to the nearest edge, exactly as it grew away from square before.
+ * distance to the nearest edge, exactly as it grew away from square before. That is `landscape`, and
+ * the default.
  *
- * Portrait canvases are not forbidden: a single tall scan, or a row ceiling that forces the shape,
- * still lands where the holes term sends it. The band says which arrangement to reach for, not which
- * ones are allowed.
+ * A Facebook feed shows an upright image larger, so a template may aim elsewhere (#1699): `portrait`
+ * is the landscape band turned on its side, `square` the narrow band around 1:1. The same rule holds
+ * for every band — free inside, the log distance outside — so only the target moves.
+ *
+ * No shape is forbidden: a single tall scan, or a row ceiling that forces the shape, still lands where
+ * the holes term sends it. The band says which arrangement to reach for, not which ones are allowed.
  */
-const TARGET_ASPECT_MIN = 4 / 3;
-const TARGET_ASPECT_MAX = 16 / 9;
+export const COLLAGE_SHAPE_BANDS: Record<CollageGridShape, { min: number; max: number }> = {
+  landscape: { min: 4 / 3, max: 16 / 9 },
+  portrait: { min: 9 / 16, max: 3 / 4 },
+  square: { min: 4 / 5, max: 5 / 4 },
+};
 
-/** How far off the landscape band a canvas is, in log-ratio; 0 anywhere inside it. */
-function shapePenalty(width: number, height: number): number {
+/** How far off the band a canvas is, in log-ratio; 0 anywhere inside it. */
+function shapePenalty(
+  width: number,
+  height: number,
+  band: { min: number; max: number }
+): number {
   const ratio = width / height;
-  if (ratio < TARGET_ASPECT_MIN) return Math.log(TARGET_ASPECT_MIN / ratio);
-  if (ratio > TARGET_ASPECT_MAX) return Math.log(ratio / TARGET_ASPECT_MAX);
+  if (ratio < band.min) return Math.log(band.min / ratio);
+  if (ratio > band.max) return Math.log(ratio / band.max);
   return 0;
 }
 
@@ -219,12 +237,16 @@ const COST_EPSILON = 1e-9;
  * - **Holes** — the canvas area the stamps do not cover, over the mean tile area. This is the term
  *   that grew: it counts the ragged cell at the end of the last row *and* the space a small
  *   definitive leaves beside a souvenir sheet in the same row, which is the imbalance #514 is about.
- * - **Shape** — how far the canvas's real aspect ratio falls outside the landscape band (#526), so a
- *   page of wide detail crops is judged on the wide canvas it makes rather than on how many cells
- *   across it is, and a page of tall stamps is pushed towards a wider arrangement rather than a
- *   column.
+ * - **Shape** — how far the canvas's real aspect ratio falls outside the chosen band (#526, #1699),
+ *   so a page of wide detail crops is judged on the wide canvas it makes rather than on how many
+ *   cells across it is, and — under the default landscape band — a page of tall stamps is pushed
+ *   towards a wider arrangement rather than a column.
  */
-function autoGridCost(sizes: readonly CollageTileSize[], columns: number): number {
+function autoGridCost(
+  sizes: readonly CollageTileSize[],
+  columns: number,
+  band: { min: number; max: number }
+): number {
   let canvasWidth = 0;
   let canvasHeight = 0;
   let tileArea = 0;
@@ -243,7 +265,7 @@ function autoGridCost(sizes: readonly CollageTileSize[], columns: number): numbe
 
   const meanTileArea = tileArea / sizes.length;
   const holes = (canvasWidth * canvasHeight - tileArea) / meanTileArea;
-  return holes + SHAPE_WEIGHT * shapePenalty(canvasWidth, canvasHeight);
+  return holes + SHAPE_WEIGHT * shapePenalty(canvasWidth, canvasHeight, band);
 }
 
 /**
@@ -290,10 +312,13 @@ export function resolveCollageColumns(
   // `maxColumns`, and the clamp leaves the loop with the widest row allowed as its only candidate.
   const minColumns = Math.min(maxColumns, Math.max(1, Math.ceil(tiles.length / maxRows)));
 
+  // Normalised although typed: a stored value reaches here through more than one caller.
+  const band = COLLAGE_SHAPE_BANDS[normalizeCollageGridShape(grid.gridShape)];
+
   let best = minColumns;
   let bestCost = Infinity;
   for (let columns = minColumns; columns <= maxColumns; columns += 1) {
-    const cost = autoGridCost(tiles, columns);
+    const cost = autoGridCost(tiles, columns, band);
     // The tolerance is what makes a tie go to the wider grid: the loop climbs, so the last equal
     // cost wins. `bestCost` keeps the true minimum, so a run of near-ties cannot drift upwards.
     if (cost <= bestCost + COST_EPSILON) {

@@ -615,6 +615,10 @@ model CollageTemplate {
   // from its tile count, staying inside both bounds. Defaults to fixed, which is what every template
   // written before this existed does.
   gridMode     String @default("fixed")
+  // `landscape` | `portrait` | `square` (#1699): the canvas shape the `auto` grid aims at — 4:3–16:9,
+  // 3:4–9:16 or 5:4–4:5, every shape inside the band equally good. Read only under `auto`; a fixed
+  // grid has no target. Defaults to landscape, the rule every template written before this follows.
+  gridShape    String @default("landscape")
   // Spacing between tiles — one value used both between columns and between rows — as a **percent
   // of the stamp height**, resolved by the renderer against the median tile of the collage it is
   // laying out (#310, #312). Not pixels: a pixel number cannot be chosen without knowing the scan
@@ -4931,6 +4935,10 @@ model Offer {
   // `fixed` — both for an offer with no collage numbers at all and for every offer prepared before
   // the mode existed, which is why it is not part of the all-or-nothing group below.
   collageGridMode String?
+  // The shape the `auto` grid aims at (#1699), copied from the template with the rest. Null is
+  // `landscape` — every offer prepared before the setting existed — and, like the mode, it sits
+  // outside the all-or-nothing group.
+  collageGridShape String?
   collageRows  Int?
   collageColumns Int?
   collageGapPercent Int?
@@ -4970,6 +4978,7 @@ model Offer {
   // together when no group template was picked: the groups then use the numbers above. Separate
   // because the two want different grids — a single on Facebook is a 1×2, a series a larger page.
   groupCollageGridMode String?
+  groupCollageGridShape String?
   groupCollageRows  Int?
   groupCollageColumns Int?
   groupCollageGapPercent Int?

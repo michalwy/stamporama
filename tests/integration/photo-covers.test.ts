@@ -127,6 +127,7 @@ describe("covering symbols on offer photos (#1665)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 1,
         collageColumns: 1,
         collageGapPercent: 0,
@@ -251,6 +252,7 @@ describe("covering symbols on offer photos (#1665)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 1,
         collageColumns: 1,
         collageGapPercent: 0,
@@ -275,6 +277,7 @@ describe("covering symbols on offer photos (#1665)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 1,
         collageColumns: 1,
         collageGapPercent: 0,

@@ -24,14 +24,18 @@ import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
   COLLAGE_GRID_MODES,
   COLLAGE_GRID_MODE_LABELS,
+  COLLAGE_GRID_SHAPES,
+  COLLAGE_GRID_SHAPE_LABELS,
   COLLAGE_LABEL_STEP,
   DEFAULT_COLLAGE_BACKGROUND,
   DEFAULT_COLLAGE_GRID_MODE,
+  DEFAULT_COLLAGE_GRID_SHAPE,
   DEFAULT_COLLAGE_PAIR_SIDES,
   collageAxisLabels,
   collageTemplateSummary,
   collageTemplateSummaryRows,
   normalizeCollageGridMode,
+  normalizeCollageGridShape,
   parseCollageTemplateInput,
   MIN_COLLAGE_AXIS,
   MAX_COLLAGE_AXIS,
@@ -103,6 +107,7 @@ type DialogState =
 /** What a new template starts as — the form's defaults, and the first drawing of an add. */
 const NEW_TEMPLATE: Omit<CollageTemplateInput, "name"> = {
   gridMode: DEFAULT_COLLAGE_GRID_MODE,
+  gridShape: DEFAULT_COLLAGE_GRID_SHAPE,
   pairSides: DEFAULT_COLLAGE_PAIR_SIDES,
   rows: 3,
   columns: 3,
@@ -208,9 +213,13 @@ function CollageTemplateForm({
   // collector switches, not on save.
   const [gridMode, setGridMode] = useState(() => normalizeCollageGridMode(start.gridMode));
   const axisLabels = collageAxisLabels(gridMode);
+  // Held here rather than read off the select, because the select is shown only for the automatic
+  // grid (#1699) and a hidden field carries the value while it is not.
+  const [gridShape, setGridShape] = useState(() => normalizeCollageGridShape(start.gridShape));
   const [drawn, setDrawn] = useState<Omit<CollageTemplateInput, "name">>(() => ({
     ...start,
     gridMode: normalizeCollageGridMode(start.gridMode),
+    gridShape: normalizeCollageGridShape(start.gridShape),
   }));
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -222,6 +231,7 @@ function CollageTemplateForm({
     const parsed = parseCollageTemplateInput({
       name: "preview",
       gridMode: str("gridMode"),
+      gridShape: str("gridShape"),
       pairSides: str("pairSides"),
       rows: str("rows"),
       columns: str("columns"),
@@ -293,6 +303,34 @@ function CollageTemplateForm({
               : "Rows filled to the columns; the last one as short as needed."}
           </span>
         </div>
+
+        {/* The shape is read only by the automatic grid (#1699); a fixed grid keeps it in a hidden
+            field, so switching back to automatic finds it as it was. */}
+        {gridMode === "auto" ? (
+          <div>
+            <FieldLabel
+              htmlFor="f-collage-grid-shape"
+              label="Shape"
+              about="The shape each automatic collage aims at. Any shape inside the range counts as equally good, and one outside it is chosen only when the stamps or the limits leave nothing inside worth having. Landscape suits most platforms; a Facebook feed shows portrait images larger."
+            />
+            <select
+              id="f-collage-grid-shape"
+              name="gridShape"
+              value={gridShape}
+              onChange={(e) => setGridShape(normalizeCollageGridShape(e.target.value))}
+              disabled={isPending}
+              style={{ ...INPUT_STYLE, cursor: "pointer" }}
+            >
+              {COLLAGE_GRID_SHAPES.map((shape) => (
+                <option key={shape} value={shape}>
+                  {COLLAGE_GRID_SHAPE_LABELS[shape]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <input type="hidden" name="gridShape" value={gridShape} />
+        )}
 
         {/* What a *cell* holds (#694) — the grid above is untouched by it, each cell is simply wider.
             It is the reusable half of the paired mode: the template is the look a collector settles

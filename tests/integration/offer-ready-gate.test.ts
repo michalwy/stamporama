@@ -426,6 +426,7 @@ describe("marking an offer ready with listing photos (#311)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,

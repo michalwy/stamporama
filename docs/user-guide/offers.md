@@ -532,16 +532,21 @@ listing:
   at the size the **Label strip (%)** below sets and at no other: a long label is cut with an
   ellipsis rather than shrunk. If yours come out cut, lower the strip percentage or write shorter
   templates.
-- **Collage** — **Grid**, **Rows**, **Columns**, **Gap (%)**, **Label strip (%)** and
-  **Background**. **Grid** says how the two numbers are read: a **fixed grid** fills every row to the
+- **Collage** — **Grid**, **Shape** (automatic grid only), **Rows**, **Columns**, **Gap (%)**,
+  **Label strip (%)** and **Background**. **Grid** says how the two numbers are read: a **fixed grid** fills every row to the
   column count, while **automatic** treats them as **Max rows** / **Max columns** and arranges each
   image from the stamps it actually holds — four stamps 2 × 2, five as 3 + 2 — so one setting suits a
   listing of any size. It reads their **sizes**, not just how many there are: a souvenir sheet among
   small definitives, or a page of wide detail crops, gets the arrangement that leaves the least space
-  empty rather than the one a stamp-counting rule would pick. It also aims at a **landscape** overall
-  shape — anything between 4:3 and 16:9 counts as equally good — since that is how the finished
-  image is looked at, on a monitor and as a listing thumbnail; a portrait arrangement is only chosen
-  when the stamps or the row bounds leave no wider one worth having. Both
+  empty rather than the one a stamp-counting rule would pick. It also aims at the overall **Shape**
+  you pick beside it: **Landscape** (4:3 to 16:9, the default — how a finished image is looked at on
+  a monitor and as most listing thumbnails), **Portrait** (3:4 to 9:16 — a Facebook feed shows
+  upright images larger) or **Square** (5:4 to 4:5). Every shape inside the range counts as equally
+  good, and an arrangement outside it is only chosen when the stamps or the row and column limits
+  leave nothing inside worth having. The shape comes with the rest of a template's numbers when you
+  **Copy from template** and can be changed for this listing alone; offers prepared before the
+  setting existed are on **Landscape**, so their photos do not change until you pick another. A
+  fixed grid has no shape to aim at, so the setting is hidden there. Both
   percentages are shares rather than pixels, so one setting reads the same whatever resolution you
   scan at: the gap is a share of the stamp's height, the label strip a share of the finished image
   (in tenths of a percent — 1–2% is the usual range),

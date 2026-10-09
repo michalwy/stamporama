@@ -30,6 +30,8 @@ export interface CollageTemplateData {
   name: string;
   /** `fixed` | `auto` (#413) — how `rows` / `columns` are read. */
   gridMode: string;
+  /** `landscape` | `portrait` | `square` (#1699) — the shape `auto` aims at. */
+  gridShape: string;
   /** Whether a cell holds a stamp's front and back side by side (#694). */
   pairSides: boolean;
   rows: number;
@@ -52,6 +54,7 @@ export async function getCollageTemplates(
       id: true,
       name: true,
       gridMode: true,
+      gridShape: true,
       pairSides: true,
       rows: true,
       columns: true,
@@ -87,6 +90,7 @@ export async function duplicateCollageTemplate(ownerId: string, templateId: stri
     select: {
       name: true,
       gridMode: true,
+      gridShape: true,
       pairSides: true,
       rows: true,
       columns: true,

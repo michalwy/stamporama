@@ -189,6 +189,7 @@ describe("offer photos grouped by checklist (#1673)", () => {
     assert.equal(detail.photoConfig.collage?.collageColumns, 1);
     assert.deepEqual(detail.photoConfig.groupCollage, {
       collageGridMode: "fixed",
+      collageGridShape: "landscape",
       collageRows: 1,
       collageColumns: 4,
       collageGapPercent: 5,

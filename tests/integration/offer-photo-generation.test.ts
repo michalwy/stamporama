@@ -167,6 +167,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -285,6 +286,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed",
+        collageGridShape: "landscape",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -352,6 +354,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed",
+        collageGridShape: "landscape",
         collageRows: 1,
         collageColumns: 1,
         collageGapPercent: 4,
@@ -410,6 +413,7 @@ describe("offer photo generation (#311)", () => {
       photoSides: "front" as const,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -576,6 +580,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed",
+        collageGridShape: "landscape",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -653,6 +658,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed",
+        collageGridShape: "landscape",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -714,6 +720,7 @@ describe("offer photo generation (#311)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed",
+        collageGridShape: "landscape",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -905,6 +912,7 @@ describe("offer photo generation (#311)", () => {
       collageGapPercent: 8,
       collageBackground: "#ffffff",
       collageLabelPercent: 16,
+      collageGridShape: "landscape" as const,
     };
     const config = {
       photoSides: "front" as const,
@@ -944,6 +952,18 @@ describe("offer photo generation (#311)", () => {
     assert.equal(auto.width, wide.width, "the auto grid lays the three out in one row");
     assert.equal(auto.height, wide.height, "at exactly the fixed 3-wide geometry");
     assert.ok(auto.width > wrapped.width, "rather than the narrower wrap it could have chosen");
+
+    // Aimed at portrait (#1699), the same bounds answer the 2 + 1 wrap: one row of three is far too
+    // wide for 3:4–9:16, and a column of three far too tall, so the upright page with its one hole
+    // is the arrangement inside the band.
+    await updateOfferPhotoConfig(userId, offerId, {
+      ...config,
+      collage: { ...collage, collageGridMode: "auto", collageGridShape: "portrait" },
+    });
+    const portrait = await regenerate();
+    assert.equal(portrait.width, wrapped.width, "the portrait aim lays the three out 2 + 1");
+    assert.equal(portrait.height, wrapped.height, "at exactly the fixed 2-wide geometry");
+    assert.ok(portrait.height > portrait.width, "an upright image");
   });
 
   it("leaves no files behind when the offer is deleted", async () => {

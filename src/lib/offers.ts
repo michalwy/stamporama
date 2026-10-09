@@ -137,7 +137,7 @@ import {
   type OfferPhotoConfigInput,
   type PlatformPhotoLimits,
 } from "./offer-photo-config";
-import { normalizeCollageGridMode } from "./collage-template-rules";
+import { normalizeCollageGridMode, normalizeCollageGridShape } from "./collage-template-rules";
 import { evaluateListingTextLimits, type PlatformTextLimits } from "./listing-text-limits";
 import {
   deleteOfferPhotoBytes,
@@ -342,6 +342,7 @@ interface PlatformPhotoDefaults {
 
 const SEED_TEMPLATE_SELECT = {
   gridMode: true,
+  gridShape: true,
   pairSides: true,
   rows: true,
   columns: true,
@@ -384,6 +385,7 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
     photoLabelLeftTemplate: platform.tileLabelLeftTemplate?.trim() || null,
     photoLabelRightTemplate: platform.tileLabelRightTemplate?.trim() || null,
     collageGridMode: template ? normalizeCollageGridMode(template.gridMode) : null,
+    collageGridShape: template ? normalizeCollageGridShape(template.gridShape) : null,
     collageRows: template?.rows ?? null,
     collageColumns: template?.columns ?? null,
     collageGapPercent: template?.gapPercent ?? null,
@@ -393,6 +395,7 @@ async function seedPhotoConfig(platform: PlatformPhotoDefaults) {
     // read — which sides are photographed is one answer for the whole offer.
     photoGroupByChecklist: platform.photoGroupByChecklist,
     groupCollageGridMode: groupTemplate ? normalizeCollageGridMode(groupTemplate.gridMode) : null,
+    groupCollageGridShape: groupTemplate ? normalizeCollageGridShape(groupTemplate.gridShape) : null,
     groupCollageRows: groupTemplate?.rows ?? null,
     groupCollageColumns: groupTemplate?.columns ?? null,
     groupCollageGapPercent: groupTemplate?.gapPercent ?? null,
@@ -4107,6 +4110,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
       collageGridMode: true,
+      collageGridShape: true,
       collageRows: true,
       collageColumns: true,
       collageGapPercent: true,
@@ -4114,6 +4118,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       collageLabelPercent: true,
       photoGroupByChecklist: true,
       groupCollageGridMode: true,
+      groupCollageGridShape: true,
       groupCollageRows: true,
       groupCollageColumns: true,
       groupCollageGapPercent: true,
@@ -4484,6 +4489,8 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
               // Null is `fixed` (#413): the mode postdates the numbers, so an offer prepared before
               // it carries a complete collage group and no mode at all.
               collageGridMode: normalizeCollageGridMode(offer.collageGridMode),
+              // Null is `landscape` (#1699), for the same reason.
+              collageGridShape: normalizeCollageGridShape(offer.collageGridShape),
               collageRows: offer.collageRows,
               collageColumns: offer.collageColumns,
               collageGapPercent: offer.collageGapPercent,
@@ -4502,6 +4509,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         offer.groupCollageLabelPercent != null
           ? {
               collageGridMode: normalizeCollageGridMode(offer.groupCollageGridMode),
+              collageGridShape: normalizeCollageGridShape(offer.groupCollageGridShape),
               collageRows: offer.groupCollageRows,
               collageColumns: offer.groupCollageColumns,
               collageGapPercent: offer.groupCollageGapPercent,
@@ -5909,6 +5917,7 @@ export async function updateOfferPhotoConfig(
       photoLabelLeftTemplate: config.photoLabelLeftTemplate,
       photoLabelRightTemplate: config.photoLabelRightTemplate,
       collageGridMode: config.collage?.collageGridMode ?? null,
+      collageGridShape: config.collage?.collageGridShape ?? null,
       collageRows: config.collage?.collageRows ?? null,
       collageColumns: config.collage?.collageColumns ?? null,
       collageGapPercent: config.collage?.collageGapPercent ?? null,
@@ -5920,6 +5929,7 @@ export async function updateOfferPhotoConfig(
       ...(config.groupCollage !== undefined
         ? {
             groupCollageGridMode: config.groupCollage?.collageGridMode ?? null,
+            groupCollageGridShape: config.groupCollage?.collageGridShape ?? null,
             groupCollageRows: config.groupCollage?.collageRows ?? null,
             groupCollageColumns: config.groupCollage?.collageColumns ?? null,
             groupCollageGapPercent: config.groupCollage?.collageGapPercent ?? null,

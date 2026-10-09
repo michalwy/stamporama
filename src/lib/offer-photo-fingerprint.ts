@@ -22,7 +22,8 @@
  * - the **source photo ids** per copy and side. Photo rows are immutable per id (replacing a front
  *   scan writes a new row), so an id captures the bytes;
  * - the **offer's photo configuration** (#308) — sides, the two tile label templates (#312) and the
- *   collage numbers, and the grid mode that says how those numbers are read (#413), and whether
+ *   collage numbers, and the grid mode that says how those numbers are read (#413) with the shape an
+ *   automatic grid aims at (#1699), and whether
  *   single-copy sets are photographed alone while the limit has room (#521) — which decides how many
  *   images there are and what each shows;
  * - the **rendered tile labels** (#312), not just their template: the labels are drawn into the
@@ -52,6 +53,7 @@
 import { createHash } from "node:crypto";
 import type { OfferCollageValues, PhotoSides, PlatformPhotoLimits } from "./offer-photo-config";
 import { compareSets, sortSetItems, type SetItemOrderRow, type SetOrderRow } from "./offer-set-order";
+import { DEFAULT_COLLAGE_GRID_SHAPE, normalizeCollageGridShape } from "./collage-template-rules";
 
 /** Bumped when the renderer's output changes, invalidating every stored fingerprint. `2`: tiles
  * carry their label (#312). `3`: the gap and the label strip became percentages of the stamp rather
@@ -172,6 +174,9 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
           // as before the mode existed, so hashing it unconditionally would declare every already
           // generated plan in the collection out of date over images unchanged by a pixel.
           ...(input.collage.collageGridMode === "auto" ? ["auto"] : []),
+          // The shape (#1699) on the same terms, and only where it is read: under `auto`, and when
+          // it is not the landscape every offer aimed at before it existed.
+          ...autoGridShape(input.collage),
         ]
       : null,
   ];
@@ -225,6 +230,7 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
             groupCollage.collageGapPercent,
             groupCollage.collageBackground,
             groupCollage.collageLabelPercent,
+            ...autoGridShape(groupCollage),
           ]
         : null,
       [...input.checklistGroups.slots]
@@ -235,4 +241,15 @@ export function fingerprintOfferPhotoInputs(input: OfferPhotoFingerprintInput): 
   }
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+/** The grid shape as the fingerprint carries it (#1699): nothing unless the grid is `auto` and aims
+ *  somewhere other than landscape, so no plan rendered before the setting goes out of date. */
+function autoGridShape(collage: {
+  collageGridMode: string;
+  collageGridShape?: string | null;
+}): string[] {
+  if (collage.collageGridMode !== "auto") return [];
+  const shape = normalizeCollageGridShape(collage.collageGridShape);
+  return shape === DEFAULT_COLLAGE_GRID_SHAPE ? [] : [`shape:${shape}`];
 }

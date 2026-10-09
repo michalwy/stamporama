@@ -27,6 +27,7 @@ describe("collage template duplicate (#1477)", () => {
 
   const values: Omit<CollageTemplateInput, "name"> = {
     gridMode: "auto",
+    gridShape: "portrait",
     pairSides: true,
     rows: 4,
     columns: 5,
@@ -88,6 +89,7 @@ describe("collage template duplicate (#1477)", () => {
     assert.deepEqual(
       {
         gridMode: first.gridMode,
+        gridShape: first.gridShape,
         pairSides: first.pairSides,
         rows: first.rows,
         columns: first.columns,

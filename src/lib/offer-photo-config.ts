@@ -19,7 +19,9 @@
 import {
   collageAxisLabels,
   normalizeCollageGridMode,
+  normalizeCollageGridShape,
   type CollageGridMode,
+  type CollageGridShape,
   MAX_COLLAGE_AXIS,
   MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
@@ -184,6 +186,9 @@ export interface OfferCollageValues {
   /** How the two numbers below are read (#413). An offer prepared before the mode existed stores
    * null and reads as `fixed`, so this side of the group is never blank once the group is there. */
   collageGridMode: CollageGridMode;
+  /** The shape the `auto` grid aims at (#1699). Null on an offer prepared before the setting
+   * existed, read as `landscape` — outside the all-or-nothing group, like the mode. */
+  collageGridShape: CollageGridShape;
   collageRows: number;
   collageColumns: number;
   collageGapPercent: number;
@@ -222,6 +227,7 @@ export function parseCoverSymbolsOverride(raw: string | null | undefined): boole
 /** The collage fields as a form posts them — one group, written together. */
 export interface CollageFieldsRaw {
   collageGridMode?: string;
+  collageGridShape?: string;
   collageRows: string;
   collageColumns: string;
   collageGapPercent: string;
@@ -240,7 +246,8 @@ function parseCollageValues(
 ): PhotoConfigParseResult<OfferCollageValues | null> {
   // The mode is deliberately **not** one of the fields that decide whether a collage is configured
   // at all: it is a toggle, so it always carries a value, and counting it would make "no collage on
-  // this offer yet" unsayable — the same reason the background travels in a hidden field.
+  // this offer yet" unsayable — the same reason the background travels in a hidden field. The
+  // shape (#1699) is a choice that always carries a value too, and is left out for the same reason.
   const collageFields = [
     raw.collageRows,
     raw.collageColumns,
@@ -294,6 +301,7 @@ function parseCollageValues(
     ok: true,
     value: {
       collageGridMode,
+      collageGridShape: normalizeCollageGridShape(raw.collageGridShape),
       collageRows: rows.value,
       collageColumns: columns.value,
       collageGapPercent: gapPercent.value,
