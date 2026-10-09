@@ -23,7 +23,8 @@ The **Your Collections** page lists all collections you own, sorted by creation 
 Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
 - The collection name, at the top, with the [Action items](action-items.md) bell beside it
-- **Overview**, pinned above everything else — the one screen about the collection as a whole
+- **Overview**, pinned above everything else — the one screen about the collection as a whole — with
+  [Collection structure](overview.md#collection-structure), its breakdown, indented beneath it
 - Five **sections**, each one a heading you can fold away: **Catalog** (Issues, Stamps and the
   variant-price worklist under it, Checklists, then Areas), **Collection** (Inventory, then
   Locations and Albums), **Selling** (the Offers group, the Marketplaces group, Sales), **Intake** (Want list,

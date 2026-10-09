@@ -19,6 +19,11 @@ describe("sectionForPath", () => {
       assert.equal(sectionForPath(`${base}${route}`, base), "collection");
     }
   });
+
+  it("leaves the structure screen outside every section, its entry being under the Overview (#1711)", () => {
+    assert.equal(sectionForPath(`${base}/inventory/structure`, base), null);
+    assert.equal(sectionForPath(`${base}/inventory/i1`, base), "collection");
+  });
 });
 
 describe("sectionTintForHref", () => {

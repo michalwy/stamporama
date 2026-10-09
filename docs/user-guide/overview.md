@@ -34,7 +34,8 @@ The tile shows counts only; what the copies are worth is the Value section's job
 
 ## Collection structure
 
-The holdings tile opens **Collection structure**: the copies you hold, counted along one of the
+The holdings tile opens **Collection structure**, and so does its own entry in the sidebar, right
+under **Overview**: the copies you hold, counted along one of the
 collection's dimensions, or two of them crossed — *how much of what is for sale is used*, *how many
 certified copies there are, by area*. It is a screen for looking at the shape of the collection; it
 never lists a copy. Every count is a link to the [Copies list](inventory.md) showing exactly those
