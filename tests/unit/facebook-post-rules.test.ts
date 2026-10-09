@@ -6,6 +6,7 @@ import {
   facebookDefaultStartingPrice,
   facebookMixedTypesRefusal,
   facebookMoney,
+  facebookPostGaps,
   facebookPostRefusal,
   isFacebookLotPosted,
   parseBidIncrement,
@@ -121,9 +122,24 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
     assert.equal(renderFacebookLotText("[{lot}] {catalog}", lot()), "[] Mi·AT 1");
   });
 
-  it("falls back to the description when the group has no template, and adds no note to it (#1689)", () => {
-    assert.equal(renderFacebookLotText("   ", lot()), "Mercury, 1850, unused");
-    assert.equal(renderFacebookLotText("   ", lot(), "Shipping 5 PLN."), "Mercury, 1850, unused");
+  it("gives an empty post where the group has no template — nothing falls back (#1692)", () => {
+    assert.equal(renderFacebookLotText("", lot()), "");
+    assert.equal(renderFacebookLotText("", lot(), "Shipping 5 PLN."), "");
+    assert.equal(renderFacebookPostText({ auction: "", quickBuy: "" }, "Shipping 5 PLN.", [lot()]), "");
+  });
+
+  it("puts the title in once and leaves {description} empty when the offer has none (#1692)", () => {
+    const quickBuy = lot({ listingType: "fixed", description: "", price: "20.00 PLN" });
+    const text = renderFacebookPostText(
+      { auction: "", quickBuy: "{title}\nKup teraz - {price} + koszty wysyłki\n\n{description}" },
+      "",
+      [quickBuy]
+    );
+    assert.equal(text, "Austria 1850 Mercury\nKup teraz - 20.00 PLN + koszty wysyłki\n\n");
+  });
+
+  it("leaves the template's line breaks as they are, empty placeholders included (#1692)", () => {
+    assert.equal(renderFacebookLotText("{title}\n\n{description}\n\n{price}", lot({ description: "" })), "Austria 1850 Mercury\n\n\n\n{price}");
   });
 
   it("joins the lots in lot order, the note where the last lot's {terms} is, once (#1689)", () => {
@@ -132,7 +148,16 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
       "Shipping 5 PLN.",
       [lot({ lotNo: 2, catalog: "Mi·AT 2" }), lot({ lotNo: 1, catalog: "Mi·AT 1" })]
     );
-    assert.equal(text, "Lot 1: Mi·AT 1\n\nLot 2: Mi·AT 2\n\nShipping 5 PLN.");
+    assert.equal(text, "Lot 1: Mi·AT 1\n\n\n\nLot 2: Mi·AT 2\n\nShipping 5 PLN.");
+  });
+
+  it("leaves a lot with no template out of the post rather than leaving a gap (#1692)", () => {
+    const text = renderFacebookPostText({ auction: "Lot {lot}", quickBuy: "" }, "", [
+      lot({ lotNo: 1 }),
+      lot({ lotNo: 2, listingType: "fixed" }),
+      lot({ lotNo: 3 }),
+    ]);
+    assert.equal(text, "Lot 1\n\nLot 3");
   });
 
   it("puts the note where {terms} stands, not at the end (#1689)", () => {
@@ -155,13 +180,57 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
     assert.equal(text, "Lot 1 auction: 10.00 PLN\n\nLot 2 buy now: 25.00 PLN");
   });
 
-  it("leaves out an empty standing note rather than a gap", () => {
-    assert.equal(renderFacebookPostText({ auction: "{catalog}\n\n{terms}", quickBuy: "" }, "  ", [lot()]), "Mi·AT 1");
+  it("leaves an empty standing note empty, the template's lines as they are (#1692)", () => {
+    assert.equal(renderFacebookPostText({ auction: "{catalog}\n\n{terms}", quickBuy: "" }, "  ", [lot()]), "Mi·AT 1\n\n");
   });
 
   it("writes a figure with its currency, and nothing for none", () => {
     assert.equal(facebookMoney("1.00", "PLN"), "1.00 PLN");
     assert.equal(facebookMoney(null, "PLN"), "");
+  });
+});
+
+describe("facebookPostGaps (#1692)", () => {
+  const templates = { auction: "{title}\n{description}\n{startingPrice}\n{terms}", quickBuy: "" };
+
+  it("names nothing when every placed placeholder has a value and every type a template", () => {
+    assert.deepEqual(facebookPostGaps(templates, "Shipping 5 PLN.", [lot()]), {
+      missingTemplates: [],
+      emptyPlaceholders: [],
+    });
+  });
+
+  it("names the template a lot's type has none of", () => {
+    assert.deepEqual(facebookPostGaps(templates, "Shipping", [lot({ listingType: "fixed" })]).missingTemplates, ["fixed"]);
+    assert.deepEqual(
+      facebookPostGaps({ auction: "", quickBuy: "" }, "", [lot(), lot({ listingType: "fixed" })]).missingTemplates,
+      ["auction", "fixed"]
+    );
+  });
+
+  it("names each placed placeholder that is empty, per lot, once", () => {
+    const gaps = facebookPostGaps({ ...templates, auction: `${templates.auction}\n{description}` }, "", [
+      lot({ description: "", startingPrice: "" }),
+    ]);
+    assert.deepEqual(gaps.emptyPlaceholders, [
+      { lotNo: null, token: "{description}" },
+      { lotNo: null, token: "{startingPrice}" },
+      { lotNo: null, token: "{terms}" },
+    ]);
+  });
+
+  it("names neither {lot} on an offer posted alone nor {terms} before the last lot", () => {
+    const gaps = facebookPostGaps({ auction: "{lot} {title} {terms}", quickBuy: "" }, "Shipping", [lot()]);
+    assert.deepEqual(gaps.emptyPlaceholders, []);
+    const post = facebookPostGaps({ auction: "{lot} {title} {terms}", quickBuy: "" }, "Shipping", [
+      lot({ lotNo: 2 }),
+      lot({ lotNo: 1 }),
+    ]);
+    assert.deepEqual(post.emptyPlaceholders, []);
+  });
+
+  it("ignores a token the lot's type does not fill — that one is kept as typed, and warned in Settings", () => {
+    assert.deepEqual(facebookPostGaps({ auction: "{price} {startprice}", quickBuy: "" }, "", [lot()]).emptyPlaceholders, []);
   });
 });
 

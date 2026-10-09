@@ -162,16 +162,26 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   post's lots cannot be taken out.
 
 - **The kit's text is rendered in the browser** (`renderFacebookPostText`, pure): `{closesAt}` is a
-  local time and the browser is the only place the zone is known (#490's rule). `{description}` is
-  the offer's description, else its display title; `{title}` the display title; `{price}` a quick
-  buy's asking price; the retired `{catalog}` is every copy's leading number through
-  `compactCatalogNumberGroups`; `{lot}` is empty on a single post. Lots are joined by a blank line.
-  The standing note is **placed, never appended** (#1689, decided with the collector on 2026-10-09):
-  `{terms}` (`FACEBOOK_TERMS_PLACEHOLDER`, in both types' lists) is filled in the **last** lot only,
-  so a multi-lot post states it once as it always did; a template without it posts no note, a blank
-  one (the description fallback) included. **Existing templates were not migrated** (amended with the
-  collector the same day, following #1692's *a post is only what its template places*): they post no
-  note until the collector places `{terms}`. `standingNoteUnused` is the warning
+  local time and the browser is the only place the zone is known (#490's rule). **A post is only what
+  its template places** (#1692, decided with the collector on 2026-10-09): nothing is substituted,
+  added or fallen back to. `{description}` is the offer's description and nothing else — empty when it
+  has none (the kit's title stand-in is gone); `{title}` the display title; `{price}` a quick buy's
+  asking price; the retired `{catalog}` is every copy's leading number through
+  `compactCatalogNumberGroups`; `{lot}` is empty on a single post. A type with **no template gives an
+  empty lot** (the `{description}` fallback template is gone), and the lot's text is not trimmed, so
+  the template's line breaks stay where it has them, around empty placeholders too — collapsing blank
+  lines was withdrawn from the issue. Lots are joined by a blank line, and a lot with no text is left
+  out of the join rather than leaving a gap. **What is missing is named, not filled in**:
+  `facebookPostGaps` lists the types with lots and no template, and each placeholder a lot's template
+  places that comes out empty — bar `{lot}` on a single post and `{terms}` before the last lot, empty
+  by the post's own rule — and the card names each under the text, linking a template or the note to
+  Settings → Facebook (`?tab=facebook&row=`, the group's own row when `kit.group.custom` holds the
+  setting, else `facebook:defaults`) and an empty offer field in another lot to that offer. **Copy**
+  still copies what there is. The standing note is **placed, never appended** (#1689, decided with
+  the collector on 2026-10-09): `{terms}` (`FACEBOOK_TERMS_PLACEHOLDER`, in both types' lists) is
+  filled in the **last** lot only, so a multi-lot post states it once as it always did; a template
+  without it posts no note. **Existing templates were not migrated** (amended with the collector the
+  same day, following #1692): they post no note until the collector places `{terms}`. `standingNoteUnused` is the warning
   under the note field, read off what is being typed (the pane holds both templates and the note in
   one state for it); a group following Facebook's note is warned too, beside the followed value. The photos
   are the offer's own ZIP for a single post and `GET …/facebook-posts/[postId]/photos/zip` for a

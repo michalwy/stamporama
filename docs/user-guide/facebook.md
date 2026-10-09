@@ -103,6 +103,12 @@ is flagged until you remove it: the field says so under it, and the row in the l
 The templates here are Facebook's own, not the platform's description template: that one writes an
 offer's description, which is what `{description}` puts into the post.
 
+**A post is only what its template places.** Nothing is added, swapped in or filled in for you:
+`{description}` is the offer's description, and empty when the offer has none — the title is not put
+in its place; a group with no template for an offer's type gives an empty post; and the line breaks
+are exactly the template's, around a placeholder that comes out empty too. The offer's Facebook card
+names whatever is missing (below), so you fix it where it is set.
+
 ## Groups
 
 The page lists your groups under **Facebook defaults** — those you use first, then any you have
@@ -207,7 +213,11 @@ the offer's screen, directly under the description, which holds everything the p
 - the **post text**: the group's post template for the offer's type — the auction or the quick-buy
   one, its own or Facebook's, as it reads now — filled in from the offer, with the note on shipping,
   payment and terms where the template's `{terms}` puts it. **Copy** puts it on the clipboard in one
-  click. A group with no template for that type posts each lot's description;
+  click. Under the text the card names what the post is missing — *No quick-buy post template set*,
+  or a placeholder that is empty, such as `{description}` when the offer has no description — with a
+  link to where it is set: the template or the note in Settings → Facebook, the group's own or
+  Facebook's defaults, whichever the group uses. Nothing is filled in to hide it, and **Copy** still
+  copies what there is;
 - **↓ Photos**: the offer's photos as one download.
 
 Once the post is up, choose **Activate** on the offer and paste the post's link as its **listing

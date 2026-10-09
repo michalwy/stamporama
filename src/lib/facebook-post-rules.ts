@@ -5,11 +5,14 @@
 //
 // What lives here is the arithmetic a group's defaults become on a new auction, and the text of the
 // kit: the group's post template filled in per lot — an auction's or a quick buy's, whichever the lot
-// is (#1671) — with the note on shipping, payment and terms where its `{terms}` says (#1689).
+// is (#1671) — with the note on shipping, payment and terms where its `{terms}` says (#1689). A post
+// is **only what its template places** (#1692): nothing is substituted, added or fallen back to, and
+// what comes out empty is named on the card (`facebookPostGaps`) rather than filled in.
 
 import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
   FACEBOOK_RETIRED_PLACEHOLDERS,
+  FACEBOOK_TERMS_PLACEHOLDER,
   facebookPostPlaceholders,
   type FacebookStartingPriceMode,
 } from "./facebook-group-rules";
@@ -104,6 +107,7 @@ export interface FacebookPostLotText {
   listingType: OfferListingType;
   /** `{title}`: the offer's title (#1671). */
   title: string;
+  /** `{description}`: the offer's description, empty when it has none (#1692) — never its title. */
   description: string;
   /** `{catalog}`, retired (#1671) and still filled in where a template carries it. */
   catalog: string;
@@ -122,25 +126,20 @@ export interface FacebookPostTemplates {
   quickBuy: string;
 }
 
-/** What a post with no template of its own says per lot: what is offered, and nothing invented. */
-export const FACEBOOK_FALLBACK_POST_TEMPLATE = "{description}";
+const TOKEN = /\{[A-Za-z]+\}/g;
 
-/**
- * One lot's text: its type's template with that type's placeholders filled in. A token the template
- * carries that is not one of them is **kept as typed** — the title template's rule, and what the
- * settings editor already warns about while it is typed (`unknownPostPlaceholders`) — so an
- * auction's `{closesAt}` left in a quick buy's template is seen, not quietly emptied. A retired
- * placeholder is still filled in (#1671), so no post loses text the collector has not been told of.
- * `{terms}` is the note on shipping, payment and terms (#1689) — `terms`, empty unless this lot is
- * where the post states it.
- */
-export function renderFacebookLotText(template: string, lot: FacebookPostLotText, terms = ""): string {
-  const source = template.trim() ? template : FACEBOOK_FALLBACK_POST_TEMPLATE;
-  const known = new Set<string>([
-    ...facebookPostPlaceholders(lot.listingType).map((p) => p.token),
+/** The placeholders a lot of this type fills in: its type's own, and the retired ones (#1671). */
+function knownTokens(listingType: OfferListingType): Set<string> {
+  return new Set<string>([
+    ...facebookPostPlaceholders(listingType).map((p) => p.token),
     ...FACEBOOK_RETIRED_PLACEHOLDERS,
   ]);
-  const values: Record<string, string> = {
+}
+
+/** What each placeholder becomes for this lot. `{terms}` is `terms`, empty unless this lot is where
+ *  the post states the note (#1689). */
+function placeholderValues(lot: FacebookPostLotText, terms: string): Record<string, string> {
+  return {
     "{title}": lot.title,
     "{description}": lot.description,
     "{catalog}": lot.catalog,
@@ -151,9 +150,22 @@ export function renderFacebookLotText(template: string, lot: FacebookPostLotText
     "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
     "{terms}": terms.trim(),
   };
-  return source
-    .replace(/\{[A-Za-z]+\}/g, (token) => (known.has(token) ? values[token] : token))
-    .trim();
+}
+
+/**
+ * One lot's text: its type's template with that type's placeholders filled in, and **nothing else**
+ * (#1692) — an empty template is an empty lot, an empty placeholder is empty, and the template's line
+ * breaks stay exactly where it has them. A token the template carries that is not one of them is
+ * **kept as typed** — the title template's rule, and what the settings editor already warns about
+ * while it is typed (`unknownPostPlaceholders`) — so an auction's `{closesAt}` left in a quick buy's
+ * template is seen, not quietly emptied. A retired placeholder is still filled in (#1671), so no post
+ * loses text the collector has not been told of. `{terms}` is the note on shipping, payment and terms
+ * (#1689) — `terms`, empty unless this lot is where the post states it.
+ */
+export function renderFacebookLotText(template: string, lot: FacebookPostLotText, terms = ""): string {
+  const known = knownTokens(lot.listingType);
+  const values = placeholderValues(lot, terms);
+  return template.replace(TOKEN, (token) => (known.has(token) ? values[token] : token));
 }
 
 /** The template a lot of `listingType` is written from (#1671). */
@@ -161,19 +173,23 @@ export function facebookTemplateFor(templates: FacebookPostTemplates, listingTyp
   return listingType === "auction" ? templates.auction : templates.quickBuy;
 }
 
+function inLotOrder(lots: readonly FacebookPostLotText[]): FacebookPostLotText[] {
+  return [...lots].sort((a, b) => (a.lotNo ?? 0) - (b.lotNo ?? 0));
+}
+
 /**
  * The whole post: each lot's text in lot order — each from its own type's template — a blank line
  * between them. The note on shipping, payment and terms goes where the **last** lot's template puts
  * `{terms}` (#1689) — once, however many lots the post holds, as it was when it was appended under
- * the last — and nowhere when that template has none. Empty parts are left out rather than leaving a
- * gap.
+ * the last — and nowhere when that template has none. A lot with no template has no text, and adds no
+ * gap between the others; what is in a lot's text is its template's, line breaks included (#1692).
  */
 export function renderFacebookPostText(
   templates: FacebookPostTemplates,
   standingNote: string,
   lots: readonly FacebookPostLotText[]
 ): string {
-  const sorted = [...lots].sort((a, b) => (a.lotNo ?? 0) - (b.lotNo ?? 0));
+  const sorted = inLotOrder(lots);
   return sorted
     .map((lot, i) =>
       renderFacebookLotText(
@@ -182,8 +198,56 @@ export function renderFacebookPostText(
         i === sorted.length - 1 ? standingNote : ""
       )
     )
-    .filter((p) => p !== "")
+    .filter((p) => p.trim() !== "")
     .join("\n\n");
+}
+
+/** A placeholder a lot's template places that comes out empty, and the lot it is in. */
+export interface FacebookEmptyPlaceholder {
+  /** The lot's number in a multi-lot post, or null for an offer posted alone. */
+  lotNo: number | null;
+  token: string;
+}
+
+/** What a post is missing (#1692), for the card to name: the templates its lots' types have none of,
+ *  and the placeholders its templates place that are empty. */
+export interface FacebookPostGaps {
+  missingTemplates: OfferListingType[];
+  emptyPlaceholders: FacebookEmptyPlaceholder[];
+}
+
+/**
+ * What the post as `renderFacebookPostText` writes it is missing (#1692) — nothing is filled in to hide
+ * it, so the card names it instead. A type with lots in the post and no template is missing; a
+ * placeholder the template places and the lot leaves empty is named per lot, once per token. Two are
+ * empty by the post's own rule rather than for want of anything, and are not named: `{lot}` on an
+ * offer posted alone, and `{terms}` in every lot but the last, where the note is stated once.
+ */
+export function facebookPostGaps(
+  templates: FacebookPostTemplates,
+  standingNote: string,
+  lots: readonly FacebookPostLotText[]
+): FacebookPostGaps {
+  const sorted = inLotOrder(lots);
+  const missingTemplates = (["auction", "fixed"] as const).filter(
+    (type) => sorted.some((lot) => lot.listingType === type) && !facebookTemplateFor(templates, type).trim()
+  );
+  const emptyPlaceholders: FacebookEmptyPlaceholder[] = [];
+  sorted.forEach((lot, i) => {
+    const template = facebookTemplateFor(templates, lot.listingType);
+    const known = knownTokens(lot.listingType);
+    const last = i === sorted.length - 1;
+    const values = placeholderValues(lot, last ? standingNote : "");
+    const seen = new Set<string>();
+    for (const token of template.match(TOKEN) ?? []) {
+      if (seen.has(token) || !known.has(token)) continue;
+      seen.add(token);
+      if (token === "{lot}" && lot.lotNo == null) continue;
+      if (token === FACEBOOK_TERMS_PLACEHOLDER.token && !last) continue;
+      if (values[token].trim() === "") emptyPlaceholders.push({ lotNo: lot.lotNo, token });
+    }
+  });
+  return { missingTemplates, emptyPlaceholders };
 }
 
 /** A figure as a post states it: `10.00 PLN`, or empty when there is none. */
