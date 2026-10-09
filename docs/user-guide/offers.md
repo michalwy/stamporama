@@ -910,6 +910,17 @@ ready** while those photos are what holds the offer back) walks you through them
   about, plus any extra you attached on its own; an image you uploaded to the offer is not a copy's
   photo and is never asked.
 
+**When nothing needs covering, mark them all at once.** For a country whose stamps certainly show
+nothing to hide, **Nothing to cover on the remaining N photos** — beside **Check N photos** on the
+Photos card, and in the walk's footer — marks every photo still unchecked in one go, after one
+confirmation naming the count. In the walk, **Nothing to cover on this copy's remaining N photos**
+does the same for the copy you are looking at, and the walk carries on with the next copy. Only
+unchecked photos are marked: one you have drawn covers on keeps them, and one already checked is left
+alone. It is recorded exactly as pressing *Nothing to cover* on each would be, so later offers reuse
+it, and any of those photos can still be given covers later — from **Review every photo** or the
+copy's own page. Finish or undo what you have drawn on the current photo first; the buttons wait
+for it.
+
 **Covers are remembered.** They are kept with the copy's photo, so listing the same piece again —
 on this offer or another — needs nothing redone, and a hundred-stamp lot is a walk you make once.
 Photos added to the collection before covers existed simply start unchecked.
