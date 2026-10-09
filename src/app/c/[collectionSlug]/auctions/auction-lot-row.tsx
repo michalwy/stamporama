@@ -9,6 +9,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
+import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import {
   auctionLotName,
@@ -53,16 +54,8 @@ import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-targe
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
+// The status chips' own box (#1705): the seller and platform chips stand in their row.
+const CHIP = ROW_CHIP;
 
 const AMOUNT: React.CSSProperties = {
   fontSize: "0.875rem",
@@ -1107,7 +1100,7 @@ export function AuctionLotRow({
               <ApiReviewChip mark={lot.apiReview} />
               {/* The collector's own labels (#1625), after everything the app says about the lot —
                   the order the Copies row reads its chips in. Nothing at all when it has none. */}
-              <TagChips tags={lot.tags} />
+              <TagChips tags={lot.tags} size="row" />
 
             </div>
             </div>

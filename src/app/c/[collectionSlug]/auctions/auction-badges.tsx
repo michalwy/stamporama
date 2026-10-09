@@ -1,5 +1,6 @@
 "use client";
 
+import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   AUCTION_LOT_OUTCOME_LABEL,
@@ -22,16 +23,9 @@ import { formatInstant } from "./auction-format";
 // Shared chip presentation for auction tracking (#351), mirroring `offer-badges.tsx` so a status
 // reads identically on the flat lot list, on a sale's detail and in the sale list.
 
-const CHIP: React.CSSProperties = {
-  fontSize: "0.75rem",
-  fontWeight: 500,
-  padding: "0.125rem 0.5rem",
-  borderRadius: "0.375rem",
-  border: "1px solid var(--color-border)",
-  color: "var(--color-text-secondary)",
-  background: "var(--color-bg-page)",
-  whiteSpace: "nowrap",
-};
+// The row chip itself rather than a copy of it (#1705), so the status chips, the *To review · API*
+// chip and the tag chips beside them (`CHIP_SIZE.row`) are one box that cannot drift apart.
+const CHIP = ROW_CHIP;
 
 function tinted(token: string | null, label: string, title?: string) {
   if (!token) {

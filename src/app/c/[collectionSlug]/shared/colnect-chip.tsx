@@ -4,6 +4,7 @@ import { colnectSearchUrl, colnectStampUrl } from "@/lib/colnect-link";
 import { catalogSearchValue } from "@/lib/catalog-number";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import { Icon } from "@/app/icons";
+import { CHIP_SIZE } from "./chip-styles";
 import { Tooltip } from "./tooltip";
 
 // The Colnect tag shown next to a stamp's catalog numbers when the stamp has a Colnect
@@ -67,7 +68,6 @@ export function ColnectChip({
   const searchUrl = url ? null : colnectSearchUrl(searchQuery);
   const href = url ?? searchUrl;
   if (!href) return null;
-  const medium = size === "medium";
   const label = url
     ? `Open Colnect item-ID ${colnectId?.trim()} on colnect.com`
     : `No Colnect item-ID recorded — search colnect.com for ${searchQuery?.trim()}`;
@@ -80,8 +80,7 @@ export function ColnectChip({
         aria-label={label}
         style={{
           ...CHIP,
-          fontSize: medium ? "0.75rem" : "0.6875rem",
-          padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
+          ...CHIP_SIZE[size],
         }}
         onClick={(e) => e.stopPropagation()}
       >

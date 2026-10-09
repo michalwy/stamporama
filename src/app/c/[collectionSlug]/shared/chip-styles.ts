@@ -85,6 +85,25 @@ export const ROW_CHIP: React.CSSProperties = {
 };
 
 /**
+ * The **sizes a word chip comes in** — a tag, a fault, a subtype, a Colnect link, a copy count — and
+ * the one place they are declared (#1705).
+ *
+ * A chip that takes a size takes it from the line it stands on, because a row of chips of different
+ * heights reads as broken: `small` on a stamp's catalogue line, `medium` where those surfaces size
+ * their chips up (the flat stamp list, the issue row, the detail screens), and `row` beside the
+ * {@link ROW_CHIP} status chips — an auction lot's *Open* / *Not described*, a copy's condition. The
+ * `row` entry is read off `ROW_CHIP` itself rather than restated, so a tag chip on a lot cannot
+ * drift from the status chips beside it again: #1625 drew it `small` there, a size smaller and lower.
+ */
+export const CHIP_SIZE = {
+  small: { fontSize: "0.6875rem", padding: "0.05rem 0.35rem" },
+  medium: { fontSize: "0.75rem", padding: "0.1rem 0.4rem" },
+  row: { fontSize: ROW_CHIP.fontSize, padding: ROW_CHIP.padding },
+} satisfies Record<string, Pick<React.CSSProperties, "fontSize" | "padding">>;
+
+export type ChipSize = keyof typeof CHIP_SIZE;
+
+/**
  * The **group-count chip** — how many things a grouped row holds, which is the whole point of a
  * grouped row, so it leads line 1 of every one of them and what the group *is* sits beside it.
  *

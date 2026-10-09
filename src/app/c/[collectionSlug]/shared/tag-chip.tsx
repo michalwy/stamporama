@@ -2,7 +2,7 @@
 
 import type { TagSummary } from "@/lib/tags";
 import { tagColorTokens } from "@/lib/tag-colors";
-import { STAMP_SECONDARY_CHIP } from "./chip-styles";
+import { CHIP_SIZE, STAMP_SECONDARY_CHIP, type ChipSize } from "./chip-styles";
 import { Tooltip } from "./tooltip";
 
 // The collector's own labels (#152), wherever the thing carrying them is drawn — the Issues list,
@@ -32,15 +32,15 @@ const CHIP: React.CSSProperties = {
 
 export function TagChip({
   tag,
-  /** Slightly larger variant for the surfaces that size their chips up — the flat stamp list and
-   *  the detail screens — mirroring `SubtypeChip` and `ColnectChip`. */
+  /** The size of the chips it stands beside (`CHIP_SIZE`, #1705): `medium` where the surface sizes
+   *  its chips up, mirroring `SubtypeChip` and `ColnectChip`, and `row` beside the status chips of
+   *  a lot or a copy. */
   size = "small",
 }: {
   tag: TagSummary;
-  size?: "small" | "medium";
+  size?: ChipSize;
 }) {
   const tokens = tagColorTokens(tag.color);
-  const medium = size === "medium";
   return (
     <Tooltip content={`Tag: ${tag.name}`}>
       <span
@@ -49,8 +49,7 @@ export function TagChip({
           color: tokens.color,
           borderColor: tokens.border,
           background: tokens.background,
-          fontSize: medium ? "0.75rem" : "0.6875rem",
-          padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
+          ...CHIP_SIZE[size],
         }}
       >
         {tag.name}
@@ -66,7 +65,7 @@ export function TagChips({
   size = "small",
 }: {
   tags: TagSummary[];
-  size?: "small" | "medium";
+  size?: ChipSize;
 }) {
   if (tags.length === 0) return null;
   return (

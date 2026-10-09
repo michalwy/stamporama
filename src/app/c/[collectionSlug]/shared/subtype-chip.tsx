@@ -1,6 +1,6 @@
 "use client";
 
-import { STAMP_SECONDARY_CHIP } from "./chip-styles";
+import { CHIP_SIZE, STAMP_SECONDARY_CHIP } from "./chip-styles";
 import { Tooltip } from "./tooltip";
 
 // The subtype tag shown next to a stamp's identity wherever stamps are listed or picked (#340):
@@ -38,14 +38,12 @@ export function SubtypeChip({
   size?: "small" | "medium";
 }) {
   if (!subtype || subtype.isDefault) return null;
-  const medium = size === "medium";
   return (
     <Tooltip content={`Subtype: ${subtype.name}`}>
       <span
         style={{
           ...CHIP,
-          fontSize: medium ? "0.75rem" : "0.6875rem",
-          padding: medium ? "0.1rem 0.4rem" : "0.05rem 0.35rem",
+          ...CHIP_SIZE[size],
         }}
       >
         {subtype.name}
