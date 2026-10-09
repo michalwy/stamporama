@@ -17,6 +17,7 @@
 import type { DateRange } from "./profit-and-loss-rules";
 import { hasPurchaseArrived, PURCHASE_STATUSES, type PurchaseStatus } from "./purchase-status";
 import type { SaleStatus } from "./sale-status";
+import type { TradeStatus } from "./trade-rules";
 
 /** The period switch: this calendar year, the last twelve months, or everything. */
 export const CONTACT_PERIODS = ["year", "12m", "all"] as const;
@@ -186,3 +187,52 @@ export function auctionPremiumTerms(
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" ") : "none";
 }
+// ── The platform section (#1710) ─────────────────────────────────────────────────────────────────
+
+/** Whether a calendar day falls inside a period's inclusive range — an open end admits anything. */
+export function isInContactRange(day: string, range: DateRange): boolean {
+  return (!range.from || day >= range.from) && (!range.to || day <= range.to);
+}
+
+/**
+ * The day a closed offer is counted on. **A sold offer closed on the day it sold** — the earliest of
+ * its sales' dates — and only falls back to the stamp `closedAt` carries where no sale names it. The
+ * stamp is not the sale date: every offer closed before #512 carries the day that column was added.
+ * A withdrawn offer has nothing but the stamp.
+ */
+export function offerClosedOn(closedOn: string | null, saleDays: readonly string[]): string | null {
+  if (saleDays.length === 0) return closedOn;
+  return saleDays.reduce((min, d) => (d < min ? d : min));
+}
+
+/** Sold of the offers that ended — sold or withdrawn — as a fraction, or null when none ended. */
+export function sellThrough(soldCount: number, withdrawnCount: number): number | null {
+  const ended = soldCount + withdrawnCount;
+  return ended === 0 ? null : soldCount / ended;
+}
+
+function dayNumber(day: string): number {
+  return Date.parse(`${day}T00:00:00.000Z`) / 86_400_000;
+}
+
+/**
+ * The mean whole days from listing to sale, to one decimal, or null with nothing to average. An
+ * offer recorded as sold before the day it says it was listed counts as sold the same day: the two
+ * dates were typed by hand, and a negative wait is a typo rather than a figure.
+ */
+export function averageDaysToSale(
+  offers: readonly { listedOn: string; soldOn: string }[]
+): number | null {
+  if (offers.length === 0) return null;
+  const total = offers.reduce(
+    (sum, o) => sum + Math.max(0, dayNumber(o.soldOn) - dayNumber(o.listedOn)),
+    0
+  );
+  return Math.round((total / offers.length) * 10) / 10;
+}
+
+// ── The trades section (#1710) ───────────────────────────────────────────────────────────────────
+
+/** A trade still in play: everything before it was closed or called off. Read by the count and by
+ *  the link that opens the trades list on it, so the two cannot name different trades. */
+export const OPEN_TRADE_STATUSES: readonly TradeStatus[] = ["preparing", "shared", "agreed"];

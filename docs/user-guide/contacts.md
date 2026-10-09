@@ -660,9 +660,33 @@ Then one section for each part the contact plays:
   them, what is **still running**: the **open lots**, what they have **committed** you to and what
   they would cost **at ceiling** — the two figures the auction lots list states above its rows — and
   how many lots are still **to review** after the assistant wrote them.
+- **Platform** (the contact as a **platform**) — how selling there goes:
+  - **Offers active** and **Offers ready** — how many of your offers are live on it, and prepared
+    and waiting to go up. These two are **as of today**, whatever the period: they say where offers
+    are now, not something that happened in a period.
+  - **Offers sold** — the offers that sold in the period, each counted on the **day of its sale**.
+  - **Sales through it** and **Revenue** — the sales made on the platform and what their buyers
+    paid, counted the way the Sales section counts them.
+  - **Sell-through** — of the offers that **ended** in the period, the share that sold rather than
+    being withdrawn: three sold and one withdrawn is 75%. A withdrawn offer counts on the day it
+    was withdrawn.
+  - **Time to sale** — the average number of days from an offer's **listing date** to its sale, over
+    the offers sold in the period. An offer with no listing date cannot be timed and is left out;
+    the figure says how many it is over when that is fewer than all of them.
+  - **Purchases through it** and **Spent through it** — the purchases you made on the platform, and
+    their order totals.
+  - A link to its **own settings** where it is one of the marketplaces with a Settings tab of its
+    own — [Allegro](allegro.md), [Delcampe](delcampe.md) or [Facebook](facebook.md).
+- **Trades** (the contact as **exchange partner**) — how many [trades](trades.md) you made with them,
+  how many are still **open** (*Preparing*, *Shared* or *Agreed*), and the **value given** and
+  **value received**, in **My valuation** — the same figures the trade's own screen totals, in your
+  base currency. A **cancelled** trade is counted and listed, but nothing went either way, so its
+  value is left out. A line with no value is never counted as zero: it is left out of the total and
+  the figure says how many lines that is. A trade belongs to the period it was **started** in.
 
-Each section ends with the list of its purchases, sales or auction sales in the period, and a row
-opens that purchase or sale. An auction sale's row says how many of its lots are open, won and lost.
+The Purchases, Sales, Auctions and Trades sections end with the list of their purchases, sales,
+auction sales or trades in the period, and a row opens that one. An auction sale's row says how many of its lots are open, won and lost; a trade's
+row shows the pieces going each way and its value each way.
 
 A section shows when the contact has the **role**, or when there is **something to show** for it — so
 a supplier created while recording a purchase, which has no roles yet, still shows its purchases.
@@ -689,13 +713,16 @@ period, and they match the auction lots list exactly.
 the sales list by buyer, and the not-delivered, not-paid and not-sent figures by those statuses too.
 An auctions figure opens the **auction lots list** for this seller — won, lost, cancelled or open on
 the matching outcome, and the totals with **Show closed** on, so the closed lots are there too.
-The lists are not narrowed to the period — they show everything with this contact. The date of the
-last purchase or sale opens that one.
+A platform's figures open the offers list on that platform and the offer state they count (sell-through
+opens its sold and withdrawn offers), the sales list on that platform, and the purchases list on that
+platform. A partner's figures open the trades list on that partner, and **Open** on the three open
+statuses too. The lists are not narrowed to the period — they show everything with this contact. The
+date of the last purchase or sale opens that one.
 
 ### Money on the page
 
 Money is stated in the collection's **base currency**, so purchases and sales in different currencies
-add up. Where every one of them was in the same other currency, its total is shown beside it.
+add up — on the Platform section too. Where every one of them was in the same other currency, its total is shown beside it.
 
 A purchase or sale in another currency with **no exchange rate** recorded cannot be stated in the
 base currency, and then the page states **no base total** rather than one that leaves it out — hover

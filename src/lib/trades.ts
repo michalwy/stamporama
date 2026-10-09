@@ -173,6 +173,9 @@ export interface TradeListItem {
 export interface TradeListFilters {
   offset?: number;
   status?: TradeStatus;
+  /** Any of these (#1710) — how a contact page's *open trades* opens the list. Combines with
+   *  `status` by intersection, which nothing asks for; the screen sends one or the other. */
+  statuses?: readonly TradeStatus[];
   partnerId?: string;
   /** Narrows to one trade number, which is what the quick jump and the search box both produce. */
   tradeNo?: number;
@@ -317,6 +320,7 @@ function buildTradeListWhere(
   return {
     collectionId,
     ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.statuses?.length ? { AND: [{ status: { in: [...filters.statuses] } }] } : {}),
     ...(filters.partnerId ? { partnerId: filters.partnerId } : {}),
     ...(filters.tradeNo ? { tradeNo: filters.tradeNo } : {}),
     ...(filters.partnerSearch

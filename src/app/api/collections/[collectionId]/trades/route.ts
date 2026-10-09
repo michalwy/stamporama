@@ -23,8 +23,9 @@ export async function GET(
 
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
-  const statusParam = sp.get("status");
-  const status = statusParam && isTradeStatus(statusParam) ? statusParam : undefined;
+  // A comma-separated set (#1710), any of them — the purchases list's reading of the same param. An
+  // unrecognised status is dropped rather than refused.
+  const statuses = (sp.get("status") || "").split(",").filter(isTradeStatus);
   const partnerId = sp.get("partnerId") || undefined;
   // One box, two meanings, resolved here rather than by two fields on the toolbar: `#7` (or a bare
   // `7`) is the trade number the quick jump sends, anything else is the partner's name. The number
@@ -44,7 +45,7 @@ export async function GET(
   try {
     const result = await listTradesPaginated(session.user.id, collectionId, {
       offset,
-      status,
+      statuses,
       partnerId,
       tradeNo,
       partnerSearch,

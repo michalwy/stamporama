@@ -34,7 +34,8 @@ const META_INLINE: React.CSSProperties = {
   flexShrink: 0,
 };
 
-function statusChip(status: TradeStatus): { style: React.CSSProperties; label: string } {
+/** A trade's status as a chip — the row's, and a contact page's trade rows' (#1710). */
+export function statusChip(status: TradeStatus): { style: React.CSSProperties; label: string } {
   const tone = TRADE_STATUS_TONE[status];
   const label = TRADE_STATUS_LABEL[status];
   if (tone === "muted") return { style: CHIP, label };
