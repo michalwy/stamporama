@@ -225,6 +225,52 @@ describe("covering symbols on offer photos (#1665)", () => {
     assert.deepEqual(await codes(offerId), []);
   });
 
+  it("draws a bar in its own colour, and a new colour puts the images out of date (#1702)", async () => {
+    await prisma.contact.update({ where: { id: coveredPlatformId }, data: { coverColor: "#f3ead3" } });
+    const copy = await scannedCopy();
+    const offerId = await preparingOffer(coveredPlatformId, [copy.itemId]);
+    // The walk starts the first bar in the platform's colour.
+    assert.equal((await readOfferCoverWalk(userId, offerId)).defaultColor, "#f3ead3");
+
+    const bar = { shape: "rect" as const, style: "bar" as const, x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+    await savePhotoCovers(userId, copy.photoId, [{ ...bar, color: "#FFFFFF" }]);
+    // The generated image is lossy, so a channel may land a step or two off the colour drawn.
+    const near = (actual: number[], expected: number[]) =>
+      assert.ok(actual.every((c, i) => Math.abs(c - expected[i]) <= 3), `expected ${expected}, got ${actual}`);
+    await generate(offerId);
+    near(await generatedCentre(offerId), [255, 255, 255]);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, false);
+
+    await savePhotoCovers(userId, copy.photoId, [{ ...bar, color: "#f3ead3" }]);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, true);
+    await generate(offerId);
+    near(await generatedCentre(offerId), [0xf3, 0xea, 0xd3]);
+
+    // Read back as saved; a pixelation sent with a colour is stored without one.
+    await savePhotoCovers(userId, copy.photoId, [
+      { ...bar, color: "#808080" },
+      { ...bar, style: "pixelate", color: "#808080", x: 0, width: 0.2 },
+    ]);
+    const [state] = await listItemPhotoCovers(userId, copy.itemId);
+    assert.deepEqual(
+      state.covers.map((c) => [c.style, c.color]),
+      [
+        ["bar", "#808080"],
+        ["pixelate", undefined],
+      ]
+    );
+    await prisma.contact.update({ where: { id: coveredPlatformId }, data: { coverColor: "#000000" } });
+  });
+
+  it("the database holds a bar to one colour and anything else to none (#1702)", async () => {
+    const copy = await scannedCopy();
+    const row = { photoId: copy.photoId, shape: "rect", x: 0, y: 0, width: 0.5, height: 0.5 };
+    await assert.rejects(() => prisma.photoCover.create({ data: { ...row, style: "bar" } }));
+    await assert.rejects(() => prisma.photoCover.create({ data: { ...row, style: "bar", color: "red" } }));
+    await assert.rejects(() => prisma.photoCover.create({ data: { ...row, style: "blur", color: "#ffffff" } }));
+    await prisma.photoCover.create({ data: { ...row, style: "bar", color: "#ffffff" } });
+  });
+
   it("remembers covers: the same piece on another offer needs nothing redone", async () => {
     const copy = await scannedCopy();
     const first = await preparingOffer(coveredPlatformId, [copy.itemId]);

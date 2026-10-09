@@ -903,6 +903,12 @@ ready** while those photos are what holds the offer back) walks you through them
 - Each cover is **pixelated**, **blurred** or a **solid bar** — chosen per cover in the toolbar,
   starting as the platform's *New covers start as*. What you see in the editor is an indication; the
   real one is drawn into the offer's images.
+- A **solid bar has a colour of its own**, so it need not clash with the stamp or the collage
+  background: with a bar selected, or *Solid bar* chosen for the next cover, the toolbar shows
+  **Colour** — black, white, grey and stamp-paper cream, or any other colour from the picker. A new
+  bar starts in the colour you last used on this browser; the very first starts in the platform's
+  *Bars in*. Recolouring a bar puts the offer's images out of date like any other change to covers,
+  and they show the new colour once regenerated.
 - **Enter** saves the photo and brings the next. With nothing drawn the button reads **Nothing to
   cover** — that counts as checked too, so a photo with nothing to hide is never asked about again.
   **Skip** and **Previous** move without saving.

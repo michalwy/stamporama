@@ -3796,6 +3796,9 @@ model PhotoCover {
   shape     String
   // `pixelate` | `blur` | `bar`.
   style     String
+  // A bar's fill as lowercase `#rrggbb` (#1702); null on pixelation and blur, which take theirs
+  // from the photo. Required on a bar — a CHECK holds both halves.
+  color     String?
   x         Float
   y         Float
   width     Float
@@ -6478,8 +6481,11 @@ model Contact {
   // whose rules punish a swastika or a portrait of Hitler on German Reich material. **Read live**,
   // like the limits above, and overridable per offer (`Offer.coverSymbols`). `coverStyle` is the
   // style a newly drawn cover starts as (`pixelate` | `blur` | `bar`); each cover keeps its own.
+  // `coverColor` is the colour the first bar starts in (#1702), lowercase `#rrggbb`; after that a new
+  // bar starts in the colour last used, remembered by the browser.
   coverSymbols Boolean @default(false)
   coverStyle   String  @default("pixelate")
+  coverColor   String  @default("#000000")
   tileLabelLeftTemplate String?
   tileLabelRightTemplate String?
   // Which collage template (#307) a new offer on this platform copies its render numbers from.

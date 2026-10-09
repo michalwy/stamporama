@@ -3,7 +3,7 @@ import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
 import { normalizePhotoSides } from "./offer-photo-config";
-import { normalizePhotoCoverStyle } from "./photo-cover-rules";
+import { normalizePhotoCoverStyle, normalizePlatformCoverColor } from "./photo-cover-rules";
 import { normalizeDescriptionFormat } from "./description-format";
 import { isOfferListingType } from "./offer-rules";
 import { normalizeFacebookProfileUrl } from "./facebook-result-rules";
@@ -206,6 +206,8 @@ export interface ContactData extends ContactRoles {
    * starts as. Read live, unlike the seeded defaults around them. */
   coverSymbols: boolean;
   coverStyle: string;
+  /** The colour the first bar starts in (#1702), `#rrggbb`. */
+  coverColor: string;
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
@@ -262,6 +264,7 @@ const CONTACT_SELECT = {
   photoPreferSingles: true,
   coverSymbols: true,
   coverStyle: true,
+  coverColor: true,
   tileLabelLeftTemplate: true,
   tileLabelRightTemplate: true,
   defaultCollageTemplateId: true,
@@ -413,6 +416,8 @@ export interface ContactCreateInput {
    * start as (normalised; unknown is pixelate). */
   coverSymbols?: boolean | null;
   coverStyle?: string | null;
+  /** #1702: the colour the first bar starts in (normalised; unusable is black). */
+  coverColor?: string | null;
   tileLabelLeftTemplate?: string | null;
   tileLabelRightTemplate?: string | null;
   /** The collage template (#307) new offers copy their render numbers from, or null for none. A
@@ -578,6 +583,8 @@ async function photoData(
    * starts as. Read live, unlike the seeded defaults around them. */
   coverSymbols: boolean;
   coverStyle: string;
+  /** The colour the first bar starts in (#1702), `#rrggbb`. */
+  coverColor: string;
   tileLabelLeftTemplate: string | null;
   tileLabelRightTemplate: string | null;
   defaultCollageTemplateId: string | null;
@@ -602,6 +609,7 @@ async function photoData(
     photoPreferSingles: data.photoPreferSingles ?? true,
     coverSymbols: data.coverSymbols ?? false,
     coverStyle: normalizePhotoCoverStyle(data.coverStyle),
+    coverColor: normalizePlatformCoverColor(data.coverColor),
     tileLabelLeftTemplate: data.tileLabelLeftTemplate ?? null,
     tileLabelRightTemplate: data.tileLabelRightTemplate ?? null,
     defaultCollageTemplateId: template?.id ?? null,

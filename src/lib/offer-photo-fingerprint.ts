@@ -71,6 +71,11 @@ export interface FingerprintSet extends SetOrderRow {
 }
 
 /** Everything the generator read, in whatever order the caller happened to read it. */
+/** One cover as hashed: shape, style and box, then a bar's colour when it is not black (#1702). */
+export type CoverFingerprintRow =
+  | readonly [string, string, number, number, number, number]
+  | readonly [string, string, number, number, number, number, string];
+
 export interface OfferPhotoFingerprintInput {
   sets: readonly FingerprintSet[];
   photoSides: PhotoSides;
@@ -112,7 +117,7 @@ export interface OfferPhotoFingerprintInput {
    * renders actually has one — so neither the upgrade nor a photo marked *nothing to cover* changes
    * the hash of an image that is unchanged by a pixel.
    */
-  covers?: readonly (readonly [string, readonly (readonly [string, string, number, number, number, number])[]])[];
+  covers?: readonly (readonly [string, readonly CoverFingerprintRow[]])[];
   /**
    * #1673's grouping, passed **only when it is on**: the group collage's numbers (null when the
    * groups use the ordinary ones) and the checklist slots each copy fills, as `[itemId, [[checklistId,

@@ -6,6 +6,8 @@
 // that photo. Geometry is in fractions of the photo (0–1): a saved photo's bytes never change
 // (#1006), so a fraction drawn today is true of every derivative for as long as the photo exists.
 
+import type { CoverFingerprintRow } from "./offer-photo-fingerprint";
+
 export const PHOTO_COVER_SHAPES = ["rect", "ellipse"] as const;
 export type PhotoCoverShape = (typeof PHOTO_COVER_SHAPES)[number];
 
@@ -20,6 +22,18 @@ export const PHOTO_COVER_STYLE_LABELS: Record<PhotoCoverStyle, string> = {
   blur: "Blur",
   bar: "Solid bar",
 };
+
+/** The colour a bar is drawn in when nothing else says — what every bar was before #1702. */
+export const DEFAULT_PHOTO_COVER_COLOR = "#000000";
+
+/** The short palette a bar's colour is picked from (#1702); any other colour can be picked freely.
+ *  Cream is the paper most stamps are printed on, so a bar in it reads as blank paper. */
+export const PHOTO_COVER_PALETTE: readonly { color: string; label: string }[] = [
+  { color: "#000000", label: "Black" },
+  { color: "#ffffff", label: "White" },
+  { color: "#808080", label: "Grey" },
+  { color: "#f3ead3", label: "Stamp-paper cream" },
+];
 
 export const PHOTO_COVER_SHAPE_LABELS: Record<PhotoCoverShape, string> = {
   rect: "Rectangle",
@@ -36,6 +50,9 @@ export const MAX_COVERS_PER_PHOTO = 50;
 export interface PhotoCover {
   shape: PhotoCoverShape;
   style: PhotoCoverStyle;
+  /** A bar's fill, lowercase `#rrggbb` (#1702). Present on a bar once cleaned, absent on any other
+   *  style; the editor may keep one on a pixelation so switching back to a bar restores it. */
+  color?: string;
   /** Left edge, top edge, width and height, each a fraction of the photo's own size. */
   x: number;
   y: number;
@@ -58,13 +75,28 @@ export function normalizePhotoCoverStyle(value: string | null | undefined): Phot
   return isPhotoCoverStyle(value) ? value : DEFAULT_PHOTO_COVER_STYLE;
 }
 
+/** A colour as stored: lowercase `#rrggbb`, from that or the 3-digit shorthand; null for anything
+ *  else. */
+export function normalizeCoverColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const hex = value.trim().replace(/^#/, "").toLowerCase();
+  if (/^[0-9a-f]{3}$/.test(hex)) return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+  return /^[0-9a-f]{6}$/.test(hex) ? `#${hex}` : null;
+}
+
+/** A platform's stored first-bar colour, read forgivingly: anything unusable is black. */
+export function normalizePlatformCoverColor(value: string | null | undefined): string {
+  return normalizeCoverColor(value) ?? DEFAULT_PHOTO_COVER_COLOR;
+}
+
 function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
 /**
  * The covers as they will be stored, from whatever the browser sent: shape and style must be known,
- * the box is clipped to the photo, and a cover left smaller than {@link MIN_COVER_SIZE} on either side
+ * the box is clipped to the photo, a bar carries its colour and nothing else carries one (#1702), and
+ * a cover left smaller than {@link MIN_COVER_SIZE} on either side
  * after clipping is refused rather than silently dropped — the collector drew it, so losing it
  * without a word would leave a symbol showing they believe is hidden.
  *
@@ -90,6 +122,17 @@ export function cleanPhotoCovers(input: unknown): PhotoCover[] {
     if (!numbers.every((n) => typeof n === "number" && Number.isFinite(n))) {
       throw new PhotoCoverValidationError(`Cover ${index + 1} has no usable position.`);
     }
+    let color: string | undefined;
+    if (cover.style === "bar") {
+      // A bar sent without a colour — from a page opened before bars had one — is the black it
+      // would have been drawn in then. One sent with a colour that is not one is refused.
+      if (cover.color == null) color = DEFAULT_PHOTO_COVER_COLOR;
+      else {
+        const normalized = normalizeCoverColor(cover.color);
+        if (!normalized) throw new PhotoCoverValidationError(`Cover ${index + 1} has an unusable colour.`);
+        color = normalized;
+      }
+    }
     const [x, y, width, height] = numbers as number[];
     const left = clamp01(x);
     const top = clamp01(y);
@@ -101,12 +144,31 @@ export function cleanPhotoCovers(input: unknown): PhotoCover[] {
     return {
       shape: cover.shape,
       style: cover.style,
+      ...(color ? { color } : {}),
       x: left,
       y: top,
       width: right - left,
       height: bottom - top,
     };
   });
+}
+
+/** A stored cover row as the code reads it, or null when it names a shape or style this code does
+ *  not know (the table's CHECKs make that unreachable). A bar without a usable colour is black. */
+export function storedPhotoCover(row: {
+  shape: string;
+  style: string;
+  color: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): PhotoCover | null {
+  if (!isPhotoCoverShape(row.shape) || !isPhotoCoverStyle(row.style)) return null;
+  const { shape, style, x, y, width, height } = row;
+  return style === "bar"
+    ? { shape, style, color: normalizeCoverColor(row.color) ?? DEFAULT_PHOTO_COVER_COLOR, x, y, width, height }
+    : { shape, style, x, y, width, height };
 }
 
 /**
@@ -122,11 +184,13 @@ export function offerNeedsCovers(offerOverride: boolean | null, platformCoverSym
  * covers, sorted, each with its covers in their stored order. Empty — and therefore absent from the
  * hash — when the offer needs no covers or none of its photos has any, so neither the upgrade nor a
  * photo merely marked *nothing to cover* declares an image out of date that has not changed a pixel.
+ * A bar's colour is named only when it is not black (#1702), so every bar drawn before bars had a
+ * colour hashes as it did.
  */
 export function coverFingerprintRows(
   needsCovers: boolean,
   coversByPhotoId: ReadonlyMap<string, readonly PhotoCover[]>
-): (readonly [string, readonly (readonly [string, string, number, number, number, number])[]])[] {
+): (readonly [string, readonly CoverFingerprintRow[]])[] {
   if (!needsCovers) return [];
   return [...coversByPhotoId]
     .filter(([, covers]) => covers.length > 0)
@@ -135,7 +199,11 @@ export function coverFingerprintRows(
       ([photoId, covers]) =>
         [
           photoId,
-          covers.map((c) => [c.shape, c.style, c.x, c.y, c.width, c.height] as const),
+          covers.map((c) =>
+            c.style === "bar" && c.color && c.color !== DEFAULT_PHOTO_COVER_COLOR
+              ? ([c.shape, c.style, c.x, c.y, c.width, c.height, c.color] as const)
+              : ([c.shape, c.style, c.x, c.y, c.width, c.height] as const)
+          ),
         ] as const
     );
 }
