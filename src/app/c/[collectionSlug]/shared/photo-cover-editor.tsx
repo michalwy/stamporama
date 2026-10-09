@@ -100,7 +100,8 @@ const TOOLBAR_SELECT: CSSProperties = {
  * style.
  *
  * The editor: the photo as large as the space allows, covers drawn by dragging, a cover selected by
- * clicking it, moved by dragging it and resized by its corners, removed with Delete. The shape and
+ * clicking it, moved by dragging it and resized by its corners, removed with Delete — or all at
+ * once with *Clear all*, which a proposal carried from the previous photo needs (#1703). The shape and
  * style of the *next* cover are chosen in the toolbar, which also restyles the selected one.
  */
 export function PhotoCoverEditor({
@@ -281,6 +282,17 @@ export function PhotoCoverEditor({
           style={{ ...TOOLBAR_SELECT, cursor: disabled || selected == null ? "default" : "pointer", opacity: selected == null ? 0.5 : 1 }}
         >
           Remove cover
+        </button>
+        <button
+          type="button"
+          disabled={disabled || covers.length === 0}
+          onClick={() => {
+            setSelected(null);
+            onChange([]);
+          }}
+          style={{ ...TOOLBAR_SELECT, cursor: disabled || covers.length === 0 ? "default" : "pointer", opacity: covers.length === 0 ? 0.5 : 1 }}
+        >
+          Clear all
         </button>
         <span style={{ color: "var(--color-text-muted)", marginLeft: "auto" }}>
           Drag across a symbol to cover it · R / E rectangle or ellipse · Delete removes

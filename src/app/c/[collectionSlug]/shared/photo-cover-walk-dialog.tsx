@@ -11,8 +11,17 @@ import {
   DialogShell,
 } from "@/app/dialog-shell";
 import { photoFullUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
-import type { PhotoCover, PhotoCoverStyle } from "@/lib/photo-cover-rules";
+import { Tooltip } from "./tooltip";
+import {
+  carryAfterSave,
+  NO_CARRIED_COVERS,
+  proposedCovers,
+  type CarriedCovers,
+  type PhotoCover,
+  type PhotoCoverStyle,
+} from "@/lib/photo-cover-rules";
 import { PhotoCoverEditor } from "./photo-cover-editor";
+import { usePersistedFlag } from "./use-persisted-flag";
 
 // The walk through photos to cover symbols on (#1665; ADR-0066): one photo at a time, as large as the
 // window allows, the next one coming with Enter. Saving a photo — with covers, or with none, which is
@@ -26,6 +35,15 @@ import { PhotoCoverEditor } from "./photo-cover-editor";
 // the current copy's photos, or every remaining one — for material that certainly shows nothing to
 // hide. It is the same record as pressing *Nothing to cover* on each, so nothing is lost by it: a
 // photo marked so can be revisited and given covers like any other.
+//
+// An offer's walk also carries covers on (#1703): listing a series, the symbols sit in the same
+// places on every stamp, so the covers last saved on a front are proposed on the next unchecked
+// front, and a back's on the next back. They are only proposed — shown as such, editable, and saved
+// by moving on with Enter like anything drawn; Skip, Previous or closing leaves the photo unchecked.
+// *Carry covers to the next photo* turns it off, remembered on this browser.
+
+/** Where *Carry covers to the next photo* is remembered (#1703). */
+const CARRY_COVERS_KEY = "stamporama:carry-photo-covers";
 
 export interface CoverWalkEntry {
   photoId: string;
@@ -33,6 +51,8 @@ export interface CoverWalkEntry {
   itemId?: string;
   /** What the photo is of — the copy, and which side. */
   label: string;
+  /** The side, which is where carried covers come from (#1703); null for an extra. */
+  side?: "front" | "back" | null;
   checked: boolean;
   covers: PhotoCover[];
 }
@@ -102,6 +122,7 @@ export function PhotoCoverWalkDialog({
   startIndex = 0,
   footerNote,
   onMarkNothingToCover,
+  carryCovers = false,
   onSaved,
   onClose,
 }: {
@@ -114,6 +135,8 @@ export function PhotoCoverWalkDialog({
   footerNote?: ReactNode;
   /** Offered by an offer's walk (#1701): marking what is left *nothing to cover* in one action. */
   onMarkNothingToCover?: MarkNothingToCover;
+  /** Offered by an offer's walk (#1703): covers saved on one photo proposed on the next of its side. */
+  carryCovers?: boolean;
   /** After every save, so the caller can pick up the counts it shows. */
   onSaved?: () => void;
   /** `changed` is whether anything was saved while the walk was open. */
@@ -131,6 +154,11 @@ export function PhotoCoverWalkDialog({
   // The bulk *nothing to cover* waiting on its confirmation (#1701).
   const [bulk, setBulk] = useState<"copy" | "all" | null>(null);
   const [bulkError, setBulkError] = useState<string | undefined>();
+  // What each side passes on, and whether the covers shown are a proposal not yet saved (#1703).
+  const [carryOn, setCarryOn] = usePersistedFlag(CARRY_COVERS_KEY, true);
+  const carrying = carryCovers && carryOn;
+  const [carried, setCarried] = useState<CarriedCovers>(NO_CARRIED_COVERS);
+  const [proposed, setProposed] = useState(false);
 
   const left = entries.filter((e) => !e.checked).length;
   const last = index >= entries.length - 1;
@@ -139,14 +167,34 @@ export function PhotoCoverWalkDialog({
   const copyLeft =
     entry?.itemId != null ? entries.filter((e) => !e.checked && e.itemId === entry.itemId).length : 0;
 
-  /** Move to another photo, starting from what is stored for it — `from` is the list to read it
-   *  from, which a save has just updated. */
-  const go = (next: number, from = entries) => {
+  /** Move to another photo, starting from what is stored for it, or from the covers its side carries
+   *  when it is still unchecked — `from` and `carry` are the list and the carried covers to read,
+   *  which a save has just updated. */
+  const go = (next: number, from = entries, carry = carried) => {
     if (next < 0 || next >= from.length) return;
+    const proposal = carrying ? proposedCovers(carry, from[next]) : null;
     setIndex(next);
-    setCovers(from[next].covers);
+    setCovers(proposal ?? from[next].covers);
+    setProposed(proposal != null);
     setDirty(false);
     setError(undefined);
+  };
+
+  /** *Carry covers to the next photo* switched: the photo on screen gains or loses its proposal,
+   *  unless the collector has already worked on what is drawn. */
+  const switchCarry = (next: boolean) => {
+    setCarryOn(next);
+    if (!entry || dirty) return;
+    if (!next && proposed) {
+      setCovers(entry.covers);
+      setProposed(false);
+    } else if (next && covers.length === 0) {
+      const proposal = proposedCovers(carried, entry);
+      if (proposal) {
+        setCovers(proposal);
+        setProposed(true);
+      }
+    }
   };
 
   const save = () => {
@@ -164,10 +212,13 @@ export function PhotoCoverWalkDialog({
         e.photoId === entry.photoId ? { ...e, checked: true, covers: result.state.covers } : e
       );
       setEntries(updated);
+      // Kept whether or not carrying is on, so switching it on mid-walk proposes what was just used.
+      const carry = carryAfterSave(carried, entry.side, result.state.covers);
+      setCarried(carry);
       setDirty(false);
       onSaved?.();
       if (last) onClose(true);
-      else go(index + 1, updated);
+      else go(index + 1, updated, carry);
     });
   };
 
@@ -185,12 +236,14 @@ export function PhotoCoverWalkDialog({
       const updated = entries.map((e) => (marked.has(e.photoId) ? { ...e, checked: true, covers: [] } : e));
       setEntries(updated);
       setBulk(null);
+      // The photos just marked are *nothing to cover*, and pass nothing on (#1703).
+      setCarried(NO_CARRIED_COVERS);
       onSaved?.();
       // Nothing left to check closes the walk; otherwise it goes on from the next photo still
       // unchecked. Nothing drawn changed, so the images need no regenerating on its account.
       const next = [...updated.slice(index + 1), ...updated.slice(0, index + 1)].find((e) => !e.checked);
       if (!next) onClose(changed);
-      else go(updated.indexOf(next), updated);
+      else go(updated.indexOf(next), updated, NO_CARRIED_COVERS);
     });
   };
 
@@ -214,7 +267,7 @@ export function PhotoCoverWalkDialog({
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const primaryLabel = `${covers.length === 0 ? "Nothing to cover" : "Save covers"}${last ? "" : " & next"}`;
+  const primaryLabel = `${covers.length === 0 ? "Nothing to cover" : proposed ? "Accept covers" : "Save covers"}${last ? "" : " & next"}`;
 
   return (
     <>
@@ -235,9 +288,22 @@ export function PhotoCoverWalkDialog({
                     {entry.covers.length === 0 ? "✓ nothing to cover" : `✓ ${entry.covers.length} covered`}
                   </span>
                 )}
+                {proposed && covers.length > 0 && (
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-info)" }}>
+                    Proposed from the previous {entry.side} — correct them, Enter accepts
+                  </span>
+                )}
                 <span style={{ marginLeft: "auto", color: "var(--color-text-muted)" }}>
                   Photo {index + 1} of {entries.length} · {left === 0 ? "all checked" : `${left} left to check`}
                 </span>
+                {carryCovers && (
+                  <Tooltip content="Propose the covers just saved on a front to the next unchecked front, and a back's to the next back">
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", color: "var(--color-text-secondary)" }}>
+                      <input type="checkbox" checked={carryOn} onChange={(e) => switchCarry(e.target.checked)} />
+                      Carry covers to the next photo
+                    </label>
+                  </Tooltip>
+                )}
               </div>
               <PhotoCoverEditor
                 key={entry.photoId}
@@ -248,6 +314,8 @@ export function PhotoCoverWalkDialog({
                 onChange={(next) => {
                   setCovers(next);
                   setDirty(true);
+                  // Cleared, a proposal is no longer one: what is left is the collector's empty photo.
+                  if (next.length === 0) setProposed(false);
                 }}
               />
             </>

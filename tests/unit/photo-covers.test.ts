@@ -2,12 +2,15 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 import {
+  carryAfterSave,
   cleanPhotoCovers,
   coverFingerprintRows,
   coverWalkPhotos,
+  NO_CARRIED_COVERS,
   normalizePhotoCoverStyle,
   offerNeedsCovers,
   PhotoCoverValidationError,
+  proposedCovers,
   type PhotoCover,
 } from "../../src/lib/photo-cover-rules";
 import { applyPhotoCovers } from "../../src/lib/photos/covers";
@@ -220,5 +223,43 @@ describe("applyPhotoCovers", () => {
       // Outside the cover nothing changed.
       assert.deepEqual(await pixel(covered, 95, 5), [255, 0, 0]);
     }
+  });
+});
+
+describe("carrying covers to the next photo (#1703)", () => {
+  const front = rect({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 });
+  const back = rect({ shape: "ellipse", style: "blur", x: 0.6, y: 0.6, width: 0.2, height: 0.2 });
+
+  it("proposes a front's covers on the next unchecked front, as the same shares of the photo", () => {
+    const carried = carryAfterSave(NO_CARRIED_COVERS, "front", [front]);
+    assert.deepEqual(proposedCovers(carried, { side: "front", checked: false }), [front]);
+  });
+
+  it("keeps the sides apart: a back's covers come from the previous back, not the front", () => {
+    let carried = carryAfterSave(NO_CARRIED_COVERS, "front", [front]);
+    assert.equal(proposedCovers(carried, { side: "back", checked: false }), null);
+    carried = carryAfterSave(carried, "back", [back]);
+    assert.deepEqual(proposedCovers(carried, { side: "back", checked: false }), [back]);
+    assert.deepEqual(proposedCovers(carried, { side: "front", checked: false }), [front]);
+  });
+
+  it("a photo saved with nothing to cover passes nothing on", () => {
+    let carried = carryAfterSave(NO_CARRIED_COVERS, "front", [front]);
+    carried = carryAfterSave(carried, "front", []);
+    assert.equal(proposedCovers(carried, { side: "front", checked: false }), null);
+  });
+
+  it("never proposes over a photo already checked, nor to or from an extra", () => {
+    const carried = carryAfterSave(NO_CARRIED_COVERS, "front", [front]);
+    assert.equal(proposedCovers(carried, { side: "front", checked: true }), null);
+    assert.equal(proposedCovers(carried, { side: null, checked: false }), null);
+    assert.equal(carryAfterSave(carried, null, []), carried);
+  });
+
+  it("hands out copies, so editing a proposal leaves what is carried as it was", () => {
+    const carried = carryAfterSave(NO_CARRIED_COVERS, "front", [front]);
+    const proposal = proposedCovers(carried, { side: "front", checked: false })!;
+    proposal[0].x = 0.9;
+    assert.equal(carried.front[0].x, 0.1);
   });
 });

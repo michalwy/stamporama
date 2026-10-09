@@ -72,6 +72,13 @@ or one copy's from inside the walk — can be marked *nothing to cover* in one c
 records exactly what an empty save on each would, and touches no photo with covers or already
 checked.
 
+*Amended by #1703:* in an offer's walk the covers last saved on a front are proposed on the next
+unchecked front, and a back's on the next back — the same fractions, so the same place on the stamp
+at any size. A proposal is not stored until the collector moves on with the primary action; an empty
+save passes nothing on, a checked photo is never proposed over, and a *Carry covers to the next
+photo* switch, on by default and remembered per browser, turns it off. How covers are stored and
+applied does not change.
+
 ## Consequences
 
 - A copy photo can be shown to a buyer only through offer images for the covers to matter; anything
