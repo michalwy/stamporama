@@ -36,6 +36,9 @@ function recipe(overrides: Partial<LotRecipe> = {}): LotRecipe {
     duplicates: "neutral",
     nameTemplate: null,
     descriptionTemplate: null,
+    platformId: "",
+    listingType: null,
+    facebookGroupId: null,
     ...overrides,
   });
 }
@@ -97,6 +100,47 @@ describe("the bulk-lot builder's saved criteria (#773)", () => {
 
     const listed = await getLotBuilderPresets(userId, collectionId);
     assert.deepEqual(listed.find((p) => p.id === created.id)?.recipe, full);
+
+    await deleteLotBuilderPreset(userId, created.id);
+  });
+
+  // A kind of lot is listed on one platform (#1688). The ids are kept as stored, with no relation, so
+  // one naming a platform or group gone since comes back as it was saved — the screen says so.
+  it("keeps the platform with its listing type and Facebook group", async () => {
+    const onFacebook = recipe({ platformId: "plat-fb", listingType: "fixed", facebookGroupId: "grp-gone" });
+    const created = await createLotBuilderPreset(userId, collectionId, `Platform ${ts}`, onFacebook);
+    assert.deepEqual(created.recipe, onFacebook);
+
+    const moved = await updateLotBuilderPreset(
+      userId,
+      created.id,
+      created.name,
+      recipe({ platformId: "plat-other", listingType: "auction", facebookGroupId: null })
+    );
+    assert.equal(moved.recipe.platformId, "plat-other");
+    assert.equal(moved.recipe.listingType, "auction");
+    assert.equal(moved.recipe.facebookGroupId, null, "the group goes with the update, as every axis does");
+
+    await deleteLotBuilderPreset(userId, created.id);
+  });
+
+  // A preset saved before #1688 has no platform, and loads as it always did; a type or group with no
+  // platform to be about is not a choice and is not kept.
+  it("reads a preset with no platform as stating none of the three", async () => {
+    const created = await createLotBuilderPreset(
+      userId,
+      collectionId,
+      `No platform ${ts}`,
+      recipe({ platformId: "", listingType: "auction", facebookGroupId: "grp-1" })
+    );
+    const row = await prisma.lotBuilderPreset.findUniqueOrThrow({
+      where: { id: created.id },
+      select: { platformId: true, listingType: true, facebookGroupId: true },
+    });
+    assert.deepEqual(row, { platformId: null, listingType: null, facebookGroupId: null });
+    assert.equal(created.recipe.platformId, "");
+    assert.equal(created.recipe.listingType, null);
+    assert.equal(created.recipe.facebookGroupId, null);
 
     await deleteLotBuilderPreset(userId, created.id);
   });

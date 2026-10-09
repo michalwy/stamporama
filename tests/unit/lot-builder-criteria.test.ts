@@ -9,6 +9,8 @@ import {
   suggestLotTexts,
   toLotCriteria,
   LOT_RECIPE_KEYS,
+  lotPlatformChoice,
+  NO_LOT_PLATFORM,
   type LotBuilderCriteria,
   type LotBuilderRequest,
   type LotTextFacts,
@@ -40,6 +42,8 @@ function criteria(overrides: Partial<LotBuilderCriteria> = {}): LotBuilderCriter
     duplicates: "neutral",
     nameTemplate: null,
     descriptionTemplate: null,
+    listingType: null,
+    facebookGroupId: null,
     ...overrides,
   };
 }
@@ -154,6 +158,23 @@ describe("the bulk-lot criteria round trip (#759)", () => {
     assert.equal(roundTrip(padded).criteria.nameTemplate, "{count} stamps");
   });
 
+  it("round-trips the listing type and the Facebook group (#1688)", () => {
+    const input = request({ criteria: criteria({ listingType: "fixed", facebookGroupId: "grp-1" }) });
+    assert.deepEqual(roundTrip(input), input);
+    const params = lotBuilderSearchParams(input);
+    assert.equal(params.get("type"), "fixed");
+    assert.equal(params.get("fbGroup"), "grp-1");
+  });
+
+  it("writes no type or group when neither is stated, and reads an unknown type as unstated", () => {
+    const params = lotBuilderSearchParams(request());
+    assert.equal(params.has("type"), false);
+    assert.equal(params.has("fbGroup"), false);
+    const parsed = parseLotBuilderRequest(new URLSearchParams("platform=p&type=raffle&fbGroup="));
+    assert.equal(parsed.criteria.listingType, null);
+    assert.equal(parsed.criteria.facebookGroupId, null);
+  });
+
   it("keeps the wording out of the pick's own inputs", () => {
     const pure = toLotCriteria(criteria({ nameTemplate: "{count} stamps" }));
     assert.equal("nameTemplate" in pure, false);
@@ -171,6 +192,8 @@ describe("the bulk-lot criteria round trip (#759)", () => {
 describe("the preset's recipe (#773)", () => {
   const FULL = criteria({
     platformId: "plat-1",
+    listingType: "auction",
+    facebookGroupId: "grp-1",
     areaId: "area-pl",
     areaSubtree: false,
     yearFrom: 1950,
@@ -192,13 +215,39 @@ describe("the preset's recipe (#773)", () => {
     assert.deepEqual(Object.keys(recipe).sort(), [...LOT_RECIPE_KEYS].sort());
   });
 
-  // The whole reason the platform and the area are out of the recipe: one recipe is meant to be run
-  // over Germany and then over Poland, on whichever platform the sitting is about.
-  it("leaves the platform, the area and its subtree scope exactly as they stand", () => {
+  // The whole reason the area is out of the recipe: one recipe is meant to be run over Germany and
+  // then over Poland.
+  it("leaves the area and its subtree scope exactly as they stand", () => {
     const applied = applyLotRecipe(FULL, toLotRecipe(criteria({ countMin: 5 })));
-    assert.equal(applied.platformId, "plat-1");
     assert.equal(applied.areaId, "area-pl");
     assert.equal(applied.areaSubtree, false);
+  });
+
+  // A kind of lot is listed on one platform (#1688), so the platform travels with the recipe and takes
+  // the type and the group with it.
+  it("selects the platform it was saved with, with its listing type and group", () => {
+    const saved = toLotRecipe(
+      criteria({ platformId: "plat-fb", listingType: "fixed", facebookGroupId: "grp-2" })
+    );
+    const applied = applyLotRecipe(FULL, saved);
+    assert.equal(applied.platformId, "plat-fb");
+    assert.equal(applied.listingType, "fixed");
+    assert.equal(applied.facebookGroupId, "grp-2");
+  });
+
+  it("applies the platform whole too: a preset with no group clears the one on screen", () => {
+    const saved = toLotRecipe(criteria({ platformId: "plat-1", listingType: null, facebookGroupId: null }));
+    const applied = applyLotRecipe(FULL, saved);
+    assert.equal(applied.listingType, null);
+    assert.equal(applied.facebookGroupId, null);
+  });
+
+  // A preset saved before #1688 states no platform, and loads as it always did.
+  it("leaves the platform, type and group on screen when the preset states no platform", () => {
+    const older = toLotRecipe(criteria({ ...NO_LOT_PLATFORM, countMin: 5 }));
+    const applied = applyLotRecipe(FULL, older);
+    assert.deepEqual(lotPlatformChoice(applied), lotPlatformChoice(FULL));
+    assert.equal(applied.countMin, 5);
   });
 
   it("applies whole rather than merging, so a preset means the same thing whatever was on screen", () => {
@@ -243,6 +292,9 @@ describe("telling a preset from the screen (#1687)", () => {
       duplicates: "preferDuplicates",
       nameTemplate: "{count} stamps",
       descriptionTemplate: "Bulk lot of {count} stamps.",
+      platformId: "plat-1",
+      listingType: "auction",
+      facebookGroupId: "grp-1",
     })
   );
 
@@ -282,6 +334,9 @@ describe("telling a preset from the screen (#1687)", () => {
       { duplicates: "neutral" },
       { nameTemplate: "" },
       { descriptionTemplate: "" },
+      { platformId: "" },
+      { listingType: null },
+      { facebookGroupId: null },
     ];
     // Every recipe key is covered, so a field added to the recipe is a field added here.
     assert.deepEqual(
@@ -291,6 +346,12 @@ describe("telling a preset from the screen (#1687)", () => {
     for (const patch of clearedOne) {
       assert.equal(sameLotRecipe(SAVED, { ...SAVED, ...patch }), false, Object.keys(patch)[0]);
     }
+  });
+
+  it("sees another platform, type or group as a change (#1688)", () => {
+    assert.equal(sameLotRecipe(SAVED, { ...SAVED, platformId: "plat-2" }), false);
+    assert.equal(sameLotRecipe(SAVED, { ...SAVED, listingType: "fixed" }), false);
+    assert.equal(sameLotRecipe(SAVED, { ...SAVED, facebookGroupId: "grp-2" }), false);
   });
 
   it("survives a save: what the screen sends back reads as the preset it became", () => {

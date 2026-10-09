@@ -9,7 +9,9 @@
 //
 // The structural axes live here beside the pure ones deliberately. `LotCriteria` in the rules module
 // is what survives the SQL — the pick's own inputs — and everything else (platform, area, years,
-// conditions, formats) is spent narrowing the pool. Splitting them across two modules would leave
+// conditions, formats) is spent narrowing the pool. The listing choices (the wording, the listing
+// type, the Facebook group) narrow nothing; they ride here so the commit makes the offer the screen
+// showed and a preset can keep them. Splitting them across two modules would leave
 // the wizard holding two half-criteria and no single thing to serialize.
 
 import type {
@@ -17,6 +19,7 @@ import type {
   LotCriteria,
   SeriesPreference,
 } from "./lot-builder-rules";
+import { isOfferListingType, type OfferListingType } from "./offer-rules";
 
 /** Everything the wizard holds: the structural narrowing and the pick's own targets. */
 export interface LotBuilderCriteria {
@@ -65,6 +68,16 @@ export interface LotBuilderCriteria {
    *  hold but never let go of. Whitespace alone is empty (ADR-0055). */
   nameTemplate: string | null;
   descriptionTemplate: string | null;
+  /** How the offer is sold (#1688): `auction` or `fixed` (a quick buy), or null for *not stated* —
+   *  the offer then starts as the platform says, which on Facebook is the group's own type (#1671).
+   *  Not an input to the pool or the pick; it rides in the address so the commit makes what the
+   *  screen showed and a preset can keep it. */
+  listingType: OfferListingType | null;
+  /** On Facebook, the group the offer is in (#1663, #1688), or null for *not stated* — the screen
+   *  then starts on the group last used there. An id rather than a choice the server trusts: the
+   *  commit still names the group through its own argument, and a group archived or deleted since
+   *  is simply not chosen, which the screen says. Meaningless on every other platform. */
+  facebookGroupId: string | null;
 }
 
 /** The whole proposal request: the criteria, plus the three things a round of closing in adds. */
@@ -107,19 +120,23 @@ function range(min: number | null, max: number | null) {
 // ── The recipe ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The half of the criteria a **preset** keeps (#773): how a lot of this kind is picked, with nothing
- * about *which* lot.
+ * The half of the criteria a **preset** keeps (#773): how a lot of this kind is picked and where it
+ * is listed, with nothing about *which* lot.
  *
  * Stating eleven controls is most of the work of building a lot, and a collector who builds the same
  * kind of lot repeatedly retypes all eleven and mistypes some. What repeats is the recipe — "about a
  * hundred pieces, used, nothing dearer than five, deepest piles first, at most two of a stamp" — so
  * that is what is named and kept.
  *
- * **The platform and the area are deliberately not in it.** The area is precisely what *varies*
- * between two lots of one kind: the same recipe is meant to be run over Germany and then over
- * Poland, and a preset that carried the area would need one copy per area. The platform is a select
- * the collector must state anyway before the screen says anything at all, and it is picked per
- * sitting rather than per kind of lot. The subtree scope goes with the area for the same reason.
+ * **The area is deliberately not in it.** The area is precisely what *varies* between two lots of
+ * one kind: the same recipe is meant to be run over Germany and then over Poland, and a preset that
+ * carried the area would need one copy per area. The subtree scope goes with the area.
+ *
+ * **The platform is** (#1688), with the two choices that depend on it — the listing type and, on
+ * Facebook, the group. It was left out at first as something picked per sitting; in use a kind of
+ * lot turned out to be listed on one platform, and leaving it out meant choosing it by hand on every
+ * load. An empty `platformId` is a preset that states none (one saved before this), and applying it
+ * leaves all three as they are on screen — see {@link applyLotRecipe}.
  *
  * The seed, the pins and the rejections are not criteria at all — they are one lot's own closing-in
  * (#760), and a preset carrying them would propose the same hundred copies for ever.
@@ -143,7 +160,14 @@ export type LotRecipeKey =
   | "maxPerStamp"
   | "duplicates"
   | "nameTemplate"
-  | "descriptionTemplate";
+  | "descriptionTemplate"
+  | LotPlatformKey;
+
+/** The platform half of the recipe (#1688): the three choices that go together, since the listing
+ *  type and the group mean nothing without the platform they were made on. */
+export type LotPlatformKey = "platformId" | "listingType" | "facebookGroupId";
+
+export type LotPlatformChoice = Pick<LotBuilderCriteria, LotPlatformKey>;
 
 export type LotRecipe = Pick<LotBuilderCriteria, LotRecipeKey>;
 
@@ -163,6 +187,9 @@ export const LOT_RECIPE_KEYS: readonly LotRecipeKey[] = [
   "duplicates",
   "nameTemplate",
   "descriptionTemplate",
+  "platformId",
+  "listingType",
+  "facebookGroupId",
 ];
 
 /** What the collector is looking at, as a recipe worth keeping. Takes anything carrying the recipe's
@@ -183,8 +210,25 @@ export function toLotRecipe(criteria: LotRecipe): LotRecipe {
     duplicates: criteria.duplicates,
     nameTemplate: criteria.nameTemplate,
     descriptionTemplate: criteria.descriptionTemplate,
+    ...lotPlatformChoice(criteria),
   };
 }
+
+/** The platform, its listing type and its Facebook group, alone. */
+export function lotPlatformChoice(criteria: LotPlatformChoice): LotPlatformChoice {
+  return {
+    platformId: criteria.platformId,
+    listingType: criteria.listingType,
+    facebookGroupId: criteria.facebookGroupId,
+  };
+}
+
+/** No platform, and so nothing that depends on one — what a preset saved before #1688 holds. */
+export const NO_LOT_PLATFORM: LotPlatformChoice = {
+  platformId: "",
+  listingType: null,
+  facebookGroupId: null,
+};
 
 /**
  * A recipe over the criteria in force. **Whole, never merged**: applying a preset that says nothing
@@ -192,14 +236,20 @@ export function toLotRecipe(criteria: LotRecipe): LotRecipe {
  * or a preset would mean something different depending on what was on screen when it was applied —
  * which is the one thing a saved recipe must not do.
  *
- * Everything outside the recipe passes through untouched, which is what leaves the platform, the
- * area and its subtree scope exactly as the collector has them.
+ * Everything outside the recipe passes through untouched, which is what leaves the area and its
+ * subtree scope exactly as the collector has them. **The platform half is the one exception to
+ * *whole***: a recipe stating no platform — one saved before #1688 — leaves the platform, its listing
+ * type and its group as they are on screen, because clearing them would turn every older preset into
+ * one that empties the screen it is applied to.
  */
 export function applyLotRecipe(
   criteria: LotBuilderCriteria,
   recipe: LotRecipe
 ): LotBuilderCriteria {
-  return { ...criteria, ...toLotRecipe(recipe) };
+  const own = toLotRecipe(recipe);
+  return own.platformId
+    ? { ...criteria, ...own }
+    : { ...criteria, ...own, ...lotPlatformChoice(criteria) };
 }
 
 /**
@@ -212,7 +262,7 @@ export function applyLotRecipe(
 export function sameLotRecipe(a: LotRecipe, b: LotRecipe): boolean {
   const key = (recipe: LotRecipe) =>
     lotBuilderSearchParams({
-      criteria: { ...recipe, platformId: "", areaId: null, areaSubtree: true },
+      criteria: { ...recipe, areaId: null, areaSubtree: true },
       seed: "",
       pinnedItemIds: [],
       rejectedItemIds: [],
@@ -262,6 +312,10 @@ export function parseLotBuilderRequest(params: URLSearchParams): LotBuilderReque
       // listing — the commit sends a blank text as no template of the offer's own.
       nameTemplate: template(params.get("nameTpl")),
       descriptionTemplate: template(params.get("descTpl")),
+      // Anything but the two words is *not stated*, as an unknown preference is neutral: a type the
+      // offer cannot be made as is one the collector has not chosen.
+      listingType: listingType(params.get("type")),
+      facebookGroupId: params.get("fbGroup") || null,
     },
     seed: params.get("seed") ?? "",
     pinnedItemIds: params.getAll("pin").filter(Boolean),
@@ -294,6 +348,8 @@ export function lotBuilderSearchParams(request: LotBuilderRequest): URLSearchPar
   params.set("duplicates", criteria.duplicates);
   putTemplate(params, "nameTpl", criteria.nameTemplate);
   putTemplate(params, "descTpl", criteria.descriptionTemplate);
+  if (criteria.listingType) params.set("type", criteria.listingType);
+  if (criteria.facebookGroupId) params.set("fbGroup", criteria.facebookGroupId);
   if (request.seed) params.set("seed", request.seed);
   for (const id of request.pinnedItemIds) params.append("pin", id);
   for (const id of request.rejectedItemIds) params.append("reject", id);
@@ -314,6 +370,10 @@ function template(raw: string | null): string | null {
 function putTemplate(params: URLSearchParams, key: string, value: string | null): void {
   const text = template(value);
   if (text !== null) params.set(key, text);
+}
+
+function listingType(raw: string | null): OfferListingType | null {
+  return isOfferListingType(raw) ? raw : null;
 }
 
 // ── The suggested texts ─────────────────────────────────────────────────────────────────────────

@@ -175,9 +175,11 @@ Every other way of making an offer asks for the group too when the platform is F
 - **Series from singles**, when you compose a series into a new offer. A series added to an offer
   that already lists it keeps that offer's group.
 
-The picker starts on the last group you used on Facebook, from any of these or from the form. Until
+The picker starts on the last group you used on Facebook, from any of these or from the form — in
+the Lot builder, unless the saved criteria you loaded name a group of their own. Until
 a group is chosen the create button stays greyed out, and the reason is shown beside it. The new
-offer takes the group's settings as the form does: an auction or a quick buy as the group says, and
+offer takes the group's settings as the form does: an auction or a quick buy as the group says (the
+Lot builder lets you choose the other), and
 for an auction the starting price, worked out from the copies' catalogue value when the group gives
 a percentage, the bid increment, the currency, and the closing time. A quick buy made this way has
 no price yet. The listing's link and anything else are set on the offer itself afterwards.

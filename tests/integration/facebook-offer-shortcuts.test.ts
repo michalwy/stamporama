@@ -385,6 +385,8 @@ describe("Facebook offers from the shortcuts (#1663)", () => {
         duplicates: "neutral",
         nameTemplate: null,
         descriptionTemplate: null,
+        listingType: null,
+        facebookGroupId: null,
       },
       seed: "seed-1",
       pinnedItemIds: [],

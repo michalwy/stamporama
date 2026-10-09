@@ -4,9 +4,12 @@ import { useState, useTransition } from "react";
 import {
   applyLotRecipe,
   lotBuilderSearchParams,
+  lotPlatformChoice,
+  NO_LOT_PLATFORM,
   sameLotRecipe,
   toLotRecipe,
   type LotBuilderRequest,
+  type LotPlatformChoice,
   type LotRecipe,
 } from "@/lib/lot-builder-criteria";
 import type { LotBuilderPresetData } from "@/lib/lot-builder-presets";
@@ -30,31 +33,41 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 // and mistypes some of them.
 //
 // **Why it sits on The pick and not above the whole screen.** A preset holds the recipe and
-// deliberately not the platform or the area (`LotRecipe`), and *The pool*'s controls are mostly the
-// ones it does hold — years, conditions, formats, the per-copy ceiling — while the platform and the
-// area are the ones it does not. Putting the control on the heading of the second band would have
-// said the preset was about that band alone. It is on **The pick** because that is where the
-// recipe's own name belongs, and the copy beside it says what it reaches.
+// deliberately not the area (`LotRecipe`), so a control over everything would have promised it
+// reached the area too. It is on **The pick** because that is where the recipe's own name belongs,
+// and the copy beside it says what it reaches.
+//
+// **The platform rides with it** (#1688), and with it the listing type and the Facebook group. A
+// preset saved before that states none, and applying it leaves all three as they are on screen; the
+// three on screen at that moment are then what the preset is compared against, so changing the
+// platform afterwards is an edit *Update* can keep. A preset naming a platform deleted since applies
+// without it and says so, and one naming a group archived or deleted since leaves the group unchosen
+// — the panel reports that one, since the group is only judged once its platform's groups are in.
 //
 // **Saving reads the address, not the controls.** The criteria live in the URL and the commit
 // re-plans from it (#717); a preset saved from a second assembly of the same eleven fields would be
 // a second place for them to disagree. So the action is handed `lotBuilderSearchParams(request)`
 // and drops everything outside the recipe server-side, once.
 //
-// **Applying is whole, never a merge**, and it leaves the platform, the area and the subtree scope
-// exactly as they stand — the two halves of what makes one preset usable over Germany and then over
-// Poland.
+// **Applying is whole, never a merge**, and it leaves the area and the subtree scope exactly as they
+// stand — what makes one preset usable over Germany and then over Poland.
 
 type Dialog = { kind: "none" } | { kind: "save" } | { kind: "delete"; preset: LotBuilderPresetData };
 
 export function LotPresetBar({
   collectionId,
   request,
+  platformIds,
+  groupNotice,
   onApply,
   disabled,
 }: {
   collectionId: string;
   request: LotBuilderRequest;
+  /** The platforms a lot can be built for — a preset naming any other applies without one. */
+  platformIds: string[];
+  /** Why the group a preset named is not chosen, from the panel (#1688), or null. */
+  groupNotice: string | null;
   /** Hands back the criteria with the recipe laid over them — the panel writes them to the URL. */
   onApply: (recipe: LotRecipe) => void;
   disabled: boolean;
@@ -65,6 +78,13 @@ export function LotPresetBar({
   // navigation state and the preset is only the name they arrived under, so a link carries the lot
   // rather than a preset id that may have been renamed or deleted since.
   const [selectedId, setSelectedId] = useState("");
+  // What a preset stating no platform is compared against: the platform, type and group on screen
+  // when it was applied (#1688). Without it an older preset would read as *edited* the moment it was
+  // applied, and changing the platform after it would not.
+  const [platformBaseline, setPlatformBaseline] = useState<LotPlatformChoice>(NO_LOT_PLATFORM);
+  // The platform a preset named is gone — said beside the select until a platform is chosen.
+  const [platformGone, setPlatformGone] = useState(false);
+  const sayPlatformGone = platformGone && request.criteria.platformId === platformBaseline.platformId;
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [name, setName] = useState("");
   const [error, setError] = useState<string | undefined>();
@@ -72,7 +92,23 @@ export function LotPresetBar({
 
   const current = presets?.find((p) => p.id === selectedId);
   const onScreen = toLotRecipe(request.criteria);
-  const edited = !!current && !sameLotRecipe(current.recipe, onScreen);
+  const compared = current && {
+    ...current.recipe,
+    ...(current.recipe.platformId ? {} : platformBaseline),
+  };
+  const edited = !!compared && !sameLotRecipe(compared, onScreen);
+
+  function apply(preset: LotBuilderPresetData | undefined) {
+    setSelectedId(preset?.id ?? "");
+    setPlatformGone(false);
+    if (!preset) return;
+    setPlatformBaseline(lotPlatformChoice(request.criteria));
+    const gone = !!preset.recipe.platformId && !platformIds.includes(preset.recipe.platformId);
+    setPlatformGone(gone);
+    // Gone, the preset is applied as one stating no platform — what is on screen stays, and the
+    // preset still reads as *edited*, since the screen is not what it says.
+    onApply(gone ? { ...preset.recipe, ...NO_LOT_PLATFORM } : preset.recipe);
+  }
   const search = lotBuilderSearchParams(request).toString();
 
   function close() {
@@ -89,6 +125,7 @@ export function LotPresetBar({
       if (result.status === "error") setError(result.message);
       else {
         setSelectedId(result.presetId);
+        setPlatformGone(false);
         setDialog({ kind: "none" });
         await invalidateAll(collectionId);
       }
@@ -102,7 +139,10 @@ export function LotPresetBar({
       const { updateLotBuilderPresetAction } = await import("@/app/actions/offers");
       const result = await updateLotBuilderPresetAction(current.id, current.name, search);
       if (result.status === "error") setError(result.message);
-      else await invalidateAll(collectionId);
+      else {
+        setPlatformGone(false);
+        await invalidateAll(collectionId);
+      }
     });
   }
 
@@ -130,11 +170,7 @@ export function LotPresetBar({
             aria-label="Saved criteria"
             style={{ ...FILTER_CONTROL_STYLE, cursor: "pointer", maxWidth: "14rem" }}
             value={selectedId}
-            onChange={(e) => {
-              const preset = presets.find((p) => p.id === e.currentTarget.value);
-              setSelectedId(preset?.id ?? "");
-              if (preset) onApply(preset.recipe);
-            }}
+            onChange={(e) => apply(presets.find((p) => p.id === e.currentTarget.value))}
             disabled={busy}
           >
             <option value="">Saved criteria…</option>
@@ -151,6 +187,14 @@ export function LotPresetBar({
         </>
       )}
 
+      {/* A preset whose platform or group is gone loads without it and says so (#1688), leaving the
+          choice to the collector rather than quietly putting the lot somewhere else. */}
+      {current && (sayPlatformGone || groupNotice) && (
+        <span style={{ ...NOTE, color: "var(--color-warning)" }}>
+          {sayPlatformGone ? PLATFORM_GONE : groupNotice}
+        </span>
+      )}
+
       {current && edited && (
         <Tooltip content={`Overwrite "${current.name}" with what is on screen`}>
           <button type="button" onClick={update} disabled={busy} style={PRESET_BTN}>
@@ -159,7 +203,7 @@ export function LotPresetBar({
         </Tooltip>
       )}
 
-      <Tooltip content="Keep these criteria under a name — the years, conditions, formats, ceilings, targets and preferences, but not the platform or the area">
+      <Tooltip content="Keep these criteria under a name — the platform with its listing type and group, the years, conditions, formats, ceilings, targets, preferences and wording, but not the area">
         <button
           type="button"
           onClick={() => {
@@ -215,10 +259,11 @@ export function LotPresetBar({
               style={{ ...FILTER_CONTROL_STYLE, width: "100%" }}
             />
             <p style={{ ...NOTE, margin: "0.75rem 0 0", lineHeight: 1.5 }}>
-              Keeps the years, the conditions and formats, the per-copy ceiling, both targets and the
-              three preferences. <strong>Not</strong> the platform and not the area — those are what
-              you change between two lots of the same kind, so the same saved criteria work over one
-              area today and another tomorrow.
+              Keeps the platform with its listing type and, on Facebook, its group; the years, the
+              conditions and formats, the per-copy ceiling, both targets, the three preferences and
+              the wording. <strong>Not</strong> the area — that is what you change between two lots
+              of the same kind, so the same saved criteria work over one area today and another
+              tomorrow.
             </p>
           </DialogBody>
           <DialogActions
@@ -253,6 +298,9 @@ export function LotPresetBar({
     </span>
   );
 }
+
+const PLATFORM_GONE =
+  "The platform these criteria were saved for no longer exists — choose one, then Update.";
 
 /** The quiet button a heading row carries — the detail screens' own card button, so the builder's
  *  headings and every detail card's read alike. */

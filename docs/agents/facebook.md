@@ -96,8 +96,11 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   name in the `Tooltip`. What travels is `FacebookCreateChoice` (`facebook-post-rules.ts`): the group and the
   closing time the browser worked out from it (#490's rule), read server-side by
   `readFacebookCreateChoice` into `createOffer`'s input — an action argument for the Lot builder and
-  the series, FormData for quick mode, the query string for the generator (not a lot criterion, so no
-  preset or address carries it). Everything else is the ordinary create: the increment, currency and
+  the series, FormData for quick mode, the query string for the generator. **The Lot builder also
+  holds the group in its address** (`fbGroup`, #1688) so a preset can keep it: it passes it to the
+  hook as `held`, and a held group that is archived or gone is left unchosen and reported
+  (`unavailable`, `FACEBOOK_GROUP_UNAVAILABLE`) rather than replaced by the last used. The action
+  argument is still what the commit reads; the address is only where the screen keeps it. Everything else is the ordinary create: the increment, currency and
   `amount` from `resolveFacebookOffer`, and a **`catalogPercent`** starting price now worked out
   server-side by `prepareOfferCreation` (`catalogShareOfSets`) over the seed whenever none was
   submitted — the share of one set's catalogue value, averaged over the valued sets in the offer's

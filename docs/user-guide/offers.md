@@ -1289,6 +1289,7 @@ a name, and the select beside it puts it all back.
 
 What a saved set holds:
 
+- the platform, with the listing type and, on Facebook, the group
 - the issued-year span
 - the conditions and formats you allow
 - the maximum catalogue value per copy
@@ -1298,7 +1299,6 @@ What a saved set holds:
 
 What it deliberately does **not** hold, and why:
 
-- **The platform.** You pick it every sitting anyway — nothing on the screen answers until you have.
 - **The area**, and whether it brings its sub-areas. This is the thing you *change* between two lots
   of the same kind: one saved recipe — *about a hundred used pieces, nothing dearer than five,
   deepest piles first, at most two of a stamp* — is meant to run over Germany today and Poland
@@ -1316,6 +1316,13 @@ updated to leave it empty, so nothing a saved set holds is there for good. A tem
 spaces is empty. **Update** overwrites it with what is on screen (and renames it if you want),
 **Save as…** keeps it as a second one, and the ✕ deletes it. Deleting changes nothing else — the
 criteria on screen stay put, and lots you already built from it are ordinary offers.
+
+A kind of lot is usually listed in one place, so a saved set **selects its platform** too, with the
+listing type and the Facebook group, and changing any of them counts as an edit. A set saved before
+it could hold a platform leaves the platform on screen as it is; change it afterwards and **Update**
+keeps the new one. If the platform a set was saved for has since been deleted, or its Facebook group
+archived or deleted, the set loads without it and says so beside the select, leaving the choice to
+you.
 
 ### Reading the pool before you pick
 
@@ -1394,9 +1401,12 @@ the chosen copies. One set, not one per copy: a set is the thing a buyer buys,
 and one set per copy would describe your lot as a hundred alternative listings.
 
 On Facebook the section also asks for the **Facebook group** the lot is offered in, starting on
-the last one you used. The button stays greyed out until one is chosen, and the lot is an auction or
-a quick buy as the group says — an auction taking the group's starting price, increment and closing
-time — see [Facebook](facebook.md#without-the-form).
+the last one you used. The button stays greyed out until one is chosen. An auction takes the group's
+starting price, increment and closing time — see [Facebook](facebook.md#without-the-form).
+
+**Listing type** says whether the lot is an **Auction** or a **Quick buy**. It starts on what the
+offer would be anyway — the group's type on Facebook, the platform's default type elsewhere — and
+choosing another Facebook group sets it back to that group's.
 
 The lot is **picked again** as the offer is created. Between opening this screen and pressing the
 button a copy may have been listed elsewhere or promised in a trade, so the offer is built from a
@@ -1405,7 +1415,8 @@ fresh look rather than from what is on your screen — and anything that dropped
 ### Building several lots in a row
 
 The builder **stays open** after **Create the offer**, with every setting where you left it — the
-area, the pool and the pick, the platform and its Facebook group, the title and the description. A
+area, the pool and the pick, the platform with its listing type and Facebook group, the title and the
+description. A
 confirmation names the new offer (*Offer #412 created · Open*); **Open** takes you there, or opens it
 in a new tab with ⌘ or Ctrl.
 

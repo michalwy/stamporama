@@ -15,6 +15,12 @@ import {
   type LotBuilderRequest,
 } from "@/lib/lot-builder-criteria";
 import type { DuplicatePolicy, SeriesPreference } from "@/lib/lot-builder-rules";
+import {
+  normalizeListingType,
+  OFFER_LISTING_TYPE_LABEL,
+  OFFER_LISTING_TYPES,
+  type OfferListingType,
+} from "@/lib/offer-rules";
 import { Icon } from "@/app/icons";
 import { DialogPrimaryButton, DialogSecondaryButton, DialogError } from "@/app/dialog-shell";
 import { AreaFilterSidebar } from "@/app/c/[collectionSlug]/shared/area-filter-sidebar";
@@ -262,6 +268,15 @@ function numberOrNull(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/** A platform as the builder offers it: its listing type is what an offer there starts as when the
+ *  collector states none (#1688) — off Facebook, where the group says instead. */
+export interface LotPlatform {
+  id: string;
+  name: string;
+  platformCurrency: string | null;
+  defaultListingType: string | null;
+}
+
 export function LotBuilderPanel({
   collectionId,
   collectionSlug,
@@ -280,7 +295,7 @@ export function LotBuilderPanel({
   locations: LocationData[];
   conditions: StampConditionData[];
   formats: StampFormatData[];
-  platforms: { id: string; name: string; platformCurrency: string | null }[];
+  platforms: LotPlatform[];
   baseCurrency: string;
 }) {
   const router = useRouter();
@@ -316,12 +331,42 @@ export function LotBuilderPanel({
   // same toggle does on every other screen. With no area picked the scope is about nothing, so it is
   // pinned true — that is also what keeps the address's round trip exact.
   const [includeSubAreas] = useSubtreeScope("area");
+
+  // On Facebook the lot is an offer in a group (#1663). The group is held in the address beside the
+  // criteria (#1688) so a preset can keep it, and choosing one lets the listing type follow it again:
+  // a group's type is the group's setting, and one stated against the last group is not a choice
+  // about this one.
+  const facebook = useFacebookGroupChoice(collectionId, parsed.criteria.platformId, {
+    groupId: parsed.criteria.facebookGroupId,
+    choose: (groupId) => patchCriteria({ facebookGroupId: groupId, listingType: null }),
+  });
+  // The group on screen, written back as the criteria. Left as the address has it while the groups
+  // are still being asked, and while it names one archived or gone since — dropping it there would
+  // let the last group used step in unseen, and the collector is being asked to choose instead.
+  const facebookGroupId =
+    facebook.loading || facebook.unavailable
+      ? parsed.criteria.facebookGroupId
+      : facebook.groupId || null;
+  // How the offer is sold (#1688): the collector's own word, else what it would start as anyway — the
+  // group's type on Facebook (#1671), the platform's default elsewhere. Stated on screen either way,
+  // so the preset keeps the type the collector was looking at and the commit makes it.
+  const platform = platforms.find((p) => p.id === parsed.criteria.platformId);
+  const followedType: OfferListingType | null =
+    !platform || facebook.loading
+      ? null
+      : facebook.isFacebook
+        ? (facebook.group?.listingType ?? null)
+        : normalizeListingType(platform.defaultListingType);
+  const listingType = parsed.criteria.listingType ?? followedType;
+
   const request = useMemo<LotBuilderRequest>(
     () => ({
       ...parsed,
       criteria: {
         ...parsed.criteria,
         areaSubtree: parsed.criteria.areaId ? includeSubAreas : true,
+        listingType,
+        facebookGroupId,
         // The wording is a criterion — the preset keeps it and the commit renders it — but a draft
         // being *typed* is not navigation, so it is overlaid from local state rather than pushed to
         // the address on every keystroke. Null there means "whatever the address says", which is
@@ -331,7 +376,7 @@ export function LotBuilderPanel({
         descriptionTemplate: description ?? parsed.criteria.descriptionTemplate,
       },
     }),
-    [parsed, includeSubAreas, name, description]
+    [parsed, includeSubAreas, name, description, listingType, facebookGroupId]
   );
   const { criteria } = request;
 
@@ -388,10 +433,6 @@ export function LotBuilderPanel({
       pinnedItemIds: request.pinnedItemIds.filter((id) => id !== itemId),
       rejectedItemIds: [...new Set([...request.rejectedItemIds, itemId])],
     });
-
-  // On Facebook the lot is an offer in a group (#1663): asked beside the create button, and kept
-  // out of the criteria — no preset or shared address carries it, since it is not about the copies.
-  const facebook = useFacebookGroupChoice(collectionId, criteria.platformId);
 
   function commit() {
     setError(undefined);
@@ -466,7 +507,8 @@ export function LotBuilderPanel({
 
   const platformChosen = !!criteria.platformId;
   const busy = proposalFetching || isPending;
-  const platformName = platforms.find((p) => p.id === criteria.platformId)?.name;
+  const platformName = platform?.name;
+  const typeLabel = listingType === "auction" ? "auction" : "quick buy";
   const marked = request.pinnedItemIds.length + request.rejectedItemIds.length;
 
   return (
@@ -515,7 +557,14 @@ export function LotBuilderPanel({
                   cursor: "pointer",
                 }}
                 value={criteria.platformId}
-                onChange={(e) => patchCriteria({ platformId: e.currentTarget.value })}
+                // The type and the group were choices on the platform being left (#1688).
+                onChange={(e) =>
+                  patchCriteria({
+                    platformId: e.currentTarget.value,
+                    listingType: null,
+                    facebookGroupId: null,
+                  })
+                }
               >
                 <option value="">Choose a platform…</option>
                 {platforms.map((p) => (
@@ -585,10 +634,10 @@ export function LotBuilderPanel({
         </section>
 
         <section style={BAND}>
-          {/* Saved criteria live on this heading (#773). A preset holds the recipe and not the
-              platform or the area, and this is the band the recipe is mostly stated in — putting the
-              control over the whole screen would have promised it reached the two things it
-              deliberately leaves alone. */}
+          {/* Saved criteria live on this heading (#773). This is the band the recipe is mostly stated
+              in; a preset also keeps the platform with its listing type and group (#1688), but not
+              the area, and a control over the whole screen would have promised it reached the area
+              too. */}
           <SectionHeading
             title="The pick"
             note="What the lot should come to, and how the copies are chosen to get there"
@@ -596,6 +645,8 @@ export function LotBuilderPanel({
               <LotPresetBar
                 collectionId={collectionId}
                 request={request}
+                platformIds={platforms.map((p) => p.id)}
+                groupNotice={facebook.unavailable ? facebook.missing : null}
                 onApply={(recipe) => {
                   // The drafts are dropped, not merged: a preset carries the wording too, and a
                   // half-typed title left overlaying it would make the applied preset say something
@@ -819,8 +870,8 @@ export function LotBuilderPanel({
               title="Create the offer"
               note={
                 facebook.group
-                  ? `A draft ${facebook.group.listingType === "auction" ? "auction" : "quick buy"} in ${facebook.group.name}, one set of ${proposal.plan.itemIds.length}`
-                  : `A draft on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`
+                  ? `A draft ${typeLabel} in ${facebook.group.name}, one set of ${proposal.plan.itemIds.length}`
+                  : `A draft ${listingType ? `${typeLabel} ` : ""}on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`
               }
             />
             {/* **Templates, not finished text** (#774). The lot writes its own template onto the
@@ -883,6 +934,30 @@ export function LotBuilderPanel({
                 />
               </div>
             )}
+            {/* How the offer is sold (#1688), starting on what it would be anyway — the group's type
+                on Facebook, the platform's default elsewhere — so a preset can keep a kind of lot
+                that is always a quick buy. The offer form's own field, under the step's frame. */}
+            <div style={STEP_FIELD}>
+              <label htmlFor="lot-listing-type" style={STEP_FIELD_LABEL}>
+                Listing type
+              </label>
+              <select
+                id="lot-listing-type"
+                value={listingType ?? ""}
+                onChange={(e) =>
+                  patchCriteria({ listingType: normalizeListingType(e.currentTarget.value) })
+                }
+                style={STEP_SELECT_STYLE}
+              >
+                {/* On Facebook with no group yet there is nothing for the type to follow. */}
+                {listingType === null && <option value="">As the group says</option>}
+                {OFFER_LISTING_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {OFFER_LISTING_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div
               style={{
                 display: "flex",

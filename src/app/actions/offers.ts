@@ -354,8 +354,9 @@ export type LotPresetActionState =
  * address is the criteria, so parsing it here is what guarantees a preset holds what the collector
  * was actually looking at rather than a second assembly of the same eleven fields.
  *
- * `toLotRecipe` then keeps only the recipe half — the platform, the area and its subtree scope are
- * dropped here, once, rather than by each caller remembering to.
+ * `toLotRecipe` then keeps only the recipe half — the area and its subtree scope are dropped here,
+ * once, rather than by each caller remembering to. The platform, its listing type and its Facebook
+ * group are kept (#1688); the screen writes the ones it is showing into the address it sends.
  */
 function recipeFromSearch(search: string): LotRecipe {
   return toLotRecipe(parseLotBuilderRequest(new URLSearchParams(search)).criteria);
