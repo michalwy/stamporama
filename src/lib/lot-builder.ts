@@ -385,6 +385,10 @@ export interface LotProposal {
    *  description previews render against the lot itself rather than random copies of the collection,
    *  and `{count}` previews the number the listing will actually carry. */
   templateSamples: TitleSampleCopy[];
+  /** The language `templateSamples` were resolved in — the platform's listing language, null for the
+   *  collection's default. What a translation entered from the previews' warning is written in
+   *  (#1733). */
+  templateLanguage: string | null;
   /** Pinned copies that stopped being listable. */
   missingPinned: MissingPinnedCopy[];
   /** Picked copies promised in an agreed trade (#639). Reported, never excluded: a `preparing`
@@ -459,6 +463,7 @@ export async function buildLotProposal(
     summary,
     suggested: await suggestTexts(collectionId, criteria),
     templateSamples,
+    templateLanguage: language,
   };
 }
 

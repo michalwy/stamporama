@@ -7,6 +7,8 @@ import {
   renderListingTemplateSegments,
   titleFallbackTokens,
   listingFallbackTokens,
+  titleFallbacks,
+  listingFallbacks,
   templatePreviewScope,
   EXAMPLE_OFFER_URL,
   AVAILABLE_LISTING_BLOCKS,
@@ -88,6 +90,10 @@ export interface TemplateSamples {
    *  previews must read as the offer it creates will — one set of all of them, the title over every
    *  copy. Absent, each copy is a sample set of its own and the title previews the first. */
   oneListing?: boolean;
+  /** What the preview's warning needs to let each untranslated name be translated in place (#1733):
+   *  the collection the translation is written in, the language the copies were resolved in, and a
+   *  way to re-resolve the **same** copies once one is saved. Absent, the warning only names them. */
+  translate?: { collectionId: string; language: string | null; refresh: () => void };
 }
 
 /**
@@ -145,6 +151,21 @@ export function useTemplateSamples(
   return {
     copies,
     loading,
+    translate: {
+      collectionId,
+      language,
+      // No loading state: the copies stay on screen and only their wording changes.
+      refresh: () => {
+        const ids = copies.map((c) => c.id);
+        if (ids.length === 0) return;
+        (async () => {
+          const { titleSamplesByIdsAction } = await import("@/app/actions/title-template");
+          const next = await titleSamplesByIdsAction(collectionId, ids, language);
+          // Only if the collector has not moved on to other copies meanwhile.
+          setCopies((prev) => (prev.map((c) => c.id).join() === ids.join() ? next : prev));
+        })();
+      },
+    },
     shuffle: () => {
       setLoading(true);
       (async () => {
@@ -383,6 +404,17 @@ export function TemplateBuilder({
     ? listingFallbackTokens(value, previewSets)
     : titleFallbackTokens(value, titleCopies);
   const preview = segments.map((s) => s.text).join("");
+  // The names behind those tokens, each translatable from the warning line (#1733) — the same walk
+  // as the tokens, so the two cannot disagree about what fell back.
+  const translate = samples.translate;
+  const fix = translate
+    ? {
+        collectionId: translate.collectionId,
+        language: translate.language,
+        gaps: multiline ? listingFallbacks(value, previewSets) : titleFallbacks(value, titleCopies),
+        onSaved: translate.refresh,
+      }
+    : undefined;
 
   const fieldProps = {
     ref: inputRef as React.Ref<HTMLInputElement & HTMLTextAreaElement>,
@@ -578,7 +610,7 @@ export function TemplateBuilder({
         </div>
 
         {/* Tokens that are not really translated in this language (#298). */}
-        {!samples.loading && <TitleFallbackNote tokens={fallbackTokens} />}
+        {!samples.loading && <TitleFallbackNote tokens={fallbackTokens} fix={fix} />}
       </div>
         </div>
       )}
