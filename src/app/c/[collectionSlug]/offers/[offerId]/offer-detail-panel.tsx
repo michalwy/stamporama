@@ -14,6 +14,7 @@ import {
   NeedsActionChip,
   InActiveBiddingChip,
   ListingOutOfDateChip,
+  RefreshDueChip,
   ListingTypeChip,
   PlatformSaleChip,
 } from "../offer-badges";
@@ -28,6 +29,7 @@ import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translatio
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
+import { RepostOfferDialog } from "./repost-offer-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
 import { CLOSE_ELEMENT_ID, useAssistantClose } from "../assistant-close-handoff";
 import {
@@ -288,6 +290,8 @@ export function OfferDetailPanel({
   // Activation asks for the listing URL when the offer has none (#399) — the bulk workspace's own
   // publish step (#322), reached from here.
   const [activating, setActivating] = useState(false);
+  // *Repost* (#1718): an active quick buy posted again, asking for the new link.
+  const [reposting, setReposting] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
   const [confirm, setConfirm] = useState<"withdraw" | "delete" | null>(null);
   // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
@@ -473,6 +477,12 @@ export function OfferDetailPanel({
   // post live, and the link it asks for is the post's — the lot's own, if it has one, is its photo's.
   const facebookPostLots = offer.facebook?.post ? offer.facebook.lots.length : null;
   const needsUrlToActivate = offer.state === "ready" && (!offer.url || facebookPostLots !== null);
+  // Only an active quick buy is posted again (#1718); a lot of a Facebook post takes every active
+  // quick-buy lot of the post with it.
+  const canRepost = offer.state === "active" && offer.listingType === "fixed";
+  const repostLots = offer.facebook?.post
+    ? offer.facebook.lots.filter((l) => l.state === "active" && l.listingType === "fixed").length
+    : 1;
 
   /** Patch a single header field in place, then refresh. */
   function patch(
@@ -600,6 +610,20 @@ export function OfferDetailPanel({
     });
   }
 
+  /** Record the repost (#1718): the new link, *last posted* now, the earlier link kept in history. */
+  function repost(url: string) {
+    setActionError(undefined);
+    startTransition(async () => {
+      const { repostOfferAction } = await import("@/app/actions/offers");
+      const result = await repostOfferAction(offerId, url);
+      if (result.status === "success") {
+        setReposting(false);
+        invalidateAll(collectionId);
+        toast({ message: "Reposted — the count of days up starts again today" });
+      } else setActionError(result.message);
+    });
+  }
+
   const menuActions: RowAction[] = [
     ...manualTransitions(offer.state)
       .filter((s): s is ManualOfferTarget => s !== "sold")
@@ -676,6 +700,9 @@ export function OfferDetailPanel({
             onSelect: markListingSynced,
           } as RowAction,
         ]
+      : []),
+    ...(canRepost
+      ? [{ key: "repost", label: "Repost…", icon: "refresh", onSelect: () => setReposting(true) } as RowAction]
       : []),
     { key: "duplicate", label: "List on another platform", icon: "duplicate", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "delete", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
@@ -985,6 +1012,8 @@ export function OfferDetailPanel({
                 listing that is wrong costs a sale, not a double one. The menu carries the way off
                 it, so the chip states the problem and nothing more. */}
             {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
+            {/* Up long enough to have sunk out of sight on its platform (#1718) — the row's chip. */}
+            {offer.refreshDueDays !== null && <RefreshDueChip days={offer.refreshDueDays} />}
             {/* Nothing is left in a listing that was up (#1277) — the same chip the row carries. */}
             {isEmptiedListing(offer.state, offer.sets.length) && <EmptiedListingChip state={offer.state} />}
             {/* An auction says how to read the price beside it (#449); "in bidding" (#215) says
@@ -1006,6 +1035,15 @@ export function OfferDetailPanel({
           {offer.listingDate && (
             <Tooltip content="Listing date — when this listing went live">
               <span style={CHIP}><Icon name="date" size="sm" /> {new Date(offer.listingDate).toISOString().slice(0, 10)}</span>
+            </Tooltip>
+          )}
+          {/* Last posted (#1718): when it was posted again. The listing date beside it stays the
+              first listing, which time to sale is counted from. */}
+          {offer.lastPostedAt && (
+            <Tooltip content="Last posted — when this listing was last posted again">
+              <span style={CHIP}>
+                <Icon name="refresh" size="sm" /> {new Date(offer.lastPostedAt).toISOString().slice(0, 10)}
+              </span>
             </Tooltip>
           )}
 
@@ -1037,6 +1075,29 @@ export function OfferDetailPanel({
             inputType="url"
             onSave={(v) => patch("url", v)}
           />
+
+          {/* The links this listing had before it was posted again (#1718), latest first — the
+              offer's history of postings, each with the days it was up. */}
+          {offer.postings.map((posting, i) => {
+            const day = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : "?");
+            const label = `Earlier post ${day(posting.postedAt)} – ${day(posting.endedAt)}`;
+            return (
+              <Tooltip key={i} content="An earlier posting of this listing, before it was posted again">
+                {posting.url ? (
+                  <a
+                    href={posting.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...CHIP, color: "var(--color-text-secondary)", textDecoration: "none" }}
+                  >
+                    <Icon name="externalLink" size="sm" /> {label}
+                  </a>
+                ) : (
+                  <span style={{ ...CHIP, color: "var(--color-text-muted)" }}>{label}</span>
+                )}
+              </Tooltip>
+            );
+          })}
 
           {/* The price and the figures it is weighed against, stacked on the right so they read as
               one unit. What the figure is *called* follows the listing type (#449) — an auction's is
@@ -1344,6 +1405,7 @@ export function OfferDetailPanel({
           offerId={offerId}
           kit={offer.facebook}
           onChanged={() => invalidateAll(collectionId)}
+          onRepost={canRepost ? () => setReposting(true) : undefined}
         />
       )}
 
@@ -1526,6 +1588,22 @@ export function OfferDetailPanel({
             setActionError(undefined);
           }}
           onConfirm={publish}
+        />
+      )}
+
+      {reposting && (
+        <RepostOfferDialog
+          offerLabel={offer.name ?? offer.label}
+          platformName={offer.platformName}
+          lots={repostLots}
+          isPending={isPending}
+          error={actionError}
+          onClose={() => {
+            if (isPending) return;
+            setReposting(false);
+            setActionError(undefined);
+          }}
+          onConfirm={repost}
         />
       )}
 

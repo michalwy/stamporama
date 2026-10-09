@@ -33,6 +33,9 @@ export interface OfferListContext {
   /** Only live listings changed since they went up (#542) — a plain narrowing, like the three
    * above, and the one a re-listing session is walked along. */
   listingOutOfDate?: boolean;
+  /** Only active quick buys past their platform's refresh threshold (#1718) — a plain narrowing,
+   * and the one a reposting session is walked along. */
+  needsRefresh?: boolean;
   /** The list's remembered show-closed toggle (#245) — not a list URL param, but part of what the
    * list was showing, so the walk has to carry it. */
   includeClosed?: boolean;
@@ -51,6 +54,7 @@ export function offerListContextQuery(context: OfferListContext): string {
   if (context.bidding) params.set("bidding", "1");
   if (context.endedAuction) params.set("endedAuction", "1");
   if (context.listingOutOfDate) params.set("listingOutOfDate", "1");
+  if (context.needsRefresh) params.set("needsRefresh", "1");
   if (context.platformSale) params.set("platformSale", "1");
   if (context.needsAction) params.set("needsAction", "1");
   else if (context.states?.length) params.set("state", context.states.join(","));
@@ -77,6 +81,7 @@ export function parseOfferListContext(
     bidding: get("bidding") === "1",
     endedAuction: get("endedAuction") === "1",
     listingOutOfDate: get("listingOutOfDate") === "1",
+    needsRefresh: get("needsRefresh") === "1",
     platformSale: get("platformSale") === "1",
     includeClosed: get("closed") === "1",
     search: get("search") || undefined,

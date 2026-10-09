@@ -76,6 +76,13 @@ import {
   type ResolvedCatalogItemId,
 } from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { countsForRefresh, lastPostedOn, quickBuyRefreshDue } from "./offer-refresh-rules";
+import {
+  needsRefreshWhere,
+  readRefreshThresholds,
+  refreshThresholdFor,
+  type RefreshThresholds,
+} from "./offer-refresh";
 import {
   evaluateListingPreconditions,
   type ListingBlocker,
@@ -2028,6 +2035,10 @@ export interface OfferListItem {
    * pushed back to the marketplace. The instant is when it started diverging, so the row can say how
    * long the live listing has been wrong; null is a listing this record believes is in step. */
   listingOutOfDate: Date | null;
+  /** How many days this **active quick buy** has been up since it was last posted, where that is
+   * past its platform's (on Facebook, its group's) refresh threshold (#1718); null where nothing is
+   * due. The row shows *Up N days · refresh*. */
+  refreshDueDays: number | null;
   /** A Facebook auction's group, increment and post (#1544), all null off Facebook. On the row for
    * the header form opened from it — the `startingPrice` reason above — and for *Post together*,
    * which asks which ticked offers are auctions in one group. */
@@ -2053,6 +2064,7 @@ const OFFER_SELECT = {
   endsAt: true,
   priceCheckedAt: true,
   listingDate: true,
+  lastPostedAt: true,
   listingContentChangedAt: true,
   facebookGroupId: true,
   bidIncrement: true,
@@ -2078,6 +2090,7 @@ type OfferRow = {
   endsAt: Date | null;
   priceCheckedAt: Date | null;
   listingDate: Date | null;
+  lastPostedAt: Date | null;
   listingContentChangedAt: Date | null;
   facebookGroupId: string | null;
   bidIncrement: Decimal | null;
@@ -2105,7 +2118,9 @@ function toListItem(
   baseCurrency: string,
   labeller: OfferLabeller,
   soldCopyCount = 0,
-  platformSale: UnrecordedPlatformSale | null = null
+  platformSale: UnrecordedPlatformSale | null = null,
+  /** The refresh threshold this offer is held to (#1718), or null for none. */
+  refreshThresholdDays: number | null = null
 ): OfferListItem {
   const state = (isOfferState(row.state) ? row.state : "active") as OfferState;
   const listingType = normalizeListingType(row.listingType);
@@ -2156,6 +2171,11 @@ function toListItem(
     // flagged simply stops reporting it — what a closed listing said is history, and it is one rule
     // in one place instead of a clean-up on every terminal transition.
     listingOutOfDate: isListedState(state) ? row.listingContentChangedAt : null,
+    refreshDueDays: quickBuyRefreshDue(
+      { state, listingType, listingDate: row.listingDate, lastPostedAt: row.lastPostedAt },
+      refreshThresholdDays,
+      new Date()
+    ),
     facebookGroupId: row.facebookGroupId,
     bidIncrement: row.bidIncrement?.toFixed(2) ?? null,
     facebookPostId: row.facebookPostId,
@@ -2202,6 +2222,7 @@ async function withNeedsAction(
   resolved: {
     counts?: Map<string, number>;
     platformSales?: Map<string, UnrecordedPlatformSale>;
+    refreshThresholds?: RefreshThresholds;
   } = {}
 ): Promise<OfferListItem[]> {
   // Whole-collection, like the needs-action comparison below: what an order says about a listing
@@ -2211,7 +2232,7 @@ async function withNeedsAction(
   const platformSales = resolved.platformSales ?? (await unrecordedPlatformSales(collectionId));
   const platformSoldIds = [...platformSales.keys()];
 
-  const [counts, labeller] = await Promise.all([
+  const [counts, labeller, thresholds] = await Promise.all([
     resolved.counts ??
       needsActionCounts(
         collectionId,
@@ -2219,9 +2240,17 @@ async function withNeedsAction(
         platformSoldIds
       ),
     makeOfferLabeller(collectionId),
+    resolved.refreshThresholds ?? readRefreshThresholds(collectionId),
   ]);
   const items = rows.map((r) =>
-    toListItem(r, baseCurrency, labeller, counts.get(r.id) ?? 0, platformSales.get(r.id) ?? null)
+    toListItem(
+      r,
+      baseCurrency,
+      labeller,
+      counts.get(r.id) ?? 0,
+      platformSales.get(r.id) ?? null,
+      refreshThresholdFor(thresholds, r)
+    )
   );
   await attachBasePrices(collectionId, baseCurrency, items);
   return items;
@@ -2253,6 +2282,10 @@ export interface OfferListFilters {
    * counts and paginates like any other column-backed filter rather than resolving to ids — which
    * is exactly why the signal is a stored instant and not a recomputed diff. */
   listingOutOfDate?: boolean;
+  /** Only **active quick buys past their platform's refresh threshold** (#1718) — on Facebook, their
+   * group's. Each platform and group counts against its own, so the thresholds are read first and
+   * handed in as a `where` (see {@link resolveOfferOverlays}); the dates are columns. */
+  needsRefresh?: boolean;
   /** Include closed (sold / withdrawn) offers. Off by default: the list hides dead listings unless
    * the user opts in (#245). Ignored when an explicit `states` filter is set. */
   includeClosed?: boolean;
@@ -2393,7 +2426,9 @@ function offerListWhere(
     | "listingOutOfDate"
   >,
   needsActionIds?: string[],
-  platformSoldIds?: string[]
+  platformSoldIds?: string[],
+  /** The *Needs refresh* narrowing (#1718), built from the thresholds by the overlay pass. */
+  refreshWhere?: Prisma.OfferWhereInput
 ): Prisma.OfferWhereInput {
   // Every narrowing goes into one `AND` list rather than onto the object as sibling keys: the
   // search is an `OR`, the ended-auction rule is an `AND`, and since #501 the state selection can be
@@ -2405,6 +2440,7 @@ function offerListWhere(
   // what the list item's own derivation reads, and asking it here is what stops a listing that sold
   // while flagged from being counted as work waiting to be done.
   if (filters.listingOutOfDate) and.push(LISTING_DRIFT_WHERE);
+  if (refreshWhere) and.push(refreshWhere);
   if (filters.search?.trim()) and.push(offerSearchWhere(filters.search));
   if (needsActionIds) and.push({ id: { in: needsActionIds } });
   // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the user
@@ -2468,7 +2504,13 @@ export async function listOffersPaginated(
   if (overlays.ids?.length === 0) return { items: [], nextCursor: null };
 
   const rows = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, overlays.ids, overlays.platformSoldIds),
+    where: offerListWhere(
+      collectionId,
+      filters,
+      overlays.ids,
+      overlays.platformSoldIds,
+      overlays.refreshWhere
+    ),
     orderBy: OFFER_LIST_ORDER_BY,
     take: pageSize + 1,
     skip: offset,
@@ -2506,7 +2548,13 @@ export async function countOffers(
   const overlays = await resolveOfferOverlays(collectionId, filters);
   if (overlays.ids?.length === 0) return 0;
   return prisma.offer.count({
-    where: offerListWhere(collectionId, filters, overlays.ids, overlays.platformSoldIds),
+    where: offerListWhere(
+      collectionId,
+      filters,
+      overlays.ids,
+      overlays.platformSoldIds,
+      overlays.refreshWhere
+    ),
   });
 }
 
@@ -2525,12 +2573,18 @@ export async function countOffers(
  */
 async function resolveOfferOverlays(
   collectionId: string,
-  filters: Pick<OfferListFilters, "needsAction" | "platformSale" | "states">
+  filters: Pick<OfferListFilters, "needsAction" | "platformSale" | "states" | "needsRefresh">
 ): Promise<{
   ids?: string[];
   /** The flagged offers, whenever anything downstream needs to tell them apart. */
   platformSoldIds?: string[];
-  resolved: { counts?: Map<string, number>; platformSales?: Map<string, UnrecordedPlatformSale> };
+  /** The *Needs refresh* narrowing (#1718), where it is selected. */
+  refreshWhere?: Prisma.OfferWhereInput;
+  resolved: {
+    counts?: Map<string, number>;
+    platformSales?: Map<string, UnrecordedPlatformSale>;
+    refreshThresholds?: RefreshThresholds;
+  };
 }> {
   // The platform-sale set first, because the needs-action pass reads it as well (the sibling
   // cascade), and handing it on is what keeps one request to one comparison.
@@ -2569,10 +2623,19 @@ async function resolveOfferOverlays(
           const keep = new Set(b);
           return a.filter((id) => keep.has(id));
         });
+  // *Needs refresh* (#1718): each platform and group holds its own threshold, so they are read and
+  // turned into a `where` of dated clauses — columns all the way down, so it narrows, counts and
+  // paginates like any other filter. Handed on so the rows do not read the thresholds twice.
+  const refreshThresholds = filters.needsRefresh ? await readRefreshThresholds(collectionId) : null;
   return {
     ids,
     platformSoldIds,
-    resolved: { counts: counts ?? undefined, platformSales: platformSales ?? undefined },
+    refreshWhere: refreshThresholds ? needsRefreshWhere(refreshThresholds, new Date()) : undefined,
+    resolved: {
+      counts: counts ?? undefined,
+      platformSales: platformSales ?? undefined,
+      refreshThresholds: refreshThresholds ?? undefined,
+    },
   };
 }
 
@@ -2613,19 +2676,20 @@ export async function offerListNeighbours(
     | "endedAuction"
     | "platformSale"
     | "listingOutOfDate"
+    | "needsRefresh"
   > = {}
 ): Promise<OfferListNeighbours> {
   await assertCollectionOwner(ownerId, collectionId);
 
   // The derived overlays are not columns (ADR-0013 §4, #499), so they resolve to ids first —
   // exactly as the list page and the summary bar do.
-  const { ids, platformSoldIds } = await resolveOfferOverlays(collectionId, filters);
+  const { ids, platformSoldIds, refreshWhere } = await resolveOfferOverlays(collectionId, filters);
   if (ids?.length === 0) {
     return { previousId: null, nextId: null, position: null, total: 0 };
   }
 
   const rows = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, ids, platformSoldIds),
+    where: offerListWhere(collectionId, filters, ids, platformSoldIds, refreshWhere),
     orderBy: OFFER_LIST_ORDER_BY,
     select: { id: true },
   });
@@ -2903,6 +2967,9 @@ export interface OfferFilterCounts {
   /** Listings sold on a connected platform with no sale recorded here (#499), within the selected
    * platform. An overlay too, so counted on the same terms. */
   platformSale: number;
+  /** Active quick buys past their platform's refresh threshold (#1718), within the selected
+   * platform — an overlay across the state chips, counted on the same terms. */
+  needsRefresh: number;
   /** Offers per platform, under the selected state / needs-action / show-closed choice. */
   platforms: Record<string, number>;
   /** Total across platforms — the "All platforms" option. */
@@ -2955,7 +3022,7 @@ export async function offerFilterCounts(
   // The needs-action facet comes back already grouped by platform, so both the chip's own count
   // (within the selected platform) and the platform facet under a needs-action selection are read
   // off the same few flagged rows — no id list travels back into a `where`.
-  const [flagged, drifted, byState, byPlatform, endedAuction, platformSales] = await Promise.all([
+  const [flagged, drifted, byState, byPlatform, endedAuction, platformSales, needsRefresh] = await Promise.all([
     needsActionRows(collectionId, searchIds),
     // The other half of what *Needs action* selects (#542). Read as its own small set rather than
     // folded into the SQL above: that query is about dead copies, and drift is not one.
@@ -3000,6 +3067,17 @@ export async function offerFilterCounts(
     // …and the sold-on-platform chip's (#499), which is a resolved id set rather than a `where`, so
     // it is narrowed here by the platform and the search the same way every other facet is.
     unrecordedPlatformSales(collectionId),
+    // …and *Needs refresh* (#1718), over the `where` the filter itself reads.
+    readRefreshThresholds(collectionId).then((thresholds) =>
+      prisma.offer.count({
+        where: {
+          collectionId,
+          ...(filters.platformId ? { platformId: filters.platformId } : {}),
+          ...(searchWhere ?? {}),
+          AND: [needsRefreshWhere(thresholds, new Date())],
+        },
+      })
+    ),
   ]);
 
   const platformSaleIds = [...platformSales.keys()];
@@ -3063,6 +3141,7 @@ export async function offerFilterCounts(
       : needingAction.size,
     endedAuction,
     platformSale,
+    needsRefresh,
     platforms,
     total,
   };
@@ -3112,13 +3191,14 @@ export async function offersSummary(
     | "endedAuction"
     | "platformSale"
     | "listingOutOfDate"
+    | "needsRefresh"
   > = {}
 ): Promise<OffersSummary> {
   const { baseCurrency } = await assertCollectionOwner(ownerId, collectionId);
 
   // The derived overlays are not columns (ADR-0013 §4, #499), so they resolve to ids first — exactly
   // as the list page does. Nothing matching means an empty slice, not an unfiltered one.
-  const { ids, resolved } = await resolveOfferOverlays(collectionId, filters);
+  const { ids, resolved, refreshWhere } = await resolveOfferOverlays(collectionId, filters);
   if (ids?.length === 0) {
     return {
       ...aggregateOfferAsking([], baseCurrency, new Map()),
@@ -3133,7 +3213,7 @@ export async function offersSummary(
   const platformSales = resolved.platformSales ?? (await unrecordedPlatformSales(collectionId));
 
   const offers = await prisma.offer.findMany({
-    where: offerListWhere(collectionId, filters, ids, [...platformSales.keys()]),
+    where: offerListWhere(collectionId, filters, ids, [...platformSales.keys()], refreshWhere),
     select: {
       id: true,
       platformId: true,
@@ -3717,6 +3797,66 @@ export async function recordOfferListed(
   );
 }
 
+/**
+ * Post a quick buy again (#1718): the same offer, a new link. The collector has deleted the stale
+ * post and put it up afresh; the offer keeps its number — so `{offer}` (#1694) and what buyers quote
+ * still match — and its copies stay where they are. What moves on is the address, recorded as the
+ * listing link, and *last posted*, which restarts the refresh count. The link it had, with the dates
+ * it was up, goes into the offer's history; the first listing date is left as it was, since time to
+ * sale is counted from it.
+ *
+ * Only an **active quick buy**: an auction ends of its own accord, and a paused listing is in front
+ * of nobody. A lot of a Facebook post takes **every active quick-buy lot of that post** with it
+ * (decided with the collector, 2026-10-09) — they are one post, so one repost — and an auction lot
+ * beside them is left alone.
+ *
+ * A repost puts the current content in front of buyers, so it clears the changed-since-listed flag
+ * (#542) as a first publication does.
+ */
+export async function repostOffer(ownerId: string, offerId: string, url: string): Promise<{ reposted: number }> {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    throw new OfferActionBlockedError("no-url", "Paste the link of the new post.");
+  }
+  const ref = await assertOfferOwner(ownerId, offerId);
+  if (!countsForRefresh(ref)) {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      "Only an active quick buy is posted again — an auction ends of its own accord."
+    );
+  }
+  const own = await prisma.offer.findUniqueOrThrow({
+    where: { id: offerId },
+    select: { facebookPostId: true },
+  });
+  const listings = await prisma.offer.findMany({
+    where: own.facebookPostId
+      ? { facebookPostId: own.facebookPostId, state: "active", listingType: "fixed" }
+      : { id: offerId },
+    select: { id: true, url: true, listingDate: true, lastPostedAt: true },
+  });
+  // The listing's own id follows its address (#696), as on every URL write. A post of several lots
+  // is a Facebook post, whose link names no Colnect sale; one that did would be refused by the
+  // unique index rather than written to several offers.
+  const colnectSaleId = await resolveColnectSaleId(ref.collectionId, offerId, trimmed);
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.offerPosting.createMany({
+      data: listings.map((listing) => ({
+        offerId: listing.id,
+        url: listing.url,
+        postedAt: lastPostedOn(listing.listingDate, listing.lastPostedAt),
+        endedAt: now,
+      })),
+    }),
+    prisma.offer.updateMany({
+      where: { id: { in: listings.map((listing) => listing.id) } },
+      data: { url: trimmed, colnectSaleId, lastPostedAt: now, listingContentChangedAt: null },
+    }),
+  ]);
+  return { reposted: listings.length };
+}
+
 export interface OfferDetailSet {
   id: string;
   title: string | null;
@@ -3897,6 +4037,14 @@ export interface OfferDetail {
   setsTotals: OfferSetsTotals;
   /** The date the listing went live (#257), or null when not recorded. */
   listingDate: Date | null;
+  /** When the listing was last posted again (#1718), or null when it never was — the count of days
+   * up runs from the later of this and `listingDate`, the first listing. */
+  lastPostedAt: Date | null;
+  /** The links this listing had before it was posted again (#1718), latest first. */
+  postings: OfferPostingEntry[];
+  /** Days up since last posted, where an active quick buy is past its refresh threshold (#1718) —
+   * the list row's own figure, on the offer's own screen. */
+  refreshDueDays: number | null;
   /** Derived (#542): the offer is up on the platform and something about what it lists has changed
    * since it went there, with nothing pushed back. The instant is when it started diverging; null is
    * a listing this record believes is in step. What the header's **Mark as up to date** clears. */
@@ -4064,6 +4212,13 @@ export interface OfferPlatformItem {
   copyCount: number;
 }
 
+/** One earlier posting of a listing (#1718): the link it had and when it was up. */
+export interface OfferPostingEntry {
+  url: string | null;
+  postedAt: Date | null;
+  endedAt: Date;
+}
+
 /** Full offer read model for the detail / compose screen (ADR-0013): the offer header plus each
  * of its sets, with per-set sold / needs-action status. */
 export async function getOfferDetail(ownerId: string, offerId: string): Promise<OfferDetail | null> {
@@ -4099,6 +4254,11 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       state: true,
       inActiveBidding: true,
       listingDate: true,
+      lastPostedAt: true,
+      postings: {
+        select: { url: true, postedAt: true, endedAt: true },
+        orderBy: [{ endedAt: "desc" }, { id: "desc" }],
+      },
       listingContentChangedAt: true,
       createdAt: true,
       // What publishing through Allegro's API left behind (#477), which is what decides whether the
@@ -4469,6 +4629,19 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     sets,
     setsTotals,
     listingDate: offer.listingDate,
+    lastPostedAt: offer.lastPostedAt,
+    postings: offer.postings,
+    // The list row's derivation (#1718), so the row and the screen it opens cannot disagree.
+    refreshDueDays: quickBuyRefreshDue(
+      {
+        state,
+        listingType: normalizeListingType(offer.listingType),
+        listingDate: offer.listingDate,
+        lastPostedAt: offer.lastPostedAt,
+      },
+      refreshThresholdFor(await readRefreshThresholds(offer.collectionId), offer),
+      new Date()
+    ),
     // The same derivation the list row makes (#542): the stored instant, but only while the offer is
     // still up. One rule, read in both places, so the row and the screen it opens cannot disagree.
     listingOutOfDate: isListedState(state) ? offer.listingContentChangedAt : null,

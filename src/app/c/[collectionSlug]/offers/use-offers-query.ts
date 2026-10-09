@@ -52,6 +52,8 @@ export interface OfferFilters {
   platformSale?: boolean;
   /** Only live listings changed since they went up (#542) — the ones that have to be re-posted. */
   listingOutOfDate?: boolean;
+  /** Only active quick buys past their platform's refresh threshold (#1718). */
+  needsRefresh?: boolean;
   /** Show closed (sold / withdrawn) offers; off by default hides dead listings (#245). */
   includeClosed?: boolean;
   /** Free text over the title, the offer number, the listing URL and the copies' catalog numbers
@@ -82,6 +84,7 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
       if (filters.bidding) params.set("bidding", "1");
       if (filters.endedAuction) params.set("endedAuction", "1");
       if (filters.listingOutOfDate) params.set("listingOutOfDate", "1");
+      if (filters.needsRefresh) params.set("needsRefresh", "1");
       if (filters.platformSale) params.set("platformSale", "1");
       if (filters.needsAction) params.set("needsAction", "1");
       else if (filters.states?.length) params.set("state", filters.states.join(","));
@@ -156,6 +159,7 @@ export function useOfferNeighbours(
       if (context?.bidding) params.set("bidding", "1");
       if (context?.endedAuction) params.set("endedAuction", "1");
       if (context?.listingOutOfDate) params.set("listingOutOfDate", "1");
+      if (context?.needsRefresh) params.set("needsRefresh", "1");
       if (context?.platformSale) params.set("platformSale", "1");
       if (context?.needsAction) params.set("needsAction", "1");
       else if (context?.states?.length) params.set("state", context.states.join(","));
@@ -184,6 +188,7 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
       if (filters.bidding) params.set("bidding", "1");
       if (filters.endedAuction) params.set("endedAuction", "1");
       if (filters.listingOutOfDate) params.set("listingOutOfDate", "1");
+      if (filters.needsRefresh) params.set("needsRefresh", "1");
       if (filters.platformSale) params.set("platformSale", "1");
       if (filters.needsAction) params.set("needsAction", "1");
       else if (filters.states?.length) params.set("state", filters.states.join(","));
@@ -210,6 +215,7 @@ export function useOffersSummary(collectionId: string, filters: OfferFilters) {
       if (filters.bidding) params.set("bidding", "1");
       if (filters.endedAuction) params.set("endedAuction", "1");
       if (filters.listingOutOfDate) params.set("listingOutOfDate", "1");
+      if (filters.needsRefresh) params.set("needsRefresh", "1");
       if (filters.platformSale) params.set("platformSale", "1");
       if (filters.needsAction) params.set("needsAction", "1");
       else if (filters.states?.length) params.set("state", filters.states.join(","));

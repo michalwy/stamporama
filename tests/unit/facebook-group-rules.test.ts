@@ -10,6 +10,7 @@ import {
   cleanFacebookDefaults,
   cleanFacebookGroupValues,
   effectiveFacebookGroupSettings,
+  effectiveRefreshQuickBuysAfterDays,
   isFacebookGroupUrl,
   normalizeClosingTime,
   retiredPostPlaceholders,
@@ -220,6 +221,7 @@ describe("cleanFacebookDefaults (#1661)", () => {
         bidIncrement: 0.5,
         auctionDays: 7,
         closingTime: "9:00",
+        refreshQuickBuysAfterDays: 4,
       }),
       {
         listingType: "fixed",
@@ -232,6 +234,7 @@ describe("cleanFacebookDefaults (#1661)", () => {
         bidIncrement: 0.5,
         auctionDays: 7,
         closingTime: "09:00",
+        refreshQuickBuysAfterDays: 4,
       }
     );
     assert.throws(
@@ -241,6 +244,10 @@ describe("cleanFacebookDefaults (#1661)", () => {
     assert.throws(
       () => cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, closingTime: "25:00" }),
       /time of day/
+    );
+    assert.throws(
+      () => cleanFacebookDefaults({ ...FACEBOOK_BLANK_SETTINGS, refreshQuickBuysAfterDays: 0 }),
+      /Refresh quick buys after/
     );
   });
 });
@@ -257,6 +264,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
     bidIncrement: 1,
     auctionDays: 7,
     closingTime: "20:00",
+    refreshQuickBuysAfterDays: 3,
   };
 
   it("reads every setting from the platform for a group that follows it throughout", () => {
@@ -271,7 +279,16 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       ...FACEBOOK_BLANK_SETTINGS,
       standingNote: "Group terms",
       currency: "EUR",
-      custom: ["standingNote", "startingPrice", "closingTime", "currency", "listingType", "mixedListingTypes"],
+      refreshQuickBuysAfterDays: 10,
+      custom: [
+        "standingNote",
+        "startingPrice",
+        "closingTime",
+        "currency",
+        "listingType",
+        "mixedListingTypes",
+        "refreshQuickBuysAfterDays",
+      ],
     };
     assert.deepEqual(effectiveFacebookGroupSettings(group, platform), {
       listingType: "auction",
@@ -284,8 +301,19 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       bidIncrement: 1,
       auctionDays: 7,
       closingTime: null,
+      refreshQuickBuysAfterDays: 10,
       currency: "EUR",
     });
+  });
+
+  it("follows the platform's refresh threshold unless the group holds its own (#1718)", () => {
+    const following = { custom: [], refreshQuickBuysAfterDays: 10 };
+    assert.equal(effectiveRefreshQuickBuysAfterDays(following, platform), 3);
+    assert.equal(effectiveFacebookGroupSettings({ ...FACEBOOK_BLANK_SETTINGS, ...following, currency: null }, platform).refreshQuickBuysAfterDays, 3);
+    // A custom *never* where Facebook has one.
+    const never = { custom: ["refreshQuickBuysAfterDays"], refreshQuickBuysAfterDays: null };
+    assert.equal(effectiveRefreshQuickBuysAfterDays(never, platform), null);
+    assert.equal(effectiveFacebookGroupSettings({ ...FACEBOOK_BLANK_SETTINGS, ...never, currency: null }, platform).refreshQuickBuysAfterDays, null);
   });
 
   it("leaves the currency null — the platform's — on a group that follows it, whatever is stored", () => {

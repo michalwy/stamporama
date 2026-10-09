@@ -116,6 +116,14 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   anywhere else — resolved by `resolveVocabularyValue`, so a wrong name returns the accepted ones. Its
   draft has **no closing time**: the API has no zone to turn the group's time of day into an instant.
 
+- **Quick buys have a refresh threshold, a followed setting like the rest** (#1718).
+  `refreshQuickBuysAfterDays` is in `FacebookDefaults` and on each group, keyed
+  `refreshQuickBuysAfterDays` in `customSettings` — a custom null is a group's own *never* where
+  Facebook has one. The Facebook contact's `refreshQuickBuysAfterDays` column is not read (the
+  contact dialog hides it there), the `defaultStartingPrice` reasoning of #1661. The card's
+  **Repost…** (an active quick buy only) opens the offer screen's dialog; for a lot it reposts every
+  active quick-buy lot of the post, since they are one post. The rest is in `offers.md`.
+
 - **A group's currency wins over the platform's** (settled with the collector on 2026-10-03, the
   question ADR-0061 left to #1544). An auction in a group with `currency` set is created in it and
   `resolvePlatformCurrency` is not called, so the platform's lock (#196) is neither read nor written;

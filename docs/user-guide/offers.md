@@ -2042,6 +2042,44 @@ taken down, so the offer stays flagged until you **withdraw** it.
 The flag is not carried by sold or withdrawn offers. What a closed listing said is a record, not a
 claim.
 
+## Quick buys that need refreshing
+
+A quick buy that has been up a while sinks out of sight: a Facebook post a few days old is seen by
+nobody, and a Delcampe listing slides down the results. The fix is to take it down and post it
+again — and that is easy to forget without something telling you which ones are due.
+
+So a platform can say **after how many days its quick buys need refreshing**. On most platforms it is
+**Refresh quick buys after (days)** on the platform's [contact](contacts.md); on Facebook it is in
+[Settings → Facebook](facebook.md#facebook-defaults), where each group follows it or sets its own.
+Empty means never, which is what a platform such as Allegro wants.
+
+An **active quick buy** that has been up at least that long carries an **Up N days · refresh** badge,
+on the offer row and on the offer's own page, and the toolbar's **Needs refresh** chip narrows the
+list to just these. Auctions are never marked — they end on their own — and neither is a paused
+offer, which is in front of nobody anyway.
+
+The days are counted from when the offer was **last posted**. Until it has been reposted that is its
+listing date.
+
+### Reposting
+
+Once you have posted it again, choose **Repost…** from the offer's **⋮** menu (on Facebook, also on
+the offer's Facebook card) and paste the **new link**. The offer stays the same offer — the same
+number, so buyers' messages and an `{offer}` in a Facebook post still match, and the same copies, so
+nothing moves. What changes:
+
+- the new link becomes the offer's listing link;
+- today becomes its **last posted** date, shown on the offer's page beside the listing date, and the
+  count of days starts again;
+- the earlier link is kept, with the dates it was up, as an **Earlier post** beside the listing link;
+- a **Changed since listed** flag clears, since what is posted now is what the offer says.
+
+The **listing date** stays the day it was first listed, which is what the time an offer took to sell
+is counted from.
+
+On Facebook, a lot of a post with several lots reposts the **whole post**: every active quick buy in it
+takes the new link. An auction in the same post is left as it is.
+
 ## One active offer per copy, per platform
 
 You should keep **at most one active offer per copy, per platform** — otherwise the same stamp
@@ -2390,6 +2428,10 @@ have not been resolved (see [Ended auctions](#ended-auctions--waiting-on-you)) �
 recorded** — listings a connected platform has already sold (see [Sold on a
 platform](#sold-on-a-platform-not-recorded-here)). Neither is remembered between visits: each is a
 batch of work you sit down to and finish, not the shape the list should still have tomorrow.
+
+**Needs refresh** sits beside them on the same terms — the active quick buys up longer than their
+platform's threshold (see [Quick buys that need refreshing](#quick-buys-that-need-refreshing)) — but
+does not redden: nothing about those listings is wrong, they have only sunk.
 
 ### Searching
 

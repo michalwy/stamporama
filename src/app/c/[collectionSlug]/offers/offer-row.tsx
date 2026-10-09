@@ -31,6 +31,7 @@ import {
   PlatformSaleChip,
   InActiveBiddingChip,
   ListingOutOfDateChip,
+  RefreshDueChip,
   ListingTypeChip,
 } from "./offer-badges";
 import { Icon, type IconName } from "@/app/icons";
@@ -342,6 +343,8 @@ export function OfferRow({
               chips and before the plain descriptive ones: it is a problem, but the mildest of them —
               a listing that is wrong rather than stock promised twice. */}
           {offer.listingOutOfDate && <ListingOutOfDateChip since={offer.listingOutOfDate} />}
+          {/* …and one that is right but has sunk out of sight on its platform (#1718). */}
+          {offer.refreshDueDays !== null && <RefreshDueChip days={offer.refreshDueDays} />}
           {/* …and why that listing cannot simply be updated: nothing is left in it (#1277). Also on a
               withdrawn offer, which is how one emptied before the fix is found under Withdrawn. */}
           {isEmptiedListing(offer.state, offer.setCount) && <EmptiedListingChip state={offer.state} />}

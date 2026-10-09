@@ -38,6 +38,7 @@ import {
 } from "@/lib/offer-photo-config";
 import { MAX_LISTING_TEXT_LENGTH_LIMIT } from "@/lib/listing-text-limits";
 import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
+import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
 import { FACEBOOK_PLATFORM_MODULE } from "@/lib/platform-modules";
 import {
   DEFAULT_PHOTO_COVER_STYLE,
@@ -692,6 +693,32 @@ export function ContactFormDialog({
                     offer&apos;s price to apply it when you want it.
                   </p>
                 </div>
+
+                {/* When a quick buy here needs posting again (#1718) — a Delcampe listing sinks, an
+                    Allegro one does not. Not on the Facebook platform: there it is Facebook's own
+                    setting, which its groups follow, on Settings → Facebook (#1661). */}
+                {contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
+                  <div style={FIELD_GAP}>
+                    <LabelWithError htmlFor="contact-refresh-quick-buys">
+                      Refresh quick buys after (days, optional)
+                    </LabelWithError>
+                    <input
+                      id="contact-refresh-quick-buys"
+                      name="refreshQuickBuysAfterDays"
+                      type="number"
+                      step={1}
+                      min={1}
+                      max={REFRESH_QUICK_BUYS_DAYS_MAX}
+                      defaultValue={contact?.refreshQuickBuysAfterDays ?? ""}
+                      placeholder="never"
+                      disabled={isPending}
+                      style={INPUT_STYLE}
+                    />
+                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                      Marks an active quick buy up this long since it was posted, to post it again.
+                    </p>
+                  </div>
+                )}
 
                 {/* Listing templates (#210, #266, #267): what this platform's offer title, description
                     and private note are generated from. Kept in a dedicated dialog so the contact form
