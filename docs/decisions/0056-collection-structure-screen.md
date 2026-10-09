@@ -5,7 +5,8 @@
 Accepted and implemented in #1401. Designed in #1399 with the collector on 2026-09-26; one question
 the design left open was settled on 2026-09-27 (§5). The value measures — catalogue value, market
 value and cost per segment — were added in #1402 on the same screen (§6). **Amends #397's decision**
-that the Overview is one screen with no reports area (§1).
+that the Overview is one screen with no reports area (§1). **Amended by #1711** on 2026-10-09: the
+screen has a navigation entry after all (§1).
 
 ## Context
 
@@ -31,8 +32,15 @@ Copies list whose copies it counts, and the tile's own figures keep linking to t
 
 This departs from #397's *one screen* and is recorded as such. What #397 protected is kept by §2.
 
-*Rejected:* its own navigation entry, a tab of the Overview, and a mode of the Copies list's summary
-bar.
+**Amended by #1711 (2026-10-09): the screen has a navigation entry**, nested under the Overview in
+the sidebar, because the collector uses the screen on its own and wants it in the navigation. It sits under the Overview, outside
+every section, because it is the Overview's breakdown; the holdings tile keeps opening it, so both
+ways in remain. The address does not move: the screen still counts through the Copies list, and
+the sidebar treats `/inventory/structure` as belonging to no section, so the Collection section does
+not claim it. Nothing §2 protects changes — an entry is a way in, not a list.
+
+*Rejected:* its own navigation entry (reversed by #1711), a tab of the Overview, and a mode of the
+Copies list's summary bar.
 
 ### 2. It states counts and never lists a copy
 

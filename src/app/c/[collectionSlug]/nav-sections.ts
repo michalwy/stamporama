@@ -67,8 +67,23 @@ export const SECTION_TINTS: Record<SectionKey, string> = {
   partners: "violet",
 };
 
+/**
+ * Routes under a section's prefix that answer to **no** section, checked before the prefixes.
+ *
+ * The collection structure screen (#1711) lives at `/inventory/structure`, under the Copies list it
+ * counts through (ADR-0056), but its navigation entry sits beneath the Overview, outside every
+ * section: it is the Overview's breakdown. Left to the prefix, Collection would open and carry the
+ * active tint for a screen whose entry is not in it.
+ */
+const SECTIONLESS_ROUTES = ["/inventory/structure"];
+
 /** The section the given screen belongs to, or null on Overview / Settings / the footer links. */
 export function sectionForPath(pathname: string, base: string): SectionKey | null {
+  const sectionless = SECTIONLESS_ROUTES.some((route) => {
+    const href = `${base}${route}`;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  });
+  if (sectionless) return null;
   for (const key of Object.keys(SECTION_ROUTES) as SectionKey[]) {
     const owns = SECTION_ROUTES[key].some((route) => {
       const href = `${base}${route}`;

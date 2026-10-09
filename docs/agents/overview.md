@@ -29,6 +29,11 @@ The collection Overview at `/c/[collectionSlug]` — the holdings, financial and
   becoming the second list #397 guarded against by one rule: **it states counts and never lists a
   copy**, and every count is a link to the Copies list under exactly the filters that produce it. The
   tile's own figures, its total included (an inner link since #1401), still open the Copies list.
+  **Since #1711 it also has a sidebar entry**, nested under Overview as the Overview's breakdown — the
+  collector uses it on its own. The address stays under `/inventory`, so `nav-sections.ts` names it
+  in `SECTIONLESS_ROUTES`: its entry is outside every section, and the Collection section must not
+  open or carry the active tint for it. The Inventory entry yields the branch through `isActive`'s
+  `except`.
 
 - **Aggregate here, detail elsewhere** (#397). The section reads — `getOverviewHoldings`,
   `getOverviewValue` and `getOverviewProgress` in `src/lib/overview.ts`, one API route each under

@@ -476,13 +476,22 @@ export function CollectionSidebar({
         }}
       >
         {/* Outside every section and never folded away (#762): it is the one screen that is about
-            the collection as a whole, and the way back when a section has been collapsed. */}
-        <NavItem
-          href={base}
+            the collection as a whole, and the way back when a section has been collapsed.
+            Collection structure (#1711) hangs beneath it as the Overview's breakdown, the way
+            Variant prices hangs under Stamps; the holdings tile still opens it too (ADR-0056). */}
+        <NavGroup
           icon={<Icon name="overview" />}
           label="Overview"
+          href={base}
           active={isActive(base)}
-        />
+        >
+          <NavItem
+            href={`${base}/inventory/structure`}
+            label="Collection structure"
+            active={isActive(`${base}/inventory/structure`)}
+            nested
+          />
+        </NavGroup>
 
         <NavSection {...sectionProps("catalog")}>
           <NavItem
@@ -539,7 +548,7 @@ export function CollectionSidebar({
             href={`${base}/inventory`}
             icon={<Icon name="inventory" />}
             label="Inventory"
-            active={isActive(`${base}/inventory`)}
+            active={isActive(`${base}/inventory`, false, [`${base}/inventory/structure`])}
           />
           {/* Locations and Albums follow Inventory, being where the paper physically sits. */}
           <NavItem
