@@ -901,8 +901,9 @@ function IntakeConditionDialog({
                 onCompare={() => setComparing(null)}
               />
             )}
-            {/* The in-collection copies themselves (#1621), since whether the piece should take one
-                of their places is judged by looking. Under the line, on the line's own terms. */}
+            {/* The in-collection copies themselves (#1621), and those being sorted (#1728), since
+                whether the piece should take one of their places is judged by looking. Under the
+                line, on the line's own terms. */}
             {selection.kind === "stamp" && !(carriedStamps && carriedStamps.length > 0) && (
               <HeldCopyThumbs
                 collectionId={collectionId}
