@@ -16,6 +16,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 import { ThumbPreview, THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 // Add manual attachments to an offer's photo plan (#313, #331).
 //
@@ -54,6 +55,7 @@ const TAB_STYLE: React.CSSProperties = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",

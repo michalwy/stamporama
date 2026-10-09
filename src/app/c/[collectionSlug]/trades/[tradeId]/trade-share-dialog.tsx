@@ -16,6 +16,7 @@ import {
   revokeTradeShareLinkAction,
   setTradeShareOptionsAction,
 } from "@/app/actions/trades";
+import { formControl } from "@/app/control-style";
 
 // The collector's end of the partner's link (#640; ADR-0039 §9).
 //
@@ -35,6 +36,7 @@ import {
 // also break their link, so it does not.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -42,7 +44,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const HINT: React.CSSProperties = {

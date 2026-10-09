@@ -27,6 +27,7 @@ import { Tooltip } from "./tooltip";
 import { NO_AUTOFILL } from "./no-autofill";
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 /**
  * The collection-area form and the **Add area** dialog around it.
@@ -41,6 +42,7 @@ import { TextArea, TextInput } from "./text-input";
 // ── Shared styles ────────────────────────────────────────────────────────────
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -48,8 +50,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 /** The dialog form's own layout — a column that owns the dialog's height so the body scrolls

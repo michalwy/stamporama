@@ -42,6 +42,7 @@ import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/spe
 import { FacebookGroupSelect } from "../facebook-group-select";
 import { useFacebookGroupChoice } from "../use-facebook-group-choice";
 import { useToast } from "@/app/toast-provider";
+import { formControl } from "@/app/control-style";
 
 // The bulk-lot builder's screen (#760), over #758's rules and #759's two reads.
 //
@@ -126,6 +127,7 @@ const STEP_FIELD_LABEL: React.CSSProperties = {
 
 /** The template fields' input, minus the full width and the monospace a template is written in. */
 const STEP_SELECT_STYLE: React.CSSProperties = {
+  ...formControl,
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

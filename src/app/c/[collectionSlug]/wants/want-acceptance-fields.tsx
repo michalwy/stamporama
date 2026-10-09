@@ -8,6 +8,7 @@ import { useCollectionConditions } from "@/app/c/[collectionSlug]/shared/use-dis
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/shared/use-display-format";
 import { useCollectionCertificateStatuses } from "@/app/c/[collectionSlug]/shared/use-certificate-statuses";
 import { useAcceptanceProfiles } from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
+import { formControl } from "@/app/control-style";
 
 // The three acceptance axes of a want (#532; ADR-0032 §1/§3), as one editor shared by the want form
 // and the intake review's *narrow* step — the two places the same question is asked, which must not
@@ -31,6 +32,7 @@ const NONE = "__none__";
 const CUSTOM = "";
 
 const SELECT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
@@ -38,8 +40,6 @@ const SELECT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2rem",
 };
 
 const toKey = (id: string | null): string => id ?? NONE;

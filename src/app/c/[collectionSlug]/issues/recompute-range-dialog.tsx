@@ -5,8 +5,10 @@ import { DialogShell, DialogBody, DialogActions } from "@/app/dialog-shell";
 import { getIssueRangeSuggestionsAction, applyIssueRangeSuggestionAction } from "@/app/actions/issues";
 import type { IssueRangeSuggestion } from "@/lib/issues";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
@@ -14,8 +16,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontFamily: "monospace",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2rem",
   width: "6rem",
 };
 

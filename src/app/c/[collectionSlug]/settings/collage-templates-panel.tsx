@@ -49,6 +49,7 @@ import { Icon } from "@/app/icons";
 import { CollageTemplatePreviewPanel } from "./collage-template-preview";
 import { ListBesidePreview, useSettingsSelection } from "./list-beside-preview";
 import { SettingsPageAction } from "./settings-page-frame";
+import { formControl } from "@/app/control-style";
 
 // The collage templates (#307) — on the Settings page, the list beside the selected template's
 // collage (#1477; `list-beside-preview.tsx`); in the editor, the fields beside the same drawing,
@@ -59,6 +60,7 @@ import { SettingsPageAction } from "./settings-page-frame";
 // prepared.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -66,8 +68,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const FORM_STYLE: React.CSSProperties = {

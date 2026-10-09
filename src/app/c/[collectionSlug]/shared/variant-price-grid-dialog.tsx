@@ -33,6 +33,7 @@ import type {
   VariantPriceRestriction,
   VariantPriceScope,
 } from "@/lib/variant-prices";
+import { formControl } from "@/app/control-style";
 
 /**
  * The variant price grid (#618): a grid over a **tree**, because that is the shape of the source.
@@ -1069,6 +1070,7 @@ const CONTROL_LABEL: React.CSSProperties = {
 };
 
 const SELECT_STYLE: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
@@ -1106,6 +1108,7 @@ const FILL_PANEL: React.CSSProperties = {
 };
 
 const FACTOR_INPUT: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { formControl } from "@/app/control-style";
 
 /** The narrowest a card may get before the grid drops a column. */
 const CARD_MIN_WIDTH = "18rem";
@@ -129,6 +130,7 @@ export function SettingsFieldCard({
 
 /** A select inside a card: as wide as its card allows, never wider. */
 export const SETTINGS_FIELD_SELECT_STYLE: React.CSSProperties = {
+  ...formControl,
   maxWidth: "100%",
   padding: "0.4rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -141,6 +143,7 @@ export const SETTINGS_FIELD_SELECT_STYLE: React.CSSProperties = {
 
 /** A short number field inside a card. */
 export const SETTINGS_FIELD_NUMBER_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "5rem",
   padding: "0.4rem 0.625rem",
   border: "1px solid var(--color-border-strong)",

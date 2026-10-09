@@ -34,6 +34,7 @@ import {
   parseRowKey,
   type RowSelection,
 } from "./list-detail-model";
+import { formControl } from "@/app/control-style";
 
 /*
  * **List beside detail** — the first of ADR-0059's three body shapes (#1471), and the one every
@@ -866,6 +867,7 @@ export function DetailFacts({ rows }: { rows: { label: string; value: ReactNode 
 // ── Fields ───────────────────────────────────────────────────────────────────
 
 export const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -873,8 +875,6 @@ export const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 /** Spacing between the fields of a detail pane. */

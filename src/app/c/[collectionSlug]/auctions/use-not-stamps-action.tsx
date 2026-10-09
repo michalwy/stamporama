@@ -11,6 +11,7 @@ import {
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import type { RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import type { AuctionLotStatus } from "@/lib/auction-rules";
+import { formControl } from "@/app/control-style";
 
 // **A lot that is not stamps** (#1624) — a catalogue, literature, an accessory bid on and tracked
 // like any lot. Marked, it carries no lines, never reads as *Not described*, has no value or
@@ -22,6 +23,7 @@ import type { AuctionLotStatus } from "@/lib/auction-rules";
 // greys out — the mark on a lot holding stamps, and its removal once the lot is no longer open.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -29,7 +31,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const NOTE: React.CSSProperties = {

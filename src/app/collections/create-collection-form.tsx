@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/collections";
 import { BASE_CURRENCIES, DEFAULT_BASE_CURRENCY } from "@/lib/currencies";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 const initial: CreateCollectionState = { status: "idle" };
 
@@ -71,6 +72,7 @@ export function CreateCollectionForm() {
             autoComplete="off"
             placeholder="e.g. My stamp collection"
             style={{
+              ...formControl,
               padding: "0.5rem 0.75rem",
               border: "1px solid var(--color-border)",
               borderRadius: "0.375rem",
@@ -97,6 +99,7 @@ export function CreateCollectionForm() {
             name="baseCurrency"
             defaultValue={DEFAULT_BASE_CURRENCY}
             style={{
+              ...formControl,
               padding: "0.5rem 0.75rem",
               border: "1px solid var(--color-border)",
               borderRadius: "0.375rem",

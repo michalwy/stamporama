@@ -62,6 +62,7 @@ import { DEFAULT_CHECKLIST } from "@/lib/checklist-vocabulary";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
 import { SpecialisedMark, useSpecialisedChecklists } from "./specialised-checklists";
+import { CONTROL_HEIGHT, formControl } from "@/app/control-style";
 
 /** The stamp's one translatable field (#296). `defaultValue` is filled in at render time from the
  * live Name input, so the dialog's placeholder shows what a blank entry falls back to. Mirrors
@@ -69,6 +70,7 @@ import { SpecialisedMark, useSpecialisedChecklists } from "./specialised-checkli
 const NAME_TRANSLATION_FIELDS: TranslationField[] = [{ key: "name", label: "Name" }];
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -76,8 +78,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const FORM_STYLE: React.CSSProperties = {
@@ -1625,7 +1625,7 @@ function SizePresetControls({
         gap: "0.5rem",
         flexWrap: "wrap",
         fontSize: "0.8125rem",
-        minHeight: "2.25rem",
+        minHeight: CONTROL_HEIGHT,
       }}
     >
       <StampSizePresetPicker

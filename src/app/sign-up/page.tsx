@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -94,6 +95,7 @@ export default function SignUpPage() {
               required
               autoComplete="name"
               style={{
+                ...formControl,
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--color-border)",
                 borderRadius: "0.375rem",
@@ -116,6 +118,7 @@ export default function SignUpPage() {
               required
               autoComplete="email"
               style={{
+                ...formControl,
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--color-border)",
                 borderRadius: "0.375rem",
@@ -139,6 +142,7 @@ export default function SignUpPage() {
               autoComplete="new-password"
               minLength={8}
               style={{
+                ...formControl,
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--color-border)",
                 borderRadius: "0.375rem",

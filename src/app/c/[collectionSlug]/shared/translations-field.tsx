@@ -9,6 +9,7 @@ import {
 } from "./translations-dialog";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import { CONTROL_HEIGHT } from "@/app/control-style";
 
 // The opener half of the per-language entity text UI (#293–#296): a 🌐 icon button that sits beside
 // an entity form's default-language input, badged with how many languages still fall back, plus the
@@ -22,8 +23,8 @@ import { Icon } from "@/app/icons";
 const buttonStyle: React.CSSProperties = {
   position: "relative",
   flexShrink: 0,
-  width: "2.25rem",
-  height: "2.25rem",
+  width: CONTROL_HEIGHT,
+  height: CONTROL_HEIGHT,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

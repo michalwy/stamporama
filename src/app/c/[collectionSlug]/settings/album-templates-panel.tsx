@@ -67,6 +67,7 @@ import { ListBesidePreview, useSettingsSelection } from "./list-beside-preview";
 import { SettingsPageAction } from "./settings-page-frame";
 import { FrameOrnamentField } from "./album-ornaments-panel";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 // The album templates (#766) — on the Settings page, the list beside the selected template's page
 // (#1474; `list-beside-preview.tsx`); in the editor, the listing templates dialog's builder for the
@@ -90,6 +91,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 // could disagree with what a save would store.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -97,8 +99,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const FORM_STYLE: React.CSSProperties = {

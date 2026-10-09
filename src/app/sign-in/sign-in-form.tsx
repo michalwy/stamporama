@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 interface SignInFormProps {
   /** The instance refused a session this browser still holds, said in one sentence (#1175). */
@@ -124,6 +125,7 @@ export default function SignInForm({ signedOutNotice, landing }: SignInFormProps
               required
               autoComplete="email"
               style={{
+                ...formControl,
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--color-border)",
                 borderRadius: "0.375rem",
@@ -146,6 +148,7 @@ export default function SignInForm({ signedOutNotice, landing }: SignInFormProps
               required
               autoComplete="current-password"
               style={{
+                ...formControl,
                 padding: "0.5rem 0.75rem",
                 border: "1px solid var(--color-border)",
                 borderRadius: "0.375rem",

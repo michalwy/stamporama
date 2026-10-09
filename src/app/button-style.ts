@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { CONTROL_HEIGHT } from "@/app/control-style";
 
 /**
  * The one button shape: every dialog button is drawn from it, so the variants are the same shape and
@@ -32,7 +33,7 @@ export const baseBtn: CSSProperties = {
   justifyContent: "center",
   flexShrink: 0,
   whiteSpace: "nowrap",
-  minHeight: "2.25rem",
+  minHeight: CONTROL_HEIGHT,
   padding: "0.375rem 1rem",
   borderRadius: "0.375rem",
   fontSize: "0.875rem",

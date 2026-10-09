@@ -35,6 +35,7 @@ import { Muted, mutedSmallStyle, numStyle } from "./price-matrix";
 import { useCollectionConditions } from "./use-display-condition";
 import { useCollectionFormats } from "./use-display-format";
 import { useCollectionCertificateStatuses } from "./use-certificate-statuses";
+import { formControl } from "@/app/control-style";
 
 // **Realised prices from other people's auctions** (#1633; ADR-0063 §6) — listed in the Valuation
 // dialog under the Market value grid they feed, and recorded, corrected and deleted from there.
@@ -46,6 +47,7 @@ import { useCollectionCertificateStatuses } from "./use-certificate-statuses";
 // day. A hint is never folded into a figure, and a figure never hides that hints exist.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -53,7 +55,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };

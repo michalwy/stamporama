@@ -38,6 +38,7 @@ import {
   updateTradeReceiveLineAction,
 } from "@/app/actions/trades";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { formControl } from "@/app/control-style";
 
 // Entering one line of the **receive** side (#637), as two steps: pick the stamp, then say what
 // state it is in — the auction lot line's flow exactly, because it is the identical question about
@@ -62,6 +63,7 @@ import { useInvalidateTradeDetail } from "./use-trade-detail-query";
 // one line into twelve is not an edit.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -69,7 +71,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const NOTE: React.CSSProperties = {

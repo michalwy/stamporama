@@ -17,6 +17,7 @@ import { NumericInput } from "./numeric-input";
 import { StampIdentity } from "./stamp-identity";
 import { Tooltip } from "./tooltip";
 import { useAreaVendorMaps } from "./use-area-vendor-maps";
+import { formControl } from "@/app/control-style";
 
 /**
  * The Valuation window's answer for a **multi-stamp copy** (#747; ADR-0044 §6).
@@ -357,6 +358,7 @@ function currencyOptions(current: string): string[] {
 }
 
 const INPUT: React.CSSProperties = {
+  ...formControl,
   padding: "0.4rem 0.6rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

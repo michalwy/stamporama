@@ -24,8 +24,10 @@ import {
 } from "@/app/actions/shipping-methods";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
@@ -33,7 +35,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 /** name · carrier · cost · currency · actions — one grid so the rows, the editor and the add form

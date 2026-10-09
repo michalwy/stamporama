@@ -13,6 +13,7 @@ import type {
   ColnectListImportPreview,
   ColnectListImportResult,
 } from "@/lib/colnect-list-snapshot";
+import { formControl } from "@/app/control-style";
 
 // **Loading an export into a list's snapshot** (#685).
 //
@@ -33,6 +34,7 @@ import type {
 // count and the wrong grade for every row that sits on two lists.
 
 const FIELD: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

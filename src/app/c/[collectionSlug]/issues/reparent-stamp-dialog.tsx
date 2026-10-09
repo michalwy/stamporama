@@ -13,6 +13,7 @@ import { buildStampTree, type StampTreeNodeData } from "@/app/c/[collectionSlug]
 import { stampNodeLabel } from "@/app/c/[collectionSlug]/inventory/stamp-picker-shared";
 import { useIssueMembers } from "./use-issues-query";
 import type { StampNodeData } from "@/lib/issues";
+import { formControl } from "@/app/control-style";
 
 // Where a stamp hangs in its issue's tree (#656), corrected — the finer-grained neighbour of #54's
 // "move this stamp to another issue". A stamp filed at the top level that turns out to be a variant
@@ -39,6 +40,7 @@ const FORM_STYLE: React.CSSProperties = {
 
 /** The same select box the issue screen's other dialogs use. */
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -46,8 +48,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const NOTE_STYLE: React.CSSProperties = {
