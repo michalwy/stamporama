@@ -316,17 +316,17 @@ describe("isFacebookGroupUrl", () => {
 });
 
 describe("post template placeholders", () => {
-  it("are an auction's settled ones with {title} and {terms}, and no longer {catalog} (#1543, #1671, #1689)", () => {
+  it("are an auction's settled ones with {title} and {terms}, and {offer}, and no longer {catalog} (#1543, #1671, #1689, #1694)", () => {
     assert.deepEqual(
       FACEBOOK_AUCTION_PLACEHOLDERS.map((p) => p.token),
-      ["{title}", "{description}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}", "{terms}"]
+      ["{title}", "{description}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}", "{offer}", "{terms}"]
     );
   });
 
-  it("are a quick buy's own: its price where an auction states its bidding (#1671), and {terms} (#1689)", () => {
+  it("are a quick buy's own: its price where an auction states its bidding (#1671), and {terms} (#1689) and {offer} (#1694)", () => {
     assert.deepEqual(
       FACEBOOK_QUICK_BUY_PLACEHOLDERS.map((p) => p.token),
-      ["{title}", "{description}", "{price}", "{lot}", "{terms}"]
+      ["{title}", "{description}", "{price}", "{lot}", "{offer}", "{terms}"]
     );
   });
 

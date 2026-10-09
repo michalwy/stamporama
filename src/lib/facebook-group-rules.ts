@@ -36,7 +36,7 @@ export const FACEBOOK_TERMS_PLACEHOLDER: FacebookPostPlaceholder = {
  * The placeholders an **auction's** post template may carry.
  *
  * Settled with the issue (#1543): the description, the starting price, the increment, the closing
- * time and the lot number — and the offer's title since #1671. They are the `{token}` spelling every
+ * time and the lot number — and the offer's title since #1671, and its number since #1694. They are the `{token}` spelling every
  * other template here uses (`offer-title-template.ts`). Rendering them is #1544's; an unknown token
  * is kept as typed rather than refused, the title template's rule.
  */
@@ -47,6 +47,7 @@ export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] =
   { token: "{increment}", label: "Bid increment", example: "1.00 PLN" },
   { token: "{closesAt}", label: "Closing time", example: "Sun 5 Oct, 20:00" },
   { token: "{lot}", label: "Lot number", example: "3" },
+  { token: "{offer}", label: "Offer number", example: "412" },
   FACEBOOK_TERMS_PLACEHOLDER,
 ];
 
@@ -59,6 +60,7 @@ export const FACEBOOK_QUICK_BUY_PLACEHOLDERS: readonly FacebookPostPlaceholder[]
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
   { token: "{price}", label: "Price", example: "25.00 PLN" },
   { token: "{lot}", label: "Lot number", example: "3" },
+  { token: "{offer}", label: "Offer number", example: "412" },
   FACEBOOK_TERMS_PLACEHOLDER,
 ];
 

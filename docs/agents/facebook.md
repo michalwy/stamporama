@@ -167,7 +167,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   added or fallen back to. `{description}` is the offer's description and nothing else — empty when it
   has none (the kit's title stand-in is gone); `{title}` the display title; `{price}` a quick buy's
   asking price; the retired `{catalog}` is every copy's leading number through
-  `compactCatalogNumberGroups`; `{lot}` is empty on a single post. A type with **no template gives an
+  `compactCatalogNumberGroups`; `{lot}` is empty on a single post; `{offer}` (#1694) is each lot's own offer number, bare as `{lot}` is,
+  so the template writes any `#` itself. A type with **no template gives an
   empty lot** (the `{description}` fallback template is gone), and the lot's text is not trimmed, so
   the template's line breaks stay where it has them, around empty placeholders too — collapsing blank
   lines was withdrawn from the issue. Lots are joined by a blank line, and a lot with no text is left

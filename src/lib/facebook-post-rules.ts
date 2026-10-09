@@ -103,6 +103,8 @@ export function parseBidIncrement(
 export interface FacebookPostLotText {
   /** The lot's number in a multi-lot post, or null for an offer posted alone — `{lot}` is then empty. */
   lotNo: number | null;
+  /** `{offer}`: the offer's own number (#1694), bare — the template writes any `#` around it. */
+  offerNo: number;
   /** Which of the group's templates the lot is written from (#1671). */
   listingType: OfferListingType;
   /** `{title}`: the offer's title (#1671). */
@@ -148,6 +150,7 @@ function placeholderValues(lot: FacebookPostLotText, terms: string): Record<stri
     "{closesAt}": lot.closesAt,
     "{price}": lot.price,
     "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
+    "{offer}": String(lot.offerNo),
     "{terms}": terms.trim(),
   };
 }
