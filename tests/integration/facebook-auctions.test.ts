@@ -243,6 +243,11 @@ describe("Facebook auction offers (#1544)", () => {
     const kit = await getFacebookOfferKit(quickBuyId);
     assert.equal(kit?.group.quickBuyTemplate, "{title} — {price}");
     assert.equal(kit?.lots[0].listingType, "fixed");
+    // `{description}` is the offer's own and nothing else (#1692): none here, so it is empty, not the title.
+    assert.notEqual(kit?.lots[0].title, "");
+    assert.equal(kit?.lots[0].description, "");
+    // The group follows Facebook's quick-buy template, so the card links a gap in it to the defaults.
+    assert.equal(kit?.group.custom.includes("quickBuyTemplate"), false);
 
     await updateFacebookDefaults(userId, collectionId, FACEBOOK_BLANK_SETTINGS);
   });

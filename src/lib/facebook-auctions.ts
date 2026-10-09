@@ -4,6 +4,7 @@ import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
 import {
   effectiveFacebookGroupSettings,
   type FacebookEffectiveSettings,
+  type FacebookGroupSetting,
   type FacebookStartingPriceMode,
 } from "./facebook-group-rules";
 import { readFacebookDefaults, toCustomSettings, toPostingSettings } from "./facebook-groups";
@@ -344,7 +345,7 @@ export interface FacebookKitLot {
   listingType: OfferListingType;
   /** `{title}`: the offer's display title. */
   title: string;
-  /** `{description}`: the offer's description, else its title. */
+  /** `{description}`: the offer's description, empty when it has none — never its title (#1692). */
   description: string;
   /** `{catalog}`, retired (#1671) but still filled in: every copy's catalogue number, compacted as a
    *  title's `{catalog}` is. */
@@ -376,6 +377,9 @@ export interface FacebookOfferKit {
     /** A quick buy's post template (#1671). */
     quickBuyTemplate: string;
     standingNote: string;
+    /** The settings the group holds as its own (#1661) — the rest it follows from Facebook's — so the
+     *  card links a missing template or note to where it is set (#1692). */
+    custom: FacebookGroupSetting[];
   };
   /** The multi-lot post this offer is a lot of, or null when it is posted alone. Its link is each
    *  lot's own `url` (#1668), so the post carries none. */
@@ -438,7 +442,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       lotNo: offer.facebookPostId ? row.facebookLotNo : null,
       listingType: normalizeListingType(row.listingType),
       title,
-      description: row.description?.trim() || title,
+      description: row.description?.trim() ?? "",
       catalog: compactCatalogNumberGroups(numbers),
       startingPrice: row.startingPrice?.toFixed(2) ?? null,
       bidIncrement: row.bidIncrement?.toFixed(2) ?? null,
@@ -465,6 +469,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       postTemplate: settings.postTemplate,
       quickBuyTemplate: settings.quickBuyTemplate,
       standingNote: settings.standingNote,
+      custom: toCustomSettings(offer.facebookGroup.customSettings),
     },
     post: offer.facebookPost,
     lots,

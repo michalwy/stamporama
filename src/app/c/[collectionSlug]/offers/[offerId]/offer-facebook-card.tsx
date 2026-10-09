@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import type { FacebookOfferKit } from "@/lib/facebook-auctions";
 import {
   facebookMoney,
+  facebookPostGaps,
   isFacebookLotPosted,
   renderFacebookPostText,
   type FacebookPostLotText,
 } from "@/lib/facebook-post-rules";
+import { FACEBOOK_TERMS_PLACEHOLDER, type FacebookGroupSetting } from "@/lib/facebook-group-rules";
 import { isAuctionListing, OFFER_LISTING_TYPE_LABEL, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -35,6 +37,9 @@ import { formControl } from "@/app/control-style";
 // asks for the result — the winner and the winning bid, which records the sale, or *No bids*, which
 // withdraws the offer and frees its copies. A quick buy (#1671) has no bidding: while it is up the
 // card offers only its sale — the buyer and the price, recorded the same way.
+//
+// The post is only what its template places (#1692): a missing template or an empty placeholder is
+// named under the text, with a link to where it is set, and nothing is filled in to hide it.
 //
 // Rendered only for an offer naming a group: `OfferDetail.facebook` is null everywhere else.
 
@@ -92,6 +97,16 @@ const LINK_BTN: React.CSSProperties = {
   cursor: "pointer",
 };
 
+/** Why a placeholder came out empty, in the words of what is missing where that is plain. */
+const EMPTY_PLACEHOLDER_REASON: Record<string, string> = {
+  "{description}": "the offer has no description",
+  "{startingPrice}": "no starting price",
+  "{increment}": "no bid increment",
+  "{closesAt}": "no closing time",
+  "{price}": "no price",
+  [FACEBOOK_TERMS_PLACEHOLDER.token]: "no note on shipping, payment and terms",
+};
+
 /** `Sun 5 Oct, 20:00` in the collector's own locale and zone. */
 function formatClosesAt(iso: string | null): string {
   if (!iso) return "";
@@ -130,7 +145,7 @@ export function OfferFacebookCard({
   const multiLot = kit.post !== null;
 
   const auction = isAuctionListing(self.listingType);
-  const postText = useMemo(() => {
+  const { postText, gaps } = useMemo(() => {
     const lots: FacebookPostLotText[] = kit.lots.map((lot) => ({
       lotNo: lot.lotNo,
       listingType: lot.listingType,
@@ -142,17 +157,17 @@ export function OfferFacebookCard({
       closesAt: formatClosesAt(lot.endsAt),
       price: isAuctionListing(lot.listingType) ? "" : facebookMoney(lot.price, lot.currency),
     }));
-    return renderFacebookPostText(
-      { auction: kit.group.postTemplate, quickBuy: kit.group.quickBuyTemplate },
-      kit.group.standingNote,
-      lots
-    );
+    const templates = { auction: kit.group.postTemplate, quickBuy: kit.group.quickBuyTemplate };
+    return {
+      postText: renderFacebookPostText(templates, kit.group.standingNote, lots),
+      gaps: facebookPostGaps(templates, kit.group.standingNote, lots),
+    };
   }, [kit]);
-  // The templates the post is written from that are blank, so their lots read as their description.
-  const blankTemplates = [
-    ...(kit.lots.some((l) => isAuctionListing(l.listingType)) && !kit.group.postTemplate.trim() ? ["auction"] : []),
-    ...(kit.lots.some((l) => !isAuctionListing(l.listingType)) && !kit.group.quickBuyTemplate.trim() ? ["quick-buy"] : []),
-  ];
+  // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661).
+  const settingHref = (setting: FacebookGroupSetting) =>
+    `/c/${collectionSlug}/settings?tab=facebook&row=${encodeURIComponent(
+      kit.group.custom.includes(setting) ? kit.group.id : "facebook:defaults"
+    )}`;
 
   // Posted: once any lot has gone up — the lots of a post go up together.
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
@@ -268,17 +283,49 @@ export function OfferFacebookCard({
             </a>
           </div>
         </div>
-        {postText ? (
+        {postText.trim() ? (
           <pre style={POST_TEXT}>{postText}</pre>
         ) : (
-          <p style={{ ...MUTED, margin: 0 }}>Nothing to post yet — give the offer a description.</p>
+          <p style={{ ...MUTED, margin: 0 }}>The post is empty.</p>
         )}
-        {blankTemplates.length > 0 && (
-          <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
-            {kit.group.name} has no{" "}
-            {blankTemplates.length === 2 ? "post templates" : `${blankTemplates[0]} post template`}, so{" "}
-            {multiLot ? "each such lot" : "the post"} is its description.
-          </p>
+        {(gaps.missingTemplates.length > 0 || gaps.emptyPlaceholders.length > 0) && (
+          <ul style={{ ...MUTED, margin: "0.25rem 0 0", paddingLeft: "1.25rem", color: "var(--color-warning)" }}>
+            {gaps.missingTemplates.map((type) => (
+              <li key={type}>
+                No {type === "auction" ? "auction" : "quick-buy"} post template set
+                {multiLot ? ", so those lots are empty" : ""} —{" "}
+                <Link
+                  href={settingHref(type === "auction" ? "postTemplate" : "quickBuyTemplate")}
+                  style={{ color: "var(--color-accent)" }}
+                >
+                  set it in Settings → Facebook
+                </Link>
+              </li>
+            ))}
+            {gaps.emptyPlaceholders.map(({ lotNo, token }) => {
+              const lot = kit.lots.find((l) => l.lotNo === lotNo);
+              const where = multiLot ? `Lot ${lotNo}: ` : "";
+              const reason = EMPTY_PLACEHOLDER_REASON[token];
+              const fix =
+                token === FACEBOOK_TERMS_PLACEHOLDER.token ? (
+                  <Link href={settingHref("standingNote")} style={{ color: "var(--color-accent)" }}>
+                    set it in Settings → Facebook
+                  </Link>
+                ) : multiLot && lot && lot.offerId !== offerId ? (
+                  <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ color: "var(--color-accent)" }}>
+                    open #{lot.offerNo}
+                  </Link>
+                ) : null;
+              return (
+                <li key={`${lotNo}:${token}`}>
+                  {where}
+                  <code>{token}</code> is empty
+                  {reason && <> — {reason}</>}
+                  {fix && <> — {fix}</>}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 

@@ -8,7 +8,8 @@ bid and the result #1545 (§4), the Assistant filling a post #1546 (§3), and se
 #1547 (§5). §6 is amended by #1661: a group's settings follow the platform's unless set custom. §3
 is amended by #1668: the post's link is recorded as the offer's own listing link, asked by *Activate*.
 The whole is amended by #1671 (§8): a Facebook offer can be a quick buy as well as an auction. §6
-is amended by #1689: the standing note is placed by a `{terms}` placeholder, no longer appended.
+is amended by #1689: the standing note is placed by a `{terms}` placeholder, no longer appended. §3
+is amended by #1692: a post is only what its template places.
 
 ## Context
 
@@ -51,6 +52,13 @@ posts by hand and records the post's link — as the offer's own listing link, w
 for as on every platform (#1668); for a post holding several lots it is given once and written into
 every lot that has no link of its own. **The Assistant filling in the post comes later**, as a
 step of its own (#1546), and never presses *Post* itself.
+
+**Amended by #1692 (decided with the collector on 2026-10-09): a post is only what its template
+places.** Nothing is substituted, added or fallen back to: `{description}` is the offer's description
+and empty when it has none, never its title; a group with no template for an offer's type gives an
+empty post, no longer the description; and the template's line breaks are kept, around empty
+placeholders too. What is missing — a template, or a placeholder that comes out empty — is named on
+the offer's Facebook card with a link to where it is set, and fixing it is the collector's.
 
 ### 4. The running bid is recorded by hand, and the result when it ends
 
