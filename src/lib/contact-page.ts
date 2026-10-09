@@ -2,6 +2,14 @@ import "server-only";
 import { prisma } from "./db";
 import { getContactListItem, type ContactListItem } from "./contacts";
 import { resolveBuyerHandling } from "./sales";
+import { auctionLotExposure, countAuctionLots, type AuctionLotExposure } from "./auctions";
+import { lotOutcome } from "./auction-lot";
+import {
+  isAuctionLotStatus,
+  isAuctionSaleStatus,
+  type AuctionLotStatus,
+  type AuctionSaleStatus,
+} from "./auction-rules";
 import { valuateItemsByIds } from "./item-valuation";
 import { canExpressInBase, lotPoolBase, purchaseCostsOf } from "./purchase-allocation";
 import { resolvePurchaseSpend } from "./purchase-spend";
@@ -14,7 +22,11 @@ import {
 } from "./cost-to-catalog";
 import { dateRangeBounds, type DateRange } from "./profit-and-loss-rules";
 import {
+  auctionPremiumTerms,
+  auctionWinRate,
+  auctionWonSpend,
   contactPeriodRange,
+  type MoneyEntry,
   NOT_DELIVERED_PURCHASE_STATUSES,
   sumMoney,
   toBaseAmount,
@@ -25,8 +37,9 @@ import {
 } from "./contact-page-rules";
 
 // The read behind a contact's own page (#1708): its header, and one section per role it plays —
-// here **purchases** (the contact as seller) and **sales** (the contact as buyer). Auctions (#1709)
-// and platform and trades (#1710) are sections of their own still to come.
+// here **purchases** (the contact as seller), **sales** (the contact as buyer) and **auctions** (the
+// contact as the seller or house an auction sale is tracked with, #1709). Platform and trades (#1710)
+// is a section of its own still to come.
 //
 // **A section shows when the contact has the role or has data for it**, the data counted over all
 // time: a contact created on the fly from a purchase's supplier field carries no roles, and its
@@ -91,6 +104,45 @@ export interface ContactSales {
   rows: ContactSaleRow[];
 }
 
+export interface ContactAuctionSaleRow {
+  id: string;
+  name: string;
+  /** When the sale was first tracked — the date the period reads (see {@link readAuctions}). */
+  trackedAt: string;
+  status: AuctionSaleStatus;
+  platformName: string;
+  openCount: number;
+  wonCount: number;
+  lostCount: number;
+}
+
+export interface ContactAuctions {
+  /** Auction sales tracked with the contact in the period. */
+  saleCount: number;
+  /** Every lot of those sales, whatever became of it. */
+  lotCount: number;
+  wonCount: number;
+  lostCount: number;
+  cancelledCount: number;
+  /** Won of won + lost — see `auctionWinRate`. Null with nothing decided. */
+  winRate: number | null;
+  /** The won lots all-in: hammer, premium and each parcel's shipping once. */
+  spent: MoneyTotal;
+  /** The distinct buyer's premium terms across the period's sales, most recent first — each seeded
+   *  from the contact when its sale was tracked, so a change of terms shows as a second entry. */
+  premiumTerms: string[];
+  /**
+   * The contact's lots **as they stand now**, whatever the period — what is still running is a
+   * present state, and these are the lots list's own figures (#1036) under its link, so the two can
+   * never disagree: lots still open, what they commit and what they would cost at their ceilings,
+   * and lots still waiting for the collector's review (#1626).
+   */
+  openCount: number;
+  exposure: AuctionLotExposure;
+  toReviewCount: number;
+  rows: ContactAuctionSaleRow[];
+}
+
 export interface ContactPage {
   contact: ContactListItem;
   baseCurrency: string;
@@ -100,6 +152,8 @@ export interface ContactPage {
   purchases: ContactPurchases | null;
   /** Null when the contact neither buys nor ever bought from the collector. */
   sales: ContactSales | null;
+  /** Null when the contact is no auction house and no auction sale is tracked with it. */
+  auctions: ContactAuctions | null;
 }
 
 function isoDate(d: Date): string {
@@ -123,9 +177,10 @@ export async function getContactPage(
   const bounds = dateRangeBounds(range);
   const dateWhere = bounds.gte || bounds.lt ? bounds : undefined;
 
-  const [purchaseCount, saleCount] = await Promise.all([
+  const [purchaseCount, saleCount, auctionSaleCount] = await Promise.all([
     prisma.purchase.count({ where: purchaseWhere(contact) }),
     prisma.sale.count({ where: { collectionId: contact.collectionId, buyerId: contact.id } }),
+    prisma.auctionSale.count({ where: { collectionId: contact.collectionId, sellerId: contact.id } }),
   ]);
 
   return {
@@ -139,6 +194,12 @@ export async function getContactPage(
         : null,
     sales:
       contact.buyer || saleCount > 0 ? await readSales(contact, baseCurrency, dateWhere) : null,
+    // The Seller role alone does not bring it: most sellers are never bid with, and the purchases
+    // section already answers for them. An auction house is, so it shows before anything is tracked.
+    auctions:
+      contact.auctionHouse || auctionSaleCount > 0
+        ? await readAuctions(ownerId, contact, baseCurrency, dateWhere)
+        : null,
   };
 }
 
@@ -331,6 +392,125 @@ async function readSales(
       .length,
     unsentCount: sales.filter((s) => (UNSENT_SALE_STATUSES as readonly string[]).includes(s.status))
       .length,
+    rows,
+  };
+}
+
+/**
+ * The contact's auctions: the auction sales it is the **seller** on — the house of a house's own
+ * sale, the seller of a marketplace basket (ADR-0021). The platform side of a sale is #1710's.
+ *
+ * **A sale belongs to the period it was tracked in** (`createdAt`), and every lot of it with it: a
+ * sale is one settlement, so its rows and the figures above them sum to each other, and a sale has
+ * no date of its own to read instead — `endsAt` is only a default for its lots (schema).
+ */
+async function readAuctions(
+  ownerId: string,
+  contact: ContactListItem,
+  baseCurrency: string,
+  dateWhere: { gte?: Date; lt?: Date } | undefined
+): Promise<ContactAuctions> {
+  const sales = await prisma.auctionSale.findMany({
+    where: {
+      collectionId: contact.collectionId,
+      sellerId: contact.id,
+      ...(dateWhere ? { createdAt: dateWhere } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      currency: true,
+      premiumPercent: true,
+      premiumFixed: true,
+      shippingCost: true,
+      createdAt: true,
+      platform: { select: { name: true } },
+      lots: {
+        select: { status: true, myBid: true, finalPrice: true, wonTie: true, fxRateToBase: true },
+      },
+    },
+  });
+
+  // The watchlist as it stands, over the lots list's own reads under the filters its link opens.
+  const sellerOnly = { sellerId: contact.id };
+  const [openCount, exposure, toReviewCount] = await Promise.all([
+    countAuctionLots(ownerId, contact.collectionId, { ...sellerOnly, outcome: "pending" }),
+    auctionLotExposure(ownerId, contact.collectionId, { ...sellerOnly, outcome: "pending" }),
+    countAuctionLots(ownerId, contact.collectionId, { ...sellerOnly, includeClosed: true, toReview: true }),
+  ]);
+
+  let lotCount = 0;
+  let wonCount = 0;
+  let lostCount = 0;
+  let cancelledCount = 0;
+  const spent: MoneyEntry[] = [];
+  const premiumTerms: string[] = [];
+  const rows: ContactAuctionSaleRow[] = sales.map((s) => {
+    const premium = auctionPremiumTerms(
+      s.premiumPercent?.toString() ?? null,
+      s.premiumFixed?.toString() ?? null,
+      s.currency
+    );
+    if (!premiumTerms.includes(premium)) premiumTerms.push(premium);
+    const counts = { pending: 0, won: 0, lost: 0, observed: 0, cancelled: 0 };
+    const won: { finalPrice: number; fxRateToBase: number | null }[] = [];
+    for (const lot of s.lots) {
+      const outcome = lotOutcome({
+        status: (isAuctionLotStatus(lot.status) ? lot.status : "open") as AuctionLotStatus,
+        myBid: lot.myBid?.toString(),
+        finalPrice: lot.finalPrice?.toString(),
+        wonTie: lot.wonTie,
+      });
+      counts[outcome] += 1;
+      // A won lot always carries its price: that is what made it won.
+      if (outcome === "won" && lot.finalPrice) {
+        won.push({
+          finalPrice: Number(lot.finalPrice),
+          fxRateToBase: lot.fxRateToBase == null ? null : Number(lot.fxRateToBase),
+        });
+      }
+    }
+    lotCount += s.lots.length;
+    wonCount += counts.won;
+    lostCount += counts.lost;
+    cancelledCount += counts.cancelled;
+    const entry = auctionWonSpend(
+      won,
+      {
+        premiumPercent: s.premiumPercent == null ? null : Number(s.premiumPercent),
+        premiumFixed: s.premiumFixed == null ? null : Number(s.premiumFixed),
+        shippingCost: s.shippingCost == null ? null : Number(s.shippingCost),
+      },
+      s.currency,
+      baseCurrency
+    );
+    if (entry) spent.push(entry);
+    return {
+      id: s.id,
+      name: s.name,
+      trackedAt: isoDate(s.createdAt),
+      status: isAuctionSaleStatus(s.status) ? s.status : "open",
+      platformName: s.platform.name,
+      openCount: counts.pending,
+      wonCount: counts.won,
+      lostCount: counts.lost,
+    };
+  });
+
+  return {
+    saleCount: sales.length,
+    lotCount,
+    wonCount,
+    lostCount,
+    cancelledCount,
+    winRate: auctionWinRate(wonCount, lostCount),
+    spent: sumMoney(spent, baseCurrency),
+    premiumTerms,
+    openCount,
+    exposure,
+    toReviewCount,
     rows,
   };
 }

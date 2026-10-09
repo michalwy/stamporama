@@ -294,9 +294,17 @@ export function AuctionLotsPanel({
   // It is the one switch that **widens** rather than narrows, which is why the band below never
   // announces it and why `lotNarrowings` returns nothing for it. *Clear filters* does turn it off,
   // on the Copies list's rule (#733): a reset puts the screen back to its default.
-  const [includeClosed, setIncludeClosed] = usePersistedFlag(
+  //
+  // A link may name it — `?includeClosed=1`, the parameter the request carries — and the address then
+  // wins over the remembered switch, like every filter here: a contact page's *Lots tracked* (#1709)
+  // counts closed lots too, and the list it opens has to hold them. Flipping the switch drops the
+  // parameter, so what is flipped is what is shown.
+  const [storedIncludeClosed, rememberIncludeClosed] = usePersistedFlag(
     `stamporama:auctions:includeClosed:${collectionId}`
   );
+  const includeClosed = searchParams.has("includeClosed")
+    ? searchParams.get("includeClosed") === "1"
+    : storedIncludeClosed;
 
   const filters: AuctionLotFilters = useMemo(
     () => ({
@@ -342,6 +350,14 @@ export function AuctionLotsPanel({
       router.push(`/c/${collectionSlug}/auctions${qs ? `?${qs}` : ""}`);
     },
     [router, collectionSlug, searchParams]
+  );
+
+  const setIncludeClosed = useCallback(
+    (next: boolean) => {
+      rememberIncludeClosed(next);
+      if (searchParams.has("includeClosed")) updateParams({ includeClosed: "" });
+    },
+    [rememberIncludeClosed, searchParams, updateParams]
   );
 
   const [localSearch, setLocalSearch] = useDebouncedSearch(search, (value) => {
@@ -509,7 +525,7 @@ export function AuctionLotsPanel({
     rememberTagIds("");
     rememberTagMode("");
     rememberToReview("");
-    setIncludeClosed(false);
+    rememberIncludeClosed(false);
     // The box holds its own debounced copy, so the input has to be told as well or it goes on
     // showing a phrase that is no longer narrowing anything.
     setLocalSearch("");
@@ -526,6 +542,7 @@ export function AuctionLotsPanel({
       [TAG_FILTER_PARAM]: "",
       [TAG_MODE_PARAM]: "",
       toReview: "",
+      includeClosed: "",
     });
   }, [
     rememberOutcome,
@@ -540,7 +557,7 @@ export function AuctionLotsPanel({
     rememberTagIds,
     rememberTagMode,
     rememberToReview,
-    setIncludeClosed,
+    rememberIncludeClosed,
     setLocalSearch,
     updateParams,
   ]);

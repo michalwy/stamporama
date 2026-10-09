@@ -593,7 +593,8 @@ address bar, so a filtered view can still be bookmarked or shared — and a link
 wins over what was remembered, so an address that names a filter means exactly what it says. The
 search box and the **Show closed** switch are remembered too, and so are the four that used to be
 forgotten on purpose: the **closing window**, the row of chips at the head of the bar, **Not
-described** and **Duplicate**.
+described** and **Duplicate**. A link can name **Show closed** as well — a contact's page does, to
+open the list on every lot of that seller — and flipping the switch then takes it out of the address.
 
 Those four were left out because they are jobs you go and do rather than the shape the list should
 keep having, and coming back tomorrow to a list still narrowed to them hides everything actually

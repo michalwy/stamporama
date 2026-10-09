@@ -654,16 +654,41 @@ Then one section for each part the contact plays:
   prices plus any handling they paid, before commission and your own shipping), the **copies sold**,
   the **last sale**'s date, and how many sales are **not yet paid** (*Ordered*) and **not yet sent**
   (anything before *Sent*).
+- **Auctions** (the contact as the **seller or auction house** you track auction sales with) — how
+  many **sales** and **lots** you tracked, how many lots you **won**, **lost** and saw **cancelled**,
+  your **win rate**, what you **spent on won lots**, and the **buyer's premium** on the sales. Under
+  them, what is **still running**: the **open lots**, what they have **committed** you to and what
+  they would cost **at ceiling** — the two figures the auction lots list states above its rows — and
+  how many lots are still **to review** after the assistant wrote them.
 
-Each section ends with the list of its purchases or sales in the period, and a row opens that
-purchase or sale.
+Each section ends with the list of its purchases, sales or auction sales in the period, and a row
+opens that purchase or sale. An auction sale's row says how many of its lots are open, won and lost.
 
 A section shows when the contact has the **role**, or when there is **something to show** for it — so
 a supplier created while recording a purchase, which has no roles yet, still shows its purchases.
-Switching the period never hides a section, only empties it.
+The auctions section is the one exception: the **Seller** role alone does not bring it, since most
+sellers are never bid with — an **Auction house**, or any seller with an auction sale tracked, has
+it. Switching the period never hides a section, only empties it.
+
+### Auctions on the page
+
+An auction sale belongs to the period it was **tracked** in, and all of its lots with it — so the
+sales listed and the figures above them always add up. The **open lots**, **committed**, **at
+ceiling** and **to review** figures are different: they are what is running **now**, whatever the
+period, and they match the auction lots list exactly.
+
+- The **win rate** is the lots you won out of the lots that closed **with your bid on them** — won
+  and lost. A lot you only watched, without bidding, and a cancelled one count as neither.
+- **Spent on won lots** is each won lot's hammer price with the sale's premium on it, plus each
+  sale's shipping **once** — what the sale's own screen states for the lots you won. It is in the base
+  currency at the rate recorded when each result was entered.
+- The **buyer's premium** lists the terms on the sales in the period. A sale takes them from the
+  contact when it is tracked, so if the terms changed, both are listed, newest first.
 
 **Every figure opens the list it counts**, narrowed to this contact: the purchases list by supplier,
 the sales list by buyer, and the not-delivered, not-paid and not-sent figures by those statuses too.
+An auctions figure opens the **auction lots list** for this seller — won, lost, cancelled or open on
+the matching outcome, and the totals with **Show closed** on, so the closed lots are there too.
 The lists are not narrowed to the period — they show everything with this contact. The date of the
 last purchase or sale opens that one.
 
