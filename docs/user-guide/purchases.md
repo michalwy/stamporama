@@ -1990,13 +1990,16 @@ large as your browser window, split into two equal halves:
 - Copies you **no longer hold** — sold, traded away, written off, never arrived — are not shown.
 
 **Your collection's copies, at a glance.** Under the line, the step also shows **thumbnails of the
-copies you hold in your collection** — only those: copies for sale, for trade, with no disposition or
-not filed yet are left to the line and the comparison. Each carries its condition chip, and its
+copies you hold in your collection**, followed by **the copies still being sorted** — often the other
+copy from the same stockbook, the one the piece in hand most needs comparing with. Those are marked
+*being sorted* under their chips, in the line's colour for them. Copies for sale, for trade, with no
+disposition, in the post or on their way are left to the line and the comparison, and the piece you
+are identifying is never one of the thumbnails. Each carries its condition chip, and its
 certificate chip when it has one; hover one to enlarge it, click it to open the comparison above
-**on that copy**, with the others still in its strip. Up to six are drawn, in your
-conditions' own order; beyond that **+N more** opens the comparison on all of them. A copy with no
+**on that copy**, with the others still in its strip. Up to six are drawn, your
+collection's first and each group in your conditions' own order; beyond that **+N more** opens the comparison on all of them. A copy with no
 photo shows the usual empty frame, so the number of thumbnails is the number of copies. With nothing
-in your collection, no thumbnails are drawn and the line reads as before.
+in your collection and nothing being sorted, no thumbnails are drawn and the line reads as before.
 
 It is **only for looking**. Nothing in the window changes anything, and nothing decides which copy is
 better: that call is yours. **Back to the identification** (or Escape) returns you to the step with

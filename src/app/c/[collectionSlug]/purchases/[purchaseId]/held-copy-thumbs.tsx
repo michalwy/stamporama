@@ -19,25 +19,32 @@ import {
   ConditionChip,
 } from "@/app/c/[collectionSlug]/shared/dictionary-chip";
 import type { CertificateStatusData } from "@/lib/certificate-statuses";
+import { COPY_BUCKET_COLOR } from "@/app/c/[collectionSlug]/wants/want-copy-counts";
 
 /** How many thumbnails the line draws before *+N more* takes over. */
 const SHOWN = 6;
 const THUMB_SIZE = "3.5rem";
 
 /**
- * The stamp's **in-collection** copies as thumbnails, under #562's line in *Set condition* (#1621).
+ * The stamp's **in-collection** copies as thumbnails, under #562's line in *Set condition* (#1621),
+ * followed by its copies **being sorted** (#1728).
  *
  * The line says *You hold 1: 1 in collection (MH)*, and the decision the step is taken for is
  * whether the piece in hand should take that copy's place — which a count and a condition code do
  * not settle, and #1207's comparison settles one click away. This puts the copies the piece would
  * replace in the box itself, so the glance answers most of it and the click is for the rest.
  *
- * **In-collection copies only**: copies for sale, for trade, with no disposition or not yet filed are
- * not what the piece competes with, and the line and the comparison still name them. The set is the
- * comparison's own query (same key, so opening it reads nothing again), narrowed to filed copies
- * carrying the in-collection marker — an in-flight copy carries no disposition, by #562's rule.
+ * **In-collection copies, then copies being sorted**: copies for sale, for trade, with no disposition,
+ * in the post or on their way are not what the piece competes with, and the line and the comparison
+ * still name them. A copy being sorted has no disposition yet (#562's rule), but working a large
+ * intake it is often the very copy the piece in hand has to be compared with — the other one from the
+ * same stockbook — so it is drawn too, after the in-collection ones and marked *being sorted* in the
+ * line's own hue for that clause. The set is the comparison's own query (same key, so opening it
+ * reads nothing again), narrowed to those two kinds. The piece itself is never among them: before it
+ * is saved it is no copy at all, and a re-identified tile's own copy is `excludeItemId`.
  *
- * Ordered as the comparison orders them, the collection's own condition order and then copy number:
+ * Ordered as the comparison orders them — in-collection before being sorted, and inside each the
+ * collection's own condition order and then copy number:
  * condition order is display order and not a quality scale (ADR-0032), so the first is the
  * collection's first condition rather than a claim that it is the best copy. A copy with no photo
  * draws the usual placeholder, so the number of thumbnails is the number of copies. Each opens the
@@ -68,7 +75,10 @@ export function HeldCopyThumbs({
   // Nothing while loading or on a failed read: the line above already says what is held, or that
   // it could not check, and an empty strip here is no claim either way.
   const copies = orderHeldCopyPictures(
-    (data ?? []).filter((copy) => copy.inCollection && heldCopyPlace(copy).kind === "held"),
+    (data ?? []).filter((copy) => {
+      const place = heldCopyPlace(copy);
+      return place.kind === "held" ? copy.inCollection : place.state === "to_sort";
+    }),
     conditions.map((c) => c.id)
   );
   if (copies.length === 0) return null;
@@ -93,7 +103,9 @@ export function HeldCopyThumbs({
           : undefined;
         const photo = copy.photos[0];
         const itemNo = formatItemNo(copy.itemNo, pad);
-        const label = `${itemNo} · ${condition?.name ?? "?"}`;
+        const place = heldCopyPlace(copy);
+        const sorting = place.kind === "inFlight" ? place.label : null;
+        const label = `${itemNo} · ${condition?.name ?? "?"}${sorting ? ` · ${sorting}` : ""}`;
         return (
           <div
             key={copy.id}
@@ -171,6 +183,19 @@ export function HeldCopyThumbs({
                 />
               )}
             </div>
+            {sorting && (
+              <span
+                style={{
+                  fontSize: "0.625rem",
+                  lineHeight: 1.1,
+                  textAlign: "center",
+                  fontWeight: 500,
+                  color: COPY_BUCKET_COLOR.to_sort,
+                }}
+              >
+                {sorting}
+              </span>
+            )}
           </div>
         );
       })}
