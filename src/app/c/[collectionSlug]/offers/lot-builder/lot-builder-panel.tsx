@@ -131,6 +131,24 @@ const STEP_FIELD_LABEL: React.CSSProperties = {
   color: "var(--color-text-primary)",
 };
 
+/** Several small choices side by side in one step's frame (#1732), as wide as the frame at most. */
+const STEP_FIELD_ROW: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "1.5rem",
+  maxWidth: "100%",
+  minWidth: 0,
+};
+
+/** One choice in a `STEP_FIELD_ROW`: its label above its control, as a step on its own has them. */
+const STEP_FIELD_CELL: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: "0.5rem",
+  minWidth: 0,
+};
+
 /** The template fields' input, minus the full width and the monospace a template is written in. */
 const STEP_SELECT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -913,50 +931,59 @@ export function LotBuilderPanel({
               description="Same engine as a platform's description template, over this lot's copies."
               emptyPreview="This platform's own description template renders instead."
             />
-            {/* The group a Facebook lot is offered in (#1663), starting on the last one used there.
-                The server types and prices the offer from it — auction or quick buy (#1671), starting
-                price, increment, currency — exactly as the offer form does, and an auction's closing
-                time is worked out here from its length.
+            {/* **Where and how the lot is sold, in one section on one line** (#1732): two small
+                choices used to take two full-width frames. Framed, labelled and spaced as the two
+                templates above it are (#1669), each label above its own select — the criteria bands'
+                small `Field` label read as a stray control glued to the button below.
 
-                Framed, labelled and spaced as the two templates above it are (#1669): the criteria
-                bands' small `Field` label read as a stray control glued to the button below. */}
-            {facebook.isFacebook && (
-              <div style={STEP_FIELD}>
-                <label htmlFor="lot-facebook-group" style={STEP_FIELD_LABEL}>
-                  Facebook group
-                </label>
-                <FacebookGroupSelect
-                  id="lot-facebook-group"
-                  groups={facebook.groups}
-                  value={facebook.groupId}
-                  onChange={facebook.choose}
-                  style={STEP_SELECT_STYLE}
-                />
-              </div>
-            )}
-            {/* How the offer is sold (#1688), starting on what it would be anyway — the group's type
-                on Facebook, the platform's default elsewhere — so a preset can keep a kind of lot
-                that is always a quick buy. The offer form's own field, under the step's frame. */}
+                The group a Facebook lot is offered in (#1663) comes first, starting on the last one
+                used there. The server types and prices the offer from it — auction or quick buy
+                (#1671), starting price, increment, currency — exactly as the offer form does, and an
+                auction's closing time is worked out here from its length. It is the one that shrinks:
+                a long name is ellipsised and shown whole in its hint.
+
+                Beside it, how the offer is sold (#1688), starting on what it would be anyway — the
+                group's type on Facebook, the platform's default elsewhere — so a preset can keep a
+                kind of lot that is always a quick buy. The offer form's own field. On a platform
+                without groups it stands alone here. */}
             <div style={STEP_FIELD}>
-              <label htmlFor="lot-listing-type" style={STEP_FIELD_LABEL}>
-                Listing type
-              </label>
-              <select
-                id="lot-listing-type"
-                value={listingType ?? ""}
-                onChange={(e) =>
-                  patchCriteria({ listingType: normalizeListingType(e.currentTarget.value) })
-                }
-                style={STEP_SELECT_STYLE}
-              >
-                {/* On Facebook with no group yet there is nothing for the type to follow. */}
-                {listingType === null && <option value="">As the group says</option>}
-                {OFFER_LISTING_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {OFFER_LISTING_TYPE_LABEL[t]}
-                  </option>
-                ))}
-              </select>
+              <div style={STEP_FIELD_ROW}>
+                {facebook.isFacebook && (
+                  <div style={{ ...STEP_FIELD_CELL, flex: "0 1 auto" }}>
+                    <label htmlFor="lot-facebook-group" style={STEP_FIELD_LABEL}>
+                      Facebook group
+                    </label>
+                    <FacebookGroupSelect
+                      id="lot-facebook-group"
+                      groups={facebook.groups}
+                      value={facebook.groupId}
+                      onChange={facebook.choose}
+                      style={STEP_SELECT_STYLE}
+                    />
+                  </div>
+                )}
+                <div style={{ ...STEP_FIELD_CELL, flex: "0 0 auto" }}>
+                  <label htmlFor="lot-listing-type" style={STEP_FIELD_LABEL}>
+                    Listing type
+                  </label>
+                  <select
+                    id="lot-listing-type"
+                    value={listingType ?? ""}
+                    onChange={(e) =>
+                      patchCriteria({ listingType: normalizeListingType(e.currentTarget.value) })
+                    }
+                    style={STEP_SELECT_STYLE}
+                  >
+                    {/* On Facebook with no group yet there is nothing for the type to follow. */}
+                    {listingType === null && <option value="">As the group says</option>}
+                    {OFFER_LISTING_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {OFFER_LISTING_TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
             <div
               style={{
