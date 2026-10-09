@@ -36,6 +36,12 @@ import {
   type HoldingsCostInput,
 } from "./cost-basis";
 import { intakeDocumentName } from "./purchase-kind";
+import { loadCostEstimates } from "./cost-estimates";
+import {
+  estimateWeightBase,
+  type CostEstimateGap,
+  type EstimateCopy,
+} from "./purchase-allocation";
 import {
   isUnknownVariantStamp,
   subtypeLabel,
@@ -706,7 +712,7 @@ export async function getItemListItem(
     where: { id: itemId },
     select: ITEM_LIST_SELECT,
   });
-  const [item] = await enrichItemRows(collectionId, [row]);
+  const [item] = await withCostEstimates(collectionId, await enrichItemRows(collectionId, [row]));
   return item;
 }
 
@@ -1754,6 +1760,13 @@ export interface ItemListItem {
   disposalNote: string | null;
   /** Base-currency cost-basis snapshot (ADR-0009), or null when pending. */
   costBasis: string | null;
+  /** While the cost basis is **pending**, what this copy is estimated to cost (#1696): its share of
+   *  the open lot's pool by catalogue value, base currency, 2 dp — the figure its purchase order
+   *  shows. Never a cost basis, and never added into a total. Null when the copy is not pending, or
+   *  when `costEstimateGap` says why there is no estimate. */
+  costEstimate: string | null;
+  /** Why a pending copy has no estimate, or null. */
+  costEstimateGap: CostEstimateGap | null;
   notes: string | null;
   /** Assignable storage location this copy is filed in (#56), or null. The display
    * name/path is resolved client-side from the collection's locations list. */
@@ -2083,6 +2096,9 @@ function toItemListItem(
     disposalReason: row.disposalReason,
     disposalNote: row.disposalNote,
     costBasis: row.costBasis == null ? null : row.costBasis.toString(),
+    // Filled in by `withCostEstimates`, which reads each open lot whole (#1696).
+    costEstimate: null,
+    costEstimateGap: null,
     notes: row.notes,
     locationId: row.locationId,
     locationRef: row.locationRef,
@@ -2183,6 +2199,32 @@ async function enrichItemRows(
   );
 }
 
+/** A copy as the live cost estimate weighs it (#172, #1696). */
+function estimateCopyOf(item: ItemListItem): EstimateCopy {
+  return { deliveryState: item.deliveryState, weight: item.value.baseAmount };
+}
+
+/** The pending copies' estimated cost (#1696), on the readers that show a copy's cost basis outside
+ * its purchase order — the copy's page, the copies list, and every picker drawn from it. The intake
+ * reads leave it out: the purchase order works the same figure out on the screen from its own lot
+ * summary, and reading every open lot whole again inside that summary would value it twice. */
+async function withCostEstimates(
+  collectionId: string,
+  items: ItemListItem[]
+): Promise<ItemListItem[]> {
+  const estimates = await loadCostEstimates(collectionId, items);
+  if (estimates.size === 0) return items;
+  return items.map((item) => {
+    const estimate = estimates.get(item.id);
+    if (!estimate) return item;
+    return {
+      ...item,
+      costEstimate: estimate.amount != null ? estimate.amount.toFixed(2) : null,
+      costEstimateGap: estimate.gap,
+    };
+  });
+}
+
 /** Paginated, enriched copy list for the Copies screen. Filters by disposition flags,
  * condition, and certificate status; sorts by added or acquired date; offset-paginated
  * to feed the shared infinite-scroll primitive (mirrors `listStampsPaginated`). */
@@ -2275,7 +2317,7 @@ export async function listItemsPaginated(
 
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
-  const items = await enrichItemRows(collectionId, page);
+  const items = await withCostEstimates(collectionId, await enrichItemRows(collectionId, page));
 
   const nextCursor = hasMore ? String(offset + pageSize) : null;
   return { items, nextCursor };
@@ -3629,11 +3671,7 @@ export async function getLotIntakeSummary(
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
 
   const staying = all.filter((i) => i.deliveryState !== "not_delivered");
-  const estimateWeightBase = staying.reduce(
-    (sum, i) =>
-      sum + (i.value.baseAmount != null && i.value.baseAmount > 0 ? i.value.baseAmount : 0),
-    0
-  );
+  const weightBase = estimateWeightBase(all.map(estimateCopyOf));
 
   const matching = all.filter((i) => matchesIntakeFilters(i, filters));
 
@@ -3644,7 +3682,7 @@ export async function getLotIntakeSummary(
     unsortedCount: all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState)).length,
     blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
     noPhotoCount: all.filter((i) => i.photos.length === 0).length,
-    estimateWeightBase,
+    estimateWeightBase: weightBase,
     derivedLabel: deriveLotLabel(all, maps),
     groupTree: buildGroupTree(matching, filters, areas),
     holdings: summarizeHoldings(
@@ -3726,14 +3764,8 @@ export async function getPurchaseIntakeSummary(
   // same copy shows unfiltered.
   const lotWeightBase: Record<string, number> = {};
   for (const it of all) {
-    if (
-      it.lotId &&
-      it.deliveryState !== "not_delivered" &&
-      it.value.baseAmount != null &&
-      it.value.baseAmount > 0
-    ) {
-      lotWeightBase[it.lotId] = (lotWeightBase[it.lotId] ?? 0) + it.value.baseAmount;
-    }
+    if (!it.lotId) continue;
+    lotWeightBase[it.lotId] = (lotWeightBase[it.lotId] ?? 0) + estimateWeightBase([estimateCopyOf(it)]);
   }
   const matching = all.filter((i) => matchesIntakeFilters(i, filters));
 
@@ -4059,43 +4091,9 @@ async function isDescendantStamp(
 // Copy valuation (ADR-0007 §7) lives in `item-valuation.ts`, below both this module and
 // `market-values.ts` so the two can share it without importing each other. Re-exported here
 // because every existing caller reaches it through `items.ts`.
-export { valuateItemRows, type ValuationRow } from "./item-valuation";
-
-/** Value a set of copies by id, resolving each copy's condition, certificate, and
- * unknown-variant flag from the database, then applying the same primary-catalog
- * price-for-condition×certificate rule the Copies screen uses. Returned as id →
- * valuation; ids not found are simply absent. The lot-close flow (#121) reads
- * `baseAmount` off each valuation as the allocation weight (ADR-0009 §3.3). Caller
- * must have already asserted collection ownership. */
-export async function valuateItemsByIds(
-  collectionId: string,
-  itemIds: string[]
-): Promise<Map<string, CopyValuation>> {
-  if (itemIds.length === 0) return new Map();
-  const rows = await prisma.item.findMany({
-    where: { id: { in: itemIds }, collectionId },
-    select: {
-      id: true,
-      stampId: true,
-      conditionId: true,
-      certificateStatusId: true,
-      formatId: true,
-      ...COPY_VALUATION_SELECT,
-      stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
-    },
-  });
-  const valuationRows: ValuationRow[] = rows.map((row) => ({
-    id: row.id,
-    stampId: row.stampId,
-    conditionId: row.conditionId,
-    certificateStatusId: row.certificateStatusId,
-    formatId: row.formatId,
-    unknownVariant:
-      isUnknownVariantStamp(row.stamp),
-    ...copyValuationOf(row),
-  }));
-  return valuateItemRows(collectionId, valuationRows);
-}
+// `valuateItemsByIds` moved there too (#1696), so the cost-estimate read can value a lot's copies
+// without importing this module back.
+export { valuateItemRows, valuateItemsByIds, type ValuationRow } from "./item-valuation";
 
 /** Aggregate holdings valuation over every copy matching the given filters (the whole
  * filtered set, not one page). Mirrors the disposition/condition/certificate filters of

@@ -12,6 +12,7 @@ import {
   type CertColumn,
 } from "./price-matrix";
 import type { StampPurchaseCost, StampPurchaseCosts } from "@/lib/purchase-costs";
+import { COST_ESTIMATE_STYLE } from "./cost-estimate-text";
 
 // **What I paid** — the Valuation dialog's third answer (#560), between what the market paid (#457)
 // and what the catalogues list.
@@ -28,9 +29,13 @@ import type { StampPurchaseCost, StampPurchaseCosts } from "@/lib/purchase-costs
 //
 // **The figures are over the priced copies only.** A copy in a still-open purchase lot has no final
 // cost basis (#123; ADR-0009 §5) — its share of the lot's pool is not settled — and a copy added by
-// hand never had one. Neither is averaged in at nothing, and neither is guessed at. They are
-// counted, on their own line under the figure, which is why a cell can carry counts and no figure at
-// all: "two of these, cost not settled yet" is an answer, and an empty cell would say "none held".
+// hand never had one. Neither is averaged in at nothing. They are counted, on their own line under
+// the figure, which is why a cell can carry counts and no figure at all: "two of these, cost not
+// settled yet" is an answer, and an empty cell would say "none held".
+//
+// The pending ones carry their **estimate** beside their count (#1696) — the average of what their
+// purchase orders estimate them at, marked `~` in muted italic — and, in a cell with no priced copy,
+// in the figure's place. It stays beside the average and never enters it.
 //
 // Neither toolbar toggle reaches this section, on market value's reasoning exactly: a cost basis is
 // frozen in the collection's own currency when the lot closes, and it belongs to an order rather
@@ -90,6 +95,19 @@ function CostDetails({ cell }: { cell: StampPurchaseCost }) {
             <span style={{ color: "var(--color-warning)" }}>{cell.pendingCount}</span>
           </DetailRow>
         )}
+        {cell.pendingEstimate !== null && (
+          <DetailRow
+            label={
+              cell.pendingEstimatedCount < cell.pendingCount
+                ? `Estimated (${cell.pendingEstimatedCount} of ${cell.pendingCount} pending)`
+                : "Estimated (pending)"
+            }
+          >
+            <span style={COST_ESTIMATE_STYLE}>
+              ~{cell.pendingEstimate} {cell.baseCurrency}
+            </span>
+          </DetailRow>
+        )}
         {cell.noneCount > 0 && <DetailRow label="No cost recorded">{cell.noneCount}</DetailRow>}
         {cell.latestPurchasedAt && (
           <DetailRow label="Last bought">{day(cell.latestPurchasedAt)}</DetailRow>
@@ -99,7 +117,8 @@ function CostDetails({ cell }: { cell: StampPurchaseCost }) {
       {cell.pendingCount > 0 && (
         <span style={{ color: "var(--color-text-muted)" }}>
           A copy on a still-open purchase lot has no final cost yet — it is counted here, never
-          averaged in. Closing the lot settles it.
+          averaged in, and its share of the lot as its purchase order estimates it is shown beside
+          the count. Closing the lot settles it.
         </span>
       )}
     </div>
@@ -114,8 +133,11 @@ function CountLine({ cell }: { cell: StampPurchaseCost }) {
   if (cell.knownCount > 0) parts.push(<span key="known">{cell.knownCount} priced</span>);
   if (cell.pendingCount > 0)
     parts.push(
-      <span key="pending" style={{ color: "var(--color-warning)" }}>
-        {cell.pendingCount} pending
+      <span key="pending">
+        <span style={{ color: "var(--color-warning)" }}>{cell.pendingCount} pending</span>
+        {cell.pendingEstimate !== null && (
+          <span style={COST_ESTIMATE_STYLE}> ~{cell.pendingEstimate}</span>
+        )}
       </span>
     );
   if (cell.noneCount > 0) parts.push(<span key="none">{cell.noneCount} no cost</span>);
@@ -136,7 +158,13 @@ function CostCell({ cell }: { cell: StampPurchaseCost }) {
   return (
     <Tooltip content={<CostDetails cell={cell} />} placement="top" align="end" maxWidth="24rem">
       <span style={{ display: "inline-block" }}>
-        {cell.average === null ? (
+        {cell.average === null && cell.pendingEstimate !== null ? (
+          // No settled cost, but pending copies with an estimate (#1696): the estimate in the
+          // figure's place, marked as one.
+          <div style={{ ...numStyle, ...COST_ESTIMATE_STYLE }}>
+            ~{cell.pendingEstimate} {cell.baseCurrency}
+          </div>
+        ) : cell.average === null ? (
           // Held copies, no settled cost — a dash on the figure line and the counts below saying
           // why. Never a zero: zero is a price, and "not yet known" is not one.
           <div style={{ ...numStyle, color: "var(--color-text-muted)" }}>—</div>

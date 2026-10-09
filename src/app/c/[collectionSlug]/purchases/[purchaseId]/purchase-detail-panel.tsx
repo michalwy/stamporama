@@ -58,6 +58,7 @@ import {
   type CostToCatalogLot,
   type LotCatalogBasis,
 } from "@/lib/cost-to-catalog";
+import { estimateCopyCost } from "@/lib/purchase-allocation";
 import {
   EMPTY_SELECTION,
   containerBoxState,
@@ -2434,19 +2435,21 @@ function costToCatalogLot(lot: LotSummary, basis: LotCatalogBasis | undefined): 
 
 /** A copy's live cost-basis estimate for an open lot: its share of the base-currency pool by
  * catalog-price weight, using the whole-lot weight denominator from the summary (#172). Never
- * persisted — the real snapshot is frozen on close. Null when the lot is closed, no FX rate is
- * known, or the copy carries no positive weight / was not delivered. */
+ * persisted — the real snapshot is frozen on close. The arithmetic is `estimateCopyCost`, the one
+ * the copy's own page and the copies list read theirs by (#1696). Null when the lot is closed, no
+ * FX rate is known, or the copy carries no positive weight / was not delivered. */
 function estimateFor(
   item: ItemListItem,
   poolBase: number | null,
   weightBase: number,
   open: boolean
 ): number | null {
-  if (!open || poolBase == null || weightBase <= 0) return null;
-  if (item.deliveryState === "not_delivered") return null;
-  const w = item.value.baseAmount;
-  if (w == null || w <= 0) return null;
-  return Math.round(((poolBase * w) / weightBase) * 100) / 100;
+  if (!open) return null;
+  return estimateCopyCost(
+    { deliveryState: item.deliveryState, weight: item.value.baseAmount },
+    poolBase,
+    weightBase
+  ).amount;
 }
 
 /** The plain-text controls in the selection action bar (#565) — "select all matching", "clear".

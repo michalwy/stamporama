@@ -385,9 +385,14 @@ copy's share is frozen in your **base currency**.
 On a copy's row the cost-basis shows as:
 
 - **cost 12.34 EUR** — the frozen amount, once the copy's purchase lot has been closed.
-- **cost pending** — the copy belongs to a purchase lot that is still **open**; its
-  cost-basis is frozen only when you close the lot (see
-  [Closing a lot](purchases.md#closing-a-lot)).
+- ***~4.00 EUR*** — the copy belongs to a purchase lot that is still **open**, so its cost-basis
+  is not settled yet; this is its **estimated** cost, the same figure its purchase order shows: its
+  share of the lot's cost by catalog value. The `~` and the muted italics mark it as an estimate. It
+  becomes the cost-basis when you close the lot (see [Closing a lot](purchases.md#closing-a-lot)),
+  and no total counts it in the meantime — a total still counts the copy as *pending*.
+- **cost pending** — the copy is on an open lot, but no estimate can be made: it has no catalog
+  value to share the lot's cost by, its purchase has no exchange rate to your base currency, or it
+  was marked *not delivered* and so leaves the split. Hover it for which.
 - *nothing* — the copy has no cost-basis: you added it by hand rather than through a
   purchase, or it was marked *not delivered* and dropped from its lot.
 
@@ -409,7 +414,9 @@ shows three figures, all in your base currency:
 A figure that cannot be worked out says so instead of showing a number: **No exchange rate** when
 no rate to your base currency is known for the sale, **Cannot be split** when a copy in the same set
 has no catalog price, **Pending** or **None recorded** for the cost basis — and then the profit reads
-**Cannot be computed**. Hover any of them for the reason. See [profit and
+**Cannot be computed**. A cost basis still pending on an open lot shows the copy's **estimated** cost
+in its place, marked `~`, as the copy's row does; the profit is still not worked out from it, because
+an estimate is not what the copy cost. Hover any of them for the reason. See [profit and
 loss](sales.md#profit-and-loss) for how the sale itself adds up.
 
 ### Going to a copy's purchase

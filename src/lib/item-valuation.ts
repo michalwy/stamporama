@@ -20,7 +20,7 @@ import {
   valuateExplicitValue,
   type CopyValuation,
 } from "./valuation";
-import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
+import { childIsVariant, isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 
 // Split out of `items.ts` so that **market** valuation can reuse it without the two modules
 // importing each other: `market-values.ts` values a lot's lines with the very same rule a copy is
@@ -306,4 +306,40 @@ export async function valuateItemRows(
       rates,
     });
   }
+}
+
+/** Value a set of copies by id, resolving each copy's condition, certificate, and
+ * unknown-variant flag from the database, then applying the same primary-catalog
+ * price-for-condition×certificate rule the Copies screen uses. Returned as id →
+ * valuation; ids not found are simply absent. The lot-close flow (#121) reads
+ * `baseAmount` off each valuation as the allocation weight (ADR-0009 §3.3). Caller
+ * must have already asserted collection ownership. */
+export async function valuateItemsByIds(
+  collectionId: string,
+  itemIds: string[]
+): Promise<Map<string, CopyValuation>> {
+  if (itemIds.length === 0) return new Map();
+  const rows = await prisma.item.findMany({
+    where: { id: { in: itemIds }, collectionId },
+    select: {
+      id: true,
+      stampId: true,
+      conditionId: true,
+      certificateStatusId: true,
+      formatId: true,
+      ...COPY_VALUATION_SELECT,
+      stamp: { select: { parentId: true, variants: { select: VARIANT_FLAG_SELECT } } },
+    },
+  });
+  const valuationRows: ValuationRow[] = rows.map((row) => ({
+    id: row.id,
+    stampId: row.stampId,
+    conditionId: row.conditionId,
+    certificateStatusId: row.certificateStatusId,
+    formatId: row.formatId,
+    unknownVariant:
+      isUnknownVariantStamp(row.stamp),
+    ...copyValuationOf(row),
+  }));
+  return valuateItemRows(collectionId, valuationRows);
 }

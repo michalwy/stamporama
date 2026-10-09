@@ -2023,7 +2023,9 @@ from the current copies and their catalog prices. It updates as you add, remove,
 copies, and is **not** saved; the real cost-basis is frozen only when the lot closes. A copy
 with no catalog price (or a purchase with no base-currency rate) shows `cost —` until that is
 resolved. The estimate is always computed over the **whole lot**, so it stays accurate no
-matter how many copies the lot holds or how far you have scrolled.
+matter how many copies the lot holds or how far you have scrolled. The same estimate is what the
+copy's own page, the Copies list and the Valuation dialog's **What I paid** show while the lot is
+open (see [Cost-basis](inventory.md#cost-basis)).
 
 **Which card a copy came off.** A copy identified from a [card scan](#card-scans) names that scan
 on its row, by the card's own name — or by `Batch 3` where the card has not been named. A large

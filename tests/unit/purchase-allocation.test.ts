@@ -6,6 +6,11 @@ import {
   allocateLot,
   estimateLot,
   closeLot,
+  canExpressInBase,
+  estimateCopyCost,
+  estimateWeightBase,
+  lotPoolBase,
+  purchaseCostsOf,
   LotCloseBlockedError,
   type PurchaseCosts,
   type LotItem,
@@ -329,5 +334,112 @@ describe("estimateLot — live open-lot estimate", () => {
       { itemId: "a", costBasis: null },
       { itemId: "b", costBasis: null },
     ]);
+  });
+});
+
+// The estimate every screen states for an open-lot copy (#172, #1696) --------
+
+describe("estimateWeightBase — the whole lot's denominator", () => {
+  it("sums positive weights over staying copies only", () => {
+    assert.equal(
+      estimateWeightBase([
+        { deliveryState: "delivered", weight: 30 },
+        { deliveryState: "in_transit", weight: 10 },
+        { deliveryState: "damaged", weight: 5 },
+        { deliveryState: "not_delivered", weight: 100 },
+        { deliveryState: "delivered", weight: null },
+        { deliveryState: "delivered", weight: 0 },
+        { deliveryState: "delivered", weight: -4 },
+      ]),
+      45
+    );
+  });
+});
+
+describe("estimateCopyCost — a copy's live share of its open lot", () => {
+  it("is the pool split by catalogue weight, to the cent", () => {
+    assert.deepEqual(estimateCopyCost({ deliveryState: "delivered", weight: 1 }, 100, 3), {
+      amount: 33.33,
+      gap: null,
+    });
+    assert.deepEqual(estimateCopyCost({ deliveryState: "damaged", weight: 2 }, 100, 3), {
+      amount: 66.67,
+      gap: null,
+    });
+  });
+
+  it("says why there is none", () => {
+    assert.deepEqual(estimateCopyCost({ deliveryState: "not_delivered", weight: 5 }, 100, 10), {
+      amount: null,
+      gap: "not_delivered",
+    });
+    assert.deepEqual(estimateCopyCost({ deliveryState: "delivered", weight: 5 }, null, 10), {
+      amount: null,
+      gap: "no_rate",
+    });
+    assert.deepEqual(estimateCopyCost({ deliveryState: "delivered", weight: null }, 100, 10), {
+      amount: null,
+      gap: "no_catalog_value",
+    });
+    assert.deepEqual(estimateCopyCost({ deliveryState: "delivered", weight: 0 }, 100, 10), {
+      amount: null,
+      gap: "no_catalog_value",
+    });
+  });
+
+  it("equals the close snapshot once every staying copy is priced", () => {
+    const copies = [
+      { id: "a", deliveryState: "delivered" as const, weight: 2 },
+      { id: "b", deliveryState: "delivered" as const, weight: 6 },
+      { id: "gone", deliveryState: "not_delivered" as const, weight: 9 },
+    ];
+    const weightBase = estimateWeightBase(copies);
+    const allocation = allocateLot(
+      80,
+      copies.map((c) => item(c.id, c.weight, c.deliveryState))
+    );
+    for (const snap of allocation.snapshots) {
+      const copy = copies.find((c) => c.id === snap.itemId)!;
+      assert.equal(estimateCopyCost(copy, 80, weightBase).amount, snap.costBasis);
+    }
+  });
+});
+
+describe("lotPoolBase — the pool an open lot is estimated from", () => {
+  const costs = purchaseCostsOf({
+    shippingCost: "10.00",
+    fxRateToBase: "4",
+    lots: [
+      { id: "l1", price: "30.00" },
+      { id: "l2", price: null },
+    ],
+    expenses: [{ id: "e1", price: "10.00" }],
+  });
+
+  it("reads stored money, a valueless lot weighing nothing in the shipping split", () => {
+    assert.deepEqual(costs, {
+      shippingCost: 10,
+      fxRateToBase: 4,
+      lots: [
+        { id: "l1", price: 30 },
+        { id: "l2", price: 0 },
+      ],
+      expenses: [{ id: "e1", price: 10 }],
+    });
+  });
+
+  it("is the lot's pool in the base currency", () => {
+    assert.equal(lotPoolBase(costs, "l1", { valued: true, canExpressBase: true }), 150);
+  });
+
+  it("is null for a lot with no value or a purchase with no rate", () => {
+    assert.equal(lotPoolBase(costs, "l2", { valued: false, canExpressBase: true }), null);
+    assert.equal(lotPoolBase(costs, "l1", { valued: true, canExpressBase: false }), null);
+  });
+
+  it("can state a purchase in the base currency with a rate, or in that currency itself", () => {
+    assert.equal(canExpressInBase(4, "EUR", "PLN"), true);
+    assert.equal(canExpressInBase(null, "PLN", "PLN"), true);
+    assert.equal(canExpressInBase(null, "EUR", "PLN"), false);
   });
 });

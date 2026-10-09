@@ -262,3 +262,95 @@ export function closeLot(
 ): LotAllocation {
   return allocateLot(computeLotPool(costs, lotId).poolBase, items);
 }
+
+// ── The pool an open lot shows, and a copy's live share of it (#172, #1696) ───────────────────
+// The purchase order states each open-lot copy's estimated cost, and the copy's own page, the
+// copies list and the Valuation dialog state the same figure (#1696). They are one computation in
+// one place, so the screens can never disagree about what a copy is estimated to cost.
+
+/** A purchase's money as the purchase row stores it — Decimals or numbers, nulls where a column
+ * is optional — ready for {@link purchaseCostsOf}. */
+export interface StoredPurchaseCosts {
+  shippingCost: unknown;
+  fxRateToBase: unknown;
+  lots: readonly { id: string; price: unknown }[];
+  expenses: readonly { id: string; price: unknown }[];
+}
+
+/** The engine's input off a stored purchase. A lot with no value weighs nothing in the shipping
+ * split — and only an opening balance has one, which carries no shipping to split anyway (#1323). */
+export function purchaseCostsOf(row: StoredPurchaseCosts): PurchaseCosts {
+  return {
+    shippingCost: row.shippingCost != null ? Number(row.shippingCost) : 0,
+    lots: row.lots.map((l) => ({ id: l.id, price: l.price == null ? 0 : Number(l.price) })),
+    expenses: row.expenses.map((e) => ({ id: e.id, price: Number(e.price) })),
+    fxRateToBase: row.fxRateToBase != null ? Number(row.fxRateToBase) : null,
+  };
+}
+
+/** Whether a purchase's amounts can be stated in the base currency: a rate is frozen, or the
+ * transaction currency **is** the base currency (an implicit 1:1 rate — `fxRateToBase` is
+ * deliberately left null then). Only a genuinely unknown cross-currency rate says no. */
+export function canExpressInBase(
+  fxRateToBase: number | null,
+  currency: string,
+  baseCurrency: string
+): boolean {
+  return fxRateToBase != null || currency === baseCurrency;
+}
+
+/** A lot's pool in the base currency, or null when the lot has no value to split (#1323) or the
+ * purchase has no rate into the base currency. */
+export function lotPoolBase(
+  costs: PurchaseCosts,
+  lotId: string,
+  opts: { valued: boolean; canExpressBase: boolean }
+): number | null {
+  if (!opts.valued || !opts.canExpressBase) return null;
+  return computeLotPool(costs, lotId).poolBase;
+}
+
+/** A copy as the live estimate weighs it: its delivery state and its base-currency catalogue
+ * value (null when it has none). */
+export interface EstimateCopy {
+  deliveryState: string;
+  weight: number | null;
+}
+
+/** The estimate's denominator: Σ positive weight over the lot's staying copies. A property of the
+ * **whole** lot, never of a filtered view — or one copy would show a different estimate depending
+ * on what else the list was showing. */
+export function estimateWeightBase(copies: readonly EstimateCopy[]): number {
+  return copies.reduce(
+    (sum, c) =>
+      c.deliveryState !== "not_delivered" && c.weight != null && c.weight > 0
+        ? sum + c.weight
+        : sum,
+    0
+  );
+}
+
+/** Why an open-lot copy has no estimate: it was not delivered (it leaves the split, and its share
+ * goes to the others), its purchase has no rate into the base currency, or it has no catalogue
+ * value to share the pool by. */
+export type CostEstimateGap = "not_delivered" | "no_rate" | "no_catalog_value";
+
+export type CostEstimate =
+  | { amount: number; gap: null }
+  | { amount: null; gap: CostEstimateGap };
+
+/** A copy's live cost-basis estimate for an open lot: its share of the base-currency pool by
+ * catalogue weight against the whole lot's {@link estimateWeightBase}, to the cent. Never
+ * persisted — the real snapshot is frozen on close (`allocateLot`), and equals this once every
+ * staying copy is priced. `poolBase` is null when the purchase has no rate into the base currency. */
+export function estimateCopyCost(
+  copy: EstimateCopy,
+  poolBase: number | null,
+  weightBase: number
+): CostEstimate {
+  if (copy.deliveryState === "not_delivered") return { amount: null, gap: "not_delivered" };
+  if (poolBase == null) return { amount: null, gap: "no_rate" };
+  const w = copy.weight;
+  if (w == null || w <= 0 || weightBase <= 0) return { amount: null, gap: "no_catalog_value" };
+  return { amount: Math.round(((poolBase * w) / weightBase) * 100) / 100, gap: null };
+}
