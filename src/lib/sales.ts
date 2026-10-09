@@ -773,7 +773,7 @@ export async function updateSaleShipping(
  * mutually-exclusive anchors and its gross (#205). Total-anchored handling is derived as
  * `total − gross` and clamped at 0 — the allocation engine requires non-negative shared amounts, and
  * a total below the offer prices is an error state surfaced separately (`totalBelowGross`). */
-function resolveBuyerHandling(
+export function resolveBuyerHandling(
   buyerHandling: Prisma.Decimal | null,
   buyerPaidTotal: Prisma.Decimal | null,
   gross: number
@@ -1490,6 +1490,8 @@ function toSaleListItem(
 
 export interface SaleListFilters {
   platformId?: string;
+  /** One buyer (#1708) — what a contact page's sales figures open the list on. */
+  buyerId?: string;
   /** Fulfillment statuses (#191) to narrow to, for the list's status chips (#392). OR-matched;
    * empty or absent means every status. The chips became mutually exclusive again in #972
    * (reversing #475), but the filter stays a **set**: a link or a remembered value written while
@@ -1547,6 +1549,7 @@ export async function listSalesPaginated(
     where: {
       collectionId,
       ...(filters.platformId ? { platformId: filters.platformId } : {}),
+      ...(filters.buyerId ? { buyerId: filters.buyerId } : {}),
       ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
       ...(filters.search ? saleSearchWhere(filters.search) : {}),
       // One line is enough to put the sale on the list (#697): the collector is looking for parcels

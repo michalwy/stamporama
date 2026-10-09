@@ -147,6 +147,9 @@ export interface PurchaseListFilters {
   /** Status. A delivery status narrows to purchases (an opening balance has none); *Completed* is
    *  the one an opening balance shares, so it answers for both kinds (#1461). */
   status?: PurchaseStatus;
+  /** Several statuses, any of them (#1708) — the list's link from a contact page names *Preparing*
+   *  and *In transit* together. ANDed with {@link status} where both are given. */
+  statuses?: PurchaseStatus[];
   contactId?: string;
   /** Platforms (#1392), any of them — {@link INTAKE_PARTY_NONE} for documents recorded without one,
    *  which includes every opening balance. Empty or absent is no filter. */
@@ -336,6 +339,7 @@ function buildPurchaseListWhere(
     AND: [
       filters.type ? documentTypeWhere(filters.type) : {},
       filters.status ? statusWhere(filters.status) : {},
+      filters.statuses?.length ? { OR: filters.statuses.map(statusWhere) } : {},
       filters.kind ? { kind: filters.kind } : {},
       partyWhere("platformId", filters.platformIds),
       partyWhere("contactId", filters.supplierIds),

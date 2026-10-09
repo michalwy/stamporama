@@ -22,8 +22,9 @@ export async function GET(
 
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
-  const statusParam = sp.get("status");
-  const status = isPurchaseStatus(statusParam) ? statusParam : undefined;
+  // A comma-separated set (#1708), any of them; an unrecognised status is dropped rather than
+  // refused, as the sales route drops one.
+  const statuses = (sp.get("status") || "").split(",").filter(isPurchaseStatus);
   const typeParam = sp.get("type");
   const type = isIntakeDocumentType(typeParam) ? typeParam : undefined;
   const contactId = sp.get("contactId") || undefined;
@@ -42,7 +43,7 @@ export async function GET(
     const result = await listPurchasesPaginated(session.user.id, collectionId, {
       offset,
       type,
-      status,
+      statuses,
       contactId,
       platformIds,
       supplierIds,

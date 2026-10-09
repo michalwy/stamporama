@@ -75,10 +75,10 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
     invalidate(collectionId);
   }
 
-  // Confirmation toasts (#541). Contacts have no detail page of their own, so none of these carries
-  // a link — the row *is* the entity, and it is right there behind the dialog that just closed. What
-  // the toast adds is the confirmation for a save that landed a contact outside the current role
-  // filter, and for the delete, which leaves nothing to look at.
+  // Confirmation toasts (#541). None carries a link to the contact's page (#1708): the row is right
+  // there behind the dialog that just closed, and opens it. What the toast adds is the confirmation
+  // for a save that landed a contact outside the current role filter, and for the delete, which
+  // leaves nothing to look at.
   const { toast } = useToast();
 
   const hasActiveFilters = !!role || query.trim().length > 0;
@@ -166,6 +166,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
             <ContactRow
               key={c.id}
               contact={c}
+              collectionSlug={collectionSlug}
               isLast={idx === rows.length - 1}
               onEdit={(row) => setDialog({ kind: "edit", contact: row })}
               onDelete={(row) => setDialog({ kind: "delete", contact: row })}

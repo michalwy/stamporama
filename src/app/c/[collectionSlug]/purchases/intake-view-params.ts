@@ -25,14 +25,17 @@ import {
   type IntakeDocumentType,
 } from "@/lib/purchase-kind";
 import type { PurchaseSortBy } from "@/lib/purchases";
-import { isPurchaseStatus, PURCHASE_STATUSES, type PurchaseStatus } from "@/lib/purchase-status";
+import { PURCHASE_STATUSES, type PurchaseStatus } from "@/lib/purchase-status";
 
 /** Everything the toolbar over the Intake documents list decides. */
 export interface IntakeView {
   /** One document type, or every type. */
   type?: IntakeDocumentType;
-  /** One status, or every status. Only *Completed* while `type` is `opening_balance` (#1461). */
-  status?: PurchaseStatus;
+  /** The statuses in force — none is every status. Only *Completed* while `type` is
+   *  `opening_balance` (#1461). The toggles pick one at a time, but this is a **set**, the sales
+   *  list's rule (#735, #972): a link that names several — a contact page's *not yet delivered*
+   *  (#1708) is *Preparing* and *In transit* — reads back whole, every named toggle lit. */
+  statuses: PurchaseStatus[];
   /** Platform ids, {@link INTAKE_PARTY_NONE} among them for *No platform*. Empty is every platform. */
   platforms: string[];
   /** Supplier ids, on the same terms as {@link platforms}. */
@@ -49,7 +52,7 @@ export const INTAKE_SORTS: readonly PurchaseSortBy[] = ["purchasedAt", "createdA
  */
 export const INTAKE_VIEW_DEFAULTS: IntakeView = {
   type: undefined,
-  status: undefined,
+  statuses: [],
   platforms: [],
   suppliers: [],
   sortBy: "purchasedAt",
@@ -66,7 +69,7 @@ export const INTAKE_VIEW_DEFAULTS: IntakeView = {
  */
 const VIEW_PARAM: { [K in keyof Required<IntakeView>]-?: string } = {
   type: "type",
-  status: "status",
+  statuses: "status",
   platforms: "platform",
   suppliers: "supplier",
   sortBy: "sortBy",
@@ -93,14 +96,14 @@ const VIEW_KEYS = Object.keys(VIEW_PARAM) as (keyof IntakeView)[];
 export function resolveIntakeView(readParam: (key: string) => string | null): IntakeView {
   const typeRaw = readParam(VIEW_PARAM.type);
   const type = isIntakeDocumentType(typeRaw) ? typeRaw : undefined;
-  const statusRaw = readParam(VIEW_PARAM.status) ?? "";
   const sortRaw = readParam(VIEW_PARAM.sortBy) ?? "";
   return {
     type,
     // A delivery status is a purchase's field, and there may be no purchases on screen — the note
     // at the top.
-    status:
-      isPurchaseStatus(statusRaw) && intakeViewAllowsStatus(type, statusRaw) ? statusRaw : undefined,
+    statuses: parseIntakeStatuses(readParam(VIEW_PARAM.statuses)).filter((s) =>
+      intakeViewAllowsStatus(type, s)
+    ),
     platforms: parseIntakePartyIds(readParam(VIEW_PARAM.platforms)),
     suppliers: parseIntakePartyIds(readParam(VIEW_PARAM.suppliers)),
     sortBy: INTAKE_SORTS.includes(sortRaw as PurchaseSortBy)
@@ -108,6 +111,13 @@ export function resolveIntakeView(readParam: (key: string) => string | null): In
       : INTAKE_VIEW_DEFAULTS.sortBy,
     sortDir: readParam(VIEW_PARAM.sortDir) === "asc" ? "asc" : "desc",
   };
+}
+
+/** A status set as the address carries it — comma-separated, each once, in lifecycle order. A value
+ *  that is no status is dropped rather than refused, so a stale link narrows less, not to nothing. */
+export function parseIntakeStatuses(raw: string | null | undefined): PurchaseStatus[] {
+  const named = new Set((raw ?? "").split(",").map((s) => s.trim()));
+  return PURCHASE_STATUSES.filter((s) => named.has(s));
 }
 
 /** The one status an opening balance has to filter by (#1461): it has no delivery status, but is
@@ -179,9 +189,12 @@ export function intakeViewUpdatesFor(
     if (!(key in patch)) continue;
     updates[VIEW_PARAM[key]] = serialize(key, patch);
   }
-  if ("type" in patch && !("status" in patch) && narrowsStatuses(patch.type)) {
-    const kept = current?.status;
-    if (!kept || !intakeViewAllowsStatus(patch.type, kept)) updates[VIEW_PARAM.status] = "";
+  if ("type" in patch && !("statuses" in patch) && narrowsStatuses(patch.type)) {
+    const inForce = current?.statuses ?? [];
+    const kept = inForce.filter((s) => intakeViewAllowsStatus(patch.type, s));
+    if (inForce.length === 0 || kept.length < inForce.length) {
+      updates[VIEW_PARAM.statuses] = kept.join(",");
+    }
   }
   return updates;
 }
@@ -193,7 +206,7 @@ export function intakeViewUpdatesFor(
  */
 export type IntakeNarrowing =
   | { key: "type"; value: IntakeDocumentType }
-  | { key: "status"; value: PurchaseStatus }
+  | { key: "statuses"; value: PurchaseStatus[] }
   | { key: "platforms" | "suppliers"; value: string[] };
 
 /**
@@ -203,7 +216,7 @@ export type IntakeNarrowing =
 export function intakeViewNarrowings(view: IntakeView): IntakeNarrowing[] {
   const out: IntakeNarrowing[] = [];
   if (view.type) out.push({ key: "type", value: view.type });
-  if (view.status) out.push({ key: "status", value: view.status });
+  if (view.statuses.length > 0) out.push({ key: "statuses", value: view.statuses });
   if (view.platforms.length > 0) out.push({ key: "platforms", value: view.platforms });
   if (view.suppliers.length > 0) out.push({ key: "suppliers", value: view.suppliers });
   return out;
@@ -217,7 +230,7 @@ export function intakeViewNarrowings(view: IntakeView): IntakeNarrowing[] {
 export function intakeViewClearUpdates(): Record<string, string> {
   return {
     [VIEW_PARAM.type]: "",
-    [VIEW_PARAM.status]: "",
+    [VIEW_PARAM.statuses]: "",
     [VIEW_PARAM.platforms]: "",
     [VIEW_PARAM.suppliers]: "",
   };
@@ -246,9 +259,10 @@ export function intakeViewUrlUpdates(
     const value = serialize(key, view);
     if (value && (urlValue(param) ?? "") !== value) updates[param] = value;
   }
-  const urlStatus = urlValue(VIEW_PARAM.status);
-  if (narrowsStatuses(view.type) && urlStatus !== null && urlStatus !== view.status) {
-    updates[VIEW_PARAM.status] = "";
+  const urlStatus = urlValue(VIEW_PARAM.statuses);
+  const statusInForce = serialize("statuses", view);
+  if (narrowsStatuses(view.type) && urlStatus !== null && urlStatus !== statusInForce) {
+    updates[VIEW_PARAM.statuses] = statusInForce;
   }
   return Object.keys(updates).length > 0 ? updates : null;
 }

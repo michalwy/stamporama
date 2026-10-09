@@ -16,7 +16,8 @@ interface PurchasesPage {
 
 export interface PurchaseFilters {
   type?: IntakeDocumentType;
-  status?: PurchaseStatus;
+  /** Statuses, any of them (#1708); empty or absent is every status. */
+  statuses?: PurchaseStatus[];
   /** Platform ids, `none` among them for documents without one (#1392). */
   platformIds?: string[];
   /** Supplier ids, on the same terms. */
@@ -41,7 +42,7 @@ export function usePurchasesInfinite(
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
       if (filters.type) params.set("type", filters.type);
-      if (filters.status) params.set("status", filters.status);
+      if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.platformIds?.length) params.set("platform", filters.platformIds.join(","));
       if (filters.supplierIds?.length) params.set("supplier", filters.supplierIds.join(","));
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
