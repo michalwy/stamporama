@@ -11,6 +11,7 @@ import {
   type CollageTileSize,
   type CollageTileTrueSize,
 } from "../../src/lib/collage-layout";
+import type { CollageGridShape } from "../../src/lib/collage-template-rules";
 
 const size = (width: number, height: number): CollageTileSize => ({ width, height });
 
@@ -241,8 +242,8 @@ describe("trueSizeScales", () => {
 });
 
 describe("resolveCollageColumns", () => {
-  const auto = (rows: number, columns: number) =>
-    ({ gridMode: "auto", rows, columns }) as const;
+  const auto = (rows: number, columns: number, gridShape: CollageGridShape = "landscape") =>
+    ({ gridMode: "auto", gridShape, rows, columns }) as const;
 
   /** `n` identical square tiles — the uniform collage every #413 case was written against. */
   const square = (n: number) => Array.from({ length: n }, () => ({ width: 100, height: 100 }));
@@ -251,13 +252,13 @@ describe("resolveCollageColumns", () => {
     // The whole point of the fixed grid: what was typed is what every row is filled to, whatever
     // the tiles do.
     for (const count of [1, 2, 4, 5, 9]) {
-      assert.equal(resolveCollageColumns(square(count), { gridMode: "fixed", rows: 5, columns: 4 }), 4);
+      assert.equal(resolveCollageColumns(square(count), { gridMode: "fixed", gridShape: "landscape", rows: 5, columns: 4 }), 4);
     }
     // Not even sizes wildly out of proportion move it — that is what "fixed" means.
     assert.equal(
       resolveCollageColumns(
         [{ width: 1200, height: 200 }, { width: 100, height: 140 }],
-        { gridMode: "fixed", rows: 5, columns: 4 }
+        { gridMode: "fixed", gridShape: "landscape", rows: 5, columns: 4 }
       ),
       4
     );
@@ -356,6 +357,49 @@ describe("resolveCollageColumns", () => {
     assert.equal(resolveCollageColumns(mixed, auto(3, 3)), 2);
   });
 
+  // ── #1699: the shape is a choice ───────────────────────────────────────────
+
+  it("aims at the chosen shape: landscape, portrait or square", () => {
+    // Four ordinary portrait stamps (100 × 140). Landscape reaches for one row of four, a 400 × 140
+    // strip it would rather have than the tall 2 × 2; a square aims at the 2 × 2 (200 × 280, just
+    // short of 4:5) and portrait finds it inside its band.
+    const four = Array.from({ length: 4 }, () => ({ width: 100, height: 140 }));
+    assert.equal(resolveCollageColumns(four, auto(20, 20, "landscape")), 4);
+    assert.equal(resolveCollageColumns(four, auto(20, 20, "square")), 2);
+    assert.equal(resolveCollageColumns(four, auto(20, 20, "portrait")), 2);
+
+    // Six of them: three across is 300 × 280, about 1:1 — inside the square band, close enough to
+    // landscape to beat the holed alternatives, and much too wide for portrait, which takes the
+    // 2 × 3 column at 200 × 420.
+    const six = Array.from({ length: 6 }, () => ({ width: 100, height: 140 }));
+    assert.equal(resolveCollageColumns(six, auto(20, 20, "landscape")), 3);
+    assert.equal(resolveCollageColumns(six, auto(20, 20, "square")), 3);
+    assert.equal(resolveCollageColumns(six, auto(20, 20, "portrait")), 2);
+
+    // Square stamps make the difference plainest: six are 3 × 2 for landscape, 2 × 3 for portrait.
+    assert.equal(resolveCollageColumns(square(6), auto(20, 20, "landscape")), 3);
+    assert.equal(resolveCollageColumns(square(6), auto(20, 20, "portrait")), 2);
+  });
+
+  it("counts every shape inside the band as equally good, whatever the shape", () => {
+    // Twelve squares under portrait: 3 × 4 is exactly 3:4, on the band's edge, and costs nothing —
+    // nothing more upright is reached for, just as landscape takes 4 × 3 (4:3) rather than chasing
+    // 16:9.
+    assert.equal(resolveCollageColumns(square(12), auto(20, 20, "portrait")), 3);
+    // Nine squares under square: the 3 × 3 sits on 1:1 and no ragged neighbour beats it.
+    assert.equal(resolveCollageColumns(square(9), auto(20, 20, "square")), 3);
+  });
+
+  it("leaves the band only when the maxima leave nothing inside it", () => {
+    // Nine squares with at most two rows can never be portrait: the narrowest row that fits is
+    // five, and that is what every shape answers — the same rule that lets landscape leave its band.
+    for (const shape of ["landscape", "portrait", "square"] as const) {
+      assert.equal(resolveCollageColumns(square(9), auto(2, 8, shape)), 5);
+    }
+    // And a column ceiling holds a landscape aim to two across, however tall that makes it.
+    assert.equal(resolveCollageColumns(square(8), auto(20, 2, "landscape")), 2);
+  });
+
   it("is total: no tiles, a degenerate size or a degenerate bound still names a width", () => {
     assert.equal(resolveCollageColumns([], auto(3, 3)), 1);
     assert.equal(resolveCollageColumns(square(4), auto(0, 0)), 1);
@@ -440,7 +484,7 @@ describe("pairedTrueScaledSizes", () => {
   });
 
   it("gives the auto grid a narrower row than the same scans unpaired (#514)", () => {
-    const grid = { gridMode: "auto" as const, rows: 6, columns: 6 };
+    const grid = { gridMode: "auto" as const, gridShape: "landscape" as const, rows: 6, columns: 6 };
     const six = Array.from({ length: 6 }, () => trueSize(100, 100));
 
     // Six square scans land three across, on a 3:2 canvas inside the landscape band. Pair each with

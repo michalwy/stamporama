@@ -134,6 +134,7 @@ describe("closed-offer photo cleanup (#512)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,

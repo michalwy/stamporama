@@ -96,6 +96,7 @@ describe("Delcampe Easy Uploader export (#610)", () => {
       photoLabelRightTemplate: null,
       collage: {
         collageGridMode: "fixed" as const,
+        collageGridShape: "landscape" as const,
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,

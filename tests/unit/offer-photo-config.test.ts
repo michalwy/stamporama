@@ -154,6 +154,7 @@ describe("parseOfferPhotoConfigInput", () => {
     assert.equal(result.value.photoLabelRightTemplate, "{catalog}");
     assert.deepEqual(result.value.collage, {
       collageGridMode: "fixed",
+      collageGridShape: "landscape",
       collageRows: 5,
       collageColumns: 4,
       collageGapPercent: 5,
@@ -180,6 +181,26 @@ describe("parseOfferPhotoConfigInput", () => {
     const full = parseOfferPhotoConfigInput({ ...FULL_CONFIG, collageGridMode: "auto" });
     assert.ok(full.ok);
     assert.equal(full.value.collage?.collageGridMode, "auto");
+  });
+
+  it("reads the grid shape, and does not let it alone make a collage either (#1699)", () => {
+    const blank = parseOfferPhotoConfigInput({ ...BLANK_CONFIG, collageGridShape: "portrait" });
+    assert.ok(blank.ok);
+    assert.equal(blank.value.collage, null);
+
+    for (const shape of ["landscape", "portrait", "square"] as const) {
+      const full = parseOfferPhotoConfigInput({
+        ...FULL_CONFIG,
+        collageGridMode: "auto",
+        collageGridShape: shape,
+      });
+      assert.ok(full.ok);
+      assert.equal(full.value.collage?.collageGridShape, shape);
+    }
+    // Not posted — an older form, or the field left out — is landscape.
+    const absent = parseOfferPhotoConfigInput(FULL_CONFIG);
+    assert.ok(absent.ok);
+    assert.equal(absent.value.collage?.collageGridShape, "landscape");
   });
 
   it("rejects a half-filled collage group", () => {

@@ -54,6 +54,40 @@ export function normalizeCollageGridMode(raw: string | null | undefined): Collag
     : DEFAULT_COLLAGE_GRID_MODE;
 }
 
+/**
+ * The canvas shape the automatic grid aims at (#1699). A fixed grid has none: what was typed is the
+ * shape. Each is a *band* of aspect ratios, every one inside it equally good (#526), and the
+ * arrangement outside it is chosen only when the stamps or the maxima leave nothing inside worth
+ * having — the bands themselves are `COLLAGE_SHAPE_BANDS` in `collage-layout.ts`.
+ *
+ * - `landscape` — 4:3 to 16:9, the rule #526 set and what suits a monitor and most listing pages;
+ * - `portrait` — 3:4 to 9:16, which a Facebook feed shows larger;
+ * - `square` — about 1:1, from 5:4 to 4:5.
+ *
+ * A choice of shape rather than a ratio range typed by number: the collector settled that on
+ * 2026-10-09.
+ */
+export const COLLAGE_GRID_SHAPES = ["landscape", "portrait", "square"] as const;
+export type CollageGridShape = (typeof COLLAGE_GRID_SHAPES)[number];
+
+/** Landscape: what every template and offer written before #1699 renders as. */
+export const DEFAULT_COLLAGE_GRID_SHAPE: CollageGridShape = "landscape";
+
+export const COLLAGE_GRID_SHAPE_LABELS: Record<CollageGridShape, string> = {
+  landscape: "Landscape (4:3 – 16:9)",
+  portrait: "Portrait (3:4 – 9:16)",
+  square: "Square (5:4 – 4:5)",
+};
+
+/** Narrows a stored or submitted value to a known shape. Null — an offer prepared before #1699, or a
+ * form that did not send the field — reads as `landscape`, which is what those have always aimed at. */
+export function normalizeCollageGridShape(raw: string | null | undefined): CollageGridShape {
+  const value = (raw ?? "").trim().toLowerCase();
+  return (COLLAGE_GRID_SHAPES as readonly string[]).includes(value)
+    ? (value as CollageGridShape)
+    : DEFAULT_COLLAGE_GRID_SHAPE;
+}
+
 /** What the two numbers are called in the mode they are being read in — the same words the forms
  * label them with, so a validation message names the field the collector is looking at. */
 export function collageAxisLabels(mode: CollageGridMode): { rows: string; columns: string } {
@@ -115,6 +149,8 @@ export interface CollageTemplateInput {
   name: string;
   /** How `rows` / `columns` are read (#413): an exact grid, or bounds the renderer solves within. */
   gridMode: CollageGridMode;
+  /** The canvas shape the `auto` grid aims at (#1699); kept, but not read, on a fixed grid. */
+  gridShape: CollageGridShape;
   /** Whether a cell holds a stamp's front and back side by side (#694). A cell, not an image: the
    * grid above is unchanged by it — each cell is simply wider. */
   pairSides: boolean;
@@ -197,6 +233,7 @@ export function parseBoundedDecimal(raw: string, label: string, min: number, max
 export function parseCollageTemplateInput(raw: {
   name: string;
   gridMode?: string;
+  gridShape?: string;
   /** A checkbox, so absent is unticked (#694) — the form always posts the field it does have. */
   pairSides?: string;
   rows: string;
@@ -248,6 +285,7 @@ export function parseCollageTemplateInput(raw: {
     value: {
       name,
       gridMode,
+      gridShape: normalizeCollageGridShape(raw.gridShape),
       pairSides: isChecked(raw.pairSides),
       rows: rows.value,
       columns: columns.value,
@@ -258,7 +296,10 @@ export function parseCollageTemplateInput(raw: {
   };
 }
 
-type CollageTemplateValues = Omit<CollageTemplateInput, "name" | "gridMode"> & { gridMode: string };
+type CollageTemplateValues = Omit<CollageTemplateInput, "name" | "gridMode" | "gridShape"> & {
+  gridMode: string;
+  gridShape: string;
+};
 
 /** The grid in words — `3 × 3`, or `up to 3 × 3` where the two numbers are only bounds (#413). */
 function collageGridWords(template: CollageTemplateValues): string {
@@ -271,7 +312,7 @@ function collageGridWords(template: CollageTemplateValues): string {
 export function collageTemplateSummary(template: CollageTemplateValues): string {
   const parts = [
     normalizeCollageGridMode(template.gridMode) === "auto"
-      ? `auto, ${collageGridWords(template)}`
+      ? `auto, ${collageGridWords(template)}, ${normalizeCollageGridShape(template.gridShape)}`
       : collageGridWords(template),
     ...(template.pairSides ? ["front+back cells"] : []),
     `gap ${template.gapPercent}%`,
@@ -282,7 +323,7 @@ export function collageTemplateSummary(template: CollageTemplateValues): string 
 
 /** A template's values as label and value, for the summary beside its preview (#1477). The drawing
  *  shows the look; these are the figures it does not print — every one of them, since a collage
- *  template has only six. */
+ *  template has only seven, and the shape (#1699) only where the grid is automatic and reads it. */
 export function collageTemplateSummaryRows(
   template: CollageTemplateValues
 ): { label: string; value: string }[] {
@@ -290,6 +331,14 @@ export function collageTemplateSummaryRows(
   const capacity = template.rows * template.columns;
   return [
     { label: "Grid", value: `${COLLAGE_GRID_MODE_LABELS[mode]}, ${collageGridWords(template)}` },
+    ...(mode === "auto"
+      ? [
+          {
+            label: "Shape",
+            value: COLLAGE_GRID_SHAPE_LABELS[normalizeCollageGridShape(template.gridShape)],
+          },
+        ]
+      : []),
     { label: "Per image", value: capacity === 1 ? "1 stamp" : `Up to ${capacity} stamps` },
     { label: "Cells", value: template.pairSides ? "Front and back" : "One scan" },
     { label: "Gap", value: `${template.gapPercent}% of stamp` },

@@ -164,6 +164,7 @@ describe("offer photo attachments (#313)", () => {
       photoLabelRightTemplate: "Lot 7",
       collage: {
         collageGridMode: "fixed",
+        collageGridShape: "landscape",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -683,6 +684,7 @@ describe("one photo per copy (#434)", () => {
       photoLabelRightTemplate: "",
       collage: {
         collageGridMode: "fixed",
+        collageGridShape: "landscape",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,

@@ -42,6 +42,7 @@ describe("parseCollageTemplateInput", () => {
     assert.deepEqual(result.value, {
       name: "Small definitives",
       gridMode: "fixed",
+      gridShape: "landscape",
       pairSides: false,
       rows: 5,
       columns: 4,
@@ -77,6 +78,24 @@ describe("parseCollageTemplateInput", () => {
       const result = parseCollageTemplateInput({ ...VALID, gridMode });
       assert.ok(result.ok);
       assert.equal(result.value.gridMode, "fixed");
+    }
+  });
+
+  it("reads the shape the automatic grid aims at, defaulting to landscape (#1699)", () => {
+    for (const [posted, read] of [
+      ["portrait", "portrait"],
+      ["SQUARE", "square"],
+      ["landscape", "landscape"],
+    ] as const) {
+      const result = parseCollageTemplateInput({ ...VALID, gridMode: "auto", gridShape: posted });
+      assert.ok(result.ok);
+      assert.equal(result.value.gridShape, read);
+    }
+    // Absent or unknown is landscape: the rule every template followed before the choice existed.
+    for (const gridShape of [undefined, "", "diamond"]) {
+      const result = parseCollageTemplateInput({ ...VALID, gridShape });
+      assert.ok(result.ok);
+      assert.equal(result.value.gridShape, "landscape");
     }
   });
 

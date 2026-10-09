@@ -9,7 +9,7 @@ import {
   type PlannedImage,
 } from "../../src/lib/offer-photo-plan";
 import { fingerprintOfferPhotoInputs } from "../../src/lib/offer-photo-fingerprint";
-import { parseOfferPhotoConfigInput } from "../../src/lib/offer-photo-config";
+import { parseOfferPhotoConfigInput, type OfferCollageValues } from "../../src/lib/offer-photo-config";
 
 // #1673: a set's copies grouped by checklist on photos of their own.
 
@@ -211,12 +211,19 @@ describe("the photo fingerprint under checklist groups (#1673)", () => {
   });
 
   it("changes when grouping is turned on, when a copy joins a checklist and with the group template", () => {
-    const on = (slots: [string, [string, number][]][], rows = 3) =>
+    const on = (
+      slots: [string, [string, number][]][],
+      rows = 3,
+      grid: Pick<OfferCollageValues, "collageGridMode" | "collageGridShape"> = {
+        collageGridMode: "fixed",
+        collageGridShape: "landscape",
+      }
+    ) =>
       fingerprintOfferPhotoInputs({
         ...fingerprintInput,
         checklistGroups: {
           collage: {
-            collageGridMode: "fixed",
+            ...grid,
             collageRows: rows,
             collageColumns: 3,
             collageGapPercent: 5,
@@ -231,6 +238,14 @@ describe("the photo fingerprint under checklist groups (#1673)", () => {
     assert.notEqual(fingerprintOfferPhotoInputs(fingerprintInput), none);
     assert.notEqual(none, joined);
     assert.notEqual(joined, on([["a1", [["A", 1]]]], 4));
+    // The group template's shape (#1699) counts where it is read — under auto, away from landscape.
+    const auto = (shape: "landscape" | "portrait") =>
+      on([["a1", [["A", 1]]]], 3, { collageGridMode: "auto", collageGridShape: shape });
+    assert.notEqual(auto("landscape"), auto("portrait"));
+    assert.equal(
+      joined,
+      on([["a1", [["A", 1]]]], 3, { collageGridMode: "fixed", collageGridShape: "portrait" })
+    );
     // Read order is not a change.
     assert.equal(
       on([
@@ -267,6 +282,7 @@ describe("parseOfferPhotoConfigInput's group settings (#1673)", () => {
       groupByChecklist: "on",
       groupCollage: {
         collageGridMode: "auto",
+        collageGridShape: "portrait",
         collageRows: "3",
         collageColumns: "4",
         collageGapPercent: "5",
@@ -278,6 +294,7 @@ describe("parseOfferPhotoConfigInput's group settings (#1673)", () => {
     assert.equal(result.value.groupByChecklist, true);
     assert.deepEqual(result.value.groupCollage, {
       collageGridMode: "auto",
+      collageGridShape: "portrait",
       collageRows: 3,
       collageColumns: 4,
       collageGapPercent: 5,

@@ -667,6 +667,7 @@ export async function updateOfferPhotoConfigAction(
     photoLabelLeftTemplate: str(formData, "photoLabelLeftTemplate"),
     photoLabelRightTemplate: str(formData, "photoLabelRightTemplate"),
     collageGridMode: str(formData, "collageGridMode"),
+    collageGridShape: str(formData, "collageGridShape"),
     collageRows: str(formData, "collageRows"),
     collageColumns: str(formData, "collageColumns"),
     collageGapPercent: str(formData, "collageGapPercent"),
@@ -677,6 +678,7 @@ export async function updateOfferPhotoConfigAction(
     groupByChecklist: str(formData, "groupByChecklist"),
     groupCollage: {
       collageGridMode: str(formData, "groupCollageGridMode"),
+      collageGridShape: str(formData, "groupCollageGridShape"),
       collageRows: str(formData, "groupCollageRows"),
       collageColumns: str(formData, "groupCollageColumns"),
       collageGapPercent: str(formData, "groupCollageGapPercent"),

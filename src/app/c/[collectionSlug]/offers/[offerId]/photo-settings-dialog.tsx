@@ -8,11 +8,15 @@ import type { CollageTemplateData } from "@/lib/collage-templates";
 import {
   COLLAGE_GRID_MODES,
   COLLAGE_GRID_MODE_LABELS,
+  COLLAGE_GRID_SHAPES,
+  COLLAGE_GRID_SHAPE_LABELS,
   COLLAGE_LABEL_STEP,
   DEFAULT_COLLAGE_BACKGROUND,
   DEFAULT_COLLAGE_GRID_MODE,
+  DEFAULT_COLLAGE_GRID_SHAPE,
   collageAxisLabels,
   normalizeCollageGridMode,
+  normalizeCollageGridShape,
   MAX_COLLAGE_AXIS,
   MAX_COLLAGE_LABEL_PERCENT,
   MAX_COLLAGE_PERCENT,
@@ -62,6 +66,9 @@ interface CollageDraft {
   /** Always set — a toggle has no blank state — which is why it is not one of the fields that decide
    * whether the offer carries a collage at all (#413). */
   collageGridMode: string;
+  /** The shape an automatic grid aims at (#1699) — a choice, never blank, so not one of those
+   * fields either. */
+  collageGridShape: string;
   collageRows: string;
   collageColumns: string;
   collageGapPercent: string;
@@ -71,6 +78,7 @@ interface CollageDraft {
 
 const EMPTY_COLLAGE: CollageDraft = {
   collageGridMode: DEFAULT_COLLAGE_GRID_MODE,
+  collageGridShape: DEFAULT_COLLAGE_GRID_SHAPE,
   collageRows: "",
   collageColumns: "",
   collageGapPercent: "",
@@ -82,6 +90,7 @@ function toDraft(c: OfferPhotoConfigInput["collage"]): CollageDraft {
   if (!c) return EMPTY_COLLAGE;
   return {
     collageGridMode: c.collageGridMode,
+    collageGridShape: c.collageGridShape,
     collageRows: String(c.collageRows),
     collageColumns: String(c.collageColumns),
     collageGapPercent: String(c.collageGapPercent),
@@ -94,6 +103,7 @@ function toDraft(c: OfferPhotoConfigInput["collage"]): CollageDraft {
 function templateDraft(t: CollageTemplateData): CollageDraft {
   return {
     collageGridMode: normalizeCollageGridMode(t.gridMode),
+    collageGridShape: normalizeCollageGridShape(t.gridShape),
     collageRows: String(t.rows),
     collageColumns: String(t.columns),
     collageGapPercent: String(t.gapPercent),
@@ -102,10 +112,16 @@ function templateDraft(t: CollageTemplateData): CollageDraft {
   };
 }
 
-/** A grid in a word: `3 × 4`, or `auto, up to 3 × 4`. */
-function gridText(gridMode: string, rows: string | number, columns: string | number): string {
+/** A grid in a word: `3 × 4`, or `auto, up to 3 × 4, portrait` — the shape (#1699) only where it
+ *  is read. */
+function gridText(
+  gridMode: string,
+  gridShape: string,
+  rows: string | number,
+  columns: string | number
+): string {
   return normalizeCollageGridMode(gridMode) === "auto"
-    ? `auto, up to ${rows} × ${columns}`
+    ? `auto, up to ${rows} × ${columns}, ${normalizeCollageGridShape(gridShape)}`
     : `${rows} × ${columns}`;
 }
 
@@ -248,7 +264,7 @@ export function PhotoSettingsDialog({
 
   /** Any collage field filled in — what "Clear" acts on and what the save writes as a group. */
   const hasCollage = Object.entries(collage).some(
-    ([field, value]) => field !== "collageGridMode" && value.trim()
+    ([field, value]) => field !== "collageGridMode" && field !== "collageGridShape" && value.trim()
   );
 
   const axisLabels = collageAxisLabels(normalizeCollageGridMode(collage.collageGridMode));
@@ -428,6 +444,7 @@ export function PhotoSettingsDialog({
           {/* The group template's numbers travel in hidden fields whether or not the box is
               ticked, so turning grouping off and on again keeps the template. */}
           <input type="hidden" name="groupCollageGridMode" value={groupCollage.collageGridMode} />
+          <input type="hidden" name="groupCollageGridShape" value={groupCollage.collageGridShape} />
           <input type="hidden" name="groupCollageRows" value={groupCollage.collageRows} />
           <input type="hidden" name="groupCollageColumns" value={groupCollage.collageColumns} />
           <input type="hidden" name="groupCollageGapPercent" value={groupCollage.collageGapPercent} />
@@ -453,6 +470,7 @@ export function PhotoSettingsDialog({
                     {hasGroupCollage
                       ? `${gridText(
                           groupCollage.collageGridMode,
+                          groupCollage.collageGridShape,
                           groupCollage.collageRows,
                           groupCollage.collageColumns
                         )} — pick another template`
@@ -460,7 +478,7 @@ export function PhotoSettingsDialog({
                   </option>
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({gridText(t.gridMode, t.rows, t.columns)})
+                      {t.name} ({gridText(t.gridMode, t.gridShape, t.rows, t.columns)})
                     </option>
                   ))}
                 </select>
@@ -503,7 +521,7 @@ export function PhotoSettingsDialog({
                 </option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} ({gridText(t.gridMode, t.rows, t.columns)})
+                    {t.name} ({gridText(t.gridMode, t.gridShape, t.rows, t.columns)})
                   </option>
                 ))}
               </select>
@@ -546,6 +564,29 @@ export function PhotoSettingsDialog({
                 ))}
               </select>
             </div>
+            {/* The shape is read only by the automatic grid (#1699), so it is shown only there; a
+                fixed grid keeps it in a hidden field, so switching the grid back restores it. */}
+            {collage.collageGridMode === "auto" ? (
+              <div style={{ flex: 1 }}>
+                <LabelWithError htmlFor="offer-collage-grid-shape">Shape</LabelWithError>
+                <select
+                  id="offer-collage-grid-shape"
+                  name="collageGridShape"
+                  value={collage.collageGridShape}
+                  onChange={(e) => set("collageGridShape", normalizeCollageGridShape(e.target.value))}
+                  disabled={isPending}
+                  style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                >
+                  {COLLAGE_GRID_SHAPES.map((shape) => (
+                    <option key={shape} value={shape}>
+                      {COLLAGE_GRID_SHAPE_LABELS[shape]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <input type="hidden" name="collageGridShape" value={collage.collageGridShape} />
+            )}
             <NumberField
               id="offer-collage-rows"
               name="collageRows"

@@ -22,7 +22,7 @@ import {
   type CollagePlannedTileSize,
   type CollageTileTrueSize,
 } from "./collage-layout";
-import { normalizeCollageGridMode } from "./collage-template-rules";
+import { normalizeCollageGridMode, normalizeCollageGridShape } from "./collage-template-rules";
 import { thumbnailFor } from "./photos/process";
 import { normalizePhotoSides, type OfferCollageValues, type PlatformPhotoLimits } from "./offer-photo-config";
 import {
@@ -528,6 +528,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       photoLabelLeftTemplate: true,
       photoLabelRightTemplate: true,
       collageGridMode: true,
+      collageGridShape: true,
       collageRows: true,
       collageColumns: true,
       collageGapPercent: true,
@@ -535,6 +536,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
       collageLabelPercent: true,
       photoGroupByChecklist: true,
       groupCollageGridMode: true,
+      groupCollageGridShape: true,
       groupCollageRows: true,
       groupCollageColumns: true,
       groupCollageGapPercent: true,
@@ -763,6 +765,8 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
           // Null is `fixed` (#413) — an offer prepared before the mode existed renders exactly as
           // it did, which is also why the mode is not one of the columns `hasCollage` tests.
           collageGridMode: normalizeCollageGridMode(offer.collageGridMode),
+          // Null is `landscape` (#1699), on the same reasoning.
+          collageGridShape: normalizeCollageGridShape(offer.collageGridShape),
           collageRows: offer.collageRows!,
           collageColumns: offer.collageColumns!,
           collageGapPercent: offer.collageGapPercent!,
@@ -774,6 +778,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     groupCollage: hasGroupCollage
       ? {
           collageGridMode: normalizeCollageGridMode(offer.groupCollageGridMode),
+          collageGridShape: normalizeCollageGridShape(offer.groupCollageGridShape),
           collageRows: offer.groupCollageRows!,
           collageColumns: offer.groupCollageColumns!,
           collageGapPercent: offer.groupCollageGapPercent!,
@@ -1914,6 +1919,7 @@ async function renderPlannedCollage(
       sources,
       collageColumnsFor(plannedTileSizes(image, inputs), {
         gridMode: collage.collageGridMode,
+        gridShape: collage.collageGridShape,
         rows: collage.collageRows,
         columns: collage.collageColumns,
       }),

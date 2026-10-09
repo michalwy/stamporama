@@ -55,6 +55,9 @@ describe("offer photo configuration (#308)", () => {
           name: "Small definitives",
           rows: 5,
           columns: 4,
+          // Read only by an automatic grid, and copied regardless (#1699): a template switched to
+          // fixed keeps its shape for when it is switched back.
+          gridShape: "portrait",
           gapPercent: 5,
           background: "#f0f0f0",
           labelPercent: 14,
@@ -107,6 +110,7 @@ describe("offer photo configuration (#308)", () => {
     assert.equal(detail?.photoConfig.photoLabelLeftTemplate, "{catalog}");
     assert.deepEqual(detail?.photoConfig.collage, {
       collageGridMode: "fixed",
+      collageGridShape: "portrait",
       collageRows: 5,
       collageColumns: 4,
       collageGapPercent: 5,
@@ -244,7 +248,8 @@ describe("offer photo configuration (#308)", () => {
       photoLabelLeftTemplate: "{name}",
       photoLabelRightTemplate: null,
       collage: {
-        collageGridMode: "fixed",
+        collageGridMode: "auto",
+        collageGridShape: "square",
         collageRows: 2,
         collageColumns: 2,
         collageGapPercent: 8,
@@ -255,6 +260,8 @@ describe("offer photo configuration (#308)", () => {
     let detail = await getOfferDetail(userId, offerId);
     assert.equal(detail?.photoConfig.photoSides, "back");
     assert.equal(detail?.photoConfig.collage?.collageRows, 2);
+    // The shape is the offer's own to change (#1699), and the save keeps what was chosen.
+    assert.equal(detail?.photoConfig.collage?.collageGridShape, "square");
 
     await updateOfferPhotoConfig(userId, offerId, {
       photoSides: "front",

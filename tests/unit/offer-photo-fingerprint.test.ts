@@ -40,6 +40,7 @@ const base: OfferPhotoFingerprintInput = {
   ],
   collage: {
     collageGridMode: "fixed",
+    collageGridShape: "landscape",
     collageRows: 2,
     collageColumns: 2,
     collageGapPercent: 5,
@@ -176,6 +177,26 @@ describe("fingerprintOfferPhotoInputs sensitivity", () => {
       fp(base),
       "an offer with no stored mode hashes exactly as a fixed one"
     );
+  });
+
+  it("hashes the grid shape only where it is read, and only when it is not landscape (#1699)", () => {
+    const auto = { ...base.collage!, collageGridMode: "auto" as const };
+    // Landscape is what every automatic grid aimed at before the choice existed, so an offer that
+    // keeps it — or carries no shape at all — keeps the digest it stored.
+    const withoutShape: Partial<NonNullable<typeof base.collage>> = { ...auto };
+    delete withoutShape.collageGridShape;
+    assert.equal(
+      fp({ ...base, collage: { ...auto, collageGridShape: "landscape" } }),
+      fp({ ...base, collage: withoutShape as typeof base.collage })
+    );
+    // Portrait and square change the images under auto, and differ from each other.
+    const portrait = fp({ ...base, collage: { ...auto, collageGridShape: "portrait" } });
+    const square = fp({ ...base, collage: { ...auto, collageGridShape: "square" } });
+    assert.notEqual(portrait, fp({ ...base, collage: auto }));
+    assert.notEqual(square, fp({ ...base, collage: auto }));
+    assert.notEqual(portrait, square);
+    // A fixed grid has no shape to aim at, so choosing one changes nothing there.
+    assert.ok(!differs({ collage: { ...base.collage!, collageGridShape: "portrait" } }));
   });
 
   it("changes when a tile's label changes, because the label is drawn into the image", () => {
