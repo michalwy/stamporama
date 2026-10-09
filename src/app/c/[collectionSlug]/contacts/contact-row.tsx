@@ -3,6 +3,10 @@
 import { useState } from "react";
 import type { ContactListItem } from "@/lib/contacts";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import {
+  RowQuickActions,
+  pickRowActions,
+} from "@/app/c/[collectionSlug]/shared/row-quick-actions";
 import { CONTACT_ROLES } from "./contact-roles";
 
 const CHIP: React.CSSProperties = {
@@ -82,6 +86,9 @@ export function ContactRow({ contact: c, isLast, onEdit, onDelete }: ContactRowP
             </span>
           ))}
           <span style={{ flex: 1 }} />
+          {/* Edit is what this list is opened for most, so it is on the row as well as in the
+              menu (#1707), drawn as the issues list draws its quick actions. */}
+          <RowQuickActions actions={pickRowActions(menuActions, ["edit"])} visible={hovered} />
           <RowActionsMenu actions={menuActions} ariaLabel="Contact actions" />
         </div>
 
