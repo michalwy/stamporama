@@ -5,7 +5,7 @@
 //
 // What lives here is the arithmetic a group's defaults become on a new auction, and the text of the
 // kit: the group's post template filled in per lot — an auction's or a quick buy's, whichever the lot
-// is (#1671) — with the standing note under it.
+// is (#1671) — with the note on shipping, payment and terms where its `{terms}` says (#1689).
 
 import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
@@ -131,8 +131,10 @@ export const FACEBOOK_FALLBACK_POST_TEMPLATE = "{description}";
  * settings editor already warns about while it is typed (`unknownPostPlaceholders`) — so an
  * auction's `{closesAt}` left in a quick buy's template is seen, not quietly emptied. A retired
  * placeholder is still filled in (#1671), so no post loses text the collector has not been told of.
+ * `{terms}` is the note on shipping, payment and terms (#1689) — `terms`, empty unless this lot is
+ * where the post states it.
  */
-export function renderFacebookLotText(template: string, lot: FacebookPostLotText): string {
+export function renderFacebookLotText(template: string, lot: FacebookPostLotText, terms = ""): string {
   const source = template.trim() ? template : FACEBOOK_FALLBACK_POST_TEMPLATE;
   const known = new Set<string>([
     ...facebookPostPlaceholders(lot.listingType).map((p) => p.token),
@@ -147,6 +149,7 @@ export function renderFacebookLotText(template: string, lot: FacebookPostLotText
     "{closesAt}": lot.closesAt,
     "{price}": lot.price,
     "{lot}": lot.lotNo == null ? "" : String(lot.lotNo),
+    "{terms}": terms.trim(),
   };
   return source
     .replace(/\{[A-Za-z]+\}/g, (token) => (known.has(token) ? values[token] : token))
@@ -160,19 +163,27 @@ export function facebookTemplateFor(templates: FacebookPostTemplates, listingTyp
 
 /**
  * The whole post: each lot's text in lot order — each from its own type's template — a blank line
- * between them, and the group's standing note under the last, once, however many lots the post
- * holds. Empty parts are left out rather than leaving a gap.
+ * between them. The note on shipping, payment and terms goes where the **last** lot's template puts
+ * `{terms}` (#1689) — once, however many lots the post holds, as it was when it was appended under
+ * the last — and nowhere when that template has none. Empty parts are left out rather than leaving a
+ * gap.
  */
 export function renderFacebookPostText(
   templates: FacebookPostTemplates,
   standingNote: string,
   lots: readonly FacebookPostLotText[]
 ): string {
-  const parts = [...lots]
-    .sort((a, b) => (a.lotNo ?? 0) - (b.lotNo ?? 0))
-    .map((lot) => renderFacebookLotText(facebookTemplateFor(templates, lot.listingType), lot));
-  if (standingNote.trim()) parts.push(standingNote.trim());
-  return parts.filter((p) => p !== "").join("\n\n");
+  const sorted = [...lots].sort((a, b) => (a.lotNo ?? 0) - (b.lotNo ?? 0));
+  return sorted
+    .map((lot, i) =>
+      renderFacebookLotText(
+        facebookTemplateFor(templates, lot.listingType),
+        lot,
+        i === sorted.length - 1 ? standingNote : ""
+      )
+    )
+    .filter((p) => p !== "")
+    .join("\n\n");
 }
 
 /** A figure as a post states it: `10.00 PLN`, or empty when there is none. */

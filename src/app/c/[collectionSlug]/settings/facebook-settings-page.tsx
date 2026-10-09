@@ -16,6 +16,7 @@ import {
   facebookPostPlaceholders,
   isFacebookGroupSetting,
   retiredPostPlaceholders,
+  standingNoteUnused,
   unknownPostPlaceholders,
   usesRetiredPostPlaceholder,
   type FacebookGroupSetting,
@@ -363,8 +364,9 @@ const HINTS = {
   postTemplate: (
     <>
       The text an auction&rsquo;s post is prepared from. Each placeholder is filled in from the offer
-      when the post is prepared; in a post holding several lots, each lot gets its own line. The note
-      on shipping, payment and terms is added after it.
+      when the post is prepared; in a post holding several lots, each lot gets its own line.{" "}
+      <code>{"{terms}"}</code> puts the note on shipping, payment and terms where it stands — once, in
+      the last lot.
     </>
   ),
   quickBuyTemplate: (
@@ -373,8 +375,12 @@ const HINTS = {
       from the auction template, nor an auction from this one.
     </>
   ),
-  standingNote:
-    "Added to every post, as written — how you ship, how buyers pay, and the group's own terms.",
+  standingNote: (
+    <>
+      How you ship, how buyers pay, and the group&rsquo;s own terms, as written. A post carries it
+      where its template puts <code>{"{terms}"}</code>, and only there.
+    </>
+  ),
   shared: "These apply to auctions and quick buys alike.",
   newAuctions:
     "What a new auction starts from. Each can be changed on the auction itself, and changing it here never changes an auction already made. Leave a field blank for no default.",
@@ -431,6 +437,9 @@ function DefaultsFields({
   defaults: FacebookPostingSettings;
   platformCurrency: string | null;
 }) {
+  // The texts the note's warning reads (#1689), held here so it answers while either is typed.
+  const [texts, setTexts] = useState<PostTexts>(() => postTexts(defaults));
+  const setText = (key: keyof PostTexts) => (value: string) => setTexts((t) => ({ ...t, [key]: value }));
   return (
     <Fields>
       <div>
@@ -456,14 +465,24 @@ function DefaultsFields({
         <GroupLabel htmlFor="facebook-standing-note" hint={HINTS.standingNote}>
           Shipping, payment and terms
         </GroupLabel>
-        <StandingNoteField id="facebook-standing-note" initial={defaults.standingNote} />
+        <StandingNoteField
+          id="facebook-standing-note"
+          value={texts.standingNote}
+          onChange={setText("standingNote")}
+          unused={standingNoteUnused(texts)}
+        />
       </div>
       <div>
         <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
         <div style={FIGURE_GRID}>
           <div style={{ gridColumn: "1 / -1" }}>
             <span style={SMALL_LABEL}>Post template</span>
-            <PostTemplateField id="facebook-post-template" listingType="auction" initial={defaults.postTemplate} />
+            <PostTemplateField
+              id="facebook-post-template"
+              listingType="auction"
+              value={texts.postTemplate}
+              onChange={setText("postTemplate")}
+            />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <span style={SMALL_LABEL}>Starting price</span>
@@ -488,7 +507,12 @@ function DefaultsFields({
       <div>
         <GroupLabel hint={HINTS.quickBuys}>Quick buys</GroupLabel>
         <span style={SMALL_LABEL}>Post template</span>
-        <PostTemplateField id="facebook-quick-buy-template" listingType="fixed" initial={defaults.quickBuyTemplate} />
+        <PostTemplateField
+          id="facebook-quick-buy-template"
+          listingType="fixed"
+          value={texts.quickBuyTemplate}
+          onChange={setText("quickBuyTemplate")}
+        />
       </div>
     </Fields>
   );
@@ -532,10 +556,22 @@ function GroupFields({
     ? effectiveFacebookGroupSettings(group, defaults)
     : { ...defaults, currency: null };
   const shownCurrency = own("currency") ? currency || null : platformCurrency;
+  // The group's own texts, held here so the note's warning (#1689) reads what is typed; a followed one
+  // is read from Facebook's instead.
+  const [texts, setTexts] = useState<PostTexts>(() => postTexts(start));
+  const setText = (key: keyof PostTexts) => (value: string) => setTexts((t) => ({ ...t, [key]: value }));
+  const posting = {
+    postTemplate: own("postTemplate") ? texts.postTemplate : defaults.postTemplate,
+    quickBuyTemplate: own("quickBuyTemplate") ? texts.quickBuyTemplate : defaults.quickBuyTemplate,
+    standingNote: own("standingNote") ? texts.standingNote : defaults.standingNote,
+  };
   const setting = (key: FacebookGroupSetting) => ({
     custom: own(key),
-    onCustom: (on: boolean) =>
-      setCustom((c) => (on ? [...c, key] : c.filter((k) => k !== key))),
+    onCustom: (on: boolean) => {
+      setCustom((c) => (on ? [...c, key] : c.filter((k) => k !== key)));
+      // A text switched to custom starts again from what it followed, as a field shown afresh would.
+      if (on && isPostText(key)) setText(key)(start[key]);
+    },
     following: describeSetting(key, defaults, platformCurrency),
     settingKey: key,
   });
@@ -622,15 +658,28 @@ function GroupFields({
         hint={HINTS.standingNote}
         {...setting("standingNote")}
       >
-        <StandingNoteField id="facebook-group-note" initial={start.standingNote} />
+        <StandingNoteField
+          id="facebook-group-note"
+          value={texts.standingNote}
+          onChange={setText("standingNote")}
+          unused={standingNoteUnused(posting)}
+        />
       </FollowableSetting>
+      {/* A followed note no template here uses is said too: the note is Facebook's, the gap is this
+          group's. */}
+      {!own("standingNote") && standingNoteUnused(posting) && <UnusedNote />}
 
       <div>
         <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
         <div style={FIGURE_GRID}>
           <div style={{ gridColumn: "1 / -1" }}>
             <FollowableSetting label="Post template" small {...setting("postTemplate")}>
-              <PostTemplateField id="facebook-group-template" listingType="auction" initial={start.postTemplate} />
+              <PostTemplateField
+                id="facebook-group-template"
+                listingType="auction"
+                value={texts.postTemplate}
+                onChange={setText("postTemplate")}
+              />
             </FollowableSetting>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
@@ -658,7 +707,12 @@ function GroupFields({
       <div>
         <GroupLabel hint={HINTS.quickBuys}>Quick buys</GroupLabel>
         <FollowableSetting label="Post template" small {...setting("quickBuyTemplate")}>
-          <PostTemplateField id="facebook-group-quick-buy-template" listingType="fixed" initial={start.quickBuyTemplate} />
+          <PostTemplateField
+            id="facebook-group-quick-buy-template"
+            listingType="fixed"
+            value={texts.quickBuyTemplate}
+            onChange={setText("quickBuyTemplate")}
+          />
         </FollowableSetting>
       </div>
     </Fields>
@@ -760,13 +814,14 @@ function FollowableSetting({
 function PostTemplateField({
   id,
   listingType,
-  initial,
+  value: template,
+  onChange,
 }: {
   id: string;
   listingType: OfferListingType;
-  initial: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
-  const [template, setTemplate] = useState(initial);
   const unknown = unknownPostPlaceholders(template, listingType);
   const retired = retiredPostPlaceholders(template);
   return (
@@ -776,7 +831,7 @@ function PostTemplateField({
         name={listingType === "auction" ? "postTemplate" : "quickBuyTemplate"}
         aria-label={`${OFFER_LISTING_TYPE_LABEL[listingType]} post template`}
         value={template}
-        onChange={(e) => setTemplate(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         style={TEXTAREA_STYLE}
         {...NO_AUTOFILL}
       />
@@ -839,15 +894,52 @@ function MixedListingTypesField({ initial }: { initial: boolean }) {
   );
 }
 
-function StandingNoteField({ id, initial }: { id: string; initial: string }) {
+/** The texts a post is written from — both templates and the note — as a pane holds them. */
+type PostTexts = Pick<FacebookPostingSettings, "postTemplate" | "quickBuyTemplate" | "standingNote">;
+
+function postTexts(s: PostTexts): PostTexts {
+  return { postTemplate: s.postTemplate, quickBuyTemplate: s.quickBuyTemplate, standingNote: s.standingNote };
+}
+
+function isPostText(key: FacebookGroupSetting): key is keyof PostTexts {
+  return key === "postTemplate" || key === "quickBuyTemplate" || key === "standingNote";
+}
+
+/** The note on shipping, payment and terms, and — since nothing appends it any more (#1689) — the
+ *  warning that no template puts it anywhere. */
+function StandingNoteField({
+  id,
+  value,
+  onChange,
+  unused,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  unused: boolean;
+}) {
   return (
-    <TextArea
-      id={id}
-      name="standingNote"
-      defaultValue={initial}
-      style={{ ...TEXTAREA_STYLE, minHeight: "5rem" }}
-      {...NO_AUTOFILL}
-    />
+    <>
+      <TextArea
+        id={id}
+        name="standingNote"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ ...TEXTAREA_STYLE, minHeight: "5rem" }}
+        {...NO_AUTOFILL}
+      />
+      {unused && <UnusedNote />}
+    </>
+  );
+}
+
+function UnusedNote() {
+  return (
+    <FieldNote>
+      <span style={{ color: "var(--color-warning)" }}>
+        No post carries this note: neither post template has <code>{"{terms}"}</code>.
+      </span>
+    </FieldNote>
   );
 }
 

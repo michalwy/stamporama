@@ -13,6 +13,7 @@ import {
   isFacebookGroupUrl,
   normalizeClosingTime,
   retiredPostPlaceholders,
+  standingNoteUnused,
   toFacebookListingType,
   unknownPostPlaceholders,
   usesRetiredPostPlaceholder,
@@ -315,17 +316,17 @@ describe("isFacebookGroupUrl", () => {
 });
 
 describe("post template placeholders", () => {
-  it("are an auction's settled ones with {title}, and no longer {catalog} (#1543, #1671)", () => {
+  it("are an auction's settled ones with {title} and {terms}, and no longer {catalog} (#1543, #1671, #1689)", () => {
     assert.deepEqual(
       FACEBOOK_AUCTION_PLACEHOLDERS.map((p) => p.token),
-      ["{title}", "{description}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}"]
+      ["{title}", "{description}", "{startingPrice}", "{increment}", "{closesAt}", "{lot}", "{terms}"]
     );
   });
 
-  it("are a quick buy's own: its price where an auction states its bidding (#1671)", () => {
+  it("are a quick buy's own: its price where an auction states its bidding (#1671), and {terms} (#1689)", () => {
     assert.deepEqual(
       FACEBOOK_QUICK_BUY_PLACEHOLDERS.map((p) => p.token),
-      ["{title}", "{description}", "{price}", "{lot}"]
+      ["{title}", "{description}", "{price}", "{lot}", "{terms}"]
     );
   });
 
@@ -344,6 +345,25 @@ describe("post template placeholders", () => {
     assert.deepEqual(retiredPostPlaceholders("{title}"), []);
     assert.equal(usesRetiredPostPlaceholder({ postTemplate: "{title}", quickBuyTemplate: "{catalog}" }), true);
     assert.equal(usesRetiredPostPlaceholder({ postTemplate: "{title}", quickBuyTemplate: "" }), false);
+  });
+});
+
+describe("the note on shipping, payment and terms (#1689)", () => {
+  it("is flagged when it is set and neither template has {terms}", () => {
+    const note = "Shipping 7 PLN";
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price}", standingNote: note }), true);
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price} {terms}", standingNote: note }), false);
+    // A blank template places nothing either: the note is only where `{terms}` puts it.
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "", standingNote: note }), true);
+  });
+
+  it("is not flagged when there is no note to place", () => {
+    assert.equal(standingNoteUnused({ postTemplate: "{title}", quickBuyTemplate: "{price}", standingNote: "  " }), false);
+  });
+
+  it("is not an unknown token in either template", () => {
+    assert.deepEqual(unknownPostPlaceholders("{title} {terms}", "auction"), []);
+    assert.deepEqual(unknownPostPlaceholders("{title} {terms}", "fixed"), []);
   });
 });
 

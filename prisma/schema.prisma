@@ -2856,7 +2856,8 @@ model FacebookGroup {
   quickBuyTemplate String @default("")
   // Whether the lots of one post may be of both types (#1671). Off, a post's lots share one type.
   mixedListingTypes Boolean @default(false)
-  // Shipping, payment and terms, appended to every post in this group as written.
+  // Shipping, payment and terms, as written — placed in a post where its template's `{terms}` is
+  // (#1689); nothing appends it any more.
   standingNote String @default("")
 
   // ── What a new auction starts from ─────────────────────────────────────────────────────────────
