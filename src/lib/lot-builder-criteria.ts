@@ -56,7 +56,13 @@ export interface LotBuilderCriteria {
   /** The listing title and description this lot writes onto its offer, as **templates** (#774).
    *  Criteria like any other — they ride in the address so the commit renders exactly what the
    *  screen previewed — and part of the recipe, because how a kind of lot is *worded* repeats
-   *  exactly as much as how it is picked. Null / empty leaves the platform's own template. */
+   *  exactly as much as how it is picked.
+   *
+   *  **Three states, not two** (#1687). `null` is *not stated*: the wizard keeps the field following
+   *  its own suggestion. `""` is *stated empty*: the collector cleared the field, and the offer takes
+   *  the platform's own template. Anything else is the lot's own wording. A preset keeps whichever it
+   *  was saved with, so a cleared field is a change it can be updated with rather than a value it can
+   *  hold but never let go of. Whitespace alone is empty (ADR-0055). */
   nameTemplate: string | null;
   descriptionTemplate: string | null;
 }
@@ -196,6 +202,24 @@ export function applyLotRecipe(
   return { ...criteria, ...toLotRecipe(recipe) };
 }
 
+/**
+ * Whether two recipes say the same thing — what tells a preset from the screen it was applied to.
+ * Compared through the query string rather than field by field: the criteria's own round trip is
+ * what the proposal, the commit and the preset's save are all built on, so two recipes are the same
+ * exactly when it says they are. That is also why a cleared field must be written to it (#1687): a
+ * value the round trip loses is a change nothing can see.
+ */
+export function sameLotRecipe(a: LotRecipe, b: LotRecipe): boolean {
+  const key = (recipe: LotRecipe) =>
+    lotBuilderSearchParams({
+      criteria: { ...recipe, platformId: "", areaId: null, areaSubtree: true },
+      seed: "",
+      pinnedItemIds: [],
+      rejectedItemIds: [],
+    }).toString();
+  return key(a) === key(b);
+}
+
 // ── The query string ────────────────────────────────────────────────────────────────────────────
 
 /** A finite number, or null for blank / absent / unparseable. Anything unrecognised is dropped
@@ -233,10 +257,11 @@ export function parseLotBuilderRequest(params: URLSearchParams): LotBuilderReque
       maxPerStamp: num(params.get("maxPerStamp")),
       duplicates:
         duplicates && DUPLICATE_POLICIES.includes(duplicates) ? duplicates : "neutral",
-      // Blank and absent are one thing here — "leave the platform's template" — so an empty
-      // parameter must not round-trip as an empty *override*, which would render an empty listing.
-      nameTemplate: params.get("nameTpl") || null,
-      descriptionTemplate: params.get("descTpl") || null,
+      // Blank and absent are two things (#1687): absent leaves the wizard's suggestion, blank is the
+      // collector's cleared field and means the platform's own template. Neither renders an empty
+      // listing — the commit sends a blank text as no template of the offer's own.
+      nameTemplate: template(params.get("nameTpl")),
+      descriptionTemplate: template(params.get("descTpl")),
     },
     seed: params.get("seed") ?? "",
     pinnedItemIds: params.getAll("pin").filter(Boolean),
@@ -267,8 +292,8 @@ export function lotBuilderSearchParams(request: LotBuilderRequest): URLSearchPar
   params.set("series", criteria.series);
   putNum(params, "maxPerStamp", criteria.maxPerStamp);
   params.set("duplicates", criteria.duplicates);
-  if (criteria.nameTemplate) params.set("nameTpl", criteria.nameTemplate);
-  if (criteria.descriptionTemplate) params.set("descTpl", criteria.descriptionTemplate);
+  putTemplate(params, "nameTpl", criteria.nameTemplate);
+  putTemplate(params, "descTpl", criteria.descriptionTemplate);
   if (request.seed) params.set("seed", request.seed);
   for (const id of request.pinnedItemIds) params.append("pin", id);
   for (const id of request.rejectedItemIds) params.append("reject", id);
@@ -277,6 +302,18 @@ export function lotBuilderSearchParams(request: LotBuilderRequest): URLSearchPar
 
 function putNum(params: URLSearchParams, key: string, value: number | null): void {
   if (value !== null) params.set(key, String(value));
+}
+
+/** A listing template as the address carries it: absent is *not stated*, an empty parameter is
+ *  *stated empty* (#1687), and the text is trimmed at both ends as typed text is everywhere
+ *  (ADR-0055) — so whitespace alone is empty, and a trailing newline is not an edit to a preset. */
+function template(raw: string | null): string | null {
+  return raw === null ? null : raw.trim();
+}
+
+function putTemplate(params: URLSearchParams, key: string, value: string | null): void {
+  const text = template(value);
+  if (text !== null) params.set(key, text);
 }
 
 // ── The suggested texts ─────────────────────────────────────────────────────────────────────────

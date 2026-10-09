@@ -1311,7 +1311,9 @@ clears the span you left over from the last lot rather than leaving it in — ot
 name would mean different things depending on what happened to be on screen.
 
 Change anything after applying and the select says **· edited**: what you are looking at is no longer
-what the name says. **Update** overwrites it with what is on screen (and renames it if you want),
+what the name says. Emptying a field counts — clear a template, a year or a target and the set can be
+updated to leave it empty, so nothing a saved set holds is there for good. A template of nothing but
+spaces is empty. **Update** overwrites it with what is on screen (and renames it if you want),
 **Save as…** keeps it as a second one, and the ✕ deletes it. Deleting changes nothing else — the
 criteria on screen stay put, and lots you already built from it are ordinary offers.
 
@@ -1438,7 +1440,9 @@ would freeze a number that goes stale the moment a copy leaves. Both are in the 
 above if you want to state them as of today.
 
 They are saved as part of a [saved set of criteria](#saved-criteria): how a kind of lot is *worded*
-repeats as much as how it is picked.
+repeats as much as how it is picked. A set keeps a field you **cleared** as cleared, so applying it
+leaves that field blank for the platform's template, while a set saved with the suggestion still in
+a field brings the suggestion back.
 
 A template of your own is not decoration: the **platform's** template over a hundred unrelated stamps
 comes out as a dozen catalogue-number ranges, which is longer than most platforms allow, and a text
