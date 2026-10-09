@@ -7,6 +7,7 @@ import { titleFallbackKey, type TitleFallback } from "@/lib/offer-title-template
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
+import { useEscapeLayer } from "@/app/escape-stack";
 
 // Filling a **missing translation where the generated title needs it** (#299/#300).
 //
@@ -17,8 +18,8 @@ import { TextInput } from "./text-input";
 // be the same row the entity's own translations dialog writes (#293–#296).
 //
 // Two surfaces share this file: the gaps panel (#299) and the popover a flagged token in the preview
-// opens (#300) — the latter is the same editor over a filtered list, so there is one save path and
-// one notion of what a gap is.
+// opens (#300) — or a name in the preview's warning line (#1733). The popover is the same editor over
+// a filtered list, so there is one save path and one notion of what a gap is.
 
 /** How a gap reads on screen: which entity it belongs to, and which of its fields. Keyed by the
  * `entityType:entityField` pair the server reports. */
@@ -51,7 +52,9 @@ const GAP_LABELS: Readonly<Record<string, string>> = {
  * server component may not import a value from a `"use client"` module. */
 export const gapKey = titleFallbackKey;
 
-function gapLabel(gap: TitleFallback): string {
+/** What kind of name a gap is — `Area`, `Stamp`, `Condition (abbr.)` — falling back to the copy
+ * field it rendered from. */
+export function gapLabel(gap: TitleFallback): string {
   return GAP_LABELS[`${gap.entityType}:${gap.entityField}`] ?? gap.field;
 }
 
@@ -312,22 +315,17 @@ export function TranslationGapPopover({
 }: TranslationGapPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
 
+  // An Escape layer of its own (#1733): it opens after whatever it floats above, so it is the top of
+  // the stack and Escape closes it alone — the dialog under it needs to know nothing about it. Its
+  // hosts include the template builder, which cannot tell the dialog it sits in to step aside.
+  useEscapeLayer(onClose);
+
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      // Closing the popover must not also close the dialog it floats above.
-      e.stopImmediatePropagation();
-      onClose();
-    }
     function onPointerDown(e: MouseEvent) {
       if (!ref.current?.contains(e.target as Node)) onClose();
     }
-    document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("mousedown", onPointerDown, true);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      document.removeEventListener("mousedown", onPointerDown, true);
-    };
+    return () => document.removeEventListener("mousedown", onPointerDown, true);
   }, [onClose]);
 
   if (typeof document === "undefined" || gaps.length === 0) return null;

@@ -176,7 +176,10 @@ cursor. The preview renders in the platform's **listing language**, so you see t
 listings will read — any word for which you have not entered text in that
 language is dotted-underlined and named in a line beneath the preview (*default language used for
 {condition}*), so you can spot the gaps while you write the template. Nothing is blocked: the title
-always generates, falling back to your default text. The tokens fill in from the copies in the offer (or set):
+always generates, falling back to your default text. Each untranslated name in that line is a link
+(*Netherlands → Polish*): click it to type that name in the listing language right there. It is saved
+on the area, condition, stamp or issue itself — so it applies everywhere that name is used in that
+language — and the preview re-reads at once; the line goes when nothing is left untranslated. The tokens fill in from the copies in the offer (or set):
 
 - `{name}` — stamp name
 - `{catalog}` — catalog number (configurable, see below)

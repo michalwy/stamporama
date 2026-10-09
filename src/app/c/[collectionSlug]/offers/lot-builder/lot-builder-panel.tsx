@@ -420,6 +420,7 @@ export function LotBuilderPanel({
     data: proposal,
     isLoading: proposalLoading,
     isFetching: proposalFetching,
+    refetch: refetchProposal,
   } = useLotProposal(collectionId, request);
 
   // The suggestion follows the proposal until the collector types over it. Reading it here rather
@@ -519,8 +520,15 @@ export function LotBuilderPanel({
       pick: () => {},
       // The lot's own copies, previewed as the one-set offer the commit creates (#1350).
       oneListing: true,
+      // A name translated from a preview's warning (#1733) re-asks for the same lot: the seed and the
+      // marks are unchanged, so the pick is too, and only its wording moves.
+      translate: {
+        collectionId,
+        language: proposal?.templateLanguage ?? null,
+        refresh: () => void refetchProposal(),
+      },
     }),
-    [proposal?.templateSamples, proposalLoading]
+    [proposal?.templateSamples, proposal?.templateLanguage, proposalLoading, collectionId, refetchProposal]
   );
 
   const platformChosen = !!criteria.platformId;

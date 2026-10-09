@@ -8,6 +8,7 @@ import {
   randomTitleSampleCopy,
   randomTitleSampleCopies,
   listTitleSampleCopies,
+  titleSampleCopiesByIds,
   type TitleSampleCopy,
 } from "@/lib/title-samples";
 
@@ -49,4 +50,15 @@ export async function searchTitleSamplesAction(
 ): Promise<TitleSampleCopy[]> {
   const session = await getSession();
   return listTitleSampleCopies(session.user.id, collectionId, { search, language });
+}
+
+/** The same copies again, re-resolved — after a translation was entered from the preview's warning
+ * (#1733), so the preview re-renders over the copies it was showing rather than reshuffling. */
+export async function titleSamplesByIdsAction(
+  collectionId: string,
+  itemIds: string[],
+  language: string | null = null
+): Promise<TitleSampleCopy[]> {
+  const session = await getSession();
+  return titleSampleCopiesByIds(session.user.id, collectionId, itemIds, language);
 }

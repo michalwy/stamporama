@@ -17,8 +17,9 @@ import { useEffect, useRef } from "react";
  * hears Escape.
  *
  * The shared listener deliberately does **not** stop the event: popovers that are not layers of
- * their own (row-action menus, translation popovers) keep their own listeners and keep behaving as
- * they did. An autocomplete's list is a layer while it is up (#1597). A surface that must yield to such a popover disables its layer while
+ * their own (row-action menus) keep their own listeners and keep behaving as they did. The
+ * translation popover became a layer (#1733), because one of its hosts cannot reach the dialog it
+ * sits in. An autocomplete's list is a layer while it is up (#1597). A surface that must yield to such a popover disables its layer while
  * the popover is up — that is what `DialogShell`'s `dismissable` is for.
  */
 type Layer = { onEscape: () => void };

@@ -261,12 +261,11 @@ export function ComposeSetDialog({
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    // The translation popover (#300) is not an Escape layer — it keeps its own listener — so this
-    // dialog steps out of the stack while it is up instead of closing out from under it.
+    // The translation popovers (#300, #1733) are Escape layers of their own, opened above this one,
+    // so Escape closes them first without this dialog stepping aside.
     <DialogShell
       title="Add set"
       onClose={onClose}
-      dismissable={openFix === null}
       maxWidth="min(96vw, 100rem)"
       height={PICKER_DIALOG_HEIGHT}
     >
@@ -391,7 +390,17 @@ export function ComposeSetDialog({
                 </span>
               )}
             </div>
-            {preview && <TitleFallbackNote tokens={preview.fallbackTokens} />}
+            {preview && (
+              <TitleFallbackNote
+                tokens={preview.fallbackTokens}
+                fix={{
+                  collectionId,
+                  language: previewLanguage,
+                  gaps: preview.gaps,
+                  onSaved: refreshPreview,
+                }}
+              />
+            )}
             {/* Fill the gaps right here (#299) — each saves on its own, so they survive Cancel. */}
             {preview && (
               <div style={{ marginTop: "0.5rem" }}>

@@ -484,8 +484,9 @@ and press Enter (or click away) and it is saved **straight away**, on its own:
 - It is **not** part of the offer: cancelling the Add set dialog keeps the translation you typed.
 - The preview re-renders as soon as it saves, and the gap leaves the list.
 
-You can also click a dotted-underlined word in the preview itself to edit just that one, in a small
-popover. Clearing a box again removes the translation and the default text comes back.
+You can also click a dotted-underlined word in the preview itself, or a name in the *default language
+used* line under it (*Netherlands → Polish*), to edit just that one, in a small popover. Clearing a
+box again removes the translation and the default text comes back.
 
 An **{area}** gap is filled on the area whose title name actually appears in your titles, which is
 not always the copy's own area: with title names rolled up from a parent (see
@@ -1472,6 +1473,8 @@ per copy), in the platform's listing language. `{area}`, `{year}`, `{condition}`
 is mostly made of; the rest of the vocabulary is there if you want it. The description lists the
 [repeating blocks](contacts.md#description-and-private-note) as well — `{#copy}…{/copy}` to write one
 line per copy, a condition legend, and the rest — exactly as a platform's description template does.
+A name the preview could only print in your default language is listed under it as a link — click it
+to enter the translation right there, as in a platform's [template builder](contacts.md#adding-and-editing).
 
 Because they are templates, the wording **keeps following the offer**. Strike a copy that sold
 somewhere else and the title re-reads at 99 by itself — which finished text could not do, and which
