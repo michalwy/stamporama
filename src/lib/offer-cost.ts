@@ -8,7 +8,10 @@
 // is pending. A pending copy with no possible estimate leaves the figure incomplete and is named.
 //
 // Pure: `offers.ts` feeds it the frozen side (from the set's holdings summary) and each pending
-// copy's estimate (from `cost-estimates.ts`), so the unit suite can hold the rule.
+// copy's estimate (from `cost-estimates.ts`), so the unit suite can hold the rule. The Lot builder's
+// proposed lot is costed by the same rule from its copies' own fields (`copiesCost`, #1743).
+
+import { resolveCostBasis, type CostBasisInput } from "./cost-basis";
 
 /** A pending copy of a set, as the offer's COST needs it. */
 export interface OfferPendingCopy {
@@ -64,6 +67,46 @@ export function offerSetCost(
     noneCount: known.noneCount,
     estimated: pending.length > 0,
   };
+}
+
+/** A copy as {@link copiesCost} reads it: its cost-basis inputs, whether its lot is on an opening
+ *  balance, the estimate a list read already carries while it is pending (#1696), and its label. */
+export interface CopyCostInput extends CostBasisInput {
+  openingBalance: boolean;
+  /** Base-currency 2-dp estimate while pending, or null when none can be made. */
+  costEstimate: string | null;
+  label: string;
+}
+
+/**
+ * The COST of copies not yet on an offer — the Lot builder's proposed lot (#1743) — under the very
+ * rule a set's COST follows: a frozen cost basis where known, the estimate where the lot is still
+ * open. Built from each copy's own fields rather than a holdings summary, which is what an offer set
+ * reads, but to the same split: a copy on an opening balance carries an opening value, not money
+ * spent, and is left out as `holdings.cost` leaves it out (#1324). The caller hands it held copies
+ * only.
+ */
+export function copiesCost(copies: readonly CopyCostInput[]): OfferSetCost {
+  let total = 0;
+  let count = 0;
+  let noneCount = 0;
+  const pending: OfferPendingCopy[] = [];
+  for (const copy of copies) {
+    if (copy.openingBalance) continue;
+    const basis = resolveCostBasis(copy);
+    if (basis.state === "known") {
+      total += cents(Number(basis.amount));
+      count++;
+    } else if (basis.state === "pending") {
+      pending.push({
+        label: copy.label,
+        estimate: copy.costEstimate == null ? null : Number(copy.costEstimate),
+      });
+    } else {
+      noneCount++;
+    }
+  }
+  return offerSetCost({ total: (total / 100).toFixed(2), count, noneCount }, pending);
 }
 
 /** The offer's *Total* and *Per set* COST, summed from its sets' (#378's rule: an offer never lists a

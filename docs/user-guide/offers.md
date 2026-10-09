@@ -1397,7 +1397,13 @@ choosing one. Both buttons sit on the figures block, beside the numbers they cha
 stays pinned as you scroll.
 
 The figures give you most of the *why* — the pieces and the catalogue value against their ranges, the
-complete sets that went in whole, the copies with no catalogue value — and above the list comes the
+complete sets that went in whole, the copies with no catalogue value — and beside the catalogue
+value sits the lot's **cost**: what its copies cost you, the two figures a lot's price is set
+between. It is counted exactly as an [offer's cost](#what-a-set-is-worth) is: a
+copy whose purchase lot is still open counts at its **estimated** cost and marks the figure `~`, muted
+and italic, with the hover saying how many copies are estimated and naming any that have no figure
+yet. A copy from an opening balance is left out, as on an offer. Pinning, rejecting or re-rolling
+updates it with the rest of the figures. Above the list comes the
 rest of it, stated rather than left to be noticed: the **sets that were left out** and what refused
 them. A set your per-stamp cap would
 have broken is named along with the stamp that blocked it: the cap is something you typed, and a
