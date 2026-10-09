@@ -1430,11 +1430,13 @@ is **named on screen** and left out, never quietly released.
 the chosen copies. One set, not one per copy: a set is the thing a buyer buys,
 and one set per copy would describe your lot as a hundred alternative listings.
 
-On Facebook the section also asks for the **Facebook group** the lot is offered in, starting on
-the last one you used. The button stays greyed out until one is chosen. An auction takes the group's
+Below the two templates, one line holds where and how the lot is sold. On Facebook it starts with
+the **Facebook group** the lot is offered in, starting on the last one you used; a long group name is
+shortened, and pointing at it shows it whole. The button stays greyed out until one is chosen. An auction takes the group's
 starting price, increment and closing time — see [Facebook](facebook.md#without-the-form).
 
-**Listing type** says whether the lot is an **Auction** or a **Quick buy**. It starts on what the
+**Listing type**, beside the group — or alone on the line on any other platform — says whether the
+lot is an **Auction** or a **Quick buy**. It starts on what the
 offer would be anyway — the group's type on Facebook, the platform's default type elsewhere — and
 choosing another Facebook group sets it back to that group's.
 
