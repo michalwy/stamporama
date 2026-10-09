@@ -617,8 +617,9 @@ from now on; offers already prepared or listed keep exactly the photos they were
 one of those on the offer itself, with the **⚙** button in its Photos card (see
 [Offers → Photo settings](offers.md#photo-settings)).
 
-Every contact row has a **⋮** menu with **Edit** and **Delete**. Editing replaces all the
-details and roles with whatever the dialog shows when you save.
+Every contact row has a **⋮** menu with **Edit** and **Delete**. **Edit** is also the pencil icon
+beside the menu, so the most common change is one click away. Editing replaces all the details and
+roles with whatever the dialog shows when you save.
 
 ## Finding a contact
 
