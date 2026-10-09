@@ -119,6 +119,8 @@ const LABEL_STYLE: CSSProperties = {
   letterSpacing: "0.04em",
 };
 
+const TABLE_LABEL_STYLE: CSSProperties = { ...LABEL_STYLE, fontSize: "0.75rem" };
+
 const CRUMB_BUTTON: CSSProperties = {
   background: "none",
   border: "none",
@@ -136,9 +138,11 @@ const CRUMB_CURRENT: CSSProperties = {
   color: "var(--color-text-primary)",
 };
 
+// The table is set at the app's body size, its value lines one step under it (#1712): at the caption
+// size it was hard to read on a large window. The column labels grow with it, keeping the proportions.
 const TABLE_STYLE: CSSProperties = {
   borderCollapse: "collapse",
-  fontSize: "0.8125rem",
+  fontSize: "0.875rem",
   fontVariantNumeric: "tabular-nums",
   width: "max-content",
   minWidth: "20rem",
@@ -193,7 +197,7 @@ const VALUES_STYLE: CSSProperties = {
   flexDirection: "column",
   alignItems: "flex-end",
   marginTop: "0.125rem",
-  fontSize: "0.6875rem",
+  fontSize: "0.8125rem",
   lineHeight: 1.35,
   color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
@@ -756,13 +760,13 @@ function StructureTable({
     <table style={TABLE_STYLE}>
       <thead>
         <tr>
-          <th style={{ ...HEADING_CELL, ...LABEL_STYLE }}>{corner}</th>
+          <th style={{ ...HEADING_CELL, ...TABLE_LABEL_STYLE }}>{corner}</th>
           {data.columns.map((column) => (
             <th key={column.key} style={{ ...CELL, fontWeight: 400 }}>
               <HeadingButton heading={column} onDrill={() => onDrill(column)} />
             </th>
           ))}
-          <th style={{ ...TOTAL_CELL, ...LABEL_STYLE, textAlign: "right" }}>
+          <th style={{ ...TOTAL_CELL, ...TABLE_LABEL_STYLE, textAlign: "right" }}>
             {crossed ? "Total" : "Copies"}
           </th>
         </tr>

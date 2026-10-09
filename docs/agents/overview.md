@@ -118,6 +118,10 @@ The collection Overview at `/c/[collectionSlug]` — the holdings, financial and
     leaves out and says why on hover (`structureValueGaps`) — settled with the collector on
     2026-09-27 over writing the reasons into every cell. A copy counted but not in hand (never
     arrived, damaged) is in none of the three and named as such.
+  - **The table is set at the app's body size** (#1712, 2026-10-09): counts, headings and totals at
+    `0.875rem`, the value lines one step under at `0.8125rem` — the sidebar's entry and child sizes.
+    At the caption size it was hard to read on a large window. A wide table scrolls inside its own
+    frame rather than shrinking the type back.
 
 - **One allocation pass, grouped** — `realizedProceedsByGroup` (`sales.ts`) exists for the
   purchase-ROI tile: the per-purchase question over every purchase at once, where calling
