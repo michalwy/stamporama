@@ -484,7 +484,7 @@ function DefaultsFields({
               onChange={setText("postTemplate")}
             />
           </div>
-          <div style={{ gridColumn: "1 / -1" }}>
+          <div>
             <span style={SMALL_LABEL}>Starting price</span>
             <StartingPriceField initial={defaults} currency={platformCurrency} />
           </div>
@@ -682,11 +682,9 @@ function GroupFields({
               />
             </FollowableSetting>
           </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <FollowableSetting label="Starting price" small {...setting("startingPrice")}>
-              <StartingPriceField initial={start} currency={shownCurrency} />
-            </FollowableSetting>
-          </div>
+          <FollowableSetting label="Starting price" small {...setting("startingPrice")}>
+            <StartingPriceField initial={start} currency={shownCurrency} />
+          </FollowableSetting>
           <FollowableSetting
             label="Bid increment"
             note={shownCurrency ? `In ${shownCurrency}` : undefined}
@@ -943,7 +941,8 @@ function UnusedNote() {
   );
 }
 
-/** The starting price: its kind, and the figure beside it once there is one. */
+/** The starting price: its kind, and the figure under it once there is one — the field has half of
+ *  *New auctions*' row, beside the bid increment (#1685). */
 function StartingPriceField({
   initial,
   currency,
@@ -953,7 +952,7 @@ function StartingPriceField({
 }) {
   const [mode, setMode] = useState<FacebookStartingPriceMode | "">(initial.startingPriceMode ?? "");
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+    <div style={{ display: "grid", gap: "0.5rem" }}>
       <div>
         <select
           name="startingPriceMode"
@@ -963,35 +962,34 @@ function StartingPriceField({
           style={{ ...SETTINGS_FIELD_SELECT_STYLE, width: "100%" }}
         >
           <option value="">No starting price</option>
-          <option value="amount">Starting price: an amount</option>
-          <option value="catalogPercent">Starting price: % of catalogue value</option>
+          {/* The label above says *Starting price*; half a row has no room to say it again. */}
+          <option value="amount">An amount</option>
+          <option value="catalogPercent">% of catalogue value</option>
         </select>
       </div>
-      <div>
-        {mode !== "" && (
-          <>
-            <NumericInput
-              key={mode}
-              kind={mode === "amount" ? "amount" : "number"}
-              name="startingPriceValue"
-              aria-label={mode === "amount" ? "Starting price amount" : "Percentage of catalogue value"}
-              defaultValue={
-                initial.startingPriceMode === mode && initial.startingPriceValue != null
-                  ? mode === "amount"
-                    ? initial.startingPriceValue.toFixed(2)
-                    : String(initial.startingPriceValue)
-                  : ""
-              }
-              style={INPUT_STYLE}
-            />
-            <FieldNote>
-              {mode === "amount"
-                ? `Amount${currency ? `, in ${currency}` : ""}`
-                : "Percent of the copies' catalogue value"}
-            </FieldNote>
-          </>
-        )}
-      </div>
+      {mode !== "" && (
+        <div>
+          <NumericInput
+            key={mode}
+            kind={mode === "amount" ? "amount" : "number"}
+            name="startingPriceValue"
+            aria-label={mode === "amount" ? "Starting price amount" : "Percentage of catalogue value"}
+            defaultValue={
+              initial.startingPriceMode === mode && initial.startingPriceValue != null
+                ? mode === "amount"
+                  ? initial.startingPriceValue.toFixed(2)
+                  : String(initial.startingPriceValue)
+                : ""
+            }
+            style={INPUT_STYLE}
+          />
+          <FieldNote>
+            {mode === "amount"
+              ? `Amount${currency ? `, in ${currency}` : ""}`
+              : "Percent of the copies' catalogue value"}
+          </FieldNote>
+        </div>
+      )}
     </div>
   );
 }
