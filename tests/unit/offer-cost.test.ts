@@ -1,6 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { offerCostEstimateNotes, offerCostTotals, offerSetCost } from "../../src/lib/offer-cost";
+import {
+  copiesCost,
+  offerCostEstimateNotes,
+  offerCostTotals,
+  offerSetCost,
+  type CopyCostInput,
+} from "../../src/lib/offer-cost";
 
 // An offer's COST while some copies' lot is still open (#1736): a pending copy counts at its
 // estimate and marks the figure, one with no estimate leaves it partial and is named, and a set with
@@ -94,5 +100,60 @@ describe("the estimated COST's hint (#1736)", () => {
     assert.match(offerCostEstimateNotes(0, ["Mi 1", "Mi 2"])[0], /no figure yet for Mi 1, Mi 2 —/);
     const long = offerCostEstimateNotes(0, ["1", "2", "3", "4", "5", "6", "7"])[0];
     assert.match(long, /for 1, 2, 3, 4, 5 and 2 more/);
+  });
+});
+
+// The Lot builder's proposed lot (#1743), costed from its copies' own fields by the same rule.
+describe("a proposed lot's cost (#1743)", () => {
+  const copy = (over: Partial<CopyCostInput>): CopyCostInput => ({
+    costBasis: null,
+    lotId: null,
+    lotStatus: null,
+    lotValued: null,
+    openingBalance: false,
+    costEstimate: null,
+    label: "#1",
+    ...over,
+  });
+  const frozen = (amount: string) => copy({ costBasis: amount, lotId: "L1", lotStatus: "closed", lotValued: true });
+  const open = (label: string, estimate: string | null) =>
+    copy({ lotId: "L2", lotStatus: "open", lotValued: true, costEstimate: estimate, label });
+
+  it("sums frozen cost bases, unmarked, when nothing is pending", () => {
+    const cost = copiesCost([frozen("1.10"), frozen("0.20"), copy({})]);
+    assert.equal(cost.amount, "1.30");
+    assert.equal(cost.knownCount, 2);
+    assert.equal(cost.noneCount, 1);
+    assert.equal(cost.estimated, false);
+  });
+
+  it("counts an open lot's copy at its estimate and marks the figure", () => {
+    const cost = copiesCost([frozen("2.00"), open("#2", "0.75")]);
+    assert.equal(cost.amount, "2.75");
+    assert.equal(cost.estimatedCount, 1);
+    assert.equal(cost.estimated, true);
+  });
+
+  it("leaves a pending copy with no estimate out, named, and the figure marked as partial", () => {
+    const cost = copiesCost([frozen("2.00"), open("#3 (Eagle)", null)]);
+    assert.equal(cost.amount, "2.00");
+    assert.deepEqual(cost.unestimated, ["#3 (Eagle)"]);
+    assert.equal(cost.estimated, true);
+  });
+
+  it("leaves an opening balance's copy out, as an offer's COST does", () => {
+    const cost = copiesCost([
+      frozen("1.00"),
+      copy({ costBasis: "9.00", lotId: "L3", lotStatus: "closed", lotValued: true, openingBalance: true }),
+    ]);
+    assert.equal(cost.amount, "1.00");
+    assert.equal(cost.knownCount, 1);
+    assert.equal(cost.noneCount, 0);
+  });
+
+  it("has no figure when no copy carries one", () => {
+    const cost = copiesCost([copy({}), open("#4", null)]);
+    assert.equal(cost.amount, null);
+    assert.equal(cost.estimated, true);
   });
 });

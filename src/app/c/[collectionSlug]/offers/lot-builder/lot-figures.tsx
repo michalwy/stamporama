@@ -7,6 +7,8 @@ import type { LotAxisReport } from "@/lib/lot-builder-rules";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { FIGURE_FRAME, SkeletonBlock } from "./lot-builder-chrome";
 import { faultReducedTotalHint } from "@/lib/fault-reduction";
+import { offerCostEstimateNotes } from "@/lib/offer-cost";
+import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 
 // The lot builder's figures — **one** readout, and one line per question (#760).
 //
@@ -29,7 +31,7 @@ import { faultReducedTotalHint } from "@/lib/fault-reduction";
 // the pointer through a hundred rows.
 //
 // A question only one side can answer — how many *different* stamps the pool holds, what the cap
-// would allow, what the lot promised away in a trade — names its side in words (`17 in the pool`)
+// would allow, what the lot cost, what the lot promised away in a trade — names its side in words (`17 in the pool`)
 // rather than leaving a bare figure to be read as whichever the reader assumed. That is also why the
 // rows are declared rather than drawn: the pool and the lot are not the same list of questions, only
 // mostly.
@@ -89,6 +91,8 @@ interface FigureRow {
   poolAlarm?: boolean;
   lot: string | null;
   lotAlarm?: boolean;
+  /** The lot's figure leans on an open lot's estimate (#1743): `~`, muted italic, as an offer's COST. */
+  lotEstimated?: boolean;
   note?: string;
 }
 
@@ -153,7 +157,8 @@ function reducedValueHint(
 }
 
 /** The questions, in the order a collector reads them: the four both sides answer first — they are
- *  the comparison the bar exists for — then what only one side can. */
+ *  the comparison the bar exists for — then what only one side can. The lot's cost is the exception,
+ *  sitting beside its catalogue value because the price is set between the two (#1743). */
 function buildRows(
   criteria: LotBuilderCriteria,
   summary: LotPoolSummary,
@@ -188,6 +193,7 @@ function buildRows(
         ? describeAxis(plan.catalogValue, currency)
         : poolNote(summary.catalogValue, criteria.valueMin, criteria.valueMax),
     },
+    ...(proposal ? [costRow(proposal, currency)] : []),
     {
       key: "sets",
       label: "Complete sets",
@@ -243,12 +249,35 @@ function buildRows(
   return rows;
 }
 
+/**
+ * What the proposed lot's copies cost, beside its catalogue value (#1743) — the two figures a lot's
+ * price is set between. Counted as an offer's COST is (#1736): an open lot's copies at their estimate,
+ * the figure then marked, and the hover saying how many and naming any with no figure. The lot's side
+ * only: the pool's cost answers nothing a collector prices against.
+ */
+function costRow(proposal: LotProposal, currency: string): FigureRow {
+  const { cost } = proposal;
+  return {
+    key: "cost",
+    label: `Cost · ${currency}`,
+    hint: [
+      `What the lot's copies cost you — ${cost.knownCount} costed`,
+      ...offerCostEstimateNotes(cost.estimatedCount, cost.unestimated),
+      ...(cost.noneCount > 0 ? [`${cost.noneCount} no cost recorded`] : []),
+    ].join(" — "),
+    pool: null,
+    lot: cost.amount === null ? "—" : `${cost.estimated ? "~" : ""}${cost.amount}`,
+    lotEstimated: cost.estimated && cost.amount !== null,
+  };
+}
+
 function Tile({ row, hasLot }: { row: FigureRow; hasLot: boolean }) {
   // Before a pick there is only the pool to state. After one, the lot leads and the pool becomes its
   // denominator — which is the sentence a collector says out loud: "twenty-six of twenty-six".
   const bothSides = hasLot && row.lot !== null && row.pool !== null;
   const lead = hasLot && row.lot !== null ? row.lot : row.pool;
   const alarm = hasLot && row.lot !== null ? row.lotAlarm : row.poolAlarm;
+  const estimated = hasLot && row.lot !== null && row.lotEstimated;
   const qualifier = bothSides
     ? `of ${row.pool}`
     : !hasLot
@@ -261,7 +290,13 @@ function Tile({ row, hasLot }: { row: FigureRow; hasLot: boolean }) {
     <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem", minWidth: 0 }}>
       <Label hint={row.hint}>{row.label}</Label>
       <span style={{ display: "flex", alignItems: "baseline", gap: "0.3rem", minWidth: 0 }}>
-        <span style={{ ...FIGURE, color: alarm ? "var(--color-warning)" : FIGURE.color }}>
+        <span
+          style={{
+            ...FIGURE,
+            color: alarm ? "var(--color-warning)" : FIGURE.color,
+            ...(estimated ? COST_ESTIMATE_STYLE : {}),
+          }}
+        >
           {lead ?? "—"}
         </span>
         {qualifier && <span style={QUALIFIER}>{qualifier}</span>}

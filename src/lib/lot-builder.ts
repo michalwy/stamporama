@@ -40,6 +40,8 @@ import type { CommittedCopy } from "./trade-reservation-rules";
 import { createOffer, syncGeneratedTexts } from "./offers";
 import { readFacebookCreateChoice, type FacebookCreateChoice } from "./facebook-post-rules";
 import { shownChecklistWhere } from "./checklist-kind";
+import { copiesCost, type OfferSetCost } from "./offer-cost";
+import { formatItemNo } from "./item-number";
 
 // The server half of the bulk-lot builder (#759; #756's design, #758's rules).
 //
@@ -400,6 +402,9 @@ export interface LotProposal {
   refusedChecklists: RefusedChecklistDetail[];
   /** The criteria panel's readout over the same pool this proposal was picked from. */
   summary: LotPoolSummary;
+  /** What the picked copies cost (#1743), as an offer's COST counts it (#1736): cost bases where
+   *  frozen, estimates where the lot is still open, marked as an estimate. Base currency. */
+  cost: OfferSetCost;
   /** What the wizard's title and description fields are pre-filled with. */
   suggested: LotSuggestedTexts;
 }
@@ -461,6 +466,14 @@ export async function buildLotProposal(
     takenChecklists: series.taken,
     refusedChecklists: series.refused,
     summary,
+    // Off the copies already read, each carrying its cost basis and, while pending, its estimate —
+    // every copy the pool admits is held, so none is left out for having gone.
+    cost: copiesCost(
+      copies.map((c) => ({
+        ...c,
+        label: `${formatItemNo(c.itemNo)}${c.stampName ? ` (${c.stampName})` : ""}`,
+      }))
+    ),
     suggested: await suggestTexts(collectionId, criteria),
     templateSamples,
     templateLanguage: language,

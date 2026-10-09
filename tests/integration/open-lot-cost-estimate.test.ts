@@ -7,6 +7,7 @@ import { getItemListItem, getLotIntakeSummary, listItemsPaginated } from "../../
 import { getStampPurchaseCosts } from "../../src/lib/purchase-costs";
 import { estimateCopyCost } from "../../src/lib/purchase-allocation";
 import { addOfferSet, createOffer, getOfferDetail } from "../../src/lib/offers";
+import { buildLotProposal } from "../../src/lib/lot-builder";
 
 // What a copy on a still-open lot is estimated to cost, read for the screens outside its purchase
 // order (#1696): the copy's own page and the copies list (`ItemListItem.costEstimate`), and the
@@ -220,5 +221,53 @@ describe("an open lot's copy shows its estimated cost (#1696)", () => {
     assert.equal(t.costEstimatedCount, 2);
     assert.equal(t.costUnestimated.length, 1);
     assert.equal(t.costEstimated, true);
+  });
+
+  it("is counted into the Lot builder's proposed lot the same way (#1743)", async () => {
+    // A platform of its own, so the offer above does not keep these copies out of the pool; and the
+    // pool takes only copies for sale and in hand, so every arrived copy is made both.
+    const platformId = (
+      await prisma.contact.create({ data: { collectionId, name: "Allegro", platform: true } })
+    ).id;
+    await prisma.item.updateMany({
+      where: { collectionId, id: { not: lostId } },
+      data: { forSale: true, deliveryState: "delivered" },
+    });
+    const proposal = await buildLotProposal(userId, collectionId, {
+      criteria: {
+        platformId,
+        areaId: null,
+        areaSubtree: true,
+        yearFrom: null,
+        yearTo: null,
+        conditionIds: [],
+        formatIds: [],
+        maxCatalogValue: null,
+        // A target past the pool takes the whole of it.
+        countMin: 1000,
+        countMax: null,
+        valueMin: null,
+        valueMax: null,
+        series: "neutral",
+        maxPerStamp: null,
+        duplicates: "neutral",
+        nameTemplate: null,
+        descriptionTemplate: null,
+        listingType: null,
+        facebookGroupId: null,
+      },
+      seed: "seed-1",
+      pinnedItemIds: [],
+      rejectedItemIds: [],
+    });
+    assert.equal(proposal.plan.itemIds.length, 5);
+    // The closed lot's 1.33 + 2.67 frozen, the open lot's 4.00 + 8.00 estimated, the unpriced copy
+    // named for having no figure.
+    assert.equal(proposal.cost.amount, "16.00");
+    assert.equal(proposal.cost.knownCount, 2);
+    assert.equal(proposal.cost.estimatedCount, 2);
+    assert.equal(proposal.cost.unestimated.length, 1);
+    assert.match(proposal.cost.unestimated[0], /Unpriced/);
+    assert.equal(proposal.cost.estimated, true);
   });
 });
