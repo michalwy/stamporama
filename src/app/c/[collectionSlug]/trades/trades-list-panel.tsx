@@ -22,6 +22,7 @@ import { useTradesInfinite, useInvalidateTrades, type TradeFilters } from "./use
 import { TradeFormDialog, type TradeCatalogVendor } from "./trade-form-dialog";
 import { TradeRow } from "./trade-row";
 import { useToast } from "@/app/toast-provider";
+import { useContacts } from "@/app/c/[collectionSlug]/contacts/use-contacts-query";
 
 type DialogState =
   | { kind: "none" }
@@ -73,9 +74,18 @@ export function TradesListPanel({
   const { invalidateList, invalidatePartners } = useInvalidateTrades();
   const { toast } = useToast();
 
-  const statusParam = searchParams.get("status");
-  const status: TradeStatus | undefined =
-    statusParam && isTradeStatus(statusParam) ? statusParam : undefined;
+  // A **set** in the URL (#1710), so a contact page's *open trades* can name the three statuses that
+  // are open; the chips still pick one, and pressing a chip replaces whatever the link named.
+  const statusParam = searchParams.get("status") ?? "";
+  const statuses = useMemo(() => statusParam.split(",").filter(isTradeStatus), [statusParam]);
+
+  // One partner (#1710) — how a contact page's trade figures open this list. URL-only and never
+  // remembered, the sales list's buyer rule: a lit chip naming the partner, and pressing it is the
+  // way back to every partner.
+  const partnerId = searchParams.get("partner") || undefined;
+  const { data: contacts } = useContacts(collectionId);
+  const partnerName = partnerId ? contacts?.find((c) => c.id === partnerId)?.name : undefined;
+
   const search = searchParams.get("search") ?? "";
   const sortBy = (searchParams.get("sortBy") as TradeSortBy) || "createdAt";
   const sortDir = (searchParams.get("sortDir") as "asc" | "desc") || "desc";
@@ -98,8 +108,8 @@ export function TradesListPanel({
   );
 
   const filters: TradeFilters = useMemo(
-    () => ({ status, search: search || undefined, sortBy, sortDir }),
-    [status, search, sortBy, sortDir]
+    () => ({ statuses, partnerId, search: search || undefined, sortBy, sortDir }),
+    [statuses, partnerId, search, sortBy, sortDir]
   );
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useTradesInfinite(
@@ -139,7 +149,7 @@ export function TradesListPanel({
     });
   }
 
-  const hasActiveFilters = !!status || !!search;
+  const hasActiveFilters = statuses.length > 0 || !!search || !!partnerId;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "1rem" }}>
@@ -162,15 +172,26 @@ export function TradesListPanel({
           width="16rem"
         />
 
+        {partnerId && (
+          <FilterChip
+            label={`Partner: ${partnerName ?? "…"} ✕`}
+            active
+            onClick={() => updateParams({ partner: "" })}
+          />
+        )}
+
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
-          {TRADE_STATUSES.map((value) => (
-            <FilterChip
-              key={value}
-              label={TRADE_STATUS_LABEL[value]}
-              active={status === value}
-              onClick={() => updateParams({ status: status === value ? "" : value })}
-            />
-          ))}
+          {TRADE_STATUSES.map((value) => {
+            const sole = statuses.length === 1 && statuses[0] === value;
+            return (
+              <FilterChip
+                key={value}
+                label={TRADE_STATUS_LABEL[value]}
+                active={statuses.includes(value)}
+                onClick={() => updateParams({ status: sole ? "" : value })}
+              />
+            );
+          })}
         </div>
 
         <div

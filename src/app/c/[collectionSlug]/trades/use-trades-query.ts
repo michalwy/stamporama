@@ -11,7 +11,10 @@ interface TradesPage {
 }
 
 export interface TradeFilters {
-  status?: TradeStatus;
+  /** Any of these; the chips pick one, a contact page's *open trades* link names three (#1710). */
+  statuses: readonly TradeStatus[];
+  /** One partner (#1710) — URL-only, how a contact page's trade figures open this list. */
+  partnerId?: string;
   /** One box, two meanings: `#7` is the trade number the quick jump sends, anything else is the
    * partner's name. Which one it is, is decided server-side so the two cannot drift apart. */
   search?: string;
@@ -31,7 +34,8 @@ export function useTradesInfinite(collectionId: string, filters: TradeFilters) {
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
-      if (filters.status) params.set("status", filters.status);
+      if (filters.statuses.length) params.set("status", filters.statuses.join(","));
+      if (filters.partnerId) params.set("partnerId", filters.partnerId);
       if (filters.search) params.set("search", filters.search);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);

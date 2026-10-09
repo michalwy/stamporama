@@ -4,16 +4,22 @@ import {
   auctionPremiumTerms,
   auctionWinRate,
   auctionWonSpend,
+  averageDaysToSale,
   contactPeriodRange,
   isContactPeriod,
+  isInContactRange,
   NOT_DELIVERED_PURCHASE_STATUSES,
+  offerClosedOn,
+  OPEN_TRADE_STATUSES,
+  sellThrough,
   sumMoney,
   toBaseAmount,
   UNPAID_SALE_STATUSES,
   UNSENT_SALE_STATUSES,
 } from "../../src/lib/contact-page-rules";
 
-// A contact's page (#1708): the period switch and the money totals its figures are stated in.
+// A contact's page (#1708): the period switch and the money totals its figures are stated in; and
+// the platform and trades sections' own arithmetic (#1710).
 
 describe("contactPeriodRange", () => {
   it("is open at both ends for all time", () => {
@@ -170,5 +176,68 @@ describe("auction figures (#1709)", () => {
     assert.equal(auctionPremiumTerms("20", "1.50", "EUR"), "20% + 1.50 EUR/lot");
     assert.equal(auctionPremiumTerms("18", null, "EUR"), "18%");
     assert.equal(auctionPremiumTerms(null, null, "EUR"), "none");
+  });
+});
+
+describe("isInContactRange", () => {
+  it("includes both ends of the range", () => {
+    const range = { from: "2026-01-01", to: "2026-10-09" };
+    assert.equal(isInContactRange("2026-01-01", range), true);
+    assert.equal(isInContactRange("2026-10-09", range), true);
+    assert.equal(isInContactRange("2025-12-31", range), false);
+    assert.equal(isInContactRange("2026-10-10", range), false);
+  });
+
+  it("admits any day where the range is open", () => {
+    assert.equal(isInContactRange("1999-01-01", { from: null, to: null }), true);
+  });
+});
+
+describe("offerClosedOn", () => {
+  it("places a sold offer on its earliest sale, not on the closing stamp", () => {
+    assert.equal(offerClosedOn("2026-08-12", ["2025-03-04", "2025-02-01"]), "2025-02-01");
+  });
+
+  it("falls back to the closing stamp where no sale names the offer", () => {
+    assert.equal(offerClosedOn("2026-08-12", []), "2026-08-12");
+    assert.equal(offerClosedOn(null, []), null);
+  });
+});
+
+describe("sellThrough", () => {
+  it("is sold of the offers that ended", () => {
+    assert.equal(sellThrough(3, 1), 0.75);
+    assert.equal(sellThrough(0, 2), 0);
+  });
+
+  it("has no figure while nothing has ended", () => {
+    assert.equal(sellThrough(0, 0), null);
+  });
+});
+
+describe("averageDaysToSale", () => {
+  it("averages the days from listing to sale, to one decimal", () => {
+    assert.equal(
+      averageDaysToSale([
+        { listedOn: "2026-01-01", soldOn: "2026-01-11" },
+        { listedOn: "2026-02-27", soldOn: "2026-03-02" },
+        { listedOn: "2026-05-01", soldOn: "2026-05-01" },
+      ]),
+      4.3
+    );
+  });
+
+  it("counts a sale dated before its listing as the same day", () => {
+    assert.equal(averageDaysToSale([{ listedOn: "2026-03-10", soldOn: "2026-03-01" }]), 0);
+  });
+
+  it("has no figure with nothing to average", () => {
+    assert.equal(averageDaysToSale([]), null);
+  });
+});
+
+describe("OPEN_TRADE_STATUSES", () => {
+  it("is every status before a trade is closed or cancelled", () => {
+    assert.deepEqual([...OPEN_TRADE_STATUSES], ["preparing", "shared", "agreed"]);
   });
 });

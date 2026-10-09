@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
-import type { ContactAuctions, ContactPage, ContactPurchases, ContactSales } from "@/lib/contact-page";
+import type {
+  ContactAuctions,
+  ContactPage,
+  ContactPlatform,
+  ContactPurchases,
+  ContactSales,
+  ContactTradeValue,
+  ContactTrades,
+} from "@/lib/contact-page";
 import {
   CONTACT_PERIOD_LABELS,
   CONTACT_PERIODS,
   DEFAULT_CONTACT_PERIOD,
   isContactPeriod,
   NOT_DELIVERED_PURCHASE_STATUSES,
+  OPEN_TRADE_STATUSES,
   UNPAID_SALE_STATUSES,
   UNSENT_SALE_STATUSES,
   type MoneyTotal,
@@ -18,6 +27,7 @@ import { COMMON_MARKETS } from "@/lib/market-anchoring";
 import { AUCTION_SALE_STATUS_LABEL, type AuctionLotOutcome } from "@/lib/auction-rules";
 import { TAG_FILTER_PARAM, TAG_MODE_PARAM } from "@/lib/tag-filter";
 import { PURCHASE_STATUS_META, type PurchaseStatus } from "@/lib/purchase-status";
+import { isTradeStatus } from "@/lib/trade-rules";
 import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
@@ -37,6 +47,7 @@ import {
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { useHydrated } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { saleStatusChipStyle, saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
+import { statusChip as tradeStatusChip } from "@/app/c/[collectionSlug]/trades/trade-row";
 import { CONTACT_ROLES } from "../contact-roles";
 import { ContactFormDialog } from "../contact-form-dialog";
 import { useContactPage, useInvalidateContacts } from "../use-contacts-query";
@@ -115,6 +126,26 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
       status: statuses.join(","),
       search: "",
     })}`;
+  // The platform section's three lists (#1710), each narrowed to this platform and, by the same
+  // empty-param rule as above, to nothing the list happens to remember.
+  const platformHrefs: PlatformHrefs = {
+    offers: (state: string) =>
+      `/c/${collectionSlug}/offers?${new URLSearchParams({ platform: contact.id, state, search: "" })}`,
+    sales: `/c/${collectionSlug}/sales?${new URLSearchParams({ platform: contact.id, status: "", search: "" })}`,
+    purchases: `/c/${collectionSlug}/purchases?${new URLSearchParams({
+      type: "purchase",
+      platform: contact.id,
+      supplier: "",
+      status: "",
+    })}`,
+    settings: (tab: string) => `/c/${collectionSlug}/settings?tab=${tab}`,
+  };
+  const tradesHref = (statuses: readonly string[] = []) =>
+    `/c/${collectionSlug}/trades?${new URLSearchParams({
+      partner: contact.id,
+      status: statuses.join(","),
+      search: "",
+    })}`;
 
   const lotsHref = ({
     outcome = "",
@@ -183,11 +214,21 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
           {data.auctions && (
             <AuctionsCard auctions={data.auctions} collectionSlug={collectionSlug} href={lotsHref} />
           )}
-          {!data.purchases && !data.sales && !data.auctions && (
+          {data.platform && <PlatformCard platform={data.platform} href={platformHrefs} />}
+          {data.trades && (
+            <TradesCard
+              trades={data.trades}
+              baseCurrency={data.baseCurrency}
+              collectionSlug={collectionSlug}
+              href={tradesHref}
+            />
+          )}
+          {!data.purchases && !data.sales && !data.auctions && !data.platform && !data.trades && (
             <DetailCard title="Activity">
               <EmptyNote>
-                Nothing bought from or sold to {contact.name} yet. Give the contact the Seller, Buyer or
-                Auction house role to see those sections before anything is recorded.
+                Nothing recorded with {contact.name} yet. Give the contact the Seller, Buyer, Auction
+                house, Platform or Exchange partner role to see those sections before anything is
+                recorded.
               </EmptyNote>
             </DetailCard>
           )}
@@ -573,6 +614,148 @@ function AuctionsCard({
               </span>
             </RowLinkItem>
           ))}
+        </RowList>
+      )}
+    </DetailCard>
+  );
+}
+
+interface PlatformHrefs {
+  offers: (state: string) => string;
+  sales: string;
+  purchases: string;
+  settings: (tab: string) => string;
+}
+
+const PLATFORM_SETTINGS_LABEL: Record<NonNullable<ContactPlatform["settings"]>, string> = {
+  allegro: "Allegro settings",
+  delcampe: "Delcampe settings",
+  facebook: "Facebook settings",
+};
+
+/** The contact as a platform (#1710). Active and ready are today's; the rest are the period's. */
+function PlatformCard({ platform: p, href }: { platform: ContactPlatform; href: PlatformHrefs }) {
+  const ended = p.soldCount + p.withdrawnCount;
+  return (
+    <DetailCard title="Platform">
+      <FieldGrid min="10rem">
+        <Figure label="Offers active" href={href.offers("active")} hint="now">
+          {p.activeCount}
+        </Figure>
+        <Figure label="Offers ready" href={href.offers("ready")} hint="now">
+          {p.readyCount}
+        </Figure>
+        <Figure label="Offers sold" href={href.offers("sold")}>
+          {p.soldCount}
+        </Figure>
+        <Figure label="Sales through it" href={href.sales}>
+          {p.salesCount}
+        </Figure>
+        <Figure label="Revenue" href={href.sales} hint={moneyHint(p.revenue, "sale")}>
+          <Money total={p.revenue} noun="sale" />
+        </Figure>
+        <Figure
+          label="Sell-through"
+          href={ended > 0 ? href.offers("sold,withdrawn") : null}
+          hint={ended > 0 ? `${p.soldCount} of ${ended} ended` : undefined}
+        >
+          {p.sellThrough == null ? "—" : `${Math.round(p.sellThrough * 100)}%`}
+        </Figure>
+        <Figure
+          label="Time to sale"
+          href={p.avgDaysToSale == null ? null : href.offers("sold")}
+          hint={p.timedCount < p.soldCount ? `over ${p.timedCount} of ${p.soldCount} sold` : undefined}
+        >
+          {p.avgDaysToSale == null ? "—" : `${p.avgDaysToSale} days`}
+        </Figure>
+        <Figure label="Purchases through it" href={href.purchases}>
+          {p.purchaseCount}
+        </Figure>
+        <Figure label="Spent through it" href={href.purchases} hint={moneyHint(p.purchaseSpent, "purchase")}>
+          <Money total={p.purchaseSpent} noun="purchase" />
+        </Figure>
+      </FieldGrid>
+      {p.settings && (
+        <div style={{ marginTop: "1rem" }}>
+          <Link href={href.settings(p.settings)} style={{ ...LINK, fontSize: "0.875rem" }}>
+            {PLATFORM_SETTINGS_LABEL[p.settings]} →
+          </Link>
+        </div>
+      )}
+    </DetailCard>
+  );
+}
+
+/** Lines with no own figure are said beside a trade value rather than counted as zero, as the trade
+ * screen says them. */
+function tradeValueHint(value: ContactTradeValue): string | undefined {
+  if (value.missingLines === 0) return undefined;
+  return `${value.missingLines} line${value.missingLines === 1 ? "" : "s"} without a value left out`;
+}
+
+/** The contact as exchange partner (#1710), valued in the collector's own valuation (#638). */
+function TradesCard({
+  trades: t,
+  baseCurrency,
+  collectionSlug,
+  href,
+}: {
+  trades: ContactTrades;
+  baseCurrency: string;
+  collectionSlug: string;
+  href: (statuses?: readonly string[]) => string;
+}) {
+  return (
+    <DetailCard title="Trades · as exchange partner">
+      <FieldGrid min="10rem">
+        <Figure label="Trades" href={href()}>
+          {t.count}
+        </Figure>
+        <Figure label="Open" href={href(OPEN_TRADE_STATUSES)}>
+          {t.openCount}
+        </Figure>
+        <Figure label="Value given" href={href()} hint={tradeValueHint(t.given)}>
+          {t.given.total} {baseCurrency}
+        </Figure>
+        <Figure label="Value received" href={href()} hint={tradeValueHint(t.received)}>
+          {t.received.total} {baseCurrency}
+        </Figure>
+      </FieldGrid>
+
+      {t.rows.length === 0 ? (
+        <div style={{ marginTop: "1rem" }}>
+          <EmptyNote>No trades in this period.</EmptyNote>
+        </div>
+      ) : (
+        <RowList>
+          {t.rows.map((r, i) => {
+            const chip = isTradeStatus(r.status) ? tradeStatusChip(r.status) : { style: CHIP, label: r.status };
+            return (
+              <RowLinkItem key={r.id} first={i === 0} href={`/c/${collectionSlug}/trades/${r.id}`}>
+                <EntityNoChip entity="trade" no={r.tradeNo} prefix="t" />
+                <span style={META}>{r.createdAt}</span>
+                <span style={chip.style}>{chip.label}</span>
+                <span style={{ flex: 1 }} />
+                <span style={MUTED}>
+                  {r.givePieces} given · {r.receivePieces} received
+                </span>
+                {r.ownGiven != null && r.ownReceived != null && (
+                  <Tooltip
+                    content={
+                      r.ownMissing > 0
+                        ? `My valuation of what goes each way; ${r.ownMissing} line${r.ownMissing === 1 ? " has" : "s have"} no value and ${r.ownMissing === 1 ? "is" : "are"} left out.`
+                        : "My valuation of what goes each way."
+                    }
+                  >
+                    <span style={AMOUNT}>
+                      {r.ownGiven.toFixed(2)} → {r.ownReceived.toFixed(2)} {baseCurrency}
+                      {r.ownMissing > 0 ? " *" : ""}
+                    </span>
+                  </Tooltip>
+                )}
+              </RowLinkItem>
+            );
+          })}
         </RowList>
       )}
     </DetailCard>

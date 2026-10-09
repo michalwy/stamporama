@@ -8,6 +8,12 @@ Open the **Trades** screen from the **Partners** section of the sidebar, next to
 It sits under neither **Selling** nor **Intake**, because a trade is the one part of the hobby where
 both directions are the same act: material leaves and material arrives in one agreement.
 
+A [contact's page](contacts.md#a-contacts-page) opens the trades list narrowed to **one partner**. The
+partner shows as a lit **Partner:** chip at the front of the toolbar; click it to go back to every
+partner. The partner filter is never remembered — it comes only from the link. The page's **Open**
+figure lights the *Preparing*, *Shared* and *Agreed* chips together; clicking a chip goes back to
+filtering by that one status.
+
 ## Starting a trade
 
 **Add trade** asks for four things.

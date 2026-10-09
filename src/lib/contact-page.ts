@@ -21,12 +21,24 @@ import {
   type CostToCatalogLot,
 } from "./cost-to-catalog";
 import { dateRangeBounds, type DateRange } from "./profit-and-loss-rules";
+import { readTradeBalance } from "./trade-valuation";
+import {
+  ALLEGRO_PLATFORM_MODULE,
+  DELCAMPE_PLATFORM_MODULE,
+  FACEBOOK_PLATFORM_MODULE,
+} from "./platform-modules";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   auctionPremiumTerms,
   auctionWinRate,
   auctionWonSpend,
+  averageDaysToSale,
   contactPeriodRange,
+  isInContactRange,
   type MoneyEntry,
+  offerClosedOn,
+  OPEN_TRADE_STATUSES,
+  sellThrough,
   NOT_DELIVERED_PURCHASE_STATUSES,
   sumMoney,
   toBaseAmount,
@@ -37,9 +49,10 @@ import {
 } from "./contact-page-rules";
 
 // The read behind a contact's own page (#1708): its header, and one section per role it plays —
-// here **purchases** (the contact as seller), **sales** (the contact as buyer) and **auctions** (the
-// contact as the seller or house an auction sale is tracked with, #1709). Platform and trades (#1710)
-// is a section of its own still to come.
+// **purchases** (the contact as seller), **sales** (the contact as buyer), **auctions** (the contact
+// as the seller or house an auction sale is tracked with, #1709), **platform** (the marketplace
+// offers, sales and purchases go through, #1710) and **trades** (the contact as exchange partner,
+// #1710).
 //
 // **A section shows when the contact has the role or has data for it**, the data counted over all
 // time: a contact created on the fly from a purchase's supplier field carries no roles, and its
@@ -143,6 +156,73 @@ export interface ContactAuctions {
   rows: ContactAuctionSaleRow[];
 }
 
+/** Which of the marketplaces with a Settings tab of their own this platform is, by its module. */
+export type ContactPlatformSettings = "allegro" | "delcampe" | "facebook";
+
+const PLATFORM_SETTINGS_TABS: Record<string, ContactPlatformSettings> = {
+  [ALLEGRO_PLATFORM_MODULE]: "allegro",
+  [DELCAMPE_PLATFORM_MODULE]: "delcampe",
+  [FACEBOOK_PLATFORM_MODULE]: "facebook",
+};
+
+export interface ContactPlatform {
+  /** Offers live on it now, and ready to go up — **today's** figures, whatever the period: a state
+   *  is where an offer is, not something that happened in a period. */
+  activeCount: number;
+  readyCount: number;
+  /** Offers that ended in the period: sold on the day of their sale, withdrawn on the day they were
+   *  withdrawn (`offerClosedOn`). */
+  soldCount: number;
+  withdrawnCount: number;
+  /** Sold of the offers that ended, 0–1; null when none ended. */
+  sellThrough: number | null;
+  /** The mean days from listing to sale over the sold offers with a listing date; null with none. */
+  avgDaysToSale: number | null;
+  /** How many sold offers the average is over — those missing a listing date are not. */
+  timedCount: number;
+  /** Sales made through it, and what their buyers paid — the sales section's own measure. */
+  salesCount: number;
+  revenue: MoneyTotal;
+  /** Purchases made through it, and their order totals (#852). */
+  purchaseCount: number;
+  purchaseSpent: MoneyTotal;
+  /** The marketplace's own Settings tab, where it has one. */
+  settings: ContactPlatformSettings | null;
+}
+
+export interface ContactTradeRow {
+  id: string;
+  tradeNo: number;
+  createdAt: string;
+  status: string;
+  /** Pieces on each side — a receive line carries a quantity. */
+  givePieces: number;
+  receivePieces: number;
+  /** The collector's own valuation of each side, base currency (#638) — null on a cancelled trade,
+   *  which is not valued. */
+  ownGiven: number | null;
+  ownReceived: number | null;
+  /** Lines on this trade carrying no own figure: the two sums above leave them out. */
+  ownMissing: number;
+}
+
+/** One side of the partner's trades, in the collector's own valuation. */
+export interface ContactTradeValue {
+  /** Σ over the period's trades, cancelled ones aside, base currency, 2 dp. */
+  total: string;
+  /** Lines with no own figure — counted, never assumed zero, as the trade screen counts them. */
+  missingLines: number;
+}
+
+export interface ContactTrades {
+  count: number;
+  /** Trades still *Preparing*, *Shared* or *Agreed*. */
+  openCount: number;
+  given: ContactTradeValue;
+  received: ContactTradeValue;
+  rows: ContactTradeRow[];
+}
+
 export interface ContactPage {
   contact: ContactListItem;
   baseCurrency: string;
@@ -154,6 +234,10 @@ export interface ContactPage {
   sales: ContactSales | null;
   /** Null when the contact is no auction house and no auction sale is tracked with it. */
   auctions: ContactAuctions | null;
+  /** Null when the contact is not a platform and nothing ever went through it. */
+  platform: ContactPlatform | null;
+  /** Null when the contact is not an exchange partner and no trade was ever made with it. */
+  trades: ContactTrades | null;
 }
 
 function isoDate(d: Date): string {
@@ -177,11 +261,19 @@ export async function getContactPage(
   const bounds = dateRangeBounds(range);
   const dateWhere = bounds.gte || bounds.lt ? bounds : undefined;
 
-  const [purchaseCount, saleCount, auctionSaleCount] = await Promise.all([
+  const { collectionId } = contact;
+  const [purchaseCount, saleCount, auctionSaleCount, platformCounts, tradeCount] = await Promise.all([
     prisma.purchase.count({ where: purchaseWhere(contact) }),
-    prisma.sale.count({ where: { collectionId: contact.collectionId, buyerId: contact.id } }),
-    prisma.auctionSale.count({ where: { collectionId: contact.collectionId, sellerId: contact.id } }),
+    prisma.sale.count({ where: { collectionId, buyerId: contact.id } }),
+    prisma.auctionSale.count({ where: { collectionId, sellerId: contact.id } }),
+    Promise.all([
+      prisma.offer.count({ where: { collectionId, platformId: contact.id } }),
+      prisma.sale.count({ where: { collectionId, platformId: contact.id } }),
+      prisma.purchase.count({ where: platformPurchaseWhere(contact) }),
+    ]),
+    prisma.trade.count({ where: { collectionId, partnerId: contact.id } }),
   ]);
+  const platformUsed = platformCounts.some((n) => n > 0);
 
   return {
     contact,
@@ -193,12 +285,22 @@ export async function getContactPage(
         ? await readPurchases(contact, baseCurrency, dateWhere)
         : null,
     sales:
-      contact.buyer || saleCount > 0 ? await readSales(contact, baseCurrency, dateWhere) : null,
+      contact.buyer || saleCount > 0
+        ? await readSales({ collectionId, buyerId: contact.id }, baseCurrency, dateWhere)
+        : null,
     // The Seller role alone does not bring it: most sellers are never bid with, and the purchases
     // section already answers for them. An auction house is, so it shows before anything is tracked.
     auctions:
       contact.auctionHouse || auctionSaleCount > 0
         ? await readAuctions(ownerId, contact, baseCurrency, dateWhere)
+        : null,
+    platform:
+      contact.platform || platformUsed
+        ? await readPlatform(contact, baseCurrency, range, dateWhere)
+        : null,
+    trades:
+      contact.exchangePartner || tradeCount > 0
+        ? await readTrades(ownerId, contact, dateWhere)
         : null,
   };
 }
@@ -215,6 +317,40 @@ function purchaseWhere(contact: ContactListItem) {
     kind: "purchase",
     tradeId: null,
   };
+}
+
+/** The purchases made **through** the contact as a platform — `purchaseWhere`'s rule otherwise. */
+function platformPurchaseWhere(contact: ContactListItem) {
+  return {
+    collectionId: contact.collectionId,
+    platformId: contact.id,
+    kind: "purchase",
+    tradeId: null,
+  };
+}
+
+/** One order's total exactly as its own screen states it (#852). */
+function orderSpend(
+  p: {
+    currency: string;
+    lots: readonly { price: unknown }[];
+    expenses: readonly { price: unknown }[];
+  },
+  costs: ReturnType<typeof purchaseCostsOf>,
+  baseCurrency: string
+) {
+  const linesTx = [...p.lots, ...p.expenses].reduce<number>(
+    (sum, l) => (l.price == null ? sum : sum + Number(l.price)),
+    0
+  );
+  return resolvePurchaseSpend({
+    scope: "order",
+    priceTx: linesTx,
+    shippingTx: costs.shippingCost,
+    currency: p.currency,
+    baseCurrency,
+    fxRateToBase: costs.fxRateToBase,
+  });
 }
 
 async function readPurchases(
@@ -281,19 +417,7 @@ async function readPurchases(
         basis: lotCatalogBasis(copiesByLot.get(l.id) ?? []),
       });
     }
-    // The order's total exactly as its own screen states it (#852).
-    const linesTx = [...p.lots, ...p.expenses].reduce(
-      (sum, l) => (l.price == null ? sum : sum + Number(l.price)),
-      0
-    );
-    const spend = resolvePurchaseSpend({
-      scope: "order",
-      priceTx: linesTx,
-      shippingTx: costs.shippingCost,
-      currency: p.currency,
-      baseCurrency,
-      fxRateToBase: costs.fxRateToBase,
-    });
+    const spend = orderSpend(p, costs, baseCurrency);
     rows.push({
       id: p.id,
       purchaseNo: p.purchaseNo,
@@ -325,17 +449,15 @@ async function readPurchases(
   };
 }
 
+/** The sales one `where` names over the period — the contact's as buyer, or those made through it
+ *  as a platform. */
 async function readSales(
-  contact: ContactListItem,
+  where: Prisma.SaleWhereInput,
   baseCurrency: string,
   dateWhere: { gte?: Date; lt?: Date } | undefined
 ): Promise<ContactSales> {
   const sales = await prisma.sale.findMany({
-    where: {
-      collectionId: contact.collectionId,
-      buyerId: contact.id,
-      ...(dateWhere ? { soldAt: dateWhere } : {}),
-    },
+    where: { ...where, ...(dateWhere ? { soldAt: dateWhere } : {}) },
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
@@ -511,6 +633,179 @@ async function readAuctions(
     openCount,
     exposure,
     toReviewCount,
+    rows,
+  };
+}
+
+/**
+ * The contact as a **platform** (#1710): the offers on it, the sales and purchases made through it,
+ * and where its own settings are.
+ *
+ * Active and ready are counted as they stand today. Every other figure is over the period, and an
+ * offer that ended is placed by `offerClosedOn` — which is why the closed offers are read and placed
+ * here rather than narrowed by `closedAt` alone: that stamp is not the sale date (#512's backfill).
+ */
+async function readPlatform(
+  contact: ContactListItem,
+  baseCurrency: string,
+  range: DateRange,
+  dateWhere: { gte?: Date; lt?: Date } | undefined
+): Promise<ContactPlatform> {
+  const { collectionId } = contact;
+  const platformId = contact.id;
+  const [activeCount, readyCount, closed, sales, purchases] = await Promise.all([
+    prisma.offer.count({ where: { collectionId, platformId, state: "active" } }),
+    prisma.offer.count({ where: { collectionId, platformId, state: "ready" } }),
+    prisma.offer.findMany({
+      where: {
+        collectionId,
+        platformId,
+        state: { in: ["sold", "withdrawn"] },
+        // A first cut in the database; `offerClosedOn` below has the last word on the day.
+        ...(dateWhere
+          ? {
+              OR: [
+                { saleLines: { some: { sale: { soldAt: dateWhere } } } },
+                { closedAt: dateWhere },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        state: true,
+        listingDate: true,
+        closedAt: true,
+        saleLines: { select: { sale: { select: { soldAt: true } } } },
+      },
+    }),
+    readSales({ collectionId, platformId }, baseCurrency, dateWhere),
+    prisma.purchase.findMany({
+      where: {
+        ...platformPurchaseWhere(contact),
+        ...(dateWhere ? { purchasedAt: dateWhere } : {}),
+      },
+      select: {
+        currency: true,
+        fxRateToBase: true,
+        shippingCost: true,
+        lots: { select: { id: true, price: true } },
+        expenses: { select: { id: true, price: true } },
+      },
+    }),
+  ]);
+
+  let soldCount = 0;
+  let withdrawnCount = 0;
+  const timed: { listedOn: string; soldOn: string }[] = [];
+  for (const o of closed) {
+    const sold = o.state === "sold";
+    const on = offerClosedOn(
+      o.closedAt ? isoDate(o.closedAt) : null,
+      sold ? o.saleLines.map((l) => isoDate(l.sale.soldAt)) : []
+    );
+    if (!on || !isInContactRange(on, range)) continue;
+    if (!sold) {
+      withdrawnCount += 1;
+      continue;
+    }
+    soldCount += 1;
+    if (o.listingDate) timed.push({ listedOn: isoDate(o.listingDate), soldOn: on });
+  }
+
+  const purchaseSpent = sumMoney(
+    purchases.map((p) => {
+      const spend = orderSpend(p, purchaseCostsOf(p), baseCurrency);
+      return {
+        amount: Number(spend.tx.total),
+        currency: p.currency,
+        base: spend.base ? Number(spend.base.total) : null,
+      };
+    }),
+    baseCurrency
+  );
+
+  return {
+    activeCount,
+    readyCount,
+    soldCount,
+    withdrawnCount,
+    sellThrough: sellThrough(soldCount, withdrawnCount),
+    avgDaysToSale: averageDaysToSale(timed),
+    timedCount: timed.length,
+    salesCount: sales.count,
+    revenue: sales.revenue,
+    purchaseCount: purchases.length,
+    purchaseSpent,
+    settings: (contact.platformModule && PLATFORM_SETTINGS_TABS[contact.platformModule]) || null,
+  };
+}
+
+/**
+ * The contact as **exchange partner** (#1710): the trades made with it in the period, by the day
+ * each was started, and what went each way in the collector's own valuation — the trade screen's
+ * own read (#638), so the page can never value a trade differently from the trade itself. A
+ * cancelled trade is counted and listed but not valued: nothing went either way.
+ */
+async function readTrades(
+  ownerId: string,
+  contact: ContactListItem,
+  dateWhere: { gte?: Date; lt?: Date } | undefined
+): Promise<ContactTrades> {
+  const trades = await prisma.trade.findMany({
+    where: {
+      collectionId: contact.collectionId,
+      partnerId: contact.id,
+      ...(dateWhere ? { createdAt: dateWhere } : {}),
+    },
+    orderBy: [{ createdAt: "desc" }, { tradeNo: "desc" }],
+    select: {
+      id: true,
+      tradeNo: true,
+      createdAt: true,
+      status: true,
+      lines: { select: { side: true, quantity: true } },
+    },
+  });
+
+  let givenCents = 0;
+  let receivedCents = 0;
+  let giveMissing = 0;
+  let receiveMissing = 0;
+  const rows: ContactTradeRow[] = [];
+  // One at a time: each read values every line against the catalogues, and a partner's trades are
+  // tens, not thousands.
+  for (const t of trades) {
+    const pieces = (side: string) =>
+      t.lines.filter((l) => l.side === side).reduce((sum, l) => sum + l.quantity, 0);
+    const balance = t.status === "cancelled" ? null : await readTradeBalance(ownerId, t.id);
+    const give = balance?.trade.give;
+    const receive = balance?.trade.receive;
+    if (give && receive) {
+      givenCents += Math.round(give.own * 100);
+      receivedCents += Math.round(receive.own * 100);
+      giveMissing += give.ownMissing;
+      receiveMissing += receive.ownMissing;
+    }
+    rows.push({
+      id: t.id,
+      tradeNo: t.tradeNo,
+      createdAt: isoDate(t.createdAt),
+      status: t.status,
+      givePieces: pieces("give"),
+      receivePieces: pieces("receive"),
+      ownGiven: give ? give.own : null,
+      ownReceived: receive ? receive.own : null,
+      ownMissing: (give?.ownMissing ?? 0) + (receive?.ownMissing ?? 0),
+    });
+  }
+
+  const money = (c: number) => (c === 0 ? 0 : c / 100).toFixed(2);
+  return {
+    count: trades.length,
+    openCount: trades.filter((t) => (OPEN_TRADE_STATUSES as readonly string[]).includes(t.status))
+      .length,
+    given: { total: money(givenCents), missingLines: giveMissing },
+    received: { total: money(receivedCents), missingLines: receiveMissing },
     rows,
   };
 }
