@@ -73,6 +73,10 @@
   --color-bg-muted: #f1f5f9;
   --color-bg-strong: #e2e8f0;
   --color-bg-row-hover: #f1f5f9;
+  /* An expanded issue's block (#1729): a faint accent tint under the header and its rows, and the
+     bar down its left edge. Teal rather than slate, so a hovered row still reads against it. */
+  --color-bg-issue-open: #f0fdfa;
+  --color-issue-open-bar: #14b8a6;
   /* Transient "just added" highlight (#158): a warm tint that fades out */
   --color-bg-highlight-flash: #fde68a;
   /* Text tokens */
@@ -157,6 +161,9 @@
   --color-bg-muted: #334155;
   --color-bg-strong: #475569;
   --color-bg-row-hover: #334155;
+  /* An expanded issue's block (#1729), the dark half. */
+  --color-bg-issue-open: #1b3540;
+  --color-issue-open-bar: #14b8a6;
   /* Transient "just added" highlight (#158): a warm tint that fades out */
   --color-bg-highlight-flash: #4d3a10;
   /* Text tokens */

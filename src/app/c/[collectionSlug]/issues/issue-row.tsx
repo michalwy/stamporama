@@ -37,6 +37,11 @@ import {
 } from "@/app/c/[collectionSlug]/shared/stamp-tree-reorder";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CaretCell, CARET_GLYPH_WIDTH, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import {
+  IssueBlockBar,
+  issueBlockStyle,
+  issueHeaderBackground,
+} from "@/app/c/[collectionSlug]/shared/expanded-issue-block";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { TagChips } from "@/app/c/[collectionSlug]/shared/tag-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
@@ -956,11 +961,9 @@ export function IssueRow({
   };
 
   return (
-    <div
-      style={{
-        borderBottom: isLast ? undefined : "1px solid var(--color-border)",
-      }}
-    >
+    <div style={issueBlockStyle(isExpanded, isLast)}>
+      {/* An open issue is one block, set apart from its neighbours (#1729). */}
+      {isExpanded && <IssueBlockBar />}
       {/* The whole row opens the issue's page (#1591); expanding it is the caret's job alone. */}
       <div
         {...rowOpen}
@@ -969,7 +972,7 @@ export function IssueRow({
         style={{
           ...ROW_OPEN_STYLE,
           padding: "0.875rem 1.25rem",
-          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          background: issueHeaderBackground(isExpanded, hovered),
           transition: "background 0.1s ease",
           display: "flex",
           alignItems: "flex-start",
@@ -1214,7 +1217,7 @@ export function IssueRow({
       {isExpanded && (
         <div
           style={{
-            background: "var(--color-bg-elevated)",
+            // On the block's tint, not a surface of its own.
             borderTop: "1px solid var(--color-border)",
             marginLeft: "1.25rem",
             borderLeft: "2px solid var(--color-border)",
