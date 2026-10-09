@@ -40,10 +40,10 @@ import { markPhotosNothingToCover } from "./photo-covers";
 import {
   coverFingerprintRows,
   coverWalkPhotos,
-  isPhotoCoverShape,
-  isPhotoCoverStyle,
   normalizePhotoCoverStyle,
+  normalizePlatformCoverColor,
   offerNeedsCovers,
+  storedPhotoCover,
   type CoverWalkCandidate,
   type PhotoCover,
   type PhotoCoverStyle,
@@ -323,7 +323,7 @@ interface SourcePhoto {
   title: string | null;
   /** Whether the collector has gone over it for symbols (#1665), and what they covered. */
   coversCheckedAt: Date | null;
-  covers: { shape: string; style: string; x: number; y: number; width: number; height: number }[];
+  covers: { shape: string; style: string; color: string | null; x: number; y: number; width: number; height: number }[];
 }
 
 /** Every read that feeds `sourceById` selects exactly this — the renderer needs the same columns
@@ -343,18 +343,14 @@ const SOURCE_PHOTO_SELECT = {
   coversCheckedAt: true,
   covers: {
     orderBy: { sortOrder: "asc" },
-    select: { shape: true, style: true, x: true, y: true, width: true, height: true },
+    select: { shape: true, style: true, color: true, x: true, y: true, width: true, height: true },
   },
 } as const;
 
 /** A photo's stored covers as the renderer reads them; a row naming a shape or style this code does
  *  not know is skipped rather than guessed at (the table's CHECK makes that unreachable). */
 function coversOf(source: SourcePhoto): PhotoCover[] {
-  return source.covers.flatMap((c) =>
-    isPhotoCoverShape(c.shape) && isPhotoCoverStyle(c.style)
-      ? [{ shape: c.shape, style: c.style, x: c.x, y: c.y, width: c.width, height: c.height }]
-      : []
-  );
+  return source.covers.flatMap((c) => storedPhotoCover(c) ?? []);
 }
 
 /** Display labels for the ids a plan is written in terms of — the panel's only job for them. */
@@ -449,6 +445,8 @@ interface GenerationInputs {
   needsCovers: boolean;
   /** The style a newly drawn cover starts as — the platform's, for the walk only. */
   coverStyle: PhotoCoverStyle;
+  /** The colour the first bar starts in (#1702) — the platform's, for the walk only. */
+  coverColor: string;
 }
 
 const SIDE_ROLES = ["front", "back"];
@@ -557,6 +555,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
           titleLanguage: true,
           coverSymbols: true,
           coverStyle: true,
+          coverColor: true,
         },
       },
       sets: {
@@ -800,6 +799,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     attachmentSources,
     needsCovers: offerNeedsCovers(offer.coverSymbols, offer.platform.coverSymbols),
     coverStyle: normalizePhotoCoverStyle(offer.platform.coverStyle),
+    coverColor: normalizePlatformCoverColor(offer.platform.coverColor),
   };
 }
 
@@ -1178,6 +1178,8 @@ export interface OfferCoverWalk {
   needed: boolean;
   /** What a newly drawn cover starts as: the platform's choice. */
   defaultStyle: PhotoCoverStyle;
+  /** The colour the first bar starts in (#1702): the platform's. Later bars start in the last used. */
+  defaultColor: string;
   /** Every copy photo the offer's images are made from, checked or not, in plan order. The walk
    *  itself shows the unchecked ones; revisiting shows them all. */
   photos: OfferCoverWalkPhoto[];
@@ -1198,6 +1200,7 @@ export async function readOfferCoverWalk(ownerId: string, offerId: string): Prom
   return {
     needed: inputs.needsCovers,
     defaultStyle: inputs.coverStyle,
+    defaultColor: inputs.coverColor,
     photos: candidates.map((candidate) => {
       const source = inputs.sourceById.get(candidate.photoId)!;
       return {

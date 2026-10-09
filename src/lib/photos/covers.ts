@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import type { PhotoCover } from "../photo-cover-rules";
+import { DEFAULT_PHOTO_COVER_COLOR, type PhotoCover } from "../photo-cover-rules";
 
 // Drawing a photo's covers into its pixels (#1665; ADR-0066) — for an offer image only. The bytes
 // handed in are a copy's stored `full` derivative and are never written back: what comes out is fed
@@ -11,8 +11,6 @@ const PIXELATE_BLOCKS = 6;
 
 /** A blur's strength as a share of the cover's shorter side — strong enough to leave only colour. */
 const BLUR_SIGMA_SHARE = 0.2;
-
-const BAR_COLOR = "#000000";
 
 interface Raw {
   data: Buffer;
@@ -38,7 +36,8 @@ async function coveredRegion(
   const raw = { width: image.width, height: image.height, channels: image.channels };
   if (cover.style === "bar") {
     return sharp({
-      create: { width: box.width, height: box.height, channels: 3, background: BAR_COLOR },
+      // The bar's own colour (#1702); one stored before bars had a colour was black.
+      create: { width: box.width, height: box.height, channels: 3, background: cover.color ?? DEFAULT_PHOTO_COVER_COLOR },
     })
       .png()
       .toBuffer();

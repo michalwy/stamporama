@@ -41,10 +41,12 @@ import { OFFER_LISTING_TYPES, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules
 import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
 import { FACEBOOK_PLATFORM_MODULE } from "@/lib/platform-modules";
 import {
+  DEFAULT_PHOTO_COVER_COLOR,
   DEFAULT_PHOTO_COVER_STYLE,
   PHOTO_COVER_STYLE_LABELS,
   PHOTO_COVER_STYLES,
 } from "@/lib/photo-cover-rules";
+import { CoverColorPicker } from "../shared/photo-cover-editor";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
 
@@ -166,6 +168,8 @@ export function ContactFormDialog({
   // The platform currency field is only shown while the `platform` role is checked (#196), so the
   // platform checkbox is tracked here to reveal it.
   const [isPlatform, setIsPlatform] = useState(contact?.platform ?? false);
+  // The colour the first bar starts in (#1702) — a picker of swatches, so it posts through a hidden field.
+  const [coverColor, setCoverColor] = useState(contact?.coverColor ?? DEFAULT_PHOTO_COVER_COLOR);
   // Seller defaults for auction sales (#350) are revealed the same way, off either buying-from
   // role: an auction house is a seller that happens to run sales.
   const [isSeller, setIsSeller] = useState(contact?.seller ?? false);
@@ -944,6 +948,21 @@ export function ContactFormDialog({
                         </option>
                       ))}
                     </select>
+                    <Tooltip content="The colour of the first solid bar drawn. After that a new bar starts in the colour last used on this browser.">
+                      <label
+                        htmlFor="contact-cover-color"
+                        style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}
+                      >
+                        Bars in
+                      </label>
+                    </Tooltip>
+                    <CoverColorPicker
+                      id="contact-cover-color"
+                      value={coverColor}
+                      disabled={isPending}
+                      onChange={setCoverColor}
+                    />
+                    <input type="hidden" name="coverColor" value={coverColor} />
                   </div>
 
                   <div style={{ display: "flex", gap: "0.75rem" }}>

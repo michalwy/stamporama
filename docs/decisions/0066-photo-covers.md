@@ -79,9 +79,16 @@ save passes nothing on, a checked photo is never proposed over, and a *Carry cov
 photo* switch, on by default and remembered per browser, turns it off. How covers are stored and
 applied does not change.
 
+*Amended by #1702:* a solid bar has a colour of its own, `PhotoCover.color`, picked from a short
+palette (black, white, grey, stamp-paper cream) or freely; pixelation and blur carry none. A new bar
+starts in the colour last used on that browser, and the first in the platform's `Contact.coverColor`.
+Every bar drawn before was black and was given black, and the fingerprint names a bar's colour only
+when it is not black, so no image generated before went out of date; recolouring a bar does put them
+out of date, as any change to covers does.
+
 ## Consequences
 
 - A copy photo can be shown to a buyer only through offer images for the covers to matter; anything
   that hands out the copy's own photo (the copy's page, a shared link) shows it uncovered by design.
-- A cover's preview in the editor is an indication (a CSS backdrop blur, a black box); the real
+- A cover's preview in the editor is an indication (a CSS backdrop blur, a box in the bar's colour); the real
   pixelation and blur are the server's, and are seen in the regenerated images.

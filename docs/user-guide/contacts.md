@@ -590,7 +590,9 @@ earlier.
 photos — a swastika or a portrait on German Reich material, which Facebook's rules punish. Like the
 limits it is read **live**: turning it on reaches every offer on the platform that has not said
 otherwise. **New covers start as** picks the style a newly drawn cover begins with — *Pixelate*,
-*Blur* or *Solid bar* — and each cover can still be changed on its own. The platform you name as
+*Blur* or *Solid bar* — and each cover can still be changed on its own. **Bars in** picks the colour
+the first solid bar is drawn in — black, white, grey, stamp-paper cream or any colour you pick; after
+that a new bar starts in the colour you last gave one on this browser. The platform you name as
 Facebook in Settings starts with it ticked. See
 [Offers → Covering symbols](offers.md#covering-symbols).
 

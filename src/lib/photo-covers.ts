@@ -2,9 +2,8 @@ import "server-only";
 import { prisma } from "./db";
 import {
   cleanPhotoCovers,
-  isPhotoCoverShape,
-  isPhotoCoverStyle,
   PhotoCoverValidationError,
+  storedPhotoCover,
   type PhotoCover,
 } from "./photo-cover-rules";
 
@@ -25,19 +24,13 @@ export interface PhotoCoverState {
   covers: PhotoCover[];
 }
 
-function storedCovers(
-  rows: readonly { shape: string; style: string; x: number; y: number; width: number; height: number }[]
-): PhotoCover[] {
-  return rows.flatMap((c) =>
-    isPhotoCoverShape(c.shape) && isPhotoCoverStyle(c.style)
-      ? [{ shape: c.shape, style: c.style, x: c.x, y: c.y, width: c.width, height: c.height }]
-      : []
-  );
+function storedCovers(rows: readonly Parameters<typeof storedPhotoCover>[0][]): PhotoCover[] {
+  return rows.flatMap((row) => storedPhotoCover(row) ?? []);
 }
 
 const COVER_ROWS = {
   orderBy: { sortOrder: "asc" },
-  select: { shape: true, style: true, x: true, y: true, width: true, height: true },
+  select: { shape: true, style: true, color: true, x: true, y: true, width: true, height: true },
 } as const;
 
 /**
@@ -64,7 +57,7 @@ export async function savePhotoCovers(
   await prisma.$transaction([
     prisma.photoCover.deleteMany({ where: { photoId } }),
     prisma.photoCover.createMany({
-      data: covers.map((cover, sortOrder) => ({ photoId, sortOrder, ...cover })),
+      data: covers.map((cover, sortOrder) => ({ photoId, sortOrder, ...cover, color: cover.color ?? null })),
     }),
     prisma.photo.update({ where: { id: photoId }, data: { coversCheckedAt: new Date() } }),
   ]);

@@ -90,6 +90,7 @@ export function OfferCoverWalk({
       title={mode === "all" ? "Covers on this offer's photos" : "Check photos for symbols to cover"}
       photos={photos}
       defaultStyle={data.defaultStyle}
+      defaultColor={data.defaultColor}
       onMarkNothingToCover={markNothingToCover(offerId)}
       carryCovers
       onSaved={refresh}

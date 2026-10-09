@@ -14,6 +14,7 @@ import { photoFullUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { Tooltip } from "./tooltip";
 import {
   carryAfterSave,
+  DEFAULT_PHOTO_COVER_COLOR,
   NO_CARRIED_COVERS,
   proposedCovers,
   type CarriedCovers,
@@ -119,6 +120,7 @@ export function PhotoCoverWalkDialog({
   title,
   photos,
   defaultStyle,
+  defaultColor = DEFAULT_PHOTO_COVER_COLOR,
   startIndex = 0,
   footerNote,
   onMarkNothingToCover,
@@ -130,6 +132,8 @@ export function PhotoCoverWalkDialog({
   title: string;
   photos: CoverWalkEntry[];
   defaultStyle: PhotoCoverStyle;
+  /** The colour the first bar starts in (#1702): the platform's, black where there is none. */
+  defaultColor?: string;
   startIndex?: number;
   /** Something the caller says beside the buttons — the offer's *regenerate when done*. */
   footerNote?: ReactNode;
@@ -307,9 +311,11 @@ export function PhotoCoverWalkDialog({
               </div>
               <PhotoCoverEditor
                 key={entry.photoId}
+                collectionId={collectionId}
                 src={photoFullUrl(collectionId, entry.photoId)}
                 covers={covers}
                 defaultStyle={defaultStyle}
+                defaultColor={defaultColor}
                 disabled={isPending}
                 onChange={(next) => {
                   setCovers(next);
