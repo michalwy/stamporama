@@ -148,6 +148,7 @@ export function OfferFacebookCard({
   const { postText, gaps } = useMemo(() => {
     const lots: FacebookPostLotText[] = kit.lots.map((lot) => ({
       lotNo: lot.lotNo,
+      offerNo: lot.offerNo,
       listingType: lot.listingType,
       title: lot.title,
       description: lot.description,

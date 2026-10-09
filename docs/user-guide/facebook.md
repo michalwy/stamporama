@@ -59,6 +59,7 @@ parts.
   | `{increment}` | the bid increment |
   | `{closesAt}` | when the auction closes |
   | `{lot}` | the lot number, in a post holding several lots |
+  | `{offer}` | the offer's number — `412` for offer #412; in a post holding several lots, each lot's own |
   | `{terms}` | the note on shipping, payment and terms |
 
 - **Starting price** — none, an amount, or a percentage of the copies' catalogue value.
@@ -79,6 +80,7 @@ at once for every group that follows it, and never changes an auction already ma
   | `{description}` | the description of what is offered |
   | `{price}` | the price |
   | `{lot}` | the lot number, in a post holding several lots |
+  | `{offer}` | the offer's number — `412` for offer #412; in a post holding several lots, each lot's own |
   | `{terms}` | the note on shipping, payment and terms |
 
   A quick buy has no price default here: its price is set on each offer.

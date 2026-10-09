@@ -24,6 +24,7 @@ import {
 function lot(overrides: Partial<FacebookPostLotText> = {}): FacebookPostLotText {
   return {
     lotNo: null,
+    offerNo: 412,
     listingType: "auction",
     title: "Austria 1850 Mercury",
     description: "Mercury, 1850, unused",
@@ -120,6 +121,19 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
 
   it("leaves {lot} empty on an offer posted alone", () => {
     assert.equal(renderFacebookLotText("[{lot}] {catalog}", lot()), "[] Mi·AT 1");
+  });
+
+  it("puts the offer's bare number where {offer} is, on an offer posted alone and a quick buy (#1694)", () => {
+    assert.equal(renderFacebookLotText("#{offer} {title}", lot()), "#412 Austria 1850 Mercury");
+    assert.equal(renderFacebookLotText("Offer {offer}: {price}", lot({ listingType: "fixed", price: "25.00 PLN" })), "Offer 412: 25.00 PLN");
+  });
+
+  it("gives each lot of a post its own offer's number in {offer} (#1694)", () => {
+    const text = renderFacebookPostText({ auction: "Lot {lot} (#{offer})", quickBuy: "Lot {lot} (#{offer}) buy now" }, "", [
+      lot({ lotNo: 2, offerNo: 37 }),
+      lot({ lotNo: 1, offerNo: 412, listingType: "fixed" }),
+    ]);
+    assert.equal(text, "Lot 1 (#412) buy now\n\nLot 2 (#37)");
   });
 
   it("gives an empty post where the group has no template — nothing falls back (#1692)", () => {
