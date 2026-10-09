@@ -36,6 +36,7 @@ import {
 } from "@/lib/trade-give-resolution-rules";
 import { addTradeGiveLinesByStampAction } from "@/app/actions/trades";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
+import { formControl } from "@/app/control-style";
 
 // Adding a give line **by stamp** (#659), which is the only way a partner ever asks: their list says
 // *this stamp, in this condition*, and never which of your three copies.
@@ -59,6 +60,7 @@ import { useInvalidateTradeDetail } from "./use-trade-detail-query";
 // partner, and on a whole set the main thing they learn.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -66,7 +68,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const NOTE: React.CSSProperties = {

@@ -9,8 +9,10 @@ import type { StampSearchItem } from "@/lib/stamps";
 import { useStampPickerSearch } from "./use-inventory-query";
 import { issueLabel } from "./stamp-picker-shared";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -18,7 +20,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 /** Detailed suggestion row: catalog numbers + name on top, issue/area context

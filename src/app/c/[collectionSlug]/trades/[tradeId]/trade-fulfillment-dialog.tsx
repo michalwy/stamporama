@@ -13,6 +13,7 @@ import {
 import type { TradeSide } from "@/lib/trade-rules";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 // **What actually became of this line** (#642; ADR-0039 §11).
 //
@@ -32,6 +33,7 @@ import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 // is claiming any more — the writer clears it, and the field goes with it here.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -39,7 +41,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
   fontFamily: "inherit",
 };
 

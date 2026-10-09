@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 // The publish step of the bulk listing workspace (#322): the collector has just pasted this listing
 // into the platform's own form, and the platform handed back a URL. That URL is the one thing the app
@@ -23,6 +24,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 // each lot that has none of its own.
 
 const INPUT: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -30,8 +32,6 @@ const INPUT: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 export function ActivateOfferDialog({

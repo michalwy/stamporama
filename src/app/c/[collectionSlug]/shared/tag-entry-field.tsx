@@ -15,6 +15,7 @@ import { Autocomplete, type AutocompleteAction } from "./autocomplete";
 import { tagKeys, useCollectionTags } from "./use-tags";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
+import { formControl } from "@/app/control-style";
 
 // Where a tag is put on and taken off (#1192): the edit dialog of the thing carrying it — issue,
 // stamp or copy — beside every other field about that thing. This replaced #152's card on the
@@ -35,6 +36,7 @@ import { Icon } from "@/app/icons";
 // **Nothing is inherited**, exactly as before: this writes the one thing the dialog edits.
 
 const BOX_STYLE: React.CSSProperties = {
+  ...formControl,
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
@@ -44,8 +46,6 @@ const BOX_STYLE: React.CSSProperties = {
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
   cursor: "text",
 };
 

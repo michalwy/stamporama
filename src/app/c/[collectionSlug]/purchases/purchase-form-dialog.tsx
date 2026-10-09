@@ -14,8 +14,10 @@ import { PURCHASE_STATUSES, PURCHASE_STATUS_META } from "@/lib/purchase-status";
 import { OPENING_BALANCE_TITLE_MAX, type PurchaseKind } from "@/lib/purchase-kind";
 import { PurchaseContactSelect } from "./purchase-contact-select";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -23,7 +25,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };

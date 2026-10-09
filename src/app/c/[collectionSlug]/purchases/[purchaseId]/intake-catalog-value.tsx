@@ -5,6 +5,7 @@ import { LabelWithError } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { catalogValueSubjectKey, type IntakeCatalogValue } from "@/lib/intake-catalog-value";
 import { IntakeVariantPricesSection, type IntakeVariantPricesHandle } from "./intake-variant-prices";
+import { formControl } from "@/app/control-style";
 
 /**
  * *The catalogue value, while the catalogue is still open* (#593) — one field in the intake step.
@@ -302,6 +303,7 @@ export function IntakeCatalogValueField({
           disabled={disabled || loading || !conditionId}
           placeholder="0.00"
           style={{
+            ...formControl,
             width: "100%",
             minWidth: 0,
             textAlign: "right",
@@ -311,7 +313,6 @@ export function IntakeCatalogValueField({
             fontSize: "0.875rem",
             color: "var(--color-text-primary)",
             background: "var(--color-bg-elevated)",
-            boxSizing: "border-box",
           }}
         />
         <span

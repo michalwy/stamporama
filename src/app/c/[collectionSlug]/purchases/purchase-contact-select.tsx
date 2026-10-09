@@ -6,8 +6,10 @@ import {
   useDebouncedValue,
 } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { usePurchaseContactSearch } from "./use-purchases-query";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -15,7 +17,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 interface PurchaseContactSelectProps {

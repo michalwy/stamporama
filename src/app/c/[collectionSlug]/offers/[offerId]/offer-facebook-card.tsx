@@ -18,6 +18,7 @@ import { ConfirmDialog, DialogPrimaryButton, DialogSecondaryButton } from "@/app
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { FacebookResultDialog } from "./facebook-result-dialog";
+import { formControl } from "@/app/control-style";
 
 // A Facebook offer's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
 // alone, or as a numbered lot of a post holding several — and the post's text and photos, each taken
@@ -71,6 +72,7 @@ const POST_TEXT: React.CSSProperties = {
 };
 
 const INPUT: React.CSSProperties = {
+  ...formControl,
   flex: 1,
   padding: "0.4rem 0.625rem",
   border: "1px solid var(--color-border-strong)",

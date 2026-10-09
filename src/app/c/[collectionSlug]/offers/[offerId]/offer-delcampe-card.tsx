@@ -18,6 +18,7 @@ import {
   type DelcampeCategoryChoice,
 } from "@/app/c/[collectionSlug]/shared/delcampe-category-picker";
 import { Icon } from "@/app/icons";
+import { formControl } from "@/app/control-style";
 
 // What this offer's Easy Uploader row is built from (#608, #609) — the category it is filed under and
 // the listing profile it is uploaded with.
@@ -56,6 +57,7 @@ const helpText: React.CSSProperties = {
 };
 
 const SELECT: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

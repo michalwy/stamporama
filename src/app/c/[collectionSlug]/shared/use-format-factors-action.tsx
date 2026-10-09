@@ -22,6 +22,7 @@ import { RowActionsMenu } from "./row-actions-menu";
 import { useCollectionFormats } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { useCollectionConditions } from "./use-display-condition";
 import { TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 // Format multipliers managed from the row whose scope they belong to — an issue's on that issue,
 // an area's on that area. The anchor is therefore never a field: the screen you opened this from
@@ -33,6 +34,7 @@ import { TextInput } from "./text-input";
 // closing.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -40,8 +42,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const FORM_STYLE: React.CSSProperties = {

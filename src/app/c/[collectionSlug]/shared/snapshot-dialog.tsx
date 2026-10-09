@@ -12,6 +12,7 @@ import {
 } from "@/lib/annotations";
 import type { Box } from "@/lib/scan-boxes";
 import { TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 /** What the toast says, by who the snapshot went to (#674). A tile's is the one worth a sentence:
  * the photo is not on any copy yet, and saying where it will end up is what stops it reading as lost. */
@@ -105,8 +106,8 @@ export function SnapshotDialog({
             }
           }}
           style={{
+            ...formControl,
             width: "100%",
-            boxSizing: "border-box",
             padding: "0.5rem 0.625rem",
             border: "1px solid var(--color-border-strong)",
             borderRadius: "0.375rem",

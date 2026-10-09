@@ -43,6 +43,7 @@ import {
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { dispositionToggleColors } from "@/app/c/[collectionSlug]/shared/disposition-colors";
+import { formControl } from "@/app/control-style";
 
 // The tree-select trigger defaults to a compact toolbar height (min-h-8). Inside this
 // dialog it sits beside INPUT_STYLE inputs (~2.25rem, 0.5rem vertical padding), so bump
@@ -61,6 +62,7 @@ const SET_LINK: React.CSSProperties = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -68,7 +70,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const SECTION_LABEL: React.CSSProperties = {

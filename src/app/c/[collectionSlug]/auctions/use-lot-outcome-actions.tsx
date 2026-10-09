@@ -17,6 +17,7 @@ import {
 } from "@/lib/auction-rules";
 import { closingPricePrefill, lotOutcome } from "@/lib/auction-lot";
 import { formatInstant } from "./auction-format";
+import { formControl } from "@/app/control-style";
 
 // **Closing a lot** (#354, rewritten for ADR-0021 §4) — the fork at the end of §7.
 //
@@ -43,6 +44,7 @@ import { formatInstant } from "./auction-format";
 // including why the bid it takes is `currentBid` and no other.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -50,7 +52,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const NOTE: React.CSSProperties = {

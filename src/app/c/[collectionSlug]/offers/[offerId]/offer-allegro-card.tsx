@@ -25,6 +25,7 @@ import type {
 } from "@/lib/allegro-offer-listing";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 // **On Allegro** — what this offer will be listed as (#494).
 //
@@ -65,6 +66,7 @@ const LINK_BTN: React.CSSProperties = {
 };
 
 const SELECT: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

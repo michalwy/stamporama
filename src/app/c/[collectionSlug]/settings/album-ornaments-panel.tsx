@@ -22,6 +22,7 @@ import {
   countLabel,
   useListSelection,
 } from "./list-detail";
+import { formControl } from "@/app/control-style";
 
 // The collector's own corner ornaments (#1427): the frame field the album template's form carries,
 // and the list under Settings → Corner ornaments where one is uploaded, looked at and deleted.
@@ -153,6 +154,7 @@ export function FrameOrnamentField({
           onChange={(e) => setValue(e.target.value)}
           disabled={disabled || uploading}
           style={{
+            ...formControl,
             flex: 1,
             minWidth: 0,
             padding: "0.5rem 0.75rem",
@@ -161,7 +163,6 @@ export function FrameOrnamentField({
             fontSize: "0.875rem",
             color: "var(--color-text-primary)",
             background: "var(--color-bg-elevated)",
-            minHeight: "2.25rem",
           }}
         >
           <option value={NO_FRAME_ORNAMENT}>None</option>

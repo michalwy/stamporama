@@ -20,12 +20,14 @@ import type { DescriptionFormat } from "@/lib/description-format";
 import type { TitleSampleCopy } from "@/lib/title-samples";
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 // The template editor (#210, #266, #267): a `{token}` template edited against a **live preview** of
 // real inventory — a random copy by default, shuffled, or searched out. Extracted from the old
 // single-template dialog so several templates can share one dialog (and one loaded sample) as tabs.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -34,7 +36,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontFamily: "var(--font-mono, monospace)",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const TOKEN_CHIP: React.CSSProperties = {

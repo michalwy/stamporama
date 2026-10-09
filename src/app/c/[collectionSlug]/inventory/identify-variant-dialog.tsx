@@ -23,12 +23,14 @@ import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 import type { CollectionAreaData } from "@/lib/areas";
 import { CandidateStampsPicker, pickedSetLabel } from "./candidate-stamps-picker";
 import type { PickedStamp } from "./stamp-picker-shared";
+import { formControl } from "@/app/control-style";
 
 /** Edge of each picture in the dialog (#1003). Two of them side by side fill the dialog's width,
  * which is as large as a front and a back can be drawn here without the dialog growing. */
 const PICTURE_SIZE = "15rem";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -36,7 +38,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const SECTION_LABEL: React.CSSProperties = {

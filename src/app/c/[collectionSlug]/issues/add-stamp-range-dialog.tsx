@@ -24,18 +24,18 @@ import type { StampSizePresetData } from "@/lib/stamp-size-presets";
 import { stampSizePresetPair } from "@/lib/stamp-size-preset-rules";
 import { StampSizePresetPicker } from "../shared/stamp-size-preset-picker";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 // ── Spec helpers (#452) ───────────────────────────────────────────────────────

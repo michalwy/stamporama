@@ -10,8 +10,10 @@ import {
 } from "@/app/dialog-shell";
 import { previewIssueMergeAction } from "@/app/actions/issues";
 import type { IssueMergePreview } from "@/lib/issues";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -19,8 +21,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 export interface MergeTargetOption {

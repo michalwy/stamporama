@@ -80,6 +80,7 @@ import { useCollectionFaults } from "./use-faults";
 import { useCollectionTags } from "./use-tags";
 import { dispositionToggleColors } from "./disposition-colors";
 import { ConditionCertificateChips } from "./dictionary-chip";
+import { formControl } from "@/app/control-style";
 
 /**
  * The **condition step** of every intake in the app (#121): what a copy is, beside what it is of.
@@ -106,6 +107,7 @@ export const CHIP: React.CSSProperties = {
 };
 
 export const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -113,7 +115,6 @@ export const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 // The tree-select trigger defaults to a compact toolbar height (min-h-8). In the intake dialog

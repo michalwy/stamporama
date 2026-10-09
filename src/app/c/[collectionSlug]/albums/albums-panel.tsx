@@ -27,6 +27,7 @@ import { AreaTreeSelect, buildAreaTree } from "@/app/area-tree-select";
 import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 // The album list (#767) — the hawid-stock panel's list-and-dialog scaffolding, one level up.
 //
@@ -38,6 +39,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 //   page breaks.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -45,8 +47,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const FORM_STYLE: React.CSSProperties = {

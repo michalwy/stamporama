@@ -11,8 +11,10 @@ import {
   isColnectListSourceOfTruth,
 } from "@/lib/colnect-list-sync-rules";
 import { ListPane, countLabel } from "./list-detail";
+import { formControl } from "@/app/control-style";
 
 const SELECT_STYLE: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

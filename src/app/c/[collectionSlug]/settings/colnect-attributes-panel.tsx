@@ -16,6 +16,7 @@ import {
   colnectAttributeView,
   unmappedAttributeCount,
 } from "./colnect-summary";
+import { formControl } from "@/app/control-style";
 
 /** The panel's one button — *Fill matching*, for the list shown. Shaped like the Settings panels'
  * own secondary actions rather than a primary: it proposes, and the fields below are the record. */
@@ -32,6 +33,7 @@ const FILL_BTN: React.CSSProperties = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
+import { formControl } from "@/app/control-style";
 
 // **A ceiling set apart from the bid** (#1515).
 //
@@ -18,6 +19,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 // the row's own stacking context.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -25,7 +27,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const NOTE: React.CSSProperties = {

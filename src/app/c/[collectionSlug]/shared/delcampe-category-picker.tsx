@@ -14,6 +14,7 @@ import { readDelcampeCategoriesAction } from "@/app/actions/delcampe";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 // Picking a Delcampe category (#609; ADR-0035 §5).
 //
@@ -47,6 +48,7 @@ const helpTextStyle: React.CSSProperties = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -54,8 +56,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 /** What a finished pick is — everything a caller needs to upload with it and to record it. */

@@ -10,8 +10,10 @@ import {
 } from "@/app/dialog-shell";
 import { languageLabel } from "@/lib/languages";
 import { TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -19,7 +21,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 /** One translatable field of the entity, e.g. the area's title name or a condition's abbreviation.

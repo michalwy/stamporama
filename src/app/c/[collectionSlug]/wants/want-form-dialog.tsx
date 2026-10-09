@@ -22,8 +22,10 @@ import {
   rememberProfileFor,
 } from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -31,7 +33,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 /** Above this dialog's panel (`zIndexBase + 1` = 101), so an acceptance menu opened inside it is

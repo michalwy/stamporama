@@ -38,6 +38,7 @@ import { Icon } from "@/app/icons";
 import { ListBesidePreview, useSettingsSelection } from "./list-beside-preview";
 import { SettingsPageAction } from "./settings-page-frame";
 import { RefCardTemplatePreview } from "./ref-card-template-preview";
+import { formControl } from "@/app/control-style";
 
 // The collection's ref-card formats (#569). On the Settings page, the list beside the selected
 // template's card (#1478; `list-beside-preview.tsx`, the album templates' shape); in the editor, the
@@ -50,6 +51,7 @@ import { RefCardTemplatePreview } from "./ref-card-template-preview";
 // paragraph on the page (#1430).
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -57,8 +59,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const FORM_STYLE: React.CSSProperties = {

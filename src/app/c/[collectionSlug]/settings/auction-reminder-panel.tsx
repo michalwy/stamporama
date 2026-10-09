@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { updateAuctionReminderAction } from "@/app/actions/auction-reminder";
 import type { AuctionReminderPatch, AuctionReminderSettings } from "@/lib/auction-reminder";
 import { settingsSearch } from "./settings-nav";
+import { formControl } from "@/app/control-style";
 
 // Settings → Auction reminder (#1373): a morning email of the watched auction lots ending that day.
 // Switched on here, off by default, and only when the instance can send mail (#1372). The hour and
@@ -43,6 +44,7 @@ const helpStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = {
+  ...formControl,
   padding: "0.4rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",

@@ -16,8 +16,10 @@ import {
 import { formatItemNo } from "@/lib/item-number";
 import { useCollectionItemNoPad } from "./use-inventory-query";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
+import { formControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",

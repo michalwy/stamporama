@@ -8,6 +8,7 @@ import { useInvalidateTradeDetail } from "./use-trade-detail-query";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { TradeCatalogVendor } from "../trade-form-dialog";
 import { faultReductionNote } from "@/lib/fault-reduction";
+import { formControl } from "@/app/control-style";
 
 // **What this one line is worth** (#638; ADR-0039 §7) — the two escape hatches, and nothing else.
 //
@@ -28,6 +29,7 @@ import { faultReductionNote } from "@/lib/fault-reduction";
 // dialog that asked for an override without saying what it was overriding would be asking blind.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -35,7 +37,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const HINT: React.CSSProperties = {

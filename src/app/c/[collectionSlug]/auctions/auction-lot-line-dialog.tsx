@@ -34,6 +34,7 @@ import type { AuctionLotLineItem } from "@/lib/auction-lines";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { AuctionLotLineRaw } from "@/app/actions/auctions";
 import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
+import { formControl } from "@/app/control-style";
 
 // Entering one composition line (#353), as **two steps in modals** — the purchase-order intake's
 // flow (#121) exactly: pick what it is, then say what state it is in.
@@ -51,6 +52,7 @@ import type { AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-ve
 // attributable per stamp. Editing offers stamps alone — one line becoming twelve is not an edit.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -58,7 +60,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const NOTE: React.CSSProperties = {

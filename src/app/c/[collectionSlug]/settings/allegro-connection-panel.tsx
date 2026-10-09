@@ -16,6 +16,7 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { SettingsFieldCard } from "./settings-field-grid";
 import { FieldNote, InfoHint } from "./list-detail";
 import { ALLEGRO_CONNECTION_WORDS, allegroConnectionState } from "./allegro-summary";
+import { formControl } from "@/app/control-style";
 
 // Settings → Allegro → Account (#476; ADR-0023), the page's first tab (#1475).
 //
@@ -42,6 +43,7 @@ const ACCOUNT_GRID: React.CSSProperties = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -49,8 +51,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 const primaryButtonStyle: React.CSSProperties = {

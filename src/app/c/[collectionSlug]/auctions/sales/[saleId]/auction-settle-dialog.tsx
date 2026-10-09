@@ -9,6 +9,7 @@ import { auctionLotName, notStampsExpenseLabel } from "@/lib/auction-rules";
 import type { AuctionLotDetailView, AuctionSaleDetailView } from "../../use-auctions-query";
 import { formatDay } from "../../auction-format";
 import { CELL_GLYPH } from "@/app/c/[collectionSlug]/shared/cell-target";
+import { formControl } from "@/app/control-style";
 
 // **Settling a parcel into a purchase** (#28) — the winning half of ADR-0021 §7.
 //
@@ -23,6 +24,7 @@ import { CELL_GLYPH } from "@/app/c/[collectionSlug]/shared/cell-target";
 // carry: a won lot's line price is `hammer + premium`, which is the row's own all-in figure.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -30,7 +32,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const LABEL_STYLE: React.CSSProperties = {

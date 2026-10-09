@@ -7,10 +7,12 @@ import {
   type AutocompleteAction,
 } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import { useContactSearch, useInvalidateContacts } from "./use-inventory-query";
+import { formControl } from "@/app/control-style";
 
 // Larger form-field input than the compact autocompletes (0.875rem), so it keeps
 // its own style rather than the shared SEARCH_INPUT_STYLE.
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -18,7 +20,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 interface ContactSelectProps {

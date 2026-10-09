@@ -16,6 +16,7 @@ import {
   revokeSaleShareLinkAction,
   setSaleShareOptionsAction,
 } from "@/app/actions/sales";
+import { formControl } from "@/app/control-style";
 
 // The seller's end of the buyer's link (#699; ADR-0013 §7) — the trade share dialog's shape (#640,
 // #681), one screen over, and the differences are the interesting part.
@@ -30,6 +31,7 @@ import {
 // they are holding.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -37,7 +39,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const HINT: React.CSSProperties = {

@@ -18,6 +18,7 @@ import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
 import { TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 // A whole run of variants under one base stamp, in one save (#722).
 //
@@ -32,6 +33,7 @@ import { TextInput } from "./text-input";
 // filling it in from a range would be guesswork, and it is typed per stamp as it always was.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -39,8 +41,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 export interface AddVariantRangeParent {

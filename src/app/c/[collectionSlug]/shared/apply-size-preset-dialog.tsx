@@ -17,6 +17,7 @@ import { NO_AUTOFILL } from "./no-autofill";
 import type { RowAction } from "./row-actions-menu";
 import { StampSizePresetPicker } from "./stamp-size-preset-picker";
 import { TextInput } from "./text-input";
+import { formControl } from "@/app/control-style";
 
 // Applying a stamp size preset to an issue or a checklist (#806; ADR-0048 §4, §6, §7) — the Germania
 // case for a series already entered: dozens of stamps, one size, one click, with the counts on screen
@@ -119,6 +120,7 @@ const FORM_STYLE: React.CSSProperties = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
   border: "1px solid var(--color-border-strong)",
@@ -126,8 +128,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
-  minHeight: "2.25rem",
 };
 
 export function ApplySizePresetDialog({

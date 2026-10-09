@@ -12,6 +12,7 @@ import type { FacebookWinnerLookup } from "@/lib/facebook-results";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { isAuctionListing, type OfferListingType } from "@/lib/offer-rules";
+import { formControl } from "@/app/control-style";
 
 // Recording who won a Facebook auction and for how much (#1545; ADR-0061 §4). The winner is typed as
 // their profile shows them, with the profile's link when it is to hand; the dialog says, while it is
@@ -21,6 +22,7 @@ import { isAuctionListing, type OfferListingType } from "@/lib/offer-rules";
 // way, in its own words: its buyer, and the price it sold for — starting from its asking price.
 
 const INPUT_STYLE: React.CSSProperties = {
+  ...formControl,
   width: "100%",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
@@ -28,7 +30,6 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
-  boxSizing: "border-box",
 };
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
