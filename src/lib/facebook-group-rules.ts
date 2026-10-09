@@ -3,12 +3,12 @@
 // very lists the domain layer validates against (the `delcampe-listing-profile-rules.ts` rule).
 //
 // A group's settings are its **customs**: how a new offer there is sold, how a post there reads — one
-// template for an auction, one for a quick buy (#1671) — the standing note every post carries, and
-// the figures a new auction there starts from. Each one **follows the Facebook
-// platform's** unless the group marks it custom (#1661): the platform states what most groups want,
-// once, and a group overrides only what differs. Nothing here renders a post — that is the kit's
-// (#1544) — so what this module answers is what a group *says*, and the cleaning every write goes
-// through.
+// template for an auction, one for a quick buy (#1671) — the note on shipping, payment and terms that
+// `{terms}` places (#1689), and the figures a new auction there starts from. Each one **follows the
+// Facebook platform's** unless the group marks it custom (#1661): the platform states what most
+// groups want, once, and a group overrides only what differs. Nothing here renders a post — that is
+// the kit's (#1544) — so what this module answers is what a group *says*, and the cleaning every
+// write goes through.
 
 import { roundAmount } from "./decimal-input";
 import type { OfferListingType } from "./offer-rules";
@@ -19,6 +19,18 @@ export interface FacebookPostPlaceholder {
   label: string;
   example: string;
 }
+
+/**
+ * Where the note on shipping, payment and terms goes (#1689), in either template. It was appended
+ * after the template until then (#1543); the collector wants it where it belongs in the post, so a
+ * template without it posts no note. In a post of several lots it is filled in the last lot only,
+ * so the note is stated once, as it always was.
+ */
+export const FACEBOOK_TERMS_PLACEHOLDER: FacebookPostPlaceholder = {
+  token: "{terms}",
+  label: "Shipping, payment and terms",
+  example: "Shipping 7 PLN, payment within 3 days",
+};
 
 /**
  * The placeholders an **auction's** post template may carry.
@@ -35,6 +47,7 @@ export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] =
   { token: "{increment}", label: "Bid increment", example: "1.00 PLN" },
   { token: "{closesAt}", label: "Closing time", example: "Sun 5 Oct, 20:00" },
   { token: "{lot}", label: "Lot number", example: "3" },
+  FACEBOOK_TERMS_PLACEHOLDER,
 ];
 
 /**
@@ -46,6 +59,7 @@ export const FACEBOOK_QUICK_BUY_PLACEHOLDERS: readonly FacebookPostPlaceholder[]
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
   { token: "{price}", label: "Price", example: "25.00 PLN" },
   { token: "{lot}", label: "Lot number", example: "3" },
+  FACEBOOK_TERMS_PLACEHOLDER,
 ];
 
 /**
@@ -356,6 +370,22 @@ export function usesRetiredPostPlaceholder(settings: Pick<FacebookPostingSetting
   return (
     retiredPostPlaceholders(settings.postTemplate).length > 0 ||
     retiredPostPlaceholders(settings.quickBuyTemplate).length > 0
+  );
+}
+
+/**
+ * Whether a note is set that no post will carry (#1689): neither template has `{terms}`. Said under
+ * the note, since nothing appends it any more — a template written before the placeholder was left
+ * as it was (decided with the collector, 2026-10-09), so its posts carry no note until it is placed.
+ */
+export function standingNoteUnused(
+  settings: Pick<FacebookPostingSettings, "postTemplate" | "quickBuyTemplate" | "standingNote">
+): boolean {
+  const places = (template: string) => template.includes(FACEBOOK_TERMS_PLACEHOLDER.token);
+  return (
+    settings.standingNote.trim() !== "" &&
+    !places(settings.postTemplate) &&
+    !places(settings.quickBuyTemplate)
   );
 }
 

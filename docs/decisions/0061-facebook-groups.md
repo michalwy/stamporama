@@ -7,7 +7,8 @@ platform and its groups (§1, §6). The offer, the post and its kit are #1544 (�
 bid and the result #1545 (§4), the Assistant filling a post #1546 (§3), and several groups at once
 #1547 (§5). §6 is amended by #1661: a group's settings follow the platform's unless set custom. §3
 is amended by #1668: the post's link is recorded as the offer's own listing link, asked by *Activate*.
-The whole is amended by #1671 (§8): a Facebook offer can be a quick buy as well as an auction.
+The whole is amended by #1671 (§8): a Facebook offer can be a quick buy as well as an auction. §6
+is amended by #1689: the standing note is placed by a `{terms}` placeholder, no longer appended.
 
 ## Context
 
@@ -84,7 +85,8 @@ by allowing it first.
 Per group: the **post template** (`{token}` placeholders for the description, the catalogue numbers,
 the starting price, the increment, the closing time and the lot number — `FACEBOOK_POST_PLACEHOLDERS`,
 split by type and without the catalogue numbers since §8),
-a **standing note** on shipping, payment and terms appended to every post, the default **starting
+a **standing note** on shipping, payment and terms appended to every post (placed by `{terms}` since
+#1689, below), the default **starting
 price** (an amount, or a percentage of catalogue value), the default **bid increment**, the default
 **length** of an auction and its **closing time of day**, and the **currency**, which is the
 platform's own unless the group names another.
@@ -109,6 +111,14 @@ the collector, 2026-10-06): the description template writes the offer's descript
 template's `{description}` places — one is inside the other. The contact's default starting price, an
 amount that no Facebook auction read, moved into the platform's settings and is no longer offered on
 the Facebook platform's contact.
+
+**Amended by #1689 (decided with the collector on 2026-10-09): the standing note is placed, not
+appended.** A note tacked on after the template could not sit where it belongs in a post, so both
+templates take a `{terms}` placeholder and a template without it posts no note. In a post of several
+lots it is filled in the last lot only, so the note is stated once, as before. Templates written
+earlier were **not** given `{terms}` — a post is only what its template places (#1692) — so they
+post no note until the collector places it, and a note set but used by neither template is flagged
+under its field.
 
 ### 7. A group with offers is archived, never deleted
 

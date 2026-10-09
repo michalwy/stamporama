@@ -41,7 +41,10 @@ parts.
 - **Currency** — shown, not set here: it is the platform's own currency, set on its contact.
 - **A post may mix auctions and quick buys** — off, the lots of one [post](#a-post-with-several-lots)
   are all auctions or all quick buys; on, one post may hold both.
-- **Shipping, payment and terms** — a standing note added under every post, as written.
+- **Shipping, payment and terms** — a standing note on how you ship, how buyers pay and the group's
+  terms, as written. A post carries it where its template has `{terms}` (below), and only there: a
+  template without `{terms}` posts no note, and the field warns you when the note is set but neither
+  template uses it.
 
 **New auctions** — how an auction's post reads, and what a new auction starts from, each optional:
 
@@ -56,6 +59,7 @@ parts.
   | `{increment}` | the bid increment |
   | `{closesAt}` | when the auction closes |
   | `{lot}` | the lot number, in a post holding several lots |
+  | `{terms}` | the note on shipping, payment and terms |
 
 - **Starting price** — none, an amount, or a percentage of the copies' catalogue value.
 - **Bid increment** — how much a bid must beat the last one by.
@@ -75,6 +79,7 @@ at once for every group that follows it, and never changes an auction already ma
   | `{description}` | the description of what is offered |
   | `{price}` | the price |
   | `{lot}` | the lot number, in a post holding several lots |
+  | `{terms}` | the note on shipping, payment and terms |
 
   A quick buy has no price default here: its price is set on each offer.
 
@@ -83,6 +88,12 @@ template, a quick buy's from the quick-buy one, never the other. In either templ
 in braces stays exactly as you typed it, and the field says so under it while you type — so a
 misspelt `{startprice}`, or an auction's `{closesAt}` in the quick-buy template, is caught before it
 reaches a post.
+
+**`{terms}` places the note on shipping, payment and terms** — wherever you put it, at the end of
+the post or above the price. In a post holding several lots it is filled in once, in the last lot's
+text; in the lots before it, it is left empty. Nothing adds the note for you: a template written
+before `{terms}` existed posts no note until you place it, and the note's field says so while no
+template uses it.
 
 **`{catalog}` is no longer offered**: the catalogue numbers are already in an offer's title or
 description. A template that still uses it keeps working — the numbers are still filled in — but it
@@ -193,8 +204,8 @@ the offer's screen, directly under the description, which holds everything the p
 - the **group**, with a link to open it;
 - the **post text**: the group's post template for the offer's type — the auction or the quick-buy
   one, its own or Facebook's, as it reads now — filled in from the offer, with the note on shipping,
-  payment and terms under it. **Copy** puts it on the clipboard in one click. A group with no
-  template for that type posts each lot's description;
+  payment and terms where the template's `{terms}` puts it. **Copy** puts it on the clipboard in one
+  click. A group with no template for that type posts each lot's description;
 - **↓ Photos**: the offer's photos as one download.
 
 Once the post is up, choose **Activate** on the offer and paste the post's link as its **listing
@@ -216,7 +227,7 @@ Each lot's Facebook card then shows the whole post:
 
 - the lots, in order, each linking to its offer;
 - the **post text** for the whole post — each lot's text in lot order, each from its own type's
-  template, the standing note once under the last — and **↓ Photos, in lot order**, every lot's photos in one download, each file starting
+  template, the note on shipping, payment and terms once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in one download, each file starting
   with its lot (`lot-01-…`), so the album uploads in the right order;
 - the **listing link** of this lot, once the post is up.
 

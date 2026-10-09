@@ -121,16 +121,29 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
     assert.equal(renderFacebookLotText("[{lot}] {catalog}", lot()), "[] Mi·AT 1");
   });
 
-  it("falls back to the description when the group has no template", () => {
+  it("falls back to the description when the group has no template, and adds no note to it (#1689)", () => {
     assert.equal(renderFacebookLotText("   ", lot()), "Mercury, 1850, unused");
+    assert.equal(renderFacebookLotText("   ", lot(), "Shipping 5 PLN."), "Mercury, 1850, unused");
   });
 
-  it("joins the lots in lot order and puts the standing note under the last, once", () => {
-    const text = renderFacebookPostText({ auction: "Lot {lot}: {catalog}", quickBuy: "" }, "Shipping 5 PLN.", [
-      lot({ lotNo: 2, catalog: "Mi·AT 2" }),
-      lot({ lotNo: 1, catalog: "Mi·AT 1" }),
-    ]);
+  it("joins the lots in lot order, the note where the last lot's {terms} is, once (#1689)", () => {
+    const text = renderFacebookPostText(
+      { auction: "Lot {lot}: {catalog}\n\n{terms}", quickBuy: "" },
+      "Shipping 5 PLN.",
+      [lot({ lotNo: 2, catalog: "Mi·AT 2" }), lot({ lotNo: 1, catalog: "Mi·AT 1" })]
+    );
     assert.equal(text, "Lot 1: Mi·AT 1\n\nLot 2: Mi·AT 2\n\nShipping 5 PLN.");
+  });
+
+  it("puts the note where {terms} stands, not at the end (#1689)", () => {
+    const text = renderFacebookPostText({ auction: "{title}\n{terms}\nStart {startingPrice}", quickBuy: "" }, "Shipping 5 PLN.", [
+      lot(),
+    ]);
+    assert.equal(text, "Austria 1850 Mercury\nShipping 5 PLN.\nStart 10.00 PLN");
+  });
+
+  it("appends no note to a template without {terms} (#1689)", () => {
+    assert.equal(renderFacebookPostText({ auction: "{title}", quickBuy: "" }, "Shipping 5 PLN.", [lot()]), "Austria 1850 Mercury");
   });
 
   it("writes each lot from its own type's template, never the other (#1671)", () => {
@@ -143,7 +156,7 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
   });
 
   it("leaves out an empty standing note rather than a gap", () => {
-    assert.equal(renderFacebookPostText({ auction: "{catalog}", quickBuy: "" }, "  ", [lot()]), "Mi·AT 1");
+    assert.equal(renderFacebookPostText({ auction: "{catalog}\n\n{terms}", quickBuy: "" }, "  ", [lot()]), "Mi·AT 1");
   });
 
   it("writes a figure with its currency, and nothing for none", () => {

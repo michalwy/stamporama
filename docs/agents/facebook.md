@@ -162,7 +162,15 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   local time and the browser is the only place the zone is known (#490's rule). `{description}` is
   the offer's description, else its display title; `{title}` the display title; `{price}` a quick
   buy's asking price; the retired `{catalog}` is every copy's leading number through
-  `compactCatalogNumberGroups`; `{lot}` is empty on a single post. Lots are joined by a blank line and the standing note goes under the last, once. The photos
+  `compactCatalogNumberGroups`; `{lot}` is empty on a single post. Lots are joined by a blank line.
+  The standing note is **placed, never appended** (#1689, decided with the collector on 2026-10-09):
+  `{terms}` (`FACEBOOK_TERMS_PLACEHOLDER`, in both types' lists) is filled in the **last** lot only,
+  so a multi-lot post states it once as it always did; a template without it posts no note, a blank
+  one (the description fallback) included. **Existing templates were not migrated** (amended with the
+  collector the same day, following #1692's *a post is only what its template places*): they post no
+  note until the collector places `{terms}`. `standingNoteUnused` is the warning
+  under the note field, read off what is being typed (the pane holds both templates and the note in
+  one state for it); a group following Facebook's note is warned too, beside the followed value. The photos
   are the offer's own ZIP for a single post and `GET …/facebook-posts/[postId]/photos/zip` for a
   multi-lot one — every lot's upload set, flat, prefixed `lot-NN-`.
 
