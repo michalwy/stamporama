@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   applyLotRecipe,
   lotBuilderSearchParams,
+  sameLotRecipe,
   toLotRecipe,
   type LotBuilderRequest,
   type LotRecipe,
@@ -44,20 +45,6 @@ import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 // exactly as they stand — the two halves of what makes one preset usable over Germany and then over
 // Poland.
 
-/** Whether what is on screen still says what the selected preset says. Compared through the query
- *  string rather than field by field: the criteria's own round trip is what both the proposal and
- *  the commit are built on, so two recipes are the same exactly when it says they are. */
-function sameRecipe(a: LotRecipe, b: LotRecipe): boolean {
-  const key = (recipe: LotRecipe) =>
-    lotBuilderSearchParams({
-      criteria: { ...recipe, platformId: "", areaId: null, areaSubtree: true },
-      seed: "",
-      pinnedItemIds: [],
-      rejectedItemIds: [],
-    }).toString();
-  return key(a) === key(b);
-}
-
 type Dialog = { kind: "none" } | { kind: "save" } | { kind: "delete"; preset: LotBuilderPresetData };
 
 export function LotPresetBar({
@@ -85,7 +72,7 @@ export function LotPresetBar({
 
   const current = presets?.find((p) => p.id === selectedId);
   const onScreen = toLotRecipe(request.criteria);
-  const edited = !!current && !sameRecipe(current.recipe, onScreen);
+  const edited = !!current && !sameLotRecipe(current.recipe, onScreen);
   const search = lotBuilderSearchParams(request).toString();
 
   function close() {

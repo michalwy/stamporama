@@ -123,6 +123,30 @@ describe("the bulk-lot builder's saved criteria (#773)", () => {
     await deleteLotBuilderPreset(userId, created.id);
   });
 
+  // A cleared template is "use the platform's" and an unset one is "follow the wizard's suggestion"
+  // (#1687). The column keeps `''` apart from NULL (ADR-0055 §4), and the preset must too, or a
+  // template once set could never be taken back to the platform's.
+  it("keeps a cleared template apart from an unset one", async () => {
+    const created = await createLotBuilderPreset(
+      userId,
+      collectionId,
+      `Cleared ${ts}`,
+      recipe({ nameTemplate: "{count} stamps", descriptionTemplate: "Bulk lot of {count}." })
+    );
+    const updated = await updateLotBuilderPreset(
+      userId,
+      created.id,
+      created.name,
+      recipe({ nameTemplate: null, descriptionTemplate: "" })
+    );
+    assert.equal(updated.recipe.nameTemplate, null);
+    assert.equal(updated.recipe.descriptionTemplate, "");
+    const listed = await getLotBuilderPresets(userId, collectionId);
+    assert.equal(listed.find((p) => p.id === created.id)?.recipe.descriptionTemplate, "");
+
+    await deleteLotBuilderPreset(userId, created.id);
+  });
+
   it("refuses a second preset of the same name in one collection", async () => {
     const first = await createLotBuilderPreset(userId, collectionId, `Twice ${ts}`, recipe());
     await assert.rejects(() =>

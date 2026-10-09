@@ -4,6 +4,7 @@ import {
   applyLotRecipe,
   lotBuilderSearchParams,
   parseLotBuilderRequest,
+  sameLotRecipe,
   toLotRecipe,
   suggestLotTexts,
   toLotCriteria,
@@ -124,7 +125,7 @@ describe("the bulk-lot criteria round trip (#759)", () => {
     assert.equal(parsed.criteria.areaSubtree, true);
   });
 
-  it("round-trips the listing wording, and reads a blank one as absent (#774)", () => {
+  it("round-trips the listing wording (#774)", () => {
     const input = request({
       criteria: criteria({
         nameTemplate: "{area} {year}, {count} stamps",
@@ -132,11 +133,25 @@ describe("the bulk-lot criteria round trip (#759)", () => {
       }),
     });
     assert.deepEqual(roundTrip(input), input);
-    // Blank and absent are one thing — "leave the platform's template" — and an empty parameter must
-    // not come back as an empty *override*, which would render an empty listing.
+  });
+
+  // Absent is "not stated" — the wizard keeps following its suggestion — and blank is a field the
+  // collector cleared, meaning the platform's own template. Collapsing the two lost the clearing.
+  it("keeps a cleared template apart from an unstated one (#1687)", () => {
+    const cleared = request({ criteria: criteria({ nameTemplate: "", descriptionTemplate: "" }) });
+    assert.deepEqual(roundTrip(cleared), cleared);
+    assert.equal(lotBuilderSearchParams(cleared).has("descTpl"), true);
+    assert.equal(lotBuilderSearchParams(request()).has("descTpl"), false);
     const blank = parseLotBuilderRequest(new URLSearchParams("platform=plat-1&nameTpl=&descTpl="));
-    assert.equal(blank.criteria.nameTemplate, null);
-    assert.equal(blank.criteria.descriptionTemplate, null);
+    assert.equal(blank.criteria.nameTemplate, "");
+    assert.equal(blank.criteria.descriptionTemplate, "");
+  });
+
+  it("reads whitespace alone as a cleared template, and trims the rest (ADR-0055)", () => {
+    const spaces = request({ criteria: criteria({ descriptionTemplate: "  \n " }) });
+    assert.equal(roundTrip(spaces).criteria.descriptionTemplate, "");
+    const padded = request({ criteria: criteria({ nameTemplate: " {count} stamps\n" }) });
+    assert.equal(roundTrip(padded).criteria.nameTemplate, "{count} stamps");
   });
 
   it("keeps the wording out of the pick's own inputs", () => {
@@ -206,6 +221,87 @@ describe("the preset's recipe (#773)", () => {
     const recipe = toLotRecipe(FULL);
     recipe.conditionIds.push("cond-mnh");
     assert.deepEqual(FULL.conditionIds, ["cond-u"]);
+  });
+});
+
+// What decides whether the preset bar offers *Update* (#1687): every field a preset holds must be
+// able to be cleared as well as changed, or a preset can be given a value it can never let go of.
+describe("telling a preset from the screen (#1687)", () => {
+  const SAVED = toLotRecipe(
+    criteria({
+      yearFrom: 1950,
+      yearTo: 1960,
+      conditionIds: ["cond-u"],
+      formatIds: ["single"],
+      maxCatalogValue: 5,
+      countMin: 90,
+      countMax: 110,
+      valueMin: 40,
+      valueMax: 80,
+      series: "preferComplete",
+      maxPerStamp: 3,
+      duplicates: "preferDuplicates",
+      nameTemplate: "{count} stamps",
+      descriptionTemplate: "Bulk lot of {count} stamps.",
+    })
+  );
+
+  it("is the same recipe as itself", () => {
+    assert.equal(sameLotRecipe(SAVED, toLotRecipe(SAVED)), true);
+  });
+
+  it("sees a cleared description template as a change", () => {
+    assert.equal(sameLotRecipe(SAVED, { ...SAVED, descriptionTemplate: "" }), false);
+  });
+
+  it("sees a template cleared from the suggestion as a change", () => {
+    const following = { ...SAVED, nameTemplate: null, descriptionTemplate: null };
+    assert.equal(sameLotRecipe(following, { ...following, descriptionTemplate: "" }), false);
+    assert.equal(sameLotRecipe(following, { ...following, nameTemplate: "" }), false);
+  });
+
+  it("reads whitespace alone as cleared, and padding as no change", () => {
+    const cleared = { ...SAVED, descriptionTemplate: "" };
+    assert.equal(sameLotRecipe(cleared, { ...SAVED, descriptionTemplate: " \n " }), true);
+    assert.equal(sameLotRecipe(SAVED, { ...SAVED, nameTemplate: "{count} stamps\n" }), true);
+  });
+
+  it("sees every other field cleared as a change", () => {
+    const clearedOne: Partial<typeof SAVED>[] = [
+      { yearFrom: null },
+      { yearTo: null },
+      { conditionIds: [] },
+      { formatIds: [] },
+      { maxCatalogValue: null },
+      { countMin: null },
+      { countMax: null },
+      { valueMin: null },
+      { valueMax: null },
+      { series: "neutral" },
+      { maxPerStamp: null },
+      { duplicates: "neutral" },
+      { nameTemplate: "" },
+      { descriptionTemplate: "" },
+    ];
+    // Every recipe key is covered, so a field added to the recipe is a field added here.
+    assert.deepEqual(
+      clearedOne.flatMap((patch) => Object.keys(patch)).sort(),
+      [...LOT_RECIPE_KEYS].sort()
+    );
+    for (const patch of clearedOne) {
+      assert.equal(sameLotRecipe(SAVED, { ...SAVED, ...patch }), false, Object.keys(patch)[0]);
+    }
+  });
+
+  it("survives a save: what the screen sends back reads as the preset it became", () => {
+    const onScreen = { ...SAVED, descriptionTemplate: "" };
+    const saved = toLotRecipe(
+      parseLotBuilderRequest(
+        lotBuilderSearchParams(request({ criteria: { ...criteria(), ...onScreen } }))
+      ).criteria
+    );
+    assert.equal(saved.descriptionTemplate, "");
+    assert.equal(sameLotRecipe(saved, onScreen), true);
   });
 });
 
