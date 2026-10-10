@@ -605,7 +605,9 @@ export function InventoryItemFormDialog({
                 />
               </div>
               <div>
-                <Tooltip content={FAULT_REDUCTION_HINT}>
+                {/* The label is a block; the tooltip's default `inline-flex` wrapper would sit it on a
+                    line box of its own and drop it, and the field under it, below Faults (#1752). */}
+                <Tooltip content={FAULT_REDUCTION_HINT} style={{ display: "flex", width: "fit-content" }}>
                   <GroupLabel htmlFor="copy-fault-reduction">Value reduction</GroupLabel>
                 </Tooltip>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
