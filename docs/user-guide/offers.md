@@ -31,8 +31,10 @@ deleting offer 12 retires that number rather than handing it to the next listing
 may already be written somewhere you cannot take it back from.
 
 The number is printed on the offer's row in the [offers list](#filtering), in front of the platform,
-the way a purchase or a sale row carries its own. That is where you read it off to type it into the
-[**Jump to…** box](quick-jump.md) as `o 42`, or to build the short address below.
+the way a purchase or a sale row carries its own, and on the offer's own screen in front of its
+title, in the same form — so a number a buyer quotes can be checked against the offer that is open.
+That is where you read it off to type it into the [**Jump to…** box](quick-jump.md) as `o 42`, or
+to build the short address below.
 
 It gives an offer a **short address**:
 

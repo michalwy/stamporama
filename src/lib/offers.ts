@@ -3946,6 +3946,9 @@ export interface OfferSetsTotals {
 export interface OfferDetail {
   id: string;
   collectionId: string;
+  /** The offer's short per-collection number (#416), shown beside the title on its own screen as it
+   * is on the offer list (#1755). */
+  offerNo: number;
   /** The stored listing title (#209), or null when never generated. */
   name: string | null;
   /** Label derived from the offer's sets — the display fallback when `name` is null. */
@@ -4240,6 +4243,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     where: { id: offerId },
     select: {
       id: true,
+      offerNo: true,
       name: true,
       description: true,
       privateNote: true,
@@ -4623,6 +4627,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
   return {
     id: offer.id,
     collectionId: offer.collectionId,
+    offerNo: offer.offerNo,
     // Both names rather than `offerDisplayLabel` (#1024). The offer's own screen is the one place
     // the title is **edited**, so it needs the raw field — `InlineText` writes back to it and the
     // ↻ regenerate control turns on whether it is null — while the heading composes `name ?? label`
