@@ -79,12 +79,39 @@ export interface CopyCostInput extends CostBasisInput {
 }
 
 /**
+ * What one copy contributes to {@link copiesCost} (#1746) — the figure a Lot builder row shows beside
+ * its catalogue value. The summary is the sum of these, so a row and the total cannot disagree:
+ *
+ *  - `known` — its frozen cost basis;
+ *  - `estimate` — pending on an open lot, at the estimate its purchase order shows;
+ *  - `missing` — no figure, and why: `pending` (an open lot with no estimate — named by the summary),
+ *    `unrecorded` / `no_opening_value` (no cost at all — counted as *no cost recorded*), or
+ *    `opening_balance` (an opening value, not money spent — left out, #1324).
+ */
+export type CopyCostFigure =
+  | { kind: "known"; amount: string }
+  | { kind: "estimate"; amount: string }
+  | { kind: "missing"; why: "pending" | "unrecorded" | "no_opening_value" | "opening_balance" };
+
+export function copyCostFigure(copy: Omit<CopyCostInput, "label">): CopyCostFigure {
+  if (copy.openingBalance) return { kind: "missing", why: "opening_balance" };
+  const basis = resolveCostBasis(copy);
+  if (basis.state === "known") return { kind: "known", amount: basis.amount };
+  if (basis.state === "pending") {
+    return copy.costEstimate == null
+      ? { kind: "missing", why: "pending" }
+      : { kind: "estimate", amount: copy.costEstimate };
+  }
+  return { kind: "missing", why: basis.reason };
+}
+
+/**
  * The COST of copies not yet on an offer — the Lot builder's proposed lot (#1743) — under the very
  * rule a set's COST follows: a frozen cost basis where known, the estimate where the lot is still
  * open. Built from each copy's own fields rather than a holdings summary, which is what an offer set
  * reads, but to the same split: a copy on an opening balance carries an opening value, not money
  * spent, and is left out as `holdings.cost` leaves it out (#1324). The caller hands it held copies
- * only.
+ * only. Summed from {@link copyCostFigure}, the figure each row shows (#1746).
  */
 export function copiesCost(copies: readonly CopyCostInput[]): OfferSetCost {
   let total = 0;
@@ -92,17 +119,15 @@ export function copiesCost(copies: readonly CopyCostInput[]): OfferSetCost {
   let noneCount = 0;
   const pending: OfferPendingCopy[] = [];
   for (const copy of copies) {
-    if (copy.openingBalance) continue;
-    const basis = resolveCostBasis(copy);
-    if (basis.state === "known") {
-      total += cents(Number(basis.amount));
+    const figure = copyCostFigure(copy);
+    if (figure.kind === "known") {
+      total += cents(Number(figure.amount));
       count++;
-    } else if (basis.state === "pending") {
-      pending.push({
-        label: copy.label,
-        estimate: copy.costEstimate == null ? null : Number(copy.costEstimate),
-      });
-    } else {
+    } else if (figure.kind === "estimate") {
+      pending.push({ label: copy.label, estimate: Number(figure.amount) });
+    } else if (figure.why === "pending") {
+      pending.push({ label: copy.label, estimate: null });
+    } else if (figure.why !== "opening_balance") {
       noneCount++;
     }
   }

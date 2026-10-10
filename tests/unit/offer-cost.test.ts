@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   copiesCost,
+  copyCostFigure,
   offerCostEstimateNotes,
   offerCostTotals,
   offerSetCost,
@@ -155,5 +156,27 @@ describe("a proposed lot's cost (#1743)", () => {
     const cost = copiesCost([copy({}), open("#4", null)]);
     assert.equal(cost.amount, null);
     assert.equal(cost.estimated, true);
+  });
+
+  // Each row of the proposal shows its copy's figure (#1746); the summary is their sum.
+  it("states each copy's own figure, the one the summary adds up", () => {
+    const opening = copy({ costBasis: "9.00", lotId: "L3", lotStatus: "closed", lotValued: true, openingBalance: true });
+    const noValue = copy({ lotId: "L4", lotStatus: "open", lotValued: false });
+    assert.deepEqual(copyCostFigure(frozen("1.10")), { kind: "known", amount: "1.10" });
+    assert.deepEqual(copyCostFigure(open("#2", "0.75")), { kind: "estimate", amount: "0.75" });
+    assert.deepEqual(copyCostFigure(open("#3", null)), { kind: "missing", why: "pending" });
+    assert.deepEqual(copyCostFigure(copy({})), { kind: "missing", why: "unrecorded" });
+    assert.deepEqual(copyCostFigure(noValue), { kind: "missing", why: "no_opening_value" });
+    assert.deepEqual(copyCostFigure(opening), { kind: "missing", why: "opening_balance" });
+
+    const copies = [frozen("1.10"), open("#2", "0.75"), open("#3", null), copy({}), noValue, opening];
+    const rows = copies
+      .map(copyCostFigure)
+      .reduce((sum, f) => (f.kind === "missing" ? sum : sum + Math.round(Number(f.amount) * 100)), 0);
+    const cost = copiesCost(copies);
+    assert.equal(cost.amount, (rows / 100).toFixed(2));
+    assert.equal(cost.amount, "1.85");
+    assert.equal(cost.noneCount, 2);
+    assert.deepEqual(cost.unestimated, ["#3"]);
   });
 });
