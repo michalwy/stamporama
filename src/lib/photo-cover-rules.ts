@@ -14,6 +14,9 @@ export type PhotoCoverShape = (typeof PHOTO_COVER_SHAPES)[number];
 export const PHOTO_COVER_STYLES = ["pixelate", "blur", "bar"] as const;
 export type PhotoCoverStyle = (typeof PHOTO_COVER_STYLES)[number];
 
+/** The shape a newly drawn cover takes before any other has been chosen on this browser (#1761). */
+export const DEFAULT_PHOTO_COVER_SHAPE: PhotoCoverShape = "rect";
+
 /** What a newly drawn cover starts as when the platform says nothing usable. */
 export const DEFAULT_PHOTO_COVER_STYLE: PhotoCoverStyle = "pixelate";
 
@@ -68,6 +71,12 @@ export function isPhotoCoverShape(value: unknown): value is PhotoCoverShape {
 
 export function isPhotoCoverStyle(value: unknown): value is PhotoCoverStyle {
   return typeof value === "string" && (PHOTO_COVER_STYLES as readonly string[]).includes(value);
+}
+
+/** The shape last chosen, as remembered by the browser, read forgivingly: anything unknown is a
+ *  rectangle (#1761). */
+export function normalizePhotoCoverShape(value: string | null | undefined): PhotoCoverShape {
+  return isPhotoCoverShape(value) ? value : DEFAULT_PHOTO_COVER_SHAPE;
 }
 
 /** A platform's stored default style, read forgivingly: anything unknown is the built-in default. */
