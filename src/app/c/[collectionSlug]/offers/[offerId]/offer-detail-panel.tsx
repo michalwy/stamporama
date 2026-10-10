@@ -705,6 +705,14 @@ export function OfferDetailPanel({
     ...(canRepost
       ? [{ key: "repost", label: "Repost…", icon: "refresh", onSelect: () => setReposting(true) } as RowAction]
       : []),
+    // The buyer's specification (#1758): a printable page with an address of its own, so an `href`
+    // entry rather than an `onSelect` — a new tab is a cmd-click away, as for any link.
+    {
+      key: "specification",
+      label: "Specification",
+      icon: "print",
+      href: `/c/${collectionSlug}/offers/${offerId}/specification`,
+    },
     { key: "duplicate", label: "List on another platform", icon: "duplicate", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "delete", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
   ];

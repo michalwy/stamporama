@@ -991,6 +991,42 @@ offer puts the listing back to **Active**, and it stops being a candidate for cl
 
 Storage freed this way shows up in the collection's [photo storage total](collections.md).
 
+## Specification for buyers
+
+A post that shows a set's photos often adds that a detailed specification is available on request.
+The offer writes that specification for you: choose **Specification** from the offer's **⋮** menu.
+It opens a page listing exactly what the offer contains. **Print** it, or pick *Save as PDF* in the
+print dialog to keep it as a file to send to the buyer.
+
+The page is headed with the offer's [number](#offer-number-and-short-link) and title. Below that is
+**one row per copy**, showing:
+
+- a thumbnail of the copy's own photo (its front, or its back if it has no front scan),
+- its catalogue number, as the offer's title writes it — a cover or a fragment gives the number of
+  every stamp it carries,
+- the area, the series and the year,
+- the stamp's description,
+- its condition, with any [faults](#faults-in-the-description) listed under it,
+- its certificate, if it has one.
+
+That is all the page shows. **It has no price and no catalogue value**, and nothing about packing,
+shipping, payment, the buyer or the sale. Nor does it show anything that is yours alone: no storage
+location, no ref, no copy number and no collection name.
+
+**It lists what the offer holds now.** If a set has already sold through this offer, or one of its
+copies has sold through another listing, that copy is not on the page. A partly sold offer's
+specification therefore shows only what is left to buy.
+
+The rows follow the order of the offer's photos: sets in their order, and copies within a set in
+catalogue order (or the order you set by hand). If the offer
+[groups its photos by checklist](#series-in-a-lot), each checklist's copies come together in the
+same way, so the page reads in the order a buyer sees the stamps in the photos.
+
+The page is written in **the offer's language** — its platform's listing language, the same one the
+title and description use. Stamp, series, area, condition, fault and certificate names are
+translated where your collection has a translation for that language. Where it doesn't, the
+collection's own wording is used, just as in the title. The column headings stay in English.
+
 ## What the market is asking
 
 Pricing a listing means two questions about each stamp in it: what it *is*, and what people are
