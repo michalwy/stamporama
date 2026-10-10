@@ -148,6 +148,9 @@ export function ConditionsPanel({
   );
 }
 
+/** Abbreviation, Symbol, Name — shared by the default-language row and its translations (#1748). */
+const FIELD_COLUMNS = "8rem 6rem minmax(0, 1fr)";
+
 function ConditionFields({
   condition,
   newColor,
@@ -172,7 +175,16 @@ function ConditionFields({
 
   return (
     <Fields>
-      <div style={{ display: "grid", gridTemplateColumns: "8rem 6rem minmax(0, 1fr)", gap: "0.75rem" }}>
+      {/* Bottom-aligned (#1748): a label that wraps — a long language name — grows upwards, so the
+          three fields keep their tops on one line. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: FIELD_COLUMNS,
+          gap: "0.75rem",
+          alignItems: "end",
+        }}
+      >
         <div>
           <LabelWithError htmlFor="f-cond-abbr">Abbreviation{suffix}</LabelWithError>
           <TextInput
@@ -237,6 +249,8 @@ function ConditionFields({
           },
           { key: "name", label: "Name", fallback: name, stored: condition?.nameByLanguage },
         ]}
+        // Each translation under its own field; a symbol is not translated, so its column stays empty.
+        align={{ gridTemplateColumns: FIELD_COLUMNS, columns: ["abbreviation", null, "name"] }}
       />
 
       <div>
