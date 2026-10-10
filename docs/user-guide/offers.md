@@ -1029,6 +1029,18 @@ title and description use. Stamp, series, area, condition, fault and certificate
 translated where your collection has a translation for that language. Where it doesn't, the
 collection's own wording is used, just as in the title. The column headings stay in English.
 
+### As plain text
+
+When a buyer asks in a chat, pasting a list is quicker than attaching a PDF. Choose **Copy
+specification as text** from the offer's **⋮** menu: the whole specification goes to the clipboard
+in one click, and a message confirms how many copies it lists.
+
+The text holds the same copies as the page, in the same order and the same language. Its first line
+names the offer by its number and title; after it comes **one line per copy**, with the page's
+fields in the page's order, separated by `·` — catalogue number, area, series, year, stamp,
+condition with any faults in brackets, and certificate. A field the copy doesn't have is simply
+left out. The thumbnail is the only thing the text cannot carry.
+
 ## What the market is asking
 
 Pricing a listing means two questions about each stamp in it: what it *is*, and what people are

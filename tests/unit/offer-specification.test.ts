@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   specificationCopyOrder,
   specificationRow,
+  specificationText,
   type SpecificationSet,
 } from "../../src/lib/offer-specification-rules";
 import type { TitleTemplateCopy } from "../../src/lib/offer-title-template";
@@ -161,5 +162,51 @@ describe("a row of an offer's specification (#1758)", () => {
 
   it("falls back to the series' year when the stamp states none", () => {
     assert.equal(specificationRow("i", titleCopy({ year: null }), null).year, 1972);
+  });
+});
+
+describe("an offer's specification as plain text (#1759)", () => {
+  const row = (over: Parameters<typeof titleCopy>[0] = {}, itemId = "item-1") =>
+    specificationRow(itemId, titleCopy(over), "photo-1");
+
+  it("is a header naming the offer, then one line per copy with the page's fields in its order", () => {
+    const text = specificationText({
+      offerNo: 2663,
+      title: "Polska 1973 Kopernik",
+      rows: [
+        row({ faults: ["Cienkie miejsce", "Zagięcie"], certificate: "Atest" }),
+        row({ name: "Słońce", condition: "Kasowany" }, "item-2"),
+      ],
+    });
+    assert.equal(
+      text,
+      [
+        "#2663 · Polska 1973 Kopernik",
+        "Mi·PL 1234 · Polska · Rok Kopernikański · 1973 · Kopernik · Czysty (Cienkie miejsce, Zagięcie) · Atest",
+        "Mi·PL 1234 · Polska · Rok Kopernikański · 1973 · Słońce · Kasowany",
+      ].join("\n")
+    );
+  });
+
+  it("leaves out a field the copy does not have, and keeps faults with no condition", () => {
+    const text = specificationText({
+      offerNo: 7,
+      title: "Lot",
+      rows: [
+        row({ catalogNumbers: [], issueName: null, year: null, issueYear: null, condition: null, faults: ["Zagięcie"] }),
+      ],
+    });
+    assert.equal(text, "#7 · Lot\nPolska · Kopernik · Zagięcie");
+  });
+
+  it("is the header alone for an offer that holds no copies", () => {
+    assert.equal(specificationText({ offerNo: 7, title: "Lot", rows: [] }), "#7 · Lot");
+  });
+
+  it("never carries the thumbnail or the copy's internal identifiers", () => {
+    const text = specificationText({ offerNo: 7, title: "Lot", rows: [row()] });
+    for (const internal of ["photo-1", "item-1", "Klaser 3", "A12", "00042"]) {
+      assert.equal(text.includes(internal), false, `${internal} is in the text`);
+    }
   });
 });
