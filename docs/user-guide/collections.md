@@ -288,6 +288,20 @@ so nothing changes until you start telling Stamporama where results come from. S
 
 Areas are managed on the **Areas** screen, in the sidebar's **Catalog** section, where they form a tree: an area can have sub-areas nested underneath it. Two options control how that tree behaves. (Areas used to live under Settings, and then in the **Collection** section; the screen's address never changed with the second move, and the old Settings address still works and takes you to the screen.)
 
+### The area dialog
+
+The **Add area** and **Edit area** dialogs are the same form, and so is the one the **＋** on the area
+tree opens. It is laid out in two columns so that everything is in view at once:
+
+- **On the left, the area itself** — its **Name** with its **Symbol** beside it, the **Parent area**,
+  the **Title name** (with its translations button), the **Description**, and **Can hold issues**.
+- **On the right, its catalogue settings** — **Numbering**, **Price sources** and **Valuation**, in
+  that order, each described below.
+
+**Cancel** and **Save** sit across the bottom. Where a field's explanation is longer than one line,
+the line under it is the short version and the **ⓘ** beside it shows the rest when you rest the
+pointer on it.
+
 ### Grouping-only areas
 
 Some areas exist only to organize the ones inside them — for example a **Europe** node that groups individual countries but never holds issues of its own. In the **Add area** / **Edit area** dialog, the **Can hold issues** checkbox controls this:
@@ -299,7 +313,7 @@ You cannot mark an area as grouping-only while issues or stamps are still assign
 
 ### Area symbol
 
-The **Symbol** box in the **Add area** / **Edit area** dialog, under the title name, holds the area's
+The **Symbol** box in the **Add area** / **Edit area** dialog, beside the name, holds the area's
 symbol — usually its flag as an emoji, `🇵🇱` for Poland. It is optional and empty until you fill it
 in, existing areas included, and it is the same in every language. It feeds the `{areaSymbol}` token
 in [templates](contacts.md#adding-and-editing). A sub-area does **not** take its parent's symbol, so
