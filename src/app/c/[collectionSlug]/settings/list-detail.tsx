@@ -948,14 +948,37 @@ export function TranslationRows({
   languages,
   fields,
   hint,
+  align,
 }: {
   /** Languages needing a translation. Empty draws nothing. */
   languages: string[];
   fields: TranslatedField[];
   hint?: ReactNode;
+  /**
+   * Line each translation up under its own default-language field (#1748): the grid of the
+   * default-language row above, and the field key drawn in each of its columns — `null` for a column
+   * nothing is translated in (a condition's symbol). Each language's name then sits above its row
+   * rather than beside it, so no label column pushes the inputs out of line.
+   */
+  align?: { gridTemplateColumns: string; columns: (string | null)[] };
 }) {
   if (languages.length === 0) return null;
   const columns = fields.map((f) => (f.narrow ? "minmax(0, 8rem)" : "minmax(0, 1fr)")).join(" ");
+  const input = (f: TranslatedField, lang: string, gridColumn?: number) => (
+    <TextInput
+      key={f.key}
+      name={`${f.key}:${lang}`}
+      defaultValue={f.stored?.[lang] ?? ""}
+      placeholder={f.fallback || undefined}
+      aria-label={`${f.label} — ${languageLabel(lang)}`}
+      style={gridColumn ? { ...INPUT_STYLE, gridColumn } : INPUT_STYLE}
+    />
+  );
+  const languageName = (lang: string) => (
+    <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+      {languageLabel(lang)}
+    </span>
+  );
   return (
     <div>
       <div
@@ -976,43 +999,55 @@ export function TranslationRows({
             "One entry per language your platforms list in. Leave one blank to use the default text above. Saved together with the rest."}
         </InfoHint>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `minmax(6rem, auto) ${columns}`,
-          columnGap: "0.75rem",
-          rowGap: "0.5rem",
-          alignItems: "center",
-        }}
-      >
-        {fields.length > 1 && (
-          <>
-            <span />
-            {fields.map((f) => (
-              <span key={f.key} style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                {f.label}
-              </span>
-            ))}
-          </>
-        )}
-        {languages.map((lang) => (
-          <Fragment key={lang}>
-            <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-              {languageLabel(lang)}
-            </span>
-            {fields.map((f) => (
-              <TextInput
-                key={f.key}
-                name={`${f.key}:${lang}`}
-                defaultValue={f.stored?.[lang] ?? ""}
-                placeholder={f.fallback || undefined}
-                aria-label={`${f.label} — ${languageLabel(lang)}`}
-                style={INPUT_STYLE}
-              />
-            ))}
-          </Fragment>
-        ))}
-      </div>
+      {align ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: align.gridTemplateColumns,
+            columnGap: "0.75rem",
+            rowGap: "0.375rem",
+          }}
+        >
+          {languages.map((lang, i) => (
+            <Fragment key={lang}>
+              <div style={{ gridColumn: "1 / -1", marginTop: i > 0 ? "0.375rem" : 0 }}>
+                {languageName(lang)}
+              </div>
+              {align.columns.map((key, col) => {
+                const field = key ? fields.find((f) => f.key === key) : undefined;
+                return field ? input(field, lang, col + 1) : null;
+              })}
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `minmax(6rem, auto) ${columns}`,
+            columnGap: "0.75rem",
+            rowGap: "0.5rem",
+            alignItems: "center",
+          }}
+        >
+          {fields.length > 1 && (
+            <>
+              <span />
+              {fields.map((f) => (
+                <span key={f.key} style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                  {f.label}
+                </span>
+              ))}
+            </>
+          )}
+          {languages.map((lang) => (
+            <Fragment key={lang}>
+              {languageName(lang)}
+              {fields.map((f) => input(f, lang))}
+            </Fragment>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
