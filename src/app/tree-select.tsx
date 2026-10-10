@@ -179,6 +179,7 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
   includeEmptyOption = false,
   noneOptionLabel,
   closeOnSelect = true,
+  panelMinWidth = 0,
 }: {
   items: T[];
   tree: TreeNode<T>[];
@@ -199,6 +200,9 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
    * tick and stays open, so closing here was the exception rather than the rule.
    */
   closeOnSelect?: boolean;
+  /** The panel's own minimum width, when it is wider than its trigger — the same figure given to
+   * `TreeSelectPanel`, so the panel is kept inside the window at the width it is drawn (#1765). */
+  panelMinWidth?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -249,7 +253,7 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
     }
 
     function onReposition() {
-      const nextStyle = getFloatingPanelStyle(containerRef.current);
+      const nextStyle = getFloatingPanelStyle(containerRef.current, panelMinWidth);
       if (nextStyle) setPanelStyle(nextStyle);
     }
 
@@ -264,7 +268,7 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
     };
-  }, [isOpen]);
+  }, [isOpen, panelMinWidth]);
 
   // A panel that survives the pick (`closeOnSelect: false`) has to survive whatever the pick does to
   // the page. It is `position: fixed` at a style computed from the trigger, and until now that was
@@ -274,14 +278,14 @@ export function useTreeSelect<T extends { id: string; parentId: string | null; n
   // Measured in a layout effect, after the pick's DOM has landed and before it is painted.
   useLayoutEffect(() => {
     if (!isOpen || closeOnSelect) return;
-    const nextStyle = getFloatingPanelStyle(containerRef.current);
+    const nextStyle = getFloatingPanelStyle(containerRef.current, panelMinWidth);
     if (nextStyle) setPanelStyle(nextStyle);
-  }, [isOpen, closeOnSelect, selectedId]);
+  }, [isOpen, closeOnSelect, selectedId, panelMinWidth]);
 
   function openSelect() {
     setExpandedIds(getAncestorIds(items, selectedId));
     setActiveId(selectedId);
-    setPanelStyle(getFloatingPanelStyle(containerRef.current) ?? {});
+    setPanelStyle(getFloatingPanelStyle(containerRef.current, panelMinWidth) ?? {});
     setPortalTarget(containerRef.current?.closest("dialog") ?? document.body);
     setIsOpen(true);
   }

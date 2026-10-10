@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useEscapeLayer } from "@/app/escape-stack";
+import { placeAnchored } from "@/app/anchored-placement";
 import { TextInput } from "./text-input";
 
 // Shared flat search-suggestion autocomplete primitive (#109). A single
@@ -52,9 +53,6 @@ const DROPDOWN_STYLE: CSSProperties = {
 
 /** The list's height when the window has room for it (12rem). */
 const DROPDOWN_MAX_HEIGHT = 192;
-/** Between the field and its list, and between the list and the window's edge. */
-const DROPDOWN_GAP = 4;
-const VIEWPORT_MARGIN = 8;
 
 /** The rank of the surface the field sits in — the dialog panel, usually — read off the nearest
  * ancestors that set one, so the list is drawn just above whatever it was opened in without each
@@ -69,21 +67,22 @@ function surfaceRank(el: HTMLElement): number {
 }
 
 /** Draw the portaled list against its field: under it, or over it when the window has no room
- * below, and never taller than the window leaves it. */
+ * below, and never taller than the window leaves it — the rule every menu in the app keeps
+ * (`placeAnchored`, #1765). */
 function placeDropdown(anchor: HTMLElement, list: HTMLElement, floor: number) {
   const rect = anchor.getBoundingClientRect();
-  const wanted = Math.min(list.scrollHeight, DROPDOWN_MAX_HEIGHT);
-  const below = window.innerHeight - rect.bottom - DROPDOWN_GAP - VIEWPORT_MARGIN;
-  const above = rect.top - DROPDOWN_GAP - VIEWPORT_MARGIN;
-  // Below when it fits there; otherwise on whichever side has more room, cut to that room.
-  const down = wanted <= below || below >= above;
+  const { top, maxHeight } = placeAnchored({
+    anchor: rect,
+    size: { width: rect.width, height: list.scrollHeight + list.offsetHeight - list.clientHeight },
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    maxHeight: DROPDOWN_MAX_HEIGHT,
+  });
   const style = list.style;
   style.left = `${rect.left}px`;
   style.width = `${rect.width}px`;
   style.zIndex = String(Math.max(floor, surfaceRank(anchor) + 1));
-  style.top = down ? `${rect.bottom + DROPDOWN_GAP}px` : "";
-  style.bottom = down ? "" : `${window.innerHeight - rect.top + DROPDOWN_GAP}px`;
-  style.maxHeight = `${Math.max(0, Math.min(wanted, down ? below : above))}px`;
+  style.top = `${top}px`;
+  style.maxHeight = `${maxHeight}px`;
 }
 
 const OPTION_STYLE: CSSProperties = {

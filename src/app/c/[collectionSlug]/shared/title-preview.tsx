@@ -5,6 +5,7 @@ import { titleFallbackKey, type TitleFallback, type TitleSegment } from "@/lib/o
 import { languageLabel } from "@/lib/languages";
 import { Tooltip } from "./tooltip";
 import { TranslationGapPopover, gapLabel } from "./translation-gaps";
+import type { AnchorRect } from "@/app/anchored-placement";
 
 // Shared rendering of a generated-title preview with its **untranslated** parts flagged (#298).
 // Used by the platform's template builder (which renders segments client-side as you type) and by
@@ -35,7 +36,7 @@ export interface TitlePreviewTextProps {
   /** Makes each flagged run clickable, reporting the copy field it rendered from and where it sits
    * on screen — the caller opens the translation popover there (#300). Omitted where there is
    * nothing to fix in place, e.g. the platform template builder's sample-copy preview. */
-  onFixField?: (field: string, anchor: { left: number; bottom: number }) => void;
+  onFixField?: (field: string, anchor: AnchorRect) => void;
 }
 
 /** The rendered title, with segments that fell back to the default language dotted-underlined and
@@ -69,8 +70,7 @@ export function TitlePreviewText({ segments, onFixField }: TitlePreviewTextProps
               type="button"
               style={FIXABLE_STYLE}
               onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                onFixField(field, { left: rect.left, bottom: rect.bottom });
+                onFixField(field, e.currentTarget.getBoundingClientRect());
               }}
             >
               {s.text}
@@ -115,7 +115,7 @@ const NAME_LINK_STYLE: React.CSSProperties = {
  * leaving for the area, issue or stamp it lives on. The saved text is the entity's own translation,
  * so it applies everywhere that name is used in that language. */
 export function TitleFallbackNote({ tokens, fix }: { tokens: readonly string[]; fix?: TitleFallbackFix }) {
-  const [open, setOpen] = useState<{ key: string; anchor: { left: number; bottom: number } } | null>(null);
+  const [open, setOpen] = useState<{ key: string; anchor: AnchorRect } | null>(null);
   if (tokens.length === 0) return null;
   const language = fix?.language ?? null;
   const gaps = fix && language ? fix.gaps : [];
@@ -141,8 +141,7 @@ export function TitleFallbackNote({ tokens, fix }: { tokens: readonly string[]; 
                   type="button"
                   style={NAME_LINK_STYLE}
                   onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setOpen({ key: titleFallbackKey(gap), anchor: { left: rect.left, bottom: rect.bottom } });
+                    setOpen({ key: titleFallbackKey(gap), anchor: e.currentTarget.getBoundingClientRect() });
                   }}
                 >
                   {gap.defaultValue} → {languageName}

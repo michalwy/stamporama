@@ -8,6 +8,8 @@ import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
 import { useEscapeLayer } from "@/app/escape-stack";
+import type { AnchorRect } from "@/app/anchored-placement";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 
 // Filling a **missing translation where the generated title needs it** (#299/#300).
 //
@@ -291,8 +293,9 @@ export interface TranslationGapPopoverProps {
   collectionId: string;
   language: string;
   gaps: readonly TitleFallback[];
-  /** Where the flagged token sits on screen — the popover opens just under it. */
-  anchor: { left: number; bottom: number };
+  /** Where the flagged token sits on screen — the popover opens just under it, or over it when there
+   * is more room there, always inside the window (#1765). */
+  anchor: AnchorRect;
   onSaved: () => void;
   onClose: () => void;
 }
@@ -314,6 +317,7 @@ export function TranslationGapPopover({
   onClose,
 }: TranslationGapPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const { style: placement } = useAnchoredPlacement({ open: true, anchor, floatingRef: ref });
 
   // An Escape layer of its own (#1733): it opens after whatever it floats above, so it is the top of
   // the stack and Escape closes it alone — the dialog under it needs to know nothing about it. Its
@@ -336,13 +340,11 @@ export function TranslationGapPopover({
       role="dialog"
       aria-label={`Translate into ${languageLabel(language)}`}
       style={{
-        position: "fixed",
-        // Kept inside the viewport for a token near the right edge of a wide dialog.
-        left: Math.min(anchor.left, Math.max(8, window.innerWidth - 30 * 16 - 8)),
-        top: anchor.bottom + 6,
+        ...placement,
         zIndex: 300,
         width: "28rem",
-        maxWidth: "calc(100vw - 1rem)",
+        overflowY: "auto",
+        overscrollBehavior: "contain",
         padding: "0.75rem",
         border: "1px solid var(--color-border-strong)",
         borderRadius: "0.5rem",

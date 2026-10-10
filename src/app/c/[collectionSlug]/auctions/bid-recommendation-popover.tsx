@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { MarketConfidenceChip } from "@/app/c/[collectionSlug]/shared/market-confidence-chip";
 import { Icon } from "@/app/icons";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { formatDay } from "./auction-format";
 import { formatMarketCounts } from "@/lib/market-anchoring";
 import {
@@ -54,9 +55,11 @@ const PANEL_Z_INDEX = 200;
 export const RECOMMENDATION_CARET_SLOT = "0.95rem";
 
 const PANEL: React.CSSProperties = {
-  position: "fixed",
   width: "30rem",
-  maxWidth: "calc(100vw - 2rem)",
+  // Kept inside the window, opening above the cell when there is more room there; what the window
+  // cannot hold scrolls inside the panel (#1765).
+  overflowY: "auto",
+  overscrollBehavior: "contain",
   padding: "0.75rem 0.875rem",
   background: "var(--color-bg-elevated)",
   border: "1px solid var(--color-border)",
@@ -351,11 +354,6 @@ function gapSentence(recommendation: AuctionLotBidEvidenceView["recommendation"]
   return `Not counted: ${gaps.join(", ")}.`;
 }
 
-interface Position {
-  top: number;
-  right: number;
-}
-
 /**
  * The recommendation cell on the row, and the panel it opens.
  *
@@ -388,34 +386,18 @@ export function BidRecommendationPopover({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<Position | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { style: placement } = useAnchoredPlacement({
+    open,
+    anchor: triggerRef,
+    floatingRef: panelRef,
+    align: "end",
+  });
   // Fetched only while open, and left in the cache afterwards: reopening the same lot's evidence
   // during one bidding session should not go back to the server for figures that move with recorded
   // results, not with the minute.
   const evidence = useAuctionLotBidEvidence(collectionId, open ? lotId : null);
-
-  function place() {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const gap = 4;
-    // The panel's height is not known before its lines are, so it is anchored below the trigger and
-    // flipped above only when the *bottom half* of the screen could not hold anything useful. The
-    // lines section scrolls internally, which is what keeps either placement on screen.
-    const below = rect.bottom + gap;
-    const room = window.innerHeight - below;
-    const flip = room < 240 && rect.top > room;
-    setPos({
-      top: flip ? gap : below,
-      right: Math.max(gap, window.innerWidth - rect.right),
-    });
-  }
-
-  useEffect(() => {
-    if (open) place();
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -427,19 +409,26 @@ export function BidRecommendationPopover({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
-    function onScrollOrResize() {
+    // The page moving under a fixed panel closes it; a scroll inside the panel — its lines, or the
+    // panel itself when the window cuts it short (#1765) — is reading it, not leaving it.
+    function onScroll(e: Event) {
+      const t = e.target;
+      if (t instanceof Node && panelRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onResize() {
       setOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     // Capture-phase catches scrolling inside the list containers too.
-    window.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
@@ -501,14 +490,13 @@ export function BidRecommendationPopover({
         </button>
       </Tooltip>
       {open &&
-        pos &&
         typeof document !== "undefined" &&
         createPortal(
           <div
             ref={panelRef}
             role="dialog"
             aria-label="Bid recommendation"
-            style={{ ...PANEL, zIndex: PANEL_Z_INDEX, top: pos.top, right: pos.right }}
+            style={{ ...PANEL, ...placement, zIndex: PANEL_Z_INDEX }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>

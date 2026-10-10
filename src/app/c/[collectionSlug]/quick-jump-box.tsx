@@ -11,6 +11,7 @@ import {
 } from "@/lib/recent-entities";
 import { useRecentEntities } from "./shared/use-recent-entities";
 import { Icon, type IconName } from "@/app/icons";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { sectionTintForHref } from "./nav-sections";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
@@ -72,7 +73,6 @@ export function QuickJumpBox({
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   /** Which recent the keyboard is on; -1 means "none — Enter is a jump". Read through `active`
    *  below, which is this clamped to the list as it currently stands. */
   const [storedActive, setActive] = useState(-1);
@@ -106,6 +106,11 @@ export function QuickJumpBox({
   const active = storedActive >= shown.length ? -1 : storedActive;
 
   const panelOpen = open && shown.length > 0;
+  const { style: placement, anchorWidth } = useAnchoredPlacement({
+    open: panelOpen,
+    anchor: inputRef,
+    floatingRef: panelRef,
+  });
   const activeEntry = active >= 0 ? shown[active] : undefined;
 
   useEffect(() => {
@@ -125,13 +130,6 @@ export function QuickJumpBox({
   // the same reason the notification panel portals (#367).
   useEffect(() => {
     if (!panelOpen) return;
-    function place() {
-      const el = inputRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-    }
-    place();
     function onDown(e: MouseEvent) {
       const t = e.target as Node;
       if (inputRef.current?.contains(t) || panelRef.current?.contains(t)) return;
@@ -263,7 +261,6 @@ export function QuickJumpBox({
       )}
 
       {panelOpen &&
-        pos &&
         typeof document !== "undefined" &&
         createPortal(
           <div
@@ -272,13 +269,11 @@ export function QuickJumpBox({
             role="listbox"
             aria-label="Recently visited"
             style={{
-              position: "fixed",
-              top: pos.top,
-              left: pos.left,
+              ...placement,
               width: "20rem",
-              minWidth: pos.width,
-              maxHeight: "calc(100vh - 6rem)",
+              minWidth: anchorWidth,
               overflowY: "auto",
+              overscrollBehavior: "contain",
               background: "var(--color-bg-elevated)",
               border: "1px solid var(--color-border)",
               borderRadius: "0.5rem",

@@ -12,6 +12,7 @@ import {
   LabelWithError,
 } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
+import type { AnchorRect } from "@/app/anchored-placement";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   TranslationGapsPanel,
@@ -211,7 +212,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
   const [error, setError] = useState<string | null>(null);
   const [gapPopover, setGapPopover] = useState<{
     gaps: TitleFallback[];
-    at: { left: number; bottom: number };
+    at: AnchorRect;
   } | null>(null);
   const [addingNote, setAddingNote] = useState(false);
   /** Adding a page without stamps (#1429). The page just added is gone to by its own id, since that

@@ -10,6 +10,7 @@ import {
 import { sanitizeDescriptionHtml } from "./rendered-description";
 import { Tooltip } from "./tooltip";
 import { Icon, type IconName } from "@/app/icons";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 
 /**
  * Copy one field's text to the clipboard (#327), with a moment of confirmation on the button
@@ -43,7 +44,6 @@ const SMALL_BTN: React.CSSProperties = {
 };
 
 const MENU: React.CSSProperties = {
-  position: "fixed",
   minWidth: "12rem",
   padding: "0.3rem",
   background: "var(--color-bg-elevated)",
@@ -51,6 +51,7 @@ const MENU: React.CSSProperties = {
   borderRadius: "0.5rem",
   boxShadow: "0 8px 24px rgb(0 0 0 / 0.16)",
   zIndex: 300,
+  overflowY: "auto",
   display: "flex",
   flexDirection: "column",
   gap: "0.05rem",
@@ -91,9 +92,16 @@ export function CopyButton({
 }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [menuAt, setMenuAt] = useState<{ top: number; right: number } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const caretRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { style: menuPlacement } = useAnchoredPlacement({
+    open: menuOpen,
+    anchor: caretRef,
+    floatingRef: menuRef,
+    align: "end",
+  });
 
   // The feedback is a timer, so unmounting mid-flight (the field enters edit mode, the card
   // collapses) must not leave it to fire against a gone component.
@@ -102,15 +110,15 @@ export function CopyButton({
   }, []);
 
   useEffect(() => {
-    if (!menuAt) return;
+    if (!menuOpen) return;
     function close(e: MouseEvent | KeyboardEvent) {
       if (e instanceof KeyboardEvent && e.key !== "Escape") return;
       if (e instanceof MouseEvent && caretRef.current?.contains(e.target as Node)) return;
-      setMenuAt(null);
+      setMenuOpen(false);
     }
     // The menu is portaled with fixed coordinates, so anything that moves the trigger closes it.
     function dismiss() {
-      setMenuAt(null);
+      setMenuOpen(false);
     }
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", close);
@@ -122,7 +130,7 @@ export function CopyButton({
       window.removeEventListener("scroll", dismiss, true);
       window.removeEventListener("resize", dismiss);
     };
-  }, [menuAt]);
+  }, [menuOpen]);
 
   function flash(ok: boolean) {
     setCopied(ok);
@@ -225,22 +233,10 @@ export function CopyButton({
           type="button"
           disabled={isDisabled}
           aria-haspopup="menu"
-          aria-expanded={!!menuAt}
+          aria-expanded={menuOpen}
           aria-label={`Copy ${label} as…`}
           tabIndex={-1}
-          onClick={() => {
-            if (menuAt) {
-              setMenuAt(null);
-              return;
-            }
-            const rect = caretRef.current?.getBoundingClientRect();
-            if (rect) {
-              setMenuAt({
-                top: rect.bottom + 4,
-                right: Math.max(4, window.innerWidth - rect.right),
-              });
-            }
-          }}
+          onClick={() => setMenuOpen((v) => !v)}
           style={{
             ...SMALL_BTN,
             padding: "0.1875rem 0.3125rem",
@@ -254,16 +250,16 @@ export function CopyButton({
           <Icon name="caret" size="xs" />
         </button>
       </Tooltip>
-      {menuAt &&
+      {menuOpen &&
         typeof document !== "undefined" &&
         createPortal(
-          <div role="menu" style={{ ...MENU, top: menuAt.top, right: menuAt.right }}>
+          <div ref={menuRef} role="menu" style={{ ...MENU, ...menuPlacement }}>
             <button
               type="button"
               role="menuitem"
               style={MENU_ITEM}
               onClick={() => {
-                setMenuAt(null);
+                setMenuOpen(false);
                 copy("formatted");
               }}
             >
@@ -274,7 +270,7 @@ export function CopyButton({
               role="menuitem"
               style={MENU_ITEM}
               onClick={() => {
-                setMenuAt(null);
+                setMenuOpen(false);
                 copy("source");
               }}
             >

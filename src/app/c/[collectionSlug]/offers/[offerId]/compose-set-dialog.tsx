@@ -14,6 +14,7 @@ import type { LocationData } from "@/lib/locations";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
+import type { AnchorRect } from "@/app/anchored-placement";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
@@ -227,7 +228,7 @@ export function ComposeSetDialog({
   }, [offerId, previewKey, languageOverride, previewNonce]);
 
   // The token whose translation the popover is editing (#300), with where its run sits on screen.
-  const [fixing, setFixing] = useState<{ field: string; anchor: { left: number; bottom: number } } | null>(null);
+  const [fixing, setFixing] = useState<{ field: string; anchor: AnchorRect } | null>(null);
   // Filling a gap changes entity data, not the offer — so the only thing to do afterwards is
   // re-render the title it feeds. The gap leaves the list because the new preview no longer reports
   // it, which is also what keeps the panel honest if a save is rejected.

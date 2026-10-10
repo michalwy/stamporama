@@ -49,6 +49,9 @@ function getAreaPath(areas: CollectionAreaData[], areaId: string): string {
   return path.join(" › ");
 }
 
+/** The open panel is at least this wide, whatever its trigger's width. */
+const PANEL_MIN_WIDTH = 280;
+
 /**
  * Tree-select over collection areas. When `onlyAssignableSelectable` is set (the
  * issue-assignment case, #263) grouping-only areas (`assignable = false`) are shown for
@@ -101,6 +104,7 @@ export function AreaTreeSelect({
     filterTree: filterAreaTree,
     onSelectedIdChange,
     noneOptionLabel,
+    panelMinWidth: PANEL_MIN_WIDTH,
   });
 
   function isSelectable(id: string): boolean {
@@ -142,7 +146,7 @@ export function AreaTreeSelect({
           activeId={activeId}
           listboxAriaLabelledby={buttonId}
           noneOptionLabel={noneOptionLabel}
-          panelMinWidth={280}
+          panelMinWidth={PANEL_MIN_WIDTH}
           panelRef={panelRef}
           panelStyle={panelStyle}
           portalTarget={portalTarget}
