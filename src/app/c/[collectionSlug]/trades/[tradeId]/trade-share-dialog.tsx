@@ -16,7 +16,7 @@ import {
   revokeTradeShareLinkAction,
   setTradeShareOptionsAction,
 } from "@/app/actions/trades";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 // The collector's end of the partner's link (#640; ADR-0039 §9).
 //
@@ -64,6 +64,7 @@ const CHECK_ROW: React.CSSProperties = {
 
 const LINK_BOX: React.CSSProperties = {
   ...INPUT_STYLE,
+  ...multiLineFormControl,
   fontFamily: "var(--font-mono, ui-monospace, monospace)",
   fontSize: "0.8125rem",
   wordBreak: "break-all",

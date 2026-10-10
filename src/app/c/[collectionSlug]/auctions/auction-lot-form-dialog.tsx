@@ -34,7 +34,7 @@ import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { TagEntryField } from "@/app/c/[collectionSlug]/shared/tag-entry-field";
 import type { TagEntry } from "@/lib/tag-entry";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -805,7 +805,7 @@ export function AuctionLotFormDialog({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Condition doubts, what to check before bidding…"
-              style={{ ...INPUT_STYLE, resize: "vertical" }}
+              style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
             />
           </div>
         </DialogBody>

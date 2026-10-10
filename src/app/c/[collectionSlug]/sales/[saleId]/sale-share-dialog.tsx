@@ -16,7 +16,7 @@ import {
   revokeSaleShareLinkAction,
   setSaleShareOptionsAction,
 } from "@/app/actions/sales";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 // The seller's end of the buyer's link (#699; ADR-0013 §7) — the trade share dialog's shape (#640,
 // #681), one screen over, and the differences are the interesting part.
@@ -50,6 +50,7 @@ const HINT: React.CSSProperties = {
 
 const LINK_BOX: React.CSSProperties = {
   ...INPUT_STYLE,
+  ...multiLineFormControl,
   fontFamily: "var(--font-mono, ui-monospace, monospace)",
   fontSize: "0.8125rem",
   wordBreak: "break-all",

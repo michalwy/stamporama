@@ -23,7 +23,7 @@ import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu
 import { useCollapsedSet } from "@/app/c/[collectionSlug]/shared/use-collapsed-set";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/cell-target";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 // Persisted collapse state for the location management tree, consistent with the area
 // management tree (#237) and area filter tree (#81). Distinct key so it collapses independently.
@@ -155,7 +155,7 @@ function LocationForm({
           rows={3}
           defaultValue={defaultDescription ?? ""}
           disabled={isPending}
-          style={{ ...INPUT_STYLE, resize: "vertical", minHeight: "4.5rem" }}
+          style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "4.5rem" }}
         />
       </div>
 

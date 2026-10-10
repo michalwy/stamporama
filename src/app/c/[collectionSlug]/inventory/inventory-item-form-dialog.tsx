@@ -43,7 +43,7 @@ import {
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { dispositionToggleColors } from "@/app/c/[collectionSlug]/shared/disposition-colors";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 // The tree-select trigger defaults to a compact toolbar height (min-h-8). Inside this
 // dialog it sits beside INPUT_STYLE inputs (~2.25rem, 0.5rem vertical padding), so bump
@@ -749,7 +749,7 @@ export function InventoryItemFormDialog({
                 placeholder="Per-copy detail (e.g. postmark type)"
                 defaultValue={item?.notes ?? ""}
                 disabled={isPending}
-                style={{ ...INPUT_STYLE, resize: "vertical" }}
+                style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
               />
             </div>
 

@@ -48,7 +48,7 @@ import {
 } from "@/lib/photo-cover-rules";
 import { CoverColorPicker } from "../shared/photo-cover-editor";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -468,7 +468,7 @@ export function ContactFormDialog({
                   rows={3}
                   defaultValue={contact?.notes ?? ""}
                   disabled={isPending}
-                  style={{ ...INPUT_STYLE, resize: "vertical", minHeight: "4rem" }}
+                  style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "4rem" }}
                 />
               </div>
             </div>

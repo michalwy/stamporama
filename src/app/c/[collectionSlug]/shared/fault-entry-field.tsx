@@ -12,7 +12,7 @@ import { Autocomplete, type AutocompleteAction } from "./autocomplete";
 import { faultKeys, useCollectionFaults } from "./use-faults";
 import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
-import { formControl } from "@/app/control-style";
+import { multiLineFormControl } from "@/app/control-style";
 
 // A copy's faults (#1557), chosen in the copy's edit dialog beside its condition — the copy page
 // opens this same dialog, so there is one editor (*a detail page reads*).
@@ -24,7 +24,7 @@ import { formControl } from "@/app/control-style";
 // becomes a new fault **when the dialog is saved**, never before, so a cancelled dialog leaves none.
 
 const BOX_STYLE: React.CSSProperties = {
-  ...formControl,
+  ...multiLineFormControl,
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",

@@ -12,7 +12,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import type { TradeListItem } from "@/lib/trades";
 import { TradePartnerSelect } from "./trade-partner-select";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -301,7 +301,7 @@ export function TradeFormDialog({
               rows={3}
               defaultValue={trade?.notes ?? ""}
               disabled={isPending}
-              style={{ ...INPUT_STYLE, resize: "vertical" }}
+              style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
             />
           </div>
         </DialogBody>

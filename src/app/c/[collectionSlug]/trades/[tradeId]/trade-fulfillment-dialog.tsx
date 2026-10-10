@@ -13,7 +13,7 @@ import {
 import type { TradeSide } from "@/lib/trade-rules";
 import { useInvalidateTradeDetail } from "./use-trade-detail-query";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 // **What actually became of this line** (#642; ADR-0039 §11).
 //
@@ -180,7 +180,7 @@ export function TradeFulfillmentDialog({
                 maxLength={TRADE_FULFILLMENT_NOTE_MAX}
                 disabled={isPending || fulfillment === "pending"}
                 placeholder="Gum toned, kept it back"
-                style={INPUT_STYLE}
+                style={{ ...INPUT_STYLE, ...multiLineFormControl }}
               />
               <p style={HINT}>
                 For your own memory of the parcel. Taking the verdict back clears it — a reason with
