@@ -9,6 +9,7 @@ import type {
   AlbumEditorText,
 } from "@/lib/album-editor";
 import { photoThumbUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import type { AnchorRect } from "@/app/anchored-placement";
 import {
   blockDropMark,
   boxDropMark,
@@ -257,7 +258,7 @@ const NO_ROW_BREAK: (entryId: string, stampId: string, on: boolean) => void = ()
 const NO_BAND_BREAK: (blockId: string, on: boolean) => void = () => {};
 const NO_OPEN_GAPS: (
   text: AlbumEditorText,
-  at: { left: number; bottom: number }
+  at: AnchorRect
 ) => void = () => {};
 
 interface AlbumPageCanvasBase {
@@ -290,7 +291,7 @@ interface AlbumPageCanvasInteractive extends AlbumPageCanvasBase {
    *  than beside the block before it, or stop doing so. The panel's checkbox writes the same thing. */
   onToggleBandBreak: (blockId: string, on: boolean) => void;
   /** Opens the translation editor for a text that fell back to the default language (#298/#300). */
-  onOpenGaps: (text: AlbumEditorText, at: { left: number; bottom: number }) => void;
+  onOpenGaps: (text: AlbumEditorText, at: AnchorRect) => void;
 }
 
 /**
@@ -487,7 +488,7 @@ export function AlbumPageCanvas(props: AlbumPageCanvasProps) {
             onClick={(e) => {
               e.stopPropagation();
               const r = (e.target as Element).getBoundingClientRect();
-              onOpenGaps(text, { left: r.left, bottom: r.bottom });
+              onOpenGaps(text, r);
             }}
           />
         )}

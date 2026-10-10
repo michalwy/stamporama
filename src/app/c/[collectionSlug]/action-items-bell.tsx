@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ActionItemGroup, ActionItemSeverity, ActionItemsResult } from "@/lib/action-items";
 import { Icon } from "@/app/icons";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { Tooltip } from "./shared/tooltip";
 import { formatInstant, formatRelative } from "./auctions/auction-format";
 
@@ -88,9 +89,17 @@ export function ActionItemsBell({
   collectionSlug: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Beside the sidebar, not below the trigger: the sidebar is the full height of the window, so
+  // there is nothing under the row and everything to the right of it. Kept inside the window
+  // vertically, scrolling inside itself when the list is longer than it (#1765).
+  const { style: placement } = useAnchoredPlacement({
+    open,
+    anchor: triggerRef,
+    floatingRef: panelRef,
+    side: "right",
+  });
 
   useRefreshOnAnyInvalidation(collectionId);
 
@@ -115,18 +124,8 @@ export function ActionItemsBell({
   // everything says only that the list is non-empty.
   const tint = data?.severity ? `var(--color-${SEVERITY_TOKEN[data.severity]})` : null;
 
-  function place() {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    // Beside the sidebar, not below the trigger: the sidebar is the full height of the window, so
-    // there is nothing under the row and everything to the right of it.
-    setPos({ top: Math.max(8, rect.top), left: rect.right + 8 });
-  }
-
   useEffect(() => {
     if (!open) return;
-    place();
     function onDown(e: MouseEvent) {
       const t = e.target as Node;
       if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
@@ -210,7 +209,6 @@ export function ActionItemsBell({
       </Tooltip>
 
       {open &&
-        pos &&
         typeof document !== "undefined" &&
         createPortal(
           <div
@@ -218,12 +216,10 @@ export function ActionItemsBell({
             role="dialog"
             aria-label="Action items"
             style={{
-              position: "fixed",
-              top: pos.top,
-              left: pos.left,
+              ...placement,
               width: "22rem",
-              maxHeight: "calc(100vh - 2rem)",
               overflowY: "auto",
+              overscrollBehavior: "contain",
               background: "var(--color-bg-elevated)",
               border: "1px solid var(--color-border)",
               borderRadius: "0.5rem",

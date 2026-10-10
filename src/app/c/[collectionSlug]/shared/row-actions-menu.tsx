@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Icon, type IconName } from "@/app/icons";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { Tooltip } from "./tooltip";
 
 /** One entry in a row's action menu. `onSelect` runs after the menu closes, so it
@@ -69,6 +70,10 @@ const menuStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "0.05rem",
+  // A menu longer than the window leaves it scrolls inside itself (#1765), and the wheel stops at
+  // its ends rather than moving the page — which would close it.
+  overflowY: "auto",
+  overscrollBehavior: "contain",
 };
 
 const itemBaseStyle: React.CSSProperties = {
@@ -86,6 +91,7 @@ const itemBaseStyle: React.CSSProperties = {
   textAlign: "left",
   cursor: "pointer",
   whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 
 const iconStyle: React.CSSProperties = {
@@ -95,16 +101,15 @@ const iconStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-/** The menu is pinned by whichever side it hangs from — see `align`. */
-type MenuPosition = { top: number } & ({ right: number } | { left: number });
-
 /** Where the portaled menu ranks by default — above the app's own chrome, below a dialog. */
 const DEFAULT_MENU_Z_INDEX = 200;
 
 /** A single `⋮` trigger that opens a dropdown of row actions. The dropdown is
  * portaled to `document.body` with fixed positioning so it is never clipped by the
- * `overflow: hidden` list containers, and it flips above the trigger when there
- * isn't room below. Renders nothing when there are no actions. */
+ * `overflow: hidden` list containers. It always fits inside the window (#1765): it
+ * opens above the trigger when there is more room there, and a menu taller than
+ * either side scrolls inside itself — see `useAnchoredPlacement`. Renders nothing
+ * when there are no actions. */
 export function RowActionsMenu({
   actions,
   ariaLabel = "Row actions",
@@ -135,29 +140,16 @@ export function RowActionsMenu({
   align?: "start" | "end";
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<MenuPosition | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  function place() {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const gap = 4;
-    // A hinted entry wraps to two lines, so it counts for roughly one and a half rows.
-    const estHeight = actions.reduce((h, a) => h + (a.hint ? 50 : 34), 12);
-    const below = rect.bottom + gap;
-    const flip = below + estHeight > window.innerHeight && rect.top - gap - estHeight > 0;
-    const top = flip ? Math.max(gap, rect.top - gap - estHeight) : below;
-    setPos(
-      align === "start"
-        ? { top, left: Math.max(gap, rect.left) }
-        : { top, right: Math.max(gap, window.innerWidth - rect.right) }
-    );
-  }
+  const { style: placement } = useAnchoredPlacement({
+    open,
+    anchor: triggerRef,
+    floatingRef: menuRef,
+    align,
+  });
 
   useEffect(() => {
-    if (open) place();
     onOpenChange?.(open);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -172,19 +164,26 @@ export function RowActionsMenu({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
-    function onScrollOrResize() {
+    // A fixed box does not follow its trigger, so the page moving under it closes it — but not a
+    // scroll inside the menu itself, which is how a menu cut short by the window is read (#1765).
+    function onScroll(e: Event) {
+      const t = e.target;
+      if (t instanceof Node && menuRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onResize() {
       setOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     // Capture-phase catches scrolling inside inner list containers too.
-    window.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
@@ -230,13 +229,12 @@ export function RowActionsMenu({
         </button>
       </Tooltip>
       {open &&
-        pos &&
         typeof document !== "undefined" &&
         createPortal(
           <div
             ref={menuRef}
             role="menu"
-            style={{ ...menuStyle, zIndex, ...pos }}
+            style={{ ...menuStyle, ...placement, zIndex }}
             onClick={(e) => e.stopPropagation()}
           >
             {actions.map((a) => {
@@ -291,6 +289,7 @@ export function RowActionsMenu({
                       role="separator"
                       style={{
                         height: 1,
+                        flexShrink: 0,
                         background: "var(--color-border)",
                         margin: "0.2rem 0.15rem",
                       }}

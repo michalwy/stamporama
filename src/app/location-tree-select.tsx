@@ -51,6 +51,9 @@ function getLocationPath(locations: LocationData[], locationId: string): string 
   return path.join(" › ");
 }
 
+/** The open panel is at least this wide, whatever its trigger's width. */
+const PANEL_MIN_WIDTH = 280;
+
 /**
  * Tree-select over storage locations (#56), mirroring {@link AreaTreeSelect}. When
  * `onlyAssignableSelectable` is set (the copy-assignment case) grouping-only nodes
@@ -121,6 +124,7 @@ export function LocationTreeSelect({
     onSelectedIdChange,
     noneOptionLabel,
     closeOnSelect,
+    panelMinWidth: PANEL_MIN_WIDTH,
   });
 
   function isSelectable(id: string): boolean {
@@ -166,7 +170,7 @@ export function LocationTreeSelect({
           footer={panelFooter}
           listboxAriaLabelledby={buttonId}
           noneOptionLabel={noneOptionLabel}
-          panelMinWidth={280}
+          panelMinWidth={PANEL_MIN_WIDTH}
           panelRef={panelRef}
           panelStyle={panelStyle}
           portalTarget={portalTarget}

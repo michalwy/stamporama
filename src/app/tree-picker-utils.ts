@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { placeAnchored } from "./anchored-placement";
 
 export type TreeNode<T> = T & { children: TreeNode<T>[] };
 
@@ -101,27 +102,35 @@ export function getVisibleOptions<T extends { id: string }>(
 }
 
 export function getFloatingPanelStyle(
-  anchor: HTMLElement | null
+  anchor: HTMLElement | null,
+  minWidth = 0
 ): CSSProperties | null {
   if (!anchor) {
     return null;
   }
 
-  const viewportPadding = 16;
+  // The panel's height is not known before it is drawn, so it asks for a usable minimum and takes
+  // the room on whichever side it opens to; inside that room it is never cut off (#1765). Hung by its
+  // bottom edge when it opens upwards, so a panel shorter than the room still meets its trigger.
   const gap = 4;
   const minimumHeight = 220;
   const rect = anchor.getBoundingClientRect();
-  const spaceBelow = window.innerHeight - rect.bottom - viewportPadding - gap;
-  const spaceAbove = rect.top - viewportPadding - gap;
-  const opensDown = spaceBelow >= minimumHeight || spaceBelow >= spaceAbove;
-  const maxHeight = Math.max(160, Math.floor(opensDown ? spaceBelow : spaceAbove));
+  const placement = placeAnchored({
+    anchor: rect,
+    size: { width: Math.max(rect.width, minWidth), height: minimumHeight },
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    gap,
+    margin: 16
+  });
+  const opensDown = placement.top >= rect.bottom;
 
   return {
-    left: rect.left,
+    left: placement.left,
     width: rect.width,
-    maxHeight,
+    maxHeight: Math.floor(placement.maxHeight),
+    maxWidth: placement.maxWidth,
     ...(opensDown
-      ? { top: rect.bottom + gap }
+      ? { top: placement.top }
       : { bottom: window.innerHeight - rect.top + gap })
   };
 }

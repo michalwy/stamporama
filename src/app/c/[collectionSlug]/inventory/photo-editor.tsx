@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type DragEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import type { PhotoChangeSet, PhotoSummary } from "@/lib/photos";
 import {
@@ -17,6 +10,7 @@ import {
 } from "./photo-slot-meta";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 // The upload bar lives in `@/app/progress-bar` since #590, where the card-scan upload draws the
 // same treatment: it began here, and a second one drawn beside it would be the divergence.
 import { ProgressBar } from "@/app/progress-bar";
@@ -907,29 +901,16 @@ function PromotePopover({
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
-  // Anchor under the trigger button, right edge aligned, clamped to the viewport.
-  useLayoutEffect(() => {
-    function place() {
-      const anchor = anchorRef.current;
-      if (!anchor) return;
-      const r = anchor.getBoundingClientRect();
-      const left = Math.max(
-        8,
-        Math.min(r.right - PROMOTE_POPOVER_WIDTH, window.innerWidth - PROMOTE_POPOVER_WIDTH - 8)
-      );
-      setPos({ top: r.bottom + 6, left });
-    }
-    place();
-    window.addEventListener("scroll", place, true);
-    window.addEventListener("resize", place);
-    return () => {
-      window.removeEventListener("scroll", place, true);
-      window.removeEventListener("resize", place);
-    };
-  }, [anchorRef]);
+  // Under the trigger button, right edge aligned — or over it when there is more room there —
+  // always inside the window (#1765).
+  const { style: placement } = useAnchoredPlacement({
+    open: true,
+    anchor: anchorRef,
+    floatingRef: popRef,
+    align: "end",
+  });
 
   // Close on Escape or a click outside the popover / its trigger.
   useEffect(() => {
@@ -972,10 +953,9 @@ function PromotePopover({
       ref={popRef}
       onClick={(e) => e.stopPropagation()}
       style={{
-        position: "fixed",
-        top: pos?.top ?? -9999,
-        left: pos?.left ?? -9999,
-        visibility: pos ? "visible" : "hidden",
+        ...placement,
+        overflowY: "auto",
+        overscrollBehavior: "contain",
         zIndex: 2000,
         width: `${PROMOTE_POPOVER_WIDTH}px`,
         padding: "0.625rem",

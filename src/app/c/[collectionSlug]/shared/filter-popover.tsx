@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { Tooltip } from "./tooltip";
 
 /** Above a list screen's chrome, below a dialog opened over one — the rank `RowActionsMenu` uses,
  *  named here too so the portaled menus of this app stack alike. */
 export const FILTER_MENU_Z_INDEX = 200;
 
-/** Where a portaled menu is drawn: under its trigger, at least as wide as it. */
+/** Where a portaled menu is drawn — under its trigger, or over it when there is more room there,
+ * always inside the window (#1765) — and the trigger's width, which it is at least as wide as. */
 export interface FilterPopoverPosition {
-  top: number;
-  left: number;
+  style: React.CSSProperties;
   minWidth: number;
 }
+
+/** A filter menu's own ceiling; shorter still when the window leaves it less room. */
+const FILTER_MENU_MAX_HEIGHT_REM = 20;
 
 /**
  * The dismissal behaviour every filter dropdown on a list toolbar shares (#425, #868) — extracted
@@ -50,9 +54,16 @@ export function useFilterPopover<T extends HTMLElement>({
   // is how it happened — a click on the empty card clears the selection the picker is enabled by.
   // Set during render, React's pattern for state following a prop, so it never paints still open.
   if (open && disabled) setOpen(false);
-  const [pos, setPos] = useState<FilterPopoverPosition | null>(null);
   const triggerRef = useRef<T>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const placement = useAnchoredPlacement({
+    open: open && !disabled,
+    anchor: triggerRef,
+    floatingRef: menuRef,
+    maxHeightRem: FILTER_MENU_MAX_HEIGHT_REM,
+  });
+  const pos: FilterPopoverPosition | null =
+    open && !disabled ? { style: placement.style, minWidth: placement.anchorWidth } : null;
 
   // Reported from one place rather than at every setter, and through a ref so a caller passing a
   // fresh closure each render does not re-fire it.
@@ -66,11 +77,6 @@ export function useFilterPopover<T extends HTMLElement>({
 
   useEffect(() => {
     if (!open || disabled) return;
-    const el = triggerRef.current;
-    if (el) {
-      const rect = el.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left, minWidth: rect.width });
-    }
     function onDown(e: MouseEvent) {
       const t = e.target as Node;
       if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
@@ -115,12 +121,10 @@ export function filterMenuStyle(
   zIndex: number
 ): React.CSSProperties {
   return {
-    position: "fixed",
-    top: pos.top,
-    left: pos.left,
+    ...pos.style,
     minWidth: Math.max(pos.minWidth, 176),
-    maxHeight: "20rem",
     overflowY: "auto",
+    overscrollBehavior: "contain",
     padding: "0.3rem",
     background: "var(--color-bg-elevated)",
     border: "1px solid var(--color-border)",
