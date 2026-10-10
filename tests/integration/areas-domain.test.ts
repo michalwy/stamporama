@@ -693,3 +693,43 @@ describe("translation languages derived from albums (#777)", () => {
     await deleteAlbum(userId, album);
   });
 });
+
+describe("area symbol (#1740)", () => {
+  let userId: string;
+  let collectionId: string;
+
+  before(async () => {
+    const ts = Date.now();
+    userId = (await createTestUser(`sym-${ts}`)).id;
+    collectionId = (await createTestCollection(userId, `sym-${ts}`)).id;
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.delete({ where: { id: userId } });
+  });
+
+  const read = async (id: string) => (await getCollectionAreas(userId, collectionId)).find((a) => a.id === id);
+
+  it("is empty until set", async () => {
+    const { id } = await createCollectionArea(userId, collectionId, { name: "Hungary", assignable: false });
+    assert.equal((await read(id))?.symbol, null);
+  });
+
+  it("stores an emoji on create, trimmed, and a blank one as none", async () => {
+    const { id } = await createCollectionArea(userId, collectionId, { name: "Poland", symbol: " 🇵🇱 ", assignable: false });
+    assert.equal((await read(id))?.symbol, "🇵🇱");
+    const blank = await createCollectionArea(userId, collectionId, { name: "Czechia", symbol: "  ", assignable: false });
+    assert.equal((await read(blank.id))?.symbol, null);
+  });
+
+  it("changes on update, clears when blank, and stays when the update leaves it out", async () => {
+    const { id } = await createCollectionArea(userId, collectionId, { name: "Austria", symbol: "🇦🇹", assignable: false });
+    await updateCollectionArea(userId, id, { name: "Österreich", assignable: false });
+    assert.equal((await read(id))?.symbol, "🇦🇹");
+    await updateCollectionArea(userId, id, { name: "Österreich", symbol: "🇵🇱", assignable: false });
+    assert.equal((await read(id))?.symbol, "🇵🇱");
+    await updateCollectionArea(userId, id, { name: "Österreich", symbol: "", assignable: false });
+    assert.equal((await read(id))?.symbol, null);
+  });
+});

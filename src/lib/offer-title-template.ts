@@ -96,6 +96,15 @@ export interface TitleTemplateCopy {
   /** Certificate-status abbreviation, or null. */
   certificateAbbr: string | null;
   area: string | null;
+  /** The symbol of the copy's **own** area (#1740) — usually its flag as an emoji — or null when the
+   * copy has no area or its area has no symbol set. Unlike {@link area} it does not roll up to an
+   * ancestor (#1692): an unset symbol renders empty and is flagged by the preview instead
+   * ({@link templateEmptyAreaSymbols}). The same in every language, so it never falls back. */
+  areaSymbol: string | null;
+  /** The copy's own area's name (#1740), which is where its symbol is set — what the preview's
+   * empty-symbol warning names, since {@link area} may be an ancestor's title name. Omitted where
+   * the source has none; the warning then names {@link area}. */
+  areaName?: string | null;
   /** Name of the copy's assignable storage location (#56), or null. */
   location: string | null;
   /** Free-text identifier within that location (e.g. `A234`), or null. */
@@ -240,6 +249,7 @@ export const AVAILABLE_TITLE_TOKENS: readonly TitleToken[] = [
   { token: "{certificate}", label: "Certificate", example: "Photo certificate" },
   { token: "{certificateAbbr}", label: "Certificate (abbr.)", example: "cert." },
   { token: "{area}", label: "Area", example: "Austria" },
+  { token: "{areaSymbol}", label: "Area (symbol)", example: "🇦🇹" },
   // Offered on every template, not only a lot's (#773/#774): a set of four is as entitled to say
   // "4 stamps" as a lot of a hundred is, and a token the engine resolves everywhere but only
   // *advertises* on one screen is a token nobody finds.
@@ -370,6 +380,7 @@ function titleToken(token: string): TitleToken {
 export const ALBUM_CHAPTER_TOKENS: readonly TitleToken[] = [
   titleToken("{year}"),
   titleToken("{area}"),
+  titleToken("{areaSymbol}"),
 ];
 
 /** A checklist heading, the line the collector writes by hand today as
@@ -386,6 +397,7 @@ export const ALBUM_CHECKLIST_TOKENS: readonly TitleToken[] = [
   titleToken("{issueDate}"),
   titleToken("{issueName}"),
   titleToken("{area}"),
+  titleToken("{areaSymbol}"),
 ];
 
 /** A box label names the **catalogue slot** the mount is for, so the copy-level tokens — condition,
@@ -418,6 +430,7 @@ export const ALBUM_FOOTER_TOKENS: readonly TitleToken[] = [
   { token: "{pageRange}", label: "Page range", example: ALBUM_PREVIEW_CONTEXT.pageRange! },
   { token: "{albumName}", label: "Album name", example: ALBUM_PREVIEW_CONTEXT.albumName! },
   titleToken("{area}"),
+  titleToken("{areaSymbol}"),
   titleToken("{year}"),
 ];
 
@@ -1005,6 +1018,10 @@ function resolveTokenValue(
       return distinct(copies.map((c) => c.certificateAbbr)).join(" / ");
     case "area":
       return distinct(copies.map((c) => c.area)).join(" / ");
+    // In the copies' order and with `{area}`'s separator (#1740), empty ones left out — so an offer
+    // spanning two areas reads `🇩🇪 / 🇦🇹` where `{area}` reads `Germany / Austria`.
+    case "areasymbol":
+      return distinct(copies.map((c) => c.areaSymbol)).join(" / ");
     // **How many pieces** (#773). Every other token names *what* the copies are; this one names how
     // many, which is what a bulk lot's wording is mostly made of ("Bulk lot of 100 stamps") and the
     // one thing no amount of joining distinct values could say. It counts the copies **in scope**,
@@ -1624,19 +1641,54 @@ export function templateEmptyConditionSymbols(
   fallbackTemplate: string | null = null,
   listingText = false
 ): string[] {
+  return emptySymbolNames(template, sets, fallbackTemplate, listingText, "conditionsymbol", (c) =>
+    c.condition && !c.conditionSymbol?.trim() ? c.condition : null
+  );
+}
+
+/**
+ * The areas in use whose **symbol is not set** where this template asks for `{areaSymbol}` (#1740),
+ * named by the copy's own area — where the symbol is entered — first-seen order, de-duplicated. The
+ * same walk as {@link templateEmptyConditionSymbols}: a symbol never rolls up from a parent area, so
+ * a collector who wrote the token should hear which areas it said nothing for.
+ */
+export function templateEmptyAreaSymbols(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[],
+  fallbackTemplate: string | null = null,
+  listingText = false
+): string[] {
+  return emptySymbolNames(template, sets, fallbackTemplate, listingText, "areasymbol", (c) =>
+    c.area && !c.areaSymbol?.trim() ? (c.areaName?.trim() || c.area) : null
+  );
+}
+
+/** The shared walk behind the empty-symbol warnings (#1739, #1740): every placeholder naming `token`
+ * is resolved against each copy `unsetName` names, and the copies it came out empty for are named. */
+function emptySymbolNames(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[],
+  fallbackTemplate: string | null,
+  listingText: boolean,
+  token: string,
+  unsetName: (copy: TitleTemplateCopy) => string | null
+): string[] {
   const tpl = template?.trim() || fallbackTemplate?.trim() || "";
   if (!tpl) return [];
   const scope = rootScope(sets, NO_CONTEXT, listingText);
-  const unset = scope.copies.filter((c) => c.condition && !c.conditionSymbol?.trim());
+  const unset = scope.copies.flatMap((c) => {
+    const name = unsetName(c);
+    return name ? [{ copy: c, name }] : [];
+  });
   if (unset.length === 0) return [];
   const out: string[] = [];
   for (const m of tpl.matchAll(/\{([^{}]+)\}/g)) {
-    const asks = m[1].split("|").some((p) => p.split(":")[0].trim().toLowerCase() === "conditionsymbol");
+    const asks = m[1].split("|").some((p) => p.split(":")[0].trim().toLowerCase() === token);
     if (!asks) continue;
-    for (const c of unset) {
-      if (out.includes(c.condition!)) continue;
-      const { value } = resolvePlaceholder(m[1], [c], scope.setTitle, scope.context, scope.listingText);
-      if (!value) out.push(c.condition!);
+    for (const { copy, name } of unset) {
+      if (out.includes(name)) continue;
+      const { value } = resolvePlaceholder(m[1], [copy], scope.setTitle, scope.context, scope.listingText);
+      if (!value) out.push(name);
     }
   }
   return out;
@@ -1656,6 +1708,22 @@ export function listingEmptyConditionSymbols(
   sets: readonly TemplateSet[]
 ): string[] {
   return templateEmptyConditionSymbols(template, sets, null, true);
+}
+
+/** {@link templateEmptyAreaSymbols} for a one-line title over a flat copy list (#1740). */
+export function titleEmptyAreaSymbols(
+  template: string | null | undefined,
+  copies: readonly TitleTemplateCopy[]
+): string[] {
+  return templateEmptyAreaSymbols(template, [{ title: null, copies }], DEFAULT_TITLE_TEMPLATE);
+}
+
+/** {@link templateEmptyAreaSymbols} for a multi-line listing text over an offer's sets (#1740). */
+export function listingEmptyAreaSymbols(
+  template: string | null | undefined,
+  sets: readonly TemplateSet[]
+): string[] {
+  return templateEmptyAreaSymbols(template, sets, null, true);
 }
 
 /** {@link templateFallbackTokens} for a one-line title over a flat copy list (#298). */

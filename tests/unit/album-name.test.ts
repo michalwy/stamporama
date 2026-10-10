@@ -14,6 +14,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
+    symbol: null,
     assignable: true,
     sortOrder: 0,
     stampCount: 0,
@@ -32,6 +33,7 @@ const reich = area({
   name: "Deutsches Reich",
   titleName: "Deutsches Reich",
   titleNameByLanguage: { pl: "Rzesza Niemiecka" },
+  symbol: null,
 });
 const weimar = area({ id: "wr", name: "Weimarer Republik", parentId: "dr" });
 const areas = [reich, weimar];

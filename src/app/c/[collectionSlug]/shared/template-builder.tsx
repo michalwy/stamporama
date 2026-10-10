@@ -11,6 +11,8 @@ import {
   listingFallbacks,
   titleEmptyConditionSymbols,
   listingEmptyConditionSymbols,
+  titleEmptyAreaSymbols,
+  listingEmptyAreaSymbols,
   templatePreviewScope,
   EXAMPLE_OFFER_URL,
   AVAILABLE_LISTING_BLOCKS,
@@ -411,6 +413,11 @@ export function TemplateBuilder({
   const emptySymbols = multiline
     ? listingEmptyConditionSymbols(value, previewSets)
     : titleEmptyConditionSymbols(value, titleCopies);
+  // The same for `{areaSymbol}` (#1740), named by each copy's own area: a symbol never rolls up from
+  // a parent, so the area to fix is the one the copy is in.
+  const emptyAreaSymbols = multiline
+    ? listingEmptyAreaSymbols(value, previewSets)
+    : titleEmptyAreaSymbols(value, titleCopies);
   // The names behind those tokens, each translatable from the warning line (#1733) — the same walk
   // as the tokens, so the two cannot disagree about what fell back.
   const translate = samples.translate;
@@ -622,6 +629,12 @@ export function TemplateBuilder({
           <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
             {"{conditionSymbol}"} is empty for {emptySymbols.join(", ")} — no symbol set in Settings →
             Conditions.
+          </p>
+        )}
+        {!samples.loading && emptyAreaSymbols.length > 0 && (
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
+            {"{areaSymbol}"} is empty for {emptyAreaSymbols.join(", ")} — no symbol set on the area in
+            Catalog → Areas.
           </p>
         )}
       </div>

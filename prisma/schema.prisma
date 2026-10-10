@@ -3194,6 +3194,10 @@ model CollectionArea {
   // that sets one, else the area's own `name` — so internal grouping levels (e.g. "Second Republic")
   // roll up to a public area ("Poland") while siblings ("General Gouvernement") keep their own.
   titleName            String?
+  // The area's symbol (#1740) — usually its flag as an emoji (🇳🇱) — behind `{areaSymbol}`. Optional
+  // and null until the collector sets it; the same in every language, so it has no translation. It
+  // does **not** roll up: a sub-area without one renders `{areaSymbol}` empty (#1692).
+  symbol               String?
   // Grouping-only areas (e.g. "Europe") have `assignable = false`: they organize child
   // areas but cannot themselves receive Issues/stamps directly. Leaf areas that hold
   // material have `assignable = true`. Defaults true. Mirrors `Location.assignable` (#56, #263).

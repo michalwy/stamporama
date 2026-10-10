@@ -323,7 +323,7 @@ new collecting field from a catalogue's table of contents, and reorganise the tr
   A **read only** token can do this much;
 - **create an area** under another, or at the top level, with everything the *Add area* form has:
   its name, the title name listings use (the name itself, unless it is told otherwise) and that name
-  in your other languages, a description, whether it is grouping-only, and its catalogues — the
+  in your other languages, its [symbol](collections.md#area-symbol), a description, whether it is grouping-only, and its catalogues — the
   catalogues its stamps are numbered in, the prefix for each, which one leads, the catalogue volumes
   that price it and which of them gives a copy its catalogue value. Whatever it leaves out is
   inherited from the areas above;

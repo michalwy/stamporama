@@ -412,10 +412,16 @@ describe("album text vocabularies", () => {
     assert.ok(!tokensOf(ALBUM_BOX_LABEL_TOKENS).includes("{pageRange}"));
   });
 
+  it("offers {areaSymbol} wherever {area} is offered, and nowhere else (#1740)", () => {
+    for (const list of [ALBUM_CHAPTER_TOKENS, ALBUM_CHECKLIST_TOKENS, ALBUM_BOX_LABEL_TOKENS, ALBUM_FOOTER_TOKENS]) {
+      assert.equal(tokensOf(list).includes("{areaSymbol}"), tokensOf(list).includes("{area}"));
+    }
+  });
+
   it("keeps a chapter heading to the year group it actually is", () => {
     // Not the issue: a year group holding one issue would then print a differently shaped heading
     // from one holding three, and nobody reading the finished run could tell why.
-    assert.deepEqual(tokensOf(ALBUM_CHAPTER_TOKENS), ["{year}", "{area}"]);
+    assert.deepEqual(tokensOf(ALBUM_CHAPTER_TOKENS), ["{year}", "{area}", "{areaSymbol}"]);
   });
 
   it("keeps copy-level facts off a box label", () => {
@@ -443,6 +449,7 @@ const baseCopy: TitleTemplateCopy = {
   certificate: null,
   certificateAbbr: null,
   area: null,
+  areaSymbol: null,
   location: null,
   ref: null,
   itemNo: null,

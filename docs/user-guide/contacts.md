@@ -195,6 +195,13 @@ language — and the preview re-reads at once; the line goes when nothing is lef
 - `{certificate}` — certificate status (full name)
 - `{certificateAbbr}` — certificate-status abbreviation
 - `{area}` — area (uses each area's optional **title name**, rolling up to a parent when blank — see below)
+- `{areaSymbol}` — the area's **symbol**, usually its flag (e.g. `🇳🇱`), set on the area in
+  [**Catalog → Areas**](collections.md#area-symbol). Unlike `{area}` it **never rolls up**: an area
+  without a symbol of its own prints **nothing**, even when its parent has one, and the preview says so
+  beneath it (*{areaSymbol} is empty for Second Republic*). Where an offer spans several areas it lists
+  their symbols in the same order and with the same ` / ` as `{area}`, leaving out the ones not set.
+  It works inside `{#copy}` and `{#set}`, in the photo tile labels, and in an album's chapter headings,
+  checklist headings and footers.
 - `{location}` — the copy's storage location name
 - `{ref}` — the copy's free-text reference within that location (e.g. `A234`)
 - `{itemNo}` — the copy's [internal number](inventory.md#internal-copy-number), padded to the width

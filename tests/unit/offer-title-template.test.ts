@@ -10,6 +10,8 @@ import {
   titleFallbacks,
   titleEmptyConditionSymbols,
   listingEmptyConditionSymbols,
+  titleEmptyAreaSymbols,
+  listingEmptyAreaSymbols,
   DEFAULT_TITLE_TEMPLATE,
   AVAILABLE_TITLE_TOKENS,
   type TitleTemplateCopy,
@@ -69,6 +71,7 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     certificate: null,
     certificateAbbr: null,
     area: null,
+    areaSymbol: null,
     location: null,
     ref: null,
     itemNo: null,
@@ -945,5 +948,70 @@ describe("{conditionSymbol}", () => {
   it("flags a symbol asked for inside a block, once per condition", () => {
     const sets = [{ title: null, copies: [mh, { ...mh, name: "Mars" }] }];
     assert.deepEqual(listingEmptyConditionSymbols("{#copy}{name} {conditionSymbol}\n{/copy}", sets), ["Mint hinged"]);
+  });
+});
+
+// ── {areaSymbol} (#1740) ─────────────────────────────────────────────────────
+
+describe("{areaSymbol}", () => {
+  const pl = copy({ name: "Eagle", area: "Poland", areaName: "Poland", areaSymbol: "🇵🇱" });
+  const de = copy({ name: "Germania", area: "Germany", areaName: "Germany", areaSymbol: "🇩🇪" });
+  // A sub-area whose `{area}` rolled up to its parent's title name, but which states no symbol.
+  const sr = copy({ name: "Chopin", area: "Poland", areaName: "Second Republic", areaSymbol: null });
+
+  it("is offered beside {area}", () => {
+    const tokens = AVAILABLE_TITLE_TOKENS.map((t) => t.token);
+    assert.equal(tokens.indexOf("{areaSymbol}"), tokens.indexOf("{area}") + 1);
+  });
+
+  it("renders the symbol", () => {
+    assert.equal(renderTitleTemplate("{areaSymbol} {name}", [pl]), "🇵🇱 Eagle");
+  });
+
+  it("renders empty when unset — never a parent's symbol or the area's name (#1692)", () => {
+    assert.equal(renderTitleTemplate("{areaSymbol} {name}", [sr]), "Chopin");
+  });
+
+  it("follows {area} across several areas: same order, same separator, empty ones left out", () => {
+    assert.equal(renderTitleTemplate("{area}", [de, sr, pl]), "Germany / Poland");
+    assert.equal(renderTitleTemplate("{areaSymbol}", [de, sr, pl]), "🇩🇪 / 🇵🇱");
+  });
+
+  it("works inside {#copy}", () => {
+    const sets = [{ title: null, copies: [pl, de] }];
+    assert.equal(
+      renderListingTemplate("{#copy}{areaSymbol} {name}\n{/copy}", sets),
+      "🇵🇱 Eagle\n🇩🇪 Germania"
+    );
+  });
+
+  it("never reports as untranslated", () => {
+    assert.deepEqual(titleFallbackTokens("{areaSymbol}", [pl]), []);
+  });
+
+  it("flags the areas in use whose symbol is empty, by the copy's own area", () => {
+    assert.deepEqual(titleEmptyAreaSymbols("{areaSymbol} {name}", [pl, sr]), ["Second Republic"]);
+  });
+
+  it("names the area by {area} where the copy carries no own name", () => {
+    assert.deepEqual(titleEmptyAreaSymbols("{areaSymbol}", [copy({ area: "Austria" })]), ["Austria"]);
+  });
+
+  it("flags nothing when every symbol is set, or when the template does not ask for it", () => {
+    assert.deepEqual(titleEmptyAreaSymbols("{areaSymbol}", [pl, de]), []);
+    assert.deepEqual(titleEmptyAreaSymbols("{name} {area}", [sr]), []);
+  });
+
+  it("flags nothing for a copy without an area", () => {
+    assert.deepEqual(titleEmptyAreaSymbols("{areaSymbol}", [copy({ name: "Mars", area: null })]), []);
+  });
+
+  it("flags nothing where the collector's own fallback group still has text", () => {
+    assert.deepEqual(titleEmptyAreaSymbols("{areaSymbol|area}", [sr]), []);
+  });
+
+  it("flags a symbol asked for inside a block, once per area", () => {
+    const sets = [{ title: null, copies: [sr, { ...sr, name: "Pilsudski" }] }];
+    assert.deepEqual(listingEmptyAreaSymbols("{#copy}{areaSymbol} {name}\n{/copy}", sets), ["Second Republic"]);
   });
 });

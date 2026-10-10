@@ -13,6 +13,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
+    symbol: null,
     assignable: true,
     sortOrder: 0,
     stampCount: 0,
@@ -131,6 +132,7 @@ describe("buildAreaTitleEntries fallback reporting (#298)", () => {
       title: "Korzeń",
       fellBack: false,
       sourceAreaId: "r",
+      symbol: null,
     });
   });
 
@@ -139,12 +141,13 @@ describe("buildAreaTitleEntries fallback reporting (#298)", () => {
       title: "Root",
       fellBack: true,
       sourceAreaId: "r",
+      symbol: null,
     });
   });
 
   it("reports a fallback when nothing is configured and the area's own name is used", () => {
     const a = area({ id: "a", name: "Germany" });
-    assert.deepEqual(buildAreaTitleEntries([a], "pl").get("a"), { title: "Germany", fellBack: true, sourceAreaId: "a" });
+    assert.deepEqual(buildAreaTitleEntries([a], "pl").get("a"), { title: "Germany", fellBack: true, sourceAreaId: "a", symbol: null });
   });
 
   it("never reports a fallback without a language", () => {
@@ -162,5 +165,25 @@ describe("buildAreaTitleEntries source area (#299)", () => {
   it("names the area itself when nothing rolls up and its own name is used", () => {
     const a = area({ id: "a", name: "Germany" });
     assert.equal(buildAreaTitleEntries([a], "pl").get("a")?.sourceAreaId, "a");
+  });
+});
+
+describe("buildAreaTitleEntries symbol (#1740)", () => {
+  it("carries the area's own symbol, trimmed", () => {
+    const a = area({ id: "a", name: "Poland", symbol: " 🇵🇱 " });
+    assert.equal(buildAreaTitleEntries([a], "pl").get("a")?.symbol, "🇵🇱");
+  });
+
+  it("never takes a parent's symbol, even where the title rolls up to it (#1692)", () => {
+    const root = area({ id: "r", name: "Poland", titleName: "Poland", symbol: "🇵🇱" });
+    const leaf = area({ id: "l", name: "Second Republic", parentId: "r" });
+    const entry = buildAreaTitleEntries([root, leaf], null).get("l");
+    assert.equal(entry?.title, "Poland");
+    assert.equal(entry?.symbol, null);
+  });
+
+  it("reads a blank symbol as none", () => {
+    const a = area({ id: "a", name: "Poland", symbol: "  " });
+    assert.equal(buildAreaTitleEntries([a], null).get("a")?.symbol, null);
   });
 });
