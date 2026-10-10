@@ -522,6 +522,9 @@ interface InventoryItemRowProps {
   /** Extra chips appended to the last (condition/disposition) line — e.g. the lot
    * delivery state and cost-basis on the intake screen (#121). */
   trailingChips?: ReactNode;
+  /** A figure drawn just before the catalogue value, at the right of the catalog line — the Lot
+   *  builder's per-copy cost (#1746), which is read against that value. */
+  valueAside?: ReactNode;
   /** Tint the row background to flag it (e.g. a copy blocking a lot close, #121). */
   highlight?: boolean;
   /** Which tone the tint takes. `error` is the original and stays the default — a copy blocking a
@@ -601,6 +604,7 @@ export function InventoryItemRow({
   actionsOverride,
   promote,
   trailingChips,
+  valueAside,
   highlight = false,
   highlightTone = "error",
   onSetCatalogPrice,
@@ -999,7 +1003,10 @@ export function InventoryItemRow({
               {unknownVariantChip}
             </>
           )}
-          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline" }}>
+          <span
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "baseline", gap: "0.75rem" }}
+          >
+            {valueAside}
             {/* A carrier's value is not a catalogue price, so clicking it records a value on the piece
                 in its Valuation window rather than opening the leading stamp's price editor (#747). */}
             <CopyValue
