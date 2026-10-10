@@ -9,6 +9,7 @@ import {
   DEFAULT_PHOTO_COVER_COLOR,
   NO_CARRIED_COVERS,
   normalizeCoverColor,
+  normalizePhotoCoverShape,
   normalizePhotoCoverStyle,
   normalizePlatformCoverColor,
   offerNeedsCovers,
@@ -98,6 +99,19 @@ describe("a solid cover's colour (#1702)", () => {
     assert.equal(normalizePlatformCoverColor("#ffffff"), "#ffffff");
     assert.equal(normalizePlatformCoverColor("garbage"), "#000000");
     assert.equal(normalizePlatformCoverColor(null), "#000000");
+  });
+});
+
+describe("the shape a new cover takes (#1761)", () => {
+  it("is the one last chosen, as the browser remembers it", () => {
+    assert.equal(normalizePhotoCoverShape("ellipse"), "ellipse");
+    assert.equal(normalizePhotoCoverShape("rect"), "rect");
+  });
+
+  it("is a rectangle before any has been chosen, or when what is remembered is not a shape", () => {
+    assert.equal(normalizePhotoCoverShape(null), "rect");
+    assert.equal(normalizePhotoCoverShape(undefined), "rect");
+    assert.equal(normalizePhotoCoverShape("triangle"), "rect");
   });
 });
 

@@ -916,8 +916,10 @@ made from have not been checked yet, and **Check N photos** in its header (also 
 ready** while those photos are what holds the offer back) walks you through them one at a time:
 
 - The photo is shown large. **Drag** across a symbol to cover it; drag a cover to move it, its
-  corners to resize it, and press **Delete** to remove the selected one. **R** and **E** switch the
-  next cover between a rectangle and an ellipse.
+  corners to resize it, and press **Delete** to remove the selected one. **Shape** in the toolbar,
+  or **R** and **E**, switch the next cover between a rectangle and an ellipse. The shape you last
+  chose stays chosen on the next photo, and in the next walk, on this browser; until you choose
+  one, covers are rectangles. Covers carried over from the previous photo keep their own shapes.
 - Each cover is **pixelated**, **blurred** or a **solid bar** — chosen per cover in the toolbar,
   starting as the platform's *New covers start as*. What you see in the editor is an indication; the
   real one is drawn into the offer's images.

@@ -5,6 +5,7 @@ import {
   DEFAULT_PHOTO_COVER_COLOR,
   MIN_COVER_SIZE,
   normalizeCoverColor,
+  normalizePhotoCoverShape,
   PHOTO_COVER_PALETTE,
   PHOTO_COVER_SHAPE_LABELS,
   PHOTO_COVER_SHAPES,
@@ -94,6 +95,9 @@ function boxBetween(ax: number, ay: number, bx: number, by: number) {
 /** Where the colour last given to a bar is remembered, per collection on this browser (#1702). */
 const COVER_COLOR_NAMESPACE = "photo-cover-color";
 
+/** Where the shape last chosen for a new cover is remembered, the same way as the colour (#1761). */
+const COVER_SHAPE_NAMESPACE = "photo-cover-shape";
+
 /**
  * A bar's colour (#1702): the short palette as swatches, and any other colour from the browser's
  * picker. Used by the editor's toolbar and by the platform's settings, so the two offer one choice.
@@ -163,7 +167,7 @@ const TOOLBAR_SELECT: CSSProperties = {
 /**
  * Keyed on the photo by its caller, so each photo starts with nothing selected and the platform's
  * style. A bar starts in the colour last given to one on this browser, or the platform's the first
- * time (#1702).
+ * time (#1702); a new cover in the shape last chosen on this browser, or a rectangle (#1761).
  *
  * The editor: the photo as large as the space allows, covers drawn by dragging, a cover selected by
  * clicking it, moved by dragging it and resized by its corners, removed with Delete — or all at
@@ -193,7 +197,6 @@ export function PhotoCoverEditor({
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
   const [area, setArea] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
-  const [shape, setShape] = useState<PhotoCoverShape>("rect");
   const [style, setStyle] = useState<PhotoCoverStyle>(defaultStyle);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -201,6 +204,9 @@ export function PhotoCoverEditor({
   const [lastColor, setLastColor] = usePersistedCollectionValue(COVER_COLOR_NAMESPACE, collectionId);
   // The colour the next bar is drawn in: the last one used, else the platform's.
   const color = normalizeCoverColor(lastColor) ?? defaultColor;
+  const [lastShape, setShape] = usePersistedCollectionValue(COVER_SHAPE_NAMESPACE, collectionId);
+  // The shape the next cover is drawn in: the last one chosen, else a rectangle.
+  const shape = normalizePhotoCoverShape(lastShape);
   /** The next cover as the toolbar stands — a bar in the current colour, anything else in none. */
   const next = (box: { x: number; y: number; width: number; height: number }): PhotoCover =>
     style === "bar" ? { shape, style, color, ...box } : { shape, style, ...box };
@@ -252,7 +258,7 @@ export function PhotoCoverEditor({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [disabled, removeSelected, selected]);
+  }, [disabled, removeSelected, selected, setShape]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (disabled || e.button !== 0) return;
