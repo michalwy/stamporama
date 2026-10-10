@@ -49,6 +49,7 @@ import { OfferSetsView } from "./offer-sets-view";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
+import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { TextLengthCounter } from "@/app/c/[collectionSlug]/shared/text-length-counter";
 import { formatInstant } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { languageLabel, normalizeLanguage } from "@/lib/languages";
@@ -788,6 +789,10 @@ export function OfferDetailPanel({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+          {/* The offer's short number (#1755), leading the title as it leads the offer list's row
+              (#470) and the stamp screen's header: the one chip, so the number a buyer quotes reads
+              the same on the list and here. */}
+          <EntityNoChip entity="offer" no={offer.offerNo} prefix="o" />
           {/* Listing title (#209): the offer's own editable name, defaulting to the derived label
               when never generated. A pencil edits it in place; the ⋮ menu regenerates it from the
               platform's template.
