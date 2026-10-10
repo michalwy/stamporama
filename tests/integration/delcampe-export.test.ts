@@ -251,7 +251,7 @@ describe("Delcampe Easy Uploader export (#610)", () => {
   });
 
   it("keeps two offers' pictures apart in a flat archive", async () => {
-    // The same title, so both offers slug the same and every file name would collide.
+    // The same title: only the offer number at the head of each stem (#1754) keeps the names apart.
     secondOfferId = await preparedOffer("Poland 1921 Sowing Man used", "1.50", 90);
     await setDelcampeOfferCategory(userId, secondOfferId, {
       categoryId: "7946",

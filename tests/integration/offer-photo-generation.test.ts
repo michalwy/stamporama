@@ -74,6 +74,15 @@ async function bytesExist(photo: {
   }
 }
 
+/** The offer's short number (#416) — the head of every file name the plan hands out (#1754). */
+async function offerNoOf(offerId: string): Promise<number> {
+  const { offerNo } = await prisma.offer.findUniqueOrThrow({
+    where: { id: offerId },
+    select: { offerNo: true },
+  });
+  return offerNo;
+}
+
 /** Read a ZIP back by walking its local file headers, in written order (#314). */
 function readZipEntries(archive: Buffer): { name: string; contents: Buffer }[] {
   const entries: { name: string; contents: Buffer }[] = [];
@@ -478,11 +487,12 @@ describe("offer photo generation (#311)", () => {
     const state = await getOfferPhotoPlanState(userId, offerId);
     assert.equal(state.images.length, 1, "front-only, one group");
     const [image] = state.images;
+    const no = await offerNoOf(offerId);
 
     assert.equal(
       image.fileName,
-      `offer-${offerId.slice(-6)}-01.jpg`,
-      "the offer's stem (#326), then plan position, padded, with the stored mime's extension"
+      `${no}-01.jpg`,
+      "the offer's stem (#326, #1754), then plan position, padded, with the stored mime's extension"
     );
     assert.equal(image.itemIds.length, 3, "the three copies the collage actually shows");
     assert.deepEqual(image.copyLabels, ["Stamp 0", "Stamp 1", "Stamp 2"]);
@@ -491,12 +501,13 @@ describe("offer photo generation (#311)", () => {
 
   it("hands the whole plan over as one ordered ZIP", async () => {
     const archive = await buildOfferPhotoArchive(userId, offerId);
-    assert.match(archive.fileName, /-photos\.zip$/);
+    const no = await offerNoOf(offerId);
+    assert.equal(archive.fileName, `${no}-photos.zip`, "an untitled offer is its number alone (#1754)");
 
     const entries = readZipEntries(archive.bytes);
     assert.deepEqual(
       entries.map((e) => e.name),
-      [`offer-${offerId.slice(-6)}-01.jpg`],
+      [`${no}-01.jpg`],
       "one file per stored image, numbered in plan order"
     );
 
@@ -516,32 +527,30 @@ describe("offer photo generation (#311)", () => {
     assert.deepEqual(entries[0].contents, Buffer.concat(chunks));
   });
 
-  it("names every file after the offer, so it stays identifiable outside the app (#326)", async () => {
+  it("names every file after the offer, number first, so it stays identifiable outside the app (#326, #1754)", async () => {
     await prisma.offer.update({ where: { id: offerId }, data: { name: "Węgry 1950 — zestaw" } });
+    const no = await offerNoOf(offerId);
 
     const state = await getOfferPhotoPlanState(userId, offerId);
     assert.deepEqual(
       state.images.map((i) => i.fileName),
-      ["wegry-1950-zestaw-01.jpg"],
-      "diacritics are folded rather than dropped, so the stem stays readable"
+      [`${no}-wegry-1950-zestaw-01.jpg`],
+      "the number, then the title with diacritics folded rather than dropped"
     );
 
     const archive = await buildOfferPhotoArchive(userId, offerId);
-    assert.equal(archive.fileName, "wegry-1950-zestaw-photos.zip");
+    assert.equal(archive.fileName, `${no}-wegry-1950-zestaw-photos.zip`);
     assert.deepEqual(
       readZipEntries(archive.bytes).map((e) => e.name),
-      ["wegry-1950-zestaw-01.jpg"],
+      [`${no}-wegry-1950-zestaw-01.jpg`],
       "the archive and its contents carry the same stem"
     );
 
-    // Back to unnamed, which the tests around this one are written against — and which falls back
-    // to the offer's id rather than a constant, so two unnamed offers still differ.
+    // Back to unnamed, which the tests around this one are written against — and which is the
+    // offer's number alone, so two unnamed offers still differ.
     await prisma.offer.update({ where: { id: offerId }, data: { name: null } });
     const unnamed = await getOfferPhotoPlanState(userId, offerId);
-    assert.deepEqual(
-      unnamed.images.map((i) => i.fileName),
-      [`offer-${offerId.slice(-6)}-01.jpg`]
-    );
+    assert.deepEqual(unnamed.images.map((i) => i.fileName), [`${no}-01.jpg`]);
   });
 
   // ── The batch archive (#323) ───────────────────────────────────────────────
@@ -626,8 +635,8 @@ describe("offer photo generation (#311)", () => {
     );
     assert.deepEqual(
       [...new Set(names.map((n) => n.split("/")[0]))].sort(),
-      [`wegry-1950`, `wegry-1950-${secondId.slice(-6)}`].sort(),
-      "one folder per offer; the first namesake keeps the plain slug, the later one carries its id"
+      [`${await offerNoOf(offerId)}-wegry-1950`, `${await offerNoOf(secondId)}-wegry-1950`].sort(),
+      "one folder per offer; namesakes are told apart by their numbers (#1754)"
     );
 
     // Nothing to upload anywhere is the one case that refuses: an empty archive says nothing.

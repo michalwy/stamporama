@@ -89,10 +89,12 @@ describe("offer photo attachments (#313)", () => {
   let strangerId: string;
   let collectionId: string;
   let offerId: string;
+  /** The offer's short number (#416), read once the fixture offer exists. */
+  let offerNo: number;
   /** The stem every one of this offer's file names starts with (#326). The fixture offer is
-   *  unnamed, so it falls back to a slice of the offer's id. A function, not a constant: `offerId`
-   *  is only assigned in `before`. */
-  const stem = () => `offer-${offerId.slice(-6)}`;
+   *  unnamed, so it is the offer's number alone (#1754). A function, not a constant: `offerNo` is
+   *  only assigned in `before`. */
+  const stem = () => String(offerNo);
   /** The one copy in the offer, with a front and a back scan. */
   let itemId: string;
   let frontPhotoId: string;
@@ -155,6 +157,10 @@ describe("offer photo attachments (#313)", () => {
       listingDate: null,
       state: "preparing",
     });
+    ({ offerNo } = await prisma.offer.findUniqueOrThrow({
+      where: { id: offerId },
+      select: { offerNo: true },
+    }));
     // A literal in the label template is what an attachment with no copy renders (#313 mode b):
     // `{ref}` resolves empty against no copy, and the engine tidies what it leaves behind.
     await updateOfferPhotoConfig(userId, offerId, {

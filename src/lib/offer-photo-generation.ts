@@ -124,8 +124,8 @@ const ACTIVE_STATUSES = ["queued", "running"] as const;
  * is a snapshot; the mismatch is what `outOfDate` reports, not something to hide. */
 const REMOVED_LABEL = "removed";
 
-/** `wegry-01.jpg`, `wegry-02.jpg`… — the offer's own slug, then the upload position, 1-based and
- * zero-padded so a file manager sorts them right.
+/** `2663-wegry-01.jpg`, `2663-wegry-02.jpg`… — the offer's own stem (its number and title slug), then
+ * the upload position, 1-based and zero-padded so a file manager sorts them right.
  *
  * The slug is there because these files leave the app (#326): downloaded one at a time or unpacked
  * from the ZIP, they land in a folder beside another offer's `01.jpg`, and a bare number says
@@ -403,6 +403,8 @@ async function readTileLabels(
 interface GenerationInputs {
   offerId: string;
   offerName: string | null;
+  /** The offer's short per-collection number (#416) — the head of every file name (#1754). */
+  offerNo: number;
   collectionId: string;
   ownerId: string;
   /** The sets the plan is built from: the offer's sets **minus** the ones that have gone (#315). */
@@ -518,6 +520,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
     select: {
       id: true,
       name: true,
+      offerNo: true,
       collectionId: true,
       // A terminal offer's photos are history: nothing is regenerated against what is still
       // available, because nothing is being sold any more (#315).
@@ -746,6 +749,7 @@ async function readInputs(offerId: string): Promise<GenerationInputs | null> {
   return {
     offerId: offer.id,
     offerName: offer.name,
+    offerNo: offer.offerNo,
     collectionId: offer.collectionId,
     ownerId: offer.collection.ownerId,
     sets,
@@ -991,7 +995,7 @@ export async function getOfferPhotoPlanState(
   const counters = { upload: 0, unpublished: 0, overLimit: 0 };
   // Every image is named for the offer it belongs to (#326), so a file keeps saying which listing
   // it is for once it has left the app.
-  const offerSlug = offerFileSlug(inputs.offerName, offerId);
+  const offerSlug = offerFileSlug(inputs.offerName, inputs.offerNo);
   const images: OfferPhotoImage[] = entries.map((e) => {
     const { publish, overLimit } = marksFor(e.token);
     // Numbered by position among the images that are actually uploaded, so the run is a dense 1..n
@@ -1278,9 +1282,10 @@ export async function buildOfferPhotoArchive(
  *
  * A folder rather than a filename prefix: the files are already named for their offer (#326), so a
  * prefix would only repeat the stem, while a folder is what a marketplace's per-listing upload
- * actually wants — open the offer's folder, select all, done. Two offers sharing a name (the title
- * is generated, so it happens) get their ids appended, because a collision would silently merge two
- * listings' uploads into one folder.
+ * actually wants — open the offer's folder, select all, done. The stem leads with the offer's
+ * number (#1754), so two offers sharing a title still get two folders; the id suffix below is the
+ * guard should two stems ever coincide, because a collision would silently merge two listings'
+ * uploads into one folder.
  *
  * Offers with nothing to upload are **skipped, not refused**: a batch is shown as a batch, and one
  * offer that was never generated should not deny the collector the other thirty. Which ones were
@@ -1404,15 +1409,18 @@ export interface OfferUploadImage {
  * ZIP entry's name alone cannot say which photo that is.
  *
  * Exported since #610, which needs the **slug** as well as the images: the Delcampe bundle is flat,
- * so two offers whose titles slug the same have to be told apart, and the same rule that names a
- * folder in the bulk ZIP names them there.
+ * so two offers whose stems coincide have to be told apart, and the same rule that names a folder in
+ * the bulk ZIP names them there.
  */
 export async function readOfferUploadSet(
   ownerId: string,
   offerId: string
 ): Promise<{ slug: string; images: OfferUploadImage[] } | { reason: string }> {
   const state = await getOfferPhotoPlanState(ownerId, offerId);
-  const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { name: true } });
+  const offer = await prisma.offer.findUniqueOrThrow({
+    where: { id: offerId },
+    select: { name: true, offerNo: true },
+  });
 
   // The read model already resolved every image's marks and its upload name against the current
   // plan, so the archive cannot disagree with the panel about what goes up or what it is called.
@@ -1446,7 +1454,7 @@ export async function readOfferUploadSet(
     })
   );
 
-  return { slug: offerFileSlug(offer?.name, offerId), images };
+  return { slug: offerFileSlug(offer.name, offer.offerNo), images };
 }
 
 /**
@@ -1471,12 +1479,13 @@ export async function readOfferUploadImages(
  * A safe, recognisable file-name stem for one offer — used for the archive and, since #326, for
  * every image inside it and every image downloaded on its own.
  *
- * The offer's own name when it has one (it usually does: the title is generated at creation from
- * the platform's template, #209/#210). When it does not, the fall-back is a slice of its id rather
- * than a bare `offer`, because a constant stem would put every unnamed offer's `01.jpg` straight
- * back in collision with every other's — the very thing the stem is here to prevent.
+ * It leads with the offer's **number** (#416, #1754): two offers with the same or similar titles
+ * otherwise produce archives that cannot be told apart, and the number is what traces a file back
+ * to its offer. The title's slug follows when the offer has one (it usually does: the title is
+ * generated at creation from the platform's template, #209/#210); an untitled offer is its number
+ * alone.
  */
-function offerFileSlug(name: string | null | undefined, offerId: string): string {
+function offerFileSlug(name: string | null | undefined, offerNo: number): string {
   const slug = (name ?? "")
     // Decompose, then drop the combining marks: "Węgry" becomes "wegry" rather than "w-gry".
     .normalize("NFKD")
@@ -1485,7 +1494,7 @@ function offerFileSlug(name: string | null | undefined, offerId: string): string
     .replace(/^-+|-+$/g, "")
     .slice(0, 60)
     .toLowerCase();
-  return slug || `offer-${offerId.slice(-6)}`;
+  return slug ? `${offerNo}-${slug}` : String(offerNo);
 }
 
 // ── Enqueue ──────────────────────────────────────────────────────────────────
