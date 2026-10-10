@@ -23,7 +23,7 @@ import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 import type { CollectionAreaData } from "@/lib/areas";
 import { CandidateStampsPicker, pickedSetLabel } from "./candidate-stamps-picker";
 import type { PickedStamp } from "./stamp-picker-shared";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 /** Edge of each picture in the dialog (#1003). Two of them side by side fill the dialog's width,
  * which is as large as a front and a back can be drawn here without the dialog growing. */
@@ -260,7 +260,7 @@ export function IdentifyVariantDialog({
               rows={2}
               placeholder="e.g. watermark confirmed under UV"
               disabled={isPending}
-              style={{ ...INPUT_STYLE, resize: "vertical" }}
+              style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
             />
           </div>
 

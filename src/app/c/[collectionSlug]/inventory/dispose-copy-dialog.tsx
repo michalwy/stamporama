@@ -16,7 +16,7 @@ import {
 import { formatItemNo } from "@/lib/item-number";
 import { useCollectionItemNoPad } from "./use-inventory-query";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -111,7 +111,7 @@ export function DisposeCopyDialog({
                 onChange={(e) => setNote(e.target.value)}
                 disabled={isPending}
                 rows={3}
-                style={{ ...INPUT_STYLE, resize: "vertical" }}
+                style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
               />
               {disposalNoteRequired(reason) && (
                 <p style={HINT_STYLE}>

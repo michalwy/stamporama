@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { multiLineFormControl } from "@/app/control-style";
 import { DialogSecondaryButton, LabelWithError } from "@/app/dialog-shell";
 import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
@@ -351,6 +352,7 @@ function GroupLabel({
 
 const TEXTAREA_STYLE: React.CSSProperties = {
   ...INPUT_STYLE,
+  ...multiLineFormControl,
   minHeight: "8rem",
   resize: "vertical",
   fontFamily: "inherit",
@@ -811,7 +813,11 @@ function FollowableSetting({
         <div
           style={{
             ...INPUT_STYLE,
-            minHeight: undefined,
+            // A followed setting can be a whole post template, so the box grows; one line of it
+            // fits the shared height, level with an own setting beside it (#1751).
+            ...multiLineFormControl,
+            paddingTop: "0.375rem",
+            paddingBottom: "0.375rem",
             display: "flex",
             gap: "0.375rem",
             alignItems: "baseline",

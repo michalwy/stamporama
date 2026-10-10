@@ -26,7 +26,7 @@ import type { DescriptionFormat } from "@/lib/description-format";
 import type { TitleSampleCopy } from "@/lib/title-samples";
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "./text-input";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 // The template editor (#210, #266, #267): a `{token}` template edited against a **live preview** of
 // real inventory — a random copy by default, shuffled, or searched out. Extracted from the old
@@ -507,7 +507,7 @@ export function TemplateBuilder({
           id={fieldId}
           rows={rows}
           {...fieldProps}
-          style={{ ...INPUT_STYLE, resize: "vertical", minHeight: `${rows * 1.4}rem`, whiteSpace: "pre" }}
+          style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: `${rows * 1.4}rem`, whiteSpace: "pre" }}
         />
       ) : (
         <TextInput id={fieldId} {...fieldProps} />

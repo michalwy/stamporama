@@ -27,7 +27,7 @@ import { Tooltip } from "./tooltip";
 import { NO_AUTOFILL } from "./no-autofill";
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "./text-input";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 /**
  * The collection-area form and the **Add area** dialog around it.
@@ -45,6 +45,22 @@ const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
   width: "100%",
   padding: "0.5rem 0.75rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.875rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+};
+
+/**
+ * A vendor row's controls: compact, a row editor's size rather than a form field's, which #1686 kept
+ * outside the shared height — so their own style, never the form's shrunk back (#1751).
+ */
+const ROW_INPUT_STYLE: React.CSSProperties = {
+  boxSizing: "border-box",
+  width: "100%",
+  minHeight: "2rem",
+  padding: "0.375rem 0.5rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
   fontSize: "0.875rem",
@@ -486,7 +502,7 @@ export function CollectionAreaForm({
             rows={3}
             defaultValue={defaultDescription ?? ""}
             disabled={isPending}
-            style={{ ...INPUT_STYLE, resize: "vertical", minHeight: "4.5rem" }}
+            style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "4.5rem" }}
           />
         </div>
 
@@ -605,7 +621,7 @@ export function CollectionAreaForm({
                       disabled={isPending || row.noPrefix}
                       placeholder={row.noPrefix ? "none" : inheritedPrefixFor(vendorId) || "none"}
                       {...NO_AUTOFILL}
-                      style={{ ...INPUT_STYLE, width: "6rem", flex: "none", padding: "0.375rem 0.5rem", minHeight: "2rem", fontFamily: "monospace" }}
+                      style={{ ...ROW_INPUT_STYLE, width: "6rem", flex: "none", fontFamily: "monospace" }}
                     />
                     <Tooltip content="No prefix for this vendor here — stops the area prefix reaching it">
                       <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "var(--color-text-muted)", cursor: isPending ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
@@ -647,7 +663,7 @@ export function CollectionAreaForm({
                 onChange={(e) => setAddVendorId(e.target.value)}
                 disabled={isPending}
                 aria-label="Add a numbering vendor"
-                style={{ ...INPUT_STYLE, flex: 1, minHeight: "2rem", padding: "0.375rem 0.5rem" }}
+                style={{ ...ROW_INPUT_STYLE, flex: 1 }}
               >
                 <option value="">— Add a vendor —</option>
                 {addableVendors.map((v) => (
@@ -740,7 +756,7 @@ export function CollectionAreaForm({
                 onChange={(e) => setAddCatalogId(e.target.value)}
                 disabled={isPending}
                 aria-label="Add a price source"
-                style={{ ...INPUT_STYLE, flex: 1, minHeight: "2rem", padding: "0.375rem 0.5rem" }}
+                style={{ ...ROW_INPUT_STYLE, flex: 1 }}
               >
                 <option value="">— Select catalog —</option>
                 {availableCatalogs.map((cn) => (

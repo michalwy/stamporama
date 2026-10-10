@@ -22,7 +22,7 @@ import {
   rememberProfileFor,
 } from "@/app/c/[collectionSlug]/shared/use-acceptance-profiles";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -250,7 +250,7 @@ export function WantFormDialog({
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isPending}
                 rows={2}
-                style={{ ...INPUT_STYLE, resize: "vertical" }}
+                style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical" }}
               />
               <p style={HINT}>
                 Taking a copy in never closes a want on its own — the copies that could satisfy one
