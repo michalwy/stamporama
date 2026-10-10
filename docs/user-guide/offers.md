@@ -842,7 +842,7 @@ drag in one is a drag in the other.
 
 Reordering does **not** make anything out of date and never needs a regeneration. The images do not
 change — only their order does — so the stored files are simply renumbered on the spot, which is also
-what renames them (`wegry-1950-01.jpg`, `wegry-1950-02.jpg`…) and what the ZIP follows.
+what renames them (`2663-wegry-1950-01.jpg`, `2663-wegry-1950-02.jpg`…) and what the ZIP follows.
 
 Your order survives the offer [changing underneath it](#when-the-offer-changes-afterwards). Add a set
 and its new collage slots in where it naturally falls; a collage whose copies are gone simply drops
@@ -884,9 +884,13 @@ Getting the files to the marketplace is a manual upload — Stamporama's job is 
 files in the right order:
 
 - **Download all** gives you the images that are actually going up as a ZIP, named
-  `wegry-1950-01.jpg`, `wegry-1950-02.jpg` and so on in upload order. Unpack it and select the lot in
-  your platform's bulk upload; they go up in order. Anything [held back](#holding-a-photo-back) is
-  left out, which is what keeps the numbering a gapless run.
+  `2663-wegry-1950-01.jpg`, `2663-wegry-1950-02.jpg` and so on in upload order. Unpack it and select
+  the lot in your platform's bulk upload; they go up in order. Anything
+  [held back](#holding-a-photo-back) is left out, which is what keeps the numbering a gapless run.
+  The archive itself is `2663-wegry-1950-photos.zip`: every name starts with the **offer's number**
+  and then its title, so two offers with the same title never produce look-alike files, and a file
+  can always be traced back to its offer. An offer without a title is named by its number alone
+  (`2663-photos.zip`, `2663-01.jpg`).
 - Each image also has its own **↓** link in the preview, under the same name, when you only need to
   replace one. It saves the file rather than opening it — click the thumbnail beside it when you want
   a look instead.

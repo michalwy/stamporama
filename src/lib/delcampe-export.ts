@@ -32,8 +32,9 @@ import {
 // **The archive is flat**, unlike the batch photo ZIP's folder per offer (#323): the CSV names its
 // pictures by file name and nothing else, so a folder would leave `images` naming files Easy
 // Uploader cannot find. The plan already names every file for its offer (#326), which is what makes
-// flat safe; the one case it does not cover — two offers whose titles slug the same — is suffixed
-// per offer rather than per file, so one listing's pictures stay a run of one stem.
+// flat safe. The stem leads with the offer's number (#1754), so two offers sharing a title no longer
+// collide; should two stems ever coincide, the later offer is suffixed per offer rather than per
+// file, so one listing's pictures stay a run of one stem.
 //
 // **A refusal is the whole batch, not a skipped row.** The bulk photo ZIP skips an offer with
 // nothing to upload, because a missing folder in a download is visible and costs nothing. A missing
