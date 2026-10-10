@@ -52,6 +52,18 @@ const INPUT_STYLE: React.CSSProperties = {
   background: "var(--color-bg-elevated)",
 };
 
+/** The one short line under a field (#1460); anything longer sits behind an `InfoHint` beside it. */
+const HINT_STYLE: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  color: "var(--color-text-muted)",
+  margin: "0.375rem 0 0",
+};
+
+/** The area dialog's width (#1747): wide enough for two columns, the area on the left and its
+ *  catalogue settings on the right, so the whole form fits the window without scrolling. Exported
+ *  for the areas panel's *Edit area* dialog, which wraps the same form. */
+export const AREA_DIALOG_MAX_WIDTH = "64rem";
+
 /** The dialog form's own layout — a column that owns the dialog's height so the body scrolls
  *  inside it rather than the page. Exported for the areas panel's *Edit area* dialog, which
  *  wraps the same form. */
@@ -99,6 +111,21 @@ function SectionHeading({ title, hint }: { title: string; hint: string }) {
         {hint}
       </p>
     </div>
+  );
+}
+
+/** The rest of a hint that was cut to one line (#1747): an ⓘ with the full wording in a tooltip. */
+function InfoHint({ children }: { children: React.ReactNode }) {
+  return (
+    <Tooltip content={children} maxWidth="22rem">
+      <span
+        role="img"
+        aria-label="More about this"
+        style={{ display: "inline-flex", color: "var(--color-text-muted)", cursor: "help", verticalAlign: "middle" }}
+      >
+        <Icon name="info" size="xs" />
+      </span>
+    </Tooltip>
   );
 }
 
@@ -344,413 +371,438 @@ export function CollectionAreaForm({
   });
 
   return (
-    <>
-      <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-area-name">Name</LabelWithError>
-        <TextInput
-          id="f-area-name"
-          name="name"
-          value={name}
-          onChange={(e) => handleNameChange(e.target.value)}
-          disabled={isPending}
-          placeholder="e.g. Germany"
-          style={INPUT_STYLE}
-          required
-        />
-      </div>
-
-      <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-area-parent-button">Parent area</LabelWithError>
-        <AreaTreeSelect
-          areas={selectableAreas}
-          areaTree={selectableTree}
-          name="parentId"
-          selectedId={parentId}
-          onSelectedIdChange={setParentId}
-          disabled={isPending}
-          noneOptionLabel="— None (top-level)"
-        />
-      </div>
-
-      <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-area-description">Description (optional)</LabelWithError>
-        <TextArea
-          id="f-area-description"
-          name="description"
-          rows={3}
-          defaultValue={defaultDescription ?? ""}
-          disabled={isPending}
-          style={{ ...INPUT_STYLE, resize: "vertical", minHeight: "4.5rem" }}
-        />
-      </div>
-
-      {/* Title name (#210): the name to use for this area in auto-generated listing titles. Blank
-          rolls up to the nearest ancestor that sets one, else the area's own name — so internal
-          grouping levels can defer to a public parent. */}
-      <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-area-title-name">
-          {titleLanguages.length > 0
-            ? `Title name — ${languageLabel(defaultLanguage)} (optional)`
-            : "Title name (optional)"}
-        </LabelWithError>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <TextInput
-            id="f-area-title-name"
-            name="titleName"
-            value={titleName}
-            onChange={(e) => setTitleName(e.target.value)}
-            disabled={isPending}
-            placeholder="e.g. Poland"
-            style={INPUT_STYLE}
-          />
-          {/* Per-language title names (#293) live behind the shared translations dialog, opened
-              from this icon so the form keeps one field however many languages are in use. Only
-              rendered once a platform has a listing language. The badge counts languages still
-              missing a translation. Values ride along as hidden inputs; a cleared one submits
-              blank, which drops that language's translation. */}
-          {titleLanguages.length > 0 && (
-            <TranslationsField
-              dialogTitle="Title name translations"
-              description={`The title name each language's platforms use for this area. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} title name above. They are saved together with the area.`}
-              languages={titleLanguages}
-              fields={[
-                { ...TITLE_NAME_FIELDS[0], defaultValue: titleName || name },
-              ]}
-              values={translations}
-              onChange={setTranslations}
-              onOpenChange={onNestedDialogOpenChange}
-              ariaLabel="Edit title name translations"
-              disabled={isPending}
-            />
-          )}
-        </div>
-        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-          Used for the <code>{"{area}"}</code> token in listing titles. Defaults to (and stays in sync
-          with) this area&apos;s name. <strong>Clear it</strong> to roll this area up to the nearest
-          parent that has a title name — handy for internal grouping levels.
-          {titleLanguages.length > 0 && (
-            <> Translations (<Icon name="translations" size="xs" />) are saved together with the area.</>
-          )}
-        </p>
-      </div>
-
-      {/* The area's symbol (#1740): optional, the same in every language — so no translations — and
-          never taken from a parent, so each area that should have one sets its own. Uncontrolled,
-          since nothing else on the form reads it. */}
-      <div style={{ marginBottom: "1rem" }}>
-        <LabelWithError htmlFor="f-area-symbol">Symbol (optional)</LabelWithError>
-        <TextInput
-          id="f-area-symbol"
-          name="symbol"
-          defaultValue={defaultSymbol ?? ""}
-          disabled={isPending}
-          placeholder="e.g. 🇵🇱"
-          style={{ ...INPUT_STYLE, width: "6rem" }}
-        />
-        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-          Used for the <code>{"{areaSymbol}"}</code> token in templates — usually the area&apos;s flag.
-        </p>
-      </div>
-
-      {/* Grouping-only areas (#263): organize children but can't receive issues directly. */}
-      <div style={{ marginBottom: "1rem" }}>
-        <label
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "0.5rem",
-            fontSize: "0.875rem",
-            color: "var(--color-text-primary)",
-            cursor: isPending ? "not-allowed" : "pointer",
-          }}
-        >
-          {/* An unchecked checkbox submits nothing, so the action reads `assignable` as
-              false when off and "true" when on — no hidden companion field. */}
-          <input
-            type="checkbox"
-            name="assignable"
-            value="true"
-            defaultChecked={defaultAssignable}
-            disabled={isPending}
-            style={{ marginTop: "0.2rem" }}
-          />
-          <span>
-            Can hold issues
-            <span
-              style={{
-                display: "block",
-                fontSize: "0.8125rem",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              Leave unchecked for a grouping-only area (e.g. &ldquo;Europe&rdquo;) that just
-              organizes the areas inside it. Catalog settings still pass down to children.
-            </span>
-          </span>
-        </label>
-      </div>
-
-      {/* **Numbering** (#675): whose numbers this area's stamps carry, and what they are prefixed
-          with. Separate from the price sources below — the schema always had them apart, and the one
-          list keyed by book is what made `PL` a thing you typed once per vendor. */}
-      <div style={{ marginBottom: "1.25rem" }}>
-        <SectionHeading
-          title="Numbering"
-          hint="Whose catalog numbers this area's stamps carry, and the prefix they show."
-        />
-
-        <div style={{ marginBottom: "0.75rem" }}>
-          <LabelWithError htmlFor="f-area-catalog-prefix">Area prefix</LabelWithError>
-          <TextInput
-            id="f-area-catalog-prefix"
-            value={catalogPrefix}
-            onChange={(e) => setCatalogPrefix(e.target.value)}
-            disabled={isPending}
-            placeholder={inheritedCatalogPrefix ?? "none"}
-            {...NO_AUTOFILL}
-            style={{ ...INPUT_STYLE, width: "8rem", fontFamily: "monospace" }}
-          />
-          <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-            Used for <strong>every</strong> vendor below unless one overrides it. Leave blank to
-            inherit from the parent area
-            {inheritedCatalogPrefix ? <> (<code>{inheritedCatalogPrefix}</code>)</> : null}.
-          </p>
-        </div>
-
-        {listedVendorIds.length > 0 && (
-          <div style={{ marginBottom: "0.5rem" }}>
-            {listedVendorIds.map((vendorId) => {
-              const vendor = vendorById.get(vendorId);
-              const row = vendorRow(vendorId);
-              const bookCount = bookIds.filter(
-                (id) => catalogNames.find((cn) => cn.id === id)?.vendorId === vendorId
-              ).length;
-              return (
-                <div
-                  key={vendorId}
-                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}
-                >
-                  <Tooltip content="Leads numbering here — the catalog sort key, the primary chip and the leading label">
-                    <input
-                      type="radio"
-                      name="f-area-primary-vendor"
-                      checked={primaryVendorId === vendorId}
-                      onChange={() => setPrimaryVendorId(vendorId)}
-                      disabled={isPending}
-                      aria-label={`${vendor?.name ?? vendorId} leads numbering`}
-                    />
-                  </Tooltip>
-                  <span
-                    style={{ flex: 1, fontSize: "0.875rem", color: "var(--color-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  >
-                    {vendor ? `${vendor.name} (${vendor.abbreviation})` : vendorId}
-                    <span style={{ marginLeft: "0.375rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                      {bookCount === 0
-                        ? "no book here"
-                        : bookCount === 1
-                          ? "1 book"
-                          : `${bookCount} books`}
-                    </span>
-                  </span>
-                  <TextInput
-                    value={row.noPrefix ? "" : row.prefix}
-                    onChange={(e) => setVendorRow(vendorId, { prefix: e.target.value })}
-                    disabled={isPending || row.noPrefix}
-                    placeholder={row.noPrefix ? "none" : inheritedPrefixFor(vendorId) || "none"}
-                    {...NO_AUTOFILL}
-                    style={{ ...INPUT_STYLE, width: "6rem", flex: "none", padding: "0.375rem 0.5rem", minHeight: "2rem", fontFamily: "monospace" }}
-                  />
-                  <Tooltip content="No prefix for this vendor here — stops the area prefix reaching it">
-                    <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "var(--color-text-muted)", cursor: isPending ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
-                      <input
-                        type="checkbox"
-                        checked={row.noPrefix}
-                        onChange={(e) => setVendorRow(vendorId, { noPrefix: e.target.checked })}
-                        disabled={isPending}
-                      />
-                      none
-                    </label>
-                  </Tooltip>
-                  <button
-                    type="button"
-                    onClick={() => removeVendor(vendorId)}
-                    disabled={isPending}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "0.875rem", padding: "0.25rem", lineHeight: 1 }}
-                    aria-label={`Remove ${vendor?.name ?? vendorId}`}
-                  >
-                    <Icon name="close" size="sm" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {inheritedPrimaryVendorId && !primaryVendorId && (
-          <p style={{ margin: "0.25rem 0 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
-            Leading vendor inherited:{" "}
-            {vendorById.get(inheritedPrimaryVendorId)?.name ?? inheritedPrimaryVendorId}
-          </p>
-        )}
-
-        {addableVendors.length > 0 && (
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <select
-              value={addVendorId}
-              onChange={(e) => setAddVendorId(e.target.value)}
-              disabled={isPending}
-              aria-label="Add a numbering vendor"
-              style={{ ...INPUT_STYLE, flex: 1, minHeight: "2rem", padding: "0.375rem 0.5rem" }}
-            >
-              <option value="">— Add a vendor —</option>
-              {addableVendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.abbreviation})
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={addVendor}
-              disabled={isPending || !addVendorId}
-              style={addBtnStyle}
-            >
-              + Add
-            </button>
-          </div>
-        )}
-        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.5rem 0 0" }}>
-          A vendor needs no book here — record its numbers even where you own none of its volumes.
-        </p>
-      </div>
-
-      {/* **Price sources** (#675): the books that price this area, and which of them a copy's
-          catalogue value is read from. Attaching none inherits the nearest ancestor's whole list. */}
+    // Two columns (#1747): the area itself on the left, its catalogue settings on the right, so the
+    // whole form is in view at once rather than a column the collector scrolls to reach numbering.
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: "2rem" }}>
       <div>
-        <SectionHeading
-          title="Price sources"
-          hint="The catalogues whose prices apply here. Attach none to use the parent area's."
-        />
-
-        {bookIds.length > 0 && (
-          <div style={{ marginBottom: "0.5rem" }}>
-            {bookIds.map((catalogNameId) => {
-              const cn = catalogById.get(catalogNameId);
-              return (
-                <div
-                  key={catalogNameId}
-                  style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}
-                >
-                  <Tooltip content="Gives a copy in this area its catalogue value">
-                    <input
-                      type="radio"
-                      name="f-area-primary-catalog"
-                      checked={primaryCatalogNameId === catalogNameId}
-                      onChange={() => setPrimaryCatalogNameId(catalogNameId)}
-                      disabled={isPending}
-                      aria-label={`${cn ? `${cn.vendorName} / ${cn.name}` : catalogNameId} is the valuing volume`}
-                    />
-                  </Tooltip>
-                  <span
-                    style={{ flex: 1, fontSize: "0.875rem", color: "var(--color-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  >
-                    {cn ? `${cn.vendorName} / ${cn.name}` : catalogNameId}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeBook(catalogNameId)}
-                    disabled={isPending}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "0.875rem", padding: "0.25rem", lineHeight: 1 }}
-                    aria-label="Remove"
-                  >
-                    <Icon name="close" size="sm" />
-                  </button>
-                </div>
-              );
-            })}
+        {/* Name with the area's symbol (#1740) beside it. The symbol is optional, the same in every
+            language — so no translations — and never taken from a parent, so each area that should
+            have one sets its own. Uncontrolled, since nothing else on the form reads it. */}
+        <div style={{ marginBottom: "1rem" }}>
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <LabelWithError htmlFor="f-area-name">Name</LabelWithError>
+              <TextInput
+                id="f-area-name"
+                name="name"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                disabled={isPending}
+                placeholder="e.g. Germany"
+                style={INPUT_STYLE}
+                required
+              />
+            </div>
+            <div style={{ width: "7rem", flex: "none" }}>
+              <LabelWithError htmlFor="f-area-symbol">Symbol (optional)</LabelWithError>
+              <TextInput
+                id="f-area-symbol"
+                name="symbol"
+                defaultValue={defaultSymbol ?? ""}
+                disabled={isPending}
+                placeholder="e.g. 🇵🇱"
+                style={INPUT_STYLE}
+              />
+            </div>
           </div>
-        )}
-
-        {/* What this area falls back to while it attaches nothing of its own. */}
-        {bookIds.length === 0 && inheritedPrefixes.length > 0 && (
-          <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
-            Inherits:{" "}
-            {inheritedPrefixes
-              .filter((ip) => !!ip.catalogName)
-              .map((ip) => `${ip.vendorName} / ${ip.catalogName}`)
-              .join(", ") || "nothing"}
+          <p style={HINT_STYLE}>
+            The symbol is used for the <code>{"{areaSymbol}"}</code> token in templates — usually the
+            area&apos;s flag.
           </p>
-        )}
+        </div>
 
-        {availableCatalogs.length > 0 && (
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <select
-              value={addCatalogId}
-              onChange={(e) => setAddCatalogId(e.target.value)}
+        <div style={{ marginBottom: "1rem" }}>
+          <LabelWithError htmlFor="f-area-parent-button">Parent area</LabelWithError>
+          <AreaTreeSelect
+            areas={selectableAreas}
+            areaTree={selectableTree}
+            name="parentId"
+            selectedId={parentId}
+            onSelectedIdChange={setParentId}
+            disabled={isPending}
+            noneOptionLabel="— None (top-level)"
+          />
+        </div>
+
+        {/* Title name (#210): the name to use for this area in auto-generated listing titles. Blank
+            rolls up to the nearest ancestor that sets one, else the area's own name — so internal
+            grouping levels can defer to a public parent. */}
+        <div style={{ marginBottom: "1rem" }}>
+          <LabelWithError htmlFor="f-area-title-name">
+            {titleLanguages.length > 0
+              ? `Title name — ${languageLabel(defaultLanguage)} (optional)`
+              : "Title name (optional)"}
+          </LabelWithError>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <TextInput
+              id="f-area-title-name"
+              name="titleName"
+              value={titleName}
+              onChange={(e) => setTitleName(e.target.value)}
               disabled={isPending}
-              aria-label="Add a price source"
-              style={{ ...INPUT_STYLE, flex: 1, minHeight: "2rem", padding: "0.375rem 0.5rem" }}
-            >
-              <option value="">— Select catalog —</option>
-              {availableCatalogs.map((cn) => (
-                <option key={cn.id} value={cn.id}>
-                  {cn.vendorName} / {cn.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={addBook}
-              disabled={isPending || !addCatalogId}
-              style={addBtnStyle}
-            >
-              + Add
-            </button>
+              placeholder="e.g. Poland"
+              style={INPUT_STYLE}
+            />
+            {/* Per-language title names (#293) live behind the shared translations dialog, opened
+                from this icon so the form keeps one field however many languages are in use. Only
+                rendered once a platform has a listing language. The badge counts languages still
+                missing a translation. Values ride along as hidden inputs; a cleared one submits
+                blank, which drops that language's translation. */}
+            {titleLanguages.length > 0 && (
+              <TranslationsField
+                dialogTitle="Title name translations"
+                description={`The title name each language's platforms use for this area. Leave one blank to fall back to the ${languageLabel(defaultLanguage)} title name above. They are saved together with the area.`}
+                languages={titleLanguages}
+                fields={[
+                  { ...TITLE_NAME_FIELDS[0], defaultValue: titleName || name },
+                ]}
+                values={translations}
+                onChange={setTranslations}
+                onOpenChange={onNestedDialogOpenChange}
+                ariaLabel="Edit title name translations"
+                disabled={isPending}
+              />
+            )}
           </div>
-        )}
-
-        {inheritedPrimaryId && !primaryCatalogNameId && (() => {
-          const inh = catalogById.get(inheritedPrimaryId);
-          return inh ? (
-            <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
-              Valuing volume inherited: {inh.vendorName} / {inh.name}
-            </p>
-          ) : null;
-        })()}
-        {!inheritedPrimaryId && !primaryCatalogNameId && (
-          <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            A valuing volume is required for top-level areas (or set one on a parent area).
+          <p style={HINT_STYLE}>
+            Used for the <code>{"{area}"}</code> token in listing titles.{" "}
+            <InfoHint>
+              Used for the <code>{"{area}"}</code> token in listing titles. Defaults to (and stays in
+              sync with) this area&apos;s name. <strong>Clear it</strong> to
+              roll this area up to the nearest parent that has a title name — handy for internal
+              grouping levels.
+              {titleLanguages.length > 0 && (
+                <> Translations (<Icon name="translations" size="xs" />) are saved together with the area.</>
+              )}
+            </InfoHint>
           </p>
-        )}
+        </div>
+
+        <div style={{ marginBottom: "1rem" }}>
+          <LabelWithError htmlFor="f-area-description">Description (optional)</LabelWithError>
+          <TextArea
+            id="f-area-description"
+            name="description"
+            rows={3}
+            defaultValue={defaultDescription ?? ""}
+            disabled={isPending}
+            style={{ ...INPUT_STYLE, resize: "vertical", minHeight: "4.5rem" }}
+          />
+        </div>
+
+        {/* Grouping-only areas (#263): organize children but can't receive issues directly. */}
+        <div>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.5rem",
+              fontSize: "0.875rem",
+              color: "var(--color-text-primary)",
+              cursor: isPending ? "not-allowed" : "pointer",
+            }}
+          >
+            {/* An unchecked checkbox submits nothing, so the action reads `assignable` as
+                false when off and "true" when on — no hidden companion field. */}
+            <input
+              type="checkbox"
+              name="assignable"
+              value="true"
+              defaultChecked={defaultAssignable}
+              disabled={isPending}
+              style={{ marginTop: "0.2rem" }}
+            />
+            <span>
+              Can hold issues
+              <span
+                style={{
+                  display: "block",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                }}
+              >
+                Uncheck for a grouping-only area, e.g. &ldquo;Europe&rdquo;.{" "}
+                <InfoHint>
+                  Leave unchecked for a grouping-only area (e.g. &ldquo;Europe&rdquo;) that just
+                  organizes the areas inside it. Catalog settings still pass down to children.
+                </InfoHint>
+              </span>
+            </span>
+          </label>
+        </div>
       </div>
 
-      {/* **Valuation** (#1634): whose auction results this area's market value and bid
-          recommendations rest on. Results from any other market are shown as hints, never counted. */}
-      <div style={{ marginBottom: "1.25rem" }}>
-        <SectionHeading
-          title="Valuation"
-          hint="Whose auction results count for this area's market value."
-        />
-        <LabelWithError htmlFor="f-area-anchor-markets">Anchoring markets</LabelWithError>
-        <TextInput
-          id="f-area-anchor-markets"
-          name="anchorMarkets"
-          value={anchorMarkets}
-          onChange={(e) => setAnchorMarkets(e.target.value)}
-          disabled={isPending}
-          placeholder={inheritedAnchorMarkets.length > 0 ? inheritedAnchorMarkets.join(", ") : "home market"}
-          {...NO_AUTOFILL}
-          style={{ ...INPUT_STYLE, width: "16rem", fontFamily: "monospace" }}
-        />
-        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
-          Country codes, e.g. <code>DE, AT, CH</code>. Leave blank to inherit
-          {inheritedAnchorMarkets.length > 0 ? (
-            <> from the parent area (<code>{inheritedAnchorMarkets.join(", ")}</code>)</>
-          ) : (
-            <> the collection&rsquo;s home market</>
+      <div>
+        {/* **Numbering** (#675): whose numbers this area's stamps carry, and what they are prefixed
+            with. Separate from the price sources below — the schema always had them apart, and the
+            one list keyed by book is what made `PL` a thing you typed once per vendor. */}
+        <div style={{ marginBottom: "1rem" }}>
+          <SectionHeading
+            title="Numbering"
+            hint="Whose catalog numbers this area's stamps carry, and the prefix they show."
+          />
+
+          <div style={{ marginBottom: "0.75rem" }}>
+            <LabelWithError htmlFor="f-area-catalog-prefix">Area prefix</LabelWithError>
+            {/* The hint beside the box rather than under it: the right column is the tall one, and
+                this is the line that keeps it inside a 1080-pixel window (#1747). */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <TextInput
+                id="f-area-catalog-prefix"
+                value={catalogPrefix}
+                onChange={(e) => setCatalogPrefix(e.target.value)}
+                disabled={isPending}
+                placeholder={inheritedCatalogPrefix ?? "none"}
+                {...NO_AUTOFILL}
+                style={{ ...INPUT_STYLE, width: "8rem", flex: "none", fontFamily: "monospace" }}
+              />
+              <p style={{ ...HINT_STYLE, margin: 0 }}>
+                Used for <strong>every</strong> vendor below unless one overrides it. Leave blank to
+                inherit from the parent area
+                {inheritedCatalogPrefix ? <> (<code>{inheritedCatalogPrefix}</code>)</> : null}.
+              </p>
+            </div>
+          </div>
+
+          {listedVendorIds.length > 0 && (
+            <div style={{ marginBottom: "0.5rem" }}>
+              {listedVendorIds.map((vendorId) => {
+                const vendor = vendorById.get(vendorId);
+                const row = vendorRow(vendorId);
+                const bookCount = bookIds.filter(
+                  (id) => catalogNames.find((cn) => cn.id === id)?.vendorId === vendorId
+                ).length;
+                return (
+                  <div
+                    key={vendorId}
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}
+                  >
+                    <Tooltip content="Leads numbering here — the catalog sort key, the primary chip and the leading label">
+                      <input
+                        type="radio"
+                        name="f-area-primary-vendor"
+                        checked={primaryVendorId === vendorId}
+                        onChange={() => setPrimaryVendorId(vendorId)}
+                        disabled={isPending}
+                        aria-label={`${vendor?.name ?? vendorId} leads numbering`}
+                      />
+                    </Tooltip>
+                    <span
+                      style={{ flex: 1, fontSize: "0.875rem", color: "var(--color-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                      {vendor ? `${vendor.name} (${vendor.abbreviation})` : vendorId}
+                      <span style={{ marginLeft: "0.375rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                        {bookCount === 0
+                          ? "no book here"
+                          : bookCount === 1
+                            ? "1 book"
+                            : `${bookCount} books`}
+                      </span>
+                    </span>
+                    <TextInput
+                      value={row.noPrefix ? "" : row.prefix}
+                      onChange={(e) => setVendorRow(vendorId, { prefix: e.target.value })}
+                      disabled={isPending || row.noPrefix}
+                      placeholder={row.noPrefix ? "none" : inheritedPrefixFor(vendorId) || "none"}
+                      {...NO_AUTOFILL}
+                      style={{ ...INPUT_STYLE, width: "6rem", flex: "none", padding: "0.375rem 0.5rem", minHeight: "2rem", fontFamily: "monospace" }}
+                    />
+                    <Tooltip content="No prefix for this vendor here — stops the area prefix reaching it">
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "var(--color-text-muted)", cursor: isPending ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                        <input
+                          type="checkbox"
+                          checked={row.noPrefix}
+                          onChange={(e) => setVendorRow(vendorId, { noPrefix: e.target.checked })}
+                          disabled={isPending}
+                        />
+                        none
+                      </label>
+                    </Tooltip>
+                    <button
+                      type="button"
+                      onClick={() => removeVendor(vendorId)}
+                      disabled={isPending}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "0.875rem", padding: "0.25rem", lineHeight: 1 }}
+                      aria-label={`Remove ${vendor?.name ?? vendorId}`}
+                    >
+                      <Icon name="close" size="sm" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           )}
-          .
-        </p>
+
+          {inheritedPrimaryVendorId && !primaryVendorId && (
+            <p style={{ margin: "0.25rem 0 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
+              Leading vendor inherited:{" "}
+              {vendorById.get(inheritedPrimaryVendorId)?.name ?? inheritedPrimaryVendorId}
+            </p>
+          )}
+
+          {addableVendors.length > 0 && (
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <select
+                value={addVendorId}
+                onChange={(e) => setAddVendorId(e.target.value)}
+                disabled={isPending}
+                aria-label="Add a numbering vendor"
+                style={{ ...INPUT_STYLE, flex: 1, minHeight: "2rem", padding: "0.375rem 0.5rem" }}
+              >
+                <option value="">— Add a vendor —</option>
+                {addableVendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.abbreviation})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={addVendor}
+                disabled={isPending || !addVendorId}
+                style={addBtnStyle}
+              >
+                + Add
+              </button>
+            </div>
+          )}
+          <p style={{ ...HINT_STYLE, marginTop: "0.5rem" }}>
+            A vendor needs no book here.{" "}
+            <InfoHint>
+              A vendor needs no book here — record its numbers even where you own none of its
+              volumes.
+            </InfoHint>
+          </p>
+        </div>
+
+        {/* **Price sources** (#675): the books that price this area, and which of them a copy's
+            catalogue value is read from. Attaching none inherits the nearest ancestor's whole list. */}
+        <div style={{ marginBottom: "1rem" }}>
+          <SectionHeading
+            title="Price sources"
+            hint="The catalogues whose prices apply here. Attach none to use the parent area's."
+          />
+
+          {bookIds.length > 0 && (
+            <div style={{ marginBottom: "0.5rem" }}>
+              {bookIds.map((catalogNameId) => {
+                const cn = catalogById.get(catalogNameId);
+                return (
+                  <div
+                    key={catalogNameId}
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}
+                  >
+                    <Tooltip content="Gives a copy in this area its catalogue value">
+                      <input
+                        type="radio"
+                        name="f-area-primary-catalog"
+                        checked={primaryCatalogNameId === catalogNameId}
+                        onChange={() => setPrimaryCatalogNameId(catalogNameId)}
+                        disabled={isPending}
+                        aria-label={`${cn ? `${cn.vendorName} / ${cn.name}` : catalogNameId} is the valuing volume`}
+                      />
+                    </Tooltip>
+                    <span
+                      style={{ flex: 1, fontSize: "0.875rem", color: "var(--color-text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                      {cn ? `${cn.vendorName} / ${cn.name}` : catalogNameId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeBook(catalogNameId)}
+                      disabled={isPending}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "0.875rem", padding: "0.25rem", lineHeight: 1 }}
+                      aria-label="Remove"
+                    >
+                      <Icon name="close" size="sm" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* What this area falls back to while it attaches nothing of its own. */}
+          {bookIds.length === 0 && inheritedPrefixes.length > 0 && (
+            <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
+              Inherits:{" "}
+              {inheritedPrefixes
+                .filter((ip) => !!ip.catalogName)
+                .map((ip) => `${ip.vendorName} / ${ip.catalogName}`)
+                .join(", ") || "nothing"}
+            </p>
+          )}
+
+          {availableCatalogs.length > 0 && (
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <select
+                value={addCatalogId}
+                onChange={(e) => setAddCatalogId(e.target.value)}
+                disabled={isPending}
+                aria-label="Add a price source"
+                style={{ ...INPUT_STYLE, flex: 1, minHeight: "2rem", padding: "0.375rem 0.5rem" }}
+              >
+                <option value="">— Select catalog —</option>
+                {availableCatalogs.map((cn) => (
+                  <option key={cn.id} value={cn.id}>
+                    {cn.vendorName} / {cn.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={addBook}
+                disabled={isPending || !addCatalogId}
+                style={addBtnStyle}
+              >
+                + Add
+              </button>
+            </div>
+          )}
+
+          {inheritedPrimaryId && !primaryCatalogNameId && (() => {
+            const inh = catalogById.get(inheritedPrimaryId);
+            return inh ? (
+              <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
+                Valuing volume inherited: {inh.vendorName} / {inh.name}
+              </p>
+            ) : null;
+          })()}
+          {!inheritedPrimaryId && !primaryCatalogNameId && (
+            <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+              A valuing volume is required for top-level areas (or set one on a parent area).
+            </p>
+          )}
+        </div>
+
+        {/* **Valuation** (#1634): whose auction results this area's market value and bid
+            recommendations rest on. Results from any other market are shown as hints, never counted. */}
+        <div>
+          <SectionHeading
+            title="Valuation"
+            hint="Whose auction results count for this area's market value."
+          />
+          <LabelWithError htmlFor="f-area-anchor-markets">Anchoring markets</LabelWithError>
+          <TextInput
+            id="f-area-anchor-markets"
+            name="anchorMarkets"
+            value={anchorMarkets}
+            onChange={(e) => setAnchorMarkets(e.target.value)}
+            disabled={isPending}
+            placeholder={inheritedAnchorMarkets.length > 0 ? inheritedAnchorMarkets.join(", ") : "home market"}
+            {...NO_AUTOFILL}
+            style={{ ...INPUT_STYLE, width: "16rem", fontFamily: "monospace" }}
+          />
+          <p style={HINT_STYLE}>
+            Country codes, e.g. <code>DE, AT, CH</code>. Leave blank to inherit
+            {inheritedAnchorMarkets.length > 0 ? (
+              <> from the parent area (<code>{inheritedAnchorMarkets.join(", ")}</code>)</>
+            ) : (
+              <> the collection&rsquo;s home market</>
+            )}
+            .
+          </p>
+        </div>
       </div>
 
       {/* Everything the two sections above decide rides to the action as hidden fields, so the
@@ -760,7 +812,7 @@ export function CollectionAreaForm({
       <input type="hidden" name="primaryCatalogVendorId" value={primaryVendorId} />
       <input type="hidden" name="catalogNameIds" value={JSON.stringify(bookIds)} />
       <input type="hidden" name="areaVendors" value={JSON.stringify(submittedVendors)} />
-    </>
+    </div>
   );
 }
 
@@ -829,7 +881,12 @@ export function AddAreaDialog({
   }
 
   return (
-    <DialogShell title="Add area" onClose={handleClose} dismissable={!nestedDialogOpen}>
+    <DialogShell
+      title="Add area"
+      onClose={handleClose}
+      dismissable={!nestedDialogOpen}
+      maxWidth={AREA_DIALOG_MAX_WIDTH}
+    >
       <form style={AREA_FORM_STYLE} onSubmit={handleSubmit}>
         <DialogBody>
           <CollectionAreaForm

@@ -20,6 +20,7 @@ import { effectivePrimaryVendorId, effectiveVendorsForArea } from "@/lib/area-ve
 import { resolveEffectiveCatalogPrefix } from "@/lib/area-inheritance";
 import {
   AddAreaDialog,
+  AREA_DIALOG_MAX_WIDTH,
   AREA_FORM_STYLE,
   CollectionAreaForm,
   type AreaFormVendor,
@@ -691,7 +692,12 @@ export function AreasPanel({
       )}
 
       {dialog.kind === "edit-area" && (
-        <DialogShell title="Edit area" onClose={closeDialog} dismissable={!nestedDialogOpen}>
+        <DialogShell
+          title="Edit area"
+          onClose={closeDialog}
+          dismissable={!nestedDialogOpen}
+          maxWidth={AREA_DIALOG_MAX_WIDTH}
+        >
           <form
             style={AREA_FORM_STYLE}
             onSubmit={(e) =>
