@@ -11,6 +11,7 @@
 import { checklistGroupsOf, type PlanChecklistSlot, type PlanCopy } from "./offer-photo-plan";
 import { compareSets, sortSetItems, type SetItemOrderRow, type SetOrderRow } from "./offer-set-order";
 import { renderTitleTemplate, type TitleTemplateCopy } from "./offer-title-template";
+import { formatEntityNo } from "./quick-jump";
 
 /** One copy of an offer set, as the specification orders it. */
 export interface SpecificationCopyOrder extends SetItemOrderRow {
@@ -112,4 +113,39 @@ export function specificationRow(
     faults: [...(copy.faults ?? [])],
     certificate: copy.certificate,
   };
+}
+
+/** What the plain-text form needs of the specification — its header and its rows. */
+export interface SpecificationTextSource {
+  offerNo: number;
+  title: string;
+  rows: readonly OfferSpecificationRow[];
+}
+
+/**
+ * The specification **as plain text** (#1759), for a buyer asking in a chat, where pasting a list is
+ * quicker than attaching a PDF.
+ *
+ * The printable page's contents, line for line: a header naming the offer by its number and title,
+ * then one line per copy, in the page's order, with the page's fields in the page's column order —
+ * catalogue, area, series, year, stamp, condition, certificate. The thumbnail is the one field plain
+ * text cannot carry. The faults qualify the condition, so they follow it in brackets, as they read
+ * under it on the page. A field the copy does not have is left out rather than drawn as a dash: the
+ * page's dash holds a column open, and a line has no columns to hold.
+ */
+export function specificationText(spec: SpecificationTextSource): string {
+  const header = `${formatEntityNo(spec.offerNo)} · ${spec.title}`;
+  return [header, ...spec.rows.map(specificationTextLine)].join("\n");
+}
+
+function specificationTextLine(row: OfferSpecificationRow): string {
+  const faults = row.faults.join(", ");
+  const condition = row.condition
+    ? faults
+      ? `${row.condition} (${faults})`
+      : row.condition
+    : faults;
+  return [row.catalog, row.area, row.issue, row.year?.toString(), row.description, condition, row.certificate]
+    .filter((field): field is string => !!field)
+    .join(" · ");
 }
