@@ -2174,6 +2174,11 @@ why `move_area` cannot clear it. `recommend_bid` lists the results a market anch
 (`notCounted`). A contact's market is set only as `create_seller` creates one (#1635) — an existing
 contact's details are the collector's, as #1390 has them.
 
+**An area's symbol rides on them too** (#1740): `symbol` on `create_area` and `update_area`,
+`clear: ["symbol"]` takes it off, and a row carries `symbol` only where one is set. It is the one
+clearable field that hands nothing back to a parent — a symbol never inherits — and, like the
+anchoring markets, an `update_area` that leaves it out leaves it as it is, so `move_area` keeps it.
+
 **A catalogue's three states are one string each**: `"Mi"` declares the catalogue with its prefix
 inherited, `"Mi: GG"` gives it one here, and `"Mi: -"` states *no prefix here* — the column's null,
 text and `''` (#675). The read writes them the same way.

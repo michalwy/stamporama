@@ -130,6 +130,7 @@ export function prefixAreasAsClientData(): CollectionAreaData[] {
     anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
+    symbol: null,
     assignable: true,
     sortOrder: 0,
     stampCount: 0,

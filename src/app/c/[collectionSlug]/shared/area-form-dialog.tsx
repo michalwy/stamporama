@@ -128,6 +128,8 @@ interface CollectionAreaFormProps {
   defaultDescription?: string | null;
   defaultTitleName?: string | null;
   defaultTitleNameByLanguage?: Record<string, string>;
+  /** The area's symbol (#1740), usually its flag as an emoji. */
+  defaultSymbol?: string | null;
   defaultPrimaryCatalogNameId?: string | null;
   defaultPrimaryCatalogVendorId?: string | null;
   defaultCatalogPrefix?: string | null;
@@ -159,6 +161,7 @@ export function CollectionAreaForm({
   defaultDescription,
   defaultTitleName,
   defaultTitleNameByLanguage,
+  defaultSymbol,
   defaultPrimaryCatalogNameId,
   defaultPrimaryCatalogVendorId,
   defaultCatalogPrefix,
@@ -428,6 +431,24 @@ export function CollectionAreaForm({
           {titleLanguages.length > 0 && (
             <> Translations (<Icon name="translations" size="xs" />) are saved together with the area.</>
           )}
+        </p>
+      </div>
+
+      {/* The area's symbol (#1740): optional, the same in every language — so no translations — and
+          never taken from a parent, so each area that should have one sets its own. Uncontrolled,
+          since nothing else on the form reads it. */}
+      <div style={{ marginBottom: "1rem" }}>
+        <LabelWithError htmlFor="f-area-symbol">Symbol (optional)</LabelWithError>
+        <TextInput
+          id="f-area-symbol"
+          name="symbol"
+          defaultValue={defaultSymbol ?? ""}
+          disabled={isPending}
+          placeholder="e.g. 🇵🇱"
+          style={{ ...INPUT_STYLE, width: "6rem" }}
+        />
+        <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.375rem 0 0" }}>
+          Used for the <code>{"{areaSymbol}"}</code> token in templates — usually the area&apos;s flag.
         </p>
       </div>
 

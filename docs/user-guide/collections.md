@@ -297,6 +297,14 @@ Some areas exist only to organize the ones inside them — for example a **Europ
 
 You cannot mark an area as grouping-only while issues or stamps are still assigned directly to it — move those into a child area first.
 
+### Area symbol
+
+The **Symbol** box in the **Add area** / **Edit area** dialog, under the title name, holds the area's
+symbol — usually its flag as an emoji, `🇵🇱` for Poland. It is optional and empty until you fill it
+in, existing areas included, and it is the same in every language. It feeds the `{areaSymbol}` token
+in [templates](contacts.md#adding-and-editing). A sub-area does **not** take its parent's symbol, so
+give one to every area whose listings should show it — `Second Republic` as well as `Poland`.
+
 ### Anchoring markets
 
 The **Valuation** section of the **Add area** / **Edit area** dialog sets the area's **Anchoring

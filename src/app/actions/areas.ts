@@ -141,6 +141,7 @@ export async function createCollectionAreaAction(
       catalogPrefix: optionalStr(formData, "catalogPrefix"),
       anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
+      symbol: optionalStr(formData, "symbol"),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });
@@ -172,6 +173,7 @@ export async function updateCollectionAreaAction(
       catalogPrefix: optionalStr(formData, "catalogPrefix"),
       anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
+      symbol: optionalStr(formData, "symbol"),
       translations: parseTranslationValues(formData, AREA_TRANSLATION_FIELDS),
       assignable: bool(formData, "assignable"),
     });

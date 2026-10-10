@@ -40,6 +40,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
+    symbol: null,
     assignable: true,
     sortOrder: 0,
     stampCount: 0,

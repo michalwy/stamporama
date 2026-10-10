@@ -70,6 +70,7 @@ const area = (over: Partial<CollectionAreaData> & { id: string }): CollectionAre
   anchorMarkets: [],
   titleName: null,
   titleNameByLanguage: {},
+  symbol: null,
   assignable: true,
   sortOrder: 0,
   stampCount: 0,

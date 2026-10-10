@@ -370,6 +370,7 @@ function sampleCopy(checklist: SampleChecklist, stamp: SampleStamp): TitleTempla
     certificate: null,
     certificateAbbr: null,
     area: "Polska",
+    areaSymbol: "🇵🇱",
     location: null,
     ref: null,
     itemNo: null,

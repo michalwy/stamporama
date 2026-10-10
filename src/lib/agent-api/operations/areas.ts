@@ -166,7 +166,7 @@ export async function listAreasFromParams(
 }
 
 const AREA_ROW =
-  "`areaId`, `name`, `areaPath` from the root, `parentId`, `position` among its siblings (1 is first), `assignable` (false on a grouping-only area), `description`, `titleName` and `translatedTitleNames` (the names listing titles use), `issueCount` and `stampCount` filed directly under it, `childCount`, `own` — the catalogue configuration it sets itself, in the spelling `create_area` and `update_area` take — `resolved`, what its issues actually get after walking up the tree: `leadingCatalogue`, every catalogue with the prefix it resolves to (`Mi·PL`), and `valuingBook` — and `anchorMarkets` (set on it) and `anchoringMarkets` (in force after walking up; absent means the collection's home market), the countries whose auction results its valuations rest on.";
+  "`areaId`, `name`, `areaPath` from the root, `parentId`, `position` among its siblings (1 is first), `assignable` (false on a grouping-only area), `description`, `titleName` and `translatedTitleNames` (the names listing titles use), `symbol` (usually its flag, for templates' `{areaSymbol}`; absent when unset, and never taken from a parent), `issueCount` and `stampCount` filed directly under it, `childCount`, `own` — the catalogue configuration it sets itself, in the spelling `create_area` and `update_area` take — `resolved`, what its issues actually get after walking up the tree: `leadingCatalogue`, every catalogue with the prefix it resolves to (`Mi·PL`), and `valuingBook` — and `anchorMarkets` (set on it) and `anchoringMarkets` (in force after walking up; absent means the collection's home market), the countries whose auction results its valuations rest on.";
 
 export const listAreasOperation: Operation = {
   name: "list_areas",
@@ -230,6 +230,7 @@ const CLEARABLE = [
   "price_books",
   "valuing_book",
   "anchor_markets",
+  "symbol",
 ] as const;
 
 function refuseSentAndCleared(field: string, sent: boolean, cleared: ReadonlySet<string>): void {
@@ -352,6 +353,7 @@ export async function createAreaFromParams(context: OperationContext, params: Pa
     catalogPrefix: config.prefix,
     // The form fills the title name with the name and keeps it there until it is given its own.
     titleName: optionalString(params, "title_name")?.trim() || name,
+    symbol: optionalString(params, "symbol")?.trim() || null,
     anchorMarkets: anchorMarketsParam(params, new Set()),
     translations,
     assignable,
@@ -427,6 +429,15 @@ const ANCHOR_MARKETS_PARAMETER: ParameterSpec = {
     'The markets whose auction results this area\'s market value and bid recommendations rest on, as two-letter country codes — `["DE", "AT"]` — replacing the list. Results from any other market are shown as hints and never counted. Left out, the parent\'s apply, and with none set above, the collection\'s home market.',
 };
 
+const SYMBOL_PARAMETER: ParameterSpec = {
+  name: "symbol",
+  in: "body",
+  type: "string",
+  required: false,
+  description:
+    "The area's symbol, usually its flag as an emoji — `🇵🇱` — for the `{areaSymbol}` placeholder in templates. The same in every language, and never taken from a parent: a sub-area without one prints nothing there.",
+};
+
 const TITLE_NAMES_PARAMETER: ParameterSpec = {
   name: "title_names",
   in: "body",
@@ -450,6 +461,7 @@ export const createAreaOperation: Operation = {
     { name: "description", in: "body", type: "string", required: false, description: "A note the collector reads on the Areas screen." },
     { name: "title_name", in: "body", type: "string", required: false, description: "The name listing titles use for it. Defaults to `name`, as on the form." },
     TITLE_NAMES_PARAMETER,
+    SYMBOL_PARAMETER,
     ...CATALOGUE_PARAMETERS,
     ANCHOR_MARKETS_PARAMETER,
   ],
@@ -467,9 +479,11 @@ export async function updateAreaFromParams(context: OperationContext, params: Pa
   const nameSent = optionalString(params, "name");
   const description = optionalString(params, "description");
   const titleName = optionalString(params, "title_name");
+  const symbolSent = optionalString(params, "symbol");
   const assignableSent = optionalBoolean(params, "assignable");
   refuseSentAndCleared("description", description !== null, cleared);
   refuseSentAndCleared("title_name", titleName !== null, cleared);
+  refuseSentAndCleared("symbol", symbolSent !== null, cleared);
   const name = nameSent === null ? area.name : requireName(nameSent, "name");
   const config = catalogueConfig(world, params, cleared, area);
   const translations = await titleNameWrites(context, params);
@@ -500,6 +514,8 @@ export async function updateAreaFromParams(context: OperationContext, params: Pa
     catalogPrefix: config.prefix,
     anchorMarkets: anchorMarketsParam(params, cleared),
     titleName: nextTitleName,
+    // Left out, the symbol stays as it is (#1740) — `updateCollectionArea` leaves an omitted one alone.
+    symbol: cleared.has("symbol") ? null : symbolSent !== null ? symbolSent.trim() || null : undefined,
     translations,
     assignable,
   });
@@ -515,7 +531,7 @@ export const updateAreaOperation: Operation = {
   method: "PATCH",
   path: "/areas/{area_id}",
   description:
-    "Correct an area — its name, title names, description, whether it is grouping-only, and its catalogue configuration — only what is sent changes, and every area and issue under it inherits the change. Renaming keeps the title name in step while it equals the name, as on the form. A list sent replaces the area's list. An area holding issues cannot become grouping-only. Nothing here deletes an area; `move_area` moves one and `set_area_order` orders them.",
+    "Correct an area — its name, title names, symbol, description, whether it is grouping-only, and its catalogue configuration — only what is sent changes, and every area and issue under it inherits the change. Renaming keeps the title name in step while it equals the name, as on the form. A list sent replaces the area's list. An area holding issues cannot become grouping-only. Nothing here deletes an area; `move_area` moves one and `set_area_order` orders them.",
   writes: true,
   parameters: [
     AREA_ID_PARAMETER,
@@ -531,6 +547,7 @@ export const updateAreaOperation: Operation = {
       required: false,
       description: 'Languages whose title name to take off — `["de"]`. The title then reads in the collection\'s own language there.',
     },
+    SYMBOL_PARAMETER,
     ...CATALOGUE_PARAMETERS,
     ANCHOR_MARKETS_PARAMETER,
     {
@@ -539,7 +556,7 @@ export const updateAreaOperation: Operation = {
       type: "string[]",
       required: false,
       description:
-        "Fields to empty, so the area inherits them from its parent: `title_name`, `prefix`, `catalogues`, `leading_catalogue`, `price_books`, `valuing_book`, `anchor_markets`, and `description`.",
+        "Fields to empty, so the area inherits them from its parent: `title_name`, `prefix`, `catalogues`, `leading_catalogue`, `price_books`, `valuing_book`, `anchor_markets`, and `description`; `symbol` takes the symbol off, which nothing inherits.",
       values: [...CLEARABLE],
     },
   ],

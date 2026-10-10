@@ -362,4 +362,38 @@ describe("areas through the agent API (#1539)", () => {
       assert.deepEqual(deleting.map((op) => op.name), []);
     });
   });
+
+  describe("an area's symbol (#1740)", () => {
+    let austria: AgentArea;
+
+    it("creates an area with a symbol and reads it back", async () => {
+      austria = await ok<AgentArea>(token, "POST", "/areas", { name: "Austria", parent: "Europe", assignable: false, symbol: " 🇦🇹 " });
+      assert.equal(austria.symbol, "🇦🇹");
+      const listed = await ok<ListResponse<AgentArea>>(token, "GET", "/areas?under=Austria");
+      assert.equal(listed.items[0].symbol, "🇦🇹");
+    });
+
+    it("omits it where none is set, and never reads a parent's", async () => {
+      const vienna = await ok<AgentArea>(token, "POST", "/areas", { name: "Vienna", parent: austria.areaId, assignable: false });
+      assert.equal(vienna.symbol, undefined);
+    });
+
+    it("keeps it through an edit that does not send it, and through a move", async () => {
+      const edited = await ok<AgentArea>(token, "PATCH", `/areas/${austria.areaId}`, { description: "Alpine" });
+      assert.equal(edited.symbol, "🇦🇹");
+      const moved = await ok<Moved>(token, "POST", `/areas/${austria.areaId}/move`, { top_level: true });
+      assert.equal(moved.moved, true);
+      assert.equal(moved.area.symbol, "🇦🇹");
+    });
+
+    it("changes it when sent, and takes it off when cleared", async () => {
+      const changed = await ok<AgentArea>(token, "PATCH", `/areas/${austria.areaId}`, { symbol: "🇵🇱" });
+      assert.equal(changed.symbol, "🇵🇱");
+      const both = await refused(token, "PATCH", `/areas/${austria.areaId}`, { symbol: "🇦🇹", clear: ["symbol"] });
+      assert.match(both.error.message, /both sent and named in "clear"/);
+      const cleared = await ok<AgentArea>(token, "PATCH", `/areas/${austria.areaId}`, { clear: ["symbol"] });
+      assert.equal(cleared.symbol, undefined);
+      assert.equal((await prisma.collectionArea.findUniqueOrThrow({ where: { id: austria.areaId } })).symbol, null);
+    });
+  });
 });

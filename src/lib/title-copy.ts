@@ -558,6 +558,10 @@ export function toTitleCopy(
         )
       : null,
     area: areaTitle,
+    // The copy's own area's symbol (#1740), never rolled up and never resolved through a language:
+    // an unset one is simply empty, which the preview flags by the area's own name.
+    areaSymbol: areaEntry?.symbol ?? null,
+    areaName: areaId ? (primaryLink?.collectionArea.name ?? null) : null,
     location: row.location?.name ?? null,
     ref: row.locationRef ?? null,
     // A fact about the stamp, so it is resolved wherever a copy is normalised (#619) — an umbrella

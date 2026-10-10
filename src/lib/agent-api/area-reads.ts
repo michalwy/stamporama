@@ -71,6 +71,8 @@ export interface AgentArea {
   /** The name listing titles use; absent when it falls back to the parent's. */
   readonly titleName?: string;
   readonly translatedTitleNames?: Readonly<Record<string, string>>;
+  /** The area's symbol (#1740), usually its flag; absent when unset. Never a parent's. */
+  readonly symbol?: string;
   /** Issues filed directly under it, not under its sub-areas. */
   readonly issueCount: number;
   /** Stamps filed directly under it. */
@@ -232,6 +234,7 @@ export function agentArea(
     titleName: area.titleName ?? undefined,
     translatedTitleNames:
       Object.keys(area.titleNameByLanguage).length > 0 ? { ...area.titleNameByLanguage } : undefined,
+    symbol: area.symbol ?? undefined,
     issueCount: extras.issueCount,
     stampCount: area.stampCount,
     childCount: area.childCount,

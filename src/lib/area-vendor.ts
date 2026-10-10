@@ -198,6 +198,9 @@ export interface AreaTitleEntry {
    * it. That is the row a missing `{area}` translation has to be written on (#299), which is not
    * always the copy's own area. */
   sourceAreaId: string;
+  /** **This** area's own symbol (#1740), behind `{areaSymbol}` — never an ancestor's, unlike
+   * {@link title}: a sub-area without one renders the token empty (#1692). Null when unset. */
+  symbol: string | null;
 }
 
 /** The title name **one area states about itself**, in a language: its translated `titleName`,
@@ -268,6 +271,7 @@ export function buildAreaTitleEntries(
       title: resolved ?? area.name,
       fellBack: !!language && !translated,
       sourceAreaId,
+      symbol: area.symbol?.trim() || null,
     });
   }
   return out;

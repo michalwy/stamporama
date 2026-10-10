@@ -44,6 +44,7 @@ function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {
     certificate: null,
     certificateAbbr: null,
     area: null,
+    areaSymbol: null,
     location: null,
     ref: null,
     itemNo: null,

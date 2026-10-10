@@ -705,6 +705,7 @@ export function AreasPanel({
                 defaultDescription={dialog.area.description}
                 defaultTitleName={dialog.area.titleName}
                 defaultTitleNameByLanguage={dialog.area.titleNameByLanguage}
+                defaultSymbol={dialog.area.symbol}
                 defaultPrimaryCatalogNameId={dialog.area.primaryCatalogNameId}
                 defaultPrimaryCatalogVendorId={dialog.area.primaryCatalogVendorId}
                 defaultCatalogPrefix={dialog.area.catalogPrefix}
