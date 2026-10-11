@@ -268,9 +268,10 @@ describe("20260916160000_retire_card_scans (#1326)", () => {
     const listed = await listScans(userId, { purchaseId: doc.id });
     assert.deepEqual(
       listed.batches.map((b) => [b.batchNo, b.label, b.tiles.length]),
+      // Oldest first (#1826), as on every document.
       [
-        [2, "Klaser Polska 1", 1],
         [1, null, 4],
+        [2, "Klaser Polska 1", 1],
       ]
     );
   });

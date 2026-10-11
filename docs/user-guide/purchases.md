@@ -440,6 +440,11 @@ Open an order and use **Add card scans** in its **Card scans** section, above th
 choose **several files at once**, or drop them onto the section — see
 [Adding several scans at once](#adding-several-scans-at-once).
 
+The section lists its card scans **oldest first**, in the order you added them — the way a stack of
+cards is scanned and then worked through — so the card you added last is at the bottom. **Add card
+scans** is offered there too, under the last scan, and does exactly what the one at the top does;
+the scans you add appear just above it while they upload and are prepared.
+
 For stamps you **already own** — a shelf being catalogued, a gift, an inheritance — scan them on an
 [opening balance](#opening-balances), which has the same section.
 
@@ -522,7 +527,8 @@ Two things to know:
 A 1200 dpi card is a large file — 100 to 200 MB is ordinary — so adding one goes in **two stages
 that mean different things**:
 
-- **Uploading…**, with a bar and a percentage on the file's own card in the **Card scans** section.
+- **Uploading…**, with a bar and a percentage on the file's own card at the bottom of the **Card
+  scans** section, under the last scan.
   That is real: it counts the pieces of the file the app has actually taken, not what your browser
   has handed to the network. You can move around the app while it uploads; **keep the browser tab
   open** — closing or reloading it stops the upload, and the browser asks first.

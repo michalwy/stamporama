@@ -1108,27 +1108,6 @@ export function ScansCard({
       )}
 
       {isLoading && <Muted>Loading scans…</Muted>}
-      {/* Scans on their way to being cards (#1567), above the batches they will become — newest
-          batches lead the list, and a scan being prepared is the newest of all. */}
-      {uploadCards.map((card) => (
-        <PreparingScanCard
-          key={card.id}
-          card={card}
-          busy={pending}
-          onRetry={() => void retryPreparation(card)}
-          onDiscard={() => void discardPreparation(card)}
-        />
-      ))}
-      {/* The files of a batch this tab is still sending (#1568), after the scans already on the
-          server: they will join that queue in this order. */}
-      {queued.map((scan) => (
-        <QueuedScanCard
-          key={scan.key}
-          scan={scan}
-          onRetry={() => retryQueuedScan(scan.key)}
-          onDiscard={() => void discardQueuedScan(scan.key)}
-        />
-      ))}
 
       {!isLoading && batches.length === 0 && uploadCards.length === 0 && queued.length === 0 && (
         <Muted>
@@ -1267,6 +1246,45 @@ export function ScansCard({
           onTileKey={onTileKey}
         />
       ))}
+
+      {/* Scans on their way to being cards (#1567), under the batches they will become (#1826) —
+          batches read oldest first, and a scan being prepared is the newest of all. */}
+      {uploadCards.map((card) => (
+        <PreparingScanCard
+          key={card.id}
+          card={card}
+          busy={pending}
+          onRetry={() => void retryPreparation(card)}
+          onDiscard={() => void discardPreparation(card)}
+        />
+      ))}
+      {/* The files of a batch this tab is still sending (#1568), after the scans already on the
+          server: they will join that queue in this order. */}
+      {queued.map((scan) => (
+        <QueuedScanCard
+          key={scan.key}
+          scan={scan}
+          onRetry={() => retryQueuedScan(scan.key)}
+          onDiscard={() => void discardQueuedScan(scan.key)}
+        />
+      ))}
+
+      {/* The header's *Add card scans* again, under the last scan (#1826): a stack is scanned in
+          order, so the next card goes where the eye already is, and its progress appears just above.
+          The same button — the name and the profile in the header apply to it as well. With nothing
+          listed yet the header's is the only one, a second one under the empty note being the same
+          button twice in one glance. */}
+      {(batches.length > 0 || uploadCards.length > 0 || queued.length > 0) && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <UploadButton
+            label="Add card scans"
+            busy={detecting}
+            busyLabel="Finding the stamps…"
+            multiple
+            onFiles={(files) => upload(files, "front")}
+          />
+        </div>
+      )}
 
       {dialogTiles.length > 0 && (
         <TileIdentifyDialog
