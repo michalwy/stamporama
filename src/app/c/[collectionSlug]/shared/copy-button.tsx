@@ -26,6 +26,10 @@ import { useAnchoredPlacement } from "@/app/use-anchored-placement";
  * rich-text editor wants the former, one with an HTML field wants the latter, and only the collector
  * knows which is in front of them.
  *
+ * A text formatted elsewhere (#1772 — a Facebook post) passes its `html` instead: one button, putting
+ * that markup on `text/html` and `value` — the text with no markup symbols — on `text/plain`, so a
+ * rich-text editor pastes it formatted and a plain field still gets readable text.
+ *
  * Both sit **out of the tab order** (#446): they are auxiliary to the field beside them, not a way
  * of filling it in, and a copy control per text turns tabbing down a card into a slalom. They stay
  * reachable by mouse, which is how a one-glance-one-click control is used anyway.
@@ -78,6 +82,7 @@ export function CopyButton({
   style,
   disabled = false,
   format,
+  html: formattedHtml,
 }: {
   /** The text to copy. Empty or null disables the button — there is nothing to hand over. */
   value: string | null | undefined;
@@ -89,6 +94,9 @@ export function CopyButton({
   /** The format this text is written in (#319). Omitted — or plain — keeps the plain single button:
    * there is no second thing to copy. */
   format?: DescriptionFormat;
+  /** The text already formatted, as sanitised HTML (#1772): copied on `text/html` beside `value` on
+   * `text/plain`. Not combined with `format`. */
+  html?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -157,14 +165,14 @@ export function CopyButton({
     const done = () => flash(true);
     const oops = () => flash(false);
 
-    if (mode === "source" || !hasChoice) {
+    if (formattedHtml === undefined && (mode === "source" || !hasChoice)) {
       clipboard.writeText(source).then(done, oops);
       return;
     }
     // Formatted: the same sanitised markup the screen shows, on `text/html` so a rich-text field
     // pastes it with its formatting — with the source on `text/plain` for anything that only reads
     // that flavour.
-    const html = sanitizeDescriptionHtml(descriptionToUnsafeHtml(source, resolved));
+    const html = formattedHtml ?? sanitizeDescriptionHtml(descriptionToUnsafeHtml(source, resolved));
     if (typeof ClipboardItem === "undefined" || !clipboard.write) {
       clipboard.writeText(source).then(done, oops);
       return;
@@ -197,7 +205,9 @@ export function CopyButton({
             ? "Could not copy — your browser blocked clipboard access"
             : hasChoice
               ? `Copy the formatted ${label} — use the caret for the source`
-              : `Copy ${label} to the clipboard`
+              : formattedHtml !== undefined
+                ? `Copy the formatted ${label} — a field that takes no formatting gets its plain text`
+                : `Copy ${label} to the clipboard`
       }
     >
       <button

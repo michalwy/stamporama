@@ -29,6 +29,21 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the defaults row). Another type's token in a template is *unknown*, so it stays as typed and is named
   while it is typed.
 
+- **A post template is Markdown, limited to Facebook's editor** (#1772, decided with the collector on
+  2026-10-11: bold, italic, `#`/`##` headings, bulleted and numbered lists, a quote — what the group
+  post editor's toolbar offers). There is no format setting: every template is read this way.
+  `renderFacebookPostParts` keeps the template's own text apart from each placeholder's value, and
+  `formatFacebookPost` (`facebook-post-format.ts`, pure, the `marked` of ADR-0019) lexes the template
+  with each value standing as one Supplementary-PUA code point, putting the value back as escaped
+  text afterwards — so `**{title}**` is bold and a value is **never** formatting. Everything else is
+  off in the lexer (setext headings matter most: `Lot\n---` would otherwise be an `<h2>`) and the
+  token walk writes only the tags above, so a link or a `###` stays as typed. It returns the HTML
+  (sanitised by the card with `sanitizeDescriptionHtml`) and the plain text — symbols gone, the
+  template's line and blank-line spacing kept, bullets as `•`. The card shows it rendered with a
+  Source switch (#319's pattern); `CopyButton`'s `html` puts the HTML on `text/html` and the plain
+  text on `text/plain`. `renderFacebookPostText` is the source, unchanged. Whether Facebook keeps
+  the formatting on paste was the collector's to check — no session drives a browser.
+
 - **One platform, groups under it** (#1543; ADR-0061 §1). Facebook is the `Contact` carrying
   `platformModule = "facebook"` (`FACEBOOK_PLATFORM_MODULE`), set on Settings → Facebook through the
   shared exclusive `setModulePlatform` (`src/lib/facebook.ts`, Delcampe's thin-file shape). A group is a

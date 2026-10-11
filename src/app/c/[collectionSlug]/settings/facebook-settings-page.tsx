@@ -25,6 +25,7 @@ import {
   type FacebookPostingSettings,
   type FacebookStartingPriceMode,
 } from "@/lib/facebook-group-rules";
+import { FACEBOOK_POST_FORMATTING } from "@/lib/facebook-post-format";
 import { OFFER_LISTING_TYPE_LABEL, OFFER_LISTING_TYPES, type OfferListingType } from "@/lib/offer-rules";
 import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
 import {
@@ -834,8 +835,8 @@ function FollowableSetting({
   );
 }
 
-/** A post template — an auction's or a quick buy's (#1671) — with its type's placeholders named under
- *  it, an unknown one called out as typed, and a retired one flagged so it is removed. */
+/** A post template — an auction's or a quick buy's (#1671) — with its type's placeholders and the
+ *  formatting Facebook's editor takes (#1772) named under it, an unknown one called out as typed, and a retired one flagged so it is removed. */
 function PostTemplateField({
   id,
   listingType,
@@ -866,6 +867,16 @@ function PostTemplateField({
           <span key={p.token}>
             {i > 0 && ", "}
             <code>{p.token}</code> {p.label.toLowerCase()}
+          </span>
+        ))}
+        .
+      </FieldNote>
+      <FieldNote>
+        Formatting:{" "}
+        {FACEBOOK_POST_FORMATTING.map((f, i) => (
+          <span key={f.label}>
+            {i > 0 && ", "}
+            <code>{f.syntax.trim()}</code> {f.label}
           </span>
         ))}
         .

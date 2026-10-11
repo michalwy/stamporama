@@ -86,7 +86,20 @@ export interface RenderedDescriptionProps {
 /** The rendered description, or the placeholder when there is nothing to render. */
 export function RenderedDescription({ text, format, placeholder, style }: RenderedDescriptionProps) {
   const html = useRenderedDescriptionHtml(text, format);
+  return <RenderedHtml html={html} placeholder={placeholder} style={style} />;
+}
 
+/** Already-sanitised markup in the description's typography — the description above, and a Facebook
+ *  post formatted from its template (#1772), which is converted elsewhere and sanitised the same way. */
+export function RenderedHtml({
+  html,
+  placeholder,
+  style,
+}: {
+  html: string;
+  placeholder?: string;
+  style?: React.CSSProperties;
+}) {
   if (!html) {
     return (
       <p style={{ fontSize: "0.8125rem", lineHeight: 1.5, color: "var(--color-text-muted)", margin: "0.375rem 0 0", ...style }}>
@@ -108,7 +121,8 @@ export function RenderedDescription({ text, format, placeholder, style }: Render
           margin: "0.375rem 0 0",
           ...style,
         }}
-        // Sanitised directly above — the only place in the app that injects description markup.
+        // Sanitised by every caller (`sanitizeDescriptionHtml`) — the only place in the app that
+        // injects description markup.
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </>

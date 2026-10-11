@@ -156,6 +156,21 @@ function placeholderValues(lot: FacebookPostLotText, terms: string): Record<stri
 }
 
 /**
+ * A stretch of a post (#1772): what the template wrote — markup included — or what a placeholder put
+ * there. The two are kept apart so the formatting reads only the template's own text: a value is
+ * inserted as text and never interpreted as formatting (`facebook-post-format.ts`).
+ */
+export interface FacebookPostPart {
+  /** True for a placeholder's value, false for the template's own text. */
+  value: boolean;
+  text: string;
+}
+
+function partsText(parts: readonly FacebookPostPart[]): string {
+  return parts.map((p) => p.text).join("");
+}
+
+/**
  * One lot's text: its type's template with that type's placeholders filled in, and **nothing else**
  * (#1692) — an empty template is an empty lot, an empty placeholder is empty, and the template's line
  * breaks stay exactly where it has them. A token the template carries that is not one of them is
@@ -165,10 +180,25 @@ function placeholderValues(lot: FacebookPostLotText, terms: string): Record<stri
  * loses text the collector has not been told of. `{terms}` is the note on shipping, payment and terms
  * (#1689) — `terms`, empty unless this lot is where the post states it.
  */
-export function renderFacebookLotText(template: string, lot: FacebookPostLotText, terms = ""): string {
+export function renderFacebookLotParts(template: string, lot: FacebookPostLotText, terms = ""): FacebookPostPart[] {
   const known = knownTokens(lot.listingType);
   const values = placeholderValues(lot, terms);
-  return template.replace(TOKEN, (token) => (known.has(token) ? values[token] : token));
+  const parts: FacebookPostPart[] = [];
+  let from = 0;
+  for (const match of template.matchAll(TOKEN)) {
+    const token = match[0];
+    if (!known.has(token)) continue;
+    if (match.index > from) parts.push({ value: false, text: template.slice(from, match.index) });
+    parts.push({ value: true, text: values[token] });
+    from = match.index + token.length;
+  }
+  if (from < template.length) parts.push({ value: false, text: template.slice(from) });
+  return parts;
+}
+
+/** {@link renderFacebookLotParts} as one string — the lot's text as the template's source reads. */
+export function renderFacebookLotText(template: string, lot: FacebookPostLotText, terms = ""): string {
+  return partsText(renderFacebookLotParts(template, lot, terms));
 }
 
 /** The template a lot of `listingType` is written from (#1671). */
@@ -187,22 +217,31 @@ function inLotOrder(lots: readonly FacebookPostLotText[]): FacebookPostLotText[]
  * the last — and nowhere when that template has none. A lot with no template has no text, and adds no
  * gap between the others; what is in a lot's text is its template's, line breaks included (#1692).
  */
-export function renderFacebookPostText(
+export function renderFacebookPostParts(
   templates: FacebookPostTemplates,
   standingNote: string,
   lots: readonly FacebookPostLotText[]
-): string {
+): FacebookPostPart[] {
   const sorted = inLotOrder(lots);
-  return sorted
+  const written = sorted
     .map((lot, i) =>
-      renderFacebookLotText(
+      renderFacebookLotParts(
         facebookTemplateFor(templates, lot.listingType),
         lot,
         i === sorted.length - 1 ? standingNote : ""
       )
     )
-    .filter((p) => p.trim() !== "")
-    .join("\n\n");
+    .filter((parts) => partsText(parts).trim() !== "");
+  return written.flatMap((parts, i) => (i === 0 ? parts : [{ value: false, text: "\n\n" }, ...parts]));
+}
+
+/** {@link renderFacebookPostParts} as one string — the post's source, its formatting as typed. */
+export function renderFacebookPostText(
+  templates: FacebookPostTemplates,
+  standingNote: string,
+  lots: readonly FacebookPostLotText[]
+): string {
+  return partsText(renderFacebookPostParts(templates, standingNote, lots));
 }
 
 /** A placeholder a lot's template places that comes out empty, and the lot it is in. */

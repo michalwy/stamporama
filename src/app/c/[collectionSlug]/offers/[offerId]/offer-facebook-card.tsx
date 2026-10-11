@@ -8,12 +8,15 @@ import {
   facebookMoney,
   facebookPostGaps,
   isFacebookLotPosted,
+  renderFacebookPostParts,
   renderFacebookPostText,
   type FacebookPostLotText,
 } from "@/lib/facebook-post-rules";
+import { formatFacebookPost } from "@/lib/facebook-post-format";
 import { FACEBOOK_TERMS_PLACEHOLDER, type FacebookGroupSetting } from "@/lib/facebook-group-rules";
 import { isAuctionListing, OFFER_LISTING_TYPE_LABEL, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
+import { RenderedHtml, sanitizeDescriptionHtml } from "@/app/c/[collectionSlug]/shared/rendered-description";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { ConfirmDialog, DialogPrimaryButton, DialogSecondaryButton } from "@/app/dialog-shell";
@@ -40,6 +43,10 @@ import { formControl } from "@/app/control-style";
 //
 // The post is only what its template places (#1692): a missing template or an empty placeholder is
 // named under the text, with a link to where it is set, and nothing is filled in to hide it.
+//
+// The template is Markdown, limited to what Facebook's post editor offers (#1772): the text is shown
+// formatted, with a Source switch back to the template's markup as filled in — the offer description's
+// pattern (#319) — and Copy puts the formatted post and its plain text on the clipboard together.
 //
 // Rendered only for an offer naming a group: `OfferDetail.facebook` is null everywhere else.
 
@@ -86,6 +93,18 @@ const INPUT: React.CSSProperties = {
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
   minWidth: 0,
+};
+
+const SMALL_BTN: React.CSSProperties = {
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  padding: "0.1875rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  color: "var(--color-text-secondary)",
+  background: "var(--color-bg-elevated)",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 const LINK_BTN: React.CSSProperties = {
@@ -141,6 +160,7 @@ export function OfferFacebookCard({
   const [bid, setBid] = useState("");
   const [resultOpen, setResultOpen] = useState(false);
   const [confirmNoBids, setConfirmNoBids] = useState(false);
+  const [showSource, setShowSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -148,7 +168,7 @@ export function OfferFacebookCard({
   const multiLot = kit.post !== null;
 
   const auction = isAuctionListing(self.listingType);
-  const { postText, gaps } = useMemo(() => {
+  const { postText, formatted, gaps } = useMemo(() => {
     const lots: FacebookPostLotText[] = kit.lots.map((lot) => ({
       lotNo: lot.lotNo,
       offerNo: lot.offerNo,
@@ -162,8 +182,10 @@ export function OfferFacebookCard({
       price: isAuctionListing(lot.listingType) ? "" : facebookMoney(lot.price, lot.currency),
     }));
     const templates = { auction: kit.group.postTemplate, quickBuy: kit.group.quickBuyTemplate };
+    const post = formatFacebookPost(renderFacebookPostParts(templates, kit.group.standingNote, lots));
     return {
       postText: renderFacebookPostText(templates, kit.group.standingNote, lots),
+      formatted: { html: sanitizeDescriptionHtml(post.html), plain: post.plain },
       gaps: facebookPostGaps(templates, kit.group.standingNote, lots),
     };
   }, [kit]);
@@ -281,14 +303,25 @@ export function OfferFacebookCard({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
           <p style={{ ...SECTION_LABEL, margin: 0 }}>Post text</p>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <CopyButton value={postText} label="post text" />
+            {postText.trim() && (
+              <Tooltip content={showSource ? "Show the post the way Facebook will" : "Show the post's Markdown"}>
+                <button type="button" onClick={() => setShowSource((v) => !v)} style={SMALL_BTN}>
+                  {showSource ? "Rendered" : "Source"}
+                </button>
+              </Tooltip>
+            )}
+            <CopyButton value={formatted.plain} html={formatted.html} label="post text" />
             <a href={kit.photoZipPath} download style={{ ...MUTED, color: "var(--color-accent)" }}>
               ↓ Photos{multiLot ? ", in lot order" : ""}
             </a>
           </div>
         </div>
         {postText.trim() ? (
-          <pre style={POST_TEXT}>{postText}</pre>
+          showSource ? (
+            <pre style={POST_TEXT}>{postText}</pre>
+          ) : (
+            <RenderedHtml html={formatted.html} style={{ ...POST_TEXT, whiteSpace: "normal" }} />
+          )
         ) : (
           <p style={{ ...MUTED, margin: 0 }}>The post is empty.</p>
         )}
