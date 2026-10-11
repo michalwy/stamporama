@@ -2054,6 +2054,9 @@ export interface OfferListItem {
   facebookGroupId: string | null;
   bidIncrement: string | null;
   facebookPostId: string | null;
+  /** Whether the offer carries its own Facebook post template (#1780) — the header form warns that
+   *  changing the listing type drops it. */
+  facebookOwnTemplate: boolean;
   createdAt: Date;
 }
 
@@ -2078,6 +2081,7 @@ const OFFER_SELECT = {
   facebookGroupId: true,
   bidIncrement: true,
   facebookPostId: true,
+  facebookPostTemplate: true,
   createdAt: true,
   platform: { select: { name: true } },
   sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
@@ -2104,6 +2108,7 @@ type OfferRow = {
   facebookGroupId: string | null;
   bidIncrement: Decimal | null;
   facebookPostId: string | null;
+  facebookPostTemplate: string | null;
   createdAt: Date;
   platform: { name: string };
   sets: OfferSetRow[];
@@ -2188,6 +2193,7 @@ function toListItem(
     facebookGroupId: row.facebookGroupId,
     bidIncrement: row.bidIncrement?.toFixed(2) ?? null,
     facebookPostId: row.facebookPostId,
+    facebookOwnTemplate: row.facebookPostTemplate !== null,
     createdAt: row.createdAt,
   };
 }
@@ -5932,6 +5938,10 @@ export async function updateOffer(
   // The listing's own id follows its address (#696), exactly as it does on the in-place edit.
   const colnectSaleId = await resolveColnectSaleId(ref.collectionId, offerId, input.url);
   const endsAt = isAuctionListing(pricing.listingType) ? (input.endsAt ?? null) : null;
+  // An offer's own post template (#1780) was written for the type it had — its placeholders are that
+  // type's — so a change of type, or a move off Facebook, drops it and the post follows the group's
+  // template again. The form warns before saving; nothing is translated between the two types.
+  const dropsOwnTemplate = !facebook.facebookGroupId || pricing.listingType !== ref.listingType;
   await prisma.$transaction(async (tx) => {
     // Moved off Facebook: a lot leaves its post, which renumbers or dissolves it (ADR-0061 §2).
     if (postId && !facebook.facebookGroupId) await detachFacebookLot(tx, offerId);
@@ -5952,6 +5962,7 @@ export async function updateOffer(
       colnectSaleId,
       facebookGroupId: facebook.facebookGroupId,
       bidIncrement: facebookIncrementFor(pricing.listingType, facebook),
+      ...(dropsOwnTemplate ? { facebookPostTemplate: null } : {}),
       listingType: pricing.listingType,
       price: pricing.price,
       startingPrice: pricing.startingPrice,
@@ -6006,6 +6017,10 @@ export interface OfferPatch {
   privateNote?: string | null;
   /** How the description is read (#319). Normalised, so an unknown value falls back to plain text. */
   descriptionFormat?: string;
+  /** A Facebook offer's own post template (#1780), for its current type; null follows its group's
+   * again. Kept as written — an empty one is the offer's own, not a return to the group's. Refused
+   * on an offer that is not on Facebook. Editable in every state, like the listing texts. */
+  facebookPostTemplate?: string | null;
 }
 
 /** Patch one or more offer header fields in place (ADR-0013) — the detail screen edits name / price
@@ -6045,6 +6060,12 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
       "Only an auction listing has a starting price — change the listing type on the offer form first."
     );
   }
+  if (patch.facebookPostTemplate !== undefined && ref.facebookGroupId === null) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      "Only a Facebook offer has a post template of its own."
+    );
+  }
   if (patch.platformId !== undefined) {
     const target = await assertPlatform(ref.collectionId, patch.platformId);
     // A Facebook auction names its group, which only the offer form asks for (#1544): moving an
@@ -6072,20 +6093,33 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
   // `descriptionFormat` are deliberately absent: the first two record *where* the listing is, and the
   // third is how this app reads the description it already holds, not what goes to the platform.
   const listedBefore = isListedState(ref.state);
+  // A Facebook offer's own post template (#1780) is what its live post says, so changing it is a
+  // change to the listing as much as its description is.
   const touchesText =
-    patch.name !== undefined || patch.description !== undefined || patch.privateNote !== undefined;
+    patch.name !== undefined ||
+    patch.description !== undefined ||
+    patch.privateNote !== undefined ||
+    patch.facebookPostTemplate !== undefined;
   const before =
     listedBefore && (touchesText || patch.startingPrice !== undefined)
       ? await prisma.offer.findUnique({
           where: { id: offerId },
-          select: { name: true, description: true, privateNote: true, startingPrice: true },
+          select: {
+            name: true,
+            description: true,
+            privateNote: true,
+            startingPrice: true,
+            facebookPostTemplate: true,
+          },
         })
       : null;
   const textChanged =
     !!before &&
     ((patch.name !== undefined && patch.name !== before.name) ||
       (patch.description !== undefined && patch.description !== before.description) ||
-      (patch.privateNote !== undefined && patch.privateNote !== before.privateNote));
+      (patch.privateNote !== undefined && patch.privateNote !== before.privateNote) ||
+      (patch.facebookPostTemplate !== undefined &&
+        patch.facebookPostTemplate !== before.facebookPostTemplate));
   // The listing's own id follows its address (#696) — re-derived from whatever URL this patch
   // writes, and cleared by one that names no sale, so the pair can never drift apart.
   const colnectSaleId =
@@ -6114,6 +6148,9 @@ export async function patchOffer(ownerId: string, offerId: string, patch: OfferP
         : {}),
       ...(patch.descriptionFormat !== undefined
         ? { descriptionFormat: normalizeDescriptionFormat(patch.descriptionFormat) }
+        : {}),
+      ...(patch.facebookPostTemplate !== undefined
+        ? { facebookPostTemplate: patch.facebookPostTemplate }
         : {}),
     },
   });

@@ -7,7 +7,8 @@
 // kit: the group's post template filled in per lot — an auction's or a quick buy's, whichever the lot
 // is (#1671) — with the note on shipping, payment and terms where its `{terms}` says (#1689). A post
 // is **only what its template places** (#1692): nothing is substituted, added or fallen back to, and
-// what comes out empty is named on the card (`facebookPostGaps`) rather than filled in.
+// what comes out empty is named on the card (`facebookPostGaps`) rather than filled in. An offer may
+// carry its **own** template (#1780), which writes that lot instead of the group's.
 
 import { generatedAmount, normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
@@ -119,6 +120,9 @@ export interface FacebookPostLotText {
   closesAt: string;
   /** A quick buy's asking price (#1671), the same way. */
   price: string;
+  /** The offer's own post template (#1780), written for its type — null, or absent, follows the
+   *  group's template for that type. */
+  ownTemplate?: string | null;
 }
 
 /** The group's two post templates (#1671): a post's lot is written from the one matching its type,
@@ -201,9 +205,15 @@ export function renderFacebookLotText(template: string, lot: FacebookPostLotText
   return partsText(renderFacebookLotParts(template, lot, terms));
 }
 
-/** The template a lot of `listingType` is written from (#1671). */
+/** The group's template a lot of `listingType` is written from (#1671). */
 export function facebookTemplateFor(templates: FacebookPostTemplates, listingType: OfferListingType): string {
   return listingType === "auction" ? templates.auction : templates.quickBuy;
+}
+
+/** The template this lot is written from: its offer's own where it has one (#1780) — even an empty
+ *  one, which is the offer's choice and not a gap to fill — else its group's for its type. */
+export function facebookLotTemplate(templates: FacebookPostTemplates, lot: FacebookPostLotText): string {
+  return lot.ownTemplate ?? facebookTemplateFor(templates, lot.listingType);
 }
 
 function inLotOrder(lots: readonly FacebookPostLotText[]): FacebookPostLotText[] {
@@ -211,8 +221,8 @@ function inLotOrder(lots: readonly FacebookPostLotText[]): FacebookPostLotText[]
 }
 
 /**
- * The whole post: each lot's text in lot order — each from its own type's template — a blank line
- * between them. The note on shipping, payment and terms goes where the **last** lot's template puts
+ * The whole post: each lot's text in lot order — each from its own type's template, or its offer's
+ * own (#1780) — a blank line between them. The note on shipping, payment and terms goes where the **last** lot's template puts
  * `{terms}` (#1689) — once, however many lots the post holds, as it was when it was appended under
  * the last — and nowhere when that template has none. A lot with no template has no text, and adds no
  * gap between the others; what is in a lot's text is its template's, line breaks included (#1692).
@@ -226,7 +236,7 @@ export function renderFacebookPostParts(
   const written = sorted
     .map((lot, i) =>
       renderFacebookLotParts(
-        facebookTemplateFor(templates, lot.listingType),
+        facebookLotTemplate(templates, lot),
         lot,
         i === sorted.length - 1 ? standingNote : ""
       )
@@ -252,16 +262,21 @@ export interface FacebookEmptyPlaceholder {
 }
 
 /** What a post is missing (#1692), for the card to name: the templates its lots' types have none of,
- *  and the placeholders its templates place that are empty. */
+ *  the lots whose own template is empty (#1780), and the placeholders its templates place that are
+ *  empty. */
 export interface FacebookPostGaps {
   missingTemplates: OfferListingType[];
+  /** The lots (by `lotNo`, null for an offer posted alone) whose offer's own template is empty. */
+  emptyOwnTemplates: (number | null)[];
   emptyPlaceholders: FacebookEmptyPlaceholder[];
 }
 
 /**
  * What the post as `renderFacebookPostText` writes it is missing (#1692) — nothing is filled in to hide
- * it, so the card names it instead. A type with lots in the post and no template is missing; a
- * placeholder the template places and the lot leaves empty is named per lot, once per token. Two are
+ * it, so the card names it instead. A type with lots in the post that follow the group and no template
+ * is missing; a lot whose own template (#1780) is empty is named by itself, since the group's template
+ * is not what it lacks; a placeholder the template places and the lot leaves empty is named per lot,
+ * once per token. Two are
  * empty by the post's own rule rather than for want of anything, and are not named: `{lot}` on an
  * offer posted alone, and `{terms}` in every lot but the last, where the note is stated once.
  */
@@ -271,12 +286,18 @@ export function facebookPostGaps(
   lots: readonly FacebookPostLotText[]
 ): FacebookPostGaps {
   const sorted = inLotOrder(lots);
+  const followsGroup = (lot: FacebookPostLotText) => lot.ownTemplate == null;
   const missingTemplates = (["auction", "fixed"] as const).filter(
-    (type) => sorted.some((lot) => lot.listingType === type) && !facebookTemplateFor(templates, type).trim()
+    (type) =>
+      sorted.some((lot) => followsGroup(lot) && lot.listingType === type) &&
+      !facebookTemplateFor(templates, type).trim()
   );
+  const emptyOwnTemplates = sorted
+    .filter((lot) => !followsGroup(lot) && !lot.ownTemplate!.trim())
+    .map((lot) => lot.lotNo);
   const emptyPlaceholders: FacebookEmptyPlaceholder[] = [];
   sorted.forEach((lot, i) => {
-    const template = facebookTemplateFor(templates, lot.listingType);
+    const template = facebookLotTemplate(templates, lot);
     const known = knownTokens(lot.listingType);
     const last = i === sorted.length - 1;
     const values = placeholderValues(lot, last ? standingNote : "");
@@ -289,7 +310,7 @@ export function facebookPostGaps(
       if (values[token].trim() === "") emptyPlaceholders.push({ lotNo: lot.lotNo, token });
     }
   });
-  return { missingTemplates, emptyPlaceholders };
+  return { missingTemplates, emptyOwnTemplates, emptyPlaceholders };
 }
 
 /** A figure as a post states it: `10 PLN`, `10.50 PLN` (#1787), or empty when there is none. */

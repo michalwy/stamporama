@@ -253,7 +253,25 @@ the offer's screen, directly under the description, which holds everything the p
   link to where it is set: the template or the note in Settings → Facebook, the group's own or
   Facebook's defaults, whichever the group uses. Nothing is filled in to hide it, and **Copy** still
   copies what there is;
+- the **post template** the text is written from: *Same as group*, with the group's template for the
+  offer's type, or the offer's own (below);
 - **↓ Photos**: the offer's photos as one download.
+
+### An offer's own post template
+
+Some offers need a post worded differently from the rest — an extra line, another order. Rather than
+changing the group's template for every offer, tick **Custom for this offer** on the card: the
+group's template opens for editing, and **Save template** makes it this offer's own. It changes this
+offer's post text and no other offer's.
+
+It is still a template, not finished text: it takes the same placeholders and formatting as the
+group's, listed under the field, so the post keeps following the offer's price, closing time and
+terms as they change. Saved empty, it gives an empty post, and the card says so. Untick **Custom for
+this offer** to go back to the group's template.
+
+The template is for the offer's type. Changing the offer from auction to quick buy, or back, on the
+**Edit offer** form drops its own template — the form says so before you save — and the post follows
+the group's template for the new type. Moving the offer off Facebook drops it too.
 
 Once the post is up, choose **Activate** on the offer and paste the post's link as its **listing
 URL** — on Facebook the listing link *is* the post's address. That activates the offer, the same as
@@ -281,7 +299,8 @@ Each lot's Facebook card then shows the whole post:
 
 - the lots, in order, each linking to its offer;
 - the **post text** for the whole post — each lot's text in lot order, each from its own type's
-  template, the note on shipping, payment and terms once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in one download, each file starting
+  template, or from its offer's own where it has one — which shapes that lot's part of the post and
+  no other — the note on shipping, payment and terms once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in one download, each file starting
   with its lot (`lot-01-…`), so the album uploads in the right order;
 - the **listing link** of this lot, once the post is up.
 

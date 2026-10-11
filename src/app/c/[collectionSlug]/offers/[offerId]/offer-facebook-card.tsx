@@ -21,7 +21,8 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { PendingLinkMark } from "../offer-badges";
-import { formControl } from "@/app/control-style";
+import { formControl, multiLineFormControl } from "@/app/control-style";
+import { FacebookPostTemplateField } from "@/app/c/[collectionSlug]/shared/facebook-post-template-field";
 
 // A Facebook offer's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
 // alone, or as a numbered lot of a post holding several — and the post's text and photos, each taken
@@ -41,6 +42,12 @@ import { formControl } from "@/app/control-style";
 //
 // The post is only what its template places (#1692): a missing template or an empty placeholder is
 // named under the text, with a link to where it is set, and nothing is filled in to hide it.
+//
+// An offer may carry its own post template (#1780), overriding its group's for this offer only: the
+// card shows *Same as group* with the template it follows, or the offer's own once *Custom for this
+// offer* is ticked — prefilled with the group's, so it is edited rather than written from scratch —
+// the Settings → Facebook pattern (#1661). It is still a template, written for the offer's current
+// type; changing the type on the offer form drops it.
 //
 // The template is Markdown, limited to what Facebook's post editor offers (#1772): the text is shown
 // formatted, with a Source switch back to the template's markup as filled in — the offer description's
@@ -105,6 +112,36 @@ const SMALL_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const TEMPLATE_INPUT: React.CSSProperties = {
+  ...formControl,
+  ...multiLineFormControl,
+  width: "100%",
+  minHeight: "8rem",
+  padding: "0.5rem 0.75rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.875rem",
+  fontFamily: "inherit",
+  lineHeight: 1.5,
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  resize: "vertical",
+};
+
+const FOLLOWED_TEMPLATE: React.CSSProperties = {
+  ...MUTED,
+  margin: 0,
+  padding: "0.375rem 0.75rem",
+  border: "1px dashed var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  background: "var(--color-bg-subtle)",
+  display: "flex",
+  gap: "0.375rem",
+  alignItems: "baseline",
+  maxHeight: "10rem",
+  overflowY: "auto",
+};
+
 const LINK_BTN: React.CSSProperties = {
   padding: 0,
   background: "none",
@@ -152,6 +189,8 @@ export function OfferFacebookCard({
   onRepost?: () => void;
 }) {
   const [bid, setBid] = useState("");
+  // The offer's own template being written (#1780) — null while nothing is typed that is not saved.
+  const [draft, setDraft] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -172,6 +211,7 @@ export function OfferFacebookCard({
       increment: facebookMoney(lot.bidIncrement, lot.currency),
       closesAt: formatClosesAt(lot.endsAt),
       price: isAuctionListing(lot.listingType) ? "" : facebookMoney(lot.price, lot.currency),
+      ownTemplate: lot.ownTemplate,
     }));
     const templates = { auction: kit.group.postTemplate, quickBuy: kit.group.quickBuyTemplate };
     const post = formatFacebookPost(renderFacebookPostParts(templates, kit.group.standingNote, lots));
@@ -186,6 +226,12 @@ export function OfferFacebookCard({
     `/c/${collectionSlug}/settings?tab=facebook&row=${encodeURIComponent(
       kit.group.custom.includes(setting) ? kit.group.id : "facebook:defaults"
     )}`;
+
+  // This offer's own template (#1780), and the group's it otherwise follows for its type.
+  const groupTemplate = auction ? kit.group.postTemplate : kit.group.quickBuyTemplate;
+  const ownTemplate = self.ownTemplate;
+  const customTemplate = ownTemplate !== null || draft !== null;
+  const templateText = draft ?? ownTemplate ?? "";
 
   // Posted: once any lot has gone up — the lots of a post go up together.
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
@@ -208,6 +254,7 @@ export function OfferFacebookCard({
       if (result.status === "error") setError(result.message);
       else {
         setBid("");
+        setDraft(null);
         onChanged();
       }
     });
@@ -217,6 +264,31 @@ export function OfferFacebookCard({
     run(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
       return patchOfferAction(offerId, "price", bid);
+    });
+  }
+
+  // Ticking opens the group's template for editing, saved only by *Save*; unticking hands a saved own
+  // template back to the group's at once, and drops one not yet saved.
+  function setCustomTemplate(on: boolean) {
+    if (on) {
+      setDraft(groupTemplate);
+      return;
+    }
+    if (ownTemplate === null) {
+      setDraft(null);
+      return;
+    }
+    run(async () => {
+      const { setFacebookOfferTemplateAction } = await import("@/app/actions/facebook");
+      return setFacebookOfferTemplateAction(offerId, null);
+    });
+  }
+
+  function saveTemplate() {
+    if (draft === null) return;
+    run(async () => {
+      const { setFacebookOfferTemplateAction } = await import("@/app/actions/facebook");
+      return setFacebookOfferTemplateAction(offerId, draft);
     });
   }
 
@@ -312,7 +384,9 @@ export function OfferFacebookCard({
         ) : (
           <p style={{ ...MUTED, margin: 0 }}>The post is empty.</p>
         )}
-        {(gaps.missingTemplates.length > 0 || gaps.emptyPlaceholders.length > 0) && (
+        {(gaps.missingTemplates.length > 0 ||
+          gaps.emptyOwnTemplates.length > 0 ||
+          gaps.emptyPlaceholders.length > 0) && (
           <ul style={{ ...MUTED, margin: "0.25rem 0 0", paddingLeft: "1.25rem", color: "var(--color-warning)" }}>
             {gaps.missingTemplates.map((type) => (
               <li key={type}>
@@ -326,6 +400,27 @@ export function OfferFacebookCard({
                 </Link>
               </li>
             ))}
+            {gaps.emptyOwnTemplates.map((lotNo) => {
+              const lot = kit.lots.find((l) => l.lotNo === lotNo);
+              const isSelf = !lot || lot.offerId === offerId;
+              return (
+                <li key={`own:${lotNo}`}>
+                  {multiLot ? `Lot ${lotNo}: its` : "This offer's"} own post template is empty
+                  {multiLot ? ", so the lot is" : ""}
+                  {isSelf ? (
+                    <> — write it below, or untick it to follow the group&apos;s</>
+                  ) : (
+                    <>
+                      {" "}
+                      —{" "}
+                      <Link href={`/c/${collectionSlug}/offers/${lot.offerId}`} style={{ color: "var(--color-accent)" }}>
+                        open #{lot.offerNo}
+                      </Link>
+                    </>
+                  )}
+                </li>
+              );
+            })}
             {gaps.emptyPlaceholders.map(({ lotNo, token }) => {
               const lot = kit.lots.find((l) => l.lotNo === lotNo);
               const where = multiLot ? `Lot ${lotNo}: ` : "";
@@ -350,6 +445,58 @@ export function OfferFacebookCard({
               );
             })}
           </ul>
+        )}
+      </div>
+
+      {/* This offer's own post template (#1780): the group's it follows, or its own. */}
+      <div style={{ marginTop: "0.875rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", marginBottom: "0.25rem" }}>
+          <p style={{ ...SECTION_LABEL, margin: 0 }}>
+            {auction ? "Auction" : "Quick-buy"} post template{multiLot ? " for this lot" : ""}
+          </p>
+          <label style={{ ...MUTED, display: "inline-flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={customTemplate}
+              disabled={isPending}
+              onChange={(e) => setCustomTemplate(e.target.checked)}
+            />
+            Custom for this offer
+          </label>
+        </div>
+        {customTemplate ? (
+          <>
+            <FacebookPostTemplateField
+              id={`offer-facebook-template-${offerId}`}
+              listingType={self.listingType}
+              value={templateText}
+              onChange={setDraft}
+              style={TEMPLATE_INPUT}
+              disabled={isPending}
+            />
+            {draft !== null && draft !== ownTemplate && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+                <DialogSecondaryButton type="button" disabled={isPending} onClick={saveTemplate}>
+                  Save template
+                </DialogSecondaryButton>
+                <button
+                  type="button"
+                  style={LINK_BTN}
+                  disabled={isPending}
+                  onClick={() => setDraft(null)}
+                >
+                  {ownTemplate === null ? "Cancel" : "Undo changes"}
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={FOLLOWED_TEMPLATE}>
+            <span style={{ flexShrink: 0 }}>Same as group:</span>
+            <span style={{ color: "var(--color-text-primary)", whiteSpace: "pre-wrap", minWidth: 0 }}>
+              {groupTemplate.trim() || "None"}
+            </span>
+          </div>
         )}
       </div>
 

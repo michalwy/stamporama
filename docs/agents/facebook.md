@@ -29,6 +29,24 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the defaults row). Another type's token in a template is *unknown*, so it stays as typed and is named
   while it is typed.
 
+- **An offer can carry its own post template** (#1780, decided with the collector on 2026-10-11;
+  ADR-0061 §6). `Offer.facebookPostTemplate`: null follows the group's template for the offer's type,
+  text — **even empty** — is the offer's own (an empty one is an empty lot, named by
+  `facebookPostGaps().emptyOwnTemplates`, not the group's template reported missing; #1692's no
+  fallbacks). `facebookLotTemplate` is the one place a lot's template is chosen; `renderFacebookPostParts`
+  and `facebookPostGaps` both go through it, so in a multi-lot post the override shapes its own lot
+  only and `missingTemplates` counts only the lots that follow the group. It is written by
+  `patchOffer(… { facebookPostTemplate })` (`setFacebookOfferTemplateAction`), refused off Facebook,
+  allowed in every state like the listing texts, and counted as a text change for #542's drift. It is
+  for the offer's **current type**: `updateOffer` drops it when the type changes or the offer leaves
+  Facebook (the integration test fails with that drop removed — checked when written), and the offer
+  form warns first off `OfferListItem.facebookOwnTemplate`. A duplicate does not carry it — a clone
+  starts from its own group, as its texts do. The card (`offer-facebook-card.tsx`) shows it under the
+  post text: *Same as group* with the effective group template, or the field once *Custom for this
+  offer* is ticked, prefilled with the group's and written only by *Save template*; unticking a saved
+  one writes null at once. The field is `shared/facebook-post-template-field.tsx`, which Settings →
+  Facebook uses too, so the placeholders and formatting it lists cannot drift between the two.
+
 - **A post template is Markdown, limited to Facebook's editor** (#1772, decided with the collector on
   2026-10-11: bold, italic, `#`/`##` headings, bulleted and numbered lists, a quote — what the group
   post editor's toolbar offers). There is no format setting: every template is read this way.

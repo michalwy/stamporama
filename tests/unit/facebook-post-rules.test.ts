@@ -219,6 +219,7 @@ describe("facebookPostGaps (#1692)", () => {
   it("names nothing when every placed placeholder has a value and every type a template", () => {
     assert.deepEqual(facebookPostGaps(templates, "Shipping 5 PLN.", [lot()]), {
       missingTemplates: [],
+      emptyOwnTemplates: [],
       emptyPlaceholders: [],
     });
   });
@@ -254,6 +255,74 @@ describe("facebookPostGaps (#1692)", () => {
 
   it("ignores a token the lot's type does not fill — that one is kept as typed, and warned in Settings", () => {
     assert.deepEqual(facebookPostGaps({ auction: "{price} {startprice}", quickBuy: "" }, "", [lot()]).emptyPlaceholders, []);
+  });
+});
+
+describe("an offer's own post template (#1780)", () => {
+  const templates = { auction: "Group: {title}", quickBuy: "Group buy: {title} {price}" };
+
+  it("writes the offer's lot from its own template instead of the group's", () => {
+    assert.equal(
+      renderFacebookPostText(templates, "", [lot({ ownTemplate: "Mine: **{title}** from {startingPrice}" })]),
+      "Mine: **Austria 1850 Mercury** from 10.00 PLN"
+    );
+  });
+
+  it("follows the group's template for the lot's type when it has none", () => {
+    assert.equal(renderFacebookPostText(templates, "", [lot({ ownTemplate: null })]), "Group: Austria 1850 Mercury");
+    assert.equal(renderFacebookPostText(templates, "", [lot()]), "Group: Austria 1850 Mercury");
+  });
+
+  it("shapes only its own lot of a multi-lot post", () => {
+    assert.equal(
+      renderFacebookPostText(templates, "", [
+        lot({ lotNo: 1, title: "A" }),
+        lot({ lotNo: 2, title: "B", ownTemplate: "Lot {lot}, mine: {title}" }),
+        lot({ lotNo: 3, title: "C" }),
+      ]),
+      "Group: A\n\nLot 2, mine: B\n\nGroup: C"
+    );
+  });
+
+  it("keeps following the offer's figures, and places the note where the last lot's own template says", () => {
+    assert.equal(
+      renderFacebookPostText(templates, "Shipping 5 PLN.", [
+        lot({ lotNo: 1, title: "A" }),
+        lot({ lotNo: 2, title: "B", closesAt: "Mon 6 Oct, 21:00", ownTemplate: "{title} until {closesAt}\n{terms}" }),
+      ]),
+      "Group: A\n\nB until Mon 6 Oct, 21:00\nShipping 5 PLN."
+    );
+  });
+
+  it("fills only its type's placeholders — another type's token stays as typed", () => {
+    assert.equal(
+      renderFacebookPostText(templates, "", [lot({ ownTemplate: "{title} {price}" })]),
+      "Austria 1850 Mercury {price}"
+    );
+  });
+
+  it("names an empty own template by its lot, not the group's template as missing", () => {
+    const gaps = facebookPostGaps({ auction: "", quickBuy: "" }, "", [
+      lot({ lotNo: 1, ownTemplate: "" }),
+      lot({ lotNo: 2, ownTemplate: "{title}" }),
+    ]);
+    assert.deepEqual(gaps.missingTemplates, []);
+    assert.deepEqual(gaps.emptyOwnTemplates, [1]);
+    assert.equal(renderFacebookPostText({ auction: "", quickBuy: "" }, "", [lot({ ownTemplate: "" })]), "");
+  });
+
+  it("names the group's missing template only for the lots that follow it", () => {
+    const gaps = facebookPostGaps({ auction: "", quickBuy: "" }, "", [
+      lot({ lotNo: 1, ownTemplate: "{title}" }),
+      lot({ lotNo: 2 }),
+    ]);
+    assert.deepEqual(gaps.missingTemplates, ["auction"]);
+    assert.deepEqual(gaps.emptyOwnTemplates, []);
+  });
+
+  it("names the empty placeholders its own template places", () => {
+    const gaps = facebookPostGaps(templates, "", [lot({ description: "", ownTemplate: "{title} {description}" })]);
+    assert.deepEqual(gaps.emptyPlaceholders, [{ lotNo: null, token: "{description}" }]);
   });
 });
 

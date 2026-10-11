@@ -6,6 +6,7 @@ import {
   addOfferSet,
   createOffer,
   deleteOffer,
+  patchOffer,
   setOfferState,
   updateOffer,
   type OfferInput,
@@ -157,6 +158,7 @@ describe("Facebook auction offers (#1544)", () => {
         endsAt: true,
         state: true,
         url: true,
+        facebookPostTemplate: true,
       },
     });
 
@@ -534,6 +536,46 @@ describe("Facebook auction offers (#1544)", () => {
     const offer = await read(a);
     assert.equal(offer.state, "active");
     assert.equal(offer.url, link);
+  });
+
+  it("keeps an offer's own post template to that offer, and drops it when the offer changes type (#1780)", async () => {
+    const own = "Mine: **{title}** from {startingPrice}";
+    const a = await auction([await newItem()]);
+    const b = await auction([await newItem()]);
+    await createFacebookPost(userId, collectionId, [a, b]);
+
+    await patchOffer(userId, a, { facebookPostTemplate: own });
+    assert.equal((await read(a)).facebookPostTemplate, own);
+    assert.equal((await read(b)).facebookPostTemplate, null, "no other offer's post changes");
+    const kit = await getFacebookOfferKit(b);
+    assert.deepEqual(kit?.lots.map((l) => l.ownTemplate), [own, null]);
+    assert.equal(kit?.group.postTemplate, "Lot {lot}: {description}, start {startingPrice}", "the group's stays its own");
+
+    // An empty one is the offer's own, not the group's again; null hands it back.
+    await patchOffer(userId, a, { facebookPostTemplate: "" });
+    assert.equal((await read(a)).facebookPostTemplate, "");
+    await patchOffer(userId, a, { facebookPostTemplate: null });
+    assert.equal((await read(a)).facebookPostTemplate, null);
+
+    // An edit that keeps the type keeps it; one that changes the type drops it.
+    const alone = await auction([await newItem()]);
+    await patchOffer(userId, alone, { facebookPostTemplate: own });
+    await updateOffer(userId, alone, input({ startingPrice: "3.00" }));
+    assert.equal((await read(alone)).facebookPostTemplate, own);
+    await updateOffer(userId, alone, input({ listingType: "fixed", price: "9.00" }));
+    assert.equal((await read(alone)).listingType, "fixed");
+    assert.equal((await read(alone)).facebookPostTemplate, null);
+
+    // …and so does a move off Facebook.
+    await patchOffer(userId, alone, { facebookPostTemplate: "{title} for {price}" });
+    await updateOffer(userId, alone, input({ platformId: delcampeId, listingType: "fixed", price: "9.00" }));
+    assert.equal((await read(alone)).facebookPostTemplate, null);
+
+    // Only a Facebook offer has one.
+    await assert.rejects(
+      () => patchOffer(userId, alone, { facebookPostTemplate: "{title}" }),
+      /Only a Facebook offer/
+    );
   });
 
   it("renumbers the lots when one leaves, and dissolves a post left with one", async () => {

@@ -83,6 +83,9 @@ export interface OfferFormDialogProps {
     facebookGroupId?: string | null;
     bidIncrement?: string | null;
     facebookPostId?: string | null;
+    /** Whether the offer carries its own Facebook post template (#1780), which a change of type
+     *  — or a move off Facebook — drops. */
+    facebookOwnTemplate?: boolean;
   };
   /** Pre-fills the platform on create — e.g. the platform the list is currently filtered by. Its
    * `platformCurrency` (#196) seeds the locked/derived currency so a pre-filled platform doesn't
@@ -240,6 +243,12 @@ export function OfferFormDialog({
   const [listingTypeTouched, setListingTypeTouched] = useState(false);
   // A Facebook offer is an auction or a quick buy like any other (#1671); its group only seeds which.
   const isAuction = isAuctionListing(listingType);
+  // An offer's own Facebook post template (#1780) is for the type it was written for: a change of
+  // type, or a move off Facebook, drops it — said before the save rather than discovered after.
+  const ownTemplateDropped =
+    isEdit &&
+    !!offer?.facebookOwnTemplate &&
+    (listingType !== normalizeListingType(offer.listingType) || (!!facebookChoices && !isFacebook));
   // An auction's opening figure, seeded from the platform's own default (#362): re-seeded on a
   // platform change and left alone the moment the collector types one.
   const [startingPrice, setStartingPrice] = useState(
@@ -459,6 +468,15 @@ export function OfferFormDialog({
                   </option>
                 ))}
               </select>
+              {ownTemplateDropped && (
+                <p role="alert" style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.25rem 0 0" }}>
+                  {isFacebook
+                    ? `Saving drops this offer's own post template — it was written for ${
+                        isAuction ? "a quick buy" : "an auction"
+                      }, and the post follows the group's ${isAuction ? "auction" : "quick-buy"} template.`
+                    : "Saving drops this offer's own Facebook post template."}
+                </p>
+              )}
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="offer-currency">Currency</LabelWithError>
