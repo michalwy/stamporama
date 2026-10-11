@@ -861,6 +861,22 @@ describe("scan sheet ingest (#566)", () => {
     await deletePurchase(userId, purchaseId);
   });
 
+  it("lists batches oldest first, so the card added last is at the bottom (#1826)", async () => {
+    const purchaseId = await newOrder();
+    const first = await uploadFront(purchaseId);
+    const second = await uploadFront(purchaseId);
+    const third = await uploadFront(purchaseId);
+
+    const { batches } = await listScans(userId, { purchaseId });
+    assert.deepEqual(
+      batches.map((b) => b.batchNo),
+      [first.batchNo, second.batchNo, third.batchNo]
+    );
+    assert.ok(first.batchNo < second.batchNo && second.batchNo < third.batchNo);
+
+    await deletePurchase(userId, purchaseId);
+  });
+
   // ── The batch's name (#587) ─────────────────────────────────────────────────────────────────
 
   it("names a card at upload, again afterwards, and un-names it", async () => {

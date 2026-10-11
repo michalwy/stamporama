@@ -2416,10 +2416,6 @@ async function listScanUploadCards(purchaseId: string): Promise<ScanUploadCard[]
 }
 
 /**
- * Every batch of one owner, newest first — the shape the Card scans section renders and the review
- * editor reloads a previous cut from.
- */
-/**
  * Whether anything has been cut from a sheet — the card's *Review the front cut* / *Review the back
  * cut* stands while it is not. A front sheet is cut once tiles name it as their front, a back sheet
  * once tiles name it as their back. {@link UNCUT_SHEET_WHERE} is the same rule as a query; the two
@@ -2514,6 +2510,11 @@ export async function listSheetsToCut(
   };
 }
 
+/**
+ * Every batch of one owner, **oldest first** (#1826) — the shape the Card scans section renders and
+ * the review editor reloads a previous cut from. A stack of cards is scanned in order and worked
+ * through in the same order, so the card added last is the one at the bottom.
+ */
 export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<ScansData> {
   const owner = await assertScanOwner(ownerId, ref);
   const scope = scanOwnerWhere(owner);
@@ -2554,7 +2555,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
         turnover: true,
         _count: { select: { frontTiles: true, backTiles: true } },
       },
-      orderBy: { batchNo: "desc" },
+      orderBy: { batchNo: "asc" },
     }),
     prisma.scanTile.findMany({
       where: scope,
@@ -2680,7 +2681,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
           },
         },
       },
-      orderBy: [{ batchNo: "desc" }, { position: "asc" }],
+      orderBy: [{ batchNo: "asc" }, { position: "asc" }],
     }),
   ]);
 
@@ -2792,7 +2793,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
   }
 
   return {
-    batches: [...batches.values()].sort((a, b) => b.batchNo - a.batchNo),
+    batches: [...batches.values()].sort((a, b) => a.batchNo - b.batchNo),
     uploads: await listScanUploadCards(purchaseId),
     fromAuction: auctionSale != null,
     backTurnover: asBackTurnover(
