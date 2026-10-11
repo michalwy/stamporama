@@ -17,11 +17,15 @@ import {
   getCatalogTree,
   type CatalogVendorData,
 } from "@/lib/catalog";
+import { parseCatalogueFactor } from "@/lib/realization-ratio";
 
 export type CatalogActionState =
   | { status: "idle" }
   | { status: "success" }
   | { status: "error"; message: string };
+
+const MANUAL_FACTOR_ERROR =
+  "The factor is catalogue ÷ realised price — a positive number such as 10 or 2.5, or blank for none.";
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -84,8 +88,10 @@ export async function createCatalogNameAction(
   const currency = ((formData.get("currency") as string | null) ?? "").trim();
   if (!name) return { status: "error", message: "Name is required." };
   if (!currency) return { status: "error", message: "Currency is required." };
+  const manualFactor = parseCatalogueFactor((formData.get("manualFactor") as string | null) ?? "");
+  if (manualFactor === "invalid") return { status: "error", message: MANUAL_FACTOR_ERROR };
   try {
-    await createCatalogName(session.user.id, vendorId, { name, currency });
+    await createCatalogName(session.user.id, vendorId, { name, currency, manualFactor });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to create catalog name. Please try again." };
@@ -101,8 +107,10 @@ export async function updateCatalogNameAction(
   const currency = ((formData.get("currency") as string | null) ?? "").trim();
   if (!name) return { status: "error", message: "Name is required." };
   if (!currency) return { status: "error", message: "Currency is required." };
+  const manualFactor = parseCatalogueFactor((formData.get("manualFactor") as string | null) ?? "");
+  if (manualFactor === "invalid") return { status: "error", message: MANUAL_FACTOR_ERROR };
   try {
-    await updateCatalogName(session.user.id, nameId, { name, currency });
+    await updateCatalogName(session.user.id, nameId, { name, currency, manualFactor });
     return { status: "success" };
   } catch {
     return { status: "error", message: "Failed to update catalog name. Please try again." };

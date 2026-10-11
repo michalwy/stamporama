@@ -869,6 +869,25 @@ and any of them can be selected and edited on the right.
 - Deleting a vendor deletes its catalog names and editions with it, and deleting a catalog name its
   editions; you are told so before anything goes.
 
+### How far a catalogue overstates
+
+Catalogues overstate what stamps actually fetch, and by very different amounts — a Michel figure ten
+times the realised price is nothing unusual, while Fischer typically runs two to five times. The app
+learns this from the results you record (see [Estimated value](#estimated-value) and the
+[bid recommendation](auctions.md#why-percent-of-catalogue-is-not-one-of-these)), and a catalog name's
+pane has two lines about it:
+
+- **Manual factor** — your own estimate, written the way collectors say it: catalogue ÷ realised
+  price, so `10` for "Michel runs ten times high", `2.5` for two and a half. Leave it blank for none.
+  It is used only while this catalogue has **fewer than three results** of its own; until then it
+  stands in for the single collection-wide *Catalogue fallback* percentage, which is what a
+  catalogue with no factor still uses.
+- **Learned factor** — what this catalogue's own recorded results say, in the same unit, with how
+  many results stand behind it: *2.8 · n = 2 — too few to use yet*, or *8.4 · n = 6 — replaces the
+  manual factor* once there are three. *No recorded results yet* when there are none.
+
+A stamp's catalogue is the one its catalogue value is read in — its area's valuing volume.
+
 ## Stamp conditions
 
 Each collection keeps its own list of **conditions** — the grades used when valuing stamps (for example Mint Never Hinged, Mint Hinged, Used, or Cancelled to Order). Manage them from **Settings → Conditions**.
@@ -1848,7 +1867,9 @@ Beside each condition, the row states the **bucket** the ratio was learned from,
 
 **Click a figure** and the results the *bucket* was learned from open under the table, newest first: which stamp, at what condition, on what date, and what fraction of catalog it fetched — your lots each a link to the lot, your price observations each named by where they sold. These are other stamps' results — that is what a bucket is.
 
-When nothing has been learned yet, the row falls back to the **percentage of catalog value** set in the collection's bid settings, and says so in amber: *"No recorded results · policy, not evidence"*. That is the case where knowing which you are looking at matters most.
+Between the stamp's own area and the whole collection, the ratio can come from **every result valued in the same catalogue** — *"Michel / Online results · 12% · n = 5"* — since catalogues overstate by very different amounts and are kept apart before they are mixed.
+
+When the catalogue has too few results of its own and you have given it a [manual factor](#how-far-a-catalogue-overstates), the row uses it and says so in amber: *"Michel / Online — your factor, catalogue ÷ 10 · 10% · your estimate, not evidence"*. With no factor and nothing learned, the row falls back to the **percentage of catalog value** set in the collection's bid settings, again in amber: *"No recorded results · policy, not evidence"*. Those are the cases where knowing which you are looking at matters most.
 
 ### What it will not do
 

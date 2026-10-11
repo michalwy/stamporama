@@ -29,10 +29,11 @@ import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classifica
 //      extrapolation of the same cell printed beside it invites reading the gap between the two as
 //      a signal, and it is not one.
 //   2. A key with **no catalogue value** is empty. There is nothing to multiply.
-//   3. The **fallback** rung (#508's `bidFallbackPercent`, reached while nothing has been learned)
-//      still produces a figure, because that is precisely the case where the collector most needs
-//      to be told the number is policy rather than evidence. The bucket names itself
-//      *No recorded results* and the surface says so.
+//   3. The two **stated** rungs — a catalogue's manual factor (#1828) and the fallback (#508's
+//      `bidFallbackPercent`, reached while nothing has been learned) — still produce a figure,
+//      because that is precisely the case where the collector most needs to be told the number is
+//      a stated one rather than evidence. Each bucket names itself (*Michel / Online — your factor,
+//      catalogue ÷ 10*, *No recorded results*) and the surface says so.
 //
 // **The catalogue value is `valuateItemRows`'s**, not the dialog's cross-catalogue average: the
 // ratio's own denominator is that figure (ADR-0029 §2), and the bid recommendation multiplies that
@@ -91,7 +92,7 @@ export interface EstimatedValueRow {
   /** Unitless. Null on a set, where one row can hold several. */
   ratio: number | null;
   level: RatioBucketLevel | null;
-  /** Observations behind the median, after the split-lot dedup. 0 at `fallback`. */
+  /** Observations behind the median, after the split-lot dedup. 0 at the two stated rungs. */
   n: number;
   /** The lots the bucket was learned from, newest first — what the figure expands into. Empty on a
    * set, which does not expand, and at `fallback`, which has no evidence. */

@@ -83,6 +83,7 @@ describe("settings list beside detail (#1471)", () => {
             id: "n1",
             name: "Michel Deutschland",
             currency: "EUR",
+            manualFactor: null,
             catalogEditions: [
               { id: "e1", year: 2020 },
               { id: "e2", year: 2024 },

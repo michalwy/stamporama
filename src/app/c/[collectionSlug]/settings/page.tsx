@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
-import { getCatalogTree } from "@/lib/catalog";
+import { getCatalogSettingsTree } from "@/lib/catalog";
 import { getStampConditions } from "@/lib/conditions";
 import { getStampFormats } from "@/lib/stamp-formats";
 import { getCollectionFormatFactors } from "@/lib/format-factors";
@@ -118,7 +118,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     auctionReminder,
   ] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
-    getCatalogTree(session.user.id, collection.id),
+    getCatalogSettingsTree(session.user.id, collection.id),
     getStampConditions(session.user.id, collection.id),
     getStampFormats(session.user.id, collection.id),
     getCollectionFormatFactors(session.user.id, collection.id),

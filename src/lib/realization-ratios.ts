@@ -7,8 +7,9 @@ import {
   type MarketLotInput,
 } from "./market-value";
 import { valuateItemRows, type ValuationRow } from "./items";
-import { getCollectionBaseCurrency } from "./pricing";
+import { buildEffectivePrimaryCatalogMap, getCollectionBaseCurrency } from "./pricing";
 import {
+  learnedCatalogueRatio,
   ratioBucketLabel,
   resolveRealizationRatio,
   type RatioObservation,
@@ -51,6 +52,11 @@ import { buildAnchoringMarketsMap, getCollectionHomeMarket } from "./market-anch
 // unknown-variant rollup per #238, in the collection's base currency. The market side of the ratio
 // is in the base currency too, so the ratio is unitless and applies to a catalogue value in any
 // currency (ADR-0029 §5).
+//
+// **The catalogue is a bucket, and its manual factor the rung beneath it** (#1828). An observation's
+// catalogue is the book its catalogue value was read in (`CopyValuation.catalogNameId`); the subject's
+// is its primary area's effective primary catalogue — the only book `valuateItemRows` ever reads a
+// copy's figure from — so callers keep asking with area, condition and year and never name a book.
 //
 // Ownership is **not** checked here — every entry point is called from a module that has already
 // resolved the collection for the owner.
@@ -127,6 +133,63 @@ export function primaryAreaIdOf(links: { collectionAreaId: string; isPrimary: bo
   return link?.collectionAreaId ?? null;
 }
 
+/** What a caller asks the ladder about: the subject's catalogue is derived here, from its area. */
+export type LadderSubject = Omit<RatioSubject, "catalogNameId">;
+
+/** A collection's catalogues as the ladder reads them: the area → book map and each book's name and
+ * manual factor. Loaded before anything else, since even a collection with nothing recorded applies
+ * its manual factors. */
+interface CatalogueLadderContext {
+  catalogueByArea: Map<string, string | null>;
+  catalogues: Map<string, { name: string; manualFactor: number | null }>;
+}
+
+async function loadCatalogueLadderContext(collectionId: string): Promise<CatalogueLadderContext> {
+  const [catalogueByArea, names] = await Promise.all([
+    buildEffectivePrimaryCatalogMap(collectionId),
+    prisma.catalogName.findMany({
+      where: { vendor: { collectionId } },
+      select: { id: true, name: true, manualFactor: true, vendor: { select: { name: true } } },
+    }),
+  ]);
+  return {
+    catalogueByArea,
+    catalogues: new Map(
+      names.map((n) => [
+        n.id,
+        {
+          // The name the areas screen gives a valuing volume — `Michel / Online`.
+          name: `${n.vendor.name} / ${n.name}`,
+          manualFactor: n.manualFactor === null ? null : Number(n.manualFactor),
+        },
+      ])
+    ),
+  };
+}
+
+/** Resolve one subject against loaded evidence and name its bucket — the one spelling shared by the
+ * full resolver and the empty one. */
+function resolveSubject(
+  subject: LadderSubject,
+  observations: RatioObservation[],
+  fallbackPercent: number,
+  catalogues: CatalogueLadderContext,
+  names: { areaName: string | null; conditionName: string | null }
+): RealizationRatio {
+  const catalogNameId = subject.areaId ? (catalogues.catalogueByArea.get(subject.areaId) ?? null) : null;
+  const catalogue = catalogNameId ? catalogues.catalogues.get(catalogNameId) : undefined;
+  const resolved = resolveRealizationRatio(
+    { ...subject, catalogNameId },
+    observations,
+    fallbackPercent,
+    catalogue?.manualFactor ?? null
+  );
+  return {
+    ...resolved,
+    bucketLabel: ratioBucketLabel(resolved, { ...names, catalogueName: catalogue?.name ?? null }),
+  };
+}
+
 /** A resolved ratio with the bucket named — what #511 renders and #510 anchors a line on. */
 export interface RealizationRatio extends ResolvedRatio {
   /** e.g. `Polska Ludowa, MNH, 1945–1949`. */
@@ -141,7 +204,10 @@ export interface RealizationRatio extends ResolvedRatio {
  * precomputed table.
  */
 export interface RealizationRatioResolver {
-  resolve(subject: RatioSubject): RealizationRatio;
+  resolve(subject: LadderSubject): RealizationRatio;
+  /** What one catalogue's own results say, with no minimum sample (#1828) — the learned figure the
+   * catalogue settings show beside the manual factor. */
+  learnedForCatalogue(catalogNameId: string): { ratio: number | null; n: number };
   /** Observations behind every answer, for a caller that wants to say how much was recorded at
    * all. Deduplication is per bucket, so this is the raw count. */
   observationCount: number;
@@ -206,11 +272,12 @@ export interface RatioEvidenceObservation {
 export async function loadRealizationRatios(
   collectionId: string
 ): Promise<RealizationRatioResolver> {
-  const [collection, lots, observationRows] = await Promise.all([
+  const [collection, catalogues, lots, observationRows] = await Promise.all([
     prisma.collection.findUnique({
       where: { id: collectionId },
       select: { bidFallbackPercent: true },
     }),
+    loadCatalogueLadderContext(collectionId),
     prisma.auctionLot.findMany({
       where: {
         // The lifecycle plus a price, and nothing else (ADR-0022 §2): won, lost and merely observed
@@ -232,7 +299,7 @@ export async function loadRealizationRatios(
   ]);
   const fallbackPercent = collection?.bidFallbackPercent ?? 100;
 
-  if (lots.length === 0 && observationRows.length === 0) return emptyResolver(fallbackPercent);
+  if (lots.length === 0 && observationRows.length === 0) return emptyResolver(fallbackPercent, catalogues);
 
   const homeMarket = await getCollectionHomeMarket(collectionId);
   const [baseCurrency, areas, conditions, anchorsByArea] = await Promise.all([
@@ -321,7 +388,8 @@ export async function loadRealizationRatios(
     // A datapoint whose key has no catalogue value yields a market value but no ratio — there is
     // nothing to state it as a fraction of.
     const valuedId = point.source.kind === "lot" ? point.source.lineId : point.source.observationId;
-    const catalogueValue = valuations.get(valuedId)?.baseAmount ?? null;
+    const valuation = valuations.get(valuedId);
+    const catalogueValue = valuation?.baseAmount ?? null;
     if (catalogueValue === null || catalogueValue <= 0) continue;
     const stamp =
       point.source.kind === "lot"
@@ -335,6 +403,7 @@ export async function loadRealizationRatios(
       areaId: primaryAreaIdOf(stamp.stampAreaLinks),
       conditionId: point.key.conditionId,
       issuedYear: stamp.issuedYear,
+      catalogNameId: valuation?.catalogNameId ?? null,
     });
   }
 
@@ -389,28 +458,51 @@ export async function loadRealizationRatios(
         .filter((lot): lot is RatioEvidenceLot => lot !== null)
         .sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime());
     },
+    learnedForCatalogue(catalogNameId) {
+      return learnedCatalogueRatio(catalogNameId, observations);
+    },
     resolve(subject) {
-      const resolved = resolveRealizationRatio(subject, observations, fallbackPercent);
-      return {
-        ...resolved,
-        bucketLabel: ratioBucketLabel(resolved, {
-          areaName: subject.areaId ? (areaNames.get(subject.areaId) ?? null) : null,
-          conditionName: conditionNames.get(subject.conditionId) ?? null,
-        }),
-      };
+      return resolveSubject(subject, observations, fallbackPercent, catalogues, {
+        areaName: subject.areaId ? (areaNames.get(subject.areaId) ?? null) : null,
+        conditionName: conditionNames.get(subject.conditionId) ?? null,
+      });
     },
   };
 }
 
-/** A resolver over no evidence at all: everything falls back, and nothing is queried to say so. */
-function emptyResolver(fallbackPercent: number): RealizationRatioResolver {
+/** A resolver over no evidence at all: a catalogue's manual factor where it has one, the fallback
+ * everywhere else, and nothing more is queried to say so. */
+function emptyResolver(
+  fallbackPercent: number,
+  catalogues: CatalogueLadderContext
+): RealizationRatioResolver {
   return {
     observationCount: 0,
     describeLots: () => [],
     describeObservations: () => [],
+    learnedForCatalogue: () => ({ ratio: null, n: 0 }),
     resolve(subject) {
-      const resolved = resolveRealizationRatio(subject, [], fallbackPercent);
-      return { ...resolved, bucketLabel: ratioBucketLabel(resolved, { areaName: null, conditionName: null }) };
+      return resolveSubject(subject, [], fallbackPercent, catalogues, { areaName: null, conditionName: null });
     },
   };
+}
+
+/**
+ * Each catalogue's learned factor, for the catalogue settings (#1828): *catalogue ÷ realised*, the
+ * inverse of the catalogue bucket's median, so it reads in the same unit as the manual factor beside
+ * it. Null with `n = 0` for a catalogue nothing has been recorded against.
+ */
+export async function readLearnedCatalogueFactors(
+  collectionId: string
+): Promise<Map<string, { factor: number | null; n: number }>> {
+  const [resolver, names] = await Promise.all([
+    loadRealizationRatios(collectionId),
+    prisma.catalogName.findMany({ where: { vendor: { collectionId } }, select: { id: true } }),
+  ]);
+  return new Map(
+    names.map(({ id }) => {
+      const learned = resolver.learnedForCatalogue(id);
+      return [id, { factor: learned.ratio === null ? null : 1 / learned.ratio, n: learned.n }];
+    })
+  );
 }

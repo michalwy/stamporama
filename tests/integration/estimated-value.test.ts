@@ -5,6 +5,7 @@ import {
   getStampEstimatedValue,
   getChecklistEstimatedValue,
 } from "../../src/lib/estimated-values";
+import { readLearnedCatalogueFactors } from "../../src/lib/realization-ratios";
 
 // Estimated value from the learned realization ratio (#602; ADR-0022 §6 as revised).
 //
@@ -25,7 +26,14 @@ describe("estimated value (#602)", () => {
   let conditionId: string;
   let usedConditionId: string;
   let editionId: string;
+  let catalogNameId: string;
   let areaId: string;
+  /** A second area priced from the same Michel book (#1828) — results here share the plain stamp's
+   * catalogue but never its area. */
+  let germanyAreaId: string;
+  /** A third area priced from a different book, Fischer. */
+  let fischerAreaId: string;
+  let fischerEditionId: string;
   let issueId: string;
 
   /** Priced 50.00 MNH and 8.00 used. Never in a lot, so everything about it is estimated. */
@@ -40,12 +48,13 @@ describe("estimated value (#602)", () => {
   async function price(
     stampId: string,
     conditionIdArg: string,
-    amount: string
+    amount: string,
+    edition = editionId
   ): Promise<void> {
     await prisma.stampCatalogPrice.create({
       data: {
         stampId,
-        catalogEditionId: editionId,
+        catalogEditionId: edition,
         conditionId: conditionIdArg,
         certificateStatusId: null,
         formatId: null,
@@ -62,6 +71,26 @@ describe("estimated value (#602)", () => {
     });
     await prisma.issueMember.create({ data: { issueId, stampId: s.id } });
     return s.id;
+  }
+
+  /** A stamp in another area, priced 10.00 MNH in that area's book. */
+  async function stampElsewhere(name: string, area: string, edition: string): Promise<string> {
+    const s = await prisma.stamp.create({ data: { collectionId, name } });
+    await prisma.stampCollectionArea.create({
+      data: { stampId: s.id, collectionAreaId: area, isPrimary: true },
+    });
+    await price(s.id, conditionId, "10.00", edition);
+    return s.id;
+  }
+
+  /** Three MNH results at 40% of catalogue for a stamp outside the plain stamp's area. */
+  async function learnFortyPercentOf(stampId: string): Promise<void> {
+    const saleId = await sale();
+    for (let i = 0; i < 3; i++) await lot(saleId, stampId, "4.00");
+  }
+
+  async function setManualFactor(factor: string | null): Promise<void> {
+    await prisma.catalogName.update({ where: { id: catalogNameId }, data: { manualFactor: factor } });
   }
 
   async function sale(): Promise<string> {
@@ -115,6 +144,7 @@ describe("estimated value (#602)", () => {
   // assertion cannot fail the next test for the wrong reason.
   beforeEach(async () => {
     await prisma.auctionLot.deleteMany({ where: { auctionSale: { collectionId } } });
+    await setManualFactor(null);
   });
 
   before(async () => {
@@ -149,8 +179,18 @@ describe("estimated value (#602)", () => {
     const catalogName = await prisma.catalogName.create({
       data: { vendorId: vendor.id, name: "Michel Europa", currency: "EUR" },
     });
+    catalogNameId = catalogName.id;
     editionId = (
       await prisma.catalogEdition.create({ data: { catalogNameId: catalogName.id, year: 2024 } })
+    ).id;
+    const fischerVendor = await prisma.catalogVendor.create({
+      data: { collectionId, name: "Fischer", abbreviation: "Fi" },
+    });
+    const fischerName = await prisma.catalogName.create({
+      data: { vendorId: fischerVendor.id, name: "Katalog", currency: "EUR" },
+    });
+    fischerEditionId = (
+      await prisma.catalogEdition.create({ data: { catalogNameId: fischerName.id, year: 2024 } })
     ).id;
 
     conditionId = (
@@ -167,6 +207,16 @@ describe("estimated value (#602)", () => {
     areaId = (
       await prisma.collectionArea.create({
         data: { collectionId, name: "Poland", primaryCatalogNameId: catalogName.id },
+      })
+    ).id;
+    germanyAreaId = (
+      await prisma.collectionArea.create({
+        data: { collectionId, name: "Germany", primaryCatalogNameId: catalogName.id },
+      })
+    ).id;
+    fischerAreaId = (
+      await prisma.collectionArea.create({
+        data: { collectionId, name: "Poland (Fischer)", primaryCatalogNameId: fischerName.id },
       })
     ).id;
     issueId = (
@@ -285,6 +335,62 @@ describe("estimated value (#602)", () => {
     assert.equal(row.bucketLabel, "No recorded results");
     // A policy percentage has no evidence to expand into.
     assert.deepEqual(row.lots, []);
+  });
+
+  describe("the catalogue rungs (#1828)", () => {
+    it("learns from the catalogue's results when the area has none, and says so", async () => {
+      await learnFortyPercentOf(await stampElsewhere("German", germanyAreaId, editionId));
+
+      const value = await getStampEstimatedValue(userId, plainStampId);
+      const row = value.rows.find((r) => r.conditionId === conditionId);
+      assert.ok(row);
+      assert.equal(row.level, "catalogue");
+      assert.equal(row.ratio, 0.4);
+      assert.equal(row.n, 3);
+      assert.equal(row.bucketLabel, "Michel / Michel Europa results");
+      assert.equal(value.cells.find((c) => c.conditionAbbreviation === "MNH")?.estimate, "20.00");
+    });
+
+    it("uses the manual factor with nothing recorded, and names it as the collector's", async () => {
+      await setManualFactor("4");
+
+      const value = await getStampEstimatedValue(userId, plainStampId);
+      const row = value.rows.find((r) => r.conditionId === conditionId);
+      assert.ok(row);
+      assert.equal(row.level, "catalogue-factor");
+      assert.equal(row.ratio, 0.25);
+      assert.equal(row.n, 0);
+      assert.equal(row.bucketLabel, "Michel / Michel Europa — your factor, catalogue ÷ 4");
+      assert.deepEqual(row.lots, []);
+      assert.equal(value.cells.find((c) => c.conditionAbbreviation === "MNH")?.estimate, "12.50");
+    });
+
+    it("puts the manual factor ahead of another catalogue's results", async () => {
+      await learnFortyPercentOf(await stampElsewhere("Fischer-priced", fischerAreaId, fischerEditionId));
+
+      // Without a factor the collection bucket — all Fischer — still answers, as it did before.
+      const before = await getStampEstimatedValue(userId, plainStampId);
+      assert.equal(before.rows.find((r) => r.conditionId === conditionId)?.level, "collection");
+
+      await setManualFactor("10");
+      const after = await getStampEstimatedValue(userId, plainStampId);
+      const row = after.rows.find((r) => r.conditionId === conditionId);
+      assert.equal(row?.level, "catalogue-factor");
+      assert.equal(row?.ratio, 0.1);
+    });
+
+    it("reports each catalogue's learned factor with its n, for the settings", async () => {
+      await learnFortyPercentOf(await stampElsewhere("German", germanyAreaId, editionId));
+
+      const learned = await readLearnedCatalogueFactors(collectionId);
+      const michel = learned.get(catalogNameId);
+      assert.ok(michel);
+      assert.equal(michel.n, 3);
+      assert.ok(michel.factor !== null && Math.abs(michel.factor - 2.5) < 1e-9);
+      // A catalogue nothing was recorded against says so rather than inventing a figure.
+      const others = [...learned].filter(([id]) => id !== catalogNameId);
+      assert.ok(others.every(([, f]) => f.factor === null && f.n === 0));
+    });
   });
 
   it("sums a checklist's members per key, counting only the ones it estimated", async () => {

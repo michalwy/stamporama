@@ -1115,7 +1115,7 @@ collection:
 |---|---|---|
 | **Bargain floor** | 75% | The share of the fair figure below which a lot is a bargain. |
 | **Walk-away ceiling** | 125% | The share past which you stop bidding. |
-| **Catalogue fallback** | 100% | What a catalogue value counts as while nothing has been learned yet. |
+| **Catalogue fallback** | 100% | What a catalogue value counts as while nothing has been learned yet, for a catalogue with no [manual factor](collections.md#how-far-a-catalogue-overstates). |
 
 Each is a whole percentage. The floor is **not** required to sit below 100 nor the ceiling above it:
 buying only well under what a lot is worth is a trading style, and the app has no business calling
@@ -1130,18 +1130,39 @@ nothing like the same share of their catalogue value, so a single percentage typ
 a market opinion that is wrong nearly everywhere.
 
 Instead it is **learned from the results you record**. Every closed lot whose contents you described
-is a hammer price beside a catalogue value, and their ratio is filed by area, condition and period.
-A recommendation uses the most specific group that holds at least three of them, and says which
-group it used and how many results are behind it — *"55% — Polska Ludowa, mint never hinged,
-1945–1949, from 6 results"* is something you can argue with; *"55%"* is not.
+is a hammer price beside a catalogue value, and their ratio is filed by area, condition, period and
+**catalogue**. A recommendation uses the most specific group that holds at least three of them, and
+says which group it used and how many results are behind it — *"55% — Polska Ludowa, mint never
+hinged, 1945–1949, from 6 results"* is something you can argue with; *"55%"* is not. The groups, most
+specific first:
 
-The **catalogue fallback** above is what fills that gap until then, and 100% is chosen so it changes
-nothing: before anything has been learned, a catalogue-anchored recommendation is exactly the
-catalogue value *Bid catalogue value* already places. It stops being consulted as soon as there is
-evidence.
+1. the stamp's area, its condition, and issues within two years of it;
+2. the area and the condition;
+3. the area;
+4. **the catalogue** the stamp is valued in — every result valued in *Michel / Online*, whatever its
+   area (*"Michel / Online results"*). Catalogues overstate by very different amounts — Michel ten
+   times the realised price is nothing unusual, Fischer more like two to five — so their results are
+   kept apart before they are ever mixed;
+5. **your manual factor** for that catalogue, if you have set one ([Settings →
+   Catalogs](collections.md#how-far-a-catalogue-overstates)) — your own estimate, named as such:
+   *"Michel / Online — your factor, catalogue ÷ 10"*;
+6. every result in the collection;
+7. the **catalogue fallback** percentage above.
+
+The manual factor comes **before** the whole collection on purpose: the collection's results mix
+every catalogue, which is exactly the blur the catalogue group exists to avoid, and three results
+from Fischer should not silence what you said about Michel.
+
+The **catalogue fallback** above is what fills the gap for a catalogue with no manual factor, and
+100% is chosen so it changes nothing: before anything has been learned, a catalogue-anchored
+recommendation is exactly the catalogue value *Bid catalogue value* already places. It stops being
+consulted as soon as there is evidence.
 
 There is no setting for the percentage itself, and there is deliberately no way to override it: you
-would be tuning against evidence the app is showing you on the same screen. If a group's percentage
+would be tuning against evidence the app is showing you on the same screen. A catalogue's manual
+factor is not an override either — it is only reached while that catalogue has too few results of
+its own, and the catalogue's settings show the factor its results say beside yours, so you can see
+when the data has overtaken the guess. If a group's percentage
 looks wrong, the answer is another recorded result — which is the strongest reason there is to file
 the lots you merely **watched** as well as the ones you won.
 
