@@ -149,3 +149,38 @@ function specificationTextLine(row: OfferSpecificationRow): string {
     .filter((field): field is string => !!field)
     .join(" · ");
 }
+
+/** What a specification's **contents** are, for telling whether they have changed (#1760). */
+export interface SpecificationContents {
+  offerNo: number;
+  title: string;
+  language: string | null;
+  rows: readonly OfferSpecificationRow[];
+}
+
+/**
+ * The specification's contents as one canonical string — everything a buyer reads on the page and
+ * nothing else: the offer's number and title, its language, and every row with every field, the
+ * thumbnail's photo included. Two specifications are the same to a buyer exactly when these strings
+ * are equal, which is what a share link compares against the one it was made from (#1760). A price,
+ * the listing's texts or its collages are not in it, because the page shows none of them.
+ */
+export function specificationContentsKey(spec: SpecificationContents): string {
+  return JSON.stringify([
+    spec.offerNo,
+    spec.title,
+    spec.language,
+    spec.rows.map((row) => [
+      row.itemId,
+      row.photoId,
+      row.area,
+      row.issue,
+      row.year,
+      row.catalog,
+      row.description,
+      row.condition,
+      row.faults,
+      row.certificate,
+    ]),
+  ]);
+}

@@ -4,6 +4,8 @@ import { makeTitleCopyMapper, TITLE_COPY_SELECT, TITLE_COPY_STAMP_SELECT } from 
 import { loadChecklistSlots } from "./offer-photo-checklists";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { soldItemIds } from "./sales";
+import { normalizeLanguage } from "./languages";
+import { isTerminalState, type OfferState } from "./offer-rules";
 import {
   specificationCopyOrder,
   specificationRow,
@@ -22,6 +24,12 @@ export interface OfferSpecification {
   offerNo: number;
   /** The offer's title, or the label derived from its sets when it was never given one (#209). */
   title: string;
+  /** The offer's language — its platform's listing language, else the collection's own (#293). The
+   *  rows are written in it and the page's own words follow it (`offer-specification-labels.ts`). */
+  language: string | null;
+  /** Whether the offer is closed — sold or withdrawn. A buyer's link shows no specification for a
+   *  closed offer (#1760); the collector's own page still does. */
+  closed: boolean;
   rows: OfferSpecificationRow[];
 }
 
@@ -50,8 +58,10 @@ export async function readOfferSpecification(
       collectionId: true,
       offerNo: true,
       name: true,
+      state: true,
       photoGroupByChecklist: true,
       platform: { select: { titleLanguage: true } },
+      collection: { select: { defaultLanguage: true } },
       sets: {
         select: {
           id: true,
@@ -119,6 +129,10 @@ export async function readOfferSpecification(
     collectionId: offer.collectionId,
     offerNo: offer.offerNo,
     title,
+    language:
+      normalizeLanguage(offer.platform.titleLanguage) ??
+      normalizeLanguage(offer.collection.defaultLanguage),
+    closed: isTerminalState(offer.state as OfferState),
     rows,
   };
 }
