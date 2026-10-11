@@ -4,6 +4,7 @@ import { useId, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type {
+  ComposeSeriesResult,
   RecombinationFiller,
   RecombinationOfferRef,
   RecombinationSeriesView,
@@ -43,12 +44,22 @@ import {
   DialogShell,
 } from "@/app/dialog-shell";
 import { OfferStateChip } from "../offer-badges";
-import { BAND, Callout, Empty, NOTE, SectionHeading, SkeletonBlock } from "../lot-builder/lot-builder-chrome";
+import {
+  BAND,
+  Callout,
+  CreatedInSitting,
+  Empty,
+  NOTE,
+  SectionHeading,
+  SkeletonBlock,
+  type CreatedInSittingEntry,
+} from "../lot-builder/lot-builder-chrome";
 import { useInvalidateOffers, useSeriesFromSingles } from "../use-offers-query";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import { NO_FACEBOOK_CHOICE } from "@/lib/facebook-post-rules";
 import { FacebookGroupSelect } from "../facebook-group-select";
 import { useFacebookGroupChoice } from "../use-facebook-group-choice";
+import { useToast } from "@/app/toast-provider";
 
 // The series-recombination screen (#1210). The platform comes first, as on the lot builder, because
 // availability is a per-platform question; it lives in the URL, so a refresh or a shared link lands on
@@ -78,6 +89,11 @@ import { useFacebookGroupChoice } from "../use-facebook-group-choice";
 // offer the marketplace would refuse: the card says *would be added to #N* once every slot is chosen,
 // and the dialog proposes the lowest-numbered such offer, lets another be picked, and keeps a new
 // offer as a choice. An offer in active bidding is named and never receives one (#334).
+//
+// **The screen stays where it is after composing** (#1830), as the Lot builder does (#1680): a
+// confirmation names the offer with a plain link, every setting stays — it is all in the address, and
+// the Facebook group is remembered — and the series are read again, so the copies just composed drop
+// out. The offers made since the screen was opened are listed above the series until it is left.
 
 /** The chosen copy's photo leading a slot's row, and a candidate's beside its line (#1266). */
 const CHOSEN_PHOTO = "4.5rem";
@@ -170,6 +186,24 @@ export function SeriesFromSinglesPanel({
   const criteriaQuery = new URLSearchParams(seriesCriteriaParams(criteria)).toString();
   const query = useSeriesFromSingles(collectionId, platformId, criteriaQuery);
   const filtered = SERIES_FILTER_PARAMS.some((key) => criteria[key].length > 0);
+  // The offers composed since the screen was opened (#1830), newest first. Component state and not
+  // the address, as on the Lot builder (#1680): a record of what this sitting did, not a question the
+  // screen answers, and meant to go when the screen is left.
+  const [created, setCreated] = useState<CreatedInSittingEntry[]>([]);
+  const onComposed = (result: ComposeSeriesResult, checklistName: string) =>
+    setCreated((prev) => [
+      {
+        // One offer can receive several series in a sitting; each is its own line.
+        key: `${result.offerId}:${prev.length}`,
+        offerId: result.offerId,
+        offerNo: result.offerNo,
+        detail:
+          result.addedToOfferNo !== null
+            ? `${checklistName} added as a further set`
+            : `${checklistName}, ${result.copies} ${result.copies === 1 ? "copy" : "copies"}`,
+      },
+      ...prev,
+    ]);
 
   /** Set or clear parameters; an empty value removes its key, so the default screen's address stays
    *  bare. */
@@ -297,6 +331,8 @@ export function SeriesFromSinglesPanel({
         </div>
       </div>
 
+      <CreatedInSitting collectionSlug={collectionSlug} entries={created} leaving="this screen" />
+
       <div style={{ padding: "0.875rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {!platformId ? (
           <Empty>
@@ -332,6 +368,7 @@ export function SeriesFromSinglesPanel({
                 platformId={platformId}
                 platformName={query.data.platformName}
                 criteriaQuery={criteriaQuery}
+                onComposed={(result) => onComposed(result, series.checklistName)}
               />
             ))}
           </>
@@ -348,6 +385,7 @@ function SeriesCard({
   platformId,
   platformName,
   criteriaQuery,
+  onComposed,
 }: {
   series: RecombinationSeriesView;
   collectionId: string;
@@ -355,6 +393,7 @@ function SeriesCard({
   platformId: string;
   platformName: string;
   criteriaQuery: string;
+  onComposed: (result: ComposeSeriesResult) => void;
 }) {
   const cardId = useId();
   const [chosen, setChosen] = useState<Record<string, string>>({});
@@ -592,6 +631,7 @@ function SeriesCard({
           platformId={platformId}
           platformName={platformName}
           criteriaQuery={criteriaQuery}
+          onComposed={onComposed}
           onClose={() => setComposing(false)}
         />
       ) : null}
@@ -618,6 +658,7 @@ function ComposeSeriesDialog({
   platformId,
   platformName,
   criteriaQuery,
+  onComposed,
   onClose,
 }: {
   series: RecombinationSeriesView;
@@ -629,10 +670,11 @@ function ComposeSeriesDialog({
   platformId: string;
   platformName: string;
   criteriaQuery: string;
+  onComposed: (result: ComposeSeriesResult) => void;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const { invalidateAll } = useInvalidateOffers();
+  const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string>();
   // Undefined: the proposal (the lowest-numbered match); null: a new offer, asked for.
@@ -687,11 +729,28 @@ function ComposeSeriesDialog({
         },
         target ? NO_FACEBOOK_CHOICE : facebook.choice()
       );
-      if (result.status === "success") {
-        if (!target) facebook.remember();
-        await invalidateAll(collectionId);
-        router.push(`/c/${collectionSlug}/offers/${result.offerId}`);
-      } else setError(result.message);
+      if (result.status !== "success") {
+        setError(result.message);
+        return;
+      }
+      if (!target) facebook.remember();
+      // **The screen stays where it is** (#1830), as the Lot builder does (#1680): composing several
+      // series in a row used to mean coming back from each new offer and setting the screen up again.
+      // The offer is named in a confirmation whose link is a plain one, so ⌘ or Ctrl opens it beside.
+      toast({
+        message:
+          result.addedToOfferNo !== null
+            ? `Series added to offer #${result.offerNo}`
+            : `Offer #${result.offerNo} created`,
+        href: `/c/${collectionSlug}/offers/${result.offerId}`,
+        linkLabel: "Open",
+      });
+      onComposed(result);
+      // The series are read again before the dialog goes, so the card it closes onto already shows
+      // what is left: the copies composed sit in a multi-copy set on this platform now, which is
+      // neither available here nor a single, so they drop out of every series without a filter.
+      await invalidateAll(collectionId);
+      onClose();
     });
   }
 

@@ -231,6 +231,16 @@ describe("compose a series offer out of single offers (#1211)", () => {
       },
       { copies: 5, withdrawn: 1, emptiedLive: 2, changedLive: 0 }
     );
+    // The screen stays open after composing (#1830): it names the offer by its number, and a fresh
+    // read no longer proposes the series, its copies being in a multi-copy set on the platform now.
+    assert.equal(
+      result.offerNo,
+      (await prisma.offer.findUniqueOrThrow({ where: { id: result.offerId }, select: { offerNo: true } })).offerNo
+    );
+    assert.ok(
+      !(await findSeriesRecombinations(userId, collectionId, platformId)).series.some((s) => s.checklistId === setId),
+      "the series just composed is no longer listed"
+    );
   });
 
   it("keeps an emptied Active single in Needs action until it is withdrawn (#1277)", async () => {
@@ -522,6 +532,7 @@ describe("compose a series offer out of single offers (#1211)", () => {
 
     assert.equal(result.offerId, similar);
     assert.equal(result.addedToOfferNo, await offerNoOf(similar));
+    assert.equal(result.offerNo, result.addedToOfferNo, "the offer named is the one it went into (#1830)");
     assert.equal(await prisma.offer.count({ where: { collectionId } }), offersBefore, "no new offer");
     const row = await offerRow(similar);
     assert.equal(row.sets.length, 2, "its quantity grew by one");

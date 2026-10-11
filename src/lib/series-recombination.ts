@@ -365,6 +365,9 @@ export interface ComposeSeriesInput {
 export interface ComposeSeriesResult {
   /** The offer now holding the series: the new one, or the similar offer it was added to. */
   offerId: string;
+  /** That offer's short listing number (#416), which the screen's confirmation names it by now that
+   *  it stays open after composing (#1830). */
+  offerNo: number;
   /** The number of the similar offer the series was added to as a further set (#1369); null when a
    *  new offer was created. */
   addedToOfferNo: number | null;
@@ -563,8 +566,13 @@ export async function composeSeriesOffer(
   // and stay. A target that also lost a single was synced with the set it received.
   for (const id of keptIds) if (id !== target?.offerId) await syncGeneratedTexts(ownerId, id);
 
+  const offerNo =
+    target?.offerNo ??
+    (await prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { offerNo: true } })).offerNo;
+
   return {
     offerId,
+    offerNo,
     addedToOfferNo: target?.offerNo ?? null,
     copies: itemIds.length,
     withdrawnOffers: withdrawnIds.length,
