@@ -40,3 +40,17 @@ operational dashboard*; read the ADR before changing what the screen is.
   `api/collections/[collectionId]/dashboard/[section]`, and one query per section under its own
   `["dashboard", collectionId, …]` root — nothing invalidates it by hand; it goes stale on the shared
   clock and is read afresh on the next visit.
+
+- **Auctions I bid in** (#1812): *Closing soon* and *Waiting to be closed* are the bell's groups,
+  read through `auctionLotWindows` (`action-items.ts`) — the bell's own derivation, exported with
+  the lots rather than rows so the dashboard draws its rows with the sale beside the seller
+  (`auctionLotRowDetail`, which drops whichever of the two the row has already said). *Won, not yet
+  purchased* is the lots list's `notPurchased` filter (#1812): **won**, and the lot itself neither a
+  purchase lot nor an expense — a lot-level test, not the sale's status, so a won lot held back from
+  its sale's settlement stays until it is moved into a sale and settled. The filter names its own
+  outcome and so stands in for the hide-closed default, as picking an outcome does — unlike *To
+  review*, which narrows under it (`auctions.md`): every lot in this set is closed, so under the
+  default the chip could only ever read 0. The band's `of N` then counts open lots, exactly as it
+  already does beside *Won*, and the group's link names `outcome=won` beside it, which also keeps a
+  remembered outcome from emptying the list. It reads oldest first and is a chip on the lots toolbar
+  labelled `NOT_PURCHASED_LABEL`, the group's own title. Every row opens the lot in its sale.

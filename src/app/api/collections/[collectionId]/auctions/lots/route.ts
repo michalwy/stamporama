@@ -45,6 +45,7 @@ export async function GET(
       conditionToSettle: sp.get("conditionToSettle") === "1" || undefined,
       duplicate: sp.get("duplicate") === "1" || undefined,
       toReview: sp.get("toReview") === "1" || undefined,
+      notPurchased: sp.get("notPurchased") === "1" || undefined,
       search: readSearchParam(sp),
       sellerId: sp.get("sellerId") || undefined,
       platformId: sp.get("platformId") || undefined,

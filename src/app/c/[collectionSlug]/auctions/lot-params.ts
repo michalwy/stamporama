@@ -25,6 +25,8 @@ export interface AuctionLotFilters {
   duplicate?: boolean;
   /** Only lots carrying the *to review* marker — written through the agent API, not confirmed (#1626). */
   toReview?: boolean;
+  /** Only lots won and not yet purchased — neither transcribed into a purchase nor an expense (#1812). */
+  notPurchased?: boolean;
   /** Free-text search over the lot, its notes and the sale it belongs to (#484). */
   search?: string;
   sellerId?: string;
@@ -55,6 +57,7 @@ const LOT_PARAM: {
   conditionToSettle: () => "1",
   duplicate: () => "1",
   toReview: () => "1",
+  notPurchased: () => "1",
   search: (value) => value,
   sellerId: (value) => value,
   platformId: (value) => value,
@@ -132,6 +135,7 @@ const LOT_NARROWS: {
   conditionToSettle: () => "1",
   duplicate: () => "1",
   toReview: () => "1",
+  notPurchased: () => "1",
   // A blank-but-present search narrows nothing, and the box routinely holds one mid-edit.
   search: (value) => (value.trim() ? value : null),
   sellerId: (value) => value,

@@ -566,6 +566,12 @@ about the bidding:
 - **To review · API** — lots your [AI assistant](agent-api.md) added or changed that you have not
   confirmed yet, with a count. See [What the assistant wrote](#what-the-assistant-wrote--to-review--api)
   below.
+- **Won, not yet purchased** — lots you won that are not in a purchase yet, with a count: still to be
+  paid for and settled from their sale, so their stamps are nowhere in your collection yet. It picks
+  its own outcome, so it shows these closed lots without **Show closed**, oldest first — the one that
+  closed longest ago is the most overdue. A won lot you left out of its sale's settlement stays here
+  until it is in a purchase. The [Dashboard](dashboard.md)'s *Auctions I bid in* section opens this
+  list.
 
 Finally:
 

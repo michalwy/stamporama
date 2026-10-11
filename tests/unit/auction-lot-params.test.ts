@@ -27,6 +27,7 @@ describe("auction lot params", () => {
     conditionToSettle: true,
     duplicate: true,
     toReview: true,
+    notPurchased: true,
     search: "köhler",
     sellerId: "seller-1",
     platformId: "platform-1",
@@ -51,6 +52,7 @@ describe("auction lot params", () => {
     assert.equal(params.get("conditionToSettle"), "1");
     assert.equal(params.get("duplicate"), "1");
     assert.equal(params.get("toReview"), "1");
+    assert.equal(params.get("notPurchased"), "1");
     assert.equal(params.get("search"), "köhler");
     assert.equal(params.get("sellerId"), "seller-1");
     assert.equal(params.get("platformId"), "platform-1");
@@ -105,6 +107,7 @@ describe("auction lot narrowings", () => {
     conditionToSettle: true,
     duplicate: true,
     toReview: true,
+    notPurchased: true,
     search: "köhler",
     sellerId: "seller-1",
     platformId: "platform-1",

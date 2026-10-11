@@ -124,3 +124,22 @@ export function dashboardGroupFromBell(group: {
     href: group.href,
   };
 }
+
+/**
+ * A lot's second line in the *Auctions I bid in* section (#1812): its sale and its seller, as the
+ * issue asks — but each only where the line before it has not already said it. An untitled lot is
+ * called by its sale's name, so the sale is not repeated; a sale is often named after its seller
+ * (*Köhler 385*, *Philkam · Allegro*), so the seller is not repeated either. Null when both are
+ * already on the row.
+ */
+export function auctionLotRowDetail(lot: {
+  label: string;
+  saleName: string;
+  sellerName: string;
+}): string | null {
+  const parts: string[] = [];
+  if (lot.label !== lot.saleName) parts.push(lot.saleName);
+  const said = `${lot.label} ${lot.saleName}`.toLocaleLowerCase();
+  if (!said.includes(lot.sellerName.toLocaleLowerCase())) parts.push(lot.sellerName);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
