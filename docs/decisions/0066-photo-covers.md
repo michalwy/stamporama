@@ -30,6 +30,12 @@ exactly the repetition the collector ruled out. **Rejected: covered bytes stored
 The covers would then be part of a picture that has to be kept in step with its source, and a
 promoted stamp photo or the copy's strip could pick up the covered version by accident.
 
+**Rejected: *nothing to cover* held per stamp** (decided with the collector on 2026-10-10, #1763).
+One copy's photo marked *nothing to cover* does not release the stamp's other copies from the check —
+neither all of them nor only the unused ones. A used copy's postmark can carry a symbol that has to
+be covered (a Reich-era postmark with an eagle and swastika, say) even when the stamp's design is
+clean, and postmarks differ from copy to copy, so the answer is true of one photo and nothing more.
+
 ### 2. Covers are applied only when an offer that needs them renders the photo
 
 The renderer reads a copy's scan in one place (`scanSource` in `offer-photo-generation.ts`) and
