@@ -30,6 +30,7 @@ import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog } from "../activate-offer-dialog";
 import { RepostOfferDialog } from "./repost-offer-dialog";
+import { SpecificationShareDialog } from "./specification-share-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
 import { CLOSE_ELEMENT_ID, useAssistantClose } from "../assistant-close-handoff";
 import {
@@ -293,6 +294,8 @@ export function OfferDetailPanel({
   const [activating, setActivating] = useState(false);
   // *Repost* (#1718): an active quick buy posted again, asking for the new link.
   const [reposting, setReposting] = useState(false);
+  // *Share specification…* (#1760): the buyer's link to the specification.
+  const [sharingSpecification, setSharingSpecification] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
   const [confirm, setConfirm] = useState<"withdraw" | "delete" | null>(null);
   // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
@@ -760,6 +763,13 @@ export function OfferDetailPanel({
       label: "Copy specification as text",
       icon: "copy",
       onSelect: copySpecificationText,
+    },
+    // And as a link a buyer opens without an account (#1760) — the specification's third form.
+    {
+      key: "specification-share",
+      label: "Share specification…",
+      icon: "share",
+      onSelect: () => setSharingSpecification(true),
     },
     { key: "duplicate", label: "List on another platform", icon: "duplicate", onSelect: () => setDuplicating(true) },
     { key: "delete", label: "Delete", icon: "delete", danger: true, separatorBefore: true, onSelect: () => setConfirm("delete") },
@@ -1665,6 +1675,14 @@ export function OfferDetailPanel({
             setActionError(undefined);
           }}
           onConfirm={repost}
+        />
+      )}
+
+      {sharingSpecification && (
+        <SpecificationShareDialog
+          collectionId={collectionId}
+          offerId={offerId}
+          onClose={() => setSharingSpecification(false)}
         />
       )}
 

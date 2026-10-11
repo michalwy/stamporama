@@ -8,7 +8,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { readOfferSpecification } from "@/lib/offer-specification";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
-import { SpecificationSheet } from "./specification-sheet";
+import { SpecificationDocument, specificationThumbs } from "./specification-document";
 
 interface PageProps {
   params: Promise<{ collectionSlug: string; offerId: string }>;
@@ -45,8 +45,6 @@ export default async function OfferSpecificationPage({ params }: PageProps) {
   const spec = await readOfferSpecification(session.user.id, offerId);
   if (!spec || spec.collectionId !== collection.id) notFound();
 
-  const count = spec.rows.length;
-
   return (
     <div className="print-sheet" style={{ padding: "2rem", maxWidth: "60rem" }}>
       {/* Screen-only controls */}
@@ -66,18 +64,13 @@ export default async function OfferSpecificationPage({ params }: PageProps) {
         <PrintButton />
       </div>
 
-      <header style={{ borderBottom: "2px solid var(--color-border-strong)", paddingBottom: "0.75rem" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
-          <h1 style={{ margin: 0, fontSize: "1.375rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-            {formatEntityNo(spec.offerNo)} · {spec.title}
-          </h1>
-        </div>
-        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-          Specification — {count} {count === 1 ? "copy" : "copies"}
-        </p>
-      </header>
-
-      <SpecificationSheet collectionId={spec.collectionId} rows={spec.rows} />
+      <SpecificationDocument
+        spec={spec}
+        thumbSrc={specificationThumbs(
+          spec,
+          (photoId) => `/api/collections/${spec.collectionId}/photos/${photoId}/thumb`
+        )}
+      />
     </div>
   );
 }

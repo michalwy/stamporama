@@ -51,6 +51,10 @@ import {
   type UploadAttachmentInput,
 } from "@/lib/offer-photo-attachments";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
+import {
+  createOfferSpecificationShareToken,
+  revokeOfferSpecificationShareToken,
+} from "@/lib/offer-specification-share";
 import { resolvePurchaseContact } from "@/lib/contacts";
 import {
   NO_FACEBOOK_CHOICE,
@@ -1099,5 +1103,38 @@ export async function deleteOfferAction(offerId: string): Promise<OfferActionSta
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to delete the offer.");
+  }
+}
+
+// ── The buyer's link to the specification (#1760) ────────────────────────────────────────────────
+
+export type OfferSpecificationShareActionState =
+  | { status: "success"; token: string }
+  | { status: "error"; message: string };
+
+/** Generate the offer's specification link, replacing any it had — an offer has one link, and asking
+ *  for a new one is asking for the old one to stop working. */
+export async function createOfferSpecificationShareLinkAction(
+  offerId: string
+): Promise<OfferSpecificationShareActionState> {
+  const session = await getSession();
+  try {
+    const { token } = await createOfferSpecificationShareToken(session.user.id, offerId);
+    return { status: "success", token };
+  } catch (e) {
+    return fail(e, "Failed to create the link. Please try again.");
+  }
+}
+
+/** Withdraw the link: from then on its address shows nothing of the offer. */
+export async function revokeOfferSpecificationShareLinkAction(
+  offerId: string
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await revokeOfferSpecificationShareToken(session.user.id, offerId);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to withdraw the link. Please try again.");
   }
 }

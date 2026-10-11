@@ -33,11 +33,14 @@ const TD: React.CSSProperties = {
 const MUTED_DASH = <span style={{ color: "var(--color-text-muted)" }}>—</span>;
 
 export function SpecificationSheet({
-  collectionId,
   rows,
+  thumbSrc,
 }: {
-  collectionId: string;
   rows: readonly OfferSpecificationRow[];
+  /** Each row's thumbnail address, by photo id. Resolved by the page, because the collector's sheet
+   *  and the buyer's shared page (#1760) fetch the same picture through different routes — the
+   *  collection's own and the link's. */
+  thumbSrc: Readonly<Record<string, string>>;
 }) {
   if (rows.length === 0) {
     return (
@@ -64,12 +67,12 @@ export function SpecificationSheet({
         {rows.map((row) => (
           <tr key={row.itemId}>
             <td style={{ ...TD, width: "4.5rem", textAlign: "center" }}>
-              {row.photoId ? (
+              {row.photoId && thumbSrc[row.photoId] ? (
                 // A plain <img>: the sheet is a printout, so there is no carousel to offer, and an
                 // inline image prints where a background would not.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={`/api/collections/${collectionId}/photos/${row.photoId}/thumb`}
+                  src={thumbSrc[row.photoId]}
                   alt=""
                   style={{
                     width: "4rem",
