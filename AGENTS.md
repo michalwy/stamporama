@@ -38,9 +38,12 @@ not restate that reasoning here; add it to the topic file instead.
   checks, no bypass for anyone. Work on `task/<issue>-<slug>` cut from `main`; **the session that
   opens the pull request owns it to the end** and merges it on the user's say-so.
   → [`collaboration.md`](docs/agents/collaboration.md)
-- **A branch behind `main` is rebased and then re-verified, in that order** — the re-run is the half
-  that is easy to drop and the only one that is interesting. `--force-with-lease`, never bare
-  `--force` (#984).
+- **A pull request merges without being up to date with `main`** (#1791). It is **rebased only on a
+  conflict or when it carries a migration**, and a rebase is followed by a re-verify, in that order —
+  the re-run is the half that is easy to drop and the only one that is interesting.
+  `--force-with-lease`, never bare `--force` (#984). **`main`'s run after each merge is the safety
+  net**: the session that merged reads it, and a red `main` goes to the user at once and is fixed
+  forward in its own issue. → [`collaboration.md`](docs/agents/collaboration.md)
 - Conventional Commits. Reference an issue as `Refs #NNN`, or the `(#NNN)` suffix a commit title
   already uses; add a message body where the title alone would omit context. **Never a closing
   keyword** (`Closes`, `Fixes`, `Resolves`) anywhere in a commit message or a pull request body,
