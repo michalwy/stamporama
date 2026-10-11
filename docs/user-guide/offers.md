@@ -2483,9 +2483,28 @@ action** filter in the toolbar.
 
 To resolve one, open the offer and:
 
-- **Quantity still available** → **remove the affected set** (this is the decrement — the offer
-  now lists one fewer), after updating the quantity on the platform itself.
+- **Quantity still available** → **remove the affected sets** (this is the decrement — the offer
+  now lists fewer), then update the listing on the platform itself.
 - **Nothing left to sell** → **withdraw** the offer.
+
+### Removing every set sold elsewhere at once
+
+While an offer holds sets whose copies sold through **another** offer — on this platform or another —
+its header carries **Remove N sets sold elsewhere** beside the Needs action badge, and the offer's
+**⋮** menu carries the same entry. It asks first, listing each set it will remove with the sale that
+took its copy (each sale is a link). Confirming removes **exactly those sets**: a set sold through this
+offer stays, as the record of that sale, and so does every set still for sale — including one whose
+copy is only in bidding elsewhere, since that bid may still come to nothing. The copies stay in your
+inventory.
+
+Afterwards the offer is what is still for sale, and like any change of sets it is flagged **Listing
+out of date**, so **Update via Assistant** (or updating the listing by hand) is the next step; the
+listing photos follow the new composition as after any change of sets.
+
+If removing them would leave **nothing to sell** — every other set has sold too — nothing is removed:
+the dialog says so and offers **Withdraw…**, because a listing with nothing left can only come down
+(on Colnect, **Close via Assistant** does that in one step). The entry is absent when no set has sold
+elsewhere.
 
 The offer the sale actually went through is handled for you — it becomes **Sold** once *every* set
 has sold through it (a partial sale keeps it **Active** for its remaining sets). Nothing is done to

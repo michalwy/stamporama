@@ -22,6 +22,7 @@ import {
   addItemsToOfferSet,
   updateOfferSet,
   removeOfferSet,
+  removeOfferSetsSoldElsewhere,
   reorderOfferSets,
   reorderOfferSetItems,
   resetOfferSetItemOrder,
@@ -640,6 +641,20 @@ export async function removeOfferSetAction(setId: string): Promise<OfferActionSt
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to remove the set.");
+  }
+}
+
+/** Remove every set sold elsewhere (#1805) — of the `setIds` the confirmation listed, those still so. */
+export async function removeOfferSetsSoldElsewhereAction(
+  offerId: string,
+  setIds: string[]
+): Promise<OfferActionState> {
+  const session = await getSession();
+  try {
+    await removeOfferSetsSoldElsewhere(session.user.id, offerId, setIds);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to remove the sets.");
   }
 }
 
