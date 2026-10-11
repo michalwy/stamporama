@@ -12,6 +12,10 @@ the screen where the decision belongs, with the record in front of you.
 The badge appears only when something is waiting. With nothing outstanding the bell is quiet and the
 panel says so.
 
+For **all** the work waiting rather than only what needs attention now, open the
+[Dashboard](dashboard.md). Where one of its groups means the same as a group here, both read the same
+list.
+
 ## Priority: what the colours mean
 
 Groups are graded by **what is at stake**, not by what they are about, and the panel reads worst

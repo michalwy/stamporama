@@ -475,6 +475,16 @@ export function CollectionSidebar({
           flex: 1,
         }}
       >
+        {/* The operational Dashboard (#1808; ADR-0067): the work waiting across the collection. First,
+            outside every section and never folded away — it is the screen opened every day, and
+            entries are ordered by how often they are wanted (#971). */}
+        <NavItem
+          href={`${base}/dashboard`}
+          icon={<Icon name="dashboard" />}
+          label="Dashboard"
+          active={isActive(`${base}/dashboard`)}
+        />
+
         {/* Outside every section and never folded away (#762): it is the one screen that is about
             the collection as a whole, and the way back when a section has been collapsed.
             Collection structure (#1711) hangs beneath it as the Overview's breakdown, the way

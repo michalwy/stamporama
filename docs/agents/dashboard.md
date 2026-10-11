@@ -1,0 +1,42 @@
+# Dashboard Screen
+
+The operational Dashboard at `/c/[collectionSlug]/dashboard` — the work waiting on the collector, in
+five sections (#1808; [ADR-0067](../decisions/0067-operational-dashboard.md)). Reverses #397's *no
+operational dashboard*; read the ADR before changing what the screen is.
+
+- **Separate from the bell and the Overview** — chosen by the collector on 2026-10-11 over a
+  full-screen bell, new bell groups only, or an Overview section. The bell (#367, `ui-shell.md`)
+  stays a panel of exceptions graded by severity; the Overview (`overview.md`) stays the picture of
+  the collection and keeps *nothing operational*.
+
+- **Sidebar**: the first entry, outside every section and never folded, above Overview — the screen
+  opened every day, and entries go by how often they are wanted (#971). `/dashboard` is in no
+  `SECTION_ROUTES` entry, so it lights in the accent like Overview (`nav-sections.test.ts` pins it).
+
+- **Five sections, fixed and in this order** (`DASHBOARD_SECTIONS`, `src/lib/dashboard-rules.ts`):
+  Sales (#1809), Incoming purchases (#1810), Offers to handle (#1811), Auctions I bid in (#1812),
+  Trades (#1813). Each section's `href` is the screen its work is mostly done on: the heading links
+  there and the card takes that screen's sidebar tint through `sectionTintForHref`, not a palette of
+  its own. A section with no groups yet says so in words, never as a zero.
+
+- **A section is groups, a group is a count and its rows** — `DashboardGroup` is the bell's group
+  less severity and collapse, its items the bell's `ActionItem` shape. Rows are capped at
+  `DASHBOARD_ROW_LIMIT` with *N more →* to the group's `href`; the count is everything matching.
+  Rows come **oldest or most urgent first** — the provider's order, the screen never re-sorts.
+  **Every row links to the screen where the thing is dealt with, and nothing is acted on here.**
+
+- **Shared-source rule** (ADR-0067 §3): where a group means what a bell group means, the provider
+  reads the bell's derivation and hands it over with `dashboardGroupFromBell`. Any other group reads
+  through the function its own screen reads through. Never a second derivation of a set the app
+  already computes — that is the drift #397 refused.
+
+- **An empty group is kept**: a provider returns its groups even at zero, and the screen shows them
+  collapsed to title and `0` (`isEmptyGroup`). Do not filter empty groups out — the bell does, the
+  dashboard deliberately does not.
+
+- **Providers per section** in `src/lib/dashboard.ts` (`SECTION_PROVIDERS`): adding a group is an
+  entry there and nothing else. `getDashboardSection` asserts the collection itself as well, so a
+  section with no providers still refuses a stranger's collection. One route per section,
+  `api/collections/[collectionId]/dashboard/[section]`, and one query per section under its own
+  `["dashboard", collectionId, …]` root — nothing invalidates it by hand; it goes stale on the shared
+  clock and is read afresh on the next visit.
