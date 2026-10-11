@@ -74,16 +74,37 @@ The ruleset itself is checked in — see
 Work happens on `task/<issue>-<slug>`, branched from `main`. **Once the task is verified, the
 session commits, pushes and opens the pull request on its own**, with no question to the user first —
 he asked for that on 2026-09-13, because asking cost him a round trip for a step he always approves.
-**The session that opens the pull request owns it to the end**: it keeps the branch up to date,
-re-runs the checks after every rebase, and merges it — on the user's say-so and never before. The
-merge is the one step that waits for him; an approval given for a specific pull request ("merge it
-once CI passes") is that say-so and is not asked again.
+**The session that opens the pull request owns it to the end**: it rebases when it has to, re-runs
+the checks after every rebase, and merges it — on the user's say-so and never before. The merge is
+the one step that waits for him; an approval given for a specific pull request ("merge it once CI
+passes") is that say-so and is not asked again.
+
+**A pull request does not have to be up to date with `main` to merge** (#1791). Its required checks
+must pass on its own head; being behind is not a reason to rebase. Parallel issues usually touch
+different areas, and rebasing every open pull request after every merge cost most of the day for
+runs that almost never caught anything (#854, #880). **Rebase only when one of two things holds:**
+
+- **GitHub cannot rebase-merge it** — the pull request conflicts with `main`.
+- **It carries a database migration** — the one place two independently green changes are likely
+  to disagree (the schema, the order of migrations), and where a fix after the merge is expensive.
+  Rebase onto the `main` you are about to merge into, immediately before merging.
+
+Otherwise merge it as it stands.
 
 **Rebase, then re-verify, in that order.** Fetch, rebase onto `main`, run the checks again, force-push
 with `--force-with-lease` — never bare `--force`. The re-run is the half that is easy to drop
 and the only half that is interesting: a suite that was green before the rebase was green against a
 different `main`. Add `pnpm install` between the rebase and the suites when the rebase pulled in a
 lockfile change.
+
+### When `main` turns red
+
+**`main`'s own CI run after each merge is the safety net** that keeping every branch up to date used
+to be — the user accepted that two changes which each passed alone can occasionally break `main`
+together. So **the session that merged reads `main`'s run for its merge commit**, and a red run is
+**reported to the user at once**. It is fixed forward, in an issue of its own, through the ordinary
+pull request flow; nobody reverts or patches `main` around the gate. No release is tagged from a red
+`main` ([`release-versioning.md`](release-versioning.md)).
 
 **Never a closing keyword** (`Closes`, `Fixes`, `Resolves`) in a commit message or a pull request
 body — GitHub acts on it the moment the change lands and closes the issue before anybody has

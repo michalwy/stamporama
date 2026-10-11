@@ -56,7 +56,14 @@ deliberately, which is half the point of writing it down:
   merge commits.
 - `pull_request` — `allowed_merge_methods: ["rebase"]`, and `required_approving_review_count: 0`.
 - `required_status_checks` — the required contexts by name, and
-  `strict_required_status_checks_policy: true`, which is what makes merges serialise here.
+  `strict_required_status_checks_policy: false`: the checks must pass on the pull request's own
+  head, but the branch does not have to be up to date with `main` to merge (#1791). With several
+  issues in flight, `true` made every merge put every other pull request behind and pay a full CI
+  run again for a rebase that almost never caught anything (#854, #880). The user accepted the
+  price — two changes that each passed alone can occasionally break `main` together — and `main`'s
+  own run after each merge is what catches it (`docs/agents/collaboration.md` § *When `main` turns
+  red*). A merge queue would have kept the guarantee without the rebasing, and was rejected only
+  because GitHub offers it to organisation-owned repositories and this one belongs to a user.
 - `require_extra_approval_for_unattributed_changes` is kept **precisely because nobody chose it**.
   It is a platform default GitHub adds at ruleset creation; it is `false` here and `true` in a
   sibling repository, which is how it was noticed at all. With zero required approvals and no
@@ -233,11 +240,11 @@ the branch name is actually written down:
   ruleset's `allowed_merge_methods: ["rebase"]` narrows this set; it cannot widen it, so the two
   files answer *"can this be squashed"* only when read together.
 - `allow_auto_merge` — whether `gh pr merge --auto` is offered at all.
-- `allow_update_branch` — whether GitHub will bring a behind branch up to date on its own. This is
-  the field the merge loop rests on: `docs/agents/collaboration.md` § *Branches and pull requests* has
-  the session that opened a pull request keep it current by hand, because an armed pull request never
-  becomes mergeable by itself. Read the value here rather than from that section, which is why it no
-  longer states one.
+- `allow_update_branch` — whether GitHub will bring a behind branch up to date on its own. Since
+  #1791 a behind branch merges as it stands, so this no longer decides whether an armed pull request
+  can merge; it matters only for the rebases `docs/agents/collaboration.md` § *Branches and pull
+  requests* still asks for (a conflict, or a migration), which a session does by hand. Read the
+  value here rather than from that section, which is why it does not state one.
 - `delete_branch_on_merge` — whether a merged branch removes itself.
 - `default_branch` — the branch name every one of the above is about.
 
