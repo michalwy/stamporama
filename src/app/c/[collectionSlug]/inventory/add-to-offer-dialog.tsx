@@ -624,6 +624,8 @@ export function AddToOfferDialog({
         error={createError}
         zIndexBase={110}
         onPlatformChange={setCreatePlatformId}
+        // The title these copies would be given, editable (#1794) — following a copy taken out.
+        titleItemIds={offerItemIds}
         // What is going in (#1793): every copy as a full row, the set's catalogue value and cost, the
         // stamps it holds twice, and a copy taken out before the offer is made.
         copies={

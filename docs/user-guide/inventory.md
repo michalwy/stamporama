@@ -1186,6 +1186,10 @@ without closing the dialog.
   summary and the warning follow at once. Only the offer being made loses it: the copy stays ticked on
   the Copies list. The last copy cannot be removed — cancel instead.
 
+The form's **Title** field starts with the title the platform's template gives these copies, and
+follows a change of platform or a copy taken out until you type in it. What you type is the offer's
+title; see [Listing title](offers.md#listing-title).
+
 ### The selection menu on a ticked row
 
 The bar's buttons sit at the far end of the bar, a long way from the checkboxes you have just been

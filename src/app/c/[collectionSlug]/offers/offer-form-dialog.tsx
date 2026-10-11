@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   PICKER_DIALOG_HEIGHT,
   DialogShell,
@@ -142,6 +142,9 @@ export interface OfferFormDialogProps {
    * selection starts with. With one the dialog becomes a wide one: the copies take the room, the
    * form keeps its own width at the right. */
   copies?: React.ReactNode;
+  /** The copies a new offer starts with (#1794) — none for an empty one. Given, a create shows the
+   * title field, prefilled with what the platform's template would title these copies. */
+  titleItemIds?: readonly string[];
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }
@@ -169,6 +172,7 @@ export function OfferFormDialog({
   notice,
   onPlatformChange,
   copies,
+  titleItemIds,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
@@ -342,6 +346,26 @@ export function OfferFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Title (#1794) ────────────────────────────────────────────────────────────────────────────
+  // What the platform's template would title these copies, following the platform — and the copies,
+  // which the panel beside the form can take out — until the collector writes in the field. From then
+  // on it is theirs, an emptied field included, and only then is it submitted: an untouched field
+  // sends nothing and the offer is titled, and kept titled, by its template.
+  const showTitle = !isEdit && titleItemIds !== undefined;
+  const [typedTitle, setTypedTitle] = useState<string | null>(null);
+  const titleKey = titleItemIds?.join(",") ?? "";
+  const { data: generatedTitle } = useQuery({
+    queryKey: ["new-offer-title", collectionId, platformId, titleKey],
+    queryFn: async () => {
+      const { previewNewOfferTitleAction } = await import("@/app/actions/offers");
+      return previewNewOfferTitleAction(collectionId, platformId, [...(titleItemIds ?? [])]);
+    },
+    enabled: showTitle && typedTitle === null && !!platformId && titleKey !== "",
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+  const shownTitle = typedTitle ?? (platformId && titleKey ? (generatedTitle ?? "") : "");
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     // The group a new auction is made in becomes the one every shortcut starts on (#1663).
@@ -456,6 +480,22 @@ export function OfferFormDialog({
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* The title (#1794), under the platform whose template prefills it. */}
+          {showTitle && (
+            <div style={FIELD_GAP}>
+              <LabelWithError htmlFor="offer-title">Title</LabelWithError>
+              <TextInput
+                id="offer-title"
+                name={typedTitle === null ? undefined : "name"}
+                value={shownTitle}
+                onChange={(e) => setTypedTitle(e.target.value)}
+                placeholder="No title"
+                disabled={isPending}
+                style={INPUT_STYLE}
+              />
             </div>
           )}
 

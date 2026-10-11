@@ -1037,6 +1037,8 @@ export function OffersListPanel({
           baseCurrency={baseCurrency}
           offer={dialog.kind === "edit" ? dialog.offer : undefined}
           initialPlatform={dialog.kind === "add" ? preferredPlatform : undefined}
+          // An empty offer has no generated title, but the collector can still give it one (#1794).
+          titleItemIds={dialog.kind === "add" ? [] : undefined}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
