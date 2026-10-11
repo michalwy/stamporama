@@ -5888,6 +5888,10 @@ model Trade {
   // have — the same split `Purchase` makes between its delivery status and its lot lifecycle.
   sentAt       DateTime?
   receivedAt   DateTime?
+  // When the trade became `agreed` (#1813), or null. Lives as long as the agreement's frozen
+  // valuations: written on reaching `agreed`, cleared on going back to an editable status, kept
+  // through `closed` and `cancelled`. What the dashboard's *To send* group measures the wait from.
+  agreedAt     DateTime?
   // ── Balancing (#638 reads these; they land here because they are terms of the agreement) ───────
   // The catalog both sides agreed to speak in, or null when the trade names none. That StampWorld
   // says something different from Fischer is a property of the negotiation, not a discrepancy to

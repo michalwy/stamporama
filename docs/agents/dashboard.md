@@ -89,3 +89,12 @@ operational dashboard*; read the ADR before changing what the screen is.
   already does beside *Won*, and the group's link names `outcome=won` beside it, which also keeps a
   remembered outcome from emptying the list. It reads oldest first and is a chip on the lots toolbar
   labelled `NOT_PURCHASED_LABEL`, the group's own title. Every row opens the lot in its sale.
+
+- **Trades** (#1813): *To send* and *Waiting for the partner* — the `TradeShippingStage` of an
+  `agreed` trade (`trade-rules.ts`); an agreed trade with both parcels in is in neither. Read
+  through `countTrades` / `listTradesPaginated` with the list's `shipping` filter, so a group is the
+  set its `trades?shipping=…` link opens; the whole set is read and ordered by how long each has
+  waited (`sortByStageAge`, `dashboard-trades-rules.ts`), which the list cannot sort on. The age is
+  `Trade.agreedAt` for *To send* — added for this, stamped and cleared with the frozen valuations,
+  backfilled from their `frozenAt` — and `sentAt` for *Waiting*. A row's balance is the trade
+  screen's `readTradeBalance`, phrased by `describeTradeBalanceShort`, and read for listed rows only.

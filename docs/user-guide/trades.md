@@ -14,6 +14,10 @@ partner. The partner filter is never remembered — it comes only from the link.
 figure lights the *Preparing*, *Shared* and *Agreed* chips together; clicking a chip goes back to
 filtering by that one status.
 
+The [Dashboard](dashboard.md#trades)'s Trades groups open the list on agreed trades **To send** or
+**Waiting for the partner**, shown as a lit chip of that name; click it to go back to every trade.
+Like the partner, it comes only from the link.
+
 ## Starting a trade
 
 **Add trade** asks for four things.

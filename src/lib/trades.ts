@@ -4,11 +4,13 @@ import { prisma } from "./db";
 import { resolvePurchaseContact } from "./contacts";
 import { allocateEntityNumber } from "./items";
 import {
+  agreedAtOnTransition,
   canTransitionTrade,
   isTradeContentEditable,
   isTradeSide,
   isTradeStatus,
   TRADE_STATUS_LABEL,
+  type TradeShippingStage,
   type TradeSide,
   type TradeStatus,
 } from "./trade-rules";
@@ -150,6 +152,8 @@ export interface TradeListItem {
   notes: string | null;
   sentAt: string | null;
   receivedAt: string | null;
+  /** When the trade was agreed (#1813), or null — see `Trade.agreedAt`. */
+  agreedAt: string | null;
   catalogVendorId: string | null;
   /** The vendor's abbreviation (`Mi`, `SW`) — what a row has room for and what a collector reads a
    *  catalog by. */
@@ -177,6 +181,9 @@ export interface TradeListFilters {
    *  `status` by intersection, which nothing asks for; the screen sends one or the other. */
   statuses?: readonly TradeStatus[];
   partnerId?: string;
+  /** Where an agreed trade's parcels stand (#1813) — how the dashboard's Trades groups open this
+   *  list on exactly their set. Implies `agreed`, intersected with any status filter. */
+  shipping?: TradeShippingStage;
   /** Narrows to one trade number, which is what the quick jump and the search box both produce. */
   tradeNo?: number;
   /** Case-insensitive match on the partner's name. */
@@ -317,16 +324,27 @@ function buildTradeListWhere(
   collectionId: string,
   filters: TradeListFilters
 ): Prisma.TradeWhereInput {
+  const and: Prisma.TradeWhereInput[] = [];
+  if (filters.statuses?.length) and.push({ status: { in: [...filters.statuses] } });
+  if (filters.shipping) and.push(shippingStageWhere(filters.shipping));
   return {
     collectionId,
     ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.statuses?.length ? { AND: [{ status: { in: [...filters.statuses] } }] } : {}),
+    ...(and.length ? { AND: and } : {}),
     ...(filters.partnerId ? { partnerId: filters.partnerId } : {}),
     ...(filters.tradeNo ? { tradeNo: filters.tradeNo } : {}),
     ...(filters.partnerSearch
       ? { partner: { name: { contains: filters.partnerSearch, mode: "insensitive" } } }
       : {}),
   };
+}
+
+/** {@link tradeShippingStage} as a `where` — the two must say the same thing, and
+ *  `trades.test.ts` holds them to it. */
+function shippingStageWhere(stage: TradeShippingStage): Prisma.TradeWhereInput {
+  return stage === "to-send"
+    ? { status: "agreed", sentAt: null }
+    : { status: "agreed", sentAt: { not: null }, receivedAt: null };
 }
 
 /**
@@ -379,6 +397,7 @@ export async function listTradesPaginated(
       notes: true,
       sentAt: true,
       receivedAt: true,
+      agreedAt: true,
       catalogVendorId: true,
       balanceByValue: true,
       countTolerance: true,
@@ -411,6 +430,7 @@ export async function listTradesPaginated(
     notes: row.notes,
     sentAt: isoOrNull(row.sentAt),
     receivedAt: isoOrNull(row.receivedAt),
+    agreedAt: isoOrNull(row.agreedAt),
     catalogVendorId: row.catalogVendorId,
     catalogVendorName: row.catalogVendor?.abbreviation ?? null,
     balanceByValue: row.balanceByValue,
@@ -692,7 +712,13 @@ export async function setTradeStatus(
     if (refusal) throw new Error(`This trade cannot be closed yet. ${refusal}`);
   }
 
-  await prisma.trade.update({ where: { id: tradeId }, data: { status } });
+  // `agreedAt` (#1813) moves with the status in one write, so no read ever sees an agreed trade
+  // without the moment it was agreed.
+  const agreedAt = agreedAtOnTransition(status, new Date());
+  await prisma.trade.update({
+    where: { id: tradeId },
+    data: { status, ...(agreedAt !== undefined ? { agreedAt } : {}) },
+  });
 
   // After the write, so a trade that failed to move is never left carrying the new state's
   // snapshot. Each of the three is idempotent, and none of them is reached by a transition that
