@@ -5163,6 +5163,9 @@ model Offer {
   listedVariants    OfferListedVariant[]
   /** The links this listing had before it was posted again (#1718), each with its dates. */
   postings          OfferPosting[]
+  /** The buyer's read-only link to this offer's specification (#1760), or none. At most one — see
+   * {@link OfferSpecificationShareToken}. */
+  specificationShareToken OfferSpecificationShareToken?
 
   // The short address `/o/<collectionSlug>/<offerNo>` (#416) resolves on this pair, and the
   // uniqueness is the guarantee that it names one listing.
@@ -5184,6 +5187,39 @@ model Offer {
   // The photo-purge sweep's own scan (#512): closed offers past the grace cutoff.
   @@index([state, closedAt])
   @@map("offer")
+}
+
+// **A buyer's link to an offer's specification** (#1760) — the specification (#1758) as a page a
+// buyer opens without an account, instead of an attached PDF or a pasted list.
+//
+// `SaleShareToken`'s shape (#699) with the sale swapped for a **single offer**, and the swap is the
+// security argument here as well: the token names one offer, and everything the page shows is that
+// offer's specification — the rows of the printable page and the thumbnails on them, nothing else
+// from the collection. No price and no value, because the specification carries none
+// (`OfferSpecificationRow` has no field for one).
+//
+// **One row per offer** (`offerId` unique), the trade and sale links' rule: a second live link is a
+// second thing to remember to revoke, and regenerating replaces the row, which is what revocation
+// means. **No expiry**: nothing asked for one, and withdrawing the link is the fence.
+//
+// The hash resolves a request and the seal is for display (#681), with the same best-effort sealing:
+// without `STAMPORAMA_SECRET_KEY` a link is still minted and shown once.
+model OfferSpecificationShareToken {
+  id          String    @id @default(cuid())
+  offerId     String    @unique
+  // SHA-256 hex of the raw token (prefix "stmpo_" — beside the Assistant's "stmpa_", a trade's
+  // "stmpx_" and a sale's "stmps_"). The only form a lookup ever touches.
+  tokenHash   String    @unique
+  // The same raw token, sealed (`secret-box.ts`), so the collector can be shown their own link
+  // again. Null on an install with no key configured.
+  tokenSealed String?
+  createdAt   DateTime  @default(now())
+  // When a buyer last opened it — the collector's one sign that the link reached anybody.
+  lastUsedAt  DateTime?
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@map("offer_specification_share_token")
 }
 
 // An earlier posting of an offer (#1718): the link it had and when it was up, kept when *Repost*

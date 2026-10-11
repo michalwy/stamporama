@@ -1041,6 +1041,29 @@ fields in the page's order, separated by `·` — catalogue number, area, series
 condition with any faults in brackets, and certificate. A field the copy doesn't have is simply
 left out. The thumbnail is the only thing the text cannot carry.
 
+### As a link
+
+Instead of attaching a PDF or pasting a list, you can send a buyer just a link. Choose **Share
+specification…** from the offer's **⋮** menu and press **Generate link**. The dialog shows the
+address: **Copy link** puts it on the clipboard, and **Open as the buyer sees it** opens the page in a
+new tab.
+
+The buyer opens the link **without an account** and sees the same specification as the printed
+page — the same rows, fields and thumbnails, in the same order and language — and nothing else from
+your collection: no other offers, no prices and no way into the app. The page shows the
+specification **as it stands when it is opened**, so a copy that sells after you sent the link is no
+longer on it.
+
+An offer has **one link**. Reopening the dialog shows it again, with when it was created and when a
+buyer last opened it.
+
+- **New link** replaces the address. The old one stops working, so anyone holding it needs the new
+  one.
+- **Withdraw** removes the link. From then on its address shows only that the link is not valid —
+  nothing of the offer.
+
+The link has no expiry date; it works until you withdraw or replace it, or delete the offer.
+
 ## What the market is asking
 
 Pricing a listing means two questions about each stamp in it: what it *is*, and what people are
