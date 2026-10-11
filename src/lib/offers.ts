@@ -3964,6 +3964,10 @@ export interface OfferDetailSet {
   sale: { id: string; saleNo: number } | null;
   /** A copy of this set has sold **elsewhere** — the set is stale and should be removed. */
   needsAction: boolean;
+  /** The half of {@link needsAction} that is a **sale**, not a bid (#1804): a copy of this set left
+   * through another set's sale, so the set has nothing left to sell. A copy merely in bidding
+   * elsewhere may still come back, and is not counted. */
+  soldElsewhere: boolean;
 }
 
 /**
@@ -4553,14 +4557,16 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     );
     const sale = s.saleLines[0]?.sale ?? null;
     const sold = sale !== null;
-    const needs =
+    const soldElsewhere =
       isLiveState(state) &&
       !sold &&
       s.items.some((li) => {
         const via = soldViaSet.get(li.itemId);
-        if (via != null && via !== s.id) return true;
-        return biddingElsewhere.has(li.itemId);
+        return via != null && via !== s.id;
       });
+    const needs =
+      soldElsewhere ||
+      (isLiveState(state) && !sold && s.items.some((li) => biddingElsewhere.has(li.itemId)));
     return {
       id: s.id,
       title: s.title,
@@ -4585,6 +4591,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       sold,
       sale,
       needsAction: needs,
+      soldElsewhere,
     };
   });
 

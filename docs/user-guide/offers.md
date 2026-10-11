@@ -2105,6 +2105,18 @@ step instead of closing it on Colnect and then withdrawing it by hand. If Colnec
 close, nothing changes and the dialog says why. The details are in the
 [Assistant guide](assistant.md#closing-a-colnect-listing).
 
+When the offer is on **Needs action**, the header **highlights the one of the two its situation calls
+for**, with a short line beside it saying why:
+
+- **Close via Assistant** when nothing in the offer is left to sell — every set has sold, through this
+  offer or another one, or no set is left at all (*Last copy sold — close the listing*).
+- **Update via Assistant** when something is still for sale (*Some copies sold elsewhere — update the
+  listing*, or *Listing out of step — update it*). A copy that is only **in bidding** elsewhere has not
+  sold, so it counts as still for sale.
+
+The other button stays usable in its ordinary style — the highlight is a suggestion, not a lock. An
+offer that is not on Needs action highlights neither.
+
 ### Publishing
 
 **Publish** on any card moves the offer **Ready → Active** and asks for the **listing URL** the
