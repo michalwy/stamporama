@@ -1574,6 +1574,14 @@ builder, each with its piece count and a link to it. The list is cleared when yo
 The title and description sit directly under the figures, so you word them while the piece count and
 the value are in front of you, and read the list below afterwards.
 
+They are there **from the moment you open the builder**, before any lot is proposed, already holding
+the suggested wording for your criteria — narrow to an area or a span of years and an untouched field
+picks it up. Check them and correct them first if you like: whatever you write before **Propose a
+lot** is what the proposal previews and what the offer is created with, and proposing again, or
+re-rolling, leaves it as you wrote it. Until there is a lot the preview says it is waiting for one,
+since there are no copies to fill the template with yet; where and how the lot is sold, and the
+**Create the offer** button, appear with the lot.
+
 They are **templates**, in the same `{token}` language a platform's own templates are written in, and
 they preview against **this lot's copies** rather than random samples — so `{count}` shows the number
 this listing will really carry, in the title as in the description. Both previews read exactly as the

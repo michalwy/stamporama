@@ -7,6 +7,7 @@ import {
   sameLotRecipe,
   toLotRecipe,
   suggestLotTexts,
+  suggestLotTextsFor,
   toLotCriteria,
   LOT_RECIPE_KEYS,
   lotPlatformChoice,
@@ -420,6 +421,11 @@ describe("the suggested lot templates (#759, #774)", () => {
     assert.match(name, /\{count\}/);
     assert.equal(/\d/.test(name), false, "no literal number in the title");
     assert.equal(/\d/.test(description), false, "nor in the description");
+    assert.equal(
+      /catalogue|catalog/i.test(description),
+      false,
+      "no value claim: the collector has the true sum on that screen, and there is no token for it"
+    );
   });
 
   it("mentions an axis only when the criteria named one", () => {
@@ -429,5 +435,39 @@ describe("the suggested lot templates (#759, #774)", () => {
       "Bulk lot of {count} stamps"
     );
     assert.equal(suggestLotTexts(facts({ areaName: null })).name, "{year}, {count} stamps");
+  });
+});
+
+// The wizard works the suggestion out itself (#1781), from the criteria and the areas and conditions
+// already on its screen, so the templates are there before any lot is proposed. Only the ids decide
+// the template; a name only says that the criteria narrowed to something that exists.
+describe("the suggested lot templates, before a proposal (#1781)", () => {
+  const areas = [{ id: "pl", name: "Poland" }];
+  const conditions = [
+    { id: "mnh", name: "MNH" },
+    { id: "used", name: "Used" },
+  ];
+  const criteria = { areaId: "pl", yearFrom: 1950, yearTo: 1960, conditionIds: ["mnh"] };
+
+  it("is the suggestion the criteria's names would give", () => {
+    assert.deepEqual(
+      suggestLotTextsFor(criteria, areas, conditions),
+      suggestLotTexts(facts({ conditionNames: ["MNH"] }))
+    );
+  });
+
+  it("needs no copies: an untouched screen already has its templates", () => {
+    const blank = { areaId: null, yearFrom: null, yearTo: null, conditionIds: [] };
+    assert.deepEqual(suggestLotTextsFor(blank, areas, conditions), {
+      name: "Bulk lot of {count} stamps",
+      description: "Bulk lot of {count} stamps.",
+    });
+  });
+
+  it("treats an id the collection no longer has as not narrowed", () => {
+    const stale = { ...criteria, areaId: "gone", conditionIds: ["gone"] };
+    const { name, description } = suggestLotTextsFor(stale, areas, conditions);
+    assert.equal(name, "{year}, {count} stamps");
+    assert.equal(description.includes("Conditions:"), false);
   });
 });

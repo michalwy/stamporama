@@ -29,11 +29,9 @@ import {
   type RefusedChecklistReason,
 } from "./lot-builder-rules";
 import {
-  suggestLotTexts,
   toLotCriteria,
   type LotBuilderCriteria,
   type LotBuilderRequest,
-  type LotSuggestedTexts,
 } from "./lot-builder-criteria";
 import { findCommittedCopies } from "./trade-reservations";
 import type { CommittedCopy } from "./trade-reservation-rules";
@@ -405,8 +403,6 @@ export interface LotProposal {
   /** What the picked copies cost (#1743), as an offer's COST counts it (#1736): cost bases where
    *  frozen, estimates where the lot is still open, marked as an estimate. Base currency. */
   cost: OfferSetCost;
-  /** What the wizard's title and description fields are pre-filled with. */
-  suggested: LotSuggestedTexts;
 }
 
 /**
@@ -474,7 +470,6 @@ export async function buildLotProposal(
         label: `${formatItemNo(c.itemNo)}${c.stampName ? ` (${c.stampName})` : ""}`,
       }))
     ),
-    suggested: await suggestTexts(collectionId, criteria),
     templateSamples,
     templateLanguage: language,
   };
@@ -606,47 +601,6 @@ async function nameChecklists(
     })),
   };
 }
-
-/**
- * The pre-filled title and description **templates** (`lot-builder-criteria.ts` states why they
- * exist at all, and why they became templates in #774).
- *
- * Only the labels are resolved here, and only to decide whether the template mentions an axis at
- * all: the criteria carry ids, and a template that says `{area}` should say it only where the
- * collector actually narrowed to one. Every figure the old finished text carried — the piece count,
- * the variety, the set tally — is gone from this call, because a template asks the engine for those
- * at render time instead of freezing them here.
- */
-async function suggestTexts(
-  collectionId: string,
-  criteria: LotBuilderCriteria
-): Promise<LotSuggestedTexts> {
-  const [area, conditions] = await Promise.all([
-    criteria.areaId
-      ? prisma.collectionArea.findFirst({
-          where: { id: criteria.areaId, collectionId },
-          select: { name: true },
-        })
-      : null,
-    criteria.conditionIds.length > 0
-      ? prisma.stampCondition.findMany({
-          where: { id: { in: criteria.conditionIds }, collectionId },
-          select: { name: true },
-          orderBy: { sortOrder: "asc" },
-        })
-      : [],
-  ]);
-  // The suggestion is a **template** now (#774), so the figures it used to carry are tokens the
-  // engine resolves against whatever the offer holds at the time — which is why the count, the
-  // variety and the set tally no longer reach it as numbers.
-  return suggestLotTexts({
-    areaName: area?.name ?? null,
-    yearFrom: criteria.yearFrom,
-    yearTo: criteria.yearTo,
-    conditionNames: conditions.map((c) => c.name),
-  });
-}
-
 
 // ── The commit ──────────────────────────────────────────────────────────────────────────────────
 
