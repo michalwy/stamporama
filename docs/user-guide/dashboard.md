@@ -29,6 +29,21 @@ handled.
 A group with **nothing in it stays on screen** as a single line with a **0**, so an empty Dashboard
 means there is nothing to do — not that something failed to load.
 
+## Sales
+
+The **Sales** section holds the sales you still have to move along:
+
+- **Sold on Allegro, no sale recorded** — listings Allegro reports sold that you have not recorded
+  as a sale yet; the same list the bell shows.
+- **Awaiting payment** — sales still *Ordered*.
+- **To pack** — sales *Paid* and not yet packed.
+- **To send** — sales *Packed* and not yet sent.
+
+Each sale shows its number and buyer, its platform, what the buyer pays, and how long it has been in
+that status — the longest waiting first. Click it to open the sale. Once you move a sale on, it leaves
+its group; sent and received sales are not on the Dashboard. A group's name opens the Sales list
+filtered to that status.
+
 ## Auctions I bid in
 
 The auctions you bid in, in three groups:
