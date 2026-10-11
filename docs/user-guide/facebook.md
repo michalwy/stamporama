@@ -197,7 +197,8 @@ each of which you can change before you save:
 - the **listing type** — **Auction** or **Quick buy**, as the group starts its offers. Change it
   here, or later on the offer's own form, like on any other platform;
 - the **starting price** of an auction — the group's amount, or its percentage of the copies'
-  catalogue value when the form suggests one from your copies;
+  catalogue value where your copies share one — always the catalogue value, not the Estimated value
+  the form suggests the price from;
 - the **bid increment** of an auction;
 - **Closes**, for an auction — the group's number of days from today, at its closing time (or at the
   time it is now, if the group names none);

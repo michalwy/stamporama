@@ -12,6 +12,7 @@
 // projection says anything at all about a marketplace.
 
 import { candidateSet, compact, catalogLabels, copyValue } from "./collection-reads";
+import { describeEstimateSource, type EstimateSource } from "../offer-price-table";
 import type {
   AgentCandidateSet,
   AgentCopyValue,
@@ -211,10 +212,12 @@ export function offerRow(row: OfferRow, path: string): AgentOfferRow {
  * What a listing could be priced at, stated as the several different claims it actually is.
  *
  * **They are never merged into one number, and that is the decision.** `suggested` is what the
- * copies are worth in the catalogue, averaged per set because a buyer takes one set (#190);
- * `market` is what copies like them have fetched (#458); `platformOpening` is what this house opens
+ * copies are worth in the catalogue, averaged per set because a buyer takes one set (#190) — its
+ * name predates #1829 and its meaning is fixed by the `/api/v1` contract; `estimated` is that
+ * figure corrected by the learned realisation ratio, which the offer screen now suggests from
+ * (#1829); `market` is what copies like them have fetched (#458); `platformOpening` is what this house opens
  * an auction at whatever the goods are worth (#553); `platformMinimum` is only what the
- * marketplace costs to post on (#731). Collapsing four claims of different strengths into a single
+ * marketplace costs to post on (#731). Collapsing five claims of different strengths into a single
  * recommendation is exactly what would make an agent price a stamp confidently and wrongly.
  *
  * **`suggestedUnpricedSets` never travels apart from `suggested`** — `valuation.md`'s standing
@@ -229,6 +232,16 @@ export interface AgentOfferPricing {
   /** Sets the suggestion *was* computed over. Read it against `suggestedUnpricedSets`: the two
    *  partition the listing, and a suggestion over one set of nine says so here. */
   readonly suggestedValuedSets: number;
+  /** Estimated value per set (#1829), in the **offer's** currency: each copy's catalogue value ×
+   *  the realisation ratio learned from recorded results (or the catalogue's manual factor), averaged
+   *  per set. What the offer screen suggests a price from. Still an estimate, not evidence — read it
+   *  with `estimatedSource`. Absent when no copy can be estimated or no rate reaches the currency. */
+  readonly estimated?: string;
+  /** Sets the estimate was computed over, read against the listing's set count as `suggested` is. */
+  readonly estimatedValuedSets: number;
+  /** Where the ratio came from: the bucket and how many results it was learned from, the
+   *  catalogue's manual factor, or how many buckets when the copies resolved several. */
+  readonly estimatedSource?: string;
   /** What the catalogue says the whole listing is worth, in the collection's base currency. */
   readonly catalogueTotal?: string;
   /** What the market has actually paid for copies like these, base currency, with the count of
@@ -321,8 +334,13 @@ export interface OfferDetailRow {
   readonly startingPrice: string | null;
   readonly currency: string;
   readonly baseCurrency: string;
+  readonly catalogPrice: string | null;
+  readonly catalogUnpricedSets: number;
   readonly suggestedPrice: string | null;
-  readonly suggestedUnpricedSets: number;
+  readonly suggestedEstimate: {
+    readonly valuedSets: number;
+    readonly source: EstimateSource;
+  } | null;
   readonly platformDefaultStartingPrice: string | null;
   readonly platformMinimumPrice: string | null;
   readonly url: string | null;
@@ -406,9 +424,12 @@ export function offerDetail(row: OfferDetailRow, path: string): AgentOfferDetail
     currency: row.currency,
     baseCurrency: row.baseCurrency,
     pricing: compact({
-      suggested: statedAmount(row.suggestedPrice),
-      suggestedUnpricedSets: row.suggestedUnpricedSets,
+      suggested: statedAmount(row.catalogPrice),
+      suggestedUnpricedSets: row.catalogUnpricedSets,
       suggestedValuedSets: row.setsTotals.catalogValuedSets,
+      estimated: statedAmount(row.suggestedPrice),
+      estimatedValuedSets: row.suggestedEstimate?.valuedSets ?? 0,
+      estimatedSource: row.suggestedEstimate ? describeEstimateSource(row.suggestedEstimate.source) : undefined,
       catalogueTotal: statedAmount(row.setsTotals.catalogTotal),
       marketTotal: marketTotal === 0 ? undefined : marketTotal.toFixed(2),
       marketNoEvidenceCopies,

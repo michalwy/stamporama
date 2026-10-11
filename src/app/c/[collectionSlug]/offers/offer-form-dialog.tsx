@@ -113,6 +113,11 @@ export interface OfferFormDialogProps {
    * `onPriceValueChange` — lets the parent recompute it (e.g. converting on a currency change). */
   priceValue?: string;
   onPriceValueChange?: (value: string) => void;
+  /** The copies' catalogue value in this offer's currency, where the caller knows it apart from the
+   * price it suggests (#1829) — what a Facebook group opening at a share of catalogue (#1663) takes
+   * its share of. Unset, the share is of {@link priceValue}, which is what every other caller seeds
+   * the form with. */
+  catalogValue?: string | null;
   /** Put the cursor straight in the money field on open, with its pre-filled figure selected so
    * typing replaces it. For flows that arrive here with everything else already decided — the
    * inventory "list these copies" path (#189/#277), where the platform is carried in and the price
@@ -166,6 +171,7 @@ export function OfferFormDialog({
   showPrice = false,
   priceValue,
   onPriceValueChange,
+  catalogValue,
   autoFocusPrice = false,
   initialCurrency,
   onCurrencyChange,
@@ -218,14 +224,14 @@ export function OfferFormDialog({
   const [bidIncrement, setBidIncrement] = useState(offer?.bidIncrement ?? "");
   const [bidIncrementTouched, setBidIncrementTouched] = useState(false);
   // The group's opening figure on a new auction: its amount, or its share of the copies' catalogue
-  // value where the caller suggests one (#230) — already in this offer's currency, since the parent
-  // converts it as the currency changes.
+  // value where the caller states one (#230, #1829) — already in this offer's currency, since the
+  // parent converts it as the currency changes.
   const facebookStartingSeed =
     !isEdit && facebookGroup
       ? facebookDefaultStartingPrice(
           facebookGroup.startingPriceMode,
           facebookGroup.startingPriceValue,
-          priceControlled ? (priceValue ?? null) : null
+          catalogValue !== undefined ? catalogValue : priceControlled ? (priceValue ?? null) : null
         )
       : null;
 

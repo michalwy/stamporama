@@ -169,8 +169,13 @@ const DETAIL: OfferDetailRow = {
   startingPrice: null,
   currency: "PLN",
   baseCurrency: "PLN",
-  suggestedPrice: "104.00",
-  suggestedUnpricedSets: 1,
+  catalogPrice: "104.00",
+  catalogUnpricedSets: 1,
+  suggestedPrice: "31.20",
+  suggestedEstimate: {
+    valuedSets: 2,
+    source: { level: "area", bucketLabel: "Polska Ludowa", bucketCount: 1, ratio: 0.3, n: 7 },
+  },
   platformDefaultStartingPrice: null,
   platformMinimumPrice: "2.00",
   url: null,
@@ -221,9 +226,30 @@ describe("an offer detail", () => {
     assert.equal(detail.pricing.suggestedUnpricedSets, 1);
   });
 
+  it("states Estimated value beside the catalogue suggestion, never in its place", () => {
+    // `suggested` is the catalogue per set and its meaning is fixed by the `/api/v1` contract, even
+    // though the offer screen now suggests from Estimated value (#1829) — which is a claim of its own,
+    // stated with the ratio it rests on.
+    const detail = offerDetail(DETAIL, "/c/pl/offers/offer-1");
+    assert.equal(detail.pricing.suggested, "104.00");
+    assert.equal(detail.pricing.estimated, "31.20");
+    assert.equal(detail.pricing.estimatedValuedSets, 2);
+    assert.equal(detail.pricing.estimatedSource, "Polska Ludowa · 30% · n = 7");
+  });
+
+  it("leaves Estimated value out when nothing could be estimated", () => {
+    const detail = offerDetail(
+      { ...DETAIL, suggestedPrice: null, suggestedEstimate: null },
+      "/c/pl/offers/offer-1"
+    );
+    assert.equal("estimated" in detail.pricing, false);
+    assert.equal("estimatedSource" in detail.pricing, false);
+    assert.equal(detail.pricing.estimatedValuedSets, 0);
+  });
+
   it("keeps a zero count rather than dropping it, because zero is an answer", () => {
     const detail = offerDetail(
-      { ...DETAIL, suggestedUnpricedSets: 0 },
+      { ...DETAIL, catalogUnpricedSets: 0 },
       "/c/pl/offers/offer-1"
     );
     assert.equal(detail.pricing.suggestedUnpricedSets, 0);

@@ -96,8 +96,8 @@ counting such copies as pending.
 In the Sets header band — the strip holding the heading, the grouping and sorting controls, and the
 **Add set** / **Collapse all** buttons — the same two figures are given for the **whole listing**:
 the **total** across every set, and the **per set** average beside it. The total is what leaves the shelf if everything
-sells; the average is what one buyer takes, and is the same figure the suggested asking price is
-built from. An average divides only by the sets that actually carry a figure — an unpriced set is a
+sells; the average is what one buyer takes, and is the same figure the **Catalogue** row of the
+[price table](#the-price-table) shows. An average divides only by the sets that actually carry a figure — an unpriced set is a
 gap in your data, not a set worth nothing — and the hover says how many of your sets were counted.
 The listing's cost is the sets' costs added up, estimates included, and is marked the same way when
 any of them is.
@@ -117,7 +117,7 @@ any of them is.
    [Auction or quick buy](#auction-or-quick-buy)); if the platform carries a
    [default starting price](contacts.md), that field starts filled in, so a house you always open at
    the same figure needs no price typed at all — and it **wins** over anything suggested by the goods
-   themselves (a lot's suggested price, the copies' catalog value), because an auction is opened
+   themselves (a lot's suggested price, the copies' Estimated value), because an auction is opened
    deliberately below what the goods are worth, to attract bids. Those suggestions fill the starting
    price only when the platform states no opening figure of its own. On a **quick buy** the order is
    the other way round and unchanged: the goods decide the price. Every figure is editable on the
@@ -203,21 +203,35 @@ any of them is.
    post's link, asked for by **Activate** as on any platform. Several offers in one group can be
    **posted together** as lots of one post. See [Facebook](facebook.md#selling-in-a-group).
 
-The asking price sits on one line with the two figures you weigh it against, in the order
-**min · suggested · price** — for example *min 0.05 · suggested 0.60 · no price yet*:
+### The price table
 
-- **min** is the platform's [minimum price](contacts.md) — the lowest figure that platform is worth
+Above the asking price sits a small table of the figures you weigh it against, each **per set** (an
+offer's price is for the one set a buyer takes) and in the **offer's currency**:
+
+- **Minimum** — the platform's [minimum price](contacts.md): the lowest figure that platform is worth
   listing on once its fees are paid.
-- **suggested** is the **average catalog value per set** (converted to the **offer's currency**),
-  since an offer's price is per one set a buyer takes. It's a starting point; price as you see fit.
+- **Catalogue** — the copies' **catalogue value**, averaged over the sets that have one. Sets with no
+  catalogue value are named beside it (*1 set unpriced*).
+- **Estimated · suggested** — **Estimated value**: the catalogue value corrected by how far that
+  catalogue runs above what stamps actually fetch — the realisation ratio learned from your recorded
+  auction results, or the catalogue's own [manual factor](collections.md#how-far-a-catalogue-overstates) where nothing has been learned
+  for it yet. This is the **suggested price**, marked with *≈* because it is an estimate. Beside it
+  is where its ratio came from — the bucket it was learned in and how many results (*Polska Ludowa ·
+  34% · n = 6*), *your estimate, not evidence* for a manual factor, *policy, not evidence* for the
+  collection's fallback percentage, or how many buckets when your copies were estimated from several.
+- **Market** — what recorded results paid for copies like these, with how many copies they cover.
+  Shown only where there are results.
+- **Cost** — what the copies cost you, marked *estimate* while their purchase lot is still open.
 
-**Click either figure** to set the price to it — the asking price on a quick buy, and the
-**starting** price on an auction, since that is the figure you state while the price beside it is
-wherever the bidding has got to (see [below](#auction-or-quick-buy)). Hovering one says what it is
-and what clicking does. A figure that already is your price is shown plain, and a figure that does not
-exist — no minimum set for the platform, or nothing to suggest from — is simply left out of the line.
-The minimum comes first on purpose: it is the price you fall back to, not the one being recommended,
-and it stays available even when the suggestion is already higher.
+Beside every price is the **margin** it would give over the cost — *+4.00 · +50%* — in the warning
+colour when it is a loss. A figure that does not exist is left out rather than shown as 0.00, and
+so is every margin when the cost is unknown.
+
+**Click any price** to set the price to it — the asking price on a quick buy, and the **starting**
+price on an auction, since that is the figure you state while the price beside it is wherever the
+bidding has got to (see [below](#auction-or-quick-buy)). Hovering one says what it is and what
+clicking does. A figure that already is your price is shown plain. The cost is not clickable, and on
+a sold or withdrawn offer none of the figures are.
 
 On an auction that has no starting price yet, and on a platform with a
 [default starting price](contacts.md), the platform's own opening figure sits under the price line as
@@ -264,7 +278,7 @@ on separate screens first:
    **For sale** and **delivered** so it's ready to list — adjust anything as you go.
 2. **List it.** On save, the same offer picker as **Add to offer** opens, seeded with the copy you
    just created: start a **new offer** (its **platform** pre-filled from the current filter or the
-   last platform you used, and its asking price pre-filled from the copy's catalog value) or drop
+   last platform you used, and its asking price pre-filled from the copy's Estimated value) or drop
    the copy into an **existing** offer.
 
 If you stop after step 1, nothing is lost — the copy is a normal inventory item, and Stamporama says
@@ -278,7 +292,7 @@ band's **Expand all** to open them. A set you add while the screen is open opens
 Group by **Set** or **Location**, optionally sub-group
 by **Issue**, and **sort** the copies — handy for pulling pieces off the shelf as you list them.
 Each copy row has a quick **+ catalog value** link (click the value to edit it) so you can fill in
-missing catalog prices without leaving the offer — which also feeds the suggested price. Each row's
+missing catalog prices without leaving the offer — which also feeds the price table. Each row's
 **⋮** menu gathers what you reach for next while writing the listing:
 
 - **Open stamp page** and **Open issue page** — real links, so Cmd/Ctrl-click or the middle button
@@ -1858,7 +1872,7 @@ Each offer is one line: its title, how many sets, how many photos are stored, th
 button:
 
 - **Title** — the [generated listing title](#listing-title).
-- **Price** — the asking price, with the suggested price beside it for reference.
+- **Price** — the asking price, with the suggested price (Estimated value) beside it for reference.
 - **Description** — shown the way the platform will read it, in [its
   format](#description-format); the copy control offers formatted or source, as on the offer screen.
 - **Private note** — only when the offer has one.
@@ -2397,7 +2411,7 @@ and the offer reads **No bids yet** until you record the first one. The two figu
 after that: correcting the opening price never touches a bid you have recorded, and recording a bid
 never rewrites what the auction opened at.
 
-That is also why a suggested price — the copies' catalog value, a lot's price, the offer you are
+That is also why a suggested price — the copies' Estimated value, a lot's price, the offer you are
 duplicating — fills the **Starting price** on an auction rather than the current one. A suggestion is
 what you would *ask* for the stamps, which on an auction is what you would open at; putting it in the
 current price would record a bid nobody placed.

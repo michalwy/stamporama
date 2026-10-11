@@ -455,13 +455,13 @@ export const getOfferOperation: Operation = {
   method: "GET",
   path: "/offers/{offerId}",
   description:
-    "One listing in full: its texts, its sets, what it is priced at, and — in `pricing` — what it could be priced at. This is the price-suggestion call for an offer: the catalogue's figure per set, what the market has paid, what the marketplace opens auctions at and what it costs to post on, each stated separately because they are claims of different strengths.",
+    "One listing in full: its texts, its sets, what it is priced at, and — in `pricing` — what it could be priced at. This is the price-suggestion call for an offer: the catalogue's figure per set, that figure corrected by the learned realisation ratio, what the market has paid, what the marketplace opens auctions at and what it costs to post on, each stated separately because they are claims of different strengths.",
   writes: false,
   parameters: [OFFER_ID_PARAMETER],
   result: {
     kind: "object",
     description:
-      "The listing. `pricing.suggested` is the catalogue value averaged **per set**, in the listing's own currency, because a buyer takes one set — read it against `suggestedValuedSets` and `suggestedUnpricedSets`, which partition the listing: a suggestion resting on one set of nine is not a suggestion about the listing. `pricing.marketTotal` is evidence from auction results and `pricing.catalogueTotal` a book's opinion; neither is the other's substitute. `pricing.platformOpening` outranks both **on an auction**, a lot being opened below what the goods are worth on purpose, and `pricing.platformMinimum` is only what the marketplace costs to post on. `editedTexts` names the texts that were written by hand and have therefore stopped following the listing's composition. Nothing here says how the listing would be published, because nothing on this surface publishes.",
+      "The listing. `pricing.suggested` is the catalogue value averaged **per set**, in the listing's own currency, because a buyer takes one set — read it against `suggestedValuedSets` and `suggestedUnpricedSets`, which partition the listing: a suggestion resting on one set of nine is not a suggestion about the listing. `pricing.estimated` is the catalogue value corrected by the realisation ratio learned from recorded results — what the collector's own screen suggests a price from — per set and in the listing's currency, with `pricing.estimatedSource` naming where the ratio came from; it is an estimate, never evidence. `pricing.marketTotal` is evidence from auction results and `pricing.catalogueTotal` a book's opinion; neither is the other's substitute. `pricing.platformOpening` outranks both **on an auction**, a lot being opened below what the goods are worth on purpose, and `pricing.platformMinimum` is only what the marketplace costs to post on. `editedTexts` names the texts that were written by hand and have therefore stopped following the listing's composition. Nothing here says how the listing would be published, because nothing on this surface publishes.",
   },
   handler: async (context, params) => readOffer(context, params),
 };

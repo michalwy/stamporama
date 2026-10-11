@@ -51,6 +51,7 @@ import { OfferAllegroCard } from "./offer-allegro-card";
 import { OfferFacebookCard } from "./offer-facebook-card";
 import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
+import { OfferPriceTable } from "./offer-price-table";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
@@ -143,8 +144,8 @@ const ASSISTANT_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** The quick-apply chip beside the platform's opening figure (#362/#553). The catalog-value
- * suggestion and the platform's floor (#731) are links on the price line instead (#1295). */
+/** The quick-apply chip beside the platform's opening figure (#362/#553). The other figures the
+ * price is weighed against are rows of the price table instead (#1295, #1829). */
 const USE_BTN: React.CSSProperties = {
   fontSize: "0.6875rem",
   fontWeight: 600,
@@ -155,80 +156,6 @@ const USE_BTN: React.CSSProperties = {
   background: "var(--color-accent-soft)",
   cursor: "pointer",
 };
-
-const PRICE_LINE_SEPARATOR: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-text-muted)" };
-
-/** A figure the price is weighed against, on the price line (#1295): a short label, so three numbers
- * in a row are not told apart by position alone, and the figure as a link that applies it. A figure
- * that already *is* the stated price is drawn plain, since clicking it would change nothing. */
-/** The suggested price's hover: what it is, and — when some copies were lowered for their faults
- *  (#1560) — how many, and the suggestion without the reductions. */
-function suggestedAbout(offer: {
-  currency: string;
-  suggestedFaultReducedCount: number;
-  suggestedFullPrice: string | null;
-}): string {
-  const about = "Average catalog value per set, in this offer's currency";
-  if (offer.suggestedFaultReducedCount === 0 || !offer.suggestedFullPrice) return about;
-  const copies =
-    offer.suggestedFaultReducedCount === 1
-      ? "1 copy"
-      : `${offer.suggestedFaultReducedCount} copies`;
-  return `${about} — ${copies} lowered for faults; ${offer.suggestedFullPrice} ${offer.currency} without the reductions`;
-}
-
-function PriceFigureLink({
-  label,
-  figure,
-  about,
-  target,
-  applied,
-  disabled,
-  onApply,
-}: {
-  label: string;
-  figure: string;
-  /** What the figure is, for the hover hint. */
-  about: string;
-  /** The field it writes, as the hint names it: "price", or an auction's "starting price". */
-  target: string;
-  applied: boolean;
-  disabled: boolean;
-  onApply: () => void;
-}) {
-  const text = (
-    <>
-      <span style={{ color: "var(--color-text-muted)" }}>{label}</span> {figure}
-    </>
-  );
-  return (
-    <Tooltip
-      content={applied ? `${about} — already the ${target}` : `${about} — click to set the ${target} to it`}
-      align="end"
-    >
-      {applied ? (
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}>{text}</span>
-      ) : (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onApply}
-          style={{
-            padding: 0,
-            background: "none",
-            border: "none",
-            fontSize: "0.75rem",
-            color: "var(--color-accent)",
-            cursor: "pointer",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {text}
-        </button>
-      )}
-    </Tooltip>
-  );
-}
 
 const QUICK_ADVANCE_BTN: React.CSSProperties = {
   display: "inline-flex",
@@ -1279,45 +1206,20 @@ export function OfferDetailPanel({
               either way, and editing it in place is how a bid is refreshed (#351's pattern:
               committing stamps the check date shown below it). */}
           <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.15rem" }}>
-            {/* One line, weakest claim first (#1295): the platform's floor (#731), the catalog value
-                (#230), then the price itself — three numbers compared at a glance rather than a row
-                each. A figure that does not exist is left out, never drawn empty or as 0.00 (#1184).
-                Clicking either one writes the figure the seller **states** (`askingPriceField`),
-                never an auction's current price, which would be recording a bid nobody placed. */}
-            <span style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", flexWrap: "wrap", gap: "0.375rem", fontVariantNumeric: "tabular-nums" }}>
-              {editable && offer.platformMinimumPrice && offer.platformMinimumPrice !== "0.00" && (
-                <>
-                  <PriceFigureLink
-                    label="min"
-                    figure={offer.platformMinimumPrice}
-                    about={`The lowest ${offer.platformName} is worth listing on, set on the platform`}
-                    target={askingPriceNoun}
-                    applied={askingPrice === offer.platformMinimumPrice}
-                    disabled={isPending}
-                    onApply={() => patch(askingPriceField, offer.platformMinimumPrice!)}
-                  />
-                  <span style={PRICE_LINE_SEPARATOR}>·</span>
-                </>
-              )}
-              {editable && offer.suggestedPrice && offer.suggestedPrice !== "0.00" && (
-                <>
-                  <PriceFigureLink
-                    label="suggested"
-                    figure={offer.suggestedPrice}
-                    about={suggestedAbout(offer)}
-                    target={askingPriceNoun}
-                    applied={askingPrice === offer.suggestedPrice}
-                    disabled={isPending}
-                    onApply={() => patch(askingPriceField, offer.suggestedPrice!)}
-                  />
-                  {offer.suggestedUnpricedSets > 0 && (
-                    <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                      ({offer.suggestedUnpricedSets} set{offer.suggestedUnpricedSets === 1 ? "" : "s"} unpriced)
-                    </span>
-                  )}
-                  <span style={PRICE_LINE_SEPARATOR}>·</span>
-                </>
-              )}
+            {/* The figures the price is weighed against, as a small table (#1829): the platform's
+                floor (#731), the catalogue value (#230), Estimated value — the suggestion — the
+                market and the cost, each per set with its margin over the cost. Clicking a price
+                writes the figure the seller **states** (`askingPriceField`), never an auction's
+                current price, which would be recording a bid nobody placed. */}
+            <OfferPriceTable
+              offer={offer}
+              askingPrice={askingPrice}
+              target={askingPriceNoun}
+              editable={editable}
+              disabled={isPending}
+              onApply={(amount) => patch(askingPriceField, amount)}
+            />
+            <span style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", fontVariantNumeric: "tabular-nums" }}>
               <span style={{ fontSize: "0.9375rem", fontWeight: 600 }}>
                 <Tooltip content={priceLabel(offer.listingType)} align="end">
                   <InlineText

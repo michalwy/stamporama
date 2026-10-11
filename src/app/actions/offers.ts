@@ -28,6 +28,7 @@ import {
   resetOfferSetItemOrder,
   previewOfferTitle,
   previewNewOfferTitle,
+  previewCopyEstimates,
   offerTranslationGaps,
   type OfferTitlePreview,
   OfferActionBlockedError,
@@ -528,6 +529,21 @@ export async function previewNewOfferTitleAction(
     return await previewNewOfferTitle(session.user.id, collectionId, platformId, itemIds);
   } catch {
     return null;
+  }
+}
+
+/** Each copy's Estimated value in the base currency (#1829), for the *New offer* form's price
+ * prefill — read-only. Empty on any failure: the form then starts with no suggestion, which is what
+ * it does for copies that have none. */
+export async function previewCopyEstimatesAction(
+  collectionId: string,
+  itemIds: string[]
+): Promise<Record<string, string>> {
+  const session = await getSession();
+  try {
+    return await previewCopyEstimates(session.user.id, collectionId, itemIds);
+  } catch {
+    return {};
   }
 }
 

@@ -23,6 +23,7 @@ import { useVariantPriceGrid } from "@/app/c/[collectionSlug]/shared/use-variant
 import type { AssistantHandoff } from "../assistant-handoff";
 import { AssistantOutcome, ListViaAssistantButton } from "../assistant-listing";
 import { Icon } from "@/app/icons";
+import { describeEstimateSource } from "@/lib/offer-price-table";
 
 // One prepared offer as a posting kit (#322). Collapsed it is a single line — enough to pick the next
 // listing to post and to publish it without opening anything. Expanded it is everything that has to
@@ -443,24 +444,29 @@ function PostingKit({
       <Field label="Price" copyValue={offer.price}>
         <p style={{ ...BODY, fontVariantNumeric: "tabular-nums" }}>
           {offer.price} {offer.currency}
-          {offer.suggestedPrice &&
-            (offer.suggestedFullPrice ? (
-              // Lowered for some copies' faults (#1560): said in the warning tone, with the
-              // suggestion without the reductions in the hover.
-              <Tooltip
-                content={`${offer.suggestedFaultReducedCount} ${
-                  offer.suggestedFaultReducedCount === 1 ? "copy" : "copies"
-                } lowered for faults — ${offer.suggestedFullPrice} ${offer.currency} without the reductions`}
+          {/* The suggestion is Estimated value (#1829), named with the ratio it rests on. Lowered
+              for some copies' faults (#1560), it is said in the warning tone. */}
+          {offer.suggestedPrice && offer.suggestedEstimate && (
+            <Tooltip
+              content={`Estimated value — ${describeEstimateSource(offer.suggestedEstimate.source)}${
+                offer.catalogFaultReducedCount > 0
+                  ? ` · ${offer.catalogFaultReducedCount} ${
+                      offer.catalogFaultReducedCount === 1 ? "copy" : "copies"
+                    } lowered for faults`
+                  : ""
+              }`}
+            >
+              <span
+                style={{
+                  marginLeft: "0.5rem",
+                  color:
+                    offer.catalogFaultReducedCount > 0 ? "var(--color-warning)" : "var(--color-text-muted)",
+                }}
               >
-                <span style={{ marginLeft: "0.5rem", color: "var(--color-warning)" }}>
-                  suggested {offer.suggestedPrice} {offer.currency}
-                </span>
-              </Tooltip>
-            ) : (
-              <span style={{ marginLeft: "0.5rem", color: "var(--color-text-muted)" }}>
-                suggested {offer.suggestedPrice} {offer.currency}
+                suggested ≈ {offer.suggestedPrice} {offer.currency}
               </span>
-            ))}
+            </Tooltip>
+          )}
         </p>
       </Field>
 

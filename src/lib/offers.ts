@@ -10,6 +10,8 @@ import {
   listItemsPaginated,
   type ItemListItem,
 } from "./items";
+import { estimateCopiesByGroup } from "./copy-estimates";
+import { estimateSets, type EstimateSource } from "./offer-price-table";
 import type { HoldingsSummary } from "./valuation";
 import { lotCostInputs, lotIsOpeningBalance, resolveCostBasis } from "./cost-basis";
 import { loadCostEstimates } from "./cost-estimates";
@@ -714,6 +716,27 @@ async function generateListingTexts(
  * created offer would not get. */
 function renderOfferTitle(template: string, sets: readonly TemplateSet[]): string | null {
   return renderTitleTemplate(template, offerTitleCopies(sets)) || null;
+}
+
+/** Each copy's Estimated value in the base currency, 2-dp (#1829) — what the *New offer* form seeds
+ * the price with, where it once took the catalogue value (#230). A copy that cannot be estimated
+ * (unpriced, valued at a recorded figure, no longer held) is absent. Writes nothing. */
+export async function previewCopyEstimates(
+  ownerId: string,
+  collectionId: string,
+  itemIds: string[]
+): Promise<Record<string, string>> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const byCopy = await estimateCopiesByGroup(
+    collectionId,
+    itemIds.map((id) => ({ key: id, itemIds: [id] }))
+  );
+  const out: Record<string, string> = {};
+  for (const [id, estimates] of byCopy) {
+    const estimate = estimateSets([estimates]);
+    if (estimate) out[id] = estimate.averageBase.toFixed(2);
+  }
+  return out;
 }
 
 /** The title an offer created on `platformId` with `itemIds` would be generated, without writing
@@ -4165,8 +4188,8 @@ export interface OfferDetailSet {
  * The offer's sets **taken together** (#378): what the whole listing is worth and what it cost, and
  * the same two figures per set. Both questions are asked at once because they answer different
  * things — the total is what leaves the shelf if everything sells, the average is what one buyer
- * takes, which is the figure an asking price is set against (and is exactly how `suggestedPrice`
- * is derived, #190).
+ * takes, which is the figure an asking price is set against (and is exactly how `catalogPrice` is
+ * derived, #190).
  *
  * An average divides by the sets that **had** a figure, not by every set: an unpriced set is a gap
  * in the data, and letting it drag the average down would report a listing as cheaper than anything
@@ -4287,17 +4310,32 @@ export interface OfferDetail {
    * lands on from it (#505). A flag shown on the way past and then missing from the offer's own
    * page reads as having been dealt with, which is the one thing it must not say. */
   platformSale: UnrecordedPlatformSale | null;
-  /** Derived suggested asking price **in the offer's currency**: the average catalog value per set
-   * (a buyer takes one set), converted from base at the current FX rate. Null when nothing is
-   * valued or no rate is available. */
+  /** The suggested asking price **in the offer's currency** (#1829): Estimated value per set —
+   * catalogue × the learned realisation ratio, averaged over the sets that have one (a buyer takes
+   * one set). Null when no copy can be estimated or no rate is available. It was the catalogue value
+   * until #1829, which is {@link catalogPrice} now. */
   suggestedPrice: string | null;
+  /** What {@link suggestedPrice} rests on: the sets and copies behind it, and the ratio's source —
+   * the bucket and its `n`, or the catalogue's manual factor (#1828). Null with it. */
+  suggestedEstimate: { valuedSets: number; copies: number; source: EstimateSource } | null;
+  /** The catalogue value per set **in the offer's currency**, averaged over the sets carrying one,
+   * converted from base at the current FX rate. Null when nothing is valued or no rate is available.
+   * The agent API's `suggested` (#711), whose meaning is fixed. */
+  catalogPrice: string | null;
   /** Sets with no computable catalog value (excluded from the average). */
-  suggestedUnpricedSets: number;
-  /** Copies whose value the suggestion was lowered for, for their faults (#1560), and the suggestion
+  catalogUnpricedSets: number;
+  /** Copies whose catalogue value was lowered for their faults (#1560), and {@link catalogPrice}
    *  without those reductions in the offer's currency — the figure its hint names. Zero and null when
    *  nothing was lowered. */
-  suggestedFaultReducedCount: number;
-  suggestedFullPrice: string | null;
+  catalogFaultReducedCount: number;
+  catalogFullPrice: string | null;
+  /** What the market paid per set (#458), in the offer's currency, averaged over the sets with any
+   * copy that has recorded results; `copies` is how many copies those results cover, and
+   * `noEvidenceCopies` how many held copies they say nothing about. Null when no copy has any. */
+  marketPrice: { amount: string; valuedSets: number; copies: number; noEvidenceCopies: number } | null;
+  /** What the copies cost per set (#378, estimates included #1736), in the offer's currency. Null
+   * when no set's cost is known or no rate is available. */
+  costPrice: string | null;
   /** The platform's configured opening figure for an auction (#362, narrowed in #449/#553), in the
    * platform's own currency; null where none is set or the platform lists quick buys. It seeded this
    * offer's starting price at creation and is **not** re-applied anywhere — the offer's screen
@@ -4700,14 +4738,15 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       }))
       .filter((c) => resolveCostBasis(c).state === "pending")
   );
-  const [labeller, holdingsBySet, conditionMap, costEstimates] = await Promise.all([
+  const setGroups = offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }));
+  const [labeller, holdingsBySet, conditionMap, costEstimates, estimatesBySet] = await Promise.all([
     makeOfferLabeller(offer.collectionId),
-    getHoldingsValuationByGroup(
-      offer.collectionId,
-      offer.sets.map((s) => ({ key: s.id, itemIds: s.items.map((li) => li.itemId) }))
-    ),
+    getHoldingsValuationByGroup(offer.collectionId, setGroups),
     loadColnectConditionMap(offer.collectionId),
     loadCostEstimates(offer.collectionId, pendingCopies),
+    // Estimated value, the price table's suggestion (#1829) — a second read of the copies, because
+    // the holdings summary stays measurement-only (#602) and has no ratio to multiply by.
+    estimateCopiesByGroup(offer.collectionId, setGroups),
   ]);
   const pendingIds = new Set(pendingCopies.map((c) => c.id));
   // What each copy is listed under (#616), resolved once for the screen and read by all four
@@ -4794,13 +4833,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     };
   });
 
-  // Suggested asking price: average base-currency catalog value per set (a buyer takes one set),
-  // converted to the offer's currency at the current rate. Summed from the per-set figures above
-  // rather than from a second valuation pass — a set counts as valued when *some* copy of it priced,
-  // which is exactly what `pricedCount` says.
+  // The catalogue value per set: average base-currency catalog value per set (a buyer takes one
+  // set), converted to the offer's currency at the current rate. Summed from the per-set figures
+  // above rather than from a second valuation pass — a set counts as valued when *some* copy of it
+  // priced, which is exactly what `pricedCount` says. It was the suggested price until #1829.
   let sumSetCV = 0;
   let valuedSets = 0;
-  // What the copies' fault reductions took off (#1560), so the suggestion can name its full figure.
+  // What the copies' fault reductions took off (#1560), so the figure can name its full value.
   let sumSetReduction = 0;
   let faultReducedCount = 0;
   for (const s of sets) {
@@ -4810,18 +4849,37 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     faultReducedCount += s.holdings.faultReducedCount;
     valuedSets++;
   }
-  let suggestedPrice: string | null = null;
-  let suggestedFullPrice: string | null = null;
+  // Same rate the per-set figures used — an offer already in base converts 1:1, and a missing rate
+  // leaves no figure rather than one in the wrong currency.
+  const toOffer = offer.currency === baseCurrency ? 1 : baseToOffer;
+  const inOfferCurrencyOrNull = (base: number | null) =>
+    base === null || toOffer === null ? null : (base * toOffer).toFixed(2);
+  let catalogPrice: string | null = null;
+  let catalogFullPrice: string | null = null;
   if (valuedSets > 0) {
-    const avgBase = sumSetCV / valuedSets;
-    // Same rate the per-set figures used — an offer already in base converts 1:1, and a missing rate
-    // leaves no suggestion rather than one in the wrong currency.
-    const rate = offer.currency === baseCurrency ? 1 : baseToOffer;
-    suggestedPrice = rate === null ? null : (avgBase * rate).toFixed(2);
-    if (rate !== null && faultReducedCount > 0) {
-      suggestedFullPrice = (((sumSetCV + sumSetReduction) / valuedSets) * rate).toFixed(2);
+    catalogPrice = inOfferCurrencyOrNull(sumSetCV / valuedSets);
+    if (faultReducedCount > 0) {
+      catalogFullPrice = inOfferCurrencyOrNull((sumSetCV + sumSetReduction) / valuedSets);
     }
   }
+
+  // The suggestion (#1829): Estimated value per set, over the same sets and in the same currency.
+  const estimate = estimateSets(sets.map((s) => estimatesBySet.get(s.id) ?? []));
+  const suggestedPrice = estimate ? inOfferCurrencyOrNull(estimate.averageBase) : null;
+
+  // What the market paid per set (#458), averaged over the sets any copy of which has results.
+  let sumSetMarket = 0;
+  let marketSets = 0;
+  let marketCopies = 0;
+  let noEvidenceCopies = 0;
+  for (const s of sets) {
+    noEvidenceCopies += s.holdings.market.noEvidenceCount;
+    if (s.holdings.market.valuedCount === 0) continue;
+    sumSetMarket += Number(s.holdings.market.totalBaseAmount);
+    marketCopies += s.holdings.market.valuedCount;
+    marketSets++;
+  }
+  const marketAmount = marketSets > 0 ? inOfferCurrencyOrNull(sumSetMarket / marketSets) : null;
 
   // The same two figures over the whole listing (#378): summed, and averaged over the sets that
   // carried one. Summed from the per-set figures rather than re-aggregated, because an offer never
@@ -4944,9 +5002,19 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     inActiveBidding: biddingLive(offer.inActiveBidding, state),
     platformSale,
     suggestedPrice,
-    suggestedUnpricedSets: offer.sets.length - valuedSets,
-    suggestedFaultReducedCount: faultReducedCount,
-    suggestedFullPrice,
+    suggestedEstimate:
+      estimate && suggestedPrice !== null
+        ? { valuedSets: estimate.valuedSets, copies: estimate.copies, source: estimate.source }
+        : null,
+    catalogPrice,
+    catalogUnpricedSets: offer.sets.length - valuedSets,
+    catalogFaultReducedCount: faultReducedCount,
+    catalogFullPrice,
+    marketPrice:
+      marketAmount === null
+        ? null
+        : { amount: marketAmount, valuedSets: marketSets, copies: marketCopies, noEvidenceCopies },
+    costPrice: inOfferCurrencyOrNull(costTotals.average),
     platformDefaultStartingPrice: offer.platform.defaultStartingPrice?.toFixed(2) ?? null,
     platformMinimumPrice: offer.platform.minimumPrice?.toFixed(2) ?? null,
     sets,
