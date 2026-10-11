@@ -500,7 +500,7 @@ export async function composeSeriesOffer(
       const withdrawn = await tx.offer.updateMany({
         where: { id: { in: withdrawnIds }, sets: { none: {} } },
         // `closedAt` (#512) is stamped with the state, as on a withdrawal by hand.
-        data: { state: "withdrawn", closedAt: new Date() },
+        data: { state: "withdrawn", stateChangedAt: new Date(), closedAt: new Date() },
       });
       if (withdrawn.count !== withdrawnIds.length) throw changedSince();
     }

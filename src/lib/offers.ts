@@ -1546,6 +1546,8 @@ export async function offersWithPlatformSale(
 /** One auction that ended with a bid on it and is still waiting to be resolved (#490). */
 export interface EndedAuctionOffer {
   offerId: string;
+  /** The offer's own number (#416) — the Dashboard prints it beside the title (#1811). */
+  offerNo: number;
   label: string;
   platformName: string;
   /** The standing bid the listing closed at, and its currency. */
@@ -1583,6 +1585,7 @@ export async function offersWithEndedAuction(
       take: limit,
       select: {
         id: true,
+        offerNo: true,
         name: true,
         price: true,
         currency: true,
@@ -1599,6 +1602,7 @@ export async function offersWithEndedAuction(
     total,
     offers: rows.map((row) => ({
       offerId: row.id,
+      offerNo: row.offerNo,
       label: offerDisplayLabel(row.name, row.sets, labeller),
       platformName: row.platform.name,
       price: row.price.toFixed(2),
@@ -1606,6 +1610,186 @@ export async function offersWithEndedAuction(
       // Non-null by the `where` — an auction with no closing time is never in this set.
       endsAt: row.endsAt!,
     })),
+  };
+}
+
+/** One offer waiting on the collector, as the Dashboard's *Offers to handle* lists it (#1811). */
+export interface WaitingOffer {
+  offerId: string;
+  offerNo: number;
+  label: string;
+  platformName: string;
+  /** The instant the row is aged from — see {@link WaitingOfferAge} — or null where none is known. */
+  since: Date | null;
+}
+
+/**
+ * What a waiting offer is aged by, and read oldest first by (#1811):
+ *
+ * - `state` — when it entered the state it is in (`stateChangedAt`): a Ready offer waiting to be
+ *   published, a Pending one waiting for its administrator;
+ * - `posted` — when it was last put up ({@link lastPostedOn}): a quick buy due for a refresh, whose
+ *   state has not changed since it first went live however often it was reposted.
+ */
+export type WaitingOfferAge = "state" | "posted";
+
+/**
+ * The offers a filter of the offers list selects, **oldest first** — the Dashboard's read (#1811).
+ *
+ * The set is the list's own: the same overlays resolved the same way and handed to the same
+ * `offerListWhere` as {@link listOffersPaginated} and {@link countOffers}, so a group's count is the
+ * number of rows its *see all* link opens. Only the order is the Dashboard's — work waiting is read
+ * longest-waiting first, where the list is read newest first.
+ *
+ * The ordering instant is read for every match and sorted here rather than in the database: the
+ * posting instant is the later of two columns, which `orderBy` cannot say, and these are groups of
+ * work waiting rather than the collection. Only the head is labelled.
+ */
+export async function offersWaiting(
+  ownerId: string,
+  collectionId: string,
+  filters: Pick<OfferListFilters, "states" | "needsRefresh">,
+  age: WaitingOfferAge,
+  limit: number
+): Promise<{ total: number; offers: WaitingOffer[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const overlays = await resolveOfferOverlays(collectionId, filters);
+  if (overlays.ids?.length === 0) return { total: 0, offers: [] };
+
+  const matches = await prisma.offer.findMany({
+    where: offerListWhere(
+      collectionId,
+      filters,
+      overlays.ids,
+      overlays.platformSoldIds,
+      overlays.refreshWhere
+    ),
+    select: { id: true, offerNo: true, stateChangedAt: true, listingDate: true, lastPostedAt: true },
+  });
+  const sinceOf = (row: (typeof matches)[number]): Date | null =>
+    age === "state" ? row.stateChangedAt : lastPostedOn(row.listingDate, row.lastPostedAt);
+  const head = matches
+    .map((row) => ({ id: row.id, offerNo: row.offerNo, since: sinceOf(row) }))
+    // Oldest first; an unknown instant last, and the offer number between two of the same instant
+    // so a tie cannot reorder between two refreshes.
+    .sort(
+      (a, b) =>
+        (a.since?.getTime() ?? Infinity) - (b.since?.getTime() ?? Infinity) || a.offerNo - b.offerNo
+    )
+    .slice(0, limit);
+
+  const labelled = await labelWaitingOffers(collectionId, head);
+  return { total: matches.length, offers: labelled.map(({ offer }) => offer) };
+}
+
+/** Names the head of a waiting group — number, title (or derived label) and platform — in the
+ *  head's own order, each beside the row it was made from. */
+async function labelWaitingOffers<T extends { id: string; since: Date | null }>(
+  collectionId: string,
+  head: readonly T[]
+): Promise<{ offer: WaitingOffer; row: T }[]> {
+  if (head.length === 0) return [];
+  const offers = await prisma.offer.findMany({
+    where: { id: { in: head.map((row) => row.id) } },
+    select: {
+      id: true,
+      offerNo: true,
+      name: true,
+      platform: { select: { name: true } },
+      sets: { select: OFFER_SETS_SELECT, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  const labeller = offers.some((o) => !o.name) ? await makeOfferLabeller(collectionId) : null;
+  const byId = new Map(offers.map((o) => [o.id, o]));
+  return head.flatMap((row) => {
+    const offer = byId.get(row.id);
+    return offer
+      ? [
+          {
+            offer: {
+              offerId: row.id,
+              offerNo: offer.offerNo,
+              label: offerDisplayLabel(offer.name, offer.sets, labeller),
+              platformName: offer.platform.name,
+              since: row.since,
+            },
+            row,
+          },
+        ]
+      : [];
+  });
+}
+
+/** Why an offer needs action (#1811): one of the bell's three collisions (#367), or its listing
+ *  having changed since it went up (#542). */
+export type OfferNeedsActionReason = OfferActionReason | "listing-changed";
+
+/** One offer of the *Needs action* set, with the reason it is listed under. */
+export interface NeedsActionOffer extends WaitingOffer {
+  reason: OfferNeedsActionReason;
+}
+
+/**
+ * The offers list's *Needs action* set as one group, for the Dashboard (#1811) — the bell's four
+ * groups (`offer-sold-elsewhere`, `offer-bidding-conflict`, `offer-platform-sale-conflict`,
+ * `offer-listing-changed`) read from the same two derivations and put back together.
+ *
+ * - **The set** is the union `resolveOfferOverlays` makes for `needsAction=1`: {@link needsActionRows}
+ *   and the drift `where`, so the count is the rows the group's link opens and each row is one the
+ *   bell reports.
+ * - **One row per offer**, under its worst reason: a collision is a double sale waiting to happen
+ *   and the bell's red, so **collisions come first**, worst first as the bell reads them (most
+ *   affected copies); then the listings changed since they went up, longest wrong first — again the
+ *   bell's order.
+ * - **The instant** is when a changed listing started diverging. A collision carries none: nothing
+ *   records when the copy went elsewhere, and the bell does not age it either.
+ */
+export async function offersNeedingActionForDashboard(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; offers: NeedsActionOffer[] }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const [collisions, drifted] = await Promise.all([
+    needsActionRows(collectionId),
+    prisma.offer.findMany({
+      where: { collectionId, ...LISTING_DRIFT_WHERE },
+      orderBy: [{ listingContentChangedAt: "asc" }, { offerNo: "desc" }],
+      select: { id: true, listingContentChangedAt: true },
+    }),
+  ]);
+
+  // The bell's own order of the three, which is also the order of what each one has lost.
+  const reasonOf = (row: NeedsActionRow): OfferActionReason =>
+    row.soldCount > 0
+      ? "sold-elsewhere"
+      : row.biddingCount > 0
+        ? "bidding-conflict"
+        : "platform-sale-conflict";
+  const flagged = collisions
+    .filter((row) => row.soldCount + row.biddingCount + row.platformSaleCount > 0)
+    .sort((a, b) => b.deadCount - a.deadCount || a.offerId.localeCompare(b.offerId))
+    .map((row) => ({
+      id: row.offerId,
+      reason: reasonOf(row) as OfferNeedsActionReason,
+      since: null as Date | null,
+    }));
+  const collided = new Set(flagged.map((row) => row.id));
+  const ordered = [
+    ...flagged,
+    ...drifted
+      .filter((row) => !collided.has(row.id))
+      .map((row) => ({
+        id: row.id,
+        reason: "listing-changed" as OfferNeedsActionReason,
+        since: row.listingContentChangedAt,
+      })),
+  ];
+
+  const labelled = await labelWaitingOffers(collectionId, ordered.slice(0, limit));
+  return {
+    total: ordered.length,
+    offers: labelled.map(({ offer, row }) => ({ ...offer, reason: row.reason })),
   };
 }
 
@@ -3918,7 +4102,7 @@ export async function repostOffer(
         url: trimmed,
         colnectSaleId,
         listingContentChangedAt: null,
-        ...(to === "pending" ? { state: "pending" } : { lastPostedAt: now }),
+        ...(to === "pending" ? { state: "pending", stateChangedAt: now } : { lastPostedAt: now }),
       },
     }),
   ]);
@@ -6614,6 +6798,8 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     where: { id: offerId },
     data: {
       state: to,
+      // Every change of state restarts its age (#1811) — `canTransition` admits no move to itself.
+      stateChangedAt: new Date(),
       // When the listing closed (#512). Only `withdrawn` is reachable by hand — `sold` is the sale
       // flow's (#166) — and only the sweep that purges a closed offer's generated images reads it.
       ...(isTerminalState(to) ? { closedAt: new Date() } : {}),

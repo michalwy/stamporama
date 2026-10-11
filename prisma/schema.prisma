@@ -4919,6 +4919,12 @@ model Offer {
   // own `updatedAt` would be reset by anything at all — a note edited on a sold listing is not the
   // listing closing again.
   closedAt     DateTime?
+  // When the offer entered the state it is in (#1811) — what the Dashboard's *Offers to handle*
+  // ages a Ready or Pending offer by. Stamped by every write that changes `state` (`setOfferState`,
+  // the repost to Pending, the sale flow's sold ↔ active, the series withdrawal) and by the column
+  // default on a create. Offers older than the column carry an estimate: their listing or closing
+  // date where one fits the state, their creation otherwise.
+  stateChangedAt DateTime @default(now())
   createdAt    DateTime @default(now())
   // "In active bidding" (#215): an auction-platform offer that has received a bid, committing the
   // collector before the sale is actually recorded. Independent axis from `state`/`sold` — freely

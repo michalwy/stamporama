@@ -29,6 +29,14 @@ import {
 } from "./dashboard-incoming-rules";
 import { countPurchases, listPurchasesPaginated, type PurchaseListFilters } from "./purchases";
 import { listSheetsToCut } from "./scan-sheets";
+import {
+  offersNeedingActionForDashboard,
+  offersWaiting,
+  offersWithEndedAuction,
+  type OfferNeedsActionReason,
+  type WaitingOffer,
+} from "./offers";
+import { formatEntityNo } from "./quick-jump";
 
 /**
  * The operational Dashboard's reads (#1808; ADR-0067). The shape and its rules are in the pure
@@ -157,6 +165,121 @@ const scansToCutProvider: DashboardProvider = async ({ ownerId, collectionId }) 
   ];
 };
 
+// ── Offers to handle (#1811) ────────────────────────────────────────────────
+
+/**
+ * An offer row: its number beside its title, its platform under it, aged from the instant its group
+ * says (#1811) — and it opens the offer, which is where every one of these is dealt with.
+ */
+function offerRow(offer: WaitingOffer, detail: string = offer.platformName): DashboardItem {
+  return {
+    key: offer.offerId,
+    label: `${formatEntityNo(offer.offerNo)} ${offer.label}`,
+    detail,
+    at: offer.since?.toISOString() ?? null,
+    href: `offers/${offer.offerId}`,
+  };
+}
+
+/** What a *Needs action* row says beside its platform: which of the bell's groups it is in. */
+const NEEDS_ACTION_REASON: Record<OfferNeedsActionReason, string> = {
+  "sold-elsewhere": "copy sold elsewhere",
+  "bidding-conflict": "conflicts with a live auction",
+  "platform-sale-conflict": "conflicts with a sale on Allegro",
+  "listing-changed": "changed since listed",
+};
+
+/** The waiting groups that are filters of the offers list and no bell group: read through that
+ *  list's own `where` and linked to it, so the count is the rows *see all* opens. */
+async function waitingGroup(
+  { ownerId, collectionId }: DashboardContext,
+  group: {
+    id: string;
+    title: string;
+    filters: Parameters<typeof offersWaiting>[2];
+    age: Parameters<typeof offersWaiting>[3];
+    href: string;
+  }
+): Promise<DashboardGroup> {
+  const waiting = await offersWaiting(
+    ownerId,
+    collectionId,
+    group.filters,
+    group.age,
+    DASHBOARD_ROW_LIMIT
+  );
+  return {
+    id: group.id,
+    title: group.title,
+    count: waiting.total,
+    items: waiting.offers.map((o) => offerRow(o)),
+    href: group.href,
+  };
+}
+
+/**
+ * The five groups, in the order the section shows them (#1811).
+ *
+ * - *Ready to publish* and *Pending approval* — the list's state filters, aged from the moment the
+ *   offer entered the state (`stateChangedAt`).
+ * - *Needs action* — the bell's three collisions and *Changed since listed*, as the one group the
+ *   offers list has them as (#542), read from the bell's own derivations; the red collisions first.
+ * - *Quick buys to refresh* — the list's *Needs refresh* (#1718), aged from the last posting.
+ * - *Auctions ended, no result* — the bell's *Auction ended with a bid* (#490), read through the
+ *   bell's own function, so the two hold the same offers.
+ */
+const offersToHandleProvider: DashboardProvider = async (ctx) => {
+  const { ownerId, collectionId } = ctx;
+  const [ready, pending, flagged, refresh, ended] = await Promise.all([
+    waitingGroup(ctx, {
+      id: "offers-ready",
+      title: "Ready to publish",
+      filters: { states: ["ready"] },
+      age: "state",
+      href: "offers?state=ready",
+    }),
+    waitingGroup(ctx, {
+      id: "offers-pending",
+      title: "Pending approval",
+      filters: { states: ["pending"] },
+      age: "state",
+      href: "offers?state=pending",
+    }),
+    offersNeedingActionForDashboard(ownerId, collectionId, DASHBOARD_ROW_LIMIT),
+    waitingGroup(ctx, {
+      id: "offers-refresh",
+      title: "Quick buys to refresh",
+      filters: { needsRefresh: true },
+      age: "posted",
+      href: "offers?needsRefresh=1",
+    }),
+    offersWithEndedAuction(ownerId, collectionId, DASHBOARD_ROW_LIMIT),
+  ]);
+  return [
+    ready,
+    pending,
+    {
+      id: "offers-needs-action",
+      title: "Needs action",
+      count: flagged.total,
+      items: flagged.offers.map((o) =>
+        offerRow(o, `${o.platformName} · ${NEEDS_ACTION_REASON[o.reason]}`)
+      ),
+      href: "offers?needsAction=1",
+    },
+    refresh,
+    {
+      id: "offers-ended-auction",
+      title: "Auctions ended, no result",
+      count: ended.total,
+      items: ended.offers.map((o) =>
+        offerRow({ ...o, since: o.endsAt }, `${o.platformName} · ${o.price} ${o.currency}`)
+      ),
+      href: "offers?endedAuction=1",
+    },
+  ];
+};
+
 /**
  * **Trades** (#1813): agreed trades waiting on a parcel — *To send* and *Waiting for the partner*.
  *
@@ -191,7 +314,7 @@ const tradeShippingGroups: DashboardProvider = ({ ownerId, collectionId }) =>
 const SECTION_PROVIDERS: Record<DashboardSectionId, DashboardProvider[]> = {
   sales: [platformSales, salesInFlight],
   "incoming-purchases": [inTransitProvider, arrivedToSortProvider, scansToCutProvider],
-  offers: [],
+  offers: [offersToHandleProvider],
   auctions: [auctionWindowsProvider, wonNotPurchasedProvider],
   trades: [tradeShippingGroups],
 };

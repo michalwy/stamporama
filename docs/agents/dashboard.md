@@ -34,6 +34,26 @@ operational dashboard*; read the ADR before changing what the screen is.
   collapsed to title and `0` (`isEmptyGroup`). Do not filter empty groups out — the bell does, the
   dashboard deliberately does not.
 
+- **Offers to handle** (#1811, rules confirmed with the collector on 2026-10-11) — one provider,
+  `offersToHandleProvider`, five groups in this order: *Ready to publish* (`?state=ready`), *Pending
+  approval* (`?state=pending`), *Needs action* (`?needsAction=1`), *Quick buys to refresh*
+  (`?needsRefresh=1`), *Auctions ended, no result* (`?endedAuction=1`). A row is
+  `#<offerNo> <title>`, the platform, and its age; it opens the offer.
+  - The three list-only groups read `offersWaiting` (`offers.ts`), which hands the list's own
+    `resolveOfferOverlays` + `offerListWhere` the group's filter — the set and count are what *see
+    all* opens; only the order (oldest first) is the dashboard's.
+  - *Needs action* is the bell's four offer groups put back together as the list's one filter (#542):
+    `offersNeedingActionForDashboard` reads `needsActionRows` and `LISTING_DRIFT_WHERE`, the bell's
+    two derivations. One row per offer under its worst reason, **collisions (the bell's red) first**,
+    worst first, then drift oldest first. A collision has no age — nothing records when the copy went.
+  - *Auctions ended, no result* is the bell's `offer-auction-ended`, read through
+    `offersWithEndedAuction` itself.
+  - Ages: Ready and Pending from **`Offer.stateChangedAt`** (added for this — the collector chose a
+    column over aging from creation); refresh from `lastPostedOn`; needs action from
+    `listingContentChangedAt`; ended from `endsAt`.
+  - `tests/integration/dashboard-offers.test.ts` pins each group against the list's filter and the
+    bell's groups, and the collision-first order; it fails with either order or a missed stamp broken.
+
 - **Providers per section** in `src/lib/dashboard.ts` (`SECTION_PROVIDERS`): adding a group is an
   entry there and nothing else. `getDashboardSection` asserts the collection itself as well, so a
   section with no providers still refuses a stranger's collection. One route per section,
