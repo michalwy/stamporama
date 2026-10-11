@@ -204,6 +204,7 @@ describe("Facebook groups (#1543)", () => {
       auctionDays: 7,
       closingTime: "9:00",
       refreshQuickBuysAfterDays: 4,
+      buyerMessageTemplate: " Pay {total}\nAccount 123 ",
     });
     const expected: FacebookPostingSettings = {
       listingType: "fixed",
@@ -217,6 +218,7 @@ describe("Facebook groups (#1543)", () => {
       auctionDays: 7,
       closingTime: "09:00",
       refreshQuickBuysAfterDays: 4,
+      buyerMessageTemplate: "Pay {total}\nAccount 123",
     };
     assert.deepEqual((await listFacebookGroups(userId, collectionId)).defaults, expected);
     // A second save edits the one row.

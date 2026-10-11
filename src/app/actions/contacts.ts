@@ -156,6 +156,8 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
       isPlatform && str(formData, "refreshQuickBuysAfterDays").trim() !== ""
         ? Number(str(formData, "refreshQuickBuysAfterDays"))
         : null,
+    // The message to a buyer after a sale here (#1815). Same platform-only handling; blank is none.
+    buyerMessageTemplate: isPlatform ? str(formData, "buyerMessageTemplate") || null : null,
     // The platform's photo limits, and the defaults new offers on this platform are seeded from
     // (#308). `photoSides` normalises to the default side; the collage template is verified against
     // the collection server-side.

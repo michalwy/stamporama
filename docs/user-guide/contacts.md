@@ -563,6 +563,16 @@ That is also why a method a sale points at can't be deleted — rename it instea
 name a **one-off** method without one being listed here, so the list is for what you actually post
 with regularly.
 
+### Message to buyer
+
+A platform's **Message to buyer** is the template of what you send a buyer after a sale here — what
+to pay, the account to pay into, and what happens next. Placeholders under the field fill in the
+sale's own figures; the [sales guide](sales.md#message-to-the-buyer) lists them and what each becomes.
+Leave it empty and sales on this platform offer no message.
+
+The Facebook platform has no such field here: its message is set under **Settings → Facebook**,
+where each group can follow it or have its own ([Facebook](facebook.md#message-to-buyer)).
+
 ### Listing text limits
 
 Under the templates sits **Listing text limits** — **Max title (characters)**, **Max description

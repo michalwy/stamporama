@@ -178,6 +178,10 @@ export interface ContactData extends ContactRoles {
    * Not read for the Facebook platform, whose threshold is on Settings → Facebook (#1661). Only
    * meaningful for the `platform` role. */
   refreshQuickBuysAfterDays: number | null;
+  /** The message a buyer is sent after a sale here (#1815), or null for none. Not read for the
+   * Facebook platform, whose message is on Settings → Facebook (#1661). Only meaningful for the
+   * `platform` role. */
+  buyerMessageTemplate: string | null;
   /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
    * the renderer (#310) rather than seeded onto offers. Only meaningful for the `platform` role. */
   maxPhotos: number | null;
@@ -253,6 +257,7 @@ const CONTACT_SELECT = {
   minimumPrice: true,
   defaultListingType: true,
   refreshQuickBuysAfterDays: true,
+  buyerMessageTemplate: true,
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
@@ -398,6 +403,8 @@ export interface ContactCreateInput {
   defaultListingType?: string | null;
   /** The quick-buy refresh threshold (#1718) in days, or null for never. Out of range is refused. */
   refreshQuickBuysAfterDays?: number | null;
+  /** The message to a buyer after a sale here (#1815), or null for none. Blank stores null. */
+  buyerMessageTemplate?: string | null;
   /** The platform's photo limits (#308) — null each means "no limit stated". */
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
@@ -660,6 +667,7 @@ export async function createContact(
         // because it is the one per-listing figure that does not depend on the listing type.
         minimumPrice: amount(data.minimumPrice),
         refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
+        buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxTitleLength: data.maxTitleLength ?? null,
@@ -719,6 +727,7 @@ export async function updateContact(
         // because it is the one per-listing figure that does not depend on the listing type.
         minimumPrice: amount(data.minimumPrice),
         refreshQuickBuysAfterDays: refreshDays(data.refreshQuickBuysAfterDays),
+        buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
         // The platform's listing-text caps (#403), beside the photo ones in spirit but plain
         // columns: nothing has to be verified against the collection, so they need no helper.
         maxTitleLength: data.maxTitleLength ?? null,

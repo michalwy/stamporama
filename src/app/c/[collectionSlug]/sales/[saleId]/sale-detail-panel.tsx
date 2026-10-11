@@ -11,6 +11,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetail } from "@/lib/sales";
+import type { SaleBuyerMessage } from "@/lib/sale-buyer-message";
 import { describeEstimated, describeLeftOut, type EstimatedProfitFigures } from "@/lib/sale-profit";
 import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
@@ -25,6 +26,7 @@ import { useInvalidateSales } from "../use-sales-query";
 import { SoldUnitsView } from "./sold-units-view";
 import { ChooseSetDialog } from "./choose-set-dialog";
 import { SaleShareDialog } from "./sale-share-dialog";
+import { BuyerMessageDialog } from "./buyer-message-dialog";
 import { PaidTotalDialog } from "./paid-total-dialog";
 import { ShipmentDialog } from "./shipment-dialog";
 import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
@@ -102,6 +104,7 @@ type Dialog =
   | { kind: "removeLine"; lineId: string; label: string }
   | { kind: "chooseSet"; lineId: string }
   | { kind: "share" }
+  | { kind: "buyerMessage" }
   | { kind: "paidTotal" }
   | { kind: "shipment"; mode: "sent" | "edit" }
   | { kind: "unpacked"; next: SaleStatus };
@@ -111,6 +114,9 @@ interface SaleDetailPanelProps {
   sale: SaleDetail;
   /** The collection's carriers (#491) — what the shipment dialog picks from. */
   carriers: CarrierData[];
+  /** The message to the buyer rendered for this sale (#1815), or null when its platform has no
+   *  template — and then there is no *Message to buyer* at all. */
+  buyerMessage: SaleBuyerMessage | null;
   areas: CollectionAreaData[];
   locations: LocationData[];
   issueHeaderById: Record<string, IssueHeader>;
@@ -120,6 +126,7 @@ export function SaleDetailPanel({
   collectionId,
   sale,
   carriers,
+  buyerMessage,
   areas,
   locations,
   issueHeaderById,
@@ -264,6 +271,26 @@ export function SaleDetailPanel({
               they get. Drawn while there is something to ask about — or while a link is already out
               there, since a seller who has sent one needs a way back to it to check or withdraw it
               even after the last unit has been settled. */}
+          {/* **Message to buyer** (#1815): what to pay, where, and what happens next, from the
+              platform's template — offered only where the platform has one (#1692). */}
+          {buyerMessage && (
+            <Tooltip
+              content="Read and copy the message for the buyer — what to pay and what happens next"
+              style={{ marginLeft: "auto" }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setError(undefined);
+                  setDialog({ kind: "buyerMessage" });
+                }}
+                disabled={isPending}
+                style={SECONDARY_BTN}
+              >
+                <Icon name="copy" size="sm" /> Message to buyer
+              </button>
+            </Tooltip>
+          )}
           {(pendingSetCount > 0 || sale.share) && (
             <Tooltip
               content={
@@ -271,7 +298,7 @@ export function SaleDetailPanel({
                   ? "Send the buyer a link and let them choose which copy they get"
                   : "This sale has a buyer link out — open it to check or withdraw it"
               }
-              style={{ marginLeft: "auto" }}
+              style={buyerMessage ? undefined : { marginLeft: "auto" }}
             >
               <button
                 type="button"
@@ -291,7 +318,7 @@ export function SaleDetailPanel({
             href={`/c/${params.collectionSlug}/sales/${sale.id}/packing-list`}
             style={{
               ...SECONDARY_BTN,
-              marginLeft: pendingSetCount > 0 || sale.share ? undefined : "auto",
+              marginLeft: buyerMessage || pendingSetCount > 0 || sale.share ? undefined : "auto",
               textDecoration: "none",
               display: "inline-block",
             }}
@@ -885,6 +912,10 @@ export function SaleDetailPanel({
             )
           }
         />
+      )}
+
+      {dialog.kind === "buyerMessage" && buyerMessage && (
+        <BuyerMessageDialog message={buyerMessage} onClose={() => setDialog({ kind: "none" })} />
       )}
 
       {/* The buyer's own pick of which copy they get (#699). Mint, copy, and withdraw — the trade

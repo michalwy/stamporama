@@ -175,6 +175,14 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   anywhere else — resolved by `resolveVocabularyValue`, so a wrong name returns the accepted ones. Its
   draft has **no closing time**: the API has no zone to turn the group's time of day into an instant.
 
+- **The message to a buyer is a followed setting too** (#1815; ADR-0061 §6). `buyerMessageTemplate`
+  is in `FacebookDefaults`, on each group and in `FACEBOOK_GROUP_SETTINGS`; the Facebook contact's
+  own column is not read (the contact dialog hides it there, the `refreshQuickBuysAfterDays` shape).
+  A sale has no group, so `sale-buyer-message.ts` takes the group's effective template only when
+  **every** line's offer names that one group, and Facebook's default otherwise — offers from several
+  groups, or a line whose offer has none (decided with the collector, 2026-10-11). The rest — the
+  placeholders and the sale's screen — is `offers.md`'s.
+
 - **Quick buys have a refresh threshold, a followed setting like the rest** (#1718).
   `refreshQuickBuysAfterDays` is in `FacebookDefaults` and on each group, keyed
   `refreshQuickBuysAfterDays` in `customSettings` — a custom null is a group's own *never* where

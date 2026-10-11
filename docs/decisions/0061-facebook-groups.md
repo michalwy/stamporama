@@ -170,6 +170,13 @@ text — the same placeholders and formatting — so the post still follows the 
 the offer's current type: a change of type, or a move off Facebook, drops it after the form says so,
 since it was written for that type's placeholders. In a multi-lot post it shapes its own lot only.
 
+**Amended by #1815 (decided with the collector on 2026-10-11): the message to a buyer after a sale is
+one of these settings too.** Every platform has a buyer-message template — off Facebook on its
+contact — and on Facebook it is a platform setting a group follows or overrides, under #1661's rule.
+It is a sale's text rather than a post's, so it is not read at an offer's creation: it is read live,
+whenever the sale's screen renders it. A sale has no group, so a sale whose offers are all from one
+group uses that group's (its own, or Facebook's it follows), and any other sale uses Facebook's.
+
 ### 7. A group with offers is archived, never deleted
 
 A group is where sales happened, and the reports per group need it to still exist. So a group no

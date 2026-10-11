@@ -2877,6 +2877,10 @@ model FacebookGroup {
   // Shipping, payment and terms, as written — placed in a post where its template's `{terms}` is
   // (#1689); nothing appends it any more.
   standingNote String @default("")
+  // The message a buyer is sent after a sale here (#1815): what to pay, where, and what happens next,
+  // with the `{token}` placeholders of `buyer-message-rules.ts`. Empty is no message — the sale offers
+  // none (#1692).
+  buyerMessageTemplate String @default("")
 
   // ── What a new auction starts from ─────────────────────────────────────────────────────────────
   // The starting price, stated one of two ways: `amount` (a figure in the group's currency) or
@@ -2929,6 +2933,8 @@ model FacebookDefaults {
   quickBuyTemplate  String  @default("")
   mixedListingTypes Boolean @default(false)
   standingNote      String  @default("")
+  // The message to a buyer (#1815); empty is none.
+  buyerMessageTemplate String @default("")
 
   startingPriceMode  String?
   startingPriceValue Decimal? @db.Decimal(10, 2)
@@ -6445,6 +6451,10 @@ model Contact {
   // how a platform that has no private-note feature at all is configured.
   descriptionTemplate String?
   privateNoteTemplate String?
+  // The message a buyer is sent after a sale on this platform (#1815) — what to pay, where, and what
+  // happens next, with `buyer-message-rules.ts`'s placeholders. Null or blank is no message. Not read
+  // on the Facebook platform: there it is `facebook_defaults`' and each group's, under #1661's rule.
+  buyerMessageTemplate String?
   // What the platform's description field accepts (#319): `plain` | `html` | `markdown`. Marketplaces
   // disagree — some show plain text with its line breaks, some take raw HTML, some paste rich text —
   // and the app renders and copies the description accordingly (ADR-0019). **Seeded** onto every

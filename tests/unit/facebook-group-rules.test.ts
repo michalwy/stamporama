@@ -172,6 +172,7 @@ describe("a group following the platform (#1661)", () => {
         auctionDays: 7,
         closingTime: "20:00",
         currency: "EUR",
+        buyerMessageTemplate: "Pay {total}",
       })
     );
     assert.deepEqual(clean, {
@@ -183,6 +184,14 @@ describe("a group following the platform (#1661)", () => {
       currency: null,
       custom: ["standingNote", "bidIncrement"],
     });
+  });
+
+  it("keeps a group's own buyer message, trimmed (#1815)", () => {
+    const clean = cleanFacebookGroupValues(
+      values({ custom: ["buyerMessageTemplate"], buyerMessageTemplate: "  Pay {total}\nThanks  " })
+    );
+    assert.equal(clean.buyerMessageTemplate, "Pay {total}\nThanks");
+    assert.deepEqual(clean.custom, ["buyerMessageTemplate"]);
   });
 
   it("does not check the shape of a setting it follows — the field was never shown", () => {
@@ -222,6 +231,7 @@ describe("cleanFacebookDefaults (#1661)", () => {
         auctionDays: 7,
         closingTime: "9:00",
         refreshQuickBuysAfterDays: 4,
+        buyerMessageTemplate: " Pay {total} ",
       }),
       {
         listingType: "fixed",
@@ -235,6 +245,7 @@ describe("cleanFacebookDefaults (#1661)", () => {
         auctionDays: 7,
         closingTime: "09:00",
         refreshQuickBuysAfterDays: 4,
+        buyerMessageTemplate: "Pay {total}",
       }
     );
     assert.throws(
@@ -265,6 +276,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
     auctionDays: 7,
     closingTime: "20:00",
     refreshQuickBuysAfterDays: 3,
+    buyerMessageTemplate: "Platform {total}",
   };
 
   it("reads every setting from the platform for a group that follows it throughout", () => {
@@ -280,6 +292,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       standingNote: "Group terms",
       currency: "EUR",
       refreshQuickBuysAfterDays: 10,
+      buyerMessageTemplate: "Group {total}",
       custom: [
         "standingNote",
         "startingPrice",
@@ -288,6 +301,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
         "listingType",
         "mixedListingTypes",
         "refreshQuickBuysAfterDays",
+        "buyerMessageTemplate",
       ],
     };
     assert.deepEqual(effectiveFacebookGroupSettings(group, platform), {
@@ -302,6 +316,7 @@ describe("effectiveFacebookGroupSettings (#1661)", () => {
       auctionDays: 7,
       closingTime: null,
       refreshQuickBuysAfterDays: 10,
+      buyerMessageTemplate: "Group {total}",
       currency: "EUR",
     });
   });
