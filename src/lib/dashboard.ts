@@ -5,6 +5,11 @@ import { countAuctionLots, listAuctionLots, type AuctionLotListItem } from "./au
 import { auctionLotName, NOT_PURCHASED_LABEL } from "./auction-rules";
 import { salesDashboardGroups } from "./dashboard-sales-rules";
 import { listSalesAwaitingFulfilment } from "./sales";
+import { countTrades, listTradesPaginated } from "./trades";
+import { readTradeBalance } from "./trade-valuation";
+import { describeTradeBalanceShort } from "./trade-balance";
+import { TRADE_SHIPPING_STAGES } from "./trade-rules";
+import { sortByStageAge, tradeShippingGroup, tradeShippingItem } from "./dashboard-trades-rules";
 import {
   auctionLotRowDetail,
   capGroup,
@@ -152,12 +157,43 @@ const scansToCutProvider: DashboardProvider = async ({ ownerId, collectionId }) 
   ];
 };
 
+/**
+ * **Trades** (#1813): agreed trades waiting on a parcel — *To send* and *Waiting for the partner*.
+ *
+ * Read through the trades list's own read and its `shipping` filter, so a group is exactly the set
+ * its *N more →* opens. The whole set is read to order it by how long each has waited, which the
+ * list cannot sort on — agreed trades waiting on the post are a handful, not a page. Each listed
+ * row's balance is the trade screen's own `readTradeBalance`, so the figure is the one the trade
+ * shows; past the row limit it is never read.
+ */
+const tradeShippingGroups: DashboardProvider = ({ ownerId, collectionId }) =>
+  Promise.all(
+    TRADE_SHIPPING_STAGES.map(async (stage) => {
+      const count = await countTrades(ownerId, collectionId, { shipping: stage });
+      const { items: trades } = count
+        ? await listTradesPaginated(ownerId, collectionId, { shipping: stage, pageSize: count })
+        : { items: [] };
+      const listed = sortByStageAge(stage, trades).slice(0, DASHBOARD_ROW_LIMIT);
+      const items = await Promise.all(
+        listed.map(async (trade) => {
+          const balance = await readTradeBalance(ownerId, trade.id);
+          return tradeShippingItem(
+            stage,
+            trade,
+            balance ? describeTradeBalanceShort(balance.trade, balance.tradeCurrency) : null
+          );
+        })
+      );
+      return tradeShippingGroup(stage, count, items);
+    })
+  );
+
 const SECTION_PROVIDERS: Record<DashboardSectionId, DashboardProvider[]> = {
   sales: [platformSales, salesInFlight],
   "incoming-purchases": [inTransitProvider, arrivedToSortProvider, scansToCutProvider],
   offers: [],
   auctions: [auctionWindowsProvider, wonNotPurchasedProvider],
-  trades: [],
+  trades: [tradeShippingGroups],
 };
 
 /**

@@ -13,8 +13,10 @@ import {
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import type { TradeListItem, TradeSortBy } from "@/lib/trades";
 import {
+  TRADE_SHIPPING_STAGE_LABEL,
   TRADE_STATUSES,
   TRADE_STATUS_LABEL,
+  isTradeShippingStage,
   isTradeStatus,
   type TradeStatus,
 } from "@/lib/trade-rules";
@@ -86,6 +88,12 @@ export function TradesListPanel({
   const { data: contacts } = useContacts(collectionId);
   const partnerName = partnerId ? contacts?.find((c) => c.id === partnerId)?.name : undefined;
 
+  // Where an agreed trade's parcels stand (#1813) — how the dashboard's *To send* and *Waiting for
+  // the partner* open this list on exactly their set. URL-only like the partner: a lit chip, and
+  // pressing it is the way back.
+  const shippingParam = searchParams.get("shipping") ?? "";
+  const shipping = isTradeShippingStage(shippingParam) ? shippingParam : undefined;
+
   const search = searchParams.get("search") ?? "";
   const sortBy = (searchParams.get("sortBy") as TradeSortBy) || "createdAt";
   const sortDir = (searchParams.get("sortDir") as "asc" | "desc") || "desc";
@@ -108,8 +116,8 @@ export function TradesListPanel({
   );
 
   const filters: TradeFilters = useMemo(
-    () => ({ statuses, partnerId, search: search || undefined, sortBy, sortDir }),
-    [statuses, partnerId, search, sortBy, sortDir]
+    () => ({ statuses, partnerId, shipping, search: search || undefined, sortBy, sortDir }),
+    [statuses, partnerId, shipping, search, sortBy, sortDir]
   );
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } = useTradesInfinite(
@@ -177,6 +185,14 @@ export function TradesListPanel({
             label={`Partner: ${partnerName ?? "…"} ✕`}
             active
             onClick={() => updateParams({ partner: "" })}
+          />
+        )}
+
+        {shipping && (
+          <FilterChip
+            label={`${TRADE_SHIPPING_STAGE_LABEL[shipping]} ✕`}
+            active
+            onClick={() => updateParams({ shipping: "" })}
           />
         )}
 

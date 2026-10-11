@@ -10,7 +10,7 @@ It is laid out in five sections side by side across the window:
 - **Incoming purchases** — purchases on their way to you
 - **Offers to handle** — offers to publish or fix
 - **Auctions I bid in** — auctions to bid on or settle
-- **Trades** — trades to send
+- **Trades** — agreed trades waiting on a parcel
 
 Each section's name is a link to the screen where that work is mostly done, and the figure beside it
 is everything waiting in the section. A section that has nothing built into it yet says *No groups
@@ -81,6 +81,21 @@ Each row names the lot, its sale and its seller, and how long until it closes �
 did. It opens the lot in its sale, where you refresh a bid, record how it ended or settle the parcel.
 The first two groups are the bell's groups of the same names; the third opens the lots screen's
 **Won, not yet purchased** filter.
+
+## Trades
+
+Two groups, both of **agreed** trades:
+
+- **To send** — your parcel has not gone out yet. A trade whose partner's parcel has already arrived
+  is still here: you still owe yours.
+- **Waiting for the partner** — your parcel is out, theirs has not arrived.
+
+Each row names the partner, the trade's number and its balance — pieces each way, or the agreed
+figures each way on a trade balanced by value — and how long it has waited: since it was agreed for
+*To send*, since your parcel went out for *Waiting for the partner*. A trade agreed before the app
+recorded that moment, with nothing on it to tell when, shows no age and is listed first. The longest
+waiting come first. A trade with both parcels accounted for is in neither group: what it waits for is
+closing.
 
 ## The Dashboard and the bell
 

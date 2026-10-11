@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listTradesPaginated, type TradeSortBy } from "@/lib/trades";
-import { isTradeStatus } from "@/lib/trade-rules";
+import { isTradeShippingStage, isTradeStatus } from "@/lib/trade-rules";
 import { parseEntityNoSearch } from "@/lib/quick-jump";
 import { readSearchParam } from "@/lib/text-input";
 
@@ -27,6 +27,10 @@ export async function GET(
   // unrecognised status is dropped rather than refused.
   const statuses = (sp.get("status") || "").split(",").filter(isTradeStatus);
   const partnerId = sp.get("partnerId") || undefined;
+  // Where an agreed trade's parcels stand (#1813), the dashboard's Trades groups. Unrecognised is
+  // dropped, like a status.
+  const shippingParam = sp.get("shipping") ?? "";
+  const shipping = isTradeShippingStage(shippingParam) ? shippingParam : undefined;
   // One box, two meanings, resolved here rather than by two fields on the toolbar: `#7` (or a bare
   // `7`) is the trade number the quick jump sends, anything else is the partner's name. The number
   // match is *instead of* the name match, not in addition to it — a partner called "7" is not a
@@ -47,6 +51,7 @@ export async function GET(
       offset,
       statuses,
       partnerId,
+      shipping,
       tradeNo,
       partnerSearch,
       sortBy,

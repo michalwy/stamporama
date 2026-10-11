@@ -234,6 +234,53 @@ export function isTradeShippingComplete(sentAt: unknown, receivedAt: unknown): b
 }
 
 /**
+ * Where an agreed trade's parcels stand (#1813) — the two stretches in which it waits on someone.
+ *
+ * - `to-send` — agreed, and the collector's parcel has not gone out. Whether the partner's has
+ *   already arrived does not matter: the collector still owes theirs.
+ * - `awaiting-partner` — the collector's parcel is out, the partner's has not arrived.
+ *
+ * Only an `agreed` trade is in either: before it nothing is committed to send, and `closed` and
+ * `cancelled` are history. An agreed trade with both parcels accounted for is in neither — what it
+ * waits for is closing, not the post.
+ */
+export const TRADE_SHIPPING_STAGES = ["to-send", "awaiting-partner"] as const;
+export type TradeShippingStage = (typeof TRADE_SHIPPING_STAGES)[number];
+
+const VALID_TRADE_SHIPPING_STAGE = new Set<string>(TRADE_SHIPPING_STAGES);
+
+export function isTradeShippingStage(value: string): value is TradeShippingStage {
+  return VALID_TRADE_SHIPPING_STAGE.has(value);
+}
+
+export const TRADE_SHIPPING_STAGE_LABEL: Record<TradeShippingStage, string> = {
+  "to-send": "To send",
+  "awaiting-partner": "Waiting for the partner",
+};
+
+export function tradeShippingStage(
+  status: TradeStatus,
+  sentAt: unknown,
+  receivedAt: unknown
+): TradeShippingStage | null {
+  if (status !== "agreed") return null;
+  if (sentAt == null) return "to-send";
+  return receivedAt == null ? "awaiting-partner" : null;
+}
+
+/**
+ * What an agreed trade's agreement does to `agreedAt` on a move to `to` (#1813): stamped on
+ * reaching `agreed`, cleared on going back to a status the list can be edited in — the life of the
+ * frozen valuations — and left alone otherwise, so `closed` and `cancelled` keep the moment.
+ * `undefined` means *leave it*.
+ */
+export function agreedAtOnTransition(to: TradeStatus, now: Date): Date | null | undefined {
+  if (to === "agreed") return now;
+  if (isTradeContentEditable(to)) return null;
+  return undefined;
+}
+
+/**
  * How a trade names a handful of subjects in one sentence: `#00012 Chopin, #00013 Kopernik, and 4
  * more`.
  *

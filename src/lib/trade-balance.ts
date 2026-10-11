@@ -425,3 +425,17 @@ export function tradeGateBlockers(
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
+
+/**
+ * The whole trade's balance in one short phrase (#1813) — for a row with room for one line, the
+ * dashboard's Trades groups. On what the trade is balanced on: the pieces each way in count mode,
+ * the agreed figures in value mode. A value side with a line missing its agreed figure is not
+ * summed into a figure that describes a different trade — the pieces are stated instead, and say why.
+ */
+export function describeTradeBalanceShort(v: TradeBalanceVerdict, tradeCurrency: string): string {
+  const pieces = `I give ${v.give.pieces} · I receive ${v.receive.pieces}`;
+  if (!v.byValue) return pieces;
+  if (!v.valueComplete) return `${pieces} (not all valued)`;
+  const money = (value: number) => `${value.toFixed(2)} ${tradeCurrency}`;
+  return `I give ${money(v.give.agreed)} · I receive ${money(v.receive.agreed)}`;
+}
