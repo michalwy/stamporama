@@ -2205,6 +2205,11 @@ nothing moves. What changes:
 The **listing date** stays the day it was first listed, which is what the time an offer took to sell
 is counted from.
 
+If the platform holds the new post for approval, tick **Waiting for approval** in the **Repost**
+dialog and paste the link to the pending post. The offer goes back to **Pending** — it is not marked
+for refresh while it waits — and when you **Approve** it with the final link, the day of the approval
+becomes its last posted date. The listing date still stays the first one.
+
 On Facebook, a lot of a post with several lots reposts the **whole post**: every active quick buy in it
 takes the new link. An auction in the same post is left as it is.
 
@@ -2509,7 +2514,8 @@ From Pending the offer goes one of three ways:
 - **Approved** — the **Approve** button (or **Approved…** in the **⋮** menu) asks for the final link,
   starting from the pending one: replace it if the approved listing has another address. The offer
   becomes **Active** and its **listing date** becomes today, since that is when buyers could first
-  see it.
+  see it — or, for a [repost](#reposting) that waited, its **last posted** date does. On Facebook an
+  auction is also asked for its closing time (see [Facebook](facebook.md)).
 - **Rejected — back to Ready** — the post was turned down. The offer returns to **Ready** and the
   pending link is cleared, so you can fix what was wrong and post it again.
 - **Withdraw** — you took the post back yourself.
@@ -2522,7 +2528,8 @@ a buyer may answer a post you have shown them before the group approves it.
 
 On a [Facebook post with several lots](facebook.md), the whole post waits together: submitting one
 lot submits all of them, approving one approves them all and writes the final link into every lot
-that carried the pending one, and a rejection takes every lot back to Ready.
+that carried the pending one, a rejection takes every lot back to Ready, and withdrawing one
+withdraws every lot still waiting.
 
 Changing a platform's currency later leaves existing offers and sales untouched — each keeps the
 currency it was created with as a permanent record; only new offers and sales use the new currency.

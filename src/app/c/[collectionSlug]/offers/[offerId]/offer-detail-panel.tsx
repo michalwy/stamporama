@@ -667,11 +667,11 @@ export function OfferDetailPanel({
   /** Go live with the URL the platform gave back (#399): `publishOffer` transitions first and writes
    * the URL after, so a refused activation — a lost set, a missing price — leaves no listing link
    * behind on an offer that never went live. A blank URL is a normal answer. */
-  function publish(url: string, target: PublishTarget) {
+  function publish(url: string, target: PublishTarget, endsAt?: string) {
     setActionError(undefined);
     startTransition(async () => {
       const { publishOfferAction } = await import("@/app/actions/offers");
-      const result = await publishOfferAction(offerId, url, target);
+      const result = await publishOfferAction(offerId, url, target, endsAt);
       if (result.status === "success") {
         setActivating(null);
         // Whatever the Assistant reported described the form, and the form has now been posted.
@@ -682,15 +682,20 @@ export function OfferDetailPanel({
   }
 
   /** Record the repost (#1718): the new link, *last posted* now, the earlier link kept in history. */
-  function repost(url: string) {
+  function repost(url: string, target: PublishTarget) {
     setActionError(undefined);
     startTransition(async () => {
       const { repostOfferAction } = await import("@/app/actions/offers");
-      const result = await repostOfferAction(offerId, url);
+      const result = await repostOfferAction(offerId, url, target);
       if (result.status === "success") {
         setReposting(false);
         invalidateAll(collectionId);
-        toast({ message: "Reposted — the count of days up starts again today" });
+        toast({
+          message:
+            target === "pending"
+              ? "Reposted and waiting for approval — the count of days up starts again when it is approved"
+              : "Reposted — the count of days up starts again today",
+        });
       } else setActionError(result.message);
     });
   }
@@ -1689,6 +1694,7 @@ export function OfferDetailPanel({
           facebookLots={offer.facebook ? (facebookPostLots ?? 1) : null}
           initialTarget={activating.target}
           approving={activating.approving}
+          offerId={offerId}
           isPending={isPending}
           error={actionError}
           onClose={() => {
@@ -1752,7 +1758,12 @@ export function OfferDetailPanel({
       {confirm === "withdraw" && (
         <ConfirmDialog
           title="Withdraw offer"
-          message="This takes the listing down on the platform. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+          message={
+            // A post still waiting for approval is taken back whole (#1779).
+            offer.state === "pending" && offer.facebook?.post
+              ? "This takes the post back from the group: every lot of it still waiting for approval is withdrawn with this one. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+              : "This takes the listing down on the platform. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+          }
           actionLabel="Withdraw"
           pendingLabel="Withdrawing…"
           variant="destructive"

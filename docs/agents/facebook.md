@@ -258,6 +258,27 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   photo's link. `rejectOfferOrPost` takes every pending lot back to Ready (links cleared, the
   ordinary `pending → ready`); `setOfferStateAction` routes every `→ ready` through it.
 
+- **What the Facebook side of Pending adds** (#1779; the collector decided the closing time on
+  2026-10-11, the rest was decided in writing the issue). **A pending-post link proposes Pending**:
+  `isFacebookPendingPostUrl` (pure, `facebook-post-rules.ts`: a facebook.com host and a
+  `pending_posts` path segment) ticks *Waiting for approval* in `ActivateOfferDialog` and
+  `RepostOfferDialog` the moment such a link arrives — a proposal, the tick stays the collector's.
+  **Approving an auction asks its closing time**: the dialog, given `offerId` while approving, asks
+  `readFacebookApprovalClosingAction` → `readFacebookApprovalClosing` (`facebook-posts.ts`), which
+  answers for the **pending auction lots** of the post, or the offer alone (`pendingFacebookAuctions`),
+  with their `endsAt` and the group's `auctionDays`/`closingTime` read **now**
+  (`readFacebookGroupSettings`) — null off Facebook, for a quick buy, or with nothing pending, and
+  then nothing is asked. The browser proposes `facebookDefaultEndsAt(today, …)` (#490's rule, the
+  zone), the field starts on it (else on the time as posted) with *Proposed* / *As posted* beside
+  it, and `publishOfferAction(…, endsAt)` → `publishOfferOrPost(…, endsAt)` writes the answer to
+  every auction that approval took up (ids read **before** anything moves). An `endsAt` left
+  `undefined` writes nothing, so every other publish path is unchanged. **Withdrawing a pending lot
+  withdraws the post**: `withdrawOfferOrPost` takes every pending lot of the post to `withdrawn`;
+  a lot of a post that is up is withdrawn alone (each lot keeps its own result once up), and a lot
+  already withdrawn with its post is a no-op, so the list's bulk withdraw (which goes through it too)
+  reads two ticked lots of one post as done. **A repost can wait** and **the refresh count starts at
+  approval** — both are `offers.md`'s (`repostOffer`'s `to`, `approvalStamp`).
+
 - **The profile link is stored normalised** (`normalizeFacebookProfileUrl`, pure in
   `facebook-profile-rules.ts`): `https://www.facebook.com/<path>`, lower case, no trailing slash, no
   query except `profile.php`'s `id`, the phone and desktop hosts folded together — so the lookup is an

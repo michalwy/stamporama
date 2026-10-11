@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  approvalStamp,
   cleanRefreshQuickBuysAfterDays,
   daysUpSince,
   lastPostedOn,
@@ -76,5 +77,15 @@ describe("quickBuyRefreshDue", () => {
     for (const state of ["paused", "ready", "preparing", "sold", "withdrawn"] as const) {
       assert.equal(quickBuyRefreshDue({ ...quickBuy, state }, 3, NOW), null);
     }
+  });
+});
+
+describe("approvalStamp (#1779)", () => {
+  it("lists a listing never up before on its approval day", () => {
+    assert.equal(approvalStamp(null), "listingDate");
+  });
+
+  it("keeps a listed one's first date and makes the approval its last posting — a repost that waited", () => {
+    assert.equal(approvalStamp(new Date("2026-10-01T00:00:00.000Z")), "lastPostedAt");
   });
 });

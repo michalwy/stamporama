@@ -262,10 +262,20 @@ is, and shows the link once the offer is up.
 
 If the group's administrator has to approve the post first, tick **Waiting for approval** in that
 dialog and paste the link to the pending post: the offer becomes **Pending**, and the card marks its
-link as the pending one. Once the post is approved, choose **Approve** and give the final link; if it
-is rejected, **Rejected — back to Ready** clears the pending link. A pending offer can already be
-sold with **Sell**, since a buyer may claim it before the post is visible to everyone. See [Waiting for
+link as the pending one. Facebook's link to a post waiting for approval has `pending_posts` in it, so
+pasting one ticks **Waiting for approval** for you — untick it if the post is in fact up. Once the
+post is approved, choose **Approve** and give the final link; if it is rejected, **Rejected — back to
+Ready** clears the pending link. A pending offer can already be sold with **Sell**, since a buyer may
+claim it before the post is visible to everyone. See [Waiting for
 approval](offers.md#waiting-for-approval).
+
+**Approving an auction asks when it closes.** The closing time was worked out when the post was
+written, so an approval a few days later would leave the auction shorter than the group runs them.
+The **Approve** dialog shows a closing time proposed from today — the group's **days an auction
+runs** and its **closing time** — and the time the post was written with. Pick **Proposed** or **As
+posted**, or type another; what the field holds is the auction's closing time from then on. A
+quick buy closes at no time and is not asked. A
+quick buy's **refresh** count starts on the day it is approved, not the day it was sent.
 
 ## A post with several lots
 
@@ -289,8 +299,10 @@ The post goes up as one: **Activate** on any lot asks for the post's link once a
 lot, so every lot has to be Ready first. The link becomes the listing URL of every lot that has none
 of its own. A lot can carry its own photo's link instead: enter it as that offer's listing URL before
 activating, and it is kept. A post waiting for the group's approval waits as one too: submitting,
-approving or rejecting any lot does it for the whole post, and approving writes the final link in
-place of the pending one.
+approving, rejecting or withdrawing any lot does it for the whole post, and approving writes the
+final link in place of the pending one and the closing time you settle on into every auction of the
+post. Once the post is up, each lot is its own result again — withdrawing one lot leaves the
+others.
 
 Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
 move up, and a post left with one lot becomes an ordinary single post. Once the post is up, its lots
@@ -361,3 +373,8 @@ post's link. The offer keeps its number — so `{offer}` and what buyers quote s
 count of days starts again from today; the old link stays on the offer as an earlier post. For a
 lot of a post with several lots, every quick buy of the post takes the new link at once. See
 [Reposting](offers.md#reposting).
+
+If the group holds the new post for approval too, tick **Waiting for approval** in the **Repost**
+dialog (a `pending_posts` link ticks it for you) and paste the pending post's link. The offer goes
+back to **Pending** until you **Approve** it with the final link, and the count of days starts again
+on the day it is approved.

@@ -26,8 +26,10 @@ import { getFacebookOfferKit, listFacebookGroupChoices } from "../../src/lib/fac
 import {
   createFacebookPost,
   publishOfferOrPost,
+  readFacebookApprovalClosing,
   rejectOfferOrPost,
   removeFacebookLot,
+  withdrawOfferOrPost,
 } from "../../src/lib/facebook-posts";
 
 // A Facebook auction offer (#1544; ADR-0061 §2, §3, §5). The rules worth a database: an offer on
@@ -525,6 +527,82 @@ describe("Facebook auction offers (#1544)", () => {
       assert.equal(offer.state, "ready");
       assert.equal(offer.url, null);
     }
+  });
+
+  it("asks an approval for the auctions' closing time and writes the answer to every one (#1779)", async () => {
+    const timed = (
+      await createFacebookGroup(
+        userId,
+        collectionId,
+        groupValues({
+          name: "Aukcje 3-dniowe",
+          auctionDays: 3,
+          closingTime: "20:00",
+          custom: ["auctionDays", "closingTime"],
+        })
+      )
+    ).id;
+    const written = new Date("2026-10-12T18:00:00.000Z");
+    const a = await auction([await newItem()], "ready", timed);
+    const b = await auction([await newItem()], "ready", timed);
+    await createFacebookPost(userId, collectionId, [a, b]);
+    await prisma.offer.updateMany({ where: { id: { in: [a, b] } }, data: { endsAt: written } });
+
+    assert.equal(await readFacebookApprovalClosing(userId, a), null, "nothing is pending, nothing is asked");
+    await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/1/pending_posts/11", "pending");
+    assert.deepEqual(await readFacebookApprovalClosing(userId, b), {
+      endsAt: written.toISOString(),
+      auctionDays: 3,
+      closingTime: "20:00",
+    });
+
+    const chosen = new Date("2026-10-15T18:00:00.000Z");
+    await publishOfferOrPost(userId, b, "https://www.facebook.com/groups/1/posts/11", "active", chosen);
+    for (const id of [a, b]) {
+      const offer = await read(id);
+      assert.equal(offer.state, "active");
+      assert.deepEqual(offer.endsAt, chosen, "every auction of the post closes at the chosen time");
+    }
+
+    // Not asked, nothing is written: an approval without an answer keeps the closing time.
+    const c = await auction([await newItem()], "ready", timed);
+    await prisma.offer.update({ where: { id: c }, data: { endsAt: written } });
+    await publishOfferOrPost(userId, c, "https://www.facebook.com/groups/1/pending_posts/12", "pending");
+    await publishOfferOrPost(userId, c, "https://www.facebook.com/groups/1/posts/12");
+    assert.deepEqual((await read(c)).endsAt, written);
+    assert.equal(await readFacebookApprovalClosing(userId, c), null);
+    await assert.rejects(() => readFacebookApprovalClosing("someone-else", a), /access denied|not found/i);
+  });
+
+  it("asks a quick buy's approval nothing about a closing time (#1779)", async () => {
+    const offerId = await createOffer(
+      userId,
+      collectionId,
+      input({ listingType: "fixed", price: "9.00" }),
+      { seedItemIds: [await newItem()] }
+    );
+    await setOfferState(userId, offerId, "ready");
+    await publishOfferOrPost(userId, offerId, "https://www.facebook.com/groups/1/pending_posts/13", "pending");
+    assert.equal(await readFacebookApprovalClosing(userId, offerId), null);
+  });
+
+  it("withdraws a post waiting for approval as one, and a lot of a post that is up alone (#1779)", async () => {
+    const a = await auction([await newItem()], "ready");
+    const b = await auction([await newItem()], "ready");
+    await createFacebookPost(userId, collectionId, [a, b]);
+    await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/1/pending_posts/14", "pending");
+    await withdrawOfferOrPost(userId, b);
+    for (const id of [a, b]) assert.equal((await read(id)).state, "withdrawn", "the post is taken back whole");
+    await withdrawOfferOrPost(userId, a);
+    assert.equal((await read(a)).state, "withdrawn", "a lot already withdrawn with its post stays so");
+
+    const c = await auction([await newItem()], "ready");
+    const d = await auction([await newItem()], "ready");
+    await createFacebookPost(userId, collectionId, [c, d]);
+    await publishOfferOrPost(userId, c, "https://www.facebook.com/groups/1/posts/15");
+    await withdrawOfferOrPost(userId, c);
+    assert.equal((await read(c)).state, "withdrawn");
+    assert.equal((await read(d)).state, "active", "a post that is up keeps its other lots");
   });
 
   it("activates an auction posted alone the ordinary way, its link the listing link", async () => {

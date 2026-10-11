@@ -82,7 +82,7 @@ import {
   type ResolvedCatalogItemId,
 } from "./listing-catalog-ids";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
-import { countsForRefresh, lastPostedOn, quickBuyRefreshDue } from "./offer-refresh-rules";
+import { approvalStamp, countsForRefresh, lastPostedOn, quickBuyRefreshDue } from "./offer-refresh-rules";
 import {
   needsRefreshWhere,
   readRefreshThresholds,
@@ -3830,8 +3830,19 @@ export async function recordOfferListed(
  *
  * A repost puts the current content in front of buyers, so it clears the changed-since-listed flag
  * (#542) as a first publication does.
+ *
+ * `to` is `pending` when the new post went to the group's administrator rather than straight up
+ * (#1779), as a first post can: each listing goes back to Pending carrying the pending post's link,
+ * and *last posted* is left for the approval to write — the refresh count starts when buyers can see
+ * the post, not when it was sent. Approving it is the ordinary approval (`setOfferState`), which
+ * keeps the first listing date of a listing already listed.
  */
-export async function repostOffer(ownerId: string, offerId: string, url: string): Promise<{ reposted: number }> {
+export async function repostOffer(
+  ownerId: string,
+  offerId: string,
+  url: string,
+  to: "active" | "pending" = "active"
+): Promise<{ reposted: number }> {
   const trimmed = url.trim();
   if (!trimmed) {
     throw new OfferActionBlockedError("no-url", "Paste the link of the new post.");
@@ -3869,7 +3880,12 @@ export async function repostOffer(ownerId: string, offerId: string, url: string)
     }),
     prisma.offer.updateMany({
       where: { id: { in: listings.map((listing) => listing.id) } },
-      data: { url: trimmed, colnectSaleId, lastPostedAt: now, listingContentChangedAt: null },
+      data: {
+        url: trimmed,
+        colnectSaleId,
+        listingContentChangedAt: null,
+        ...(to === "pending" ? { state: "pending" } : { lastPostedAt: now }),
+      },
     }),
   ]);
   return { reposted: listings.length };
@@ -6456,8 +6472,22 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   // moment that stamps the date — submitting it put it in front of an administrator, not of buyers.
   // But the content went out at submission, so *that* is the moment the drift flag clears: a change
   // made while it waited is a change the approval will not carry.
+  //
+  // A **repost** that waited for approval (#1779) is approved the same way, but it was listed long
+  // before: its first listing date stays, and the approval is its last posting instead — the moment
+  // a quick buy's refresh count starts again ({@link approvalStamp}).
   const publishing = (ref.state === "ready" || ref.state === "pending") && to === "active";
   const submitting = ref.state === "ready" && (to === "active" || to === "pending");
+  let stamp: Prisma.OfferUpdateInput = {};
+  if (publishing) {
+    const listed =
+      ref.state === "pending"
+        ? ((await prisma.offer.findUnique({ where: { id: offerId }, select: { listingDate: true } }))
+            ?.listingDate ?? null)
+        : null;
+    stamp =
+      approvalStamp(listed) === "listingDate" ? { listingDate: todayUtcDate() } : { lastPostedAt: new Date() };
+  }
   // A rejection (`pending → ready`) takes the pending link with it: it led to a post the platform
   // turned down, and a Ready offer carrying a listing link would be a false record of a listing.
   const rejecting = ref.state === "pending" && to === "ready";
@@ -6468,7 +6498,7 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       // When the listing closed (#512). Only `withdrawn` is reachable by hand — `sold` is the sale
       // flow's (#166) — and only the sweep that purges a closed offer's generated images reads it.
       ...(isTerminalState(to) ? { closedAt: new Date() } : {}),
-      ...(publishing ? { listingDate: todayUtcDate() } : {}),
+      ...stamp,
       // Publication is the live listing and the record agreeing by definition (#542), so an offer
       // goes up unflagged whatever it carried while being prepared. It is the **only** transition
       // that clears the flag: resuming a paused listing puts the same entry back in front of buyers

@@ -50,6 +50,12 @@ function groupSettings(
   );
 }
 
+/** A group's settings as they read now — its own, or Facebook's it follows (#1661). */
+export async function readFacebookGroupSettings(groupId: string): Promise<FacebookEffectiveSettings> {
+  const group = await prisma.facebookGroup.findUniqueOrThrow({ where: { id: groupId } });
+  return groupSettings(group, await readFacebookDefaults(group.platformId));
+}
+
 /** A group as the offer form offers it: what a new auction there starts from. Money as 2-dp strings,
  *  the boundary's convention. */
 export interface FacebookGroupChoice {

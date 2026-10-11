@@ -1,9 +1,25 @@
 "use client";
 
-import { useState } from "react";
-import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/dialog-shell";
+import { useEffect, useState } from "react";
+import {
+  DialogShell,
+  DialogBody,
+  DialogActions,
+  DialogSecondaryButton,
+  LabelWithError,
+} from "@/app/dialog-shell";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
+import {
+  facebookDefaultEndsAt,
+  isFacebookPendingPostUrl,
+  type FacebookApprovalClosing,
+} from "@/lib/facebook-post-rules";
+import {
+  formatInstant,
+  fromLocalInputValue,
+  toLocalInputValue,
+} from "@/app/c/[collectionSlug]/auctions/auction-format";
 
 // The publish step of the bulk listing workspace (#322): the collector has just pasted this listing
 // into the platform's own form, and the platform handed back a URL. That URL is the one thing the app
@@ -27,6 +43,13 @@ import { formControl } from "@/app/control-style";
 // Posting it, the collector ticks *Waiting for approval* and the link is the pending post's — the
 // offer goes Pending rather than Active. Once it is approved, the dialog opens in its approving form,
 // prefilled with that pending link, and asks for the final one.
+//
+// On Facebook (#1779) a link in the pending-post shape (`…/pending_posts/…`) ticks *Waiting for
+// approval* as it is pasted — a proposal the collector can untick. Approving a Facebook **auction**
+// also asks for its closing time: it was worked out when the post was written, so an approval days
+// later would shorten the auction. The dialog shows it beside a proposal counted from today with the
+// group's length and time of day, and the field holds whichever the collector settles on — written
+// to every auction of the post. A quick buy closes at no time and is not asked.
 
 const INPUT: React.CSSProperties = {
   ...formControl,
@@ -59,6 +82,7 @@ export function ActivateOfferDialog({
   facebookLots,
   initialTarget = "active",
   approving = false,
+  offerId,
   isPending,
   error,
   onClose,
@@ -74,13 +98,32 @@ export function ActivateOfferDialog({
   initialTarget?: PublishTarget;
   /** The offer is pending and this records its approval (#1778): the URL asked for is the final one. */
   approving?: boolean;
+  /** Approving, the offer whose Facebook auctions may be asked for a closing time (#1779). */
+  offerId?: string;
   isPending: boolean;
   error?: string;
   onClose: () => void;
-  onConfirm: (url: string, target: PublishTarget) => void;
+  /** `endsAt` is sent only when the closing time was asked: an ISO instant, or "" for none. */
+  onConfirm: (url: string, target: PublishTarget, endsAt?: string) => void;
 }) {
   const [url, setUrl] = useState(initialUrl ?? "");
-  const [target, setTarget] = useState<PublishTarget>(approving ? "active" : initialTarget);
+  const [target, setTarget] = useState<PublishTarget>(
+    approving ? "active" : initialUrl && isFacebookPendingPostUrl(initialUrl) ? "pending" : initialTarget
+  );
+  const closing = useApprovalClosing(approving ? offerId : undefined);
+  const [endsAt, setEndsAt] = useState<string | null>(null);
+  // The field starts on the proposal, else on the closing time as written, once both are known.
+  const proposal =
+    closing.value && closing.value.auctionDays !== null
+      ? toLocalInputValue(
+          facebookDefaultEndsAt(new Date(), closing.value.auctionDays, closing.value.closingTime)
+        )
+      : "";
+  const written = toLocalInputValue(closing.value?.endsAt ?? null);
+  const endsAtValue = endsAt ?? (proposal || written);
+  const confirm = () =>
+    onConfirm(url, target, closing.value ? fromLocalInputValue(endsAtValue) : undefined);
+  const busy = isPending || closing.loading;
   const lots = facebookLots ?? 0;
   const pending = target === "pending";
   const subject =
@@ -163,9 +206,16 @@ export function ActivateOfferDialog({
           value={url}
           placeholder="https://…"
           disabled={isPending}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            // A pending post's link proposes *Waiting for approval* the moment it arrives (#1779).
+            if (!approving && isFacebookPendingPostUrl(next) && !isFacebookPendingPostUrl(url)) {
+              setTarget("pending");
+            }
+            setUrl(next);
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !isPending) onConfirm(url, target);
+            if (e.key === "Enter" && !busy) confirm();
           }}
           style={INPUT}
         />
@@ -178,14 +228,98 @@ export function ActivateOfferDialog({
         >
           {hint}
         </p>
+        {closing.value && (
+          <div style={{ marginTop: "1rem" }}>
+            <LabelWithError htmlFor="f-approval-ends-at">
+              {lots > 1 ? "The auctions close" : "The auction closes"}
+            </LabelWithError>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <input
+                id="f-approval-ends-at"
+                type="datetime-local"
+                value={endsAtValue}
+                disabled={isPending}
+                onChange={(e) => setEndsAt(e.target.value)}
+                style={{ ...INPUT, flex: 1 }}
+              />
+              {proposal && (
+                <DialogSecondaryButton
+                  disabled={isPending || endsAtValue === proposal}
+                  onClick={() => setEndsAt(proposal)}
+                >
+                  Proposed
+                </DialogSecondaryButton>
+              )}
+              {written && written !== proposal && (
+                <DialogSecondaryButton
+                  disabled={isPending || endsAtValue === written}
+                  onClick={() => setEndsAt(written)}
+                >
+                  As posted
+                </DialogSecondaryButton>
+              )}
+            </div>
+            <p
+              style={{
+                margin: "0.5rem 0 0",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
+              }}
+            >
+              {closingHint(closing.value)}
+            </p>
+          </div>
+        )}
       </DialogBody>
       <DialogActions
         actionLabel={action}
         onCancel={onClose}
-        onAction={() => onConfirm(url, target)}
-        disabled={isPending}
-        error={error}
+        onAction={confirm}
+        disabled={busy}
+        error={error ?? closing.error}
       />
     </DialogShell>
   );
+}
+
+/** One line under the closing time: what the post said, and what today's proposal is counted from. */
+function closingHint(closing: FacebookApprovalClosing): string {
+  const posted = closing.endsAt ? `Posted to close ${formatInstant(closing.endsAt)}.` : "Posted with no closing time.";
+  if (closing.auctionDays === null) return `${posted} The group states no auction length, so nothing is proposed.`;
+  const days = `${closing.auctionDays} ${closing.auctionDays === 1 ? "day" : "days"}`;
+  const at = closing.closingTime ? ` at ${closing.closingTime}` : "";
+  return `${posted} Proposed: the group's ${days} from today${at}.`;
+}
+
+/**
+ * What approving asks about a Facebook auction's closing time (#1779), read when the dialog opens —
+ * null where nothing is asked (off Facebook, a quick buy). The group's settings are read **now**,
+ * the ones a new auction there would get.
+ */
+function useApprovalClosing(offerId: string | undefined): {
+  value: FacebookApprovalClosing | null;
+  loading: boolean;
+  error?: string;
+} {
+  const [state, setState] = useState<{ value: FacebookApprovalClosing | null; loading: boolean; error?: string }>(
+    { value: null, loading: offerId !== undefined }
+  );
+  useEffect(() => {
+    if (offerId === undefined) return;
+    let live = true;
+    import("@/app/actions/offers")
+      .then(({ readFacebookApprovalClosingAction }) => readFacebookApprovalClosingAction(offerId))
+      .then(
+        (value) => {
+          if (live) setState({ value, loading: false });
+        },
+        () => {
+          if (live) setState({ value: null, loading: false, error: "Could not read the auction's closing time." });
+        }
+      );
+    return () => {
+      live = false;
+    };
+  }, [offerId]);
+  return state;
 }

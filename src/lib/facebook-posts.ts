@@ -1,7 +1,12 @@
 import "server-only";
 import { prisma } from "./db";
-import { detachFacebookLot, facebookGroupMixesTypes } from "./facebook-auctions";
-import { facebookPostLink, facebookPostRefusal, isFacebookLotPosted } from "./facebook-post-rules";
+import { detachFacebookLot, facebookGroupMixesTypes, readFacebookGroupSettings } from "./facebook-auctions";
+import {
+  facebookPostLink,
+  facebookPostRefusal,
+  isFacebookLotPosted,
+  type FacebookApprovalClosing,
+} from "./facebook-post-rules";
 import { OfferActionBlockedError, publishOffer, setOfferState } from "./offers";
 import { isAuctionListing, normalizeListingType } from "./offer-rules";
 
@@ -131,11 +136,66 @@ export async function publishOfferOrPost(
   ownerId: string,
   offerId: string,
   url: string | null,
-  to: "active" | "pending" = "active"
+  to: "active" | "pending" = "active",
+  endsAt?: Date | null
 ): Promise<void> {
   const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
-  if (!offer?.facebookPostId) return publishOffer(ownerId, offerId, url, to);
-  await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
+  // The auctions an approval may re-time (#1779), read before anything moves: once approved they are
+  // no longer told apart from the post's lots that were already up.
+  const approved =
+    to === "active" && endsAt !== undefined ? await pendingFacebookAuctions(ownerId, offerId) : [];
+  if (!offer?.facebookPostId) await publishOffer(ownerId, offerId, url, to);
+  else await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
+  if (approved.length > 0) {
+    await prisma.offer.updateMany({ where: { id: { in: approved } }, data: { endsAt } });
+  }
+}
+
+/**
+ * The Facebook auctions an approval takes up with this offer (#1779): the pending auction lots of
+ * its post, or the offer itself when it is a pending auction posted alone. Empty off Facebook and for
+ * a quick buy, which closes at no time.
+ */
+async function pendingFacebookAuctions(ownerId: string, offerId: string): Promise<string[]> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { collectionId: true, facebookGroupId: true, facebookPostId: true },
+  });
+  if (!offer?.facebookGroupId) return [];
+  await assertCollectionOwner(ownerId, offer.collectionId);
+  const lots = await prisma.offer.findMany({
+    where: {
+      ...(offer.facebookPostId ? { facebookPostId: offer.facebookPostId } : { id: offerId }),
+      state: "pending",
+    },
+    orderBy: { facebookLotNo: "asc" },
+    select: { id: true, listingType: true },
+  });
+  return lots.filter((l) => isAuctionListing(normalizeListingType(l.listingType))).map((l) => l.id);
+}
+
+/**
+ * What approving this offer asks about its closing time (#1779), or null when it asks nothing — off
+ * Facebook, nothing pending, or no auction among what goes up. The closing time is the one the post's
+ * auctions carry (they share it, #1544); the group's length and time of day are its settings **now**,
+ * the ones a new auction there would be made with, so the browser can count them from today.
+ */
+export async function readFacebookApprovalClosing(
+  ownerId: string,
+  offerId: string
+): Promise<FacebookApprovalClosing | null> {
+  const auctions = await pendingFacebookAuctions(ownerId, offerId);
+  if (auctions.length === 0) return null;
+  const [first, offer] = await Promise.all([
+    prisma.offer.findUniqueOrThrow({ where: { id: auctions[0] }, select: { endsAt: true } }),
+    prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { facebookGroupId: true } }),
+  ]);
+  const settings = await readFacebookGroupSettings(offer.facebookGroupId!);
+  return {
+    endsAt: first.endsAt?.toISOString() ?? null,
+    auctionDays: settings.auctionDays,
+    closingTime: settings.closingTime,
+  };
 }
 
 /**
@@ -212,4 +272,27 @@ export async function rejectOfferOrPost(ownerId: string, offerId: string): Promi
   });
   if (!lots.some((l) => l.id === offerId)) return setOfferState(ownerId, offerId, "ready");
   for (const lot of lots) await setOfferState(ownerId, lot.id, "ready");
+}
+
+/**
+ * Withdraw an offer (#1779). A lot of a post still **waiting for approval** takes every pending lot of
+ * the post with it — the post is taken back from the group, not one lot of it — exactly as approving
+ * and rejecting do. A lot of a post that is up is withdrawn alone, as before: the post stays, and the
+ * lot is simply no longer for sale. A lot already withdrawn with its post is left as it is, so a bulk
+ * withdraw ticking several lots of one post reads as done rather than refused.
+ */
+export async function withdrawOfferOrPost(ownerId: string, offerId: string): Promise<void> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: { state: true, facebookPostId: true },
+  });
+  if (!offer?.facebookPostId) return setOfferState(ownerId, offerId, "withdrawn");
+  await assertPostOwner(ownerId, offer.facebookPostId);
+  if (offer.state === "withdrawn") return;
+  if (offer.state !== "pending") return setOfferState(ownerId, offerId, "withdrawn");
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: offer.facebookPostId, state: "pending" },
+    select: { id: true },
+  });
+  for (const lot of lots) await setOfferState(ownerId, lot.id, "withdrawn");
 }

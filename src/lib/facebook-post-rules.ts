@@ -40,6 +40,33 @@ export function facebookDefaultEndsAt(
 }
 
 /**
+ * Whether a link is to a post still **waiting for a group administrator** (#1779): Facebook hands
+ * back an address with a `pending_posts` segment while the post is held, so recording one proposes
+ * *Pending* rather than *Active*. Only a proposal — the collector's tick decides.
+ */
+export function isFacebookPendingPostUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  const host = url.hostname.toLowerCase();
+  if (host !== "facebook.com" && !host.endsWith(".facebook.com")) return false;
+  return url.pathname.split("/").includes("pending_posts");
+}
+
+/** What the approval of a Facebook post asks about its closing time (#1779): the closing time the
+ *  post's auctions carry — set when the post was written — and the group's length and time of day,
+ *  which the browser turns into a proposal counted from the approval day. */
+export interface FacebookApprovalClosing {
+  /** ISO-8601, or null when the auctions carry none. */
+  endsAt: string | null;
+  auctionDays: number | null;
+  closingTime: string | null;
+}
+
+/**
  * The starting price a group's default gives a new auction, as a 2-dp string, or null.
  *
  * `amount` is the figure itself. `catalogPercent` needs the copies' catalogue value, already in the

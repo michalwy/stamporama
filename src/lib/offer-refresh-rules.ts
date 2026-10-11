@@ -9,6 +9,7 @@
 //
 // The days are counted from when the listing was **last posted** — its last *Repost*, else the date
 // it was first listed. The first listing stays what it was, since time to sale is counted from it.
+// A listing that waited for approval was posted when it was **approved** (#1779), not when it was sent.
 
 import type { OfferListingType, OfferState } from "./offer-rules";
 
@@ -35,6 +36,16 @@ export function lastPostedOn(listingDate: Date | null, lastPostedAt: Date | null
   if (!listingDate) return lastPostedAt;
   if (!lastPostedAt) return listingDate;
   return lastPostedAt > listingDate ? lastPostedAt : listingDate;
+}
+
+/**
+ * Which date an **approval** stamps (#1779) — the moment a listing that waited for the platform
+ * actually goes in front of buyers, so the moment the refresh count starts. A listing never up before
+ * is listed that day. One already listed is a **repost** that waited for approval: its first listing
+ * date stays what it was, since time to sale is counted from it, and the approval is its last posting.
+ */
+export function approvalStamp(listingDate: Date | null): "listingDate" | "lastPostedAt" {
+  return listingDate === null ? "listingDate" : "lastPostedAt";
 }
 
 /** Whole days since `since`, never negative. */
