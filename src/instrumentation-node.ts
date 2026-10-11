@@ -52,6 +52,10 @@
 //     order their last piece arrived, and requeues one a previous process left mid-preparation.
 //     Preparing a large card used to happen inside the request that finished the upload and
 //     outlived the proxy's timeout.
+//   - the Facebook post freeze (#1800) — once, at boot: every Facebook offer that has gone up and
+//     carries no snapshot of its post text is frozen with the text it shows now. Those are the offers
+//     already up when #1800 landed — the text needs the display title and catalogue numbers, which a
+//     SQL migration cannot build — and, being idempotent, it costs one query on every later boot.
 
 import { raiseDefaultMaxListeners } from "@/lib/max-listeners-rules";
 import { gcStaleUploads } from "@/lib/photos";
@@ -76,6 +80,7 @@ import {
 import { EVENT_POLL_INTERVAL_MS, SYNC_INTERVAL_MS } from "@/lib/allegro-sync-rules";
 import { startValueSnapshotSweep } from "@/lib/value-snapshot-sweep";
 import { startAuctionReminderSweep } from "@/lib/auction-reminder-sweep";
+import { freezeUnfrozenFacebookPosts } from "@/lib/facebook-auctions";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // hourly
 const DELCAMPE_CATEGORY_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
@@ -97,6 +102,14 @@ export async function start(): Promise<void> {
   // volume or bucket surfaces in the logs immediately rather than on the first upload (#138).
   await logStorageStartup();
   console.log(`[mail] ${describeMailConfig(readMailConfig())}`);
+
+  // Before anything else can be edited: an offer already up keeps the text it shows now (#1800).
+  try {
+    const frozen = await freezeUnfrozenFacebookPosts();
+    if (frozen > 0) console.log(`[facebook] froze the post text of ${frozen} offer(s) already up`);
+  } catch (err) {
+    console.error("[facebook] freezing posted offers' text failed", err);
+  }
 
   // Abandoned staging, both kinds, in one pass on one TTL: a dropped-but-unsaved photo (#112) and a
   // card scan that stopped arriving halfway through (#590) are the same class of thing — bytes the

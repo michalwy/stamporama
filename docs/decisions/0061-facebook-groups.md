@@ -11,7 +11,8 @@ The whole is amended by #1671 (§8): a Facebook offer can be a quick buy as well
 is amended by #1689: the standing note is placed by a `{terms}` placeholder, no longer appended. §3
 is amended by #1692: a post is only what its template places. §4 and §8 are amended by #1777: a
 Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw*. §6 is
-amended by #1780: an offer can carry its own post template, overriding its group's.
+amended by #1780: an offer can carry its own post template, overriding its group's. §3 is amended
+by #1800: a published offer's post text is frozen as it was posted.
 
 ## Context
 
@@ -61,6 +62,18 @@ and empty when it has none, never its title; a group with no template for an off
 empty post, no longer the description; and the template's line breaks are kept, around empty
 placeholders too. What is missing — a template, or a placeholder that comes out empty — is named on
 the offer's Facebook card with a link to where it is set, and fixing it is the collector's.
+
+**Amended by #1800 (decided with the collector on 2026-10-11): the post text follows the template
+until the offer is published, and is frozen at publication.** Publication is the offer first going
+up — *Pending* or *Active*, whichever comes first — and what is frozen is what the lot was written
+from: its template (its own or its group's), the note, and its figures (`Offer.facebookPostSnapshot`).
+Frozen are the inputs rather than the words, because the closing time is written out in the browser,
+the one place the zone is known (#490). From then on no template edit and no change of the offer's
+figures reaches it, with one exception the collector chose: an **approval that states a closing
+time** writes it into the frozen text, since the post in the group is corrected to it. A **repost**
+is a new publication and freezes the current text in place of the old; an offer back in **Ready**
+follows the template again; a post of several lots freezes as one. Offers already up when this landed
+were frozen at start-up with the text they showed — earlier template versions were never kept.
 
 ### 4. The running bid is recorded by hand, and the result when it ends
 

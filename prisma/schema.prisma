@@ -5039,6 +5039,11 @@ model Offer {
   // template for the offer's type; text, even empty, is the offer's own. Still a template: the same
   // placeholders and formatting as a group's, filled in from the offer's figures as they change.
   facebookPostTemplate String?
+  // The post as it was published (#1800): this lot's template, the note and its figures, taken when
+  // the offer first goes up (Pending or Active) and drawn instead of the live ones from then on — so
+  // editing a template changes only offers not yet posted. Null until then, cleared again when the
+  // offer is back in Ready; a repost takes it afresh. Shape: `FacebookFrozenLot`.
+  facebookPostSnapshot Json?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside

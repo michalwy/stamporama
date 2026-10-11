@@ -1,6 +1,11 @@
 import "server-only";
 import { prisma } from "./db";
-import { detachFacebookLot, facebookGroupMixesTypes, readFacebookGroupSettings } from "./facebook-auctions";
+import {
+  detachFacebookLot,
+  facebookGroupMixesTypes,
+  readFacebookGroupSettings,
+  setFrozenFacebookClosing,
+} from "./facebook-auctions";
 import {
   facebookPostLink,
   facebookPostRefusal,
@@ -148,6 +153,9 @@ export async function publishOfferOrPost(
   else await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
   if (approved.length > 0) {
     await prisma.offer.updateMany({ where: { id: { in: approved } }, data: { endsAt } });
+    // The post in the group is corrected to the closing time the approval states, so the text frozen
+    // when it was submitted takes it too — and nothing else (#1800).
+    await setFrozenFacebookClosing(approved, endsAt ?? null);
   }
 }
 

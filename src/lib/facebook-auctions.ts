@@ -1,4 +1,5 @@
 import "server-only";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
 import {
@@ -10,13 +11,17 @@ import {
 import { readFacebookDefaults, toCustomSettings, toPostingSettings } from "./facebook-groups";
 import {
   describeFacebookAuctionCopies,
+  facebookLotTemplate,
   facebookMixedTypesRefusal,
+  isFacebookLotPosted,
+  readFacebookFrozenLot,
   type FacebookAuctionCopy,
+  type FacebookFrozenLot,
 } from "./facebook-post-rules";
 import { makeOfferLabeller, orderedLabelItems, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { compactCatalogNumberGroups, type CatalogNumberGroupEntry } from "./offer-title-template";
-import { normalizeListingType, type OfferListingType, type OfferState } from "./offer-rules";
+import { isAuctionListing, normalizeListingType, type OfferListingType, type OfferState } from "./offer-rules";
 
 // A Facebook offer (#1544; ADR-0061 §2, §3, §5) — the half the offers domain reads.
 //
@@ -371,6 +376,9 @@ export interface FacebookKitLot {
   priceCheckedAt: string | null;
   /** The offer's own post template (#1780), written for its type — null follows the group's. */
   ownTemplate: string | null;
+  /** The lot as it was published (#1800), drawn instead of the fields above once it has gone up;
+   *  null while it has not. */
+  frozen: FacebookFrozenLot | null;
 }
 
 /** What the offer's Facebook card draws (ADR-0061 §3): the group, the post and its lots, and where
@@ -400,47 +408,44 @@ export interface FacebookOfferKit {
   photoZipPath: string;
 }
 
-export async function getFacebookOfferKit(offerId: string): Promise<FacebookOfferKit | null> {
-  const offer = await prisma.offer.findUnique({
-    where: { id: offerId },
+/** What a lot's text is built from, read for a kit or a freeze (#1800). */
+const KIT_LOT_SELECT = {
+  id: true,
+  offerNo: true,
+  facebookLotNo: true,
+  facebookPostId: true,
+  listingType: true,
+  name: true,
+  description: true,
+  startingPrice: true,
+  bidIncrement: true,
+  currency: true,
+  endsAt: true,
+  state: true,
+  url: true,
+  price: true,
+  priceCheckedAt: true,
+  facebookPostTemplate: true,
+  facebookPostSnapshot: true,
+  sets: {
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: {
-      collectionId: true,
-      facebookPostId: true,
-      facebookPost: { select: { id: true } },
-      facebookGroup: true,
+      title: true,
+      items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
     },
+  },
+} satisfies Prisma.OfferSelect;
+
+/** The lots of one collection as their post is written from them, in lot order. */
+async function readKitLots(collectionId: string, where: Prisma.OfferWhereInput): Promise<FacebookKitLot[]> {
+  const rows = await prisma.offer.findMany({
+    where: { ...where, collectionId },
+    orderBy: [{ facebookLotNo: "asc" }, { offerNo: "asc" }],
+    select: KIT_LOT_SELECT,
   });
-  if (!offer?.facebookGroup) return null;
-  const lotRows = await prisma.offer.findMany({
-    where: offer.facebookPostId ? { facebookPostId: offer.facebookPostId } : { id: offerId },
-    orderBy: { facebookLotNo: "asc" },
-    select: {
-      id: true,
-      offerNo: true,
-      facebookLotNo: true,
-      listingType: true,
-      name: true,
-      description: true,
-      startingPrice: true,
-      bidIncrement: true,
-      currency: true,
-      endsAt: true,
-      state: true,
-      url: true,
-      price: true,
-      priceCheckedAt: true,
-      facebookPostTemplate: true,
-      sets: {
-        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-        select: {
-          title: true,
-          items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
-        },
-      },
-    },
-  });
-  const labeller = await makeOfferLabeller(offer.collectionId);
-  const lots = lotRows.map((row): FacebookKitLot => {
+  if (rows.length === 0) return [];
+  const labeller = await makeOfferLabeller(collectionId);
+  return rows.map((row): FacebookKitLot => {
     const title = offerDisplayLabel(row.name, row.sets, labeller);
     const numbers = row.sets
       .flatMap((s) => orderedLabelItems(s.items))
@@ -449,7 +454,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
     return {
       offerId: row.id,
       offerNo: row.offerNo,
-      lotNo: offer.facebookPostId ? row.facebookLotNo : null,
+      lotNo: row.facebookPostId ? row.facebookLotNo : null,
       listingType: normalizeListingType(row.listingType),
       title,
       description: row.description?.trim() ?? "",
@@ -463,10 +468,30 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       price: row.price.toFixed(2),
       priceCheckedAt: row.priceCheckedAt?.toISOString() ?? null,
       ownTemplate: row.facebookPostTemplate,
+      frozen: readFacebookFrozenLot(row.facebookPostSnapshot),
     };
   });
+}
+
+export async function getFacebookOfferKit(offerId: string): Promise<FacebookOfferKit | null> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: {
+      collectionId: true,
+      facebookPostId: true,
+      facebookPost: { select: { id: true } },
+      facebookGroup: true,
+    },
+  });
+  if (!offer?.facebookGroup) return null;
+  const lots = await readKitLots(
+    offer.collectionId,
+    offer.facebookPostId ? { facebookPostId: offer.facebookPostId } : { id: offerId }
+  );
   const base = `/api/collections/${offer.collectionId}`;
   // The post reads as the group posts now — its own template, or the platform's it follows (#1661).
+  // A lot already published is drawn from its snapshot instead (#1800); these are for the rest, and
+  // for a repost, which puts the current template up again.
   const settings = groupSettings(
     offer.facebookGroup,
     await readFacebookDefaults(offer.facebookGroup.platformId)
@@ -488,4 +513,113 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       ? `${base}/facebook-posts/${offer.facebookPost.id}/photos/zip`
       : `${base}/offers/${offerId}/photos/zip`,
   };
+}
+
+// ── The post as published (#1800) ───────────────────────────────────────────────────────────────
+
+/**
+ * Freeze the post text of these offers as it reads **now** (#1800): each lot's template — its own, or
+ * its group's for its type — the group's note and the lot's figures, written into
+ * `Offer.facebookPostSnapshot` and drawn instead of the live ones from then on. Called when an offer
+ * first goes up (Pending or Active, whichever comes first) and by a repost, which puts the current
+ * text up again.
+ *
+ * Offers off Facebook are skipped. `onlyUnfrozen` leaves a lot that already has a snapshot as it is —
+ * the transition's case, where approving a pending post or resuming a paused one is no new
+ * publication; a repost passes false and takes every lot it names afresh.
+ */
+export async function freezeFacebookPostText(
+  offerIds: readonly string[],
+  { onlyUnfrozen }: { onlyUnfrozen: boolean }
+): Promise<number> {
+  if (offerIds.length === 0) return 0;
+  const targets = await prisma.offer.findMany({
+    where: {
+      id: { in: [...offerIds] },
+      facebookGroupId: { not: null },
+      ...(onlyUnfrozen ? { facebookPostSnapshot: { equals: Prisma.DbNull } } : {}),
+    },
+    select: { id: true, collectionId: true, facebookGroupId: true },
+  });
+  const now = new Date().toISOString();
+  const settingsByGroup = new Map<string, FacebookEffectiveSettings>();
+  let frozen = 0;
+  for (const collectionId of new Set(targets.map((t) => t.collectionId))) {
+    const ids = targets.filter((t) => t.collectionId === collectionId).map((t) => t.id);
+    const lots = await readKitLots(collectionId, { id: { in: ids } });
+    for (const lot of lots) {
+      const groupId = targets.find((t) => t.id === lot.offerId)!.facebookGroupId!;
+      if (!settingsByGroup.has(groupId)) settingsByGroup.set(groupId, await readFacebookGroupSettings(groupId));
+      const settings = settingsByGroup.get(groupId)!;
+      const snapshot: FacebookFrozenLot = {
+        frozenAt: now,
+        listingType: lot.listingType,
+        template: facebookLotTemplate(
+          { auction: settings.postTemplate, quickBuy: settings.quickBuyTemplate },
+          { listingType: lot.listingType, ownTemplate: lot.ownTemplate }
+        ),
+        standingNote: settings.standingNote,
+        title: lot.title,
+        description: lot.description,
+        catalog: lot.catalog,
+        startingPrice: lot.startingPrice,
+        bidIncrement: lot.bidIncrement,
+        price: isAuctionListing(lot.listingType) ? null : lot.price,
+        currency: lot.currency,
+        endsAt: lot.endsAt,
+      };
+      await prisma.offer.update({
+        where: { id: lot.offerId },
+        data: { facebookPostSnapshot: snapshot as unknown as Prisma.InputJsonObject },
+      });
+      frozen += 1;
+    }
+  }
+  return frozen;
+}
+
+/** Let these offers' post text follow the template again (#1800): an offer back in Ready is posted
+ *  anew, with whatever the template says by then. */
+export async function thawFacebookPostText(offerIds: readonly string[]): Promise<void> {
+  if (offerIds.length === 0) return;
+  await prisma.offer.updateMany({
+    where: { id: { in: [...offerIds] }, facebookPostSnapshot: { not: Prisma.DbNull } },
+    data: { facebookPostSnapshot: Prisma.DbNull },
+  });
+}
+
+/**
+ * An approval that states the auctions' closing time writes it into their frozen text too (#1800,
+ * decided with the collector on 2026-10-11): the post in the group is corrected to it, and the text
+ * here has to read as the post does. Nothing else of the snapshot moves.
+ */
+export async function setFrozenFacebookClosing(offerIds: readonly string[], endsAt: Date | null): Promise<void> {
+  if (offerIds.length === 0) return;
+  const rows = await prisma.offer.findMany({
+    where: { id: { in: [...offerIds] } },
+    select: { id: true, facebookPostSnapshot: true },
+  });
+  for (const row of rows) {
+    const frozen = readFacebookFrozenLot(row.facebookPostSnapshot);
+    if (!frozen) continue;
+    const next: FacebookFrozenLot = { ...frozen, endsAt: endsAt?.toISOString() ?? null };
+    await prisma.offer.update({
+      where: { id: row.id },
+      data: { facebookPostSnapshot: next as unknown as Prisma.InputJsonObject },
+    });
+  }
+}
+
+/**
+ * Freeze every Facebook offer that has gone up and carries no snapshot (#1800) — the offers already
+ * up when #1800 landed, frozen with the text they showed then; nothing earlier is recovered. Run once
+ * at start-up and idempotent: an offer published since is frozen by its transition and not touched.
+ */
+export async function freezeUnfrozenFacebookPosts(): Promise<number> {
+  const rows = await prisma.offer.findMany({
+    where: { facebookGroupId: { not: null }, facebookPostSnapshot: { equals: Prisma.DbNull } },
+    select: { id: true, state: true },
+  });
+  const posted = rows.filter((r) => isFacebookLotPosted(r.state)).map((r) => r.id);
+  return freezeFacebookPostText(posted, { onlyUnfrozen: true });
 }

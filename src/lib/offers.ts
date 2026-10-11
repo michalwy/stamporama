@@ -168,6 +168,7 @@ import {
   detachFacebookLot,
   facebookAuctionRefusal,
   facebookLotTypeRefusal,
+  freezeFacebookPostText,
   getFacebookOfferKit,
   offerItemIds,
   resolveFacebookOffer,
@@ -3917,6 +3918,12 @@ export async function repostOffer(
       },
     }),
   ]);
+  // A repost is a new publication (#1800): what went up again is the current template and figures —
+  // the text the repost dialog showed — and that is what is frozen now, in place of the old post's.
+  await freezeFacebookPostText(
+    listings.map((listing) => listing.id),
+    { onlyUnfrozen: false }
+  );
   return { reposted: listings.length };
 }
 
@@ -5719,6 +5726,13 @@ async function finishOfferCreation(
   // moment and the offer would otherwise sit with a blank Allegro card until something was added.
   await backfillAllegroCategory(ownerId, offerId);
   await backfillDelcampeCategory(offerId); // #609, the same question on the marketplace next door
+  await freezeIfPublished(offerId, prepared.input.state);
+}
+
+/** A Facebook offer created already up — Pending or Active — is published as it is made, so its post
+ *  text is frozen there and then (#1800), after the texts the offer's id completes. */
+async function freezeIfPublished(offerId: string, state: OfferState): Promise<void> {
+  if (isLiveState(state)) await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
 }
 
 /** Render the listing texts once more, now that the offer has an id (#415). A no-op for every
@@ -5905,6 +5919,7 @@ export async function duplicateOffer(
   });
 
   await syncOfferContextTexts(ownerId, id, platform); // #415, as in `createOffer`
+  await freezeIfPublished(id, targetState); // #1800, as in `createOffer`
   return { id, skippedCopies };
 }
 
@@ -6570,6 +6585,9 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   // A rejection (`pending → ready`) takes the pending link with it: it led to a post the platform
   // turned down, and a Ready offer carrying a listing link would be a false record of a listing.
   const rejecting = ref.state === "pending" && to === "ready";
+  // An offer back in Ready or Preparing is not up, so its Facebook post text follows the template
+  // again until it is published anew (#1800).
+  const unpublishing = to === "ready" || to === "preparing";
   await prisma.offer.update({
     where: { id: offerId },
     data: {
@@ -6584,8 +6602,15 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       // and rewrites nothing, so a change made during the pause is still a change nobody pushed.
       ...(submitting ? { listingContentChangedAt: null } : {}),
       ...(rejecting ? { url: null, colnectSaleId: null } : {}),
+      ...(unpublishing ? { facebookPostSnapshot: Prisma.DbNull } : {}),
     },
   });
+  // Going up — Pending or Active, whichever comes first — is publication, and a Facebook offer's post
+  // text is frozen as it reads now (#1800). Only where none is frozen yet: approving a pending post or
+  // resuming a paused one puts up nothing new.
+  if (ref.facebookGroupId && isLiveState(to)) {
+    await freezeFacebookPostText([offerId], { onlyUnfrozen: true });
+  }
 
   // What the Allegro category register learns from is an offer **finished being prepared** (#494),
   // not one already listed.

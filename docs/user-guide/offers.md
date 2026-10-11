@@ -2222,7 +2222,9 @@ for refresh while it waits — and when you **Approve** it with the final link, 
 becomes its last posted date. The listing date still stays the first one.
 
 On Facebook, a lot of a post with several lots reposts the **whole post**: every active quick buy in it
-takes the new link. An auction in the same post is left as it is.
+takes the new link. An auction in the same post is left as it is. The dialog also shows the post
+text as it goes up again — the current template, not the text frozen when it was first posted — and
+recording the repost freezes that text instead (see [Facebook](facebook.md#once-it-is-posted-the-text-stays-as-posted)).
 
 ## One active offer per copy, per platform
 

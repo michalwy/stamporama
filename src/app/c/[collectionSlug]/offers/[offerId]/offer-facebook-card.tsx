@@ -3,19 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { FacebookOfferKit } from "@/lib/facebook-auctions";
-import {
-  facebookMoney,
-  facebookPostGaps,
-  isFacebookLotPosted,
-  renderFacebookPostParts,
-  renderFacebookPostText,
-  type FacebookPostLotText,
-} from "@/lib/facebook-post-rules";
-import { formatFacebookPost } from "@/lib/facebook-post-format";
+import { isFacebookLotPosted } from "@/lib/facebook-post-rules";
 import { FACEBOOK_TERMS_PLACEHOLDER, type FacebookGroupSetting } from "@/lib/facebook-group-rules";
 import { isAuctionListing, OFFER_LISTING_TYPE_LABEL, OFFER_STATE_LABEL } from "@/lib/offer-rules";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
-import { RenderedHtml, sanitizeDescriptionHtml } from "@/app/c/[collectionSlug]/shared/rendered-description";
+import { RenderedHtml } from "@/app/c/[collectionSlug]/shared/rendered-description";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
@@ -23,6 +15,7 @@ import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions
 import { PendingLinkMark } from "../offer-badges";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 import { FacebookPostTemplateField } from "@/app/c/[collectionSlug]/shared/facebook-post-template-field";
+import { renderFacebookKitPost } from "./facebook-kit-post";
 
 // A Facebook offer's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
 // alone, or as a numbered lot of a post holding several — and the post's text and photos, each taken
@@ -52,6 +45,11 @@ import { FacebookPostTemplateField } from "@/app/c/[collectionSlug]/shared/faceb
 // The template is Markdown, limited to what Facebook's post editor offers (#1772): the text is shown
 // formatted, with a Source switch back to the template's markup as filled in — the offer description's
 // pattern (#319) — and Copy puts the formatted post and its plain text on the clipboard together.
+//
+// Once the offer is published — Pending or Active, whichever comes first — the text is **frozen**
+// (#1800): it is drawn as it was posted, so editing a template, the offer's own or its figures no
+// longer changes it. A repost puts the current template up again and freezes that; an offer taken
+// back to Ready follows the template again.
 //
 // Rendered only for an offer naming a group: `OfferDetail.facebook` is null everywhere else.
 
@@ -161,18 +159,6 @@ const EMPTY_PLACEHOLDER_REASON: Record<string, string> = {
   [FACEBOOK_TERMS_PLACEHOLDER.token]: "no note on shipping, payment and terms",
 };
 
-/** `Sun 5 Oct, 20:00` in the collector's own locale and zone. */
-function formatClosesAt(iso: string | null): string {
-  if (!iso) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
-}
-
 export function OfferFacebookCard({
   collectionSlug,
   offerId,
@@ -199,28 +185,7 @@ export function OfferFacebookCard({
   const multiLot = kit.post !== null;
 
   const auction = isAuctionListing(self.listingType);
-  const { postText, formatted, gaps } = useMemo(() => {
-    const lots: FacebookPostLotText[] = kit.lots.map((lot) => ({
-      lotNo: lot.lotNo,
-      offerNo: lot.offerNo,
-      listingType: lot.listingType,
-      title: lot.title,
-      description: lot.description,
-      catalog: lot.catalog,
-      startingPrice: facebookMoney(lot.startingPrice, lot.currency),
-      increment: facebookMoney(lot.bidIncrement, lot.currency),
-      closesAt: formatClosesAt(lot.endsAt),
-      price: isAuctionListing(lot.listingType) ? "" : facebookMoney(lot.price, lot.currency),
-      ownTemplate: lot.ownTemplate,
-    }));
-    const templates = { auction: kit.group.postTemplate, quickBuy: kit.group.quickBuyTemplate };
-    const post = formatFacebookPost(renderFacebookPostParts(templates, kit.group.standingNote, lots));
-    return {
-      postText: renderFacebookPostText(templates, kit.group.standingNote, lots),
-      formatted: { html: sanitizeDescriptionHtml(post.html), plain: post.plain },
-      gaps: facebookPostGaps(templates, kit.group.standingNote, lots),
-    };
-  }, [kit]);
+  const { source: postText, html, plain, gaps, frozenAt } = useMemo(() => renderFacebookKitPost(kit), [kit]);
   // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661).
   const settingHref = (setting: FacebookGroupSetting) =>
     `/c/${collectionSlug}/settings?tab=facebook&row=${encodeURIComponent(
@@ -369,7 +334,7 @@ export function OfferFacebookCard({
                 </button>
               </Tooltip>
             )}
-            <CopyButton value={formatted.plain} html={formatted.html} label="post text" />
+            <CopyButton value={plain} html={html} label="post text" />
             <a href={kit.photoZipPath} download style={{ ...MUTED, color: "var(--color-accent)" }}>
               ↓ Photos{multiLot ? ", in lot order" : ""}
             </a>
@@ -379,10 +344,15 @@ export function OfferFacebookCard({
           showSource ? (
             <pre style={POST_TEXT}>{postText}</pre>
           ) : (
-            <RenderedHtml html={formatted.html} style={{ ...POST_TEXT, whiteSpace: "normal" }} />
+            <RenderedHtml html={html} style={{ ...POST_TEXT, whiteSpace: "normal" }} />
           )
         ) : (
           <p style={{ ...MUTED, margin: 0 }}>The post is empty.</p>
+        )}
+        {frozenAt && (
+          <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
+            As posted on {formatInstant(frozenAt)} — editing a template no longer changes it.
+          </p>
         )}
         {(gaps.missingTemplates.length > 0 ||
           gaps.emptyOwnTemplates.length > 0 ||
@@ -525,14 +495,15 @@ export function OfferFacebookCard({
                 : "The post's link. Activate asks for it once the post is up."}
           </p>
         )}
-        {/* A quick-buy post a few days old is seen by nobody (#1718): delete it, post the text and
-            photos above again, and record the new post's link on the same offer. */}
+        {/* A quick-buy post a few days old is seen by nobody (#1718): delete it, post it again — the
+            text rebuilt from the current template (#1800), shown in the dialog — and record the new
+            post's link on the same offer. */}
         {onRepost && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.375rem" }}>
             <DialogSecondaryButton type="button" disabled={isPending} onClick={onRepost}>
               Repost…
             </DialogSecondaryButton>
-            <span style={MUTED}>Post the text and photos above again, then record the new link.</span>
+            <span style={MUTED}>Post it again — the dialog shows the text as it goes up now — then record the new link.</span>
           </div>
         )}
       </div>
