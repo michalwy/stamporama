@@ -300,42 +300,40 @@ carries the **Ended, unresolved** flag, the **Ended auctions** filter lists it, 
 has closed. Unlike on other platforms, this happens whether or not you recorded a bid — on Facebook a
 missing bid may only mean you did not type one.
 
-**Record result…** asks for:
+Answer it as on any platform:
 
-- the **winner**, by the name their profile shows, and the **profile link** if you have it;
-- the **winning bid**, starting from the last bid you recorded;
-- the day it **sold**, the day it closed unless you change it;
-- the **sale** it goes into.
-
-While you type, the dialog says who the winner is: a contact found by the profile link, or by name, or
-a new buyer it will create. The profile link is kept on the contact (see [Contacts](contacts.md)), so
-the same person is recognised next time even under another name. A contact with the same name but a
-different profile link is somebody else, and the dialog says so — give the new winner a name of their
-own.
-
-Several lots won by one person are usually one parcel, so the dialog lists the winner's **open
-Facebook sales** — not yet sent, in the auction's currency — and you choose to add the lot to one of
-them or to start **a new sale**. Saving records the sale, in the auction's own currency, and opens it;
-the offer becomes **Sold**. An auction holding several sets is still bid on as one lot, so its price is
-split evenly over the sets.
-
-**No bids** ends an auction nobody bid on: the offer is **withdrawn** and its copies are free to go
-into another auction. Listing them again is a new offer.
+- **Sell**, in the offer's **⋮** menu, records the sale to the winner. If the winning bid is
+  not the last one you recorded, type it in the card's bid field first — after the close the button
+  reads **Record winning bid** — or adjust the price on the sale afterwards.
+- **Withdraw** ends an auction nobody bid on: its copies are free to go into another auction. Listing
+  them again is a new offer.
 
 In a post with several lots, each lot has its own result, recorded on its own offer.
 
-## Selling a quick buy
+## Selling a Facebook offer
 
-A quick buy that is up has a **Sale** part on its **Facebook** card, showing its price. When somebody
-claims it, choose **Record sale…**, which asks for the same things as an auction's result: the
-**buyer**, by the name their profile shows, and their **profile link** if you have it; the **price**
-it sold for, starting from its asking price; the day it **sold**, today unless you change it; and
-the **sale** it goes into — one of the buyer's open Facebook sales, or a new one. The buyer is found
-or created exactly as an auction's winner is.
+A Facebook offer — an auction or a quick buy — is sold with the ordinary **Sell**, as on every
+platform (see [Offers](offers.md)): add it to an existing sale on Facebook in the offer's currency, or
+start a new one. Each set goes in at the offer's current price; change it on the sale's screen if the
+buyer paid something else. The offer becomes **Sold**.
 
-Saving records the sale and the offer becomes **Sold**. The offer keeps its own asking price; what the
-buyer paid is on the sale. A quick buy never closes by itself, so it never asks for a result: to take
-one down unsold, withdraw it as any offer.
+What is Facebook's own is the **buyer** of a new sale. Instead of picking a contact, you type them as
+on Facebook:
+
+- **Buyer** — the name their profile shows;
+- **Buyer's Facebook profile** — the link to their profile, if you have it.
+
+While you type, the form says who that is: a contact found by the profile link, or by name, or a new
+buyer it will create. The profile link is kept on the contact (see [Contacts](contacts.md)), so the
+same person is recognised next time even under another name. A contact with the same name but a
+different profile link is somebody else, and the form says so — give the new buyer a name of their
+own. A link nobody has yet needs a name to go with it.
+
+The new sale is in the offer's own currency — a group's currency, where it has one — even when the
+Facebook platform uses another.
+
+A quick buy never closes by itself, so it never asks for a result: to take one down unsold, withdraw
+it as any offer.
 
 ## Refreshing a quick buy
 

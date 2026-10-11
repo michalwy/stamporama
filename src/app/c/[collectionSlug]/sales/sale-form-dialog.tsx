@@ -12,6 +12,7 @@ import type { ShippingMethodData } from "@/lib/shipping-methods";
 import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
+import type { FacebookBuyerLookup } from "@/lib/facebook-sales";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -25,6 +26,8 @@ const INPUT_STYLE: React.CSSProperties = {
 };
 
 const FIELD_GAP: React.CSSProperties = { marginBottom: "1rem" };
+
+const HINT: React.CSSProperties = { fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" };
 
 export interface SaleFormDialogInitial {
   platformId: string;
@@ -63,6 +66,10 @@ export interface SaleFormDialogProps {
   /** Blocks platform change (edit mode with sold units already recorded, or a pre-filled platform
    * on create — #225). */
   platformLocked?: boolean;
+  /** Name the buyer by their Facebook profile (#1777) — a Facebook offer's *Sell*: the buyer is their
+   *  name as the profile shows it and the profile's link, found by the link first and the name second,
+   *  or created with both. Replaces the buyer picker. */
+  buyerByFacebookProfile?: boolean;
   /** Sum of the sale's line (offer) prices, when known — passed from the detail screen's Edit
    * header so "total paid" can derive buyer handling = total − gross (#205). Absent at creation
    * (no sold units picked yet), where it is treated as 0. */
@@ -85,6 +92,7 @@ export function SaleFormDialog({
   initial,
   initialPlatform,
   platformLocked,
+  buyerByFacebookProfile = false,
   grossProceeds,
   isPending,
   error,
@@ -95,6 +103,8 @@ export function SaleFormDialog({
   const [platformName, setPlatformName] = useState(initial?.platformName ?? initialPlatform?.name ?? "");
   const [buyerId, setBuyerId] = useState(initial?.buyerId ?? "");
   const [buyerName, setBuyerName] = useState(initial?.buyerName ?? "");
+  const [buyerProfileUrl, setBuyerProfileUrl] = useState("");
+  const [fetchedBuyer, setFetchedBuyer] = useState<FacebookBuyerLookup | null>(null);
   const [externalRef, setExternalRef] = useState(initial?.externalRef ?? "");
   const [transactionUrl, setTransactionUrl] = useState(initial?.transactionUrl ?? "");
   const [soldAt, setSoldAt] = useState(initial?.soldAt ?? today);
@@ -183,6 +193,35 @@ export function SaleFormDialog({
     }
   }
 
+  // Who the buyer typed by their Facebook profile is (#1777), re-read a moment after typing stops: the
+  // same lookup the save makes, so what the form says and what the save does cannot disagree.
+  const buyerTyped = buyerByFacebookProfile && (!!buyerName.trim() || !!buyerProfileUrl.trim());
+  useEffect(() => {
+    if (!buyerTyped) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const { lookupFacebookBuyerAction } = await import("@/app/actions/facebook");
+      const result = await lookupFacebookBuyerAction(collectionId, buyerName, buyerProfileUrl);
+      if (!cancelled) setFetchedBuyer(result);
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [collectionId, buyerName, buyerProfileUrl, buyerTyped]);
+  // Nothing typed asks nothing: an answer about what was cleared away is not shown.
+  const buyerLookup = buyerTyped ? fetchedBuyer : null;
+  const buyerConflict = buyerLookup?.conflict ?? null;
+  const buyerWho = buyerLookup?.contact
+    ? buyerLookup.contact.matchedBy === "profile"
+      ? `${buyerLookup.contact.name} — found by their profile link.`
+      : `${buyerLookup.contact.name} — an existing contact${
+          buyerLookup.contact.facebookProfileUrl || !buyerProfileUrl.trim() ? "" : "; the link will be added to it"
+        }.`
+    : buyerLookup && buyerName.trim()
+      ? `A new buyer, ${buyerName.trim()}, will be created.`
+      : null;
+
   // Buyer handling can be entered directly, or derived from the total the buyer paid (#205):
   // handling = total − gross (sum of the sale's offer prices). Gross is only known once sold units
   // exist, so it is 0 at creation; the toggle still appears for consistency but total ≡ handling
@@ -239,11 +278,14 @@ export function SaleFormDialog({
     // A total below the offer prices would make handling negative — the inline hint already flags
     // it; block the submit so the invalid value never reaches the server.
     if (handlingMode === "total" && totalTooLow) return;
+    if (buyerConflict) return;
     onSubmit({
       platformId: platformId || null,
       platformName: platformName || null,
-      buyerId: buyerId || null,
+      // A buyer named by their Facebook profile is found or created on the server (#1777).
+      buyerId: buyerByFacebookProfile ? null : buyerId || null,
       buyerName: buyerName || null,
+      ...(buyerByFacebookProfile ? { buyerFacebookProfileUrl: buyerProfileUrl } : {}),
       externalRef,
       transactionUrl,
       soldAt,
@@ -306,23 +348,61 @@ export function SaleFormDialog({
             </div>
             <div style={{ flex: 1 }}>
               <LabelWithError htmlFor="sale-buyer">Buyer</LabelWithError>
-              <PurchaseContactSelect
-                collectionId={collectionId}
-                idFieldName="buyerId"
-                nameFieldName="buyerName"
-                role="buyer"
-                initialContactId={initial?.buyerId ?? undefined}
-                initialContactName={initial?.buyerName ?? undefined}
-                inputId="sale-buyer"
-                placeholder="Search or add a buyer…"
-                disabled={isPending}
-                onSelectionChange={(id, name) => {
-                  setBuyerId(id);
-                  setBuyerName(name);
-                }}
-              />
+              {buyerByFacebookProfile ? (
+                <TextInput
+                  id="sale-buyer"
+                  value={buyerName}
+                  onChange={(e) => setBuyerName(e.target.value)}
+                  placeholder="Their name as the profile shows it"
+                  disabled={isPending}
+                  {...NO_AUTOFILL}
+                  style={INPUT_STYLE}
+                />
+              ) : (
+                <PurchaseContactSelect
+                  collectionId={collectionId}
+                  idFieldName="buyerId"
+                  nameFieldName="buyerName"
+                  role="buyer"
+                  initialContactId={initial?.buyerId ?? undefined}
+                  initialContactName={initial?.buyerName ?? undefined}
+                  inputId="sale-buyer"
+                  placeholder="Search or add a buyer…"
+                  disabled={isPending}
+                  onSelectionChange={(id, name) => {
+                    setBuyerId(id);
+                    setBuyerName(name);
+                  }}
+                />
+              )}
             </div>
           </div>
+
+          {/* The buyer's Facebook profile (#1777): the identity a repeat buyer is recognised by, since
+              names repeat on Facebook, and kept on the contact. */}
+          {buyerByFacebookProfile && (
+            <div style={FIELD_GAP}>
+              <LabelWithError htmlFor="sale-buyer-profile">Buyer&apos;s Facebook profile (optional)</LabelWithError>
+              <TextInput
+                id="sale-buyer-profile"
+                type="url"
+                inputMode="url"
+                value={buyerProfileUrl}
+                onChange={(e) => setBuyerProfileUrl(e.target.value)}
+                placeholder="https://www.facebook.com/…"
+                disabled={isPending}
+                {...NO_AUTOFILL}
+                style={INPUT_STYLE}
+              />
+              {buyerConflict ? (
+                <p role="alert" style={{ ...HINT, color: "var(--color-error)" }}>
+                  {buyerConflict}
+                </p>
+              ) : (
+                buyerWho && <p style={HINT}>{buyerWho}</p>
+              )}
+            </div>
+          )}
 
           {/* Date + currency */}
           <div style={{ display: "flex", gap: "0.75rem", ...FIELD_GAP }}>
@@ -572,7 +652,7 @@ export function SaleFormDialog({
         <DialogActions
           actionLabel={actionLabel}
           onCancel={onClose}
-          disabled={isPending}
+          disabled={isPending || !!buyerConflict}
           error={error}
         />
       </form>

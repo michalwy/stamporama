@@ -30,6 +30,8 @@ import {
   setSaleShareOptions,
 } from "@/lib/sale-share";
 import { parseAmount, parsePrice } from "@/lib/sale-rules";
+import { assertCollectionOwner } from "@/lib/platform-category";
+import { facebookOfferSaleCurrency } from "@/lib/facebook-sales";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "@/lib/offer-rules";
@@ -70,11 +72,25 @@ function fail(e: unknown, fallback: string): { status: "error"; message: string 
   return { status: "error", message: e instanceof Error ? e.message : fallback };
 }
 
+/** Start a sale. `forOfferId` is the offer *Sell* is selling (#225): a Facebook offer's sale is in
+ *  the offer's own currency (#1777, `facebookOfferSaleCurrency`). */
 export async function createSaleAction(
   collectionId: string,
-  raw: SaleHeaderRaw
+  raw: SaleHeaderRaw,
+  opts: { forOfferId?: string } = {}
 ): Promise<CreateSaleActionState> {
   const session = await getSession();
+  // A buyer named by their Facebook profile (#1777) may be written before the sale is: the collection
+  // is checked first, since `createSale` would only check it after.
+  let offerCurrency: string | null = null;
+  try {
+    if (raw.buyerFacebookProfileUrl !== undefined) await assertCollectionOwner(session.user.id, collectionId);
+    if (opts.forOfferId) {
+      offerCurrency = await facebookOfferSaleCurrency(session.user.id, collectionId, opts.forOfferId);
+    }
+  } catch (e) {
+    return fail(e, "Collection not found");
+  }
   const header = await resolveSaleHeader(collectionId, raw);
   if (!header.ok) return { status: "error", message: header.message };
   try {
@@ -89,7 +105,7 @@ export async function createSaleAction(
       buyerPaidTotal: header.buyerPaidTotal,
       commission: header.commission,
       shipping: header.shipping,
-    });
+    }, offerCurrency ? { offerCurrency } : {});
     return { status: "success", id };
   } catch (e) {
     return fail(e, "Failed to start this sale. Please try again.");

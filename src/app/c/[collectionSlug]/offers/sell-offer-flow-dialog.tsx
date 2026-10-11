@@ -47,6 +47,9 @@ export interface SellableOfferSubject {
   platformName: string;
   price: string;
   currency: string;
+  /** The offer's Facebook group, when it is a Facebook offer (#1777): its buyer is then named by their
+   *  Facebook profile in the new-sale step. Absent off Facebook. */
+  facebookGroupId?: string | null;
 }
 
 export interface SellOfferFlowDialogProps {
@@ -71,6 +74,10 @@ export interface SellOfferFlowDialogProps {
  * sellable sets to it at their asking price. Reuses {@link SaleFormDialog} for the new-sale header
  * and `addSaleLinesAction` for the line-add, same as the detail screen's "Add sold sets" flow
  * (ADR-0013), just pre-scoped to one offer instead of a platform-wide picker.
+ *
+ * A Facebook offer is sold here too, auctions and quick buys alike (#1777): the new sale's buyer is
+ * named by their Facebook profile, found or created as `facebook-sales.ts` says, and the sale is in
+ * the offer's own currency, which a group may set apart from the platform's.
  */
 export function SellOfferFlowDialog({
   collectionId,
@@ -148,6 +155,7 @@ export function SellOfferFlowDialog({
         today={today}
         initialPlatform={{ id: offer.platformId, name: offer.platformName, platformCurrency: offer.currency }}
         platformLocked
+        buyerByFacebookProfile={!!offer.facebookGroupId}
         isPending={isPending}
         error={error}
         onClose={() => {
@@ -157,7 +165,7 @@ export function SellOfferFlowDialog({
           setError(undefined);
           startTransition(async () => {
             const { createSaleAction } = await import("@/app/actions/sales");
-            const created = await createSaleAction(collectionId, raw);
+            const created = await createSaleAction(collectionId, raw, { forOfferId: offer.id });
             if (created.status !== "success") {
               setError(created.message);
               return;
