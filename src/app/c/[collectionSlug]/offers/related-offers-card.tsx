@@ -122,8 +122,9 @@ export function OfferTargetRow({
             <span style={CHIP}>{offer.setCount}×</span>
           </Tooltip>
         )}
+        {/* A pending offer's link leads to the post waiting for approval, and says so (#1778). */}
         {offer.url && (
-          <Tooltip content="Open the platform listing">
+          <Tooltip content={offer.state === "pending" ? "Open the post waiting for approval" : "Open the platform listing"}>
             <a
               href={offer.url}
               target="_blank"
@@ -131,7 +132,7 @@ export function OfferTargetRow({
               onClick={(e) => e.stopPropagation()}
               style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
             >
-              <Icon name="externalLink" size="sm" /> Listing
+              <Icon name="externalLink" size="sm" /> {offer.state === "pending" ? "Pending post" : "Listing"}
             </a>
           </Tooltip>
         )}

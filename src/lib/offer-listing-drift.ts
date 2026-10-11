@@ -36,24 +36,26 @@ import { isAuctionListing, type OfferListingType, type OfferState } from "./offe
  *
  * `paused` is in, beside `active`, because a paused listing has not left the marketplace — it is
  * suspended, and resuming it puts exactly what is there back in front of buyers. A change made while
- * paused is therefore the same problem as one made while live, arriving a little earlier.
+ * paused is therefore the same problem as one made while live, arriving a little earlier. `pending`
+ * is in for the same reason from the other side (#1778): the post has been submitted and the
+ * approval will put exactly what was submitted in front of buyers.
  *
  * Everything else is out, and each for its own reason: `preparing` and `ready` are an offer that has
  * never been posted, so there is nothing to be out of step with; `sold` and `withdrawn` are history,
  * and what a closed listing said is a record rather than a claim.
  */
-export const LISTED_OFFER_STATES: readonly OfferState[] = ["active", "paused"];
+export const LISTED_OFFER_STATES: readonly OfferState[] = ["pending", "active", "paused"];
 
 /** Whether an offer in this state has a live listing a change could leave behind. */
 export function isListedState(state: OfferState): boolean {
-  return state === "active" || state === "paused";
+  return state === "pending" || state === "active" || state === "paused";
 }
 
 /**
  * An offer that **was up on a platform and has nothing left in it** (#1277) — a listing that can only
  * be taken down, never brought back into step.
  *
- * Active or Paused with no sets is the case the flag cannot clear: there is nothing for an update to
+ * Pending, Active or Paused with no sets is the case the flag cannot clear: there is nothing for an update to
  * type back into the form, so *Mark listing up to date* is refused and only a withdrawal takes it off
  * *Needs action*. A **withdrawn** offer with no sets is in too, because composing a series (#1211)
  * used to withdraw a listed offer it emptied, and the listing on the platform may still be up — the

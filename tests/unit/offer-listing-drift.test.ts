@@ -29,9 +29,10 @@ describe("isEmptiedListing (#1277)", () => {
 });
 
 describe("isListedState", () => {
-  it("counts the two states in which a listing is up on the platform", () => {
+  it("counts the states in which a listing is on the platform — pending its approval too (#1778)", () => {
     assert.equal(isListedState("active"), true);
     assert.equal(isListedState("paused"), true);
+    assert.equal(isListedState("pending"), true);
   });
 
   it("excludes an offer that has never been posted", () => {

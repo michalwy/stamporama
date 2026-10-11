@@ -2478,24 +2478,58 @@ reasons a listing gets flagged — a copy sold elsewhere, and a copy under a liv
   you posted the listing on a different day. Nothing else touches the date — resuming a **Paused**
   offer leaves it alone, and an offer *created* directly as **Active** keeps the date you typed in
   the creation dialog.
+- **Pending** — posted, but **waiting for the platform or the group to approve it**. A post to a
+  Facebook group often sits with the group's administrator before anyone can see it, and other
+  marketplaces can hold a listing for review too. See [Waiting for approval](#waiting-for-approval).
 - **Active** — live on the platform.
 - **Paused** — temporarily suspended; the copies stay committed. Resume any time.
 - **Withdrawn** — taken down for good. **Final**: to sell there again, create a new offer.
 - **Sold** — set automatically when a [sale](sales.md) sells every set through the offer. You do
   not mark an offer sold by hand.
 
-The lifecycle is linear but reversible: **Preparing → Ready → Active ↔ Paused**, with **Withdrawn**
-reachable from any live state. The states are **orientational** — they help you sort and filter your
-listings. They don't restrict composing: you can add sets or copies to a Preparing, Ready, Active, or
-Paused offer alike; only Withdrawn and Sold offers are frozen — with one exception, a copy promised in
+The lifecycle is linear but reversible: **Preparing → Ready → Active ↔ Paused**, with **Pending**
+between Ready and Active for a listing that has to be approved first, and **Withdrawn** reachable from
+any live state. The states are **orientational** — they help you sort and filter your
+listings. They don't restrict composing: you can add sets or copies to a Preparing, Ready, Pending,
+Active, or Paused offer alike; only Withdrawn and Sold offers are frozen — with one exception, a copy promised in
 an agreed [trade](trades.md), which cannot join an offer that is already live. See [Copies promised in
 a trade](#copies-promised-in-a-trade).
+
+### Waiting for approval
+
+When you post a listing and the platform or group holds it for approval, publish it as **Pending**
+rather than Active: tick **Waiting for approval** in the publish dialog (the one **Activate** opens,
+on the offer and in the bulk listing workspace), or pick **Submit for approval…** from the **⋮**
+menu. Paste the link you have — the link to the pending post. It is shown as **Pending post** rather
+than **Listing** everywhere the offer's link appears, so it is never mistaken for the address buyers
+will see.
+
+From Pending the offer goes one of three ways:
+
+- **Approved** — the **Approve** button (or **Approved…** in the **⋮** menu) asks for the final link,
+  starting from the pending one: replace it if the approved listing has another address. The offer
+  becomes **Active** and its **listing date** becomes today, since that is when buyers could first
+  see it.
+- **Rejected — back to Ready** — the post was turned down. The offer returns to **Ready** and the
+  pending link is cleared, so you can fix what was wrong and post it again.
+- **Withdraw** — you took the post back yourself.
+
+**A pending offer's copies count as listed**, exactly as an active offer's do: the administrator can
+approve it at any moment. So a copy in a pending offer cannot be promised in an agreed
+[trade](trades.md), another offer of it on the same platform is warned about, and a copy that sells
+elsewhere flags the pending offer as **Needs action**. It can also be **sold** while still pending —
+a buyer may answer a post you have shown them before the group approves it.
+
+On a [Facebook post with several lots](facebook.md), the whole post waits together: submitting one
+lot submits all of them, approving one approves them all and writes the final link into every lot
+that carried the pending one, and a rejection takes every lot back to Ready.
 
 Changing a platform's currency later leaves existing offers and sales untouched — each keeps the
 currency it was created with as a permanent record; only new offers and sales use the new currency.
 
 From the row's **⋮** menu you can **edit** the price / platform / URL, **mark ready** a preparing
-offer, **activate** a ready one, **pause** / **resume**, **withdraw**, **sell** (see [Selling
+offer, **activate** a ready one or **submit it for approval**, record that a pending one was
+**approved** or **rejected**, **pause** / **resume**, **withdraw**, **sell** (see [Selling
 directly from the list](#selling-directly-from-the-list)), mark or clear **in active bidding** (see
 [above](#in-active-bidding--auction-platforms)), open the live listing, or **delete** the offer.
 The detail header's **⋮** menu adds **Regenerate title** (see [Listing title](#listing-title)).
@@ -2546,7 +2580,7 @@ filter was hiding stays ticked too — the run never touched it.
 ## Filtering
 
 The toolbar has a **search** box, and filters offers by **platform**, by **state** (Preparing /
-Ready / Active / Paused / Sold / Withdrawn), and by **Needs action** (the derived overlay above).
+Ready / Pending / Active / Paused / Sold / Withdrawn), and by **Needs action** (the derived overlay above).
 The state chips are **single-select**: clicking one shows that state, clicking a different one
 switches to it, and clicking the one that is already on clears it and shows every state again. This
 list is worked through a state at a time — what is preparing, then what is ready to post — so a

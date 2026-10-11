@@ -28,7 +28,7 @@ import {
 import { TranslationGapsPanel } from "@/app/c/[collectionSlug]/shared/translation-gaps";
 import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
-import { ActivateOfferDialog } from "../activate-offer-dialog";
+import { ActivateOfferDialog, type PublishTarget } from "../activate-offer-dialog";
 import { RepostOfferDialog } from "./repost-offer-dialog";
 import { SpecificationShareDialog } from "./specification-share-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
@@ -64,8 +64,10 @@ import {
   pricingReadyFor,
   requiresSets,
   type ManualOfferTarget,
+  type OfferState,
 } from "@/lib/offer-rules";
 import { isEmptiedListing, isListedState } from "@/lib/offer-listing-drift";
+import { facebookPostLink } from "@/lib/facebook-post-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
 import { OfferCoverWalk } from "./offer-cover-walk";
@@ -108,6 +110,7 @@ const BTN: React.CSSProperties = {
 
 const TRANSITION_LABEL: Record<string, { label: string; icon: IconName }> = {
   ready: { label: "Mark ready", icon: "check" },
+  pending: { label: "Submit for approval…", icon: "publish" },
   preparing: { label: "Back to preparing", icon: "revert" },
   active: { label: "Resume", icon: "resume" },
   paused: { label: "Pause", icon: "pause" },
@@ -233,10 +236,21 @@ const QUICK_ADVANCE_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate";
- * marking a `preparing` one ready keeps the plain transition label. */
-function advanceLabel(to: ManualOfferTarget): { label: string; icon: IconName } {
-  return to === "active" ? { label: "Activate", icon: "activate" } : TRANSITION_LABEL[to];
+/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate",
+ * and approving a `pending` one "Approve" (#1778); marking a `preparing` one ready keeps the plain
+ * transition label. */
+function advanceLabel(from: OfferState, to: ManualOfferTarget): { label: string; icon: IconName } {
+  if (to === "active") return from === "pending" ? { label: "Approve", icon: "activate" } : { label: "Activate", icon: "activate" };
+  return TRANSITION_LABEL[to];
+}
+
+/** The ⋮ entry for moving `from` → `to`. Publishing a ready offer reads "Activate", resuming a paused
+ *  one keeps "Resume", and the two ways out of Pending say what happened to the post (#1778). */
+function transitionEntryLabel(from: OfferState, to: ManualOfferTarget): { label: string; icon: IconName } {
+  if (from === "ready" && to === "active") return { label: "Activate", icon: "activate" };
+  if (from === "pending" && to === "active") return { label: "Approved…", icon: "activate" };
+  if (from === "pending" && to === "ready") return { label: "Rejected — back to Ready", icon: "reject" };
+  return TRANSITION_LABEL[to];
 }
 
 interface OfferDetailPanelProps {
@@ -291,7 +305,9 @@ export function OfferDetailPanel({
   const [sellingSet, setSellingSet] = useState<OfferDetailSet | null>(null);
   // Activation asks for the listing URL when the offer has none (#399) — the bulk workspace's own
   // publish step (#322), reached from here.
-  const [activating, setActivating] = useState(false);
+  // The publish dialog (#399), and what it opens as: publishing a Ready offer, live or waiting for
+  // approval, or recording the approval of a Pending one (#1778).
+  const [activating, setActivating] = useState<{ target: PublishTarget; approving: boolean } | null>(null);
   // *Repost* (#1718): an active quick buy posted again, asking for the new link.
   const [reposting, setReposting] = useState(false);
   // *Share specification…* (#1760): the buyer's link to the specification.
@@ -481,6 +497,8 @@ export function OfferDetailPanel({
   // post live, and the link it asks for is the post's — the lot's own, if it has one, is its photo's.
   const facebookPostLots = offer.facebook?.post ? offer.facebook.lots.length : null;
   const needsUrlToActivate = offer.state === "ready" && (!offer.url || facebookPostLots !== null);
+  // Waiting for approval (#1778) asks every time too: submitting, for the pending post's link, and
+  // approving, for the final link that replaces it.
   // Only an active quick buy is posted again (#1718); a lot of a Facebook post takes every active
   // quick-buy lot of the post with it.
   const canRepost = offer.state === "active" && offer.listingType === "fixed";
@@ -592,8 +610,16 @@ export function OfferDetailPanel({
       setConfirm("withdraw");
       return;
     }
+    if (next === "pending") {
+      setActivating({ target: "pending", approving: false });
+      return;
+    }
+    if (next === "active" && state === "pending") {
+      setActivating({ target: "active", approving: true });
+      return;
+    }
     if (next === "active" && needsUrlToActivate) {
-      setActivating(true);
+      setActivating({ target: "active", approving: false });
       return;
     }
     setActionError(undefined);
@@ -641,13 +667,13 @@ export function OfferDetailPanel({
   /** Go live with the URL the platform gave back (#399): `publishOffer` transitions first and writes
    * the URL after, so a refused activation — a lost set, a missing price — leaves no listing link
    * behind on an offer that never went live. A blank URL is a normal answer. */
-  function publish(url: string) {
+  function publish(url: string, target: PublishTarget) {
     setActionError(undefined);
     startTransition(async () => {
       const { publishOfferAction } = await import("@/app/actions/offers");
-      const result = await publishOfferAction(offerId, url);
+      const result = await publishOfferAction(offerId, url, target);
       if (result.status === "success") {
-        setActivating(false);
+        setActivating(null);
         // Whatever the Assistant reported described the form, and the form has now been posted.
         dismissHandoff();
         invalidateAll(collectionId);
@@ -673,12 +699,11 @@ export function OfferDetailPanel({
     ...manualTransitions(offer.state)
       .filter((s): s is ManualOfferTarget => s !== "sold")
       .map((s) => {
-        // Publishing a ready offer reads "Activate"; resuming a paused one keeps "Resume".
-        const activating = offer.state === "ready" && s === "active";
+        const { label, icon } = transitionEntryLabel(offer.state, s);
         return {
           key: s,
-          label: activating ? "Activate" : TRANSITION_LABEL[s].label,
-          icon: activating ? "activate" : TRANSITION_LABEL[s].icon,
+          label,
+          icon,
           danger: s === "withdrawn",
           onSelect: () => setState(s),
         };
@@ -897,7 +922,7 @@ export function OfferDetailPanel({
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <OfferStateChip state={offer.state} />
             {(canAdvance || readyBlockers.length > 0) && advanceTo && (() => {
-              const { label, icon } = advanceLabel(advanceTo);
+              const { label, icon } = advanceLabel(offer.state, advanceTo);
               const blocked = readyBlockers.length > 0;
               return (
                 <Tooltip
@@ -1120,7 +1145,8 @@ export function OfferDetailPanel({
 
           {/* Listing URL — editable in any state, including sold/withdrawn, for record-keeping
               (#213). When a URL is set the link opens on click and a separate pencil edits it, so
-              the click-to-open never gets hijacked by editing (#214). */}
+              the click-to-open never gets hijacked by editing (#214). On a pending offer it is the
+              link to the post waiting for approval, and says so (#1778). */}
           <InlineText
             value={offer.url ?? ""}
             placeholder="Add listing URL"
@@ -1133,7 +1159,7 @@ export function OfferDetailPanel({
                   onClick={(e) => e.stopPropagation()}
                   style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
                 >
-                  <Icon name="externalLink" size="sm" /> Listing
+                  <Icon name="externalLink" size="sm" /> {offer.state === "pending" ? "Pending post" : "Listing"}
                 </a>
               ) : (
                 <span style={{ ...CHIP, color: "var(--color-text-muted)", cursor: "text" }}>Add listing URL</span>
@@ -1302,7 +1328,11 @@ export function OfferDetailPanel({
             {blockedOnPrice && (
               <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
                 Set {missingPriceLabel} to{" "}
-                {advanceTo === "active" ? "activate this offer" : "mark this offer ready"}
+                {advanceTo === "active"
+                  ? offer.state === "pending"
+                    ? "approve this offer"
+                    : "activate this offer"
+                  : "mark this offer ready"}
               </span>
             )}
             {offer.priceBase && (
@@ -1649,13 +1679,21 @@ export function OfferDetailPanel({
         <ActivateOfferDialog
           offerLabel={offer.name ?? offer.label}
           platformName={offer.platformName}
-          initialUrl={facebookPostLots !== null ? null : offer.url}
+          initialUrl={
+            facebookPostLots === null
+              ? offer.url
+              : activating.approving
+                ? facebookPostLink(offer.facebook?.lots ?? [])
+                : null
+          }
           facebookLots={offer.facebook ? (facebookPostLots ?? 1) : null}
+          initialTarget={activating.target}
+          approving={activating.approving}
           isPending={isPending}
           error={actionError}
           onClose={() => {
             if (isPending) return;
-            setActivating(false);
+            setActivating(null);
             setActionError(undefined);
           }}
           onConfirm={publish}

@@ -7,13 +7,14 @@
 import type { OfferState } from "./offer-rules";
 import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 
-/** Offer states a sale can be recorded against: an offer must still be live (`active`) or merely
- * `paused` on the platform — a `sold` offer is already spent and a `withdrawn` one was taken
- * down. */
-export const SELLABLE_OFFER_STATES: readonly OfferState[] = ["active", "paused"];
+/** Offer states a sale can be recorded against: an offer must still be live (`active`), merely
+ * `paused` on the platform, or `pending` its approval (#1778) — a buyer may answer a post the
+ * collector can see before anyone else can. A `sold` offer is already spent and a `withdrawn` one
+ * was taken down. */
+export const SELLABLE_OFFER_STATES: readonly OfferState[] = ["pending", "active", "paused"];
 
 export function isSellableOfferState(state: OfferState): boolean {
-  return state === "active" || state === "paused";
+  return state === "pending" || state === "active" || state === "paused";
 }
 
 /** The shipping-method select's value for **a one-off method** (#468) — a method not worth adding

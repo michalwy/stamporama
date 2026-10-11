@@ -27,6 +27,7 @@ import {
 } from "@/lib/series-recombination-rules";
 import { formatItemNo } from "@/lib/item-number";
 import { OFFER_STATE_LABEL } from "@/lib/offer-rules";
+import { isListedState } from "@/lib/offer-listing-drift";
 import { Icon } from "@/app/icons";
 import { FILTER_CONTROL_STYLE, FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { MultiSelectFilter } from "@/app/c/[collectionSlug]/shared/multi-select-filter";
@@ -748,7 +749,7 @@ function ComposeSeriesDialog({
                         {offer.setCount === 1 ? "1 set" : `${offer.setCount} sets`} → {offer.setCount + 1}
                       </span>
                     </label>
-                    {targetId === offerId && (offer.state === "active" || offer.state === "paused") ? (
+                    {targetId === offerId && isListedState(offer.state) ? (
                       <span style={{ ...NOTE, color: "var(--color-warning)" }}>
                         Live: flagged as changed — update the listing on {platformName}.
                       </span>

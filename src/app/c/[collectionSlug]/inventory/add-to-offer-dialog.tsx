@@ -46,7 +46,7 @@ import { CaretCell, CARET_GLYPH_WIDTH } from "@/app/c/[collectionSlug]/shared/ce
 const MUTED = "var(--color-text-muted)";
 
 /** The composable states, in the order the facet panel lists them. Terminal offers can't be added to. */
-const FACET_STATES: readonly OfferState[] = ["preparing", "ready", "active", "paused"];
+const FACET_STATES: readonly OfferState[] = ["preparing", "ready", "pending", "active", "paused"];
 
 const SEARCH_STYLE: React.CSSProperties = {
   width: "100%",

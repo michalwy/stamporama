@@ -13,12 +13,13 @@ import {
 // intact.
 import { COMMITTING_FULFILLMENTS } from "./trade-realisation-rules";
 import { TRADED_AWAY, TRADED_AWAY_LINE } from "./trade-exit";
+import { LIVE_OFFER_STATES } from "./offer-rules";
 
 // Reservation of committed copies against marketplace collisions (#639) — the database half. The
 // vocabulary, and every sentence a refusal is made in, is the pure `trade-reservation-rules.ts`.
 //
 // **Nothing here writes.** There is no reservation table and no flag on `Item`: a commitment is a
-// give line on an agreed trade, and a live listing is an active offer, so both questions are asked
+// give line on an agreed trade, and a live listing is an active or pending offer, so both questions are asked
 // of the records that already answer them. That is the same reasoning that makes `SaleLineItem` the
 // record of a sale rather than a boolean on the copy — one place for the truth, so there is never a
 // second place for it to be wrong in.
@@ -112,7 +113,7 @@ export async function findListedCopies(
   const rows = await prisma.offerSetItem.findMany({
     where: {
       itemId: { in: [...itemIds] },
-      offerSet: { offer: { collectionId, state: "active" } },
+      offerSet: { offer: { collectionId, state: { in: [...LIVE_OFFER_STATES] } } },
     },
     select: {
       itemId: true,

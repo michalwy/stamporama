@@ -4,7 +4,7 @@
 
 Accepted. **Supersedes ADR-0012 §1 (two axes Lot/Offer), §2 (recursive Lot), and §5
 (cross-platform coordination).** Carries over unchanged: ADR-0012 §3 (offer lifecycle, since
-extended to `preparing → ready → active ↔ paused → sold / withdrawn`; #188, #246), §4 (one currency per offer/sale, FX frozen at the
+extended to `preparing → ready → (pending →) active ↔ paused → sold / withdrawn`; #188, #246, #1778), §4 (one currency per offer/sale, FX frozen at the
 transaction date), and §6 (proportional P/L allocation engine, `sale-allocation.ts`).
 
 ## Context

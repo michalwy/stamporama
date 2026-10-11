@@ -348,6 +348,28 @@ describe("gating a trade on live listings (#639)", () => {
     assert.equal(await statusOf(tradeId), "shared");
   });
 
+  it("treats a listing waiting for approval as live, both ways (#1778)", async () => {
+    // A copy promised in an agreed trade cannot be submitted for approval: the administrator can
+    // approve it at any moment.
+    const promised = await copy();
+    const { tradeId: agreedId } = await tradePromising([promised]);
+    await agree(agreedId);
+    const blocked = await offerOver([promised]);
+    await setOfferState(f.userId, blocked, "ready");
+    await assert.rejects(() => setOfferState(f.userId, blocked, "pending"), /promised in an agreed trade/);
+    assert.equal(await stateOf(blocked), "ready");
+
+    // …and a copy in a pending listing cannot be promised.
+    const itemId = await copy();
+    const offerId = await offerOver([itemId]);
+    await setOfferState(f.userId, offerId, "ready");
+    await setOfferState(f.userId, offerId, "pending");
+    const { tradeId } = await tradePromising([itemId]);
+    await setTradeStatus(f.userId, tradeId, "shared");
+    await assert.rejects(() => setTradeStatus(f.userId, tradeId, "agreed"), /live on a marketplace/);
+    assert.equal(await statusOf(tradeId), "shared");
+  });
+
   it("lets the trade through once the listing is paused", async () => {
     const itemId = await copy();
     const offerId = await offerOver([itemId]);

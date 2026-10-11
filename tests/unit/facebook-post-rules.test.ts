@@ -8,6 +8,7 @@ import {
   facebookMoney,
   facebookPostGaps,
   facebookPostRefusal,
+  facebookPostLink,
   isFacebookLotPosted,
   parseBidIncrement,
   readFacebookCreateChoice,
@@ -252,7 +253,21 @@ describe("isFacebookLotPosted (#1668)", () => {
   it("reads a lot as up once it is past Ready", () => {
     assert.equal(isFacebookLotPosted("preparing"), false);
     assert.equal(isFacebookLotPosted("ready"), false);
-    for (const state of ["active", "paused", "sold", "withdrawn"]) assert.equal(isFacebookLotPosted(state), true);
+    for (const state of ["pending", "active", "paused", "sold", "withdrawn"]) assert.equal(isFacebookLotPosted(state), true);
+  });
+});
+
+describe("facebookPostLink (#1778)", () => {
+  it("reads the post's link as the one most of its lots carry", () => {
+    const post = "https://www.facebook.com/groups/1/pending_posts/2";
+    const photo = "https://www.facebook.com/photo/?fbid=3";
+    assert.equal(facebookPostLink([{ url: photo }, { url: post }, { url: post }]), post);
+    assert.equal(facebookPostLink([{ url: post }, { url: photo }]), post, "the first lot's wins a tie");
+  });
+
+  it("is null when no lot carries a link", () => {
+    assert.equal(facebookPostLink([]), null);
+    assert.equal(facebookPostLink([{ url: null }, { url: "  " }]), null);
   });
 });
 

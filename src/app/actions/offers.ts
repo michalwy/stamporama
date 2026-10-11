@@ -35,7 +35,7 @@ import {
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
-import { publishOfferOrPost } from "@/lib/facebook-posts";
+import { publishOfferOrPost, rejectOfferOrPost } from "@/lib/facebook-posts";
 import {
   attachOfferCopyPhotos,
   attachOfferItemFrontPhotos,
@@ -947,7 +947,10 @@ export async function setOfferStateAction(
   const session = await getSession();
   if (!isOfferState(state)) return { status: "error", message: "Unknown offer state." };
   try {
-    await setOfferState(session.user.id, offerId, state);
+    // Back to Ready is a rejection when the offer is pending (#1778), and a rejected Facebook post
+    // takes every lot back with it; anywhere else it is the ordinary step.
+    if (state === "ready") await rejectOfferOrPost(session.user.id, offerId);
+    else await setOfferState(session.user.id, offerId, state);
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to update the offer state.");
@@ -1013,14 +1016,19 @@ export async function deleteOffersAction(offerIds: string[]): Promise<BulkOfferA
 /** Publish a prepared offer from the bulk listing workspace (#322): `ready → active`, stamping the
  * listing date (#320), plus the listing URL the platform gave back. A blank URL is accepted — the
  * listing may not have one to copy yet — and clears whatever was there. A lot of a Facebook post
- * holding several takes the whole post live, the URL being the post's (#1668). */
+ * holding several takes the whole post live, the URL being the post's (#1668).
+ *
+ * `pending` publishes it as **waiting for approval** (#1778), the URL being the pending post's; the
+ * approval of a pending offer is this same action with `active`, the URL the final one. */
 export async function publishOfferAction(
   offerId: string,
-  rawUrl: string
+  rawUrl: string,
+  to: "active" | "pending" = "active"
 ): Promise<OfferActionState> {
   const session = await getSession();
+  if (to !== "active" && to !== "pending") return { status: "error", message: "Unknown offer state." };
   try {
-    await publishOfferOrPost(session.user.id, offerId, normalizeUrl(rawUrl));
+    await publishOfferOrPost(session.user.id, offerId, normalizeUrl(rawUrl), to);
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to publish the offer.");

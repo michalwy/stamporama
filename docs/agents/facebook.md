@@ -147,7 +147,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
 
 - **A copy is in one Facebook offer that is up** (ADR-0061 §5; quick buys included since #1671,
   either can sell it — the query was already keyed on `facebookGroupId`, so only the words changed). "Up" is
-  `FACEBOOK_AUCTION_HOLDING_STATES` = `active | paused`; drafts compete for nothing (#639's reading).
+  `FACEBOOK_AUCTION_HOLDING_STATES` = `pending | active | paused` (`pending` since #1778: the group's
+  administrator may approve the post at any moment); drafts compete for nothing (#639's reading).
+  `→ pending` asks every gate `→ active` does.
   `facebookAuctionRefusal` is asked **only by a Facebook offer**, at every composition path that asks
   `assertNotCommittedElsewhere`, at `createOffer`/`duplicateOffer` seeding, and at `→ active` in
   `setOfferState` — the second door, two drafts of the same stamps where the first went up later. It
@@ -245,6 +247,14 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   currency, or a new one; each set at the offer's current price (no split). The card keeps the bid
   field after the close (*Record winning bid*), which is how the winning figure reaches the price
   *Sell* uses. Sales recorded through the old dialog are untouched.
+
+- **A post waiting for the group's approval moves as one** (#1778). `publishFacebookPost` takes
+  `to`: `pending` moves each Ready lot `ready → pending` with the pending post's link; `active` moves
+  each Ready **or** pending lot up, and on an approval writes the final link over the **post's**
+  pending link — `facebookPostLink`, the link most lots carry (first lot wins a tie), read off the
+  lots rather than off the lot the approval was asked from, because that lot may carry its own
+  photo's link. `rejectOfferOrPost` takes every pending lot back to Ready (links cleared, the
+  ordinary `pending → ready`); `setOfferStateAction` routes every `→ ready` through it.
 
 - **The profile link is stored normalised** (`normalizeFacebookProfileUrl`, pure in
   `facebook-profile-rules.ts`): `https://www.facebook.com/<path>`, lower case, no trailing slash, no

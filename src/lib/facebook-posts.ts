@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { detachFacebookLot, facebookGroupMixesTypes } from "./facebook-auctions";
-import { facebookPostRefusal, isFacebookLotPosted } from "./facebook-post-rules";
+import { facebookPostLink, facebookPostRefusal, isFacebookLotPosted } from "./facebook-post-rules";
 import { OfferActionBlockedError, publishOffer, setOfferState } from "./offers";
 import { isAuctionListing, normalizeListingType } from "./offer-rules";
 
@@ -123,15 +123,19 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
  * Activate an offer with the listing link the collector pasted back (#1668) — for a Facebook offer
  * that is the post's link. An offer posted alone, and every offer off Facebook, is the ordinary
  * `publishOffer`; a lot of a post holding several takes the whole post live with it.
+ *
+ * `to` is `pending` when the post went to the group's administrator rather than straight up (#1778):
+ * the link is then the pending post's. Approving a pending offer is this same call with `active`.
  */
 export async function publishOfferOrPost(
   ownerId: string,
   offerId: string,
-  url: string | null
+  url: string | null,
+  to: "active" | "pending" = "active"
 ): Promise<void> {
   const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
-  if (!offer?.facebookPostId) return publishOffer(ownerId, offerId, url);
-  await publishFacebookPost(ownerId, offer.facebookPostId, url);
+  if (!offer?.facebookPostId) return publishOffer(ownerId, offerId, url, to);
+  await publishFacebookPost(ownerId, offer.facebookPostId, url, to);
 }
 
 /**
@@ -145,35 +149,67 @@ export async function publishOfferOrPost(
  * last, once every lot is up, into **every lot with no listing link of its own** — a lot already
  * carrying its own photo's link keeps it. A blank link activates the lots and writes nothing, as it
  * does on every other platform.
+ *
+ * A post the group holds for approval (#1778) walks the same path twice. Submitted, `to` is `pending`:
+ * each Ready lot goes `ready → pending` and the link is the pending post's. Approved, `to` is `active`:
+ * each pending lot goes `pending → active`, and the final link replaces the post's pending link
+ * ({@link facebookPostLink}) wherever a lot carries it, since that address is the one that moved; a
+ * lot's own photo link is still left as it is.
  */
 export async function publishFacebookPost(
   ownerId: string,
   postId: string,
-  url: string | null
+  url: string | null,
+  to: "active" | "pending" = "active"
 ): Promise<{ activated: number }> {
   await assertPostOwner(ownerId, postId);
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: postId },
     orderBy: { facebookLotNo: "asc" },
-    select: { id: true, offerNo: true, facebookLotNo: true, state: true },
+    select: { id: true, offerNo: true, facebookLotNo: true, state: true, url: true },
   });
-  const waiting = lots.filter((l) => l.state !== "ready" && l.state !== "active");
+  // Where each lot may start from, and where it is already done: approving finishes a post that was
+  // pending, and submitting one leaves a lot already pending where it is.
+  const movable = to === "active" ? ["ready", "pending"] : ["ready"];
+  const waiting = lots.filter((l) => !movable.includes(l.state) && l.state !== to);
   if (waiting.length > 0) {
     const named = waiting.map((l) => `lot ${l.facebookLotNo} (offer #${l.offerNo}, ${l.state})`).join(", ");
     throw new OfferActionBlockedError("bad-transition", `Every lot must be Ready before the post goes up: ${named}.`);
   }
+  const approving = lots.some((l) => l.state === "pending") && to === "active";
+  const pending = approving ? facebookPostLink(lots.filter((l) => l.state === "pending")) : null;
   let activated = 0;
   for (const lot of lots) {
-    if (lot.state !== "ready") continue;
-    await setOfferState(ownerId, lot.id, "active");
+    if (!movable.includes(lot.state)) continue;
+    await setOfferState(ownerId, lot.id, to);
     activated += 1;
   }
   const link = url?.trim();
   if (link) {
     await prisma.offer.updateMany({
-      where: { facebookPostId: postId, OR: [{ url: null }, { url: "" }] },
+      where: {
+        facebookPostId: postId,
+        OR: [{ url: null }, { url: "" }, ...(approving && pending ? [{ url: pending }] : [])],
+      },
       data: { url: link },
     });
   }
   return { activated };
+}
+
+/**
+ * Record that a pending listing was **turned down** (#1778): `pending → ready`, the pending link
+ * cleared. A lot of a post holding several takes the whole post back with it — the group approves or
+ * rejects the post, not one lot of it — exactly as activating takes the whole post up.
+ */
+export async function rejectOfferOrPost(ownerId: string, offerId: string): Promise<void> {
+  const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { facebookPostId: true } });
+  if (!offer?.facebookPostId) return setOfferState(ownerId, offerId, "ready");
+  await assertPostOwner(ownerId, offer.facebookPostId);
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: offer.facebookPostId, state: "pending" },
+    select: { id: true },
+  });
+  if (!lots.some((l) => l.id === offerId)) return setOfferState(ownerId, offerId, "ready");
+  for (const lot of lots) await setOfferState(ownerId, lot.id, "ready");
 }

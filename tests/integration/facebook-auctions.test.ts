@@ -26,6 +26,7 @@ import { getFacebookOfferKit, listFacebookGroupChoices } from "../../src/lib/fac
 import {
   createFacebookPost,
   publishOfferOrPost,
+  rejectOfferOrPost,
   removeFacebookLot,
 } from "../../src/lib/facebook-posts";
 
@@ -488,6 +489,42 @@ describe("Facebook auction offers (#1544)", () => {
 
     // Up, the lots are what was posted.
     await assert.rejects(() => removeFacebookLot(userId, a), /post is up/);
+  });
+
+  it("submits a post for the group's approval, then approves it with the final link (#1778)", async () => {
+    const pending = "https://www.facebook.com/groups/1/pending_posts/5";
+    const final = "https://www.facebook.com/groups/1/posts/5";
+    const photo = "https://www.facebook.com/photo/?fbid=6";
+    const a = await auction([await newItem()], "ready");
+    const b = await auction([await newItem()], "ready");
+    await prisma.offer.update({ where: { id: b }, data: { url: photo } });
+    await createFacebookPost(userId, collectionId, [a, b]);
+
+    await publishOfferOrPost(userId, a, pending, "pending");
+    for (const id of [a, b]) assert.equal((await read(id)).state, "pending", "the post's lots wait together");
+    assert.equal((await read(a)).url, pending);
+    assert.equal((await read(b)).url, photo, "a lot with its own photo's link keeps it");
+    // Submitted, the lots are what was posted.
+    await assert.rejects(() => removeFacebookLot(userId, a), /post is up/);
+
+    await publishOfferOrPost(userId, b, final);
+    for (const id of [a, b]) assert.equal((await read(id)).state, "active", "approving one lot approves the post");
+    assert.equal((await read(a)).url, final, "the final link replaces the pending one");
+    assert.equal((await read(b)).url, photo);
+  });
+
+  it("takes every lot of a rejected post back to Ready, links cleared (#1778)", async () => {
+    const a = await auction([await newItem()], "ready");
+    const b = await auction([await newItem()], "ready");
+    await createFacebookPost(userId, collectionId, [a, b]);
+    await publishOfferOrPost(userId, a, "https://www.facebook.com/groups/1/pending_posts/7", "pending");
+
+    await rejectOfferOrPost(userId, b);
+    for (const id of [a, b]) {
+      const offer = await read(id);
+      assert.equal(offer.state, "ready");
+      assert.equal(offer.url, null);
+    }
   });
 
   it("activates an auction posted alone the ordinary way, its link the listing link", async () => {

@@ -86,7 +86,8 @@ because it did not sell. **`sold` / `partially-sold` are derived**, never stored
 computed from sub-lot and item state, so there is no duplicated source of truth (symmetric to
 purchases deriving lot totals rather than storing them).
 
-**`Offer.state`: `preparing → active ↔ paused → sold / withdrawn`.** `preparing` = composed but
+**`Offer.state`: `preparing → active ↔ paused → sold / withdrawn`** (since extended — `ready`, #246;
+`pending`, #1778, below). `preparing` = composed but
 not yet published (added #188); `paused` = temporarily suspended on the platform, with the copies
 still committed. No `reserved`/negotiation states in v1. A **derived "to-close" flag** overlays
 `active` (§5).
@@ -104,6 +105,17 @@ the eligible-lot picker, and the collision lookup. The "at most one active offer
 (`Item` × platform)" rule is enforced as a **non-blocking warning** surfaced live in the offer
 dialog (a collision lookup over active offers sharing a copy), not a hard guard — the deeper
 coordination surface (list-level to-close flags) is #167.
+
+**Amended by #1778 (2026-10-11): `pending`, a listing waiting for approval.** Between `ready` and
+`active` sits `pending` — submitted to the platform or a Facebook group and held for an
+administrator's approval, so it is neither waiting to be posted nor visible to buyers. Transitions:
+`ready → pending`, then `pending → active` (approved), `pending → ready` (rejected) or
+`pending → withdrawn`; it can also be sold from `pending`, since a buyer may answer a post before it
+is approved. The link recorded on entering it is the pending post's (`Offer.url`, read as pending by
+the state, not by a column of its own); approving replaces it with the final link and stamps the
+listing date, rejecting clears it. **A pending offer holds a live claim on its copies**, beside an
+active one — trade commitments, the per-platform collision warning and the needs-action flag all
+read `pending | active` — because the approval can come at any moment.
 
 ### 4. Currency
 

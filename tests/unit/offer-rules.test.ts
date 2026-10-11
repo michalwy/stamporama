@@ -27,15 +27,18 @@ import {
   OFFER_STATES,
   CLOSED_OFFER_STATES,
   CREATABLE_OFFER_STATES,
+  LIVE_OFFER_STATES,
 } from "../../src/lib/offer-rules";
 
 // Type guard ----------------------------------------------------------------
 
 describe("isOfferState", () => {
-  it("accepts the six states and rejects everything else", () => {
+  it("accepts the seven states and rejects everything else", () => {
     for (const s of OFFER_STATES) assert.equal(isOfferState(s), true);
+    assert.equal(OFFER_STATES.length, 7);
     assert.equal(isOfferState("preparing"), true);
     assert.equal(isOfferState("ready"), true);
+    assert.equal(isOfferState("pending"), true);
     assert.equal(isOfferState("draft"), false);
     assert.equal(isOfferState(undefined), false);
     assert.equal(isOfferState(""), false);
@@ -45,8 +48,11 @@ describe("isOfferState", () => {
 // Live / terminal -----------------------------------------------------------
 
 describe("isLiveState", () => {
-  it("only active offers hold a live claim (collide)", () => {
+  it("active and pending offers hold a live claim (collide) — #1778", () => {
     assert.equal(isLiveState("active"), true);
+    assert.equal(isLiveState("pending"), true);
+    assert.deepEqual([...LIVE_OFFER_STATES].sort(), ["active", "pending"]);
+    for (const s of OFFER_STATES) assert.equal(isLiveState(s), LIVE_OFFER_STATES.includes(s));
     assert.equal(isLiveState("preparing"), false);
     assert.equal(isLiveState("ready"), false);
     assert.equal(isLiveState("paused"), false);
@@ -67,6 +73,7 @@ describe("isTerminalState", () => {
     assert.equal(isTerminalState("sold"), true);
     assert.equal(isTerminalState("withdrawn"), true);
     assert.equal(isTerminalState("active"), false);
+    assert.equal(isTerminalState("pending"), false);
     assert.equal(isTerminalState("paused"), false);
   });
 });
@@ -84,10 +91,27 @@ describe("canTransition", () => {
 
   it("publishes a ready offer (→ active), steps it back (→ preparing), or drops it", () => {
     assert.equal(canTransition("ready", "active"), true);
+    assert.equal(canTransition("ready", "pending"), true);
     assert.equal(canTransition("ready", "preparing"), true);
     assert.equal(canTransition("ready", "withdrawn"), true);
     assert.equal(canTransition("ready", "paused"), false);
     assert.equal(canTransition("ready", "sold"), false);
+  });
+
+  it("leaves pending only by approval, rejection or withdrawal (#1778)", () => {
+    assert.equal(canTransition("pending", "active"), true);
+    assert.equal(canTransition("pending", "ready"), true);
+    assert.equal(canTransition("pending", "withdrawn"), true);
+    assert.equal(canTransition("pending", "preparing"), false);
+    assert.equal(canTransition("pending", "paused"), false);
+    assert.equal(canTransition("pending", "sold"), false);
+    assert.equal(canTransition("pending", "pending"), false);
+  });
+
+  it("enters pending only from ready (#1778)", () => {
+    for (const from of OFFER_STATES) {
+      assert.equal(canTransition(from, "pending"), from === "ready", `${from} → pending`);
+    }
   });
 
   it("allows active ↔ paused and → withdrawn", () => {
@@ -118,7 +142,8 @@ describe("canTransition", () => {
 describe("manualTransitions", () => {
   it("lists exactly the hand-reachable targets", () => {
     assert.deepEqual([...manualTransitions("preparing")], ["ready", "withdrawn"]);
-    assert.deepEqual([...manualTransitions("ready")], ["active", "preparing", "withdrawn"]);
+    assert.deepEqual([...manualTransitions("ready")], ["active", "pending", "preparing", "withdrawn"]);
+    assert.deepEqual([...manualTransitions("pending")], ["active", "ready", "withdrawn"]);
     assert.deepEqual([...manualTransitions("active")], ["paused", "withdrawn"]);
     assert.deepEqual([...manualTransitions("paused")], ["active", "withdrawn"]);
     assert.deepEqual([...manualTransitions("sold")], []);
@@ -127,8 +152,9 @@ describe("manualTransitions", () => {
 });
 
 describe("requiresSets", () => {
-  it("only ready and active require the offer to list something (#188, #246)", () => {
+  it("only ready, pending and active require the offer to list something (#188, #246, #1778)", () => {
     assert.equal(requiresSets("ready"), true);
+    assert.equal(requiresSets("pending"), true);
     assert.equal(requiresSets("active"), true);
     assert.equal(requiresSets("preparing"), false);
     assert.equal(requiresSets("paused"), false);
@@ -137,8 +163,9 @@ describe("requiresSets", () => {
 });
 
 describe("requiresPrice", () => {
-  it("gates the same two states as requiresSets — ready and active (#336)", () => {
+  it("gates the same states as requiresSets — ready, pending and active (#336, #1778)", () => {
     assert.equal(requiresPrice("ready"), true);
+    assert.equal(requiresPrice("pending"), true);
     assert.equal(requiresPrice("active"), true);
     assert.equal(requiresPrice("preparing"), false);
     assert.equal(requiresPrice("paused"), false);
@@ -170,6 +197,7 @@ describe("quickAdvanceTarget", () => {
   it("advances only the linear forward part of the lifecycle (#255)", () => {
     assert.equal(quickAdvanceTarget("preparing"), "ready");
     assert.equal(quickAdvanceTarget("ready"), "active");
+    assert.equal(quickAdvanceTarget("pending"), "active"); // approval (#1778)
   });
 
   it("returns null where the next move is ambiguous or terminal", () => {

@@ -11,9 +11,11 @@ import {
 // Sellable offer states ------------------------------------------------------
 
 describe("isSellableOfferState", () => {
-  it("accepts active and paused only", () => {
-    assert.deepEqual([...SELLABLE_OFFER_STATES].sort(), ["active", "paused"]);
+  it("accepts active, paused and pending only (#1778)", () => {
+    assert.deepEqual([...SELLABLE_OFFER_STATES].sort(), ["active", "paused", "pending"]);
     assert.equal(isSellableOfferState("active"), true);
+    assert.equal(isSellableOfferState("pending"), true);
+    assert.equal(isSellableOfferState("ready"), false);
     assert.equal(isSellableOfferState("paused"), true);
     assert.equal(isSellableOfferState("sold"), false);
     assert.equal(isSellableOfferState("withdrawn"), false);
