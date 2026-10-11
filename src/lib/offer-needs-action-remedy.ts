@@ -55,3 +55,40 @@ export function needsActionRemedy(offer: {
   }
   return { action: "update", hint: "Listing out of step — update it" };
 }
+
+/**
+ * Whether a set has **sold elsewhere** (#1804): it has not left through this offer's own sale, and
+ * one of its copies has left through another set's — another offer's, on this platform or another.
+ * `soldVia` maps each sold copy to the set whose sale line took it. Only a live offer is asked: a
+ * set of an offer that is not up is not out of step with anything.
+ */
+export function isSetSoldElsewhere(
+  set: { id: string; sold: boolean; itemIds: readonly string[] },
+  soldVia: ReadonlyMap<string, string>
+): boolean {
+  if (set.sold) return false;
+  return set.itemIds.some((itemId) => {
+    const via = soldVia.get(itemId);
+    return via != null && via !== set.id;
+  });
+}
+
+/**
+ * What *Remove sets sold elsewhere* (#1805) would do to an offer: the sets it takes off — every one
+ * sold elsewhere, and only those, a set sold through this offer being this offer's own record — and
+ * how many sets would be left to sell afterwards. When that is none the action does not run: an
+ * emptied listing can only come down (#1277), so the collector is pointed at closing it instead.
+ */
+export function soldElsewhereRemoval<S extends { sold: boolean; soldElsewhere: boolean }>(
+  sets: readonly S[]
+): { remove: S[]; leftToSell: number } {
+  return {
+    remove: sets.filter((s) => s.soldElsewhere),
+    leftToSell: sets.filter((s) => !s.sold && !s.soldElsewhere).length,
+  };
+}
+
+/** The action's name, with its count (#1805): *Remove 3 sets sold elsewhere*. */
+export function soldElsewhereRemovalLabel(count: number): string {
+  return `Remove ${count} ${count === 1 ? "set" : "sets"} sold elsewhere`;
+}

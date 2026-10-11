@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { needsActionRemedy } from "../../src/lib/offer-needs-action-remedy";
+import {
+  isSetSoldElsewhere,
+  needsActionRemedy,
+  soldElsewhereRemoval,
+  soldElsewhereRemovalLabel,
+} from "../../src/lib/offer-needs-action-remedy";
 import { OFFER_STATES } from "../../src/lib/offer-rules";
 
 const forSale = { sold: false, soldElsewhere: false, needsAction: false };
@@ -70,5 +75,61 @@ describe("needsActionRemedy (#1804)", () => {
         null
       );
     }
+  });
+});
+
+describe("isSetSoldElsewhere (#1804)", () => {
+  const soldVia = new Map([
+    ["a", "set-1"],
+    ["b", "set-2"],
+  ]);
+
+  it("is a copy that left through another set's sale", () => {
+    assert.equal(isSetSoldElsewhere({ id: "set-1", sold: false, itemIds: ["b"] }, soldVia), true);
+  });
+
+  it("is not a copy that left through this set's own sale", () => {
+    assert.equal(isSetSoldElsewhere({ id: "set-1", sold: false, itemIds: ["a"] }, soldVia), false);
+  });
+
+  it("is never a set sold through this offer", () => {
+    assert.equal(isSetSoldElsewhere({ id: "set-1", sold: true, itemIds: ["b"] }, soldVia), false);
+  });
+
+  it("is not a set none of whose copies has sold", () => {
+    assert.equal(isSetSoldElsewhere({ id: "set-3", sold: false, itemIds: ["c"] }, soldVia), false);
+  });
+});
+
+describe("soldElsewhereRemoval (#1805)", () => {
+  it("removes every set sold elsewhere, and only those", () => {
+    const a = { ...soldElsewhere, id: "a" };
+    const b = { ...soldElsewhere, id: "b" };
+    const plan = soldElsewhereRemoval([{ ...soldHere, id: "h" }, a, { ...forSale, id: "f" }, b]);
+    assert.deepEqual(plan.remove.map((s) => s.id), ["a", "b"]);
+    assert.equal(plan.leftToSell, 1);
+  });
+
+  it("counts a set in bidding elsewhere as still for sale", () => {
+    const plan = soldElsewhereRemoval([soldElsewhere, biddingElsewhere]);
+    assert.equal(plan.remove.length, 1);
+    assert.equal(plan.leftToSell, 1);
+  });
+
+  it("leaves nothing to sell when the rest sold here", () => {
+    const plan = soldElsewhereRemoval([soldHere, soldElsewhere]);
+    assert.equal(plan.remove.length, 1);
+    assert.equal(plan.leftToSell, 0);
+  });
+
+  it("has nothing to remove when no set sold elsewhere", () => {
+    assert.equal(soldElsewhereRemoval([soldHere, forSale, biddingElsewhere]).remove.length, 0);
+  });
+});
+
+describe("soldElsewhereRemovalLabel (#1805)", () => {
+  it("names the count", () => {
+    assert.equal(soldElsewhereRemovalLabel(1), "Remove 1 set sold elsewhere");
+    assert.equal(soldElsewhereRemovalLabel(3), "Remove 3 sets sold elsewhere");
   });
 });

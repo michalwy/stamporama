@@ -54,6 +54,7 @@ import {
   type OfferLabeller,
 } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
+import { isSetSoldElsewhere, soldElsewhereRemoval } from "./offer-needs-action-remedy";
 import {
   headerChangeIsDrift,
   isListedState,
@@ -219,7 +220,10 @@ export type OfferBlockReason =
   /** A Facebook auction (#1544; ADR-0061) missing its group, or naming one it may not. */
   | "facebook-group"
   /** A copy put into a second Facebook auction while one it is in is up (ADR-0061 §5). */
-  | "facebook-auction";
+  | "facebook-auction"
+  /** *Remove sets sold elsewhere* (#1805) with nothing to remove, or with nothing left to sell after
+   *  it — the second is a listing to close, not to trim. */
+  | "sold-elsewhere";
 
 /** Raised when an offer action is refused by a domain guard. `message` is user-facing; the
  * server action maps it to an `{ status: "error" }` response. */
@@ -3968,6 +3972,9 @@ export interface OfferDetailSet {
    * through another set's sale, so the set has nothing left to sell. A copy merely in bidding
    * elsewhere may still come back, and is not counted. */
   soldElsewhere: boolean;
+  /** The sale that took a copy of this set elsewhere (#1805) — what *Remove sets sold elsewhere*
+   * names beside each set it will remove. Null unless {@link soldElsewhere}. */
+  soldElsewhereSale: { id: string; saleNo: number } | null;
 }
 
 /**
@@ -4464,10 +4471,15 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     allIds.length > 0
       ? await prisma.saleLineItem.findMany({
           where: { itemId: { in: allIds } },
-          select: { itemId: true, saleLine: { select: { offerSetId: true } } },
+          select: {
+            itemId: true,
+            saleLine: { select: { offerSetId: true, sale: { select: { id: true, saleNo: true } } } },
+          },
         })
       : [];
   const soldViaSet = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
+  // The sale each copy left on, so a set sold elsewhere can name the sale that took it (#1805).
+  const soldOnSale = new Map(soldRows.map((r) => [r.itemId, r.saleLine.sale]));
 
   // Copies held by another active offer currently "in active bidding" (#215) — same collision
   // treatment as an actual sale, without a sale line existing yet.
@@ -4559,11 +4571,13 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     const sold = sale !== null;
     const soldElsewhere =
       isLiveState(state) &&
-      !sold &&
-      s.items.some((li) => {
-        const via = soldViaSet.get(li.itemId);
-        return via != null && via !== s.id;
-      });
+      isSetSoldElsewhere({ id: s.id, sold, itemIds: s.items.map((li) => li.itemId) }, soldViaSet);
+    const elsewhereItem = soldElsewhere
+      ? s.items.find((li) => {
+          const via = soldViaSet.get(li.itemId);
+          return via != null && via !== s.id;
+        })
+      : undefined;
     const needs =
       soldElsewhere ||
       (isLiveState(state) && !sold && s.items.some((li) => biddingElsewhere.has(li.itemId)));
@@ -4592,6 +4606,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
       sale,
       needsAction: needs,
       soldElsewhere,
+      soldElsewhereSale: elsewhereItem ? (soldOnSale.get(elsewhereItem.itemId) ?? null) : null,
     };
   });
 
@@ -7345,6 +7360,78 @@ export async function updateOfferSet(ownerId: string, setId: string, title: stri
   // concerned (#380), and drift as far as the live listing is (#542).
   await syncGeneratedTexts(ownerId, ref.offerId);
   await markListingContentChanged(ref.offerId);
+}
+
+/**
+ * Remove from a live offer every set sold elsewhere (#1805) — the hand-run errand of #700 in one
+ * action. `setIds` is what the collector confirmed: only those of them **still** sold elsewhere go,
+ * so the action removes exactly what the confirmation listed and nothing it did not. A set sold
+ * through this offer is never one of them — it is this offer's own sale record. Refused when the
+ * removal would leave nothing to sell: that listing can only come down (#1277), and emptying it
+ * here would only hide the sets that say why.
+ *
+ * Afterwards it is any change of sets: the texts follow (#380), the listing is out of step (#542),
+ * and the photo fingerprint no longer matches whatever was rendered from the old composition.
+ */
+export async function removeOfferSetsSoldElsewhere(
+  ownerId: string,
+  offerId: string,
+  setIds: readonly string[]
+): Promise<{ removed: number }> {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    select: {
+      state: true,
+      collection: { select: { ownerId: true } },
+      sets: {
+        select: {
+          id: true,
+          saleLines: { select: { id: true }, take: 1 },
+          items: { select: { itemId: true } },
+        },
+      },
+    },
+  });
+  if (!offer || offer.collection.ownerId !== ownerId) {
+    throw new Error("Offer not found or access denied.");
+  }
+  const state = (isOfferState(offer.state) ? offer.state : "active") as OfferState;
+  const allIds = offer.sets.flatMap((s) => s.items.map((li) => li.itemId));
+  const soldRows =
+    isLiveState(state) && allIds.length > 0
+      ? await prisma.saleLineItem.findMany({
+          where: { itemId: { in: allIds } },
+          select: { itemId: true, saleLine: { select: { offerSetId: true } } },
+        })
+      : [];
+  const soldVia = new Map(soldRows.map((r) => [r.itemId, r.saleLine.offerSetId]));
+  const sets = offer.sets.map((s) => {
+    const sold = s.saleLines.length > 0;
+    const itemIds = s.items.map((li) => li.itemId);
+    return { id: s.id, sold, soldElsewhere: isSetSoldElsewhere({ id: s.id, sold, itemIds }, soldVia) };
+  });
+  const { remove, leftToSell } = soldElsewhereRemoval(sets);
+  const confirmed = new Set(setIds);
+  const ids = remove.filter((s) => confirmed.has(s.id)).map((s) => s.id);
+  if (ids.length === 0) {
+    throw new OfferActionBlockedError(
+      "sold-elsewhere",
+      "No set in this offer has sold elsewhere any more — reload the offer."
+    );
+  }
+  if (leftToSell === 0) {
+    throw new OfferActionBlockedError(
+      "sold-elsewhere",
+      "Nothing would be left to sell — close the listing instead."
+    );
+  }
+  // `saleLines: none` restates the guard `removeOfferSet` makes: a set with a sale line is a record.
+  const { count } = await prisma.offerSet.deleteMany({
+    where: { id: { in: ids }, offerId, saleLines: { none: {} } },
+  });
+  await syncGeneratedTexts(ownerId, offerId);
+  await markListingContentChanged(offerId);
+  return { removed: count };
 }
 
 /** Remove a set from its offer (its copies stay in inventory). This is the coordination action —

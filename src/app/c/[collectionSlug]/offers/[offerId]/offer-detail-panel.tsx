@@ -32,6 +32,7 @@ import { ActivateOfferDialog, type PublishTarget } from "../activate-offer-dialo
 import { RepostOfferDialog } from "./repost-offer-dialog";
 import { renderFacebookKitPost } from "./facebook-kit-post";
 import { SpecificationShareDialog } from "./specification-share-dialog";
+import { RemoveSoldElsewhereDialog } from "./remove-sold-elsewhere-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
 import { CLOSE_ELEMENT_ID, useAssistantClose } from "../assistant-close-handoff";
 import {
@@ -70,7 +71,11 @@ import {
   type OfferState,
 } from "@/lib/offer-rules";
 import { isEmptiedListing, isListedState } from "@/lib/offer-listing-drift";
-import { needsActionRemedy } from "@/lib/offer-needs-action-remedy";
+import {
+  needsActionRemedy,
+  soldElsewhereRemoval,
+  soldElsewhereRemovalLabel,
+} from "@/lib/offer-needs-action-remedy";
 import { facebookPostLink } from "@/lib/facebook-post-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
@@ -317,6 +322,8 @@ export function OfferDetailPanel({
   // *Share specification…* (#1760): the buyer's link to the specification.
   const [sharingSpecification, setSharingSpecification] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
+  // *Remove sets sold elsewhere* (#1805): its confirmation, listing what goes.
+  const [removingSoldElsewhere, setRemovingSoldElsewhere] = useState(false);
   const [confirm, setConfirm] = useState<"withdraw" | "delete" | null>(null);
   // A `?skipped=N` note (#200) lands here right after a duplicate; dismissible, and cleared from the
   // URL so a refresh doesn't resurrect it.
@@ -486,6 +493,10 @@ export function OfferDetailPanel({
           sets: offer.sets,
         })
       : null;
+  // The sets sold elsewhere (#1805), and what would be left to sell without them. The action exists
+  // only while there is one to remove; with nothing left, its confirmation points at closing instead.
+  const soldElsewhere = soldElsewhereRemoval(offer.sets);
+  const canWithdraw = manualTransitions(offer.state).includes("withdrawn");
   // An offer that only lacks a price (#336): the price field is right here, so say what is missing
   // instead of silently withholding the advance button. On an auction what is missing is the
   // **starting** price (#449) — the current one follows from it while nobody has bid — so the line
@@ -796,6 +807,20 @@ export function OfferDetailPanel({
             label: "Mark listing up to date",
             icon: "check",
             onSelect: markListingSynced,
+          } as RowAction,
+        ]
+      : []),
+    // Beside the header's own button (#1805), for the collector who goes to the menu for it.
+    ...(soldElsewhere.remove.length > 0
+      ? [
+          {
+            key: "remove-sold-elsewhere",
+            label: soldElsewhereRemovalLabel(soldElsewhere.remove.length),
+            icon: "remove",
+            onSelect: () => {
+              setActionError(undefined);
+              setRemovingSoldElsewhere(true);
+            },
           } as RowAction,
         ]
       : []),
@@ -1127,6 +1152,22 @@ export function OfferDetailPanel({
             {offer.needsAction && (
               <NeedsActionChip soldCopyCount={offer.sets.filter((s) => s.needsAction).length} />
             )}
+            {/* The errand the chip asks for, in one press (#1805): every set sold elsewhere off the
+                offer, after a confirmation naming them. Only while there is one to remove. */}
+            {soldElsewhere.remove.length > 0 && (
+              <button
+                type="button"
+                disabled={isPending}
+                style={ASSISTANT_BTN}
+                onClick={() => {
+                  setActionError(undefined);
+                  setRemovingSoldElsewhere(true);
+                }}
+              >
+                <Icon name="remove" size="sm" />
+                {soldElsewhereRemovalLabel(soldElsewhere.remove.length)}
+              </button>
+            )}
             {/* The list's own flag, carried onto the screen the list opens (#505). It is the
                 strongest thing an offer can be carrying — an order the marketplace has taken — and
                 a chip seen in passing that is then absent from the offer's own page reads as
@@ -1424,8 +1465,8 @@ export function OfferDetailPanel({
             }}
           >
             <strong style={{ color: "var(--color-error)" }}>Needs action:</strong> a copy in one or
-            more sets below has sold elsewhere. Update the listing on the platform, then remove the
-            affected set(s) here (or withdraw the offer).
+            more sets below has sold elsewhere. Remove the affected set(s) here, then update the listing
+            on the platform (or withdraw the offer).
           </p>
         )}
 
@@ -1781,6 +1822,41 @@ export function OfferDetailPanel({
               if (result.status === "success") {
                 setRemoveSet(null);
                 invalidateAll(collectionId);
+              } else setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {removingSoldElsewhere && (
+        <RemoveSoldElsewhereDialog
+          collectionSlug={collectionSlug}
+          sets={soldElsewhere.remove}
+          leftToSell={soldElsewhere.leftToSell}
+          isPending={isPending}
+          error={actionError}
+          onClose={() => !isPending && setRemovingSoldElsewhere(false)}
+          onWithdraw={
+            canWithdraw
+              ? () => {
+                  setRemovingSoldElsewhere(false);
+                  setActionError(undefined);
+                  setConfirm("withdraw");
+                }
+              : null
+          }
+          onConfirm={() => {
+            const setIds = soldElsewhere.remove.map((s) => s.id);
+            setActionError(undefined);
+            startTransition(async () => {
+              const { removeOfferSetsSoldElsewhereAction } = await import("@/app/actions/offers");
+              const result = await removeOfferSetsSoldElsewhereAction(offerId, setIds);
+              if (result.status === "success") {
+                setRemovingSoldElsewhere(false);
+                invalidateAll(collectionId);
+                toast({
+                  message: `Removed ${setIds.length} ${setIds.length === 1 ? "set" : "sets"} sold elsewhere — now update the listing`,
+                });
               } else setActionError(result.message);
             });
           }}
