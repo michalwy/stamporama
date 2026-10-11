@@ -102,6 +102,11 @@ under your pointer while you are working it. The only controls that come and go 
 axis your collection does not use at all: with no formats defined there is no format filter, with no
 storage locations there is no location filter or filing grouping.
 
+**A filter that is narrowing the list is drawn in the accent colour** — the location filter with a
+location (or *Not filed*) chosen as much as a delivery state or *No photos* ticked. A control back
+on its *All …* / *Any …* value returns to the resting look, so a glance at the bar shows everything
+that is filtering the list.
+
 **Reset filters** at the end of the filter row puts the whole screen back to an unfiltered list in
 one click: every filter on it — condition, delivery state, disposition, format, subtype, certificate,
 location, several stamps, the four **More filters** switches, the *Not offered on…* worklist — and the search box. It clears what is remembered as well, so the

@@ -388,6 +388,9 @@ export function CopiesFilterControls({
             /* The copies filed nowhere (#1401) — a value on this axis, as *No certificate* is on
                that one, so the structure screen's *Not filed* segment opens a list that says so. */
             extraOption={{ id: NO_LOCATION, label: "Not filed" }}
+            /* Narrowing whenever anything is picked, *Not filed* included, so it wears the accent
+               every other filter on this bar does when it narrows (#1783). */
+            filterActive={locationId !== ""}
             /* A filter's dropdown stays open on a pick (#846): the list behind it is what
                says what the pick did, so there is nothing to go back to, and the switch
                below has to survive the pick it qualifies. Escape and a click outside still
