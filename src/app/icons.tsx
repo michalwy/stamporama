@@ -77,6 +77,7 @@ import {
   Handshake,
   Hash,
   House,
+  LayoutDashboard,
   ImageOff,
   Info,
   Layers,
@@ -155,6 +156,9 @@ import {
  */
 const GLYPHS = {
   // Navigation — the sidebar's subjects.
+  /** The operational Dashboard (#1808) — the work waiting, in panels. Not `overview`'s house: that
+   *  one is the collection as a whole, this one is what to do next. */
+  dashboard: LayoutDashboard,
   overview: House,
   issues: Rows3,
   stamps: Stamp,

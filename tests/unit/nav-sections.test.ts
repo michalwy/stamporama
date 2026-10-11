@@ -24,6 +24,10 @@ describe("sectionForPath", () => {
     assert.equal(sectionForPath(`${base}/inventory/structure`, base), null);
     assert.equal(sectionForPath(`${base}/inventory/i1`, base), "collection");
   });
+
+  it("leaves the Dashboard outside every section, its entry heading the sidebar (#1808)", () => {
+    assert.equal(sectionForPath(`${base}/dashboard`, base), null);
+  });
 });
 
 describe("sectionTintForHref", () => {

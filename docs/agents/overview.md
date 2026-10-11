@@ -9,7 +9,10 @@ The collection Overview at `/c/[collectionSlug]` — the holdings, financial and
   links into the list screen that holds the underlying rows with the filter applied**. No
   `/reports` tree, no new sidebar section, and nothing operational: the action-items bell (#367)
   already aggregates what needs doing, and a dashboard repeating it would be a second version of
-  the same list drifting apart from it. The links are ordinary URL filters the target screens
+  the same list drifting apart from it. **The operational half was reversed on 2026-10-11** (#1808,
+  [ADR-0067](../decisions/0067-operational-dashboard.md)): a separate Dashboard screen
+  (`dashboard.md`), its groups reading the bell's own sources where they overlap so the drift is
+  prevented. The Overview itself still carries nothing operational. The links are ordinary URL filters the target screens
   already parse (`/offers?state=active`, `/issues?areaId=…`, `/inventory?sortBy=created`), so a
   tile and its screen cannot disagree about what the figure ranges over — which is also why each
   figure is computed over the target's **default scope** (holdings over `excludeGone`, exposure

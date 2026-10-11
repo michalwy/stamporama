@@ -80,6 +80,7 @@ and ADR references.
 | Copies list, grouping, duplicates, counts, detail pages | [`inventory-lists.md`](docs/agents/inventory-lists.md) |
 | Albums, entries, page plans, hawid stock, templates | [`albums.md`](docs/agents/albums.md) |
 | The Overview screen: Value and Progress tiles | [`overview.md`](docs/agents/overview.md) |
+| The Dashboard: the operational screen of work waiting | [`dashboard.md`](docs/agents/dashboard.md) |
 | Dialogs, escape handling, sidebar, settings, notifications | [`ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, reordering, tooltips, icons, tokens, toast | [`ui-patterns.md`](docs/agents/ui-patterns.md) |
 | Sessions, branches, pull requests, verification, plans | [`collaboration.md`](docs/agents/collaboration.md) |
