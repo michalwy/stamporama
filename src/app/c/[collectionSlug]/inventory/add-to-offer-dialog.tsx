@@ -197,6 +197,9 @@ export function AddToOfferDialog({
   const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(new Set());
   const offerItems = useMemo(() => items.filter((i) => !removedIds.has(i.id)), [items, removedIds]);
   const offerItemIds = useMemo(() => offerItems.map((i) => i.id), [offerItems]);
+  // A filter menu over the create form's copies owns its Escape (#1795): while one is open the form
+  // stops taking the key, or one press would close the menu and the form under it.
+  const [copiesMenuOpen, setCopiesMenuOpen] = useState(false);
   // Which platform the create form is currently on (#513). It is what decides whether a new offer
   // would be the platform's *second* listing of a stamp in one condition, so it is asked about
   // again whenever the collector switches house mid-form.
@@ -638,8 +641,10 @@ export function AddToOfferDialog({
             oneSet={packaging === "one-set"}
             onRemove={(id) => setRemovedIds((prev) => new Set(prev).add(id))}
             disabled={isPending}
+            onMenuOpenChange={setCopiesMenuOpen}
           />
         }
+        dismissable={!copiesMenuOpen}
         // The stamp × condition conflict, asked *before* the offer exists (#513): the platform
         // already lists exactly this composition in these conditions (#732). Stated as a fact and
         // never as a platform rule (#524) — the dialog lists on whatever platform was picked, and

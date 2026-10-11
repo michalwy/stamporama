@@ -1178,6 +1178,15 @@ without closing the dialog.
 - **Each row** shows the copy's cost just before its catalogue value.
 - **Order** the rows *As picked*, by **Catalogue value** or by **Cost** — highest first, so an
   expensive copy that slipped in stands out.
+- **Filter** the rows to read a long set in parts: **Duplicates only** (every copy of a stamp or
+  variant that goes in more than once, whatever the packaging), **conditions**, and **Worth at
+  least …** — a catalogue-value floor in your collection currency, for finding what is too valuable
+  for the set; a copy with no catalogue value is hidden while it is set. **A filter only hides**: a
+  hidden copy still goes into the offer, the summary still describes the whole offer and says how
+  many copies the filters hide, and **Clear filters** brings them back.
+- **Group** the rows **by issue** or **by stamp** — the latter puts every copy of the same stamp or
+  variant together, so duplicates sit side by side. Each group's heading gives its count, catalogue
+  value and cost.
 - **The same stamp twice.** When the copies go in as **one set**, two or more copies of the same stamp
   or variant — whatever their conditions — are tinted amber and marked *same stamp ×2*, and a warning
   at the top says how many stamps are doubled from the moment the form opens. Packaged **one set
