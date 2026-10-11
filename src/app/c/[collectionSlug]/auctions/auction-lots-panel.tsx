@@ -21,6 +21,7 @@ import {
   AUCTION_LOT_OUTCOMES,
   AUCTION_LOT_OUTCOME_LABEL,
   isAuctionLotOutcome,
+  NOT_PURCHASED_LABEL,
   type AuctionLotOutcome,
 } from "@/lib/auction-rules";
 import { SingleSelectFilter } from "@/app/c/[collectionSlug]/shared/single-select-filter";
@@ -189,6 +190,10 @@ export function AuctionLotsPanel({
     "auction-condition-to-settle",
     collectionId
   );
+  const [storedNotPurchased, rememberNotPurchased] = usePersistedCollectionValue(
+    "auction-not-purchased",
+    collectionId
+  );
 
   const outcomeRaw = searchParams.has("outcome")
     ? (searchParams.get("outcome") ?? "")
@@ -260,6 +265,12 @@ export function AuctionLotsPanel({
   const toReview =
     (searchParams.has("toReview") ? searchParams.get("toReview") : storedToReview) === "1" ||
     undefined;
+  // "What have I won and not yet paid for and turned into a purchase?" (#1812) — the door the
+  // dashboard's *Won, not yet purchased* group opens. Remembered like every other filter (#1018),
+  // with the URL winning.
+  const notPurchased =
+    (searchParams.has("notPurchased") ? searchParams.get("notPurchased") : storedNotPurchased) ===
+      "1" || undefined;
 
   // "Which lot was that?" (#484) — remembered like the outcome and the two parties, and overridden
   // by the URL whenever it carries one, so a link to a searched list still means what it says.
@@ -316,6 +327,7 @@ export function AuctionLotsPanel({
       conditionToSettle,
       duplicate,
       toReview,
+      notPurchased,
       search: search || undefined,
       sellerId,
       platformId,
@@ -331,6 +343,7 @@ export function AuctionLotsPanel({
       conditionToSettle,
       duplicate,
       toReview,
+      notPurchased,
       search,
       sellerId,
       platformId,
@@ -479,6 +492,8 @@ export function AuctionLotsPanel({
         return "Duplicate";
       case "toReview":
         return API_REVIEW_LABEL;
+      case "notPurchased":
+        return NOT_PURCHASED_LABEL;
       case "search":
         return `Search “${value}”`;
       case "sellerId":
@@ -525,6 +540,7 @@ export function AuctionLotsPanel({
     rememberTagIds("");
     rememberTagMode("");
     rememberToReview("");
+    rememberNotPurchased("");
     rememberIncludeClosed(false);
     // The box holds its own debounced copy, so the input has to be told as well or it goes on
     // showing a phrase that is no longer narrowing anything.
@@ -542,6 +558,7 @@ export function AuctionLotsPanel({
       [TAG_FILTER_PARAM]: "",
       [TAG_MODE_PARAM]: "",
       toReview: "",
+      notPurchased: "",
       includeClosed: "",
     });
   }, [
@@ -557,6 +574,7 @@ export function AuctionLotsPanel({
     rememberTagIds,
     rememberTagMode,
     rememberToReview,
+    rememberNotPurchased,
     rememberIncludeClosed,
     setLocalSearch,
     updateParams,
@@ -842,6 +860,22 @@ export function AuctionLotsPanel({
                 const next = toReview ? "" : "1";
                 rememberToReview(next);
                 updateParams({ toReview: next });
+              }}
+            />
+          </Tooltip>
+          {/* The last question about the record (#1812): a lot won and never turned into a purchase
+              — still to be paid for, and its stamps nowhere in the collection yet. It picks its own
+              outcome, so it shows closed lots without *Show closed*. A boolean, so a chip. */}
+          <Tooltip content="Lots you won that are not in a purchase yet — still to be paid for and settled from their sale. Shows closed lots on its own, without Show closed.">
+            <FilterChip
+              label={NOT_PURCHASED_LABEL}
+              count={counts ? counts.notPurchased : undefined}
+              active={!!notPurchased}
+              toggle
+              onClick={() => {
+                const next = notPurchased ? "" : "1";
+                rememberNotPurchased(next);
+                updateParams({ notPurchased: next });
               }}
             />
           </Tooltip>

@@ -749,6 +749,11 @@ export interface AuctionLotFilters extends TagFilterOpts {
    * confirmed. A stored column, so an ordinary `where`. It narrows under the hide-closed default
    * like every other filter here; a sale's own screen shows its closed lots and their markers. */
   toReview?: boolean;
+  /** Only lots **won and not yet purchased** (#1812) — closed with the collector winning, and neither
+   * transcribed into a purchase nor settled as an expense. It names its outcome itself, so like an
+   * explicit `outcome` it stands in for the hide-closed default rather than narrowing under it: the
+   * set is closed lots by definition, and the default would leave it empty. */
+  notPurchased?: boolean;
   /** Free text the list is narrowed to (#484): the lot's title, its notes, the house's lot number or
    * its URL, the lot's own short number, and the sale / seller / platform it belongs to. Composes
    * with every other filter rather than replacing them. */
@@ -781,7 +786,9 @@ function lotListWhere(
   // unless the collector opted in (#504). A sale's own lots are exempt — that screen is the
   // settlement of one parcel, where a won lot is the entire point.
   if (filters.outcome) and.push(outcomeWhere(filters.outcome));
-  else if (!filters.includeClosed && !filters.saleId) and.push(outcomeWhere("pending"));
+  else if (!filters.includeClosed && !filters.saleId && !filters.notPurchased)
+    and.push(outcomeWhere("pending"));
+  if (filters.notPurchased) and.push(outcomeWhere("won"), NOT_PURCHASED_WHERE);
   if (filters.undescribed) and.push(UNDESCRIBED_WHERE);
   if (filters.conditionToSettle) and.push(CONDITION_TO_SETTLE_WHERE);
   if (filters.toReview) and.push(TO_REVIEW_WHERE);
@@ -906,6 +913,12 @@ const CONDITION_TO_SETTLE_WHERE: Prisma.AuctionLotWhereInput = {
 };
 /** A lot carrying the *to review* marker (#1626): `apiReviewAt` is null exactly when there is none. */
 const TO_REVIEW_WHERE: Prisma.AuctionLotWhereInput = { apiReviewAt: { not: null } };
+/** The stored side of a lot being **settled** — the row's `settled` read the other way round (#1812):
+ * a won lot becomes a purchase lot, or an expense when it is not stamps (#1624). */
+const NOT_PURCHASED_WHERE: Prisma.AuctionLotWhereInput = {
+  purchaseLotId: null,
+  purchaseExpenseId: null,
+};
 
 /** The rows a signal is computed over: every live lot the rest of the filters admit. Bounded by
  * what one person is currently bidding on, and each row is a handful of numbers. */
@@ -1010,6 +1023,9 @@ function lotOrderBy(filters: AuctionLotFilters): Prisma.AuctionLotOrderByWithRel
   if (filters.closing === "ended") return { endsAt: "desc" };
   // Any other window is entirely in the future, so the soonest is the one to deal with.
   if (filters.closing) return { endsAt: "asc" };
+  // Won lots still to be paid for and turned into a purchase (#1812) are a backlog, and the one that
+  // closed longest ago is the most overdue — so oldest first, whatever outcome is also selected.
+  if (filters.notPurchased) return { endsAt: "asc" };
   if (filters.outcome === "pending") return { endsAt: "asc" };
   if (filters.outcome) return { endsAt: "desc" };
   if (!filters.includeClosed && !filters.saleId) return { endsAt: "asc" };
@@ -1254,6 +1270,8 @@ export interface AuctionLotFilterCounts {
   duplicate: number;
   /** Lots carrying the *to review* marker (#1626), under everything else selected. */
   toReview: number;
+  /** Lots won and not yet purchased (#1812), under everything else selected. */
+  notPurchased: number;
   /** Rows the list is actually showing — **every** filter applied, the derived ones included. */
   total: number;
   /**
@@ -1344,6 +1362,7 @@ export async function auctionLotFilterCounts(
     conditionToSettle,
     duplicateCount,
     toReview,
+    notPurchased,
     total,
     unfiltered,
     allOutcomes,
@@ -1421,6 +1440,17 @@ export async function auctionLotFilterCounts(
         toReview: true,
       }),
     }),
+    // *Won, not purchased* (#1812), ignoring whether it is itself selected like the chips above.
+    prisma.auctionLot.count({
+      where: lotListWhere(collectionId, {
+        ...rest,
+        outcome,
+        sellerId,
+        platformId,
+        closing,
+        notPurchased: true,
+      }),
+    }),
     (async () =>
       prisma.auctionLot.count({
         where: lotListWhere(
@@ -1472,6 +1502,7 @@ export async function auctionLotFilterCounts(
     conditionToSettle,
     duplicate: duplicateCount,
     toReview,
+    notPurchased,
     total,
     allSellers: sumCounts(sellers),
     allPlatforms: sumCounts(platforms),

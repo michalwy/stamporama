@@ -80,6 +80,12 @@ export const AUCTION_LOT_OUTCOME_LABEL: Record<AuctionLotOutcome, string> = {
   cancelled: "Cancelled",
 };
 
+/**
+ * A won lot not yet in a purchase (#1812) — the lots list's chip, the band naming it, and the
+ * dashboard group that opens it, in one wording so the three can be recognised as one set.
+ */
+export const NOT_PURCHASED_LABEL = "Won, not yet purchased";
+
 const VALID_LOT_OUTCOME = new Set<AuctionLotOutcome>(AUCTION_LOT_OUTCOMES);
 
 export function isAuctionLotOutcome(value: string): value is AuctionLotOutcome {

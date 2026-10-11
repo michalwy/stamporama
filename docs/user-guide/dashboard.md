@@ -29,6 +29,20 @@ handled.
 A group with **nothing in it stays on screen** as a single line with a **0**, so an empty Dashboard
 means there is nothing to do — not that something failed to load.
 
+## Auctions I bid in
+
+The auctions you bid in, in three groups:
+
+- **Closing soon** — lots still open that close within the day: the last chance to bid.
+- **Waiting to be closed** — lots whose closing time has passed with no result recorded.
+- **Won, not yet purchased** — lots you won that are not in a purchase yet: still to be paid for and
+  settled from their sale.
+
+Each row names the lot, its sale and its seller, and how long until it closes — or how long ago it
+did. It opens the lot in its sale, where you refresh a bid, record how it ended or settle the parcel.
+The first two groups are the bell's groups of the same names; the third opens the lots screen's
+**Won, not yet purchased** filter.
+
 ## The Dashboard and the bell
 
 The [Action items](action-items.md) bell stays as it is: a short list of what has gone wrong or is

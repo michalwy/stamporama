@@ -166,6 +166,7 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
       undescribed: "",
       conditionToSettle: "",
       duplicate: "",
+      notPurchased: "",
       [TAG_FILTER_PARAM]: "",
       [TAG_MODE_PARAM]: "",
     })}`;

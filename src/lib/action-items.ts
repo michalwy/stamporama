@@ -236,44 +236,55 @@ const duplicateProvider: ActionItemProvider = {
   },
 };
 
+/**
+ * The two windows over the lots still in play — *Closing soon* and *Waiting to be closed* — with the
+ * lots themselves rather than rows, so the operational dashboard (#1812, ADR-0067 §3) reads exactly
+ * this set and only draws its rows its own way. The bell's {@link auctionProvider} is the other
+ * reader; a second copy of these filters is the drift the dashboard's shared-source rule forbids.
+ */
+export async function auctionLotWindows(ownerId: string, collectionId: string, limit: number) {
+  // Each window is already a filter the lots screen offers, so the "see all" links are the same
+  // query rather than an approximation of it.
+  const windows = [
+    {
+      id: "auction-closing" as const,
+      title: "Closing soon",
+      // A deadline, not a loss: the bid can still be placed.
+      severity: "warning" as const,
+      closing: "today" as const,
+    },
+    {
+      id: "auction-outcome" as const,
+      title: "Waiting to be closed",
+      // The bidding happened without you — nothing is at risk, but nothing will ask again.
+      severity: "info" as const,
+      closing: "ended" as const,
+    },
+  ];
+
+  return Promise.all(
+    windows.map(async ({ id, title, severity, closing }) => {
+      const filters = { outcome: "pending" as const, closing };
+      const [page, count] = await Promise.all([
+        listAuctionLots(ownerId, collectionId, { ...filters, pageSize: limit }),
+        countAuctionLots(ownerId, collectionId, filters),
+      ]);
+      return {
+        id,
+        title,
+        severity,
+        count,
+        lots: page.items,
+        href: `auctions?outcome=pending&closing=${closing}`,
+      };
+    })
+  );
+}
+
 const auctionProvider: ActionItemProvider = {
   async load({ ownerId, collectionId, limit }) {
-    // Two windows over the lots still in play, each one already a filter the lots screen offers, so
-    // the "see all" links are the same query rather than an approximation of it.
-    const windows = [
-      {
-        id: "auction-closing" as const,
-        title: "Closing soon",
-        // A deadline, not a loss: the bid can still be placed.
-        severity: "warning" as const,
-        closing: "today" as const,
-      },
-      {
-        id: "auction-outcome" as const,
-        title: "Waiting to be closed",
-        // The bidding happened without you — nothing is at risk, but nothing will ask again.
-        severity: "info" as const,
-        closing: "ended" as const,
-      },
-    ];
-
-    return Promise.all(
-      windows.map(async ({ id, title, severity, closing }) => {
-        const filters = { outcome: "pending" as const, closing };
-        const [page, count] = await Promise.all([
-          listAuctionLots(ownerId, collectionId, { ...filters, pageSize: limit }),
-          countAuctionLots(ownerId, collectionId, filters),
-        ]);
-        return {
-          id,
-          title,
-          severity,
-          count,
-          items: page.items.map(lotItem),
-          href: `auctions?outcome=pending&closing=${closing}`,
-        };
-      })
-    );
+    const windows = await auctionLotWindows(ownerId, collectionId, limit);
+    return windows.map(({ lots, ...group }) => ({ ...group, items: lots.map(lotItem) }));
   },
 };
 

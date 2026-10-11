@@ -1,9 +1,16 @@
 import "server-only";
 import { assertCollectionOwner } from "./platform-category";
+import { auctionLotWindows } from "./action-items";
+import { countAuctionLots, listAuctionLots, type AuctionLotListItem } from "./auctions";
+import { auctionLotName, NOT_PURCHASED_LABEL } from "./auction-rules";
 import {
+  auctionLotRowDetail,
   capGroup,
+  dashboardGroupFromBell,
   dashboardSectionSpec,
+  DASHBOARD_ROW_LIMIT,
   type DashboardGroup,
+  type DashboardItem,
   type DashboardSection,
   type DashboardSectionId,
 } from "./dashboard-rules";
@@ -32,11 +39,62 @@ interface DashboardContext {
 
 type DashboardProvider = (ctx: DashboardContext) => Promise<DashboardGroup[]>;
 
+/**
+ * A lot as a row of the *Auctions I bid in* section (#1812): the lot, its sale and its seller, the
+ * instant it closes or closed — formatted client-side as time left or time since — and the lot in
+ * its sale as the place it is dealt with, which is where a bid is refreshed, an outcome recorded and
+ * a win settled into its purchase. Named as the bell names a lot (`action-items.ts`), its title or
+ * its derived name and else its sale's.
+ */
+function auctionLotRow(lot: AuctionLotListItem): DashboardItem {
+  const label = auctionLotName(lot) ?? lot.saleName;
+  return {
+    key: lot.id,
+    label,
+    detail: auctionLotRowDetail({ label, saleName: lot.saleName, sellerName: lot.sellerName }),
+    at: lot.endsAt.toISOString(),
+    href: `auctions/sales/${lot.saleId}?lot=${lot.id}`,
+  };
+}
+
+/**
+ * *Closing soon* and *Waiting to be closed* — the bell's two groups of those names, read through the
+ * bell's own derivation (ADR-0067 §3), so the sets and counts cannot differ; only the rows are drawn
+ * with the sale beside the seller.
+ */
+const auctionWindowsProvider: DashboardProvider = async ({ ownerId, collectionId }) =>
+  (await auctionLotWindows(ownerId, collectionId, DASHBOARD_ROW_LIMIT)).map(({ lots, ...group }) =>
+    dashboardGroupFromBell({ ...group, items: lots.map(auctionLotRow) })
+  );
+
+/**
+ * Lots the collector **won and has not yet bought** (#1812): closed with them winning, and neither
+ * transcribed into a purchase nor settled as an expense — still to be paid for, and their stamps
+ * nowhere in the collection yet. Read through the lots list's own *Won, not yet purchased* filter, so
+ * *N more →* lands on exactly this set, oldest first.
+ */
+const wonNotPurchasedProvider: DashboardProvider = async ({ ownerId, collectionId }) => {
+  const filters = { outcome: "won" as const, notPurchased: true };
+  const [page, count] = await Promise.all([
+    listAuctionLots(ownerId, collectionId, { ...filters, pageSize: DASHBOARD_ROW_LIMIT }),
+    countAuctionLots(ownerId, collectionId, filters),
+  ]);
+  return [
+    {
+      id: "auction-won-not-purchased",
+      title: NOT_PURCHASED_LABEL,
+      count,
+      items: page.items.map(auctionLotRow),
+      href: "auctions?outcome=won&notPurchased=1",
+    },
+  ];
+};
+
 const SECTION_PROVIDERS: Record<DashboardSectionId, DashboardProvider[]> = {
   sales: [],
   "incoming-purchases": [],
   offers: [],
-  auctions: [],
+  auctions: [auctionWindowsProvider, wonNotPurchasedProvider],
   trades: [],
 };
 

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   DASHBOARD_ROW_LIMIT,
+  auctionLotRowDetail,
   DASHBOARD_SECTIONS,
   capGroup,
   dashboardGroupFromBell,
@@ -95,5 +96,35 @@ describe("dashboardGroupFromBell", () => {
       items: [item(1)],
       href: "offers?needsAction=sold",
     });
+  });
+});
+
+describe("auctionLotRowDetail (#1812)", () => {
+  it("names the sale and the seller beside a lot of its own name", () => {
+    assert.equal(
+      auctionLotRowDetail({ label: "Danzig 1920 set", saleName: "Spring sale", sellerName: "Heinrich" }),
+      "Spring sale · Heinrich"
+    );
+  });
+
+  it("does not repeat the sale an untitled lot is already called by", () => {
+    assert.equal(
+      auctionLotRowDetail({ label: "Spring sale", saleName: "Spring sale", sellerName: "Heinrich" }),
+      "Heinrich"
+    );
+  });
+
+  it("does not repeat a seller the sale is named after, whatever the case", () => {
+    assert.equal(
+      auctionLotRowDetail({ label: "Lot 12", saleName: "Köhler 385", sellerName: "köhler" }),
+      "Köhler 385"
+    );
+  });
+
+  it("is null when the row has already said both", () => {
+    assert.equal(
+      auctionLotRowDetail({ label: "Philkam · Allegro", saleName: "Philkam · Allegro", sellerName: "Philkam" }),
+      null
+    );
   });
 });
