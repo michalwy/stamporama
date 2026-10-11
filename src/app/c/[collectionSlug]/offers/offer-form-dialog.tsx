@@ -145,6 +145,9 @@ export interface OfferFormDialogProps {
   /** The copies a new offer starts with (#1794) — none for an empty one. Given, a create shows the
    * title field, prefilled with what the platform's template would title these copies. */
   titleItemIds?: readonly string[];
+  /** Off while something drawn in the dialog owns Escape itself — a filter menu over the copies
+   *  (#1795) — so one press closes that and not the dialog under it. */
+  dismissable?: boolean;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }
@@ -173,6 +176,7 @@ export function OfferFormDialog({
   onPlatformChange,
   copies,
   titleItemIds,
+  dismissable = true,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
@@ -385,6 +389,7 @@ export function OfferFormDialog({
       onClose={onClose}
       minHeight="20rem"
       zIndexBase={zIndexBase}
+      dismissable={dismissable}
       // With the copies beside it (#1793) the dialog is as large as a picker, so every row is
       // readable; the form keeps the 34rem it has on its own.
       {...(copies

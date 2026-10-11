@@ -13,6 +13,10 @@
 //    itself, so the three cannot drift apart.
 //  - **The order** is the picked order by default, or highest first by catalogue value or by cost,
 //    so an expensive copy stands out; a copy with no figure goes last either way.
+//  - **The filters** (#1795) narrow what is *shown*, never what goes in: the duplicates only, some
+//    conditions, a catalogue-value floor. *Duplicates* is asked of the whole offer, so hiding one of
+//    two copies of a stamp does not make the other stop being a duplicate.
+//  - **The groups** (#1795) are by issue or by stamp, each summed like the whole set.
 
 import { copiesCost, copyCostFigure, type CopyCostInput, type OfferSetCost } from "./offer-cost";
 import { formatItemNo } from "./item-number";
@@ -23,6 +27,9 @@ export interface NewOfferCopy extends Omit<CopyCostInput, "label"> {
   itemNo: number;
   stampName: string | null;
   stampId: string;
+  conditionId: string;
+  issueId: string | null;
+  issueName: string | null;
   multiStamp: boolean;
   carriedStamps: readonly { stampId: string }[];
   value: { baseAmountDisplay: string | null; uncertain: boolean };
@@ -132,4 +139,96 @@ export function orderNewOfferCopies<T extends NewOfferCopy>(copies: readonly T[]
       return b.figure - a.figure || a.index - b.index;
     })
     .map((e) => e.copy);
+}
+
+/** What the list is narrowed to (#1795). Each narrows on its own; together a copy has to pass all. */
+export interface NewOfferCopyFilters {
+  /** Only the copies of a stamp the offer holds more than once — {@link duplicateStamps} over the
+   *  whole offer, whatever its packaging. */
+  duplicatesOnly: boolean;
+  /** The conditions shown, or empty for every condition. */
+  conditionIds: readonly string[];
+  /** A catalogue-value floor in the base currency as typed, or blank for none. A copy with no
+   *  catalogue value is not known to be worth it, so it is hidden while a floor is set. */
+  minValue: string;
+}
+
+export const NO_NEW_OFFER_COPY_FILTERS: NewOfferCopyFilters = {
+  duplicatesOnly: false,
+  conditionIds: [],
+  minValue: "",
+};
+
+/** The floor in cents, or null when none is set or what was typed is not an amount. */
+function floorCents(minValue: string): number | null {
+  const trimmed = minValue.trim();
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null;
+}
+
+export function newOfferCopyFiltersActive(filters: NewOfferCopyFilters): boolean {
+  return filters.duplicatesOnly || filters.conditionIds.length > 0 || floorCents(filters.minValue) !== null;
+}
+
+/** The copies the filters let through, in the order given. A new array; nothing is taken out of the
+ *  offer — the caller still creates it from every copy. */
+export function filterNewOfferCopies<T extends NewOfferCopy>(copies: readonly T[], filters: NewOfferCopyFilters): T[] {
+  const doubled = filters.duplicatesOnly ? duplicateStamps(copies).copiesOfSameStamp : null;
+  const conditions = filters.conditionIds.length > 0 ? new Set(filters.conditionIds) : null;
+  const floor = floorCents(filters.minValue);
+  return copies.filter((copy) => {
+    if (doubled && !doubled.has(copy.id)) return false;
+    if (conditions && !conditions.has(copy.conditionId)) return false;
+    if (floor !== null) {
+      if (copy.value.baseAmountDisplay == null) return false;
+      if (cents(copy.value.baseAmountDisplay) < floor) return false;
+    }
+    return true;
+  });
+}
+
+export type NewOfferCopyGrouping = "none" | "issue" | "stamp";
+
+/** One group of the list: its copies in the order given, and their figures summed as the whole
+ *  set's are. */
+export interface NewOfferCopyGroup<T extends NewOfferCopy> {
+  key: string;
+  label: string;
+  copies: T[];
+  summary: NewOfferCopiesSummary;
+}
+
+export const NO_ISSUE_GROUP_LABEL = "No issue";
+
+/** The copies grouped by issue or by stamp. Groups come in the order their first copy does, so the
+ *  row order chosen still reads from the top; the copies with no issue close the list, as they do on
+ *  the Copies list. *By stamp* uses {@link sameStampKey}, so a stamp's duplicates sit together. */
+export function groupNewOfferCopies<T extends NewOfferCopy>(
+  copies: readonly T[],
+  grouping: Exclude<NewOfferCopyGrouping, "none">
+): NewOfferCopyGroup<T>[] {
+  const groups = new Map<string, { label: string; copies: T[] }>();
+  for (const copy of copies) {
+    const key =
+      grouping === "issue" ? (copy.issueId ? `issue:${copy.issueId}` : "issue:none") : sameStampKey(copy);
+    const label =
+      grouping === "issue"
+        ? copy.issueId
+          ? (copy.issueName ?? "Unnamed issue")
+          : NO_ISSUE_GROUP_LABEL
+        : (copy.stampName ?? "Unnamed stamp");
+    const group = groups.get(key);
+    if (group) group.copies.push(copy);
+    else groups.set(key, { label, copies: [copy] });
+  }
+  const out = [...groups].map(([key, g]) => ({
+    key,
+    label: g.label,
+    copies: g.copies,
+    summary: newOfferCopiesSummary(g.copies),
+  }));
+  const noIssue = out.findIndex((g) => g.key === "issue:none");
+  if (noIssue >= 0) out.push(...out.splice(noIssue, 1));
+  return out;
 }

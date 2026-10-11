@@ -42,6 +42,7 @@ export function SingleSelectFilter({
   width,
   ariaLabel,
   zIndex = FILTER_MENU_Z_INDEX,
+  onOpenChange,
 }: {
   options: { id: string; label: string }[];
   value: string;
@@ -62,8 +63,11 @@ export function SingleSelectFilter({
   width: string;
   ariaLabel: string;
   zIndex?: number;
+  /** Raised as the menu opens and closes, for a dialog holding this control to stop taking Escape
+   *  meanwhile — `useFilterPopover`'s `onOpenChange`, as `MultiSelectFilter` passes it (#1795). */
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const { open, setOpen, pos, triggerRef, menuRef } = useFilterPopover<HTMLButtonElement>();
+  const { open, setOpen, pos, triggerRef, menuRef } = useFilterPopover<HTMLButtonElement>({ onOpenChange });
 
   return (
     <>
