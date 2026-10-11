@@ -16,6 +16,14 @@ import {
   type DashboardSection,
   type DashboardSectionId,
 } from "./dashboard-rules";
+import {
+  INCOMING_GROUPS,
+  incomingGroup,
+  incomingPurchaseItem,
+  incomingSheetItem,
+} from "./dashboard-incoming-rules";
+import { countPurchases, listPurchasesPaginated, type PurchaseListFilters } from "./purchases";
+import { listSheetsToCut } from "./scan-sheets";
 
 /**
  * The operational Dashboard's reads (#1808; ADR-0067). The shape and its rules are in the pure
@@ -104,9 +112,49 @@ const platformSales: DashboardProvider = async ({ ownerId, collectionId }) => [
 const salesInFlight: DashboardProvider = async ({ ownerId, collectionId }) =>
   salesDashboardGroups(await listSalesAwaitingFulfilment(ownerId, collectionId));
 
+/**
+ * Incoming purchases (#1810): orders in transit and documents arrived with lots still open, read
+ * through the Intake documents list's own reader — oldest in its state first — and the scans nothing
+ * has been cut from yet, read by the scans card's own rule. Three groups, one provider each, so the
+ * section is the order the parcel goes through: on its way, on the desk, on the scanner.
+ */
+async function purchaseGroup(
+  ctx: DashboardContext,
+  spec: { id: string; title: string; href: string },
+  filters: PurchaseListFilters
+): Promise<DashboardGroup[]> {
+  const [page, count] = await Promise.all([
+    listPurchasesPaginated(ctx.ownerId, ctx.collectionId, {
+      ...filters,
+      sortBy: "statusChangedAt",
+      sortDir: "asc",
+      pageSize: DASHBOARD_ROW_LIMIT,
+    }),
+    countPurchases(ctx.ownerId, ctx.collectionId, filters),
+  ]);
+  return [incomingGroup(spec, count, page.items.map(incomingPurchaseItem))];
+}
+
+const inTransitProvider: DashboardProvider = (ctx) =>
+  purchaseGroup(ctx, INCOMING_GROUPS.inTransit, { status: "in_transit" });
+
+const arrivedToSortProvider: DashboardProvider = (ctx) =>
+  purchaseGroup(ctx, INCOMING_GROUPS.arrivedToSort, { inProgress: true, withOpenLots: true });
+
+const scansToCutProvider: DashboardProvider = async ({ ownerId, collectionId }) => {
+  const { total, sheets } = await listSheetsToCut(ownerId, collectionId, DASHBOARD_ROW_LIMIT);
+  return [
+    incomingGroup(
+      INCOMING_GROUPS.scansToCut,
+      total,
+      sheets.map((sheet) => incomingSheetItem({ ...sheet, createdAt: sheet.createdAt.toISOString() }))
+    ),
+  ];
+};
+
 const SECTION_PROVIDERS: Record<DashboardSectionId, DashboardProvider[]> = {
   sales: [platformSales, salesInFlight],
-  "incoming-purchases": [],
+  "incoming-purchases": [inTransitProvider, arrivedToSortProvider, scansToCutProvider],
   offers: [],
   auctions: [auctionWindowsProvider, wonNotPurchasedProvider],
   trades: [],

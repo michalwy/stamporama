@@ -17,7 +17,7 @@ import {
   type IntakeDocumentType,
   type PurchaseKind,
 } from "./purchase-kind";
-import { isPurchaseStatus, type PurchaseStatus } from "./purchase-status";
+import { isPurchaseStatus, statusChangeStamp, type PurchaseStatus } from "./purchase-status";
 
 // Server-side domain logic for purchase records (ADR-0009, #120). A `Purchase` is one
 // acquisition event: an optional supplier (`Contact`), a date, a single transaction
@@ -53,10 +53,14 @@ async function assertCollectionOwner(
 async function assertPurchaseOwner(
   ownerId: string,
   purchaseId: string
-): Promise<{ collectionId: string; baseCurrency: string; kind: string }> {
+): Promise<{ collectionId: string; baseCurrency: string; kind: string; status: string }> {
   const purchase = await prisma.purchase.findUnique({
     where: { id: purchaseId },
-    select: { kind: true, collection: { select: { id: true, ownerId: true, baseCurrency: true } } },
+    select: {
+      kind: true,
+      status: true,
+      collection: { select: { id: true, ownerId: true, baseCurrency: true } },
+    },
   });
   if (!purchase || purchase.collection.ownerId !== ownerId) {
     throw new Error("Purchase not found or access denied.");
@@ -65,6 +69,7 @@ async function assertPurchaseOwner(
     collectionId: purchase.collection.id,
     baseCurrency: purchase.collection.baseCurrency,
     kind: purchase.kind,
+    status: purchase.status,
   };
 }
 
@@ -72,7 +77,9 @@ async function assertPurchaseOwner(
  * `purchase-status.ts`, re-exported for the callers that always imported it from here. */
 export type { PurchaseStatus };
 
-export type PurchaseSortBy = "purchasedAt" | "createdAt";
+/** `statusChangedAt` (#1810) is the dashboard's order — how long a document has been in its state —
+ *  and is offered by no list toolbar or route. */
+export type PurchaseSortBy = "purchasedAt" | "createdAt" | "statusChangedAt";
 
 /** A priced inventory line. Intake `status` is managed by the close flow (#121); the
  * CRUD dialog only reads/writes the price and never opens the lifecycle here. */
@@ -138,6 +145,8 @@ export interface PurchaseListItem {
   total: string | null;
   /** Lots with no opening value — only ever above zero on an opening balance (#1323). */
   unvaluedLotCount: number;
+  /** When {@link status} last changed, ISO (#1810) — the dashboard's *how long in this state*. */
+  statusChangedAt: string;
 }
 
 export interface PurchaseListFilters {
@@ -150,6 +159,14 @@ export interface PurchaseListFilters {
   /** Several statuses, any of them (#1708) — the list's link from a contact page names *Preparing*
    *  and *In transit* together. ANDed with {@link status} where both are given. */
   statuses?: PurchaseStatus[];
+  /** Documents in hand and not yet marked completed, **of both kinds** (#1810): an arrived purchase,
+   *  and an opening balance still in progress — both stored `arrived`. Unlike {@link status}
+   *  `arrived`, which is a delivery status and so a purchase's own (#1323). The dashboard's filter;
+   *  no toolbar offers it. */
+  inProgress?: boolean;
+  /** Documents with at least one lot still open — cost not yet frozen (#1810). The dashboard's
+   *  filter; no toolbar offers it. */
+  withOpenLots?: boolean;
   contactId?: string;
   /** Platforms (#1392), any of them — {@link INTAKE_PARTY_NONE} for documents recorded without one,
    *  which includes every opening balance. Empty or absent is no filter. */
@@ -259,7 +276,11 @@ export async function listPurchasesPaginated(
   const dir = filters.sortDir ?? "desc";
   const sortBy = filters.sortBy ?? "purchasedAt";
   const orderBy: Prisma.PurchaseOrderByWithRelationInput[] =
-    sortBy === "createdAt" ? [{ createdAt: dir }] : [{ purchasedAt: dir }, { createdAt: dir }];
+    sortBy === "createdAt"
+      ? [{ createdAt: dir }]
+      : sortBy === "statusChangedAt"
+        ? [{ statusChangedAt: dir }, { createdAt: dir }]
+        : [{ purchasedAt: dir }, { createdAt: dir }];
 
   const rows = await prisma.purchase.findMany({
     where: buildPurchaseListWhere(collectionId, filters),
@@ -277,6 +298,7 @@ export async function listPurchasesPaginated(
       purchasedAt: true,
       currency: true,
       status: true,
+      statusChangedAt: true,
       shippingCost: true,
       contact: { select: { name: true } },
       platform: { select: { name: true } },
@@ -312,6 +334,7 @@ export async function listPurchasesPaginated(
       // No value at all is said as such rather than summed to nothing (#1184).
       total: isOpeningBalance(row) && valued.length === 0 ? null : total.toFixed(2),
       unvaluedLotCount: row.lots.filter((l) => l.price == null).length,
+      statusChangedAt: row.statusChangedAt.toISOString(),
     };
   });
 
@@ -341,6 +364,8 @@ function buildPurchaseListWhere(
       filters.status ? statusWhere(filters.status) : {},
       filters.statuses?.length ? { OR: filters.statuses.map(statusWhere) } : {},
       filters.kind ? { kind: filters.kind } : {},
+      filters.inProgress ? { status: "arrived" satisfies PurchaseStatus } : {},
+      filters.withOpenLots ? { lots: { some: { status: "open" } } } : {},
       partyWhere("platformId", filters.platformIds),
       partyWhere("contactId", filters.supplierIds),
     ],
@@ -593,14 +618,17 @@ export async function updatePurchase(
   purchaseId: string,
   data: PurchaseUpdateInput
 ): Promise<PurchaseData> {
-  const { collectionId, baseCurrency, kind } = await assertPurchaseOwner(ownerId, purchaseId);
+  const current = await assertPurchaseOwner(ownerId, purchaseId);
+  const { collectionId, baseCurrency, kind } = current;
   if (data.kind && data.kind !== kind) {
     throw new Error("A document's type cannot be changed.");
   }
 
+  const header = await resolveHeader(collectionId, baseCurrency, kind as PurchaseKind, data);
   await prisma.purchase.update({
     where: { id: purchaseId },
-    data: await resolveHeader(collectionId, baseCurrency, kind as PurchaseKind, data),
+    // The header restates the status on every edit (#1449); only a different one is a change (#1810).
+    data: { ...header, ...(header.status ? statusChangeStamp(current.status, header.status) : {}) },
   });
 
   return (await getPurchase(ownerId, purchaseId))!;
@@ -616,13 +644,14 @@ export async function setPurchaseStatus(
   purchaseId: string,
   status: PurchaseStatus
 ): Promise<void> {
-  const { kind } = await assertPurchaseOwner(ownerId, purchaseId);
-  if (kind === "opening_balance") {
+  const current = await assertPurchaseOwner(ownerId, purchaseId);
+  if (current.kind === "opening_balance") {
     throw new Error("An opening balance has no delivery status.");
   }
+  const next = normalizeStatus(status);
   await prisma.purchase.update({
     where: { id: purchaseId },
-    data: { status: normalizeStatus(status) },
+    data: { status: next, ...statusChangeStamp(current.status, next) },
   });
 }
 
@@ -659,7 +688,7 @@ async function moveCompletion(
   // them has just sent back in transit.
   const { count } = await prisma.purchase.updateMany({
     where: { id: purchaseId, status: from },
-    data: { status: to },
+    data: { status: to, ...statusChangeStamp(from, to) },
   });
   if (count === 0) throw new Error(refusal);
 }

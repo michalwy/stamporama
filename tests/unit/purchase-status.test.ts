@@ -7,6 +7,7 @@ import {
   isPurchaseStatus,
   isPurchaseWorkDone,
   purchaseStatusLabel,
+  statusChangeStamp,
 } from "../../src/lib/purchase-status";
 
 // A purchase's delivery status and what stands between an arrived order and *Completed* (#1449).
@@ -62,5 +63,17 @@ describe("work left before an order is completed", () => {
       "1 scan tile not yet identified",
     ]);
     assert.deepEqual(describePurchaseWorkLeft({ toSort: 0, tiles: 0, openLots: 4 }), ["4 open lots"]);
+  });
+});
+
+describe("statusChangeStamp (#1810)", () => {
+  const now = new Date("2026-10-11T12:00:00Z");
+
+  it("stamps a status that differs from the stored one", () => {
+    assert.deepEqual(statusChangeStamp("preparing", "in_transit", now), { statusChangedAt: now });
+  });
+
+  it("adds nothing when the status written is the one stored — an edit is not a change", () => {
+    assert.deepEqual(statusChangeStamp("in_transit", "in_transit", now), {});
   });
 });

@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { asScanUploadStatus, queueAhead, type ScanUploadCard } from "./scan-upload-status-rules";
 import { resolveScanProfileId, ScanningProfileError } from "./scanning-profiles";
@@ -2418,6 +2419,101 @@ async function listScanUploadCards(purchaseId: string): Promise<ScanUploadCard[]
  * Every batch of one owner, newest first — the shape the Card scans section renders and the review
  * editor reloads a previous cut from.
  */
+/**
+ * Whether anything has been cut from a sheet — the card's *Review the front cut* / *Review the back
+ * cut* stands while it is not. A front sheet is cut once tiles name it as their front, a back sheet
+ * once tiles name it as their back. {@link UNCUT_SHEET_WHERE} is the same rule as a query; the two
+ * sit together so they cannot drift.
+ */
+function isSheetCut(side: string, counts: { frontTiles: number; backTiles: number }): boolean {
+  return (side === "back" ? counts.backTiles : counts.frontTiles) > 0;
+}
+
+/** {@link isSheetCut}, negated, as a `where` — and with its bytes still there, since a purged sheet
+ * has nothing left to cut. */
+const UNCUT_SHEET_WHERE = {
+  purgedAt: null,
+  OR: [
+    { side: "front", frontTiles: { none: {} } },
+    { side: "back", backTiles: { none: {} } },
+  ],
+} satisfies Prisma.ScanSheetWhereInput;
+
+/** One sheet waiting to be cut, for the dashboard's *Scans to cut* (#1810). */
+export interface SheetToCut {
+  id: string;
+  batchNo: number;
+  side: "front" | "back";
+  label: string | null;
+  createdAt: Date;
+  purchase: {
+    id: string;
+    kind: string;
+    purchaseNo: number;
+    title: string | null;
+    contactName: string | null;
+    platformName: string | null;
+  };
+}
+
+/**
+ * Every sheet in a collection nothing has been cut from yet — across its intake documents, oldest
+ * first (#1810). The collection-wide reading of the cards' own rule ({@link isSheetCut}), so the
+ * dashboard lists exactly the cards that offer *Review the cut*. #1675 took this set out of the
+ * notification centre, not off the record: the dashboard is a screen of work, not exceptions.
+ */
+export async function listSheetsToCut(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<{ total: number; sheets: SheetToCut[] }> {
+  await assertScanCollectionOwner(ownerId, collectionId);
+  const where = { collectionId, ...UNCUT_SHEET_WHERE };
+  const [total, rows] = await Promise.all([
+    prisma.scanSheet.count({ where }),
+    prisma.scanSheet.findMany({
+      where,
+      orderBy: [{ createdAt: "asc" }, { batchNo: "asc" }],
+      take: limit,
+      select: {
+        id: true,
+        batchNo: true,
+        side: true,
+        label: true,
+        createdAt: true,
+        purchase: {
+          select: {
+            id: true,
+            kind: true,
+            purchaseNo: true,
+            title: true,
+            contact: { select: { name: true } },
+            platform: { select: { name: true } },
+          },
+        },
+      },
+    }),
+  ]);
+  return {
+    total,
+    sheets: rows.map((row) => ({
+      id: row.id,
+      batchNo: row.batchNo,
+      side: row.side === "back" ? "back" : "front",
+      label: row.label,
+      createdAt: row.createdAt,
+      purchase: {
+        id: row.purchase.id,
+        kind: row.purchase.kind,
+        purchaseNo: row.purchase.purchaseNo,
+        title: row.purchase.title,
+        contactName: row.purchase.contact?.name ?? null,
+        platformName: row.purchase.platform?.name ?? null,
+      },
+    })),
+  };
+}
+
 export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<ScansData> {
   const owner = await assertScanOwner(ownerId, ref);
   const scope = scanOwnerWhere(owner);
@@ -2616,7 +2712,7 @@ export async function listScans(ownerId: string, ref: ScanOwnerRef): Promise<Sca
       height: s.height,
       viewWidth: s.viewWidth,
       viewHeight: s.viewHeight,
-      cut: (s.side === "back" ? s._count.backTiles : s._count.frontTiles) > 0,
+      cut: isSheetCut(s.side, s._count),
       purged: s.purgedAt != null,
       scanningProfileId: s.scanningProfileId,
       turnover: asBackTurnover(s.turnover),

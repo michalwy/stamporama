@@ -71,3 +71,14 @@ export function describePurchaseWorkLeft(left: PurchaseWorkLeft): string[] {
   if (left.openLots > 0) parts.push(`${left.openLots} open ${left.openLots === 1 ? "lot" : "lots"}`);
   return parts;
 }
+
+/** What a status write adds so that `Purchase.statusChangedAt` says when the status last **changed**
+ * (#1810): the moment, when the status written differs from the one stored, and nothing when it is
+ * the same — every header edit restates the status, and an edit is not a change of state. */
+export function statusChangeStamp(
+  current: string,
+  next: string,
+  now: Date = new Date()
+): { statusChangedAt?: Date } {
+  return current === next ? {} : { statusChangedAt: now };
+}

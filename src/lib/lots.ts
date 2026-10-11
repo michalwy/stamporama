@@ -1220,7 +1220,12 @@ export async function markPurchaseArrived(
   if (locationId) await assertLocationAssignable(collectionId, locationId);
 
   return prisma.$transaction(async (tx) => {
-    await tx.purchase.update({ where: { id: purchaseId }, data: { status: "arrived" } });
+    // Conditional, so marking an order that is already arrived again leaves the moment it arrived
+    // alone — `statusChangedAt` is when the status changed, not when it was last written (#1810).
+    await tx.purchase.updateMany({
+      where: { id: purchaseId, NOT: { status: "arrived" } },
+      data: { status: "arrived", statusChangedAt: new Date() },
+    });
     const moved = await tx.item.updateMany({
       where: { collectionId, lot: { purchaseId }, deliveryState: "ordered" },
       data: { deliveryState: "to_sort" },

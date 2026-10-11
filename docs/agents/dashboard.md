@@ -54,6 +54,28 @@ operational dashboard*; read the ADR before changing what the screen is.
   that is the anchor (#205), otherwise the lines plus buyer handling — not the list's net in base
   currency, because on an unpaid sale this is the money being waited for.
 
+- **Incoming purchases** (#1810) — three groups in `src/lib/dashboard-incoming-rules.ts` (pure:
+  group specs, row wording) filled by three providers in `dashboard.ts`. *In transit* and *Arrived,
+  to sort* read through the Intake documents list's own reader (`listPurchasesPaginated` /
+  `countPurchases`) with two filters no toolbar offers — `inProgress` (stored `arrived`, **both
+  kinds**, unlike the `arrived` status filter, which is a delivery status and a purchase's own) and
+  `withOpenLots` — sorted by `statusChangedAt` ascending. *Scans to cut* is `listSheetsToCut` in
+  `scan-sheets.ts`, the collection-wide reading of the scans card's own `cut` rule (`isSheetCut` and
+  `UNCUT_SHEET_WHERE` side by side), purged sheets excluded. **Not a bell group**: #1675 took scans
+  ready to cut out of the bell, so there is no bell source to share; the dashboard is a screen of
+  work and lists them. *N more →* for *Arrived, to sort* goes to `purchases?status=arrived` — the
+  collector chose that on 2026-10-11 over a new *open lots* list filter, knowing it is not the exact
+  set (all-closed arrived orders in, opening balances out).
+
+- **`Purchase.statusChangedAt`** (#1810, migration `20261011230000_purchase_status_changed_at`) is
+  the row's age — *how long in this state*, decided with the collector on 2026-10-11 over the purchase
+  date. Written **only when the status really changes** (`statusChangeStamp` in
+  `purchase-status.ts`): every header edit restates the status (#1449), and a restatement must not
+  reset the age. `updatePurchase`, `setPurchaseStatus` and `moveCompletion` stamp through it;
+  `markPurchaseArrived` is an `updateMany` conditional on *not already arrived*. A create takes the
+  column's default. Rows older than the column were backfilled with their purchase date. **A new
+  status writer must stamp too**, or its documents keep the age of their previous state.
+
 - **Auctions I bid in** (#1812): *Closing soon* and *Waiting to be closed* are the bell's groups,
   read through `auctionLotWindows` (`action-items.ts`) — the bell's own derivation, exported with
   the lots rather than rows so the dashboard draws its rows with the sale beside the seller

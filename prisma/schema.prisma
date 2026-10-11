@@ -3898,6 +3898,10 @@ model Purchase {
   // An opening balance has no delivery status (#1323): its copies are in hand from the start, so it
   // is `arrived` while being worked and `completed` once the collector marks it finished (#1461).
   status       String   @default("preparing")
+  // When `status` last changed (#1810) — how long an order has been in transit, or arrived and not
+  // yet sorted, on the dashboard. Written only when the status really changes, never when an edit
+  // restates it (`statusChangeStamp`). Documents older than the column carry their purchase date.
+  statusChangedAt DateTime @default(now())
   // Which intake document this is (#1323, ADR-0054): `purchase` | `opening_balance`, closed in
   // `src/lib/purchase-kind.ts` rather than in the database. An opening balance brings copies in
   // without buying them and otherwise works as a purchase does; CHECK `purchase_kind_shape` keeps

@@ -44,6 +44,30 @@ that status — the longest waiting first. Click it to open the sale. Once you m
 its group; sent and received sales are not on the Dashboard. A group's name opens the Sales list
 filtered to that status.
 
+## Incoming purchases
+
+Three groups, in the order a parcel goes through them:
+
+- **In transit** — purchase orders marked *In transit*.
+- **Arrived, to sort** — orders marked *Arrived* that still have an open lot, and opening balances
+  still in progress with an open lot. Once every lot is closed — or the document is marked
+  *Completed* — it leaves the group.
+- **Scans to cut** — card scans that are uploaded and prepared but have nothing cut from them yet:
+  the cards on a purchase's screen that offer *Review the front cut* or *Review the back cut*.
+
+A purchase row shows the supplier (an opening balance's title), the order number, the purchase date
+and the value, and **how long it has been in its state** — in transit for how long, or arrived how
+long ago. The longest-waiting come first. A scan row shows its batch and the document it belongs to,
+and how long ago it was uploaded. Every row opens the purchase.
+
+How long an order has been in its state is counted from the moment its status last changed. Orders
+recorded before the Dashboard had this section count from their purchase date until their status
+next changes.
+
+*N more →* under **In transit** opens Intake documents filtered to *In transit*. Under **Arrived, to
+sort** it opens the list filtered to *Arrived*, which also holds arrived orders whose lots are all
+closed and does not hold opening balances. Under **Scans to cut** it opens Intake documents.
+
 ## Auctions I bid in
 
 The auctions you bid in, in three groups:
@@ -62,4 +86,5 @@ The first two groups are the bell's groups of the same names; the third opens th
 
 The [Action items](action-items.md) bell stays as it is: a short list of what has gone wrong or is
 about to. Where a Dashboard group means the same thing as a bell group, both read the same list, so
-the two never disagree.
+the two never disagree. Scans ready to cut are on the Dashboard and not in the bell: the bell reports
+only a scan that could not be prepared.
