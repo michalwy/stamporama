@@ -896,7 +896,7 @@ export async function addSaleLines(
             where: { id: offerId },
             // `closedAt` (#512) is stamped with the state, as it is on a withdrawal: it is what the
             // generated-photo purge measures the grace period from.
-            data: { state: "sold", inActiveBidding: false, closedAt: new Date() },
+            data: { state: "sold", stateChangedAt: new Date(), inActiveBidding: false, closedAt: new Date() },
           });
         }
       }
@@ -1213,7 +1213,10 @@ export async function removeSaleLine(ownerId: string, lineId: string): Promise<v
         select: { state: true },
       });
       if (offer && offer.state === "sold" && !(await isOfferFullySold(tx, line.offerId))) {
-        await tx.offer.update({ where: { id: line.offerId }, data: { state: "active" } });
+        await tx.offer.update({
+          where: { id: line.offerId },
+          data: { state: "active", stateChangedAt: new Date() },
+        });
       }
       // The set is back in what this offer sells, which is the same composition change in reverse
       // (#700/#542): a live listing now understates what is there.
@@ -2008,7 +2011,7 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<void>
         where: { id: { in: offerIds }, state: "sold" },
         // The listing is open again, so it is no longer closed: clearing `closedAt` (#512) takes it
         // back out of the generated-photo purge's reach.
-        data: { state: "active", closedAt: null },
+        data: { state: "active", stateChangedAt: new Date(), closedAt: null },
       });
       // As in `removeSaleLine`: every set the sale held is sellable again, so a listing still up is
       // out of step with it (#700/#542). After the reopen above, so an offer this call just took

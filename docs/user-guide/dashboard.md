@@ -68,6 +68,25 @@ next changes.
 sort** it opens the list filtered to *Arrived*, which also holds arrived orders whose lots are all
 closed and does not hold opening balances. Under **Scans to cut** it opens Intake documents.
 
+## Offers to handle
+
+The offers that need your hand, in five groups. Each row shows the offer's number and title, its
+platform, and how long it has been waiting, and opens the offer.
+
+- **Ready to publish** — offers marked *Ready* and not yet put up, the longest-ready first.
+- **Pending approval** — offers submitted and waiting for a group administrator (or the platform)
+  to approve them, the longest-waiting first.
+- **Needs action** — live listings that are wrong: one holding a copy that has sold elsewhere, is in
+  another live auction, or has sold on Allegro (these come first), and one whose contents have
+  changed since it went up. Each row says which.
+- **Quick buys to refresh** — quick buys up longer than their platform's refresh threshold, aged from
+  when they were last posted.
+- **Auctions ended, no result** — your auctions that have ended with a bid and have no sale or other
+  result recorded yet, aged from when they ended.
+
+Offers that were already in Ready or Pending before the Dashboard learned to age them show an
+estimate: the day they were created.
+
 ## Auctions I bid in
 
 The auctions you bid in, in three groups:
