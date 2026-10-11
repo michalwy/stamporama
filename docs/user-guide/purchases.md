@@ -2242,6 +2242,13 @@ dialog names the order it would be taken off and asks you to confirm the move be
 on screen — so a copy you ticked before moving the area tree is still named in the warning, and the
 confirmation is still offered for it.
 
+The warning gives each of those purchases a line of its own: its supplier and date, and **how many
+of the ticked copies come from it** — *Bielefelder · 2025-05-03 — 312 copies*, *Box A · 2026-09-25
+— 130 copies* — so you can see the split before agreeing to it. To leave one purchase's copies
+where they are, press **Untick these** on its line: every ticked copy from that purchase is unticked
+at once, including those you ticked under another area or year that are not on screen. When no
+ticked copy belongs to another purchase any more, the warning and its confirmation go away.
+
 ### The delivery lifecycle: ordered → to sort → delivered
 
 Each copy carries a **delivery status** shown as a chip on its row, separate from its
