@@ -34,6 +34,7 @@ export function TreeSelectButton({
   buttonClassName = defaultTreeSelectButtonClassName,
   buttonId,
   disabled,
+  filterActive,
   hasSelection,
   selectedLabel,
   onKeyDown,
@@ -46,6 +47,9 @@ export function TreeSelectButton({
   buttonClassName?: string;
   buttonId: string;
   disabled?: boolean;
+  /** Drawn in the accent a narrowing filter wears on a list's bar (`filterTriggerStyle`, #1783) —
+   * set by a caller using the select as a filter, while it is narrowing the list. */
+  filterActive?: boolean;
   hasSelection: boolean;
   selectedLabel: string;
   onKeyDown: (event: ReactKeyboardEvent) => void;
@@ -54,6 +58,9 @@ export function TreeSelectButton({
   const errorClassName = ariaInvalid
     ? " !border-[var(--color-error)] !bg-[var(--color-error-soft)]/30 hover:!border-[var(--color-error)] focus:!border-[var(--color-error)]"
     : "";
+  const activeClassName = filterActive
+    ? " !border-[var(--color-accent)] !bg-[var(--color-accent-soft)] font-semibold !text-[var(--color-accent)] hover:!border-[var(--color-accent)] focus:!border-[var(--color-accent)]"
+    : "";
   return (
     <button
       id={buttonId}
@@ -61,7 +68,7 @@ export function TreeSelectButton({
       aria-haspopup="listbox"
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledby}
-      className={`${buttonClassName}${errorClassName}`}
+      className={`${buttonClassName}${errorClassName}${activeClassName}`}
       disabled={disabled}
       type="button"
       onClick={onToggle}

@@ -74,6 +74,7 @@ export function LocationTreeSelect({
   panelFooter,
   closeOnSelect = true,
   extraOption,
+  filterActive,
 }: {
   locations: LocationData[];
   locationTree: LocationTreeItem[];
@@ -95,6 +96,8 @@ export function LocationTreeSelect({
    * filed* (`NO_LOCATION`, #1401), which the collection structure screen counts as a segment
    * and so has to be able to show on the bar it opens. */
   extraOption?: { id: string; label: string };
+  /** Draws the trigger in the accent every narrowing filter on a list's bar wears (#1783). */
+  filterActive?: boolean;
 }) {
   const buttonId = `${name}-button`;
   const searchId = `${name}-search`;
@@ -159,6 +162,7 @@ export function LocationTreeSelect({
         buttonClassName={buttonClassName}
         buttonId={buttonId}
         disabled={disabled}
+        filterActive={filterActive}
         hasSelection={hasSelection}
         selectedLabel={triggerLabel}
         onKeyDown={handleKeyDown}
