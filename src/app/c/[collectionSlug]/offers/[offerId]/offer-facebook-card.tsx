@@ -403,7 +403,7 @@ export function OfferFacebookCard({
           <p style={{ ...MUTED, margin: "0 0 0.375rem" }}>
             {hasBid ? (
               <>
-                Highest bid <strong style={{ color: "var(--color-text-primary)" }}>{facebookMoney(self.price, self.currency)}</strong>
+                Highest bid <strong style={{ color: "var(--color-text-primary)" }}>{self.price} {self.currency}</strong>
                 {self.priceCheckedAt && (
                   <>
                     {" "}

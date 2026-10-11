@@ -89,6 +89,10 @@ at once for every group that follows it, and never changes an auction already ma
   and wants posting again. Past it, the offer carries **Up N days · refresh** and is listed under
   **Needs refresh** (see [Refreshing a quick buy](#refreshing-a-quick-buy)). Empty means never.
 
+**An amount in a post is written the way a person writes it**: a whole amount without decimals —
+`15 PLN`, not `15.00 PLN` — and any other with both, `15.50 PLN`. This holds for `{startingPrice}`,
+`{increment}` and `{price}`. The app's own screens still show `15.00`.
+
 A post is always written from the template of its own type — an auction's from the auction
 template, a quick buy's from the quick-buy one, never the other. In either template, anything else
 in braces stays exactly as you typed it, and the field says so under it while you type — so a

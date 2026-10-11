@@ -191,3 +191,18 @@ export function formatAmountInput(raw: string): string {
   if (!/^(\d+\.?\d*|\.\d+)$/.test(normalized)) return normalized;
   return roundAmount(Number(normalized));
 }
+
+/**
+ * An amount as a text generated from a template writes it (#1787): a whole amount without decimals,
+ * any other with both — `15.00` → `15`, `15.50` → `15.50`, never `15.5`. Decided with the collector on
+ * 2026-10-11 for every template that generates text: `15.00 PLN` reads as machine output in a post or
+ * a listing title. The app's own screens, forms and exports keep their two decimals.
+ *
+ * Takes the stored 2-dp string; anything that is not a number comes back as given.
+ */
+export function generatedAmount(amount: string): string {
+  const value = Number(amount);
+  if (amount.trim() === "" || !Number.isFinite(value)) return amount;
+  const fixed = roundAmount(value);
+  return fixed.endsWith(".00") ? fixed.slice(0, -3) : fixed;
+}

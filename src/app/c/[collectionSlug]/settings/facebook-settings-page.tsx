@@ -869,7 +869,7 @@ function PostTemplateField({
             <code>{p.token}</code> {p.label.toLowerCase()}
           </span>
         ))}
-        .
+        . An amount reads <code>15 PLN</code>, or <code>15.50 PLN</code> when it is not whole.
       </FieldNote>
       <FieldNote>
         Formatting:{" "}

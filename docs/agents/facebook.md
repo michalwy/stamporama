@@ -191,7 +191,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   its template places** (#1692, decided with the collector on 2026-10-09): nothing is substituted,
   added or fallen back to. `{description}` is the offer's description and nothing else — empty when it
   has none (the kit's title stand-in is gone); `{title}` the display title; `{price}` a quick buy's
-  asking price; the retired `{catalog}` is every copy's leading number through
+  asking price. **Every amount is `generatedAmount`'s** (#1787, `decimal-input.ts`, through
+  `facebookMoney`): whole without decimals, otherwise both (`15`, `15.50`, never `15.5`) — the
+  collector's rule for every template that generates text; the card's own *Highest bid* keeps two; the retired `{catalog}` is every copy's leading number through
   `compactCatalogNumberGroups`; `{lot}` is empty on a single post; `{offer}` (#1694) is each lot's own offer number, bare as `{lot}` is,
   so the template writes any `#` itself. A type with **no template gives an
   empty lot** (the `{description}` fallback template is gone), and the lot's text is not trimmed, so
