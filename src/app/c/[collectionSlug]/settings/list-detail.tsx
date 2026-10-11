@@ -56,15 +56,31 @@ const LIST_WIDTH = "24rem";
  */
 const DETAIL_WIDTH = "40rem";
 
+/**
+ * A pane laid out in sections (`DetailSections`, #1801) takes the width beside the list, up to two of
+ * the narrow panes side by side: no section is ever wider than a whole pane used to be, so the rule
+ * above still holds inside each one.
+ */
+const WIDE_DETAIL_WIDTH = "82rem";
+
 /** Where the detail pane stays while a long list scrolls under the pointer — the navigation's top. */
 const DETAIL_TOP = "2rem";
 
-export function ListDetail({ list, detail }: { list: ReactNode; detail: ReactNode }) {
+export function ListDetail({
+  list,
+  detail,
+  wide,
+}: {
+  list: ReactNode;
+  detail: ReactNode;
+  /** The pane's fields are `DetailSections`: give it the width beside the list (#1801). */
+  wide?: boolean;
+}) {
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: `minmax(16rem, ${LIST_WIDTH}) minmax(0, ${DETAIL_WIDTH})`,
+        gridTemplateColumns: `minmax(16rem, ${LIST_WIDTH}) minmax(0, ${wide ? WIDE_DETAIL_WIDTH : DETAIL_WIDTH})`,
         gap: "2rem",
         alignItems: "start",
       }}
@@ -880,6 +896,33 @@ export const INPUT_STYLE: React.CSSProperties = {
 /** Spacing between the fields of a detail pane. */
 export function Fields({ children }: { children: ReactNode }) {
   return <div style={{ display: "flex", flexDirection: "column", gap: "1.125rem" }}>{children}</div>;
+}
+
+/** The narrowest a section may get before `DetailSections` stacks them in one column. */
+const SECTION_MIN_WIDTH = "22rem";
+const SECTION_COLUMN_GAP = "2rem";
+
+/**
+ * A long pane's fields **in sections side by side** (#1801), for a `wide` `ListDetail`: two to a row
+ * where the pane has the room, one under the other where it has not — never a third, so a section
+ * stays the width of a narrow pane at most. Each child is one section, a heading over its fields;
+ * a pair placed in one row is read across, as the Facebook auction and quick-buy templates are
+ * compared. A pane of a few fields stays `Fields` in the narrow column: widening it would only
+ * stretch each field across the window.
+ */
+export function DetailSections({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(auto-fill, minmax(max(${SECTION_MIN_WIDTH}, (100% - ${SECTION_COLUMN_GAP}) / 2), 1fr))`,
+        gap: `1.5rem ${SECTION_COLUMN_GAP}`,
+        alignItems: "start",
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 /**

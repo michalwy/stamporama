@@ -119,6 +119,11 @@ dictionary composes them — a flat list, a grouped one (Multipliers) and a tree
   translatable field, rather than a 🌐 dialog over it.
 - The detail column is capped at 40rem, which is how the shape keeps *a single field never
   stretches across the window*; it stays in view while a long list scrolls.
+- *Amended by #1801:* a pane long enough to run far down the screen in that column — Facebook's
+  defaults and groups, a Delcampe listing profile — takes the width beside the list instead (capped
+  at 82rem), its sections laid out **two to a row** (`DetailSections`), never three. Each section is
+  at most as wide as the 40rem pane was, so the rule still holds inside it. A pane of a few fields
+  keeps the narrow column: widening it would only stretch those fields.
 
 *Rejected in writing #1471:* selecting the row through the router, which would re-run the whole
 Settings loader on every click down a list — the address is written with `history.replaceState`.

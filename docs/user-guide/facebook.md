@@ -30,8 +30,11 @@ asked of its offers.
 
 ## Facebook defaults
 
-The first row of the list, **Facebook defaults**, holds the settings every group follows, in three
-parts.
+The first row of the list, **Facebook defaults**, holds the settings every group follows, in four
+sections. They take the width beside the list, two to a row on a wide window: **Every offer** beside
+**Shipping, payment and terms**, then **New auctions** beside **Quick buys**, so the two post
+templates sit level and can be compared at a glance. A group's settings are laid out the same way,
+under its name and link.
 
 **Every offer** — what applies to auctions and quick buys alike:
 
@@ -41,10 +44,11 @@ parts.
 - **Currency** — shown, not set here: it is the platform's own currency, set on its contact.
 - **A post may mix auctions and quick buys** — off, the lots of one [post](#a-post-with-several-lots)
   are all auctions or all quick buys; on, one post may hold both.
-- **Shipping, payment and terms** — a standing note on how you ship, how buyers pay and the group's
-  terms, as written. A post carries it where its template has `{terms}` (below), and only there: a
-  template without `{terms}` posts no note, and the field warns you when the note is set but neither
-  template uses it.
+
+**Shipping, payment and terms** — a standing note on how you ship, how buyers pay and the group's
+terms, as written. A post carries it where its template has `{terms}` (below), and only there: a
+template without `{terms}` posts no note, and the field warns you when the note is set but neither
+template uses it.
 
 **New auctions** — how an auction's post reads, and what a new auction starts from, each optional:
 

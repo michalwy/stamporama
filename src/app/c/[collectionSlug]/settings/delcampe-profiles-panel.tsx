@@ -31,8 +31,8 @@ import {
   AddRowAction,
   DetailForm,
   DetailPlaceholder,
+  DetailSections,
   FieldNote,
-  Fields,
   INPUT_STYLE,
   InfoHint,
   ListDetail,
@@ -138,6 +138,7 @@ function ProfilesListDetail({
         }}
       />
       <ListDetail
+        wide
         list={
           <ListPane
             caption={countLabel(list.profiles.length, "profile", "profiles")}
@@ -299,6 +300,9 @@ function GroupLabel({ children, hint }: { children: React.ReactNode; hint?: Reac
  * One profile's fields. **Every one is a named form control** (#1471) — the pane measures what is
  * unsaved off the form, and the save reads it the same way. The auction group and the bid step are
  * held in state as well, because each is read back as a sentence while it is typed.
+ *
+ * Laid out in pairs beside the list (#1801): name and shipping model, the renewal beside the
+ * auction figures that replace it, then the paid promotions and the bid step.
  */
 function ProfileFields({ profile }: { profile: DelcampeListingProfileData | null }) {
   // Blank until typed, which is what they are stored as: a text field holding "" is the honest
@@ -357,7 +361,7 @@ function ProfileFields({ profile }: { profile: DelcampeListingProfileData | null
         });
 
   return (
-    <Fields>
+    <DetailSections>
       <div>
         <LabelWithError htmlFor="delcampe-profile-name">Name</LabelWithError>
         <TextInput
@@ -624,6 +628,6 @@ function ProfileFields({ profile }: { profile: DelcampeListingProfileData | null
         </div>
         {rulePreview && <FieldNote>{rulePreview}</FieldNote>}
       </div>
-    </Fields>
+    </DetailSections>
   );
 }
