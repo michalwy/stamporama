@@ -363,6 +363,8 @@ export interface FacebookKitLot {
    *  recorded; a quick buy's asking price (#1671). */
   price: string;
   priceCheckedAt: string | null;
+  /** The offer's own post template (#1780), written for its type — null follows the group's. */
+  ownTemplate: string | null;
 }
 
 /** What the offer's Facebook card draws (ADR-0061 §3): the group, the post and its lots, and where
@@ -421,6 +423,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       url: true,
       price: true,
       priceCheckedAt: true,
+      facebookPostTemplate: true,
       sets: {
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: {
@@ -453,6 +456,7 @@ export async function getFacebookOfferKit(offerId: string): Promise<FacebookOffe
       url: row.url,
       price: row.price.toFixed(2),
       priceCheckedAt: row.priceCheckedAt?.toISOString() ?? null,
+      ownTemplate: row.facebookPostTemplate,
     };
   });
   const base = `/api/collections/${offer.collectionId}`;

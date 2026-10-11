@@ -5034,6 +5034,11 @@ model Offer {
   // on an offer posted alone. `SetNull`: a post is removed only by the app, which renumbers first.
   facebookPostId String?
   facebookLotNo  Int?
+  // This offer's own post template (#1780), overriding its group's for this offer only — for the
+  // type the offer is now, so a change of type drops it (`updateOffer`). Null follows the group's
+  // template for the offer's type; text, even empty, is the offer's own. Still a template: the same
+  // placeholders and formatting as a group's, filled in from the offer's figures as they change.
+  facebookPostTemplate String?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside

@@ -16,6 +16,7 @@ import {
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
 import { createFacebookPost, removeFacebookLot } from "@/lib/facebook-posts";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
+import { patchOffer } from "@/lib/offers";
 import { assertCollectionOwner } from "@/lib/platform-category";
 
 // Settings → Facebook (#1543; ADR-0061): which platform contact is Facebook, and the groups under it.
@@ -154,6 +155,21 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to take the lot out of its post.");
+  }
+}
+
+/** Give a Facebook offer its own post template (#1780), or hand it back to its group's with null. The
+ *  text is kept as written — an empty one is the offer's own, not the group's. */
+export async function setFacebookOfferTemplateAction(
+  offerId: string,
+  template: string | null
+): Promise<FacebookActionState> {
+  const session = await getSession();
+  try {
+    await patchOffer(session.user.id, offerId, { facebookPostTemplate: template });
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to save the offer's post template.");
   }
 }
 

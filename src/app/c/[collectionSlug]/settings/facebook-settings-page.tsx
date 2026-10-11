@@ -8,24 +8,21 @@ import { Icon } from "@/app/icons";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { FacebookPostTemplateField } from "@/app/c/[collectionSlug]/shared/facebook-post-template-field";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { FacebookGroupData, FacebookGroupList } from "@/lib/facebook-groups";
 import {
   effectiveFacebookGroupSettings,
   FACEBOOK_AUCTION_DAYS_MAX,
-  facebookPostPlaceholders,
   isFacebookGroupSetting,
-  retiredPostPlaceholders,
   standingNoteUnused,
-  unknownPostPlaceholders,
   usesRetiredPostPlaceholder,
   type FacebookGroupSetting,
   type FacebookGroupValues,
   type FacebookPostingSettings,
   type FacebookStartingPriceMode,
 } from "@/lib/facebook-group-rules";
-import { FACEBOOK_POST_FORMATTING } from "@/lib/facebook-post-format";
 import { OFFER_LISTING_TYPE_LABEL, OFFER_LISTING_TYPES, type OfferListingType } from "@/lib/offer-rules";
 import { REFRESH_QUICK_BUYS_DAYS_MAX } from "@/lib/offer-refresh-rules";
 import {
@@ -835,12 +832,11 @@ function FollowableSetting({
   );
 }
 
-/** A post template — an auction's or a quick buy's (#1671) — with its type's placeholders and the
- *  formatting Facebook's editor takes (#1772) named under it, an unknown one called out as typed, and a retired one flagged so it is removed. */
+/** A post template in a settings pane: the shared field (#1780), submitted under its type's name. */
 function PostTemplateField({
   id,
   listingType,
-  value: template,
+  value,
   onChange,
 }: {
   id: string;
@@ -848,55 +844,15 @@ function PostTemplateField({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const unknown = unknownPostPlaceholders(template, listingType);
-  const retired = retiredPostPlaceholders(template);
   return (
-    <>
-      <TextArea
-        id={id}
-        name={listingType === "auction" ? "postTemplate" : "quickBuyTemplate"}
-        aria-label={`${OFFER_LISTING_TYPE_LABEL[listingType]} post template`}
-        value={template}
-        onChange={(e) => onChange(e.target.value)}
-        style={TEXTAREA_STYLE}
-        {...NO_AUTOFILL}
-      />
-      <FieldNote>
-        Placeholders:{" "}
-        {facebookPostPlaceholders(listingType).map((p, i) => (
-          <span key={p.token}>
-            {i > 0 && ", "}
-            <code>{p.token}</code> {p.label.toLowerCase()}
-          </span>
-        ))}
-        . An amount reads <code>15 PLN</code>, or <code>15.50 PLN</code> when it is not whole.
-      </FieldNote>
-      <FieldNote>
-        Formatting:{" "}
-        {FACEBOOK_POST_FORMATTING.map((f, i) => (
-          <span key={f.label}>
-            {i > 0 && ", "}
-            <code>{f.syntax.trim()}</code> {f.label}
-          </span>
-        ))}
-        .
-      </FieldNote>
-      {unknown.length > 0 && (
-        <FieldNote>
-          <span style={{ color: "var(--color-warning)" }}>
-            Not a placeholder, so it stays as typed: {unknown.join(", ")}.
-          </span>
-        </FieldNote>
-      )}
-      {retired.length > 0 && (
-        <FieldNote>
-          <span style={{ color: "var(--color-warning)" }}>
-            {retired.join(", ")} is no longer offered — the catalogue numbers are in the title or
-            description. Remove it; until then it is still filled in.
-          </span>
-        </FieldNote>
-      )}
-    </>
+    <FacebookPostTemplateField
+      id={id}
+      name={listingType === "auction" ? "postTemplate" : "quickBuyTemplate"}
+      listingType={listingType}
+      value={value}
+      onChange={onChange}
+      style={TEXTAREA_STYLE}
+    />
   );
 }
 

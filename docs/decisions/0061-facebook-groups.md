@@ -10,7 +10,8 @@ is amended by #1668: the post's link is recorded as the offer's own listing link
 The whole is amended by #1671 (§8): a Facebook offer can be a quick buy as well as an auction. §6
 is amended by #1689: the standing note is placed by a `{terms}` placeholder, no longer appended. §3
 is amended by #1692: a post is only what its template places. §4 and §8 are amended by #1777: a
-Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw*.
+Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw*. §6 is
+amended by #1780: an offer can carry its own post template, overriding its group's.
 
 ## Context
 
@@ -146,6 +147,15 @@ lots it is filled in the last lot only, so the note is stated once, as before. T
 earlier were **not** given `{terms}` — a post is only what its template places (#1692) — so they
 post no note until the collector places it, and a note set but used by neither template is flagged
 under its field.
+
+**Amended by #1780 (decided with the collector on 2026-10-11): an offer can carry its own post
+template**, overriding its group's for that offer only — the one setting that is not read once at
+creation and then owned, since the group's template is read live and an offer wanting other words had
+no way to say so. It follows #1661's pattern on the offer's card: *Same as group* with the template it
+follows, or *Custom for this offer*, prefilled with the group's. It is a **template**, not finished
+text — the same placeholders and formatting — so the post still follows the offer's figures. It is for
+the offer's current type: a change of type, or a move off Facebook, drops it after the form says so,
+since it was written for that type's placeholders. In a multi-lot post it shapes its own lot only.
 
 ### 7. A group with offers is archived, never deleted
 
