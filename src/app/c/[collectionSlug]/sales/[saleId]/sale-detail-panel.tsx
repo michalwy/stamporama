@@ -11,7 +11,8 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
 import type { SaleDetail } from "@/lib/sales";
-import { describeLeftOut, type ProfitFigures } from "@/lib/sale-profit";
+import { describeEstimated, describeLeftOut, type EstimatedProfitFigures } from "@/lib/sale-profit";
+import { COST_ESTIMATE_STYLE } from "@/app/c/[collectionSlug]/shared/cost-estimate-text";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { CUSTOM_SHIPPING_METHOD } from "@/lib/sale-rules";
 import type { ShippingMethodData } from "@/lib/shipping-methods";
@@ -1016,13 +1017,14 @@ const PROFIT_NOTE: React.CSSProperties = {
 
 /** The cost and profit rows under the net (#168), in the net's own column. A profit that cannot be
  * computed says why instead of showing a figure; one over only some of the copies says how many it
- * left out, and why. */
+ * left out, and why. One counting a copy at its open lot's estimate (#1814) reads as an estimate —
+ * `~`, muted italic, on both the cost and the profit — and says how many copies are estimated. */
 function ProfitRows({
   profit,
   baseCurrency,
   showBase,
 }: {
-  profit: ProfitFigures;
+  profit: EstimatedProfitFigures;
   baseCurrency: string;
   showBase: boolean;
 }) {
@@ -1063,18 +1065,24 @@ function ProfitRows({
 
   const n = Number(profit.profit);
   const incomplete = profit.countedCount < profit.copyCount;
+  const estimateNote = describeEstimated(profit.estimatedCount);
+  const mark = estimateNote ? "~" : "";
+  const estimateStyle = estimateNote ? COST_ESTIMATE_STYLE : {};
+  const qualifiers = [incomplete && "incomplete", estimateNote && "estimated"].filter(Boolean);
   return (
     <>
       <div style={ROW_LABEL}>{incomplete ? "− Cost of the counted copies" : "− Cost of copies sold"}</div>
-      {amount(`${profit.cost} ${baseCurrency}`)}
+      {amount(`${mark}${profit.cost} ${baseCurrency}`, estimateStyle)}
       <div style={{ ...ROW_LABEL, fontWeight: 600, color: "var(--color-text-primary)" }}>
-        {incomplete ? "Profit / loss (incomplete)" : "Profit / loss"}
+        {qualifiers.length > 0 ? `Profit / loss (${qualifiers.join(", ")})` : "Profit / loss"}
       </div>
-      {amount(`${signedAmount(profit.profit)} ${baseCurrency}`, {
+      {amount(`${mark}${signedAmount(profit.profit)} ${baseCurrency}`, {
         fontSize: "0.875rem",
         fontWeight: 600,
         color: n > 0 ? "var(--color-success)" : n < 0 ? "var(--color-error)" : "var(--color-text-primary)",
+        ...estimateStyle,
       })}
+      {estimateNote && <p style={PROFIT_NOTE}>{estimateNote}.</p>}
       {incomplete && (
         <p style={PROFIT_NOTE}>
           Counted over {profit.countedCount} of {profit.copyCount} copies, whose proceeds are{" "}

@@ -185,7 +185,8 @@ own **profit** under its net, too: the unit's net against the cost of the copies
 A profit is only stated where it can actually be worked out. A copy is **left out** — never
 counted as costing nothing — when:
 
-- **its cost is pending** — it belongs to a purchase lot that is still open;
+- **its cost is pending and cannot be estimated** — it belongs to a purchase lot that is still open,
+  and no estimated cost can be worked out for it (see below);
 - **it has no cost recorded** — you added it by hand, or it came through no purchase lot;
 - **it has no opening value** — it came in on an [opening balance](purchases.md#opening-balances)
   whose lot was given no value, so there is nothing to measure a profit against (a copy from a lot
@@ -204,6 +205,17 @@ reads **cannot be computed** and the note says why. A sold unit shows its profit
 copy on it counts; otherwise it reads **profit —**, and hovering it says which copies are missing
 what.
 
+**Estimated profit while a purchase lot is still open.** A copy whose lot is not closed yet has no
+settled cost, but it has an **estimated** cost — the figure its purchase order and its own page show
+— and this screen counts it at that estimate, so you can judge a sale before you close the lot. A
+profit that leans on one is marked as an estimate the way an estimated cost is: `~`, muted and
+italic, on the unit's profit and on the sale's cost and profit, which is then labelled
+**estimated**; a note (and the unit's hover) says how many copies are estimated. Once the lot is
+closed, the same figures show the actual cost, with no mark and nothing for you to do. A copy whose
+cost cannot be estimated (no catalog value, no exchange rate on the purchase, not delivered) is
+still left out as pending. Only the sale's own screen counts estimates: the profit and loss screen
+and the Overview keep such a copy pending until its lot is closed.
+
 ### The profit and loss screen
 
 Click the **Realized profit and loss** tile on the [Overview](overview.md) to open the **Profit and
@@ -219,8 +231,9 @@ loss** screen. It shows where that figure comes from. Everything on it is in you
 - **By platform** — the sales figures for each platform. Write-offs have no platform, so they are
   their own line, and the result under them is the same result as in the totals.
 - **By sale** — every sale in the range, newest first: its date, number, platform and buyer, and its
-  net proceeds, cost and profit. These are the very figures the sale's own screen shows. Click a row
-  to open the sale.
+  net proceeds, cost and profit. These are the figures the sale's own screen shows, except that a
+  copy whose purchase lot is still open stays pending here rather than counted at its estimated cost.
+  Click a row to open the sale.
 
 **Write-offs** are the copies you marked as no longer held — lost, damaged or otherwise gone. They
 brought in nothing, so what they cost is a loss, and leaving them out would make the result look
