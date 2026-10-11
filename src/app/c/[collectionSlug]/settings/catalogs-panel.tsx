@@ -13,13 +13,16 @@ import {
   updateCatalogEditionAction,
   deleteCatalogEditionAction,
 } from "@/app/actions/catalog";
-import type { CatalogVendorData } from "@/lib/catalog";
+import type { CatalogNameData, CatalogVendorData } from "@/lib/catalog";
+import { formatCatalogueFactor, MIN_RATIO_SAMPLE } from "@/lib/realization-ratio";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import {
   AddRowAction,
+  DetailFacts,
   DetailForm,
   DetailPlaceholder,
+  FieldNote,
   Fields,
   INPUT_STYLE,
   ListDetail,
@@ -185,6 +188,8 @@ export function CatalogPanel({ collectionId, initialTree }: CatalogPanelProps) {
               <CatalogNameFields
                 defaultName={pane.node.name.name}
                 defaultCurrency={pane.node.name.currency}
+                defaultManualFactor={pane.node.name.manualFactor}
+                learnedFactor={pane.node.name.learnedFactor}
               />
             </DetailForm>
           ) : (
@@ -305,10 +310,14 @@ function VendorFields({
 function CatalogNameFields({
   defaultName,
   defaultCurrency,
+  defaultManualFactor,
+  learnedFactor,
   isNew,
 }: {
   defaultName?: string;
   defaultCurrency?: string;
+  defaultManualFactor?: string | null;
+  learnedFactor?: CatalogNameData["learnedFactor"];
   isNew?: boolean;
 }) {
   return (
@@ -341,8 +350,36 @@ function CatalogNameFields({
           </select>
         </div>
       </div>
+      {/* How far this catalogue overstates (#1828): the collector's estimate, used only while its
+          own results are too few — so the learned figure stands beside it, to show when the data
+          has overtaken the guess. */}
+      <div>
+        <LabelWithError htmlFor="f-name-factor">Manual factor</LabelWithError>
+        <TextInput
+          id="f-name-factor"
+          name="manualFactor"
+          defaultValue={defaultManualFactor ? formatCatalogueFactor(Number(defaultManualFactor)) : ""}
+          placeholder="e.g. 10"
+          inputMode="decimal"
+          style={{ ...INPUT_STYLE, maxWidth: "8rem" }}
+        />
+        <FieldNote>Catalogue ÷ realised price, used while this catalogue has too few results of its own.</FieldNote>
+      </div>
+      {learnedFactor && (
+        <DetailFacts
+          rows={[{ label: "Learned factor", value: learnedFactorText(learnedFactor) }]}
+        />
+      )}
     </Fields>
   );
+}
+
+/** The learned factor as the settings state it: the figure and its `n`, and whether the ladder uses
+ *  it yet — below {@link MIN_RATIO_SAMPLE} the manual factor still answers. */
+function learnedFactorText(learned: NonNullable<CatalogNameData["learnedFactor"]>): string {
+  if (learned.factor === null) return "No recorded results yet";
+  const figure = `${formatCatalogueFactor(learned.factor)} · n = ${learned.n}`;
+  return learned.n < MIN_RATIO_SAMPLE ? `${figure} — too few to use yet` : `${figure} — replaces the manual factor`;
 }
 
 function EditionFields({ defaultYear, isNew }: { defaultYear?: number; isNew?: boolean }) {

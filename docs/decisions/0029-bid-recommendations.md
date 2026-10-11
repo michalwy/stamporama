@@ -7,7 +7,9 @@ ADR-0022 (market valuation); it decides nothing those two already decided. **Ame
 [ADR-0063](0063-price-observations.md) §7** (#1633): the ratio is learned from exact price
 observations as well as from the collector's own lots. **Amended by
 [ADR-0064](0064-markets-and-anchoring.md) §4** (#1634): only from datapoints sold in a market anchoring
-their own stamp's area.
+their own stamp's area. **Amended in place by #1828** (§2, §9): the catalogue is a bucket of the
+ladder, and each catalogue can carry a manual factor that stands in for `bidFallbackPercent` ahead of
+the collection bucket.
 
 ## Context
 
@@ -82,8 +84,10 @@ specific bucket that holds at least `MIN_RATIO_SAMPLE = 3` of them; otherwise th
 | 1 | area × condition × period | the stamp's primary area, the line's condition, `issuedYear` within **±2 years** |
 | 2 | area × condition | primary area and condition |
 | 3 | area | primary area |
-| 4 | collection | every ratio recorded |
-| 5 | `bidFallbackPercent` | nothing recorded at all |
+| 4 | catalogue | the catalogue the catalogue value was read in (#1828) |
+| 5 | the catalogue's manual factor | `CatalogName.manualFactor`, when set — a stated figure, not a bucket |
+| 6 | collection | every ratio recorded |
+| 7 | `bidFallbackPercent` | nothing learned, and no manual factor for the catalogue |
 
 Condition drops out before area deliberately, which reverses what one might expect. The catalogue
 *already* prices condition — an MNH and a used figure for the same stamp are different catalogue
@@ -98,6 +102,22 @@ which is what keeps two adjacent stamps showing different ratios explainable.
 
 A stamp with no `issuedYear` and a stamp with no primary area simply skip the buckets that need
 them.
+
+**The catalogue is a bucket, and its manual factor the rung beneath it** (#1828, amended in place on
+the §8 precedent). Catalogues overstate by very different amounts — a Michel figure ten times the
+realised price is nothing unusual, while Fischer typically runs two to five times — and the
+collection bucket folded the two into one median. "The catalogue" is the book a catalogue value was
+read in: an observation's is `CopyValuation.catalogNameId`, and the subject's is its primary area's
+effective primary catalogue, the only book a copy is ever valued from. It sits below area because an
+area is almost always priced from one book anyway, so the area bucket is already a catalogue bucket,
+narrower. Beneath it, a catalogue may carry the collector's **manual factor**, stored the way
+collectors speak of it (*catalogue ÷ realised*, `10` for "Michel runs ten times high") and applied as
+its inverse. **It sits before the collection bucket**, decided with the collector on 2026-10-11:
+placed after it, three results from any catalogue would silence every manual factor and bring back
+exactly the blur the catalogue bucket removes. The ratio itself is still learned (§9 stands): the
+factor is reached only while the catalogue's own results are too few, and the catalogue settings show
+the factor learned from those results, with its `n`, beside it. Every surface naming a bucket names
+this rung as the collector's own estimate, never as evidence — as it does `fallback`.
 
 **A split lot counts once per bucket.** ADR-0022 §3 splits a mixed lot's hammer price pro-rata by
 catalogue value, which means every line of that lot has, *by construction*, the same market ÷
@@ -248,7 +268,9 @@ the collector would be tuning against evidence the app is showing them on the sa
 `bidFallbackPercent` is the cold start only — a collection with zero recorded results. It defaults to
 **100** so that, until anything has been learned, a catalogue-anchored fair figure is exactly what
 #370's catalogue quick fill already writes and nothing silently changes meaning. It stops being
-consulted the moment bucket 4 has three ratios in it.
+consulted the moment the collection bucket has three ratios in it — and, since #1828, it is never
+reached for a stamp whose catalogue carries a manual factor (§2), which is a per-catalogue cold
+start rather than an override: it answers only where that catalogue's own evidence is too thin.
 
 ### 10. Computed on demand, in a pure module, stored nowhere
 

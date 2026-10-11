@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { readLearnedCatalogueFactors } from "./realization-ratios";
 
 async function assertCollectionOwner(
   ownerId: string,
@@ -62,6 +63,12 @@ export interface CatalogNameData {
   id: string;
   name: string;
   currency: string;
+  /** The collector's estimate of how far this catalogue overstates, *catalogue ÷ realised* (#1828),
+   * as a 2-dp string; null for none. */
+  manualFactor: string | null;
+  /** What this catalogue's own recorded results say, in the same unit, with its `n` — set only by
+   * {@link getCatalogSettingsTree}, the one surface that shows it. */
+  learnedFactor?: { factor: number | null; n: number };
   catalogEditions: CatalogEditionData[];
 }
 
@@ -101,7 +108,7 @@ export async function getCatalogTree(
   collectionId: string
 ): Promise<CatalogVendorData[]> {
   await assertCollectionOwner(ownerId, collectionId);
-  return prisma.catalogVendor.findMany({
+  const vendors = await prisma.catalogVendor.findMany({
     where: { collectionId },
     orderBy: { name: "asc" },
     select: {
@@ -114,6 +121,7 @@ export async function getCatalogTree(
           id: true,
           name: true,
           currency: true,
+          manualFactor: true,
           catalogEditions: {
             orderBy: { year: "asc" },
             select: { id: true, year: true },
@@ -122,6 +130,34 @@ export async function getCatalogTree(
       },
     },
   });
+  return vendors.map((vendor) => ({
+    ...vendor,
+    catalogNames: vendor.catalogNames.map((name) => ({
+      ...name,
+      manualFactor: name.manualFactor === null ? null : name.manualFactor.toFixed(2),
+    })),
+  }));
+}
+
+/**
+ * The tree as the catalogue settings show it: each catalogue with the factor learned from its own
+ * recorded results beside the manual one (#1828), so the collector can see when the data has
+ * overtaken the guess. The other readers of the tree have no use for it and do not pay for the ratio
+ * load.
+ */
+export async function getCatalogSettingsTree(
+  ownerId: string,
+  collectionId: string
+): Promise<CatalogVendorData[]> {
+  const tree = await getCatalogTree(ownerId, collectionId);
+  const learned = await readLearnedCatalogueFactors(collectionId);
+  return tree.map((vendor) => ({
+    ...vendor,
+    catalogNames: vendor.catalogNames.map((name) => ({
+      ...name,
+      learnedFactor: learned.get(name.id) ?? { factor: null, n: 0 },
+    })),
+  }));
 }
 
 export async function createCatalogVendor(
@@ -155,25 +191,30 @@ export async function deleteCatalogVendor(
 export async function createCatalogName(
   ownerId: string,
   vendorId: string,
-  data: { name: string; currency: string }
+  data: { name: string; currency: string; manualFactor?: number | null }
 ): Promise<void> {
   const collectionId = await resolveVendorCollection(vendorId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.catalogName.create({
-    data: { vendorId, name: data.name, currency: data.currency },
+    data: { vendorId, name: data.name, currency: data.currency, manualFactor: data.manualFactor ?? null },
   });
 }
 
 export async function updateCatalogName(
   ownerId: string,
   nameId: string,
-  data: { name: string; currency: string }
+  data: { name: string; currency: string; manualFactor?: number | null }
 ): Promise<void> {
   const collectionId = await resolveNameCollection(nameId);
   await assertCollectionOwner(ownerId, collectionId);
   await prisma.catalogName.update({
     where: { id: nameId },
-    data: { name: data.name, currency: data.currency },
+    data: {
+      name: data.name,
+      currency: data.currency,
+      // Omitted leaves the factor alone; null clears it.
+      ...(data.manualFactor !== undefined && { manualFactor: data.manualFactor }),
+    },
   });
 }
 

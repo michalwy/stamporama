@@ -3149,6 +3149,11 @@ model CatalogName {
   vendorId String
   name     String
   currency String
+  // The collector's estimate of how far this catalogue overstates what its stamps fetch, as
+  // catalogue ÷ realised — `10` for "Michel runs ten times high" (#1828; ADR-0029 §2 as amended).
+  // The realisation-ratio ladder takes its inverse when this catalogue's own results are too few to
+  // learn from, ahead of the collection-wide bucket. Null is no factor. CHECK > 0.
+  manualFactor Decimal? @db.Decimal(6, 2)
 
   vendor                 CatalogVendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   catalogEditions        CatalogEdition[]

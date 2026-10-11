@@ -6,6 +6,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { Tooltip } from "./tooltip";
 import { observationSource, soldOnLabel } from "./price-observation-sections";
 import { CollapsibleSection } from "./collapsible-section";
+import { isStatedRatio } from "@/lib/realization-ratio";
 import {
   FormatTables,
   Dash,
@@ -91,25 +92,26 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 /**
  * What a row was extrapolated with, said beside the condition rather than in a hover.
  *
- * The fallback rung is drawn in the warning tone and named for what it is: at that level the ratio
- * is the collection's configured `bidFallbackPercent` (#508) and not something learned, and that is
- * exactly the case where the figure most needs to be read as policy.
+ * The two stated rungs are drawn in the warning tone and named for what they are: the collection's
+ * configured `bidFallbackPercent` (#508), and a catalogue's manual factor (#1828) — neither learned,
+ * and those are exactly the cases where the figure most needs to be read as a stated one.
  */
 function BucketAside({ row }: { row: EstimatedValueRow }) {
-  const isFallback = row.level === "fallback";
+  const isStated = row.level !== null && isStatedRatio(row.level);
   const label =
     row.bucketLabel ?? `${row.bucketCount} bucket${row.bucketCount === 1 ? "" : "s"}`;
   return (
     <span
       style={{
         ...mutedSmallStyle,
-        color: isFallback ? "var(--color-warning)" : "var(--color-text-muted)",
+        color: isStated ? "var(--color-warning)" : "var(--color-text-muted)",
       }}
     >
       {label}
       {row.ratio !== null && <> · {percent(row.ratio)}</>}
       {row.n > 0 && <> · n = {row.n}</>}
-      {isFallback && <> · policy, not evidence</>}
+      {row.level === "fallback" && <> · policy, not evidence</>}
+      {row.level === "catalogue-factor" && <> · your estimate, not evidence</>}
     </span>
   );
 }
