@@ -200,8 +200,16 @@ describe("the post's text (#1544; ADR-0061 §3)", () => {
   });
 
   it("writes a figure with its currency, and nothing for none", () => {
-    assert.equal(facebookMoney("1.00", "PLN"), "1.00 PLN");
+    assert.equal(facebookMoney("1.00", "PLN"), "1 PLN");
+    assert.equal(facebookMoney("1.50", "PLN"), "1.50 PLN");
     assert.equal(facebookMoney(null, "PLN"), "");
+  });
+
+  it("writes a whole price in a post without decimals, any other with both (#1787)", () => {
+    const templates = { auction: "", quickBuy: "Kup teraz - {price}" };
+    const quickBuy = (price: string) => lot({ listingType: "fixed", price: facebookMoney(price, "PLN") });
+    assert.equal(renderFacebookPostText(templates, "", [quickBuy("15.00")]), "Kup teraz - 15 PLN");
+    assert.equal(renderFacebookPostText(templates, "", [quickBuy("15.50")]), "Kup teraz - 15.50 PLN");
   });
 });
 

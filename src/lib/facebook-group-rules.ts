@@ -44,8 +44,8 @@ export const FACEBOOK_TERMS_PLACEHOLDER: FacebookPostPlaceholder = {
 export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
   { token: "{title}", label: "Title", example: "Austria 1850 Mercury" },
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
-  { token: "{startingPrice}", label: "Starting price", example: "10.00 PLN" },
-  { token: "{increment}", label: "Bid increment", example: "1.00 PLN" },
+  { token: "{startingPrice}", label: "Starting price", example: "10 PLN" },
+  { token: "{increment}", label: "Bid increment", example: "1.50 PLN" },
   { token: "{closesAt}", label: "Closing time", example: "Sun 5 Oct, 20:00" },
   { token: "{lot}", label: "Lot number", example: "3" },
   { token: "{offer}", label: "Offer number", example: "412" },
@@ -59,7 +59,7 @@ export const FACEBOOK_AUCTION_PLACEHOLDERS: readonly FacebookPostPlaceholder[] =
 export const FACEBOOK_QUICK_BUY_PLACEHOLDERS: readonly FacebookPostPlaceholder[] = [
   { token: "{title}", label: "Title", example: "Austria 1850 Mercury" },
   { token: "{description}", label: "Description", example: "Mercury, 1850, mint never hinged" },
-  { token: "{price}", label: "Price", example: "25.00 PLN" },
+  { token: "{price}", label: "Price", example: "25 PLN" },
   { token: "{lot}", label: "Lot number", example: "3" },
   { token: "{offer}", label: "Offer number", example: "412" },
   FACEBOOK_TERMS_PLACEHOLDER,

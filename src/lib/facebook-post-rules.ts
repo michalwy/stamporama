@@ -9,7 +9,7 @@
 // is **only what its template places** (#1692): nothing is substituted, added or fallen back to, and
 // what comes out empty is named on the card (`facebookPostGaps`) rather than filled in.
 
-import { normalizeDecimalInput, roundAmount } from "./decimal-input";
+import { generatedAmount, normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
   FACEBOOK_RETIRED_PLACEHOLDERS,
   FACEBOOK_TERMS_PLACEHOLDER,
@@ -113,7 +113,7 @@ export interface FacebookPostLotText {
   description: string;
   /** `{catalog}`, retired (#1671) and still filled in where a template carries it. */
   catalog: string;
-  /** An auction's figures — `10.00 PLN`, or empty when it states none. */
+  /** An auction's figures — `10 PLN`, `10.50 PLN`, or empty when it states none. */
   startingPrice: string;
   increment: string;
   closesAt: string;
@@ -292,9 +292,9 @@ export function facebookPostGaps(
   return { missingTemplates, emptyPlaceholders };
 }
 
-/** A figure as a post states it: `10.00 PLN`, or empty when there is none. */
+/** A figure as a post states it: `10 PLN`, `10.50 PLN` (#1787), or empty when there is none. */
 export function facebookMoney(amount: string | null, currency: string): string {
-  return amount ? `${amount} ${currency}` : "";
+  return amount ? `${generatedAmount(amount)} ${currency}` : "";
 }
 
 /** Whether a lot has gone up with its post — anything past Ready. A post is up once one of its lots

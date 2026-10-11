@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   evaluateAmountExpression,
   formatAmountInput,
+  generatedAmount,
   normalizeDecimalInput,
   roundAmount,
   sanitizeDecimalInput,
@@ -200,5 +201,24 @@ describe("whitespace handling", () => {
 
   it("still rejects two numbers with no operator between them", () => {
     assert.equal(Number.isNaN(Number(normalizeDecimalInput("1 2"))), true);
+  });
+});
+
+describe("generatedAmount (#1787)", () => {
+  it("writes a whole amount without decimals", () => {
+    assert.equal(generatedAmount("15.00"), "15");
+    assert.equal(generatedAmount("0.00"), "0");
+    assert.equal(generatedAmount("1200"), "1200");
+  });
+
+  it("keeps both decimals on any other amount", () => {
+    assert.equal(generatedAmount("15.50"), "15.50");
+    assert.equal(generatedAmount("15.5"), "15.50");
+    assert.equal(generatedAmount("0.05"), "0.05");
+  });
+
+  it("leaves what is not a number as given", () => {
+    assert.equal(generatedAmount(""), "");
+    assert.equal(generatedAmount("abc"), "abc");
   });
 });
