@@ -15,7 +15,7 @@ import type { LocationData } from "@/lib/locations";
 import type { ItemListItem } from "@/lib/items";
 import { catalogMatchKey, catalogKeyMatches } from "@/lib/catalog-number";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
-import { summarizeRelink, type TickedCopy } from "@/lib/attach-relink";
+import { summarizeRelink, untickOrder, type TickedCopy } from "@/lib/attach-relink";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
@@ -43,6 +43,18 @@ const SEARCH_STYLE: React.CSSProperties = {
   color: "var(--color-text-primary)",
   background: "var(--color-bg-elevated)",
   boxSizing: "border-box",
+};
+
+/** *Untick these* on a line of the re-link warning — a quiet text action, the Offers list's
+ * `LINK_BTN`, so it reads as part of the sentence it answers rather than as a second footer. */
+const LINK_BTN: React.CSSProperties = {
+  border: "none",
+  background: "none",
+  padding: 0,
+  cursor: "pointer",
+  fontSize: "0.8125rem",
+  color: "var(--color-accent)",
+  fontWeight: 600,
 };
 
 const HINT_STYLE: React.CSSProperties = {
@@ -189,7 +201,7 @@ export function AttachCopiesDialog({
     setSelected((prev) => {
       const next = new Map(prev);
       if (next.has(item.id)) next.delete(item.id);
-      else next.set(item.id, { relinkFrom: item.purchase?.label ?? null });
+      else next.set(item.id, { relinkFrom: item.purchase ?? null });
       return next;
     });
   }
@@ -200,7 +212,7 @@ export function AttachCopiesDialog({
     setSelected((prev) => {
       const next = new Map(prev);
       for (const c of visibleCopies) {
-        if (on) next.set(c.id, { relinkFrom: c.purchase?.label ?? null });
+        if (on) next.set(c.id, { relinkFrom: c.purchase ?? null });
         else next.delete(c.id);
       }
       return next;
@@ -219,8 +231,10 @@ export function AttachCopiesDialog({
   // tick made under an area the rail has since left is still counted and its order still named
   // (#1079). Named rather than counted: the question a collector needs answered before agreeing is
   // *which* order loses them, so the count and the names come out of one pass and cannot drift.
+  // Each order carries its own share of the count, and can be unticked whole (#1770).
   const relinked = useMemo(() => summarizeRelink(selected), [selected]);
   const needsConfirm = relinked.count > 0;
+  const untickFrom = (orderId: string) => setSelected((prev) => untickOrder(prev, orderId));
 
   function submit() {
     setError(undefined);
@@ -373,7 +387,8 @@ export function AttachCopiesDialog({
 
       {/* Re-linking is a real change to two orders, so it is confirmed rather than assumed. The
           warning names the purchases being left — a count would not tell the collector whether
-          this is the mistake they are correcting. */}
+          this is the mistake they are correcting — one line each, with how many of the ticked
+          copies come off it and a way to leave all of them where they are (#1770). */}
       {needsConfirm && (
         <div
           style={{
@@ -382,22 +397,38 @@ export function AttachCopiesDialog({
             background: "var(--color-warning-soft)",
             color: "var(--color-warning)",
             fontSize: "0.8125rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.375rem",
           }}
         >
-          <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}>
+          <span>
+            <Icon name="warning" size="sm" /> {relinked.count}{" "}
+            {relinked.count === 1 ? "copy belongs" : "copies belong"} to another purchase.
+            Attaching {relinked.count === 1 ? "it" : "them"} here moves{" "}
+            {relinked.count === 1 ? "it" : "them"} off{" "}
+            {relinked.orders.length === 1 ? "that order" : "those orders"}.
+          </span>
+          <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
+            {relinked.orders.map((order) => (
+              <li key={order.id}>
+                {order.label} — {order.count} {order.count === 1 ? "copy" : "copies"}{" "}
+                <button type="button" onClick={() => untickFrom(order.id)} style={LINK_BTN}>
+                  Untick these
+                </button>
+              </li>
+            ))}
+          </ul>
+          <label
+            style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}
+          >
             <input
               type="checkbox"
               checked={confirmRelink}
               onChange={(e) => setConfirmRelink(e.target.checked)}
               style={{ marginTop: "0.15rem", cursor: "pointer" }}
             />
-            <span>
-              <Icon name="warning" size="sm" /> {relinked.count}{" "}
-              {relinked.count === 1 ? "copy belongs" : "copies belong"} to another purchase (
-              {relinked.orders.join(", ")}). Attaching{" "}
-              {relinked.count === 1 ? "it" : "them"} here moves{" "}
-              {relinked.count === 1 ? "it" : "them"} off that order. Confirm the move.
-            </span>
+            <span>Confirm the move.</span>
           </label>
         </div>
       )}
