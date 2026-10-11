@@ -609,8 +609,10 @@ to, which is where it earns its keep.
 
 #### Cutting the scan
 
-The scan opens in the **cut editor**, over the card itself, with **the stamps already boxed**. That
-proposal is where a cut starts, not where it ends: look down the card, correct what is wrong, and
+The scan opens in the **cut editor**, over the card itself, with **the stamps already boxed**. The
+editor takes the whole browser window, less a narrow margin, and the card gets all of it below the
+toolbar — so **Fit** shows the card as large as your screen allows, and a zoomed card shows as much
+of itself as it can. That proposal is where a cut starts, not where it ends: look down the card, correct what is wrong, and
 draw anything that was missed. On a card laid out with a tooth of gap between the stamps that is
 usually a box or two.
 
