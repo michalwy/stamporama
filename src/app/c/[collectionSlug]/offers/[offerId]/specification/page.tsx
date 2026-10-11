@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { readOfferSpecification } from "@/lib/offer-specification";
 import { formatEntityNo } from "@/lib/quick-jump";
+import { specificationLabels } from "@/lib/offer-specification-labels";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { SpecificationDocument, specificationThumbs } from "./specification-document";
 
@@ -20,8 +21,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!session) return {};
   const spec = await readOfferSpecification(session.user.id, offerId);
   if (!spec) return {};
-  // The tab title is what the browser offers as the PDF's file name, so it leads with the number.
-  return { title: `Specification ${formatEntityNo(spec.offerNo)} — ${spec.title}` };
+  // The tab title is what the browser offers as the PDF's file name, so it leads with the number —
+  // and it is the buyer's file, so it is named in the offer's language (#1760).
+  const word = specificationLabels(spec.language).specification;
+  return { title: `${word} ${formatEntityNo(spec.offerNo)} — ${spec.title}` };
 }
 
 /**

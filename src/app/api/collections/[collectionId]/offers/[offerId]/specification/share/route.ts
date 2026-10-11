@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { readOfferSpecificationShareLink } from "@/lib/offer-specification-share";
+import { readOfferSpecificationShareState } from "@/lib/offer-specification-share";
 
 // The offer's specification link (#1760) as the collector's dialog reads it: the address, when it
-// was made and when a buyer last opened it — or `null` when the offer has none.
+// was made, when a buyer last opened it and whether it still shows what it was made from — `link` is
+// `null` when the offer has none — and the offer's language, which the buyer's page speaks.
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ collectionId: string; offerId: string }> }
@@ -16,8 +17,9 @@ export async function GET(
 
   const { collectionId, offerId } = await params;
   try {
-    const link = await readOfferSpecificationShareLink(session.user.id, offerId, collectionId);
-    return NextResponse.json({ link });
+    return NextResponse.json(
+      await readOfferSpecificationShareState(session.user.id, offerId, collectionId)
+    );
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

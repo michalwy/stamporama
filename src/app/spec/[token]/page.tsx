@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
-import { verifyOfferSpecificationShareToken } from "@/lib/offer-specification-share";
-import { readOfferSpecification } from "@/lib/offer-specification";
+import {
+  readSharedOfferSpecification,
+  verifyOfferSpecificationShareToken,
+} from "@/lib/offer-specification-share";
+import { specificationLabelLanguage, specificationLabels } from "@/lib/offer-specification-labels";
+import { formatEntityNo } from "@/lib/quick-jump";
 import {
   OFFER_SPECIFICATION_SHARE_REFUSAL,
   offerSpecificationSharePhotoPath,
@@ -20,16 +24,32 @@ import {
 // token already resolves — so it inherits no collection layout: no sidebar, nothing to navigate into.
 //
 // **What is on it is the printable page's, and only that**: `readOfferSpecification`, the same read,
-// drawn by the same `SpecificationDocument`, so the rows, the fields and the thumbnails are the same
-// and as they stand when the page is opened — a copy sold since the link was made is gone from it.
+// drawn by the same `SpecificationDocument`, so the rows, the fields and the thumbnails are the same.
 // No price, no value, no other offer and nothing else from the collection; the specification's row
 // type has no field for any of it.
+//
+// **And only while it is the specification the collector sent.** Once anything on it has changed —
+// a copy sold or added, a condition, the title — or the offer has closed, the page shows the offer's
+// number and a notice to ask the seller for a current specification, in the offer's language, and
+// none of the contents (`readSharedOfferSpecification`).
 
-export const metadata: Metadata = {
-  title: "Specification",
-  // A secret link is only secret while nothing publishes it.
-  robots: { index: false, follow: false, nocache: true },
-};
+// A secret link is only secret while nothing publishes it.
+const ROBOTS: Metadata["robots"] = { index: false, follow: false, nocache: true };
+
+/** The tab title is the page's word in the offer's language, with the offer's number. The read here
+ *  does not count as the visit — the page's own does. */
+export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
+  const { token } = await params;
+  const access = await verifyOfferSpecificationShareToken(token, { touch: false });
+  const shared = access ? await readSharedOfferSpecification(access) : null;
+  if (!shared) return { title: "Specification", robots: ROBOTS };
+  const language = shared.standing === "current" ? shared.spec.language : shared.language;
+  const offerNo = shared.standing === "current" ? shared.spec.offerNo : shared.offerNo;
+  return {
+    title: `${specificationLabels(language).specification} ${formatEntityNo(offerNo)}`,
+    robots: ROBOTS,
+  };
+}
 
 /** Requests per address per minute — generous for a buyer reading and reloading one page, and far
  *  below what walking the token space would need. */
@@ -55,11 +75,23 @@ export default async function OfferSpecificationSharePage({ params }: SharePageP
   const access = await verifyOfferSpecificationShareToken(token);
   if (!access) return <Refusal message={OFFER_SPECIFICATION_SHARE_REFUSAL} />;
 
-  const spec = await readOfferSpecification(access.ownerId, access.offerId);
-  if (!spec) return <Refusal message={OFFER_SPECIFICATION_SHARE_REFUSAL} />;
+  const shared = await readSharedOfferSpecification(access);
+  if (!shared) return <Refusal message={OFFER_SPECIFICATION_SHARE_REFUSAL} />;
 
+  if (shared.standing !== "current") {
+    const labels = specificationLabels(shared.language);
+    return (
+      <Refusal
+        lang={specificationLabelLanguage(shared.language)}
+        heading={`${formatEntityNo(shared.offerNo)} · ${labels.specification}`}
+        message={labels.changed}
+      />
+    );
+  }
+
+  const { spec } = shared;
   return (
-    <main style={PAGE}>
+    <main style={PAGE} lang={specificationLabelLanguage(spec.language)}>
       <SpecificationDocument
         spec={spec}
         thumbSrc={specificationThumbs(spec, (photoId) =>
@@ -78,12 +110,21 @@ const PAGE: React.CSSProperties = {
   background: "var(--color-bg-page)",
 };
 
-/** A dead link reads as one sentence, with no app around it and nothing of the offer. */
-function Refusal({ message }: { message: string }) {
+/** A dead or outdated link reads as one sentence, with no app around it and nothing of the offer's
+ *  contents. Before an offer is known there is no offer language, so those refusals are English. */
+function Refusal({
+  message,
+  heading = "Specification",
+  lang = "en",
+}: {
+  message: string;
+  heading?: string;
+  lang?: string;
+}) {
   return (
-    <main style={PAGE}>
+    <main style={PAGE} lang={lang}>
       <h1 style={{ margin: 0, fontSize: "1.375rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
-        Specification
+        {heading}
       </h1>
       <p style={{ marginTop: "0.75rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
         {message}

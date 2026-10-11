@@ -1,6 +1,7 @@
 "use client";
 
 import type { OfferSpecificationRow } from "@/lib/offer-specification-rules";
+import type { SpecificationLabels } from "@/lib/offer-specification-labels";
 import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
 
 // The specification's table (#1758): one row per copy, for a buyer.
@@ -34,9 +35,12 @@ const MUTED_DASH = <span style={{ color: "var(--color-text-muted)" }}>—</span>
 
 export function SpecificationSheet({
   rows,
+  labels,
   thumbSrc,
 }: {
   rows: readonly OfferSpecificationRow[];
+  /** The page's words, in the offer's language (#1760). */
+  labels: SpecificationLabels;
   /** Each row's thumbnail address, by photo id. Resolved by the page, because the collector's sheet
    *  and the buyer's shared page (#1760) fetch the same picture through different routes — the
    *  collection's own and the link's. */
@@ -45,7 +49,7 @@ export function SpecificationSheet({
   if (rows.length === 0) {
     return (
       <p style={{ marginTop: "1rem", fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
-        This offer holds no copies, so there is nothing to specify.
+        {labels.empty}
       </p>
     );
   }
@@ -53,14 +57,14 @@ export function SpecificationSheet({
     <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem" }}>
       <thead>
         <tr>
-          <th style={TH} aria-label="Photo" />
-          <th style={TH}>Catalog</th>
-          <th style={TH}>Area</th>
-          <th style={TH}>Series</th>
-          <th style={{ ...TH, textAlign: "right" }}>Year</th>
-          <th style={TH}>Stamp</th>
-          <th style={TH}>Condition</th>
-          <th style={TH}>Certificate</th>
+          <th style={TH} aria-label={labels.photo} />
+          <th style={TH}>{labels.catalog}</th>
+          <th style={TH}>{labels.area}</th>
+          <th style={TH}>{labels.series}</th>
+          <th style={{ ...TH, textAlign: "right" }}>{labels.year}</th>
+          <th style={TH}>{labels.stamp}</th>
+          <th style={TH}>{labels.condition}</th>
+          <th style={TH}>{labels.certificate}</th>
         </tr>
       </thead>
       <tbody>

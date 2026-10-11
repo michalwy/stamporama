@@ -1027,7 +1027,9 @@ same way, so the page reads in the order a buyer sees the stamps in the photos.
 The page is written in **the offer's language** — its platform's listing language, the same one the
 title and description use. Stamp, series, area, condition, fault and certificate names are
 translated where your collection has a translation for that language. Where it doesn't, the
-collection's own wording is used, just as in the title. The column headings stay in English.
+collection's own wording is used, just as in the title. The page's own words — its heading, the
+column headings and the copy count — are in that language too, for each of the languages offered in
+a platform's language list. For a language outside that list, they are in English.
 
 ### As plain text
 
@@ -1049,20 +1051,28 @@ address: **Copy link** puts it on the clipboard, and **Open as the buyer sees it
 new tab.
 
 The buyer opens the link **without an account** and sees the same specification as the printed
-page — the same rows, fields and thumbnails, in the same order and language — and nothing else from
-your collection: no other offers, no prices and no way into the app. The page shows the
-specification **as it stands when it is opened**, so a copy that sells after you sent the link is no
-longer on it.
+page — the same rows, fields and thumbnails, in the same order and in the offer's language — and
+nothing else from your collection: no other offers, no prices and no way into the app.
+
+**A link shows the specification it was made with, and only that.** If anything on the
+specification changes afterwards — a copy sells or is added, a condition or a title is edited, the
+platform's language changes — or the offer is sold or withdrawn, the link still opens, but instead
+of the specification it shows the offer's number and a message, in the offer's language, that the
+offer has changed and the buyer should contact you for a current specification. Changes the
+specification doesn't show, such as the price or the listing's texts, don't affect the link.
 
 An offer has **one link**. Reopening the dialog shows it again, with when it was created and when a
-buyer last opened it.
+buyer last opened it. If the specification has changed since the link was made, or the offer has
+closed, the dialog says so. If the offer's language is one the page has no headings in, the dialog
+says that the buyer will see them in English.
 
-- **New link** replaces the address. The old one stops working, so anyone holding it needs the new
-  one.
+- **New link** replaces the address and records the specification as it is now — this is how you
+  send a buyer an updated specification. The old address stops working, so anyone holding it needs
+  the new one.
 - **Withdraw** removes the link. From then on its address shows only that the link is not valid —
   nothing of the offer.
 
-The link has no expiry date; it works until you withdraw or replace it, or delete the offer.
+The link has no expiry date. It opens until you withdraw or replace it, or delete the offer.
 
 ## What the market is asking
 

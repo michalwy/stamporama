@@ -5200,7 +5200,10 @@ model Offer {
 //
 // **One row per offer** (`offerId` unique), the trade and sale links' rule: a second live link is a
 // second thing to remember to revoke, and regenerating replaces the row, which is what revocation
-// means. **No expiry**: nothing asked for one, and withdrawing the link is the fence.
+// means. **No expiry date**: a link lives as long as the specification it was made from. Once the
+// offer's specification reads differently, or the offer closes, the address still opens — and says
+// the offer has changed and to ask the seller for a new one, instead of showing contents the buyer
+// was not sent (`contentsHash`).
 //
 // The hash resolves a request and the seal is for display (#681), with the same best-effort sealing:
 // without `STAMPORAMA_SECRET_KEY` a link is still minted and shown once.
@@ -5213,6 +5216,10 @@ model OfferSpecificationShareToken {
   // The same raw token, sealed (`secret-box.ts`), so the collector can be shown their own link
   // again. Null on an install with no key configured.
   tokenSealed String?
+  // SHA-256 hex of the specification's contents when the link was made
+  // (`specificationContentsKey`): the offer's number, title and language, and every row with every
+  // field. The page shows the specification only while today's contents hash the same.
+  contentsHash String
   createdAt   DateTime  @default(now())
   // When a buyer last opened it — the collector's one sign that the link reached anybody.
   lastUsedAt  DateTime?

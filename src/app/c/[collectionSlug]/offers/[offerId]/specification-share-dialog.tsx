@@ -10,9 +10,14 @@ import {
   DialogDestructiveButton,
   LabelWithError,
 } from "@/app/dialog-shell";
-import type { OfferSpecificationShareLinkData } from "@/lib/offer-specification-share";
+import type {
+  OfferSpecificationShareStanding,
+  OfferSpecificationShareState,
+} from "@/lib/offer-specification-share";
 import type { ShareAddressRefusal } from "@/lib/share-address";
 import { offerSpecificationSharePath } from "@/lib/offer-specification-share-rules";
+import { hasSpecificationLabels } from "@/lib/offer-specification-labels";
+import { languageLabel } from "@/lib/languages";
 import {
   createOfferSpecificationShareLinkAction,
   revokeOfferSpecificationShareLinkAction,
@@ -20,8 +25,12 @@ import {
 import { formControl, multiLineFormControl } from "@/app/control-style";
 
 // The collector's end of the specification link (#1760) — the sale buyer link's dialog (#699) with
-// less in it: no expiry, because withdrawing the link is the fence, and nothing for the buyer to
-// answer. Create, copy, open as the buyer sees it, replace, withdraw.
+// less in it: no expiry date, because a link lives as long as the specification it was made from,
+// and nothing for the buyer to answer. Create, copy, open as the buyer sees it, replace, withdraw.
+//
+// It says when the link no longer shows its specification — the offer changed or closed, and a buyer
+// opening it is asked to contact the seller — because that is exactly when the collector needs to
+// send a new one. And it says when the offer's language is one the buyer's page has no words in.
 //
 // **The address is on the dialog whenever it can be** (#681): a link that could not be shown again
 // could not be sent twice or checked, and replacing it would break the address a buyer is holding.
@@ -62,6 +71,14 @@ function dateText(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/** What a link that no longer shows its specification means, ending in what to do about it. */
+const STANDING_MESSAGE: Record<Exclude<OfferSpecificationShareStanding, "current">, string> = {
+  changed:
+    "The specification has changed since this link was made, so a buyer opening it is asked to contact you instead. Generate a new link to share the current one.",
+  closed:
+    "This offer is closed, so a buyer opening the link is asked to contact you instead of seeing the specification.",
+};
+
 function shareLinkKey(offerId: string) {
   return ["offer-specification-share", offerId] as const;
 }
@@ -76,17 +93,18 @@ export function SpecificationShareDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { data, isLoading, isError } = useQuery<OfferSpecificationShareLinkData | null>({
+  const { data, isLoading, isError } = useQuery<OfferSpecificationShareState>({
     queryKey: shareLinkKey(offerId),
     queryFn: async () => {
       const res = await fetch(
         `/api/collections/${collectionId}/offers/${offerId}/specification/share`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return ((await res.json()) as { link: OfferSpecificationShareLinkData | null }).link;
+      return (await res.json()) as OfferSpecificationShareState;
     },
   });
-  const share = data ?? null;
+  const share = data?.link ?? null;
+  const language = data?.language ?? null;
 
   // The address of a link minted in this dialog, on screen before the refetch lands.
   const [minted, setMinted] = useState<string | null>(null);
@@ -133,8 +151,9 @@ export function SpecificationShareDialog({
       <DialogBody>
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           <p style={META}>
-            A link a buyer opens without an account: this offer&apos;s specification, as it stands
-            when they open it, and nothing else from your collection.
+            A link a buyer opens without an account: this offer&apos;s specification as it is now,
+            in the offer&apos;s language, and nothing else from your collection. If the
+            specification changes or the offer closes, the link asks the buyer to contact you instead.
           </p>
 
           {link && (
@@ -174,6 +193,17 @@ export function SpecificationShareDialog({
             <p style={META}>
               Created {dateText(share.createdAt)}
               {share.lastUsedAt ? ` · last opened ${dateText(share.lastUsedAt)}` : " · not opened yet"}
+            </p>
+          )}
+
+          {share && !minted && share.standing !== "current" && (
+            <p style={{ ...META, color: "var(--color-warning)" }}>{STANDING_MESSAGE[share.standing]}</p>
+          )}
+
+          {data && !hasSpecificationLabels(language) && (
+            <p style={{ ...META, color: "var(--color-warning)" }}>
+              The specification&apos;s data is in {language ? languageLabel(language) : "this offer's language"},
+              but its headings and notices have no translation into it, so the buyer sees them in English.
             </p>
           )}
 
