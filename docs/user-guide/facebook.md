@@ -106,6 +106,27 @@ description. A template that still uses it keeps working — the numbers are sti
 is flagged until you remove it: the field says so under it, and the row in the list carries a
 `{catalog}` tag.
 
+**A template can carry formatting**, written as Markdown and limited to what Facebook's group post
+editor offers. Each template field lists it under the placeholders:
+
+| Write | For |
+| --- | --- |
+| `**text**` | bold |
+| `*text*` | italic |
+| `# ` at the start of a line | a heading |
+| `## ` at the start of a line | a subheading |
+| `- ` at the start of each line | a bulleted list |
+| `1. `, `2. `… at the start of each line | a numbered list |
+| `> ` at the start of a line | a quote |
+
+Anything else stays exactly as typed — a link, a third heading level (`###`), a line of dashes —
+since Facebook's editor would not take it. A placeholder is formatted the way the template formats
+it, so `**{title}**` makes the title bold, but what it puts in is always text: a title or a
+description with an asterisk or a `#` in it is not formatted by it. To write a symbol that would
+otherwise format, put a backslash before it — `\*` is an asterisk. A line break in the template is
+a line break in the post, and a blank line starts a new paragraph; a line written straight after a
+list item continues that item, so leave a blank line after a list.
+
 The templates here are Facebook's own, not the platform's description template: that one writes an
 offer's description, which is what `{description}` puts into the post.
 
@@ -218,8 +239,11 @@ the offer's screen, directly under the description, which holds everything the p
 - the **group**, with a link to open it;
 - the **post text**: the group's post template for the offer's type — the auction or the quick-buy
   one, its own or Facebook's, as it reads now — filled in from the offer, with the note on shipping,
-  payment and terms where the template's `{terms}` puts it. **Copy** puts it on the clipboard in one
-  click. Under the text the card names what the post is missing — *No quick-buy post template set*,
+  payment and terms where the template's `{terms}` puts it, shown formatted the way Facebook will show
+  it — **Source** switches to the template's Markdown as filled in, **Rendered** back. **Copy** puts
+  it on the clipboard in one click, formatted *and* as plain text: pasted into a Facebook group post
+  it keeps its bold, headings, lists and quotes, and pasted into a field that takes no formatting it
+  is the post's text without a Markdown symbol in it. Under the text the card names what the post is missing — *No quick-buy post template set*,
   or a placeholder that is empty, such as `{description}` when the offer has no description — with a
   link to where it is set: the template or the note in Settings → Facebook, the group's own or
   Facebook's defaults, whichever the group uses. Nothing is filled in to hide it, and **Copy** still
