@@ -12,6 +12,7 @@ import {
   setOfferState,
 } from "../../src/lib/offers";
 import { FACEBOOK_PLATFORM_MODULE } from "../../src/lib/platform-modules";
+import { publishOfferOrPost } from "../../src/lib/facebook-posts";
 
 // Quick buys past their platform's refresh threshold, and reposting them on the same offer (#1718).
 //
@@ -262,6 +263,45 @@ describe("quick-buy refresh (#1718)", () => {
       assert.equal(byId.get(lot3)!.url, "https://www.facebook.com/groups/1/posts/old");
       assert.equal(byId.get(lot3)!.lastPostedAt, null);
       assert.equal(byId.get(lot3)!._count.postings, 0);
+    });
+
+    it("reposts a post for the group's approval, and counts the days up from the approval (#1779)", async () => {
+      const post = (await prisma.facebookPost.create({ data: { collectionId, groupId: following } })).id;
+      const lot1 = await facebookOffer(following, 5, "fixed", { postId: post, lotNo: 1 });
+      const lot2 = await facebookOffer(following, 5, "fixed", { postId: post, lotNo: 2 });
+      const lot3 = await facebookOffer(following, 5, "auction", { postId: post, lotNo: 3 });
+      // An approval is an activation and asks what one does — the lots must list something.
+      for (const id of [lot1, lot2]) {
+        const itemId = (await createItem(userId, collectionId, { stampId, conditionId, forSale: true })).id;
+        await addOfferSet(userId, id, [itemId]);
+      }
+      const first = (await prisma.offer.findUniqueOrThrow({ where: { id: lot1 } })).listingDate;
+      assert.ok((await needsRefreshIds()).includes(lot1));
+
+      const pending = "https://www.facebook.com/groups/1/pending_posts/42";
+      assert.deepEqual(await repostOffer(userId, lot1, pending, "pending"), { reposted: 2 });
+      const read = (id: string) => prisma.offer.findUniqueOrThrow({ where: { id } });
+      for (const id of [lot1, lot2]) {
+        const lot = await read(id);
+        assert.equal(lot.state, "pending", "the new post waits for the group");
+        assert.equal(lot.url, pending);
+        assert.equal(lot.lastPostedAt, null, "nobody sees it yet, so the count has not restarted");
+        assert.deepEqual(lot.listingDate, first);
+      }
+      assert.equal((await read(lot3)).state, "active", "an auction lot beside them is left alone");
+      const waiting = await needsRefreshIds();
+      assert.ok(!waiting.includes(lot1) && !waiting.includes(lot2), "a pending quick buy is not marked");
+
+      const final = "https://www.facebook.com/groups/1/posts/42";
+      await publishOfferOrPost(userId, lot2, final);
+      for (const id of [lot1, lot2]) {
+        const lot = await read(id);
+        assert.equal(lot.state, "active");
+        assert.equal(lot.url, final, "the final link replaces the pending one");
+        assert.deepEqual(lot.listingDate, first, "the first listing date stays — time to sale runs from it");
+        assert.ok(lot.lastPostedAt && Date.now() - lot.lastPostedAt.getTime() < 60_000, "approval restarts the count");
+        assert.equal((await getOfferDetail(userId, id))!.refreshDueDays, null);
+      }
     });
   });
 });

@@ -35,7 +35,13 @@ import {
 import type { TitleFallback } from "@/lib/offer-title-template";
 import { parseOfferPhotoConfigInput } from "@/lib/offer-photo-config";
 import { enqueueOfferPhotoGeneration } from "@/lib/offer-photo-generation";
-import { publishOfferOrPost, rejectOfferOrPost } from "@/lib/facebook-posts";
+import {
+  publishOfferOrPost,
+  readFacebookApprovalClosing,
+  rejectOfferOrPost,
+  withdrawOfferOrPost,
+} from "@/lib/facebook-posts";
+import type { FacebookApprovalClosing } from "@/lib/facebook-post-rules";
 import {
   attachOfferCopyPhotos,
   attachOfferItemFrontPhotos,
@@ -950,6 +956,8 @@ export async function setOfferStateAction(
     // Back to Ready is a rejection when the offer is pending (#1778), and a rejected Facebook post
     // takes every lot back with it; anywhere else it is the ordinary step.
     if (state === "ready") await rejectOfferOrPost(session.user.id, offerId);
+    // …and a withdrawn one waiting for approval takes its post's other pending lots with it (#1779).
+    else if (state === "withdrawn") await withdrawOfferOrPost(session.user.id, offerId);
     else await setOfferState(session.user.id, offerId, state);
     return { status: "success" };
   } catch (e) {
@@ -995,12 +1003,13 @@ async function runOverOffers(
 }
 
 /** Withdraw a selection of offers in one motion (the offers list's bulk bar). Each goes through the
- * same `setOfferState` a single row does, so the lifecycle rules — and the refusal on an offer that
- * is already closed — are stated in exactly one place. */
+ * same path a single row does — `setOfferState`, by way of the pending Facebook post that withdraws
+ * as one (#1779) — so the lifecycle rules, and the refusal on an offer that is already closed, are
+ * stated in exactly one place. */
 export async function withdrawOffersAction(offerIds: string[]): Promise<BulkOfferActionState> {
   const session = await getSession();
   return runOverOffers(offerIds, "Failed to withdraw the offer.", (offerId) =>
-    setOfferState(session.user.id, offerId, "withdrawn")
+    withdrawOfferOrPost(session.user.id, offerId)
   );
 }
 
@@ -1023,23 +1032,46 @@ export async function deleteOffersAction(offerIds: string[]): Promise<BulkOfferA
 export async function publishOfferAction(
   offerId: string,
   rawUrl: string,
-  to: "active" | "pending" = "active"
+  to: "active" | "pending" = "active",
+  rawEndsAt?: string | null
 ): Promise<OfferActionState> {
   const session = await getSession();
   if (to !== "active" && to !== "pending") return { status: "error", message: "Unknown offer state." };
+  // The closing time an approved Facebook auction is given (#1779) — sent only when the dialog asked
+  // for it; absent, the auctions keep theirs.
+  let endsAt: Date | null | undefined;
+  if (rawEndsAt !== undefined && to === "active") {
+    const ends = parseOfferEndsAt(rawEndsAt ?? "");
+    if (!ends.ok) return { status: "error", message: ends.message };
+    endsAt = ends.value;
+  }
   try {
-    await publishOfferOrPost(session.user.id, offerId, normalizeUrl(rawUrl), to);
+    await publishOfferOrPost(session.user.id, offerId, normalizeUrl(rawUrl), to, endsAt);
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to publish the offer.");
   }
 }
 
-/** Post a quick buy again (#1718): the same offer, the new post's link, the count restarted. */
-export async function repostOfferAction(offerId: string, rawUrl: string): Promise<OfferActionState> {
+/** What approving an offer asks about a Facebook auction's closing time (#1779), or null. */
+export async function readFacebookApprovalClosingAction(
+  offerId: string
+): Promise<FacebookApprovalClosing | null> {
   const session = await getSession();
+  return readFacebookApprovalClosing(session.user.id, offerId);
+}
+
+/** Post a quick buy again (#1718): the same offer, the new post's link, the count restarted — or,
+ *  when the new post waits for the group's approval, back to Pending until it is approved (#1779). */
+export async function repostOfferAction(
+  offerId: string,
+  rawUrl: string,
+  to: "active" | "pending" = "active"
+): Promise<OfferActionState> {
+  const session = await getSession();
+  if (to !== "active" && to !== "pending") return { status: "error", message: "Unknown offer state." };
   try {
-    await repostOffer(session.user.id, offerId, normalizeUrl(rawUrl) ?? "");
+    await repostOffer(session.user.id, offerId, normalizeUrl(rawUrl) ?? "", to);
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to record the repost.");

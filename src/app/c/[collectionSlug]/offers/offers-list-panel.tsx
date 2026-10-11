@@ -1100,7 +1100,12 @@ export function OffersListPanel({
       {dialog.kind === "withdraw" && (
         <ConfirmDialog
           title="Withdraw offer"
-          message="This takes the listing down on the platform. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+          message={
+            // A post still waiting for approval is taken back whole (#1779).
+            dialog.offer.state === "pending" && dialog.offer.facebookPostId
+              ? "This takes the post back from the group: every lot of it still waiting for approval is withdrawn with this one. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+              : "This takes the listing down on the platform. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
+          }
           actionLabel="Withdraw"
           pendingLabel="Withdrawing…"
           variant="destructive"
@@ -1130,14 +1135,15 @@ export function OffersListPanel({
           initialUrl={dialog.offer.url}
           initialTarget={dialog.target}
           approving={dialog.approving}
+          offerId={dialog.offer.id}
           isPending={isPending}
           error={actionError}
           onClose={closeDialog}
-          onConfirm={(url, target) => {
+          onConfirm={(url, target, endsAt) => {
             startTransition(async () => {
               const { publishOfferAction } = await import("@/app/actions/offers");
               const offer = dialog.offer;
-              const result = await publishOfferAction(offer.id, url, target);
+              const result = await publishOfferAction(offer.id, url, target, endsAt);
               if (result.status === "success") {
                 handleSuccess();
                 toast({

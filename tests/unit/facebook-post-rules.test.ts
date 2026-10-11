@@ -10,6 +10,7 @@ import {
   facebookPostRefusal,
   facebookPostLink,
   isFacebookLotPosted,
+  isFacebookPendingPostUrl,
   parseBidIncrement,
   readFacebookCreateChoice,
   renderFacebookLotText,
@@ -434,5 +435,22 @@ describe("readFacebookCreateChoice (#1663)", () => {
       facebookGroupId: "g1",
       endsAt: null,
     });
+  });
+});
+
+describe("isFacebookPendingPostUrl (#1779)", () => {
+  it("knows a post held for a group administrator by its pending_posts segment", () => {
+    assert.equal(isFacebookPendingPostUrl("https://www.facebook.com/groups/123/pending_posts/456"), true);
+    assert.equal(isFacebookPendingPostUrl("  https://m.facebook.com/groups/123/pending_posts/  "), true);
+    assert.equal(isFacebookPendingPostUrl("https://facebook.com/groups/abc/pending_posts"), true);
+  });
+
+  it("reads anything else as a post that is up, or no link at all", () => {
+    assert.equal(isFacebookPendingPostUrl("https://www.facebook.com/groups/123/posts/456"), false);
+    assert.equal(isFacebookPendingPostUrl("https://example.com/groups/1/pending_posts/2"), false);
+    assert.equal(isFacebookPendingPostUrl("https://notfacebook.com/pending_posts/2"), false);
+    assert.equal(isFacebookPendingPostUrl("https://www.facebook.com/groups/1/posts/2?ref=pending_posts"), false);
+    assert.equal(isFacebookPendingPostUrl("not a link"), false);
+    assert.equal(isFacebookPendingPostUrl(""), false);
   });
 });
