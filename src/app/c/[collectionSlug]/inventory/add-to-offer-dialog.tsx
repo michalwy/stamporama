@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import {
   PICKER_DIALOG_HEIGHT,
@@ -211,12 +212,12 @@ export function AddToOfferDialog({
     creating
   );
 
-  // Suggested asking price for the quick-start create path (#230): the copies' catalog value in the
-  // collection base currency. Blank when a copy is unpriced, when its value can't be expressed in
-  // the base currency (no rate), or when the copies **disagree** — an offer carries one asking
-  // price, so a suggestion only exists where the copies share one figure (which a duplicate group
-  // does by construction, unless its members carry different fault reductions, #1560). Then no
-  // suggestion is shown and the field starts empty.
+  // The copies' catalogue value in the collection base currency (#230). No longer the suggestion
+  // (#1829), but still what a Facebook group opening at a share of catalogue takes its share of
+  // (#1663). Blank when a copy is unpriced, when its value can't be expressed in the base currency
+  // (no rate), or when the copies **disagree** — an offer carries one price, so a figure only
+  // exists where the copies share one (which a duplicate group does by construction, unless its
+  // members carry different fault reductions, #1560).
   const catalogBase = useMemo(() => {
     const first = items[0]?.value;
     if (!first || first.unpriced || first.baseAmountDisplay == null) return "";
@@ -224,25 +225,37 @@ export function AddToOfferDialog({
       ? first.baseAmountDisplay
       : "";
   }, [items]);
-  const [suggestedPrice, setSuggestedPrice] = useState(catalogBase);
-  // Only apply the latest conversion — quick currency switches can resolve out of order.
-  const convertToken = useRef(0);
-
-  // Re-express the catalog-value suggestion in the new offer's currency when it changes (mirrors the
-  // #200 duplicate flow). The base is always `catalogBase` in `baseCurrency`, so switching currencies
-  // never compounds; a missing rate leaves the current value for the collector to adjust.
+  // Suggested asking price for the quick-start create path (#1829): the copies' **Estimated value**
+  // — catalogue × the learned realisation ratio — in the base currency, on the same rule: blank
+  // unless every copy has one and they agree. Read while the picker is still open, so it is usually
+  // there by the time the form is.
+  const { data: copyEstimates } = useQuery({
+    queryKey: ["copy-estimates", collectionId, itemIds],
+    queryFn: async () => {
+      const { previewCopyEstimatesAction } = await import("@/app/actions/offers");
+      return previewCopyEstimatesAction(collectionId, itemIds);
+    },
+    enabled: itemIds.length > 0,
+    staleTime: 30_000,
+  });
+  const estimatedBase = useMemo(() => {
+    const first = copyEstimates && itemIds[0] ? copyEstimates[itemIds[0]] : undefined;
+    if (!first) return "";
+    return itemIds.every((id) => copyEstimates![id] === first) ? first : "";
+  }, [itemIds, copyEstimates]);
+  // Both figures are re-expressed in the new offer's currency as it changes (mirrors the #200
+  // duplicate flow). The base is always the base-currency figure, so switching currencies never
+  // compounds; a missing rate leaves no suggestion rather than one in the wrong currency.
+  const [offerCurrency, setOfferCurrency] = useState<string>(baseCurrency);
+  const estimatedPrice = useConvertedAmount(collectionId, estimatedBase, baseCurrency, offerCurrency);
+  const catalogPrice = useConvertedAmount(collectionId, catalogBase, baseCurrency, offerCurrency);
+  // What the collector typed over the suggestion; null while untouched. A currency change hands the
+  // field back to the suggestion, as converting it always did.
+  const [typedPrice, setTypedPrice] = useState<string | null>(null);
   function handlePriceCurrencyChange(currency: string | null) {
-    if (!currency || !catalogBase) return;
-    if (currency === baseCurrency) {
-      setSuggestedPrice(catalogBase);
-      return;
-    }
-    const token = ++convertToken.current;
-    void (async () => {
-      const { convertPriceAction } = await import("@/app/actions/exchange-rates");
-      const result = await convertPriceAction(collectionId, catalogBase, baseCurrency, currency);
-      if (token === convertToken.current && result.status === "success") setSuggestedPrice(result.value);
-    })();
+    if (!currency) return;
+    setOfferCurrency(currency);
+    if (estimatedBase) setTypedPrice(null);
   }
   // Persisted per collection so the picker reopens on the state facet it was left on (mirrors the
   // search box's own persistence). "" (or any non-composable value) means "All offers".
@@ -656,22 +669,23 @@ export function AddToOfferDialog({
           ) : undefined
         }
         // Always ask for the asking price here (#257): this is a one-pass "list it now" flow, so the
-        // price is set up front rather than deferred to the detail screen. When the copy has a catalog
-        // value it pre-fills (#230), converted to the offer's currency and still fully editable;
-        // otherwise the field starts blank for the collector to fill in.
+        // price is set up front rather than deferred to the detail screen. When the copy has an
+        // Estimated value it pre-fills (#1829, the catalogue value until then, #230), converted to the
+        // offer's currency and still fully editable; otherwise the field starts blank.
         showPrice
         // The price is the one thing this flow still asks for — the platform comes in pre-filled and
         // the rest pre-fills from the last offer — so the cursor starts there, with any suggested
         // figure selected so typing over it needs no clearing first.
         autoFocusPrice
-        priceValue={catalogBase ? suggestedPrice : undefined}
-        onPriceValueChange={setSuggestedPrice}
+        priceValue={typedPrice ?? estimatedPrice ?? ""}
+        onPriceValueChange={setTypedPrice}
+        catalogValue={catalogPrice}
         onCurrencyChange={handlePriceCurrencyChange}
         sourceNote={
-          catalogBase
+          estimatedBase
             ? multi
-              ? "The asking price is pre-filled from the copies' shared catalog value — adjust it as needed, then add the listing URL once you have it."
-              : "The asking price is pre-filled from this copy's catalog value — adjust it as needed, then add the listing URL once you have it."
+              ? "The asking price is pre-filled from the copies' shared Estimated value — adjust it as needed, then add the listing URL once you have it."
+              : "The asking price is pre-filled from this copy's Estimated value — adjust it as needed, then add the listing URL once you have it."
             : "Set the asking price, and add the listing URL once you have it."
         }
         onClose={() => {
@@ -1080,4 +1094,22 @@ function SetPickRow({
       )}
     </div>
   );
+}
+
+/** `amount` in `to`, converted from `from` at the collection's current rate; the amount itself when
+ * the two currencies agree, and null when there is no amount or no rate. */
+function useConvertedAmount(collectionId: string, amount: string, from: string, to: string): string | null {
+  const same = from === to;
+  const { data } = useQuery({
+    queryKey: ["convert-price", collectionId, amount, from, to],
+    queryFn: async () => {
+      const { convertPriceAction } = await import("@/app/actions/exchange-rates");
+      const result = await convertPriceAction(collectionId, amount, from, to);
+      return result.status === "success" ? result.value : null;
+    },
+    enabled: !!amount && !same,
+    staleTime: 60_000,
+  });
+  if (!amount) return null;
+  return same ? amount : (data ?? null);
 }

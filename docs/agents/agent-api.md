@@ -830,16 +830,26 @@ The two figures are **never merged**. `catalogValue` is a book's opinion at this
 fetched (#458), and it is **absent** where no auction result answers, which is *no evidence* and
 deliberately not a catalogue-derived stand-in (ADR-0022 §6). On a copy carrying several stamps the first figure is not a book's at all: no catalogue prices such a piece (#745), so `catalogValue` is the value the collector recorded on it and says so with `recorded: true` (#747) — a field added, never a meaning changed for any other copy.
 
-### `get_offer`'s `pricing` is four claims, not a recommendation
+### `get_offer`'s `pricing` is five claims, not a recommendation
 
 `suggested` is the catalogue value averaged **per set**, in the listing's own currency, because a
 buyer takes one set (#190). `marketTotal` is evidence. `platformOpening` is what this house opens an
 auction at whatever the goods are worth (#553), and outranks the other two **on an auction only**.
 `platformMinimum` is what the marketplace costs to post on (#731) and is the weakest of the four.
 
+**#1829 added a fifth, `estimated`, and changed nothing about `suggested`.** The offer screen now
+suggests from Estimated value — the catalogue corrected by the learned realisation ratio — so the
+screen's *suggested* and the API's `suggested` name different figures, and that is the contract
+holding rather than drifting: `/api/v1` only grows, `suggested` was published as the catalogue per
+set, and an agent that read it last month must read the same thing today. `estimated` travels with
+`estimatedValuedSets` and `estimatedSource` (the bucket and its `n`, the manual factor, or a count of
+buckets) for the same reason `suggested` travels with its counts. `OfferDetail` carries the
+catalogue figure as `catalogPrice` and the screen's suggestion as `suggestedPrice`, and the
+projection maps the first to `suggested`.
+
 **Collapsing them into one number is what would make an agent price a stamp confidently and
-wrongly**, which is the same argument `offers.md` makes for drawing the three figures in a fixed
-order under the price on the offer's screen. And `suggested` never travels without `suggestedValuedSets` and
+wrongly**, which is the same argument `offers.md` makes for drawing the figures as separate rows
+of a table above the price on the offer's screen. And `suggested` never travels without `suggestedValuedSets` and
 `suggestedUnpricedSets`, which partition the listing — `valuation.md`'s standing rule.
 
 **`get_offer` is the verb #711 does not name and `list_offers` is the other one**, and both are here

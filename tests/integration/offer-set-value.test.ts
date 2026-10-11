@@ -180,8 +180,48 @@ describe("per-set catalogue value + cost (#378)", () => {
     assert.equal(t.costTotal, "5.00");
   });
 
-  it("matches the suggested asking price to the per-set catalogue average", async () => {
+  it("matches the catalogue row to the per-set catalogue average", async () => {
     const detail = await offerWithSets([[priced], [pricedNoCost]]);
-    assert.equal(detail.suggestedPrice, detail.setsTotals.catalogAverage);
+    assert.equal(detail.catalogPrice, detail.setsTotals.catalogAverage);
+    assert.equal(detail.catalogUnpricedSets, 0);
+  });
+
+  // The price table (#1829). Nothing has been recorded in this collection, so the ladder answers
+  // with the catalogue's manual factor where one is set and with `bidFallbackPercent` otherwise.
+  it("suggests Estimated value — the catalogue at the fallback percentage while nothing is learned", async () => {
+    const detail = await offerWithSets([[priced], [pricedNoCost]]);
+    // The default fallback is 100%, so the estimate is the catalogue itself, and says why.
+    assert.equal(detail.suggestedPrice, "25.00");
+    assert.equal(detail.suggestedEstimate?.valuedSets, 2);
+    assert.equal(detail.suggestedEstimate?.copies, 2);
+    assert.equal(detail.suggestedEstimate?.source.level, "fallback");
+  });
+
+  it("corrects the catalogue by the catalogue's manual factor, and names it as the source", async () => {
+    await prisma.catalogName.updateMany({
+      where: { vendor: { collectionId } },
+      data: { manualFactor: 10 },
+    });
+    try {
+      const detail = await offerWithSets([[priced], [pricedNoCost]]);
+      // 30.00 ÷ 10 and 20.00 ÷ 10, averaged over the two sets.
+      assert.equal(detail.suggestedPrice, "2.50");
+      assert.equal(detail.suggestedEstimate?.source.level, "catalogue-factor");
+      assert.equal(detail.catalogPrice, "25.00");
+    } finally {
+      await prisma.catalogName.updateMany({
+        where: { vendor: { collectionId } },
+        data: { manualFactor: null },
+      });
+    }
+  });
+
+  it("leaves out what does not exist: no estimate over unpriced copies, no market without results", async () => {
+    const detail = await offerWithSets([[unpriced]]);
+    assert.equal(detail.suggestedPrice, null);
+    assert.equal(detail.suggestedEstimate, null);
+    assert.equal(detail.marketPrice, null);
+    // …while the cost is known, per set and in the offer's currency.
+    assert.equal(detail.costPrice, "5.00");
   });
 });

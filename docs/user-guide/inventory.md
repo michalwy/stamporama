@@ -989,8 +989,10 @@ Choose where the copy lands: **＋ New set** on an offer (a fresh single-item se
 
 Starting a brand-new offer from the copy is in the same picker: **＋ Create new offer** opens the
 offer header form (platform, currency). When the copy has a [catalog value](#copy-value-and-holdings-total),
-the **asking price** is pre-filled with it — converted into the offer's currency and fully editable,
-so you can accept, adjust, or clear it. (A copy with no catalog value leaves the price blank.)
+the **asking price** is pre-filled with its **Estimated value** — that catalog value corrected by how
+far the catalogue runs above what stamps fetch (see [the price table](offers.md#the-price-table)) —
+converted into the offer's currency and fully editable, so you can accept, adjust, or clear it. (A
+copy with no catalog value leaves the price blank, and so do several copies whose estimates differ.)
 Creating the offer seeds it with this copy as a single-item set and returns you to the Inventory
 list. Add more copies later from the offer's compose screen — see [Offers](offers.md).
 
@@ -1248,7 +1250,7 @@ no dialog. The menu entry says so while the mode is on: it reads *New offer on C
 The new offers carry **no asking price and no listing URL** — except on Facebook, where a group that
 starts its offers as auctions makes each an auction opening at the group's starting price. That is the point: the pass is about
 getting the listings made, and both of those belong on the offer's own screen once the listing
-exists. If you want the price filled in from the copy's catalog value, use the ordinary
+exists. If you want the price filled in from the copy's Estimated value, use the ordinary
 [create form](#the-new-offer-shortcuts) instead — quick mode is for the bulk case.
 
 What the offers *do* carry is whatever the platform itself says about listings on it: its **default
