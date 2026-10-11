@@ -22,10 +22,11 @@
 // Inside that payload it descends through **Prisma's own write operators** and nothing else. An
 // object whose keys are all operators (`{ create: … }`, `{ upsert: { where, create, update } }`) is
 // an instruction and is walked; an object with any other key is a **`Json` column's value** and is
-// left exactly as it is. That is the whole reason for the operator test. The five `Json` columns in
+// left exactly as it is. That is the whole reason for the operator test. The six `Json` columns in
 // the schema — `AlbumPrintedPage.snapshot`, `PlatformCategoryLesson.value`,
-// `Offer.allegroCategoryParameters`, `CollectionValueSnapshot.rates` and `AlbumOrnament.drawing`
-// (#1427; `{ viewBox, paths }`, neither an operator) — each hold an object of the app's own making,
+// `Offer.allegroCategoryParameters`, `CollectionValueSnapshot.rates`, `AlbumOrnament.drawing`
+// (#1427; `{ viewBox, paths }`, neither an operator) and `Offer.facebookPostSnapshot` (#1800; a
+// published post's template and figures, kept exactly as posted) — each hold an object of the app's own making,
 // not text a collector typed, and one of them is a **printed sheet's snapshot**
 // compared byte for byte against a freshly computed one by `album-divergence.ts`. Trimming a string
 // inside it would report a card as diverged forever. `tests/unit/prisma-text-trim.test.ts` reads

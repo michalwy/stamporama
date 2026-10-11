@@ -247,7 +247,7 @@ the offer's screen, directly under the description, which holds everything the p
 
 - the **group**, with a link to open it;
 - the **post text**: the group's post template for the offer's type — the auction or the quick-buy
-  one, its own or Facebook's, as it reads now — filled in from the offer, with the note on shipping,
+  one, its own or Facebook's, as it reads now (until the offer is posted, below) — filled in from the offer, with the note on shipping,
   payment and terms where the template's `{terms}` puts it, shown formatted the way Facebook will show
   it — **Source** switches to the template's Markdown as filled in, **Rendered** back. **Copy** puts
   it on the clipboard in one click, formatted *and* as plain text: pasted into a Facebook group post
@@ -260,6 +260,28 @@ the offer's screen, directly under the description, which holds everything the p
 - the **post template** the text is written from: *Same as group*, with the group's template for the
   offer's type, or the offer's own (below);
 - **↓ Photos**: the offer's photos as one download.
+
+### Once it is posted, the text stays as posted
+
+Until the offer goes up, its post text follows the template: edit the group's template, Facebook's
+defaults or the offer's own, or change the offer's price, and the card shows the new text. **The
+moment the offer goes up — Pending or Active, whichever comes first — its text is frozen** as the card
+showed it, and the card says *As posted on …* under it. From then on nothing changes it: not a
+template edit, not the offer's own template, not a change of the offer's figures — so the text here
+is always the one in the group. A post with several lots freezes as a whole, when it goes up.
+
+Three things still move it:
+
+- **Approving a post with a new closing time** writes that time into the frozen text too, since you
+  correct the post in the group to match; nothing else in it changes.
+- **Reposting** a quick buy is posting it anew: the **Repost** dialog shows the text built from the
+  current template and figures, and recording the repost freezes that text in place of the old.
+- **Rejected — back to Ready** puts the offer back before posting: its text follows the template
+  again until it goes up once more.
+
+Offers that were already up when this arrived were frozen with the text they showed at that moment.
+Earlier versions of a template are not kept anywhere, so an older post's text cannot be recovered
+if a template had already changed under it.
 
 ### An offer's own post template
 
@@ -390,9 +412,10 @@ A quick-buy post a few days old reaches nobody. Once one is up longer than **Ref
 after** — Facebook's, or the group's own — the offer carries **Up N days · refresh** and appears
 under the offers list's **Needs refresh**.
 
-Delete the old post in the group and post it again: the card's **post text** and **↓ Photos** are
-there for it as they were the first time. Then choose **Repost…** on the card and paste the new
-post's link. The offer keeps its number — so `{offer}` and what buyers quote still match — and the
+Delete the old post in the group and post it again: choose **Repost…** on the card, which shows the
+post text as it goes up now — the current template and figures, with **Copy** — and take **↓ Photos**
+from the card as the first time. Then paste the new post's link in the dialog; recording it freezes
+the new text. The offer keeps its number — so `{offer}` and what buyers quote still match — and the
 count of days starts again from today; the old link stays on the offer as an earlier post. For a
 lot of a post with several lots, every quick buy of the post takes the new link at once. See
 [Reposting](offers.md#reposting).

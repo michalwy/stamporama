@@ -137,7 +137,17 @@ describe("the schema this rule was reasoned about", () => {
     const found = [...schema.matchAll(/^\s+(\w+)\s+Json\??/gm)].map((m) => m[1]).sort();
     // `drawing` twice: a corner ornament's outlines (#1427) and a free page picture's (#1429), both
     // read by `album-ornament-svg.ts` into numbers and `#rrggbb` colours.
-    assert.deepEqual(found, ["allegroCategoryParameters", "drawing", "drawing", "rates", "snapshot", "value"]);
+    // `facebookPostSnapshot`: a published Facebook post's template and figures (#1800), which must
+    // come back byte for byte as they were posted — so it is left alone like the others.
+    assert.deepEqual(found, [
+      "allegroCategoryParameters",
+      "drawing",
+      "drawing",
+      "facebookPostSnapshot",
+      "rates",
+      "snapshot",
+      "value",
+    ]);
   });
 
   it("has no column named like a Prisma write operator", () => {

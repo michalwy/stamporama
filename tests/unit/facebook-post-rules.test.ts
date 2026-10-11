@@ -9,14 +9,18 @@ import {
   facebookPostGaps,
   facebookPostRefusal,
   facebookPostLink,
+  facebookPostSource,
   isFacebookLotPosted,
   isFacebookPendingPostUrl,
   parseBidIncrement,
   readFacebookCreateChoice,
+  readFacebookFrozenLot,
   renderFacebookLotText,
   renderFacebookPostText,
+  type FacebookFrozenLot,
   type FacebookPostCandidate,
   type FacebookPostLotText,
+  type FacebookPostSourceLot,
 } from "../../src/lib/facebook-post-rules";
 
 // A Facebook offer and its post (#1544; ADR-0061 §2, §3, §6): what a group's defaults become on a
@@ -452,5 +456,84 @@ describe("isFacebookPendingPostUrl (#1779)", () => {
     assert.equal(isFacebookPendingPostUrl("https://www.facebook.com/groups/1/posts/2?ref=pending_posts"), false);
     assert.equal(isFacebookPendingPostUrl("not a link"), false);
     assert.equal(isFacebookPendingPostUrl(""), false);
+  });
+});
+
+describe("the post as published (#1800)", () => {
+  const group = { postTemplate: "Now: {title} from {startingPrice}, ends {closesAt}\n{terms}", quickBuyTemplate: "Buy {title} for {price}", standingNote: "New note" };
+  const closesAt = (iso: string | null) => (iso ? `at ${iso}` : "");
+  const frozen: FacebookFrozenLot = {
+    frozenAt: "2026-10-11T10:00:00.000Z",
+    listingType: "auction",
+    template: "Then: {title} from {startingPrice}, ends {closesAt}\n{terms}",
+    standingNote: "Old note",
+    title: "Austria 1850 Mercury",
+    description: "",
+    catalog: "Mi·AT 1",
+    startingPrice: "10.00",
+    bidIncrement: "1.00",
+    price: null,
+    currency: "PLN",
+    endsAt: "2026-10-18T18:00:00.000Z",
+  };
+  function source(overrides: Partial<FacebookPostSourceLot> = {}): FacebookPostSourceLot {
+    return {
+      offerId: "o1",
+      lotNo: null,
+      offerNo: 412,
+      listingType: "auction",
+      title: "Austria 1850 Mercury — retitled",
+      description: "",
+      catalog: "Mi·AT 1",
+      startingPrice: "12.00",
+      bidIncrement: "1.00",
+      currency: "PLN",
+      endsAt: "2026-10-20T18:00:00.000Z",
+      price: "14.00",
+      ownTemplate: null,
+      frozen: null,
+      ...overrides,
+    };
+  }
+  const text = (s: ReturnType<typeof facebookPostSource>) => renderFacebookPostText(s.templates, s.standingNote, s.lots);
+
+  it("draws a lot not yet published from the group's template and its figures now", () => {
+    const s = facebookPostSource(group, [source()], closesAt);
+    assert.equal(text(s), "Now: Austria 1850 Mercury — retitled from 12 PLN, ends at 2026-10-20T18:00:00.000Z\nNew note");
+    assert.equal(s.frozenAt, null);
+  });
+
+  it("draws a published lot as it was posted — template, note and figures — whatever changed since", () => {
+    const s = facebookPostSource(group, [source({ frozen, ownTemplate: "Own: {title}" })], closesAt);
+    assert.equal(text(s), "Then: Austria 1850 Mercury from 10 PLN, ends at 2026-10-18T18:00:00.000Z\nOld note");
+    assert.equal(s.frozenAt, frozen.frozenAt);
+  });
+
+  it("draws the lots a repost takes as they go up now", () => {
+    const s = facebookPostSource(group, [source({ frozen })], closesAt, () => true);
+    assert.equal(text(s), "Now: Austria 1850 Mercury — retitled from 12 PLN, ends at 2026-10-20T18:00:00.000Z\nNew note");
+    assert.equal(s.frozenAt, null);
+  });
+
+  it("states a frozen quick buy's asking price as it was", () => {
+    const quick = { ...frozen, listingType: "fixed" as const, template: "Buy {title} for {price}", price: "15.50" };
+    const s = facebookPostSource(group, [source({ listingType: "fixed", price: "9.00", frozen: quick })], closesAt);
+    assert.equal(text(s), "Buy Austria 1850 Mercury for 15.50 PLN");
+  });
+
+  it("states the last lot's note in a multi-lot post, frozen with it", () => {
+    const lots = [
+      source({ offerId: "a", lotNo: 1, frozen: { ...frozen, template: "{lot}. {title}", standingNote: "First" } }),
+      source({ offerId: "b", lotNo: 2, offerNo: 413, frozen: { ...frozen, template: "{lot}. {title}\n{terms}" } }),
+    ];
+    assert.equal(text(facebookPostSource(group, lots, closesAt)), "1. Austria 1850 Mercury\n\n2. Austria 1850 Mercury\nOld note");
+  });
+
+  it("reads a stored snapshot back, and nothing that is not one", () => {
+    assert.deepEqual(readFacebookFrozenLot(JSON.parse(JSON.stringify(frozen))), frozen);
+    assert.equal(readFacebookFrozenLot(null), null);
+    assert.equal(readFacebookFrozenLot({ ...frozen, template: 3 }), null);
+    assert.equal(readFacebookFrozenLot({ ...frozen, listingType: "barter" }), null);
+    assert.equal(readFacebookFrozenLot([frozen]), null);
   });
 });

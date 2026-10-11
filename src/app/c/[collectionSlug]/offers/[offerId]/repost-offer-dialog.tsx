@@ -5,6 +5,8 @@ import { DialogShell, DialogBody, DialogActions, LabelWithError } from "@/app/di
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
 import { isFacebookPendingPostUrl } from "@/lib/facebook-post-rules";
+import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
+import { RenderedHtml } from "@/app/c/[collectionSlug]/shared/rendered-description";
 import type { PublishTarget } from "../activate-offer-dialog";
 
 // Posting a quick buy again (#1718): the collector has deleted the stale post and put it up afresh,
@@ -17,6 +19,10 @@ import type { PublishTarget } from "../activate-offer-dialog";
 // A new post can wait for the group's administrator as the first one did (#1779): *Waiting for
 // approval* — ticked by itself when the link is a pending post's — takes the listings back to
 // Pending, and approving them later restarts the count of days up.
+//
+// A repost is a new publication (#1800): on Facebook the dialog shows the post as it goes up **now** —
+// the current template and figures, not the text frozen when it was first posted — and recording it
+// freezes that text in place of the old.
 
 const CHECK_ROW: React.CSSProperties = {
   display: "flex",
@@ -26,6 +32,18 @@ const CHECK_ROW: React.CSSProperties = {
   fontSize: "0.875rem",
   color: "var(--color-text-primary)",
   cursor: "pointer",
+};
+
+const POST_TEXT: React.CSSProperties = {
+  margin: 0,
+  padding: "0.625rem 0.75rem",
+  border: "1px solid var(--color-border)",
+  borderRadius: "0.375rem",
+  background: "var(--color-bg-subtle)",
+  color: "var(--color-text-primary)",
+  fontSize: "0.8125rem",
+  maxHeight: "14rem",
+  overflowY: "auto",
 };
 
 const INPUT: React.CSSProperties = {
@@ -43,6 +61,7 @@ export function RepostOfferDialog({
   offerLabel,
   platformName,
   lots,
+  post,
   isPending,
   error,
   onClose,
@@ -52,6 +71,9 @@ export function RepostOfferDialog({
   platformName: string;
   /** How many quick-buy lots of a Facebook post take the link — 1 for an offer posted alone. */
   lots: number;
+  /** A Facebook offer's post as it goes up again (#1800), formatted, with its plain text; absent
+   *  everywhere else. */
+  post?: { html: string; plain: string };
   isPending: boolean;
   error?: string;
   onClose: () => void;
@@ -88,6 +110,21 @@ export function RepostOfferDialog({
             </>
           )}
         </p>
+        {post && (
+          <div style={{ margin: "0 0 1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+              <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-muted)" }}>
+                Post text, from the current template
+              </span>
+              <CopyButton value={post.plain} html={post.html} label="post text" />
+            </div>
+            {post.html ? (
+              <RenderedHtml html={post.html} style={POST_TEXT} />
+            ) : (
+              <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>The post is empty.</p>
+            )}
+          </div>
+        )}
         <label style={CHECK_ROW}>
           <input
             type="checkbox"

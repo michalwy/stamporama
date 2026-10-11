@@ -8,7 +8,8 @@
 // is (#1671) — with the note on shipping, payment and terms where its `{terms}` says (#1689). A post
 // is **only what its template places** (#1692): nothing is substituted, added or fallen back to, and
 // what comes out empty is named on the card (`facebookPostGaps`) rather than filled in. An offer may
-// carry its **own** template (#1780), which writes that lot instead of the group's.
+// carry its **own** template (#1780), which writes that lot instead of the group's. Once the offer is
+// published its lot is **frozen** (#1800): what it was written from is kept, and drawn from then on.
 
 import { generatedAmount, normalizeDecimalInput, roundAmount } from "./decimal-input";
 import {
@@ -17,7 +18,7 @@ import {
   facebookPostPlaceholders,
   type FacebookStartingPriceMode,
 } from "./facebook-group-rules";
-import type { OfferListingType } from "./offer-rules";
+import { isAuctionListing, type OfferListingType } from "./offer-rules";
 
 /**
  * When a new auction in a group closes, from the group's defaults: `days` after `now`, at the group's
@@ -239,11 +240,14 @@ export function facebookTemplateFor(templates: FacebookPostTemplates, listingTyp
 
 /** The template this lot is written from: its offer's own where it has one (#1780) — even an empty
  *  one, which is the offer's choice and not a gap to fill — else its group's for its type. */
-export function facebookLotTemplate(templates: FacebookPostTemplates, lot: FacebookPostLotText): string {
+export function facebookLotTemplate(
+  templates: FacebookPostTemplates,
+  lot: Pick<FacebookPostLotText, "listingType" | "ownTemplate">
+): string {
   return lot.ownTemplate ?? facebookTemplateFor(templates, lot.listingType);
 }
 
-function inLotOrder(lots: readonly FacebookPostLotText[]): FacebookPostLotText[] {
+function inLotOrder<T extends { lotNo: number | null }>(lots: readonly T[]): T[] {
   return [...lots].sort((a, b) => (a.lotNo ?? 0) - (b.lotNo ?? 0));
 }
 
@@ -338,6 +342,133 @@ export function facebookPostGaps(
     }
   });
   return { missingTemplates, emptyOwnTemplates, emptyPlaceholders };
+}
+
+/**
+ * A lot's post as it was published (#1800): the template it was written from and everything that
+ * filled it in, kept from the moment the offer first went up — Pending or Active — so that editing a
+ * template, the offer's own or its figures leaves what the group shows exactly as it was posted. Raw
+ * as the kit carries them: the closing time is written out in the browser, the one place the zone is
+ * known (#490), so an instant is kept rather than the words.
+ */
+export interface FacebookFrozenLot {
+  /** When the lot was frozen, ISO-8601. */
+  frozenAt: string;
+  listingType: OfferListingType;
+  /** The template the lot was written from — its offer's own (#1780), or its group's for its type. */
+  template: string;
+  /** The note on shipping, payment and terms as it read (#1689); a post states the last lot's. */
+  standingNote: string;
+  title: string;
+  description: string;
+  catalog: string;
+  startingPrice: string | null;
+  bidIncrement: string | null;
+  /** A quick buy's asking price; null on an auction, whose price is its running bid. */
+  price: string | null;
+  currency: string;
+  /** ISO-8601, or null. The one figure that moves after freezing: an approval that states a new
+   *  closing time writes it here too (#1800, decided with the collector on 2026-10-11). */
+  endsAt: string | null;
+}
+
+/** A stored snapshot read back, or null when there is none or it is not one — a lot with no readable
+ *  snapshot is drawn live, as it was before #1800. */
+export function readFacebookFrozenLot(value: unknown): FacebookFrozenLot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const text = (key: string) => (typeof v[key] === "string" ? (v[key] as string) : null);
+  const optional = (key: string) => (v[key] == null ? null : text(key));
+  const frozenAt = text("frozenAt");
+  const template = text("template");
+  const listingType = v.listingType === "auction" || v.listingType === "fixed" ? v.listingType : null;
+  if (frozenAt === null || template === null || listingType === null) return null;
+  return {
+    frozenAt,
+    listingType,
+    template,
+    standingNote: text("standingNote") ?? "",
+    title: text("title") ?? "",
+    description: text("description") ?? "",
+    catalog: text("catalog") ?? "",
+    startingPrice: optional("startingPrice"),
+    bidIncrement: optional("bidIncrement"),
+    price: optional("price"),
+    currency: text("currency") ?? "",
+    endsAt: optional("endsAt"),
+  };
+}
+
+/** One lot as the offer's kit hands it over: its figures as they are now, and its post as it was
+ *  published, if it has been (#1800). */
+export interface FacebookPostSourceLot {
+  offerId: string;
+  lotNo: number | null;
+  offerNo: number;
+  listingType: OfferListingType;
+  title: string;
+  description: string;
+  catalog: string;
+  startingPrice: string | null;
+  bidIncrement: string | null;
+  currency: string;
+  endsAt: string | null;
+  /** An auction's running bid, a quick buy's asking price. */
+  price: string;
+  ownTemplate: string | null;
+  frozen: FacebookFrozenLot | null;
+}
+
+/** What a post is rendered from: the templates and note, and each lot written out. `frozenAt` is when
+ *  the post was published — set only when every lot is drawn as it was posted. */
+export interface FacebookPostSource {
+  templates: FacebookPostTemplates;
+  standingNote: string;
+  lots: FacebookPostLotText[];
+  frozenAt: string | null;
+}
+
+/**
+ * The post to draw (#1800): a lot that has been published as it was posted — its own template, note
+ * and figures, whatever has changed since — and a lot not yet published from its group's templates and
+ * its figures now. `live` names the lots drawn as they would be posted **now** even though frozen: a
+ * repost puts the current template and figures up again (#1718). The note is the last lot's: frozen
+ * with it, or the group's.
+ */
+export function facebookPostSource<L extends FacebookPostSourceLot>(
+  group: { postTemplate: string; quickBuyTemplate: string; standingNote: string },
+  lots: readonly L[],
+  closesAt: (iso: string | null) => string,
+  live: (lot: L) => boolean = () => false
+): FacebookPostSource {
+  const frozenOf = (lot: L) => (live(lot) ? null : lot.frozen);
+  const texts = lots.map((lot): FacebookPostLotText => {
+    const frozen = frozenOf(lot);
+    const figures = frozen ?? { ...lot, price: lot.price as string | null };
+    return {
+      lotNo: lot.lotNo,
+      offerNo: lot.offerNo,
+      listingType: figures.listingType,
+      title: figures.title,
+      description: figures.description,
+      catalog: figures.catalog,
+      startingPrice: facebookMoney(figures.startingPrice, figures.currency),
+      increment: facebookMoney(figures.bidIncrement, figures.currency),
+      closesAt: closesAt(figures.endsAt),
+      price: isAuctionListing(figures.listingType) ? "" : facebookMoney(figures.price, figures.currency),
+      ownTemplate: frozen ? frozen.template : lot.ownTemplate,
+    };
+  });
+  const last = inLotOrder(lots).at(-1);
+  const lastFrozen = last ? frozenOf(last) : null;
+  const frozenAts = lots.map((lot) => frozenOf(lot)?.frozenAt);
+  const allFrozen = lots.length > 0 && frozenAts.every((at): at is string => at !== undefined);
+  return {
+    templates: { auction: group.postTemplate, quickBuy: group.quickBuyTemplate },
+    standingNote: lastFrozen ? lastFrozen.standingNote : group.standingNote,
+    lots: texts,
+    frozenAt: allFrozen ? (frozenAts as string[]).reduce((a, b) => (b > a ? b : a)) : null,
+  };
 }
 
 /** A figure as a post states it: `10 PLN`, `10.50 PLN` (#1787), or empty when there is none. */

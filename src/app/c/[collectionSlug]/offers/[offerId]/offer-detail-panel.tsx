@@ -30,6 +30,7 @@ import { DuplicateOfferDialog } from "../duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "../sell-offer-flow-dialog";
 import { ActivateOfferDialog, type PublishTarget } from "../activate-offer-dialog";
 import { RepostOfferDialog } from "./repost-offer-dialog";
+import { renderFacebookKitPost } from "./facebook-kit-post";
 import { SpecificationShareDialog } from "./specification-share-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
 import { CLOSE_ELEMENT_ID, useAssistantClose } from "../assistant-close-handoff";
@@ -505,6 +506,14 @@ export function OfferDetailPanel({
   const repostLots = offer.facebook?.post
     ? offer.facebook.lots.filter((l) => l.state === "active" && l.listingType === "fixed").length
     : 1;
+  // What a repost puts up (#1800): the lots it takes drawn from the current template and figures, the
+  // rest of the post as it was posted.
+  const repostKit = reposting ? offer.facebook : null;
+  const repostPost = repostKit
+    ? renderFacebookKitPost(repostKit, (lot) =>
+        repostKit.post ? lot.state === "active" && lot.listingType === "fixed" : lot.offerId === offerId
+      )
+    : undefined;
 
   /** Patch a single header field in place, then refresh. */
   function patch(
@@ -1711,6 +1720,7 @@ export function OfferDetailPanel({
           offerLabel={offer.name ?? offer.label}
           platformName={offer.platformName}
           lots={repostLots}
+          post={repostPost}
           isPending={isPending}
           error={actionError}
           onClose={() => {

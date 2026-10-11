@@ -47,6 +47,31 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   one writes null at once. The field is `shared/facebook-post-template-field.tsx`, which Settings →
   Facebook uses too, so the placeholders and formatting it lists cannot drift between the two.
 
+- **A published offer's post text is frozen** (#1800, decided with the collector on 2026-10-11;
+  ADR-0061 §3). `Offer.facebookPostSnapshot` (JSONB, `FacebookFrozenLot` in `facebook-post-rules.ts`,
+  read back by `readFacebookFrozenLot`) holds the lot's template (its own or the group's for its type,
+  through `facebookLotTemplate`), the group's note and the raw figures — **inputs, not words**: the
+  closing time stays an instant because only the browser knows the zone (#490). Written by
+  `freezeFacebookPostText` (`facebook-auctions.ts`, which reads lots through the same `readKitLots` the
+  kit does): from `setOfferState` on any move into Pending or Active **where none is frozen yet** (so an
+  approval or a resume adds nothing), from `finishOfferCreation` / `duplicateOffer` for an offer made
+  already up, and from `repostOffer` **afresh** (a repost is a new publication). `setOfferState`
+  clears it on any move to Ready or Preparing — a rejection is the case that matters. The one thing
+  that moves a frozen lot is `setFrozenFacebookClosing`, called by `publishOfferOrPost` with the
+  closing time an approval states (the collector's choice; the issue had said nothing moves it). The
+  card draws through `facebookPostSource` (pure): a lot with a snapshot from it, the note from the last
+  lot's, everything else live; `frozenAt` is set only when every lot is frozen, and then the card names
+  no gaps (nothing there can be fixed) and says *As posted on …*. `facebook-kit-post.ts` beside the
+  card is the one place the browser renders a kit's post — the card and the repost dialog, whose
+  `live` predicate draws the lots the repost takes from the current template. **Offers already up**
+  when this landed have no snapshot; `freezeUnfrozenFacebookPosts` freezes every posted Facebook offer
+  without one at boot (`instrumentation-node.ts`) — SQL could not, since the title and catalogue
+  numbers are built in TypeScript — and is an idempotent no-op after. `prisma-text-trim` leaves the
+  column alone like every `Json` column: a template's whitespace is part of what was posted. The
+  integration test is `tests/integration/facebook-post-freeze.test.ts`; removing the transition freeze,
+  the Ready clear, the approval's closing write, the repost refreeze or the creation freeze each fails
+  it (checked when written).
+
 - **A post template is Markdown, limited to Facebook's editor** (#1772, decided with the collector on
   2026-10-11: bold, italic, `#`/`##` headings, bulleted and numbered lists, a quote — what the group
   post editor's toolbar offers). There is no format setting: every template is read this way.
@@ -80,7 +105,8 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   Facebook has one), which is why this is a key list and not "null means follow". Every reader goes
   through `effectiveFacebookGroupSettings` — the offer form's choices, `resolveFacebookOffer` and the
   kit — read live, so a changed default reaches every following group and, being read at creation,
-  no auction already made. The kit's template and note are read live as they always were. The
+  no auction already made. The kit's template and note are read live until the offer is published,
+  then frozen with it (#1800, above). The
   migration made a setting custom exactly where it differed from the platform's, and moved the
   Facebook contact's `defaultStartingPrice` (never read by a Facebook auction) into the defaults row
   as an `amount`; the contact dialog no longer offers that field for the Facebook platform. The post
