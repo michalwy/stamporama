@@ -444,3 +444,25 @@ export function suggestLotTexts(facts: LotTextFacts): LotSuggestedTexts {
   if (facts.conditionNames.length > 0) lines.push("Conditions: {condition}.");
   return { name, description: lines.join("\n") };
 }
+
+/**
+ * The suggestion for a set of criteria, its ids named from the collection's own areas and conditions
+ * (#1781). The wizard calls this with what it already holds rather than waiting for a proposal: the
+ * templates are on screen **before** *Propose a lot*, since a wrong template is often the first thing
+ * a collector wants to fix, and nothing in the suggestion depends on the pick — it is a template, so
+ * the copies only ever reach it at render time. An id that names nothing the collection has (an area
+ * deleted since the link was written) counts as not narrowed, as it would on the server.
+ */
+export function suggestLotTextsFor(
+  criteria: Pick<LotBuilderCriteria, "areaId" | "yearFrom" | "yearTo" | "conditionIds">,
+  areas: readonly { id: string; name: string }[],
+  conditions: readonly { id: string; name: string }[]
+): LotSuggestedTexts {
+  const wanted = new Set(criteria.conditionIds);
+  return suggestLotTexts({
+    areaName: areas.find((a) => a.id === criteria.areaId)?.name ?? null,
+    yearFrom: criteria.yearFrom,
+    yearTo: criteria.yearTo,
+    conditionNames: conditions.filter((c) => wanted.has(c.id)).map((c) => c.name),
+  });
+}

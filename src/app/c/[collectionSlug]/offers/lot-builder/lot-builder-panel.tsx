@@ -11,6 +11,7 @@ import type { StampFormatData } from "@/lib/stamp-formats";
 import {
   lotBuilderSearchParams,
   parseLotBuilderRequest,
+  suggestLotTextsFor,
   type LotBuilderCriteria,
   type LotBuilderRequest,
 } from "@/lib/lot-builder-criteria";
@@ -325,7 +326,8 @@ export function LotBuilderPanel({
   // The texts the commit sends. Held here rather than in the URL: they are a draft being typed, not
   // navigation state, and a title in the address bar would be re-pushed on every keystroke. They
   // start `null` — "still following the suggestion" — and a keystroke is what takes them off it, so
-  // a re-roll that changes the piece count keeps updating the field until the collector touches it.
+  // a change of criteria keeps re-wording the field until the collector touches it. They are typed
+  // before a lot is proposed as readily as after (#1781), and a proposal or a re-roll leaves them be.
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
   // Which of the two template editors is expanded — one at a time, the rule the shared builder is
@@ -423,13 +425,17 @@ export function LotBuilderPanel({
     refetch: refetchProposal,
   } = useLotProposal(collectionId, request);
 
-  // The suggestion follows the proposal until the collector types over it. Reading it here rather
-  // than seeding state on arrival keeps one source: a re-roll that lands on 103 pieces instead of
-  // 100 re-words the untouched field, and leaves a written one alone.
-  const suggestedName = proposal?.suggested.name ?? "";
-  const suggestedDescription = proposal?.suggested.description ?? "";
-  const effectiveName = criteria.nameTemplate ?? suggestedName;
-  const effectiveDescription = criteria.descriptionTemplate ?? suggestedDescription;
+  // The suggestion follows the criteria until the collector types over it. Reading it here rather
+  // than seeding state on arrival keeps one source: narrowing to an area adds `{area}` to an
+  // untouched field, and leaves a written one alone. It is worked out from the criteria and the
+  // names already on this screen, not asked of the proposal (#1781): the templates are there to be
+  // read and corrected **before** *Propose a lot*, and nothing in them depends on the pick.
+  const suggested = useMemo(
+    () => suggestLotTextsFor(criteria, areas, conditions),
+    [criteria, areas, conditions]
+  );
+  const effectiveName = criteria.nameTemplate ?? suggested.name;
+  const effectiveDescription = criteria.descriptionTemplate ?? suggested.description;
 
   const roll = () => write({ ...request, seed: newSeed() });
 
@@ -506,11 +512,17 @@ export function LotBuilderPanel({
 
   // The shared builder's sample shape, over the lot itself. Its picker half is inert here on
   // purpose: there is nothing to search for or shuffle to, because the copies the text will be
-  // rendered over are the copies in front of the collector.
+  // rendered over are the copies in front of the collector. Before there are any, the templates are
+  // shown as templates and the preview says when it will render (#1781).
+  const lotCopies = proposal?.plan.itemIds.length ?? 0;
   const templateSamples: TemplateSamples = useMemo(
     () => ({
       copies: proposal?.templateSamples ?? [],
       loading: proposalLoading,
+      waiting:
+        lotCopies > 0
+          ? undefined
+          : "The preview renders over the lot's copies once a lot is proposed.",
       shuffle: () => {},
       search: "",
       setSearch: () => {},
@@ -528,7 +540,14 @@ export function LotBuilderPanel({
         refresh: () => void refetchProposal(),
       },
     }),
-    [proposal?.templateSamples, proposal?.templateLanguage, proposalLoading, collectionId, refetchProposal]
+    [
+      proposal?.templateSamples,
+      proposal?.templateLanguage,
+      proposalLoading,
+      lotCopies,
+      collectionId,
+      refetchProposal,
+    ]
   );
 
   const platformChosen = !!criteria.platformId;
@@ -889,137 +908,148 @@ export function LotBuilderPanel({
             and asked the collector to scroll back up to the figures to word a title against them.
             Here it is under the band those figures are in, so the piece count, the value and the
             wording are read in one glance, and the list below is what you check *after* deciding
-            what you are selling. It appears with the lot, since there is nothing to name before. */}
-        {proposal && proposal.plan.itemIds.length > 0 && (
-          <section style={BAND}>
-            <SectionHeading
-              title="Create the offer"
-              note={
-                facebook.group
-                  ? `A draft ${typeLabel} in ${facebook.group.name}, one set of ${proposal.plan.itemIds.length}`
-                  : `A draft ${listingType ? `${typeLabel} ` : ""}on ${platformName ?? "this platform"}, one set of ${proposal.plan.itemIds.length}`
-              }
-            />
-            {/* **Templates, not finished text** (#774). The lot writes its own template onto the
-                offer, so the wording follows the composition the way every other listing's does —
-                strike a copy that sold elsewhere and `{count}` re-reads by itself. What it may not
-                be is the *platform's* template: over a hundred unrelated stamps that renders a dozen
-                catalogue ranges, past most platforms' limit, and an over-long text blocks the way to
-                Ready (#636).
+            what you are selling.
 
-                They preview against **this lot's own copies** rather than random samples of the
-                collection, which is the one thing the shared builder cannot do for a platform
-                template written before there is anything to write it about — and the only way
-                `{count}` can preview the figure the listing will actually carry. */}
-            <TemplateBuilder
-              label="Listing title"
-              open={openTemplate === "name"}
-              onToggle={() => setOpenTemplate(openTemplate === "name" ? null : "name")}
-              value={effectiveName}
-              onChange={setName}
-              tokens={AVAILABLE_TITLE_TOKENS}
-              samples={templateSamples}
-              placeholder="Leave blank to use this platform's template"
-              description="Rendered over the lot's copies, and re-rendered whenever the offer's composition changes."
-              emptyPreview="This platform's own title template renders instead."
-            />
-            <TemplateBuilder
-              label="Description"
-              open={openTemplate === "description"}
-              onToggle={() =>
-                setOpenTemplate(openTemplate === "description" ? null : "description")
-              }
-              value={effectiveDescription}
-              onChange={setDescription}
-              tokens={AVAILABLE_LISTING_TOKENS}
-              multiline
-              rows={5}
-              samples={templateSamples}
-              placeholder="Leave blank to use this platform's template"
-              description="Same engine as a platform's description template, over this lot's copies."
-              emptyPreview="This platform's own description template renders instead."
-            />
-            {/* **Where and how the lot is sold, in one section on one line** (#1732): two small
-                choices used to take two full-width frames. Framed, labelled and spaced as the two
-                templates above it are (#1669), each label above its own select — the criteria bands'
-                small `Field` label read as a stray control glued to the button below.
+            The two templates are here **from the start** (#1781), not only once a lot is proposed:
+            a wrong template is often the first thing a collector wants to fix, and a template needs
+            no copies to be read or written — only its preview does, and that waits for the lot. A
+            template edited now is the one the proposal previews and the commit sends, and a re-roll
+            keeps it, since the drafts are this component's state and a seed is not. Where and how
+            the lot is sold, and the button, still come with the lot: they finish a pick. */}
+        <section style={BAND}>
+          <SectionHeading
+            title="Create the offer"
+            note={
+              lotCopies === 0
+                ? "Word the listing now; the offer is created from a proposed lot"
+                : facebook.group
+                  ? `A draft ${typeLabel} in ${facebook.group.name}, one set of ${lotCopies}`
+                  : `A draft ${listingType ? `${typeLabel} ` : ""}on ${platformName ?? "this platform"}, one set of ${lotCopies}`
+            }
+          />
+          {/* **Templates, not finished text** (#774). The lot writes its own template onto the
+              offer, so the wording follows the composition the way every other listing's does —
+              strike a copy that sold elsewhere and `{count}` re-reads by itself. What it may not
+              be is the *platform's* template: over a hundred unrelated stamps that renders a dozen
+              catalogue ranges, past most platforms' limit, and an over-long text blocks the way to
+              Ready (#636).
 
-                The group a Facebook lot is offered in (#1663) comes first, starting on the last one
-                used there. The server types and prices the offer from it — auction or quick buy
-                (#1671), starting price, increment, currency — exactly as the offer form does, and an
-                auction's closing time is worked out here from its length. It is the one that shrinks:
-                a long name is ellipsised and shown whole in its hint.
+              They preview against **this lot's own copies** rather than random samples of the
+              collection, which is the one thing the shared builder cannot do for a platform
+              template written before there is anything to write it about — and the only way
+              `{count}` can preview the figure the listing will actually carry. */}
+          <TemplateBuilder
+            label="Listing title"
+            open={openTemplate === "name"}
+            onToggle={() => setOpenTemplate(openTemplate === "name" ? null : "name")}
+            value={effectiveName}
+            onChange={setName}
+            tokens={AVAILABLE_TITLE_TOKENS}
+            samples={templateSamples}
+            placeholder="Leave blank to use this platform's template"
+            description="Rendered over the lot's copies, and re-rendered whenever the offer's composition changes."
+            emptyPreview="This platform's own title template renders instead."
+          />
+          <TemplateBuilder
+            label="Description"
+            open={openTemplate === "description"}
+            onToggle={() =>
+              setOpenTemplate(openTemplate === "description" ? null : "description")
+            }
+            value={effectiveDescription}
+            onChange={setDescription}
+            tokens={AVAILABLE_LISTING_TOKENS}
+            multiline
+            rows={5}
+            samples={templateSamples}
+            placeholder="Leave blank to use this platform's template"
+            description="Same engine as a platform's description template, over this lot's copies."
+            emptyPreview="This platform's own description template renders instead."
+          />
+          {lotCopies > 0 && (
+            <>
+              {/* **Where and how the lot is sold, in one section on one line** (#1732): two small
+                  choices used to take two full-width frames. Framed, labelled and spaced as the two
+                  templates above it are (#1669), each label above its own select — the criteria bands'
+                  small `Field` label read as a stray control glued to the button below.
 
-                Beside it, how the offer is sold (#1688), starting on what it would be anyway — the
-                group's type on Facebook, the platform's default elsewhere — so a preset can keep a
-                kind of lot that is always a quick buy. The offer form's own field. On a platform
-                without groups it stands alone here. */}
-            <div style={STEP_FIELD}>
-              <div style={STEP_FIELD_ROW}>
-                {facebook.isFacebook && (
-                  <div style={{ ...STEP_FIELD_CELL, flex: "0 1 auto" }}>
-                    <label htmlFor="lot-facebook-group" style={STEP_FIELD_LABEL}>
-                      Facebook group
+                  The group a Facebook lot is offered in (#1663) comes first, starting on the last one
+                  used there. The server types and prices the offer from it — auction or quick buy
+                  (#1671), starting price, increment, currency — exactly as the offer form does, and an
+                  auction's closing time is worked out here from its length. It is the one that shrinks:
+                  a long name is ellipsised and shown whole in its hint.
+
+                  Beside it, how the offer is sold (#1688), starting on what it would be anyway — the
+                  group's type on Facebook, the platform's default elsewhere — so a preset can keep a
+                  kind of lot that is always a quick buy. The offer form's own field. On a platform
+                  without groups it stands alone here. */}
+              <div style={STEP_FIELD}>
+                <div style={STEP_FIELD_ROW}>
+                  {facebook.isFacebook && (
+                    <div style={{ ...STEP_FIELD_CELL, flex: "0 1 auto" }}>
+                      <label htmlFor="lot-facebook-group" style={STEP_FIELD_LABEL}>
+                        Facebook group
+                      </label>
+                      <FacebookGroupSelect
+                        id="lot-facebook-group"
+                        groups={facebook.groups}
+                        value={facebook.groupId}
+                        onChange={facebook.choose}
+                        style={STEP_SELECT_STYLE}
+                      />
+                    </div>
+                  )}
+                  <div style={{ ...STEP_FIELD_CELL, flex: "0 0 auto" }}>
+                    <label htmlFor="lot-listing-type" style={STEP_FIELD_LABEL}>
+                      Listing type
                     </label>
-                    <FacebookGroupSelect
-                      id="lot-facebook-group"
-                      groups={facebook.groups}
-                      value={facebook.groupId}
-                      onChange={facebook.choose}
+                    <select
+                      id="lot-listing-type"
+                      value={listingType ?? ""}
+                      onChange={(e) =>
+                        patchCriteria({ listingType: normalizeListingType(e.currentTarget.value) })
+                      }
                       style={STEP_SELECT_STYLE}
-                    />
+                    >
+                      {/* On Facebook with no group yet there is nothing for the type to follow. */}
+                      {listingType === null && <option value="">As the group says</option>}
+                      {OFFER_LISTING_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {OFFER_LISTING_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
-                <div style={{ ...STEP_FIELD_CELL, flex: "0 0 auto" }}>
-                  <label htmlFor="lot-listing-type" style={STEP_FIELD_LABEL}>
-                    Listing type
-                  </label>
-                  <select
-                    id="lot-listing-type"
-                    value={listingType ?? ""}
-                    onChange={(e) =>
-                      patchCriteria({ listingType: normalizeListingType(e.currentTarget.value) })
-                    }
-                    style={STEP_SELECT_STYLE}
-                  >
-                    {/* On Facebook with no group yet there is nothing for the type to follow. */}
-                    {listingType === null && <option value="">As the group says</option>}
-                    {OFFER_LISTING_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {OFFER_LISTING_TYPE_LABEL[t]}
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </div>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                flexWrap: "wrap",
-              }}
-            >
-              <DialogPrimaryButton
-                type="button"
-                onClick={commit}
-                disabled={busy || facebook.loading || facebook.missing !== null}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  flexWrap: "wrap",
+                }}
               >
-                <Icon name="newOffer" /> Create the offer
-              </DialogPrimaryButton>
-              {/* Why the button is off, beside it, rather than a refusal after the click (#1663). */}
-              {facebook.missing ? (
-                <span style={{ ...NOTE, color: "var(--color-warning)" }}>{facebook.missing}</span>
-              ) : (
-                <span style={NOTE}>
-                  The lot is picked again as it is created, so anything listed elsewhere since
-                  is left out and named.
-                </span>
-              )}
-            </div>
-          </section>
-        )}
+                <DialogPrimaryButton
+                  type="button"
+                  onClick={commit}
+                  disabled={busy || facebook.loading || facebook.missing !== null}
+                >
+                  <Icon name="newOffer" /> Create the offer
+                </DialogPrimaryButton>
+                {/* Why the button is off, beside it, rather than a refusal after the click (#1663). */}
+                {facebook.missing ? (
+                  <span style={{ ...NOTE, color: "var(--color-warning)" }}>{facebook.missing}</span>
+                ) : (
+                  <span style={NOTE}>
+                    The lot is picked again as it is created, so anything listed elsewhere since
+                    is left out and named.
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </section>
 
         {/* The work itself. Each state below carries its own padding rather than the column carrying
             one for all of them: an empty note is set in from the edge further than a list of rows

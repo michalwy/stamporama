@@ -570,7 +570,9 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       );
     });
 
-    it("suggests a template from the criteria, previewed against the lot itself (#774)", async () => {
+    // The suggestion itself is worked out on the screen from the criteria (#1781), and tested as the
+    // pure `suggestLotTextsFor`; what the proposal still owes the templates is the copies to preview on.
+    it("previews the templates against the lot itself (#774)", async () => {
       const proposal = await buildLotProposal(
         userId,
         collectionId,
@@ -587,20 +589,6 @@ describe("the bulk-lot builder's pool, proposal and commit (#759)", () => {
       );
       // The series is atomic, so a target of one lands at two.
       assert.equal(proposal.plan.itemIds.length, 2);
-      // A **template**, not the finished text (#774): the figures the suggestion used to carry are
-      // tokens now, so the wording follows what the offer holds instead of freezing at commit time.
-      // The criteria decide which tokens appear — an area and a year span were asked for, so both do.
-      assert.equal(proposal.suggested.name, "{area} {year}, {count} stamps");
-      assert.match(
-        proposal.suggested.description,
-        /Bulk lot of \{count\} stamps from \{area\}, issued \{year\}\./
-      );
-      assert.match(proposal.suggested.description, /Conditions: \{condition\}\./);
-      assert.equal(
-        /catalogue|catalog/i.test(proposal.suggested.description),
-        false,
-        "no value claim: the collector has the true sum on that screen, and there is no token for it"
-      );
       // `{count}` has to preview the figure the listing will carry, so the samples the wizard
       // renders against are the **whole lot**, not a sample of the collection.
       assert.deepEqual(

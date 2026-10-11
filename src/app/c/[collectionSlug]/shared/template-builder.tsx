@@ -98,6 +98,10 @@ export interface TemplateSamples {
    *  the collection the translation is written in, the language the copies were resolved in, and a
    *  way to re-resolve the **same** copies once one is saved. Absent, the warning only names them. */
   translate?: { collectionId: string; language: string | null; refresh: () => void };
+  /** The copies the template will render over do not exist yet, and this says when they will
+   *  (#1781) — the lot builder's templates are written before a lot is proposed. Set, the preview
+   *  shows this line instead of rendering the template over nothing, and its warnings stay quiet. */
+  waiting?: string;
 }
 
 /**
@@ -418,6 +422,8 @@ export function TemplateBuilder({
   const emptyAreaSymbols = multiline
     ? listingEmptyAreaSymbols(value, previewSets)
     : titleEmptyAreaSymbols(value, titleCopies);
+  // Nothing to warn about while there is nothing rendered: still loading, or no copies yet (#1781).
+  const quiet = samples.loading || !!samples.waiting;
   // The names behind those tokens, each translatable from the warning line (#1733) — the same walk
   // as the tokens, so the two cannot disagree about what fell back.
   const translate = samples.translate;
@@ -608,6 +614,10 @@ export function TemplateBuilder({
             <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
               Loading a sample copy…
             </span>
+          ) : samples.waiting ? (
+            <span style={{ color: "var(--color-text-muted)", fontWeight: 400, fontSize: "0.8125rem" }}>
+              {samples.waiting}
+            </span>
           ) : preview ? (
             formatted && showRendered ? (
               // The rendered mode drops the per-segment language marks — it is markup now, not
@@ -624,14 +634,14 @@ export function TemplateBuilder({
         </div>
 
         {/* Tokens that are not really translated in this language (#298). */}
-        {!samples.loading && <TitleFallbackNote tokens={fallbackTokens} fix={fix} />}
-        {!samples.loading && emptySymbols.length > 0 && (
+        {!quiet && <TitleFallbackNote tokens={fallbackTokens} fix={fix} />}
+        {!quiet && emptySymbols.length > 0 && (
           <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
             {"{conditionSymbol}"} is empty for {emptySymbols.join(", ")} — no symbol set in Settings →
             Conditions.
           </p>
         )}
-        {!samples.loading && emptyAreaSymbols.length > 0 && (
+        {!quiet && emptyAreaSymbols.length > 0 && (
           <p style={{ fontSize: "0.6875rem", color: "var(--color-warning)", margin: "0.5rem 0 0" }}>
             {"{areaSymbol}"} is empty for {emptyAreaSymbols.join(", ")} — no symbol set on the area in
             Catalog → Areas.
