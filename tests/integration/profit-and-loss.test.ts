@@ -162,7 +162,11 @@ describe("profit and loss screen (#1305)", () => {
     );
     for (const row of page.items) {
       const detail = (await getSaleDetail(userId, row.id))!;
-      assert.deepEqual(row.profit, detail.profit);
+      // The sale screen would count an open lot's copy at its estimate (#1814); this stamp has no
+      // catalogue value, so there is none to count and the two figures agree exactly.
+      const { estimatedCount, ...figures } = detail.profit;
+      assert.equal(estimatedCount, 0);
+      assert.deepEqual(row.profit, figures);
     }
     assert.equal(page.items[2].platformName, "Allegro");
     assert.equal(page.items[2].profit.profit, "-3.00");

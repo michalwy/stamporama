@@ -148,7 +148,9 @@ The collection Overview at `/c/[collectionSlug]` — the holdings, financial and
   reads purchase lots only, and the holdings tile names an opening value beside the cost and measures
   the surplus against both (#1324, see `purchases-and-intake.md`). Since #1305 `realizedProfit` sums
   `listSaleProfitRows`, the per-sale read the profit and loss screen lists, so the tile and that
-  screen's all-dates total are one read.
+  screen's all-dates total are one read. **The one difference is an open lot's estimate** (#1814): a
+  sale's own screen counts such a copy at its estimated cost, while `listSaleProfitRows` (and so the
+  tile) keeps it pending — the two agree again once the lot closes.
 
 - **Honest gaps, everywhere** (#650/#651). Unpriced and unconvertible rows are counted apart on
   the tiles, never silently dropped — `offer-summary.ts`'s own separation. Catalogue value and

@@ -1,5 +1,7 @@
 import "server-only";
 import { lotCostInputs } from "./cost-basis";
+import { loadCostEstimates } from "./cost-estimates";
+import type { CostEstimate } from "./purchase-allocation";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { getOrFetchRate } from "./exchange-rates";
@@ -15,6 +17,7 @@ import {
   saleRateMissing,
   sumProfitFigures,
   type CopySaleProfit,
+  type EstimatedProfitFigures,
   type ProfitFigures,
   type SaleProfit,
   type SaleProfitLine,
@@ -1395,7 +1398,8 @@ interface SaleProfitSaleInput {
 
 function toProfitLines(
   sale: SaleProfitSaleInput,
-  weightOf: (itemId: string) => number | null
+  weightOf: (itemId: string) => number | null,
+  estimateOf: (itemId: string) => number | null = () => null
 ): SaleProfitLine[] {
   return sale.lines.map((line) => ({
     id: line.id,
@@ -1406,25 +1410,47 @@ function toProfitLines(
       lotId: row.item.lotId,
       ...lotCostInputs(row.item.lot),
       catalogPrice: weightOf(row.itemId),
+      estimate: estimateOf(row.itemId),
     })),
   }));
 }
 
 /** Profit on each of several sales (#168), with one catalogue-weight lookup across all of them —
- * and only for the copies on a partly countable unit, the one case that splits a net. */
+ * and only for the copies on a partly countable unit, the one case that splits a net.
+ *
+ * `withEstimates` is the sale's own screen (#1814): a copy whose lot is still open is counted at its
+ * estimated cost, read through `loadCostEstimates` — the purchase order's own figure. The profit and
+ * loss screen and the Overview leave it off and keep such a copy pending. */
 async function profitOfSales(
   collectionId: string,
-  sales: SaleProfitSaleInput[]
+  sales: SaleProfitSaleInput[],
+  { withEstimates = false }: { withEstimates?: boolean } = {}
 ): Promise<SaleProfit[]> {
+  const estimates = withEstimates
+    ? await loadCostEstimates(
+        collectionId,
+        sales.flatMap((sale) =>
+          sale.lines.flatMap((line) =>
+            line.items.map((row) => ({
+              id: row.itemId,
+              costBasis: row.item.costBasis == null ? null : row.item.costBasis.toFixed(2),
+              lotId: row.item.lotId,
+              ...lotCostInputs(row.item.lot),
+            }))
+          )
+        )
+      )
+    : new Map<string, CostEstimate>();
+  const estimateOf = (id: string) => estimates.get(id)?.amount ?? null;
   const needed = new Set(
     sales.flatMap((sale) =>
-      sale.rateMissing ? [] : copiesNeedingWeights(toProfitLines(sale, () => null))
+      sale.rateMissing ? [] : copiesNeedingWeights(toProfitLines(sale, () => null, estimateOf))
     )
   );
   const weights = await valuateItemsByIds(collectionId, [...needed]);
   return sales.map((sale) =>
     computeSaleProfit(
-      toProfitLines(sale, (id) => weights.get(id)?.baseAmount ?? null),
+      toProfitLines(sale, (id) => weights.get(id)?.baseAmount ?? null, estimateOf),
       sale.rateMissing
     )
   );
@@ -1686,8 +1712,10 @@ export interface SaleDetail {
   /** Base-currency net (#206): buyer-side proceeds converted to base, minus shipping (base). */
   netProceeds: string;
   /** Profit and loss over the sold copies (#168): the counted copies' proceeds and cost, and the
-   * copies left out, by why. The Overview's realized figure is these added up. */
-  profit: ProfitFigures;
+   * copies left out, by why. A copy whose lot is still open is counted at its estimated cost
+   * (#1814), and `estimatedCount` says how many were, marking the figure as an estimate. The
+   * Overview's realized figure is these added up **without** the estimates. */
+  profit: EstimatedProfitFigures;
   /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
   status: string;
   /** True when the sale has at least one copy and every copy is packed (#192) — drives the
@@ -1787,12 +1815,16 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     sale.shippingCurrency !== baseCurrency &&
     sale.shippingFxRateToBase == null;
 
-  const [profit] = await profitOfSales(sale.collectionId, [
-    {
-      rateMissing: resolved.rateMissing,
-      lines: sale.lines.map((l) => ({ id: l.id, netBase: resolved.netBaseOf(l), items: l.items })),
-    },
-  ]);
+  const [profit] = await profitOfSales(
+    sale.collectionId,
+    [
+      {
+        rateMissing: resolved.rateMissing,
+        lines: sale.lines.map((l) => ({ id: l.id, netBase: resolved.netBaseOf(l), items: l.items })),
+      },
+    ],
+    { withEstimates: true }
+  );
   const { units, ...profitFigures } = profit;
   const unitById = new Map(units.map((u) => [u.lineId, u]));
 
@@ -2130,7 +2162,9 @@ export async function realizedProceedsByGroup(
 /**
  * Profit and loss over every sale in the collection — the Overview's realized figure. It is each
  * sale's own figure (the one its screen shows, `profitOfSales`) added up by `sumProfitFigures`, so
- * the tile and the sale screens agree by construction rather than by two calculations kept in step.
+ * the tile and the sale screens agree by construction rather than by two calculations kept in step —
+ * except that a sale screen counts a copy on a still-open lot at its estimate (#1814) and this keeps
+ * it pending.
  *
  * Ownership is the caller's to assert.
  */
@@ -2150,7 +2184,8 @@ export interface SaleProfitRow {
   platformId: string;
   platformName: string;
   buyerName: string | null;
-  /** The figure the sale's own screen shows (`SaleDetail.profit`), by the same `profitOfSales`. */
+  /** The figure the sale's own screen shows (`SaleDetail.profit`), by the same `profitOfSales` — less
+   * the open-lot estimates that screen counts (#1814): here such a copy stays pending. */
   profit: ProfitFigures;
 }
 

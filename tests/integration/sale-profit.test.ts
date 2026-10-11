@@ -8,7 +8,8 @@ import { getOverviewValue } from "../../src/lib/overview";
 // Profit and loss on the sale screen, the copy page and the Overview (#168), end to end: a sale
 // that counts whole, one partly countable through a catalogue split, one with no exchange rate and
 // one whose uncountable unit cannot be split — and, over all four, the sale screens adding up to
-// exactly the Overview's realized figure.
+// exactly the Overview's realized figure. Last, a copy on a still-open lot counted at its estimated
+// cost on the sale screen (#1814), and at its frozen cost once the lot closes.
 //
 // Cost bases are written directly, as `purchase-return.test.ts` does: freezing them is #121's.
 
@@ -21,7 +22,7 @@ describe("sale profit and loss (#168)", () => {
   let platformId: string;
   let conditionId: string;
   let cheap: string, dear: string, unpriced: string;
-  let closedLot: string, openLot: string;
+  let closedLot: string, openLot: string, openLotNoRate: string;
   const saleIds: string[] = [];
   let nextItemNo = 1;
   let nextNo = 1;
@@ -104,6 +105,17 @@ describe("sale profit and loss (#168)", () => {
         data: { purchaseId: purchase.id, price: "100.00", status: "open" },
       })
     ).id;
+    // An open lot whose cost cannot be estimated: bought in another currency with no rate (#1814).
+    const foreign = await createPurchase(userId, collectionId, {
+      currency: "USD",
+      purchasedAt: "2026-01-01",
+    });
+    await prisma.purchase.update({ where: { id: foreign.id }, data: { fxRateToBase: null } });
+    openLotNoRate = (
+      await prisma.purchaseLot.create({
+        data: { purchaseId: foreign.id, price: "100.00", status: "open" },
+      })
+    ).id;
   });
 
   after(async () => {
@@ -126,7 +138,7 @@ describe("sale profit and loss (#168)", () => {
   }
   // Functions, not values: the lots exist only once `before` has run.
   const costing = (costBasis: string) => ({ lotId: closedLot, costBasis });
-  const pendingCost = () => ({ lotId: openLot, costBasis: null });
+  const pendingCost = () => ({ lotId: openLotNoRate, costBasis: null });
   const noCost = { lotId: null, costBasis: null };
 
   /** One sale of one unit carrying the given copies. */
@@ -178,6 +190,7 @@ describe("sale profit and loss (#168)", () => {
       proceeds: "45.00",
       cost: "20.00",
       profit: "25.00",
+      estimatedCount: 0,
     });
     assert.equal(detail.lines[0].profit.profit, "25.00");
     assert.equal(detail.lines[0].profit.cost, "20.00");
@@ -189,6 +202,7 @@ describe("sale profit and loss (#168)", () => {
   });
 
   it("counts a partly countable sale over its known copy, and marks the rest pending", async () => {
+    // The pending copy's lot has no rate to EUR, so it has no estimate either (#1814).
     // 100.00 split 1:3 by catalogue price — the known copy takes 25.00 against 10.00.
     const known = await copy(cheap, costing("10.00"));
     const waiting = await copy(dear, pendingCost());
@@ -277,5 +291,38 @@ describe("sale profit and loss (#168)", () => {
     const sold = await copy(cheap, costing("1.00"));
     await sell([sold], "2.00");
     await assert.rejects(getItemSaleRecord(strangerId, sold));
+  });
+
+  it("counts a copy on an open lot at its estimate, marked, and at its frozen cost once closed (#1814)", async () => {
+    // The open lot's 100.00 is shared 3:1 by catalogue value: the Dear copy is estimated at 75.00.
+    const known = await copy(cheap, costing("10.00"));
+    const waiting = await copy(dear, { lotId: openLot, costBasis: null });
+    await copy(cheap, { lotId: openLot, costBasis: null });
+    const { realized: before } = await getOverviewValue(userId, collectionId);
+    const saleId = await sell([known, waiting], "150.00");
+
+    const detail = (await getSaleDetail(userId, saleId))!;
+    assert.equal(detail.profit.countedCount, 2);
+    assert.equal(detail.profit.estimatedCount, 1);
+    assert.equal(detail.profit.leftOut.costPending, 0);
+    assert.equal(detail.profit.cost, "85.00");
+    assert.equal(detail.profit.profit, "65.00");
+    assert.equal(detail.lines[0].profit.profit, "65.00");
+    assert.equal(detail.lines[0].profit.estimatedCount, 1);
+
+    // The Overview's realized figure keeps the copy pending.
+    const { realized: after } = await getOverviewValue(userId, collectionId);
+    assert.equal(after.leftOut.costPending, before.leftOut.costPending + 1);
+    assert.equal(after.countedCount, before.countedCount + 1);
+
+    // The lot closes and freezes its own figure: the line states it, no longer an estimate.
+    await prisma.item.update({ where: { id: waiting }, data: { costBasis: "80.00" } });
+    await prisma.purchaseLot.update({ where: { id: openLot }, data: { status: "closed" } });
+    const settled = (await getSaleDetail(userId, saleId))!;
+    assert.equal(settled.profit.estimatedCount, 0);
+    assert.equal(settled.profit.cost, "90.00");
+    assert.equal(settled.profit.profit, "60.00");
+    assert.equal(settled.lines[0].profit.estimatedCount, 0);
+    assert.equal(settled.lines[0].profit.profit, "60.00");
   });
 });

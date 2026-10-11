@@ -4,7 +4,9 @@ import {
   computeCopySaleProfit,
   computeSaleProfit,
   copiesNeedingWeights,
+  describeEstimated,
   describeLeftOut,
+  leftOutTotal,
   saleRateMissing,
   sumProfitFigures,
   type SaleProfitCopy,
@@ -20,6 +22,10 @@ function known(id: string, cost: string, catalogPrice: number | null = 1): SaleP
 }
 function pending(id: string, catalogPrice: number | null = 1): SaleProfitCopy {
   return { id, costBasis: null, lotId: "lot", lotStatus: "open", lotValued: true, catalogPrice };
+}
+/** A pending copy the sale screen has an estimate for (#1814). */
+function estimated(id: string, estimate: number | null, catalogPrice: number | null = 1): SaleProfitCopy {
+  return { ...pending(id, catalogPrice), estimate };
 }
 function noCost(id: string, catalogPrice: number | null = 1): SaleProfitCopy {
   return { id, costBasis: null, lotId: null, lotStatus: null, lotValued: null, catalogPrice };
@@ -125,6 +131,70 @@ describe("computeSaleProfit", () => {
   it("states a loss when fees exceed the price", () => {
     const profit = computeSaleProfit([line("l1", -2.5, [known("a", "1.00")])], false);
     assert.equal(profit.profit, "-3.50");
+  });
+});
+
+// #1814: the sale's own screen counts a copy on an open lot at its estimated cost, and says so.
+describe("computeSaleProfit with open-lot estimates", () => {
+  it("counts a pending copy at its estimate and marks the unit and the sale", () => {
+    const profit = computeSaleProfit(
+      [line("l1", 45, [known("a", "10.00"), estimated("b", 7.5)]), line("l2", 20, [known("c", "5.00")])],
+      false
+    );
+    assert.equal(profit.countedCount, 3);
+    assert.equal(profit.estimatedCount, 1);
+    assert.equal(leftOutTotal(profit.leftOut), 0);
+    assert.equal(profit.cost, "22.50");
+    assert.equal(profit.profit, "42.50");
+    assert.deepEqual(profit.units.map((u) => [u.profit, u.cost, u.estimatedCount]), [
+      ["27.50", "17.50", 1],
+      ["15.00", "5.00", 0],
+    ]);
+  });
+
+  it("still leaves out a pending copy with no estimate, and splits by catalogue for the rest", () => {
+    // 100.00 split 1:1:2 — the known and the estimated copy take a quarter each.
+    const profit = computeSaleProfit(
+      [line("l1", 100, [known("a", "10.00", 1), estimated("b", 4, 1), estimated("c", null, 2)])],
+      false
+    );
+    assert.equal(profit.countedCount, 2);
+    assert.equal(profit.estimatedCount, 1);
+    assert.equal(profit.leftOut.costPending, 1);
+    assert.equal(profit.proceeds, "50.00");
+    assert.equal(profit.cost, "14.00");
+    assert.equal(profit.profit, "36.00");
+    assert.equal(profit.units[0].profit, null);
+    assert.equal(profit.units[0].estimatedCount, 0);
+  });
+
+  it("reads the frozen cost once the lot closes, whatever estimate is passed", () => {
+    const profit = computeSaleProfit([line("l1", 30, [{ ...known("a", "12.00"), estimate: 9 }])], false);
+    assert.equal(profit.profit, "18.00");
+    assert.equal(profit.estimatedCount, 0);
+    assert.equal(profit.units[0].estimatedCount, 0);
+  });
+
+  it("counts no estimate on a sale with no exchange rate", () => {
+    const profit = computeSaleProfit([line("l1", 30, [estimated("a", 9)])], true);
+    assert.equal(profit.profit, null);
+    assert.equal(profit.estimatedCount, 0);
+  });
+
+  it("asks for weights only where an unestimated copy still splits a unit", () => {
+    assert.deepEqual(
+      copiesNeedingWeights([
+        line("whole", 1, [known("a", "1.00"), estimated("b", 1)]),
+        line("part", 1, [estimated("c", 1), estimated("d", null)]),
+      ]),
+      ["c", "d"]
+    );
+  });
+
+  it("describes the estimate, and nothing when there is none", () => {
+    assert.equal(describeEstimated(0), null);
+    assert.match(describeEstimated(1)!, /^~ 1 copy counted at its estimated cost/);
+    assert.match(describeEstimated(3)!, /^~ 3 copies counted at their estimated cost/);
   });
 });
 
