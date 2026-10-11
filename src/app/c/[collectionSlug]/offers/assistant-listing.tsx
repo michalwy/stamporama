@@ -120,6 +120,17 @@ export function ListViaAssistantButton({
   );
 }
 
+/** Whether {@link UpdateViaAssistantButton} renders at all for this offer — the platform can edit a
+ *  live listing and the offer has one to go back to. */
+export function offersAssistantUpdate(platformModule: string | null, listingUrl: string | null) {
+  return supportsAssistantUpdate(platformModule) && !!listingUrl?.trim();
+}
+
+/** Whether {@link CloseViaAssistantButton} renders at all for this offer. */
+export function offersAssistantClose(platformModule: string | null, saleId: string | null) {
+  return supportsAssistantClose(platformModule) && !!saleId?.trim();
+}
+
 /**
  * **⟳ Update via Assistant** — the same handoff, aimed at the listing this offer is **already live
  * as** (#462): the extension opens the platform's edit form for that listing and re-fills it from the
@@ -155,7 +166,7 @@ export function UpdateViaAssistantButton({
   style: React.CSSProperties;
   onStart: () => void;
 }) {
-  if (!supportsAssistantUpdate(platformModule) || !listingUrl?.trim()) return null;
+  if (!offersAssistantUpdate(platformModule, listingUrl)) return null;
   const hint = assistantHint({ blockerCount, present, busy, act: "update the listing" });
   const inert = hint !== null || running;
 
@@ -210,7 +221,7 @@ export function CloseViaAssistantButton({
   style: React.CSSProperties;
   onStart: () => void;
 }) {
-  if (!supportsAssistantClose(platformModule) || !saleId?.trim()) return null;
+  if (!offersAssistantClose(platformModule, saleId)) return null;
   const hint = assistantHint({ blockerCount: 0, present, busy: false });
   const inert = hint !== null || running;
 

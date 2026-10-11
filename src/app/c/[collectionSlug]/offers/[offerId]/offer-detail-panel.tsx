@@ -39,6 +39,8 @@ import {
   ListViaAssistantButton,
   UpdateViaAssistantButton,
   CloseViaAssistantButton,
+  offersAssistantClose,
+  offersAssistantUpdate,
 } from "../assistant-listing";
 import { PublishToAllegroButton } from "../allegro/publish-to-allegro";
 import { ComposeSetDialog } from "./compose-set-dialog";
@@ -68,6 +70,7 @@ import {
   type OfferState,
 } from "@/lib/offer-rules";
 import { isEmptiedListing, isListedState } from "@/lib/offer-listing-drift";
+import { needsActionRemedy } from "@/lib/offer-needs-action-remedy";
 import { facebookPostLink } from "@/lib/facebook-post-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import { isCoverReadinessBlocker, isPhotoReadinessBlocker } from "@/lib/offer-photo-readiness";
@@ -472,6 +475,17 @@ export function OfferDetailPanel({
   // photos (#311). `listingBlockers` would report `not-ready` here, which is the very thing this
   // click undoes.
   const listingFromPreparing = offer.state === "preparing" && advanceTo === "ready" && advanceReady;
+  // Close or Update, for a *Needs action* offer that is offered both (#1804).
+  const remedy =
+    offersAssistantUpdate(offer.platformModule, offer.url) &&
+    offersAssistantClose(offer.platformModule, offer.colnectSaleId)
+      ? needsActionRemedy({
+          state: offer.state,
+          needsAction: offer.needsAction,
+          listingOutOfDate: offer.listingOutOfDate !== null,
+          sets: offer.sets,
+        })
+      : null;
   // An offer that only lacks a price (#336): the price field is right here, so say what is missing
   // instead of silently withholding the advance button. On an auction what is missing is the
   // **starting** price (#449) — the current one follows from it while nobody has bid — so the line
@@ -1051,6 +1065,9 @@ export function OfferDetailPanel({
                 what it says is to go back to it. Only on an Active offer — the button's own rules do
                 the rest, and there is deliberately no equivalent in the bulk workspace, which is
                 scoped to Ready offers because posting is what a batch is for. */}
+            {/* Which of the pair below a *Needs action* offer calls for (#1804): Close when nothing
+                is left to sell, Update otherwise. Only where both are offered — a highlight picks
+                between two, and the other stays usable in its ordinary style. */}
             {offer.state === "active" && (
               <UpdateViaAssistantButton
                 platformModule={offer.platformModule}
@@ -1060,7 +1077,7 @@ export function OfferDetailPanel({
                 busy={false}
                 running={handoffRunning}
                 disabled={isPending}
-                style={ASSISTANT_BTN}
+                style={remedy?.action === "update" ? QUICK_ADVANCE_BTN : ASSISTANT_BTN}
                 onStart={() => {
                   setActionError(undefined);
                   void startHandoff(offerId, "update");
@@ -1077,7 +1094,7 @@ export function OfferDetailPanel({
                 present={assistantPresent}
                 running={closeHandoff?.state === "running"}
                 disabled={isPending}
-                style={ASSISTANT_BTN}
+                style={remedy?.action === "close" ? QUICK_ADVANCE_BTN : ASSISTANT_BTN}
                 onStart={() => {
                   setActionError(undefined);
                   setCloseError(undefined);
@@ -1085,6 +1102,11 @@ export function OfferDetailPanel({
                   setClosingListing(true);
                 }}
               />
+            )}
+            {remedy && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}>
+                {remedy.hint}
+              </span>
             )}
             {/* The API path (#477), which is the same step for a marketplace this instance holds a
                 grant for: no form to find and no URL to paste back. It renders only where the
