@@ -530,8 +530,10 @@ interface InventoryItemRowProps {
   /** Which tone the tint takes. `error` is the original and stays the default — a copy blocking a
    *  lot close is a fault. `accent` is for a row singled out without anything being wrong with it,
    *  which is what the partner's requested copy is (#658): the collector is comparing pictures down
-   *  a column and needs to know which one is the one in question, not to be told off about it. */
-  highlightTone?: "error" | "accent";
+   *  a column and needs to know which one is the one in question, not to be told off about it.
+   *  `warning` is a row worth a second look before going on — a stamp a new offer holds twice
+   *  (#1793), which may be meant. */
+  highlightTone?: "error" | "accent" | "warning";
   /** When provided, the catalog-value area becomes an inline price editor (#121). */
   onSetCatalogPrice?: () => void;
   /** When provided, the location chip becomes a button (with an "＋ location" affordance when

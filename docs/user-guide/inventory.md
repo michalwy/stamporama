@@ -1163,6 +1163,29 @@ on a single copy's **⋮** menu.
 With a **single** copy ticked there is no packaging to decide, so the pair collapses into one
 **＋ New offer** button that does the same thing.
 
+### What is going into the new offer
+
+The create form lists **every copy going into the offer** beside its fields, each as a full row with
+its photo — whichever way you reached it: the **＋ New offer** buttons, **＋ Create new offer** in the
+picker, or **Add to new offer** on one copy. So you can check the contents before creating the offer
+without closing the dialog.
+
+- **The summary** above the rows says how many copies there are, their **catalogue value** and their
+  **cost** together, in your collection currency. Cost follows the rule an offer's own cost does: a
+  copy whose purchase lot is still open counts at its estimate, and the figure is then marked `~`.
+  Hover a figure to see what it leaves out — copies with no catalogue value, no cost recorded, or no
+  estimate yet.
+- **Each row** shows the copy's cost just before its catalogue value.
+- **Order** the rows *As picked*, by **Catalogue value** or by **Cost** — highest first, so an
+  expensive copy that slipped in stands out.
+- **The same stamp twice.** When the copies go in as **one set**, two or more copies of the same stamp
+  or variant — whatever their conditions — are tinted amber and marked *same stamp ×2*, and a warning
+  at the top says how many stamps are doubled from the moment the form opens. Packaged **one set
+  each**, no set holds anything twice, so there is nothing to warn about.
+- **Take a copy out** with the **−** on its row (or **Remove from this offer** in its **⋮** menu). The
+  summary and the warning follow at once. Only the offer being made loses it: the copy stays ticked on
+  the Copies list. The last copy cannot be removed — cancel instead.
+
 ### The selection menu on a ticked row
 
 The bar's buttons sit at the far end of the bar, a long way from the checkboxes you have just been

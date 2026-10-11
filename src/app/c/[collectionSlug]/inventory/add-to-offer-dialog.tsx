@@ -21,6 +21,7 @@ import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { InventoryItemRow } from "./inventory-item-row";
+import { NewOfferCopiesPanel } from "./new-offer-copies-panel";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { OfferFormDialog } from "@/app/c/[collectionSlug]/offers/offer-form-dialog";
@@ -191,13 +192,18 @@ export function AddToOfferDialog({
   // launched from the "Add to new offer" action (#277), which skips the picker entirely.
   const [creating, setCreating] = useState(startInCreate);
   const [createError, setCreateError] = useState<string | undefined>();
+  // The copies the create form lists can be taken out of the offer before it is made (#1793). Only
+  // this offer loses them: the picker, and the Copies list's selection, keep every copy.
+  const [removedIds, setRemovedIds] = useState<ReadonlySet<string>>(new Set());
+  const offerItems = useMemo(() => items.filter((i) => !removedIds.has(i.id)), [items, removedIds]);
+  const offerItemIds = useMemo(() => offerItems.map((i) => i.id), [offerItems]);
   // Which platform the create form is currently on (#513). It is what decides whether a new offer
   // would be the platform's *second* listing of a stamp in one condition, so it is asked about
   // again whenever the collector switches house mid-form.
   const [createPlatformId, setCreatePlatformId] = useState(initialPlatform?.id ?? "");
   const { data: createCollisions = [] } = useStampConditionCollisions(
     collectionId,
-    itemIds,
+    offerItemIds,
     creating ? createPlatformId || null : null,
     creating
   );
@@ -390,8 +396,8 @@ export function AddToOfferDialog({
       const created = await actions.createOfferAction(
         collectionId,
         formData,
-        itemIds,
-        multi && packaging === "per-copy"
+        offerItemIds,
+        offerItemIds.length > 1 && packaging === "per-copy"
       );
       if (created.status !== "success") {
         // Nothing was created (the create + seed commit together), so the picker stays open to retry.
@@ -618,6 +624,20 @@ export function AddToOfferDialog({
         error={createError}
         zIndexBase={110}
         onPlatformChange={setCreatePlatformId}
+        // What is going in (#1793): every copy as a full row, the set's catalogue value and cost, the
+        // stamps it holds twice, and a copy taken out before the offer is made.
+        copies={
+          <NewOfferCopiesPanel
+            collectionId={collectionId}
+            baseCurrency={baseCurrency}
+            areas={areas}
+            locations={locations}
+            copies={offerItems}
+            oneSet={packaging === "one-set"}
+            onRemove={(id) => setRemovedIds((prev) => new Set(prev).add(id))}
+            disabled={isPending}
+          />
+        }
         // The stamp × condition conflict, asked *before* the offer exists (#513): the platform
         // already lists exactly this composition in these conditions (#732). Stated as a fact and
         // never as a platform rule (#524) — the dialog lists on whatever platform was picked, and
@@ -653,7 +673,11 @@ export function AddToOfferDialog({
           // The "Add to new offer" flow (#277) has no picker to fall back to — cancelling the
           // create form dismisses the whole dialog.
           if (startInCreate) onClose();
-          else setCreating(false);
+          else {
+            setCreating(false);
+            // Back in the picker every copy is there again; the next create starts from all of them.
+            setRemovedIds(new Set());
+          }
         }}
         onSubmit={createOffer}
       />

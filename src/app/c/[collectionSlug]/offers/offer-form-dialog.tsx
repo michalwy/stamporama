@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  PICKER_DIALOG_HEIGHT,
   DialogShell,
   DialogBody,
   DialogActions,
@@ -137,6 +138,10 @@ export interface OfferFormDialogProps {
   /** Fires with the picked platform's id (empty for a typed, not-yet-existing one) whenever it
    * changes, including on mount — what the collision check above is asked about. */
   onPlatformChange?: (platformId: string) => void;
+  /** What is going into the offer, drawn beside the form (#1793) — the copies a create from a
+   * selection starts with. With one the dialog becomes a wide one: the copies take the room, the
+   * form keeps its own width at the right. */
+  copies?: React.ReactNode;
   onClose: () => void;
   onSubmit: (formData: FormData) => void;
 }
@@ -163,6 +168,7 @@ export function OfferFormDialog({
   sourceNote,
   notice,
   onPlatformChange,
+  copies,
   onClose,
   onSubmit,
 }: OfferFormDialogProps) {
@@ -350,7 +356,17 @@ export function OfferFormDialog({
     : doneLabel;
 
   return (
-    <DialogShell title={title} onClose={onClose} minHeight="20rem" maxWidth="34rem" zIndexBase={zIndexBase}>
+    <DialogShell
+      title={title}
+      onClose={onClose}
+      minHeight="20rem"
+      zIndexBase={zIndexBase}
+      // With the copies beside it (#1793) the dialog is as large as a picker, so every row is
+      // readable; the form keeps the 34rem it has on its own.
+      {...(copies
+        ? { maxWidth: "min(94vw, 90rem)", height: PICKER_DIALOG_HEIGHT, aside: copies, asideWidth: "max(24rem, 100% - 34rem)" }
+        : { maxWidth: "34rem" })}
+    >
       <form
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
         onSubmit={handleSubmit}
