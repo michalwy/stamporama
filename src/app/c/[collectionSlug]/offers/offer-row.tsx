@@ -11,6 +11,7 @@ import {
   quickAdvanceTarget,
   requiresSets,
   type ManualOfferTarget,
+  type OfferState,
 } from "@/lib/offer-rules";
 import { isEmptiedListing } from "@/lib/offer-listing-drift";
 import { SELECT_STRIP } from "@/app/c/[collectionSlug]/inventory/inventory-copy-list";
@@ -51,6 +52,7 @@ const CHIP: React.CSSProperties = {
 
 const TRANSITION_LABEL: Record<string, { label: string; icon: IconName }> = {
   ready: { label: "Mark ready", icon: "check" },
+  pending: { label: "Submit for approval…", icon: "publish" },
   preparing: { label: "Back to preparing", icon: "revert" },
   active: { label: "Resume", icon: "resume" },
   paused: { label: "Pause", icon: "pause" },
@@ -72,10 +74,21 @@ const QUICK_ADVANCE_BTN: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate";
- * marking a `preparing` one ready keeps the plain transition label. */
-function advanceLabel(to: ManualOfferTarget): { label: string; icon: IconName } {
-  return to === "active" ? { label: "Activate", icon: "activate" } : TRANSITION_LABEL[to];
+/** Label + icon for the one-click advance to `to` — publishing a `ready` offer reads "Activate", and
+ * approving a `pending` one "Approve" (#1778); marking a `preparing` one ready keeps the plain
+ * transition label. */
+function advanceLabel(from: OfferState, to: ManualOfferTarget): { label: string; icon: IconName } {
+  if (to === "active") return from === "pending" ? { label: "Approve", icon: "activate" } : { label: "Activate", icon: "activate" };
+  return TRANSITION_LABEL[to];
+}
+
+/** The ⋮ entry for moving `from` → `to`. Publishing a ready offer reads "Activate", resuming a paused
+ *  one keeps "Resume", and the two ways out of Pending say what happened to the post (#1778). */
+function transitionEntryLabel(from: OfferState, to: ManualOfferTarget): { label: string; icon: IconName } {
+  if (from === "ready" && to === "active") return { label: "Activate", icon: "activate" };
+  if (from === "pending" && to === "active") return { label: "Approved…", icon: "activate" };
+  if (from === "pending" && to === "ready") return { label: "Rejected — back to Ready", icon: "reject" };
+  return TRANSITION_LABEL[to];
 }
 
 interface OfferRowProps {
@@ -148,12 +161,11 @@ export function OfferRow({
   const stateActions: RowAction[] = manualTransitions(offer.state)
     .filter((s): s is ManualOfferTarget => s !== "sold")
     .map((s) => {
-      // Publishing a ready offer reads "Activate"; resuming a paused one keeps "Resume".
-      const activating = offer.state === "ready" && s === "active";
+      const { label, icon } = transitionEntryLabel(offer.state, s);
       return {
         key: s,
-        label: activating ? "Activate" : TRANSITION_LABEL[s].label,
-        icon: activating ? "activate" : TRANSITION_LABEL[s].icon,
+        label,
+        icon,
         danger: s === "withdrawn",
         onSelect: () => onSetState(offer, s),
       };
@@ -161,7 +173,7 @@ export function OfferRow({
 
   const menuActions: RowAction[] = [
     ...(offer.url
-      ? [{ key: "listing", label: "Open listing", icon: "externalLink", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
+      ? [{ key: "listing", label: offer.state === "pending" ? "Open pending post" : "Open listing", icon: "externalLink", onSelect: () => window.open(offer.url!, "_blank", "noopener,noreferrer") } as RowAction]
       : []),
     ...(terminal
       ? []
@@ -302,7 +314,7 @@ export function OfferRow({
           </Tooltip>
           <OfferStateChip state={offer.state} />
           {canAdvance && advanceTo && (() => {
-            const { label, icon } = advanceLabel(advanceTo);
+            const { label, icon } = advanceLabel(offer.state, advanceTo);
             return (
               <Tooltip content={label}>
                 <button
@@ -353,8 +365,9 @@ export function OfferRow({
               <span style={CHIP}>{offer.setCount}×</span>
             </Tooltip>
           )}
+          {/* A pending offer's link leads to the post waiting for approval, and says so (#1778). */}
           {offer.url && (
-            <Tooltip content="Open the platform listing">
+            <Tooltip content={offer.state === "pending" ? "Open the post waiting for approval" : "Open the platform listing"}>
               <a
                 href={offer.url}
                 target="_blank"
@@ -362,7 +375,7 @@ export function OfferRow({
                 onClick={(e) => e.stopPropagation()}
                 style={{ ...CHIP, color: "var(--color-accent)", textDecoration: "none" }}
               >
-                <Icon name="externalLink" size="sm" /> Listing
+                <Icon name="externalLink" size="sm" /> {offer.state === "pending" ? "Pending post" : "Listing"}
               </a>
             </Tooltip>
           )}

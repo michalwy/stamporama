@@ -6,7 +6,7 @@ import { getOrFetchRate } from "./exchange-rates";
 import { type OfferState, isOfferState } from "./offer-rules";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
-import { isSellableOfferState } from "./sale-rules";
+import { isSellableOfferState, SELLABLE_OFFER_STATES } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput, type SaleLineNet } from "./sale-allocation";
 import {
   computeCopySaleProfit,
@@ -265,7 +265,7 @@ export async function listSellableOffers(
   const rows = await prisma.offer.findMany({
     where: {
       collectionId,
-      state: { in: [...(["active", "paused"] as const)] },
+      state: { in: [...SELLABLE_OFFER_STATES] },
       ...(opts.platformId ? { platformId: opts.platformId } : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -322,7 +322,7 @@ export async function listSellableCopies(
   const offers = await prisma.offer.findMany({
     where: {
       collectionId,
-      state: { in: [...(["active", "paused"] as const)] },
+      state: { in: [...SELLABLE_OFFER_STATES] },
       ...(opts.platformId ? { platformId: opts.platformId } : {}),
     },
     select: { sets: { select: { items: { select: { itemId: true } } } } },

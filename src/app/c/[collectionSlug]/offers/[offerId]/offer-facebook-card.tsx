@@ -20,6 +20,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
+import { PendingLinkMark } from "../offer-badges";
 import { formControl } from "@/app/control-style";
 
 // A Facebook offer's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
@@ -189,10 +190,13 @@ export function OfferFacebookCard({
   // Posted: once any lot has gone up — the lots of a post go up together.
   const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
   // What stands between the post and going up: every lot must be Ready, the gate publishing asks.
-  const waiting = kit.lots.filter((l) => l.state !== "ready" && l.state !== "active");
+  const waiting = kit.lots.filter((l) => l.state !== "ready" && l.state !== "pending" && l.state !== "active");
 
   // Up in the group: the offer is running — an auction may have closed and wait for its result.
   const up = self.state === "active" || self.state === "paused";
+  // Waiting for the group's administrator (#1778): nobody bids on a post nobody can see, so the
+  // bidding stays hidden; the link is the pending post's, and says so.
+  const pendingApproval = self.state === "pending";
   const now = new Date();
   const closed = auction && up && self.endsAt !== null && new Date(self.endsAt).getTime() <= now.getTime();
   const hasBid = self.price !== "0.00";
@@ -353,9 +357,14 @@ export function OfferFacebookCard({
       <div style={{ marginTop: "0.875rem" }}>
         <p style={SECTION_LABEL}>Listing link</p>
         {posted && self.url ? (
-          <a href={self.url} target="_blank" rel="noreferrer" style={{ fontSize: "0.875rem", color: "var(--color-accent)", wordBreak: "break-all" }}>
-            {self.url} ↗
-          </a>
+          <>
+            <a href={self.url} target="_blank" rel="noreferrer" style={{ fontSize: "0.875rem", color: "var(--color-accent)", wordBreak: "break-all" }}>
+              {self.url} ↗
+            </a>
+            {pendingApproval && <PendingLinkMark />}
+          </>
+        ) : pendingApproval ? (
+          <p style={{ ...MUTED, margin: 0 }}>Waiting for approval, with no link recorded.</p>
         ) : posted ? (
           <p style={{ ...MUTED, margin: 0 }}>Up, with no link recorded — add the post&apos;s link as the listing link.</p>
         ) : (

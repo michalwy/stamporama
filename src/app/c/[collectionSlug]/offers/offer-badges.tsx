@@ -43,6 +43,7 @@ function tinted(token: string, label: string, title?: string) {
 const STATE: Record<OfferState, { token: string | null; title: string }> = {
   preparing: { token: "info", title: "Still being composed — not yet published" },
   ready: { token: "info", title: "Fully prepared — ready to post to the platform" },
+  pending: { token: "warning", title: "Submitted — waiting for the platform or group to approve it" },
   active: { token: "accent", title: "Live on the platform" },
   paused: { token: "warning", title: "Temporarily suspended on the platform" },
   sold: { token: "success", title: "Sold through this offer" },
@@ -59,6 +60,17 @@ export function OfferStateChip({ state }: { state: OfferState }) {
       </Tooltip>
     );
   return tinted(meta.token, label, meta.title);
+}
+
+/** Beside the listing link of a **pending** offer (#1778): the link leads to a post still waiting for
+ *  approval, not to the listing buyers will see. Read off the state, never stored — approving writes
+ *  the final link in its place, and rejecting clears it. */
+export function PendingLinkMark() {
+  return tinted(
+    "warning",
+    "Pending",
+    "The link to the post waiting for approval — approving the offer asks for its final link"
+  );
 }
 
 /** Derived overlay (ADR-0013 §4): an active offer holding a set whose copy sold elsewhere — go to

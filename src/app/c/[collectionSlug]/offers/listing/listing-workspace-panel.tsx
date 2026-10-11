@@ -29,7 +29,7 @@ import {
   useAssistantHandoff,
   useAssistantPresence,
 } from "../assistant-handoff";
-import { ActivateOfferDialog } from "../activate-offer-dialog";
+import { ActivateOfferDialog, type PublishTarget } from "../activate-offer-dialog";
 import { DELCAMPE_PLATFORM_MODULE } from "@/lib/platform-modules";
 import { Icon } from "@/app/icons";
 
@@ -249,7 +249,9 @@ export function ListingWorkspacePanel({
     return { label: `${areaLabel} · ${key.year ?? "No year"}` };
   }
 
-  function publish(url: string) {
+  /** `target` is `pending` when the listing went to the platform's or group's approval rather than
+   *  straight up (#1778): the offer leaves the batch either way, as Pending instead of Active. */
+  function publish(url: string, target: PublishTarget) {
     const offer = publishing;
     if (!offer) return;
     setActionError(undefined);
@@ -262,13 +264,13 @@ export function ListingWorkspacePanel({
     const next = at >= 0 ? (ordered[at + 1]?.id ?? undefined) : undefined;
     startTransition(async () => {
       const { publishOfferAction } = await import("@/app/actions/offers");
-      const result = await publishOfferAction(offer.id, url);
+      const result = await publishOfferAction(offer.id, url, target);
       if (result.status === "success") {
         setPublishing(null);
         // Whatever the Assistant reported about this offer described the form, and the form has now
         // been posted — the report has nothing left to say.
         if (handoff?.offerId === offer.id) dismissHandoff();
-        // The offer has left this batch — it is `active` now, so the workspace, the Offers list and
+        // The offer has left this batch — it is `active` (or `pending`) now, so the workspace, the Offers list and
         // the toolbar counts all want re-reading.
         invalidateAll(collectionId);
         setExpandedId(next);

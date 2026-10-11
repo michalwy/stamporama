@@ -489,8 +489,9 @@ const listingChangedProvider: ActionItemProvider = {
           key: offer.offerId,
           label: offer.label,
           // A paused listing is still on the platform — which is why it is flagged at all — but it
-          // is not in front of buyers this minute, and that changes how urgent the row is.
-          detail: `${offer.platformName}${offer.state === "paused" ? " · paused" : ""}`,
+          // is not in front of buyers this minute, and that changes how urgent the row is. So is a
+          // pending one (#1778), whose post is still waiting for approval.
+          detail: `${offer.platformName}${offer.state === "paused" || offer.state === "pending" ? ` · ${offer.state}` : ""}`,
           at: offer.changedAt.toISOString(),
           href: `offers/${offer.offerId}`,
         })),

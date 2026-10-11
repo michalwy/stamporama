@@ -223,7 +223,8 @@ it leaves for you to set.
 
 ### A copy is in one offer at a time
 
-A copy that is in a Facebook offer which is up — an auction or a quick buy, active or paused —
+A copy that is in a Facebook offer which is up — an auction or a quick buy, active, paused, or
+pending the group's approval —
 cannot be put in another Facebook offer, in any group: either one may sell it. The refusal names the
 offer it is in, for example *offer #41 in Znaczki — aukcje*. Closing or withdrawing that offer frees
 the copy. Two offers still being prepared may hold the same copy; the second one then cannot go up
@@ -255,6 +256,13 @@ URL** — on Facebook the listing link *is* the post's address. That activates t
 publishing on any other platform, so the offer has to be **Ready** first; the card says so until it
 is, and shows the link once the offer is up.
 
+If the group's administrator has to approve the post first, tick **Waiting for approval** in that
+dialog and paste the link to the pending post: the offer becomes **Pending**, and the card marks its
+link as the pending one. Once the post is approved, choose **Approve** and give the final link; if it
+is rejected, **Rejected — back to Ready** clears the pending link. A pending offer can already be
+sold with **Sell**, since a buyer may claim it before the post is visible to everyone. See [Waiting for
+approval](offers.md#waiting-for-approval).
+
 ## A post with several lots
 
 A post can hold several offers as **lots** — an album, each photo a lot of its own. On the
@@ -276,7 +284,9 @@ Each lot's Facebook card then shows the whole post:
 The post goes up as one: **Activate** on any lot asks for the post's link once and activates **every**
 lot, so every lot has to be Ready first. The link becomes the listing URL of every lot that has none
 of its own. A lot can carry its own photo's link instead: enter it as that offer's listing URL before
-activating, and it is kept.
+activating, and it is kept. A post waiting for the group's approval waits as one too: submitting,
+approving or rejecting any lot does it for the whole post, and approving writes the final link in
+place of the pending one.
 
 Until the post is up, **Take this lot out of the post** removes a lot: the lots after it
 move up, and a post left with one lot becomes an ordinary single post. Once the post is up, its lots

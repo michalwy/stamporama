@@ -348,7 +348,7 @@ const LIST_OFFERS_PARAMETERS: readonly ParameterSpec[] = [
     type: "string[]",
     required: false,
     description:
-      "Restrict to listings in these states. `preparing` is a draft, `ready` one assembled and waiting to be posted, `active` one that is up, `paused` one taken down temporarily, and `sold` / `withdrawn` are closed. Closed listings are left out unless asked for by name.",
+      "Restrict to listings in these states. `preparing` is a draft, `ready` one assembled and waiting to be posted, `pending` one posted and waiting for the marketplace or group to approve it (its copies already count as listed, and its `url` is the pending post's), `active` one that is up, `paused` one taken down temporarily, and `sold` / `withdrawn` are closed. Closed listings are left out unless asked for by name.",
     values: OFFER_STATES,
   },
   {

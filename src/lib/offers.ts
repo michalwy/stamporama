@@ -40,6 +40,8 @@ import {
   auctionNeedsResolution,
   CLOSED_OFFER_STATES,
   OPEN_OFFER_STATES,
+  LIVE_OFFER_STATES,
+  isLiveState,
   type OfferListingType,
   isAuctionListing,
   normalizeListingType,
@@ -182,7 +184,7 @@ import type { PlanDrift } from "./offer-generator-rules";
 // is a separate offer with its own sets, and the `Item` is the cross-platform thread.
 //
 // This module owns: offer create / edit / delete + the manual lifecycle (preparing → ready →
-// active ↔ paused → withdrawn; `sold` is set by the sale flow, #166), set add / rename / remove, the paginated
+// (pending →) active ↔ paused → withdrawn; `sold` is set by the sale flow, #166), set add / rename / remove, the paginated
 // offers list + the offer detail read model, the composable-copies picker, the non-blocking
 // collision warning, and the derived **"needs action"** overlay (an active offer holding a set
 // whose copy has already sold elsewhere — ADR-0013 §4). The pure state machine lives in
@@ -974,7 +976,8 @@ interface NeedsActionRow {
  * held by *another* active offer currently in active bidding (#215). Such an offer is stale on its
  * platform: the collector removes the dead set (decrement) or withdraws. A set that sold through
  * its own line is not counted (it is the sale, not a collision), and fully-sold offers are already
- * `sold` (#166), so only `active` offers are considered.
+ * `sold` (#166), so only live offers are considered — `active`, and `pending` beside it (#1778), whose
+ * post the administrator may approve with the dead copy still in it.
  *
  * **One SQL query, evaluated in the database** — the previous in-memory derivation had to load
  * every active offer with its sets and copy ids on each call, which is tens of thousands of rows
@@ -1060,7 +1063,7 @@ async function needsActionRows(
     LEFT JOIN bidding_items b ON b."itemId" = li."itemId"
     LEFT JOIN platform_sold_items p ON p."itemId" = li."itemId"
     WHERE o."collectionId" = ${collectionId}
-      AND o."state" = 'active'
+      AND o."state" IN ('active', 'pending')
       ${scope}
       AND (
         (sl."offerSetId" IS NOT NULL AND sl."offerSetId" <> s."id")
@@ -1201,7 +1204,8 @@ export interface ChangedListingOffer {
   platformName: string;
   /** When it started diverging — the first change since the listing was last in step. */
   changedAt: Date;
-  /** `active` or `paused`, so the row can say a paused listing is not in front of buyers right now. */
+  /** `pending`, `active` or `paused`, so the row can say a paused or pending listing is not in front
+   * of buyers right now. */
   state: OfferState;
 }
 
@@ -1594,9 +1598,10 @@ export interface OfferCollision {
 }
 
 /**
- * **Active** offers on the same platform whose sets already list one of `itemIds` (ADR-0013 —
- * you normally keep at most one active listing of a copy per platform). A *warning* the compose
- * dialog surfaces; nothing is blocked. `excludeOfferId` skips the offer being composed.
+ * **Live** offers on the same platform whose sets already list one of `itemIds` (ADR-0013 —
+ * you normally keep at most one active listing of a copy per platform). Live is `active` or
+ * `pending` (#1778): a listing waiting for approval goes up the moment it is approved. A *warning*
+ * the compose dialog surfaces; nothing is blocked. `excludeOfferId` skips the offer being composed.
  */
 export async function findOfferCollisions(
   ownerId: string,
@@ -1613,7 +1618,7 @@ export async function findOfferCollisions(
     where: {
       collectionId,
       platformId,
-      state: "active",
+      state: { in: [...LIVE_OFFER_STATES] },
       ...(excludeOfferId ? { id: { not: excludeOfferId } } : {}),
       sets: { some: { items: { some: { itemId: { in: itemIds } } } } },
     },
@@ -1664,7 +1669,7 @@ export interface StampConditionCollision {
 
 /** The offer states a collision is reported against (#513) — every *live* one, so a duplicate is
  * caught while both listings are still drafts rather than after one is posted. */
-export const COLLIDING_STATES = ["preparing", "ready", "active", "paused"] as const;
+export const COLLIDING_STATES = ["preparing", "ready", "pending", "active", "paused"] as const;
 
 /**
  * What a collision read needs of a copy to say what it will be **listed as** (#1347): the axes the
@@ -2240,7 +2245,7 @@ async function withNeedsAction(
     resolved.counts ??
       needsActionCounts(
         collectionId,
-        rows.filter((r) => r.state === "active").map((r) => r.id),
+        rows.filter((r) => isOfferState(r.state) && isLiveState(r.state)).map((r) => r.id),
         platformSoldIds
       ),
     makeOfferLabeller(collectionId),
@@ -2282,7 +2287,7 @@ export interface OfferListFilters {
    * and a sale — so it is resolved to ids rather than expressed as a `where`. */
   platformSale?: boolean;
   /** Only offers that are **up on the platform and no longer match this record** (#542): the flag
-   * is set and the offer is `active` or `paused`. Two columns and no comparison, so it narrows,
+   * is set and the offer is `pending`, `active` or `paused`. Two columns and no comparison, so it narrows,
    * counts and paginates like any other column-backed filter rather than resolving to ids — which
    * is exactly why the signal is a stored instant and not a recomputed diff. */
   listingOutOfDate?: boolean;
@@ -2714,11 +2719,12 @@ export async function offerListNeighbours(
  * so "where is this copy on sale right now?" is answered by the top of the popup. */
 const ITEM_OFFER_RANK: Record<OfferState, number> = {
   active: 0,
-  paused: 1,
-  ready: 2,
-  preparing: 3,
-  sold: 4,
-  withdrawn: 5,
+  pending: 1,
+  paused: 2,
+  ready: 3,
+  preparing: 4,
+  sold: 5,
+  withdrawn: 6,
 };
 
 /** What the "View offers" popup is scoped to (#276, #349): one copy, every copy of a stamp, or
@@ -3734,6 +3740,11 @@ async function resolveColnectSaleId(
  * Publish a prepared offer (#322): record the listing URL the platform gave back, then move
  * `ready → active`, which stamps the listing date (#320).
  *
+ * The same step serves a listing that has to **wait for approval** (#1778), at both ends of the wait:
+ * `ready → pending` records the link to the pending post, and `pending → active` — the approval —
+ * records the final link in its place. Every one of them is a moment the platform hands over an
+ * address, which is why they are one function rather than three.
+ *
  * The URL is written **after** the transition so a refused publication — an offer that lost its last
  * set, or its price — leaves nothing behind: a listing URL on an offer that never went live would be
  * a false record of a live listing. `null` clears the field, and a listing may legitimately have no
@@ -3743,14 +3754,15 @@ async function resolveColnectSaleId(
 export async function publishOffer(
   ownerId: string,
   offerId: string,
-  url: string | null
+  url: string | null,
+  to: "active" | "pending" = "active"
 ): Promise<void> {
   // Asked **before** the transition (#696), even though `patchOffer` asks it again on the way in: a
   // collision refused after the offer had already gone Active would leave a live listing with no
   // address recorded on it, which is the very thing the URL-after-transition order exists to avoid.
   const ref = await assertOfferOwner(ownerId, offerId);
   await resolveColnectSaleId(ref.collectionId, offerId, url);
-  await setOfferState(ownerId, offerId, "active");
+  await setOfferState(ownerId, offerId, to);
   await patchOffer(ownerId, offerId, { url });
 }
 
@@ -3771,6 +3783,8 @@ export type OfferListedOutcome = "activated" | "url-recorded" | "unchanged";
  *   • already `active` → the listing is already live. A **blank** URL is filled in, because that is
  *     the field this exists to save from being pasted by hand; one that is already recorded is left
  *     alone, since a URL on the record was either put there by the collector or by this same capture.
+ *   • `pending` (#1778) → the same as `active`: a blank link is filled in, and nothing is approved —
+ *     an address coming back says the listing was submitted, not that anybody accepted it.
  *   • anything else → refused. A paused, sold or preparing offer is not something a marketplace
  *     submission may quietly take live.
  */
@@ -3789,7 +3803,7 @@ export async function recordOfferListed(
     await publishOffer(ownerId, offerId, trimmed);
     return "activated";
   }
-  if (ref.state === "active") {
+  if (ref.state === "active" || ref.state === "pending") {
     const row = await prisma.offer.findUnique({ where: { id: offerId }, select: { url: true } });
     if (row?.url) return "unchanged";
     await patchOffer(ownerId, offerId, { url: trimmed });
@@ -4488,7 +4502,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
     const sale = s.saleLines[0]?.sale ?? null;
     const sold = sale !== null;
     const needs =
-      state === "active" &&
+      isLiveState(state) &&
       !sold &&
       s.items.some((li) => {
         const via = soldViaSet.get(li.itemId);
@@ -5023,8 +5037,8 @@ export interface ComposeTargets {
   offers: ComposeTargetOffer[];
 }
 
-const COMPOSE_TARGET_STATES = ["preparing", "ready", "active", "paused"] as const;
-const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, ready: 1, active: 2, paused: 3 };
+const COMPOSE_TARGET_STATES = ["preparing", "ready", "pending", "active", "paused"] as const;
+const COMPOSE_STATE_RANK: Record<string, number> = { preparing: 0, ready: 1, pending: 2, active: 3, paused: 4 };
 
 /**
  * What the picker draws of an offer, and nothing else (#867).
@@ -5076,8 +5090,8 @@ const COMPOSE_TARGET_SELECT = {
 } as const;
 
 /** Offers copies can be added to from the inventory list (#188): the collection's non-terminal
- * offers (preparing / ready / active / paused, all platforms), each with its sets, ordered
- * preparing → ready → active → paused then newest first. When `itemIds` is given, the sets and
+ * offers (preparing / ready / pending / active / paused, all platforms), each with its sets, ordered
+ * preparing → ready → pending → active → paused then newest first. When `itemIds` is given, the sets and
  * offers already holding any of those copies report which ones, so the picker can disable a
  * destination that has nothing left to gain and note the rest (an offer never lists a copy twice).
  *
@@ -6354,10 +6368,11 @@ export async function syncGeneratedTexts(ownerId: string, offerId: string): Prom
   }
 }
 
-/** Move an offer through its manual lifecycle (preparing → ready → active ↔ paused → withdrawn,
- * reversible; #246). `sold` is owned by the sale flow (#166) and rejected here.
+/** Move an offer through its manual lifecycle (preparing → ready → (pending →) active ↔ paused →
+ * withdrawn, reversible; #246, #1778). `sold` is owned by the sale flow (#166) and rejected here.
  *
- * Publishing — `ready → active` — also stamps the listing date (#320); see the note at the update. */
+ * Publishing — `ready → active`, or the approval `pending → active` — also stamps the listing date
+ * (#320); see the note at the update. Rejection — `pending → ready` — clears the pending link. */
 export async function setOfferState(ownerId: string, offerId: string, to: OfferState): Promise<void> {
   const ref = await assertOfferOwner(ownerId, offerId);
   if (to === "sold") {
@@ -6370,13 +6385,15 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   if (requiresSets(to)) {
     const setCount = await prisma.offerSet.count({ where: { offerId } });
     if (setCount === 0) {
-      const verb = to === "active" ? "activating" : "marking this offer ready";
+      const verb = transitionVerb(to);
       throw new OfferActionBlockedError("empty", `Add at least one set before ${verb}.`);
     }
   }
   // Marking it ready is also where the listing preconditions (#418) and the listing photos (#311)
-  // are asked — see {@link readReadyBlockers} for why here and nowhere else in the lifecycle.
-  if (to === "ready") {
+  // are asked — see {@link readReadyBlockers} for why here and nowhere else in the lifecycle. Not on
+  // a rejection (`pending → ready`, #1778): the offer was ready when it was submitted, and refusing to
+  // record that a post came back would leave it claiming a submission the platform has turned down.
+  if (to === "ready" && ref.state !== "pending") {
     const blockers = await readReadyBlockers(ref.collectionId, offerId);
     if (blockers.length > 0) {
       throw new OfferActionBlockedError(
@@ -6388,8 +6405,9 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   // Going live is where the trade reservation is asked (#639), and only there: a copy promised in an
   // agreed trade must not also be sold out from under the promise. `preparing` and `ready` are not
   // gated on it — an offer being assembled competes for nothing, and a collector may perfectly well
-  // prepare the listing they will post the day the trade falls through.
-  if (to === "active") {
+  // prepare the listing they will post the day the trade falls through. Submitting a listing for
+  // approval is going live (#1778): the administrator can approve it at any moment.
+  if (isLiveState(to)) {
     const committed = await readOfferCommitments(ref.collectionId, offerId);
     if (committed.length > 0) {
       throw new OfferActionBlockedError("trade-committed", describeCommittedCopies(committed));
@@ -6408,7 +6426,7 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
   // **starting** price (#449) — the current one is an observation, and an auction that is up with
   // nobody bidding has none to make — so that is what is asked for, in the auction's own words.
   if (requiresPrice(to)) {
-    const verb = to === "active" ? "activating" : "marking this offer ready";
+    const verb = transitionVerb(to);
     const row = await prisma.offer.findUnique({
       where: { id: offerId },
       select: { price: true, startingPrice: true },
@@ -6426,13 +6444,23 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     }
   }
   // Publishing (#320): `ready → active` is the moment the listing actually goes live, so it stamps
-  // the listing date. It is the one transition that does — resuming a paused offer is not a first
-  // publication, and going back to `preparing` is not one either.
+  // the listing date. It is the one transition that does, with the approval of a pending one beside
+  // it — resuming a paused offer is not a first publication, and going back to `preparing` is not one
+  // either.
   //
   // An offer *created* directly as `active` (#257) never passes through here, so the date the
   // collector typed in the creation dialog is left exactly as entered. The stamp is a starting
   // value, not a lock: the header form edits it afterwards like any other field.
-  const publishing = ref.state === "ready" && to === "active";
+  //
+  // A listing that waited for approval (#1778) goes up when it is **approved**, so that is the
+  // moment that stamps the date — submitting it put it in front of an administrator, not of buyers.
+  // But the content went out at submission, so *that* is the moment the drift flag clears: a change
+  // made while it waited is a change the approval will not carry.
+  const publishing = (ref.state === "ready" || ref.state === "pending") && to === "active";
+  const submitting = ref.state === "ready" && (to === "active" || to === "pending");
+  // A rejection (`pending → ready`) takes the pending link with it: it led to a post the platform
+  // turned down, and a Ready offer carrying a listing link would be a false record of a listing.
+  const rejecting = ref.state === "pending" && to === "ready";
   await prisma.offer.update({
     where: { id: offerId },
     data: {
@@ -6445,7 +6473,8 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
       // goes up unflagged whatever it carried while being prepared. It is the **only** transition
       // that clears the flag: resuming a paused listing puts the same entry back in front of buyers
       // and rewrites nothing, so a change made during the pause is still a change nobody pushed.
-      ...(publishing ? { listingContentChangedAt: null } : {}),
+      ...(submitting ? { listingContentChangedAt: null } : {}),
+      ...(rejecting ? { url: null, colnectSaleId: null } : {}),
     },
   });
 
@@ -6473,6 +6502,13 @@ export async function setOfferState(ownerId: string, offerId: string, to: OfferS
     // that learned at publication would answer the question long after it stopped mattering.
     await learnDelcampeCategoryFromReadyOffer(offerId);
   }
+}
+
+/** How a refusal names the move it refused — "Add at least one set before …". */
+function transitionVerb(to: OfferState): string {
+  if (to === "active") return "activating";
+  if (to === "pending") return "submitting this offer for approval";
+  return "marking this offer ready";
 }
 
 /** "an asking price" / "a starting price" — the article a missing-figure message needs. */
@@ -6616,7 +6652,8 @@ async function nextSetSortOrder(offerId: string): Promise<number> {
  *
  * The same collision the going-live gate refuses, arriving through the other door: adding a committed
  * copy to an active offer puts it in front of buyers just as surely as activating the offer around it
- * would. Asked only of an `active` offer, because that is the only state that competes for anything —
+ * would. Asked only of a live offer — `active`, or `pending` its approval (#1778) — because those are
+ * the only states that compete for anything —
  * composing a `preparing` or `ready` listing out of promised copies is how a collector gets ready for
  * a trade that may yet fall through.
  *
@@ -6629,7 +6666,7 @@ async function assertNotCommittedElsewhere(
   offerState: OfferState,
   itemIds: readonly string[]
 ): Promise<void> {
-  if (offerState !== "active") return;
+  if (!isLiveState(offerState)) return;
   const refusal = await offerCommitmentRefusal(collectionId, itemIds);
   if (refusal) throw new OfferActionBlockedError("trade-committed", refusal);
 }
@@ -6823,6 +6860,7 @@ export async function quickOfferCreationBlock(
 const OFFER_STATE_LABEL_LOWER: Record<OfferState, string> = {
   preparing: "preparing",
   ready: "ready",
+  pending: "pending",
   active: "active",
   paused: "paused",
   sold: "sold",

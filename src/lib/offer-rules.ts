@@ -5,11 +5,12 @@
 
 import { normalizeDecimalInput, roundAmount } from "./decimal-input";
 
-export type OfferState = "preparing" | "ready" | "active" | "paused" | "sold" | "withdrawn";
+export type OfferState = "preparing" | "ready" | "pending" | "active" | "paused" | "sold" | "withdrawn";
 
 export const OFFER_STATES: readonly OfferState[] = [
   "preparing",
   "ready",
+  "pending",
   "active",
   "paused",
   "sold",
@@ -26,6 +27,7 @@ export const CLOSED_OFFER_STATES: readonly OfferState[] = ["sold", "withdrawn"];
 export const OPEN_OFFER_STATES: readonly OfferState[] = [
   "preparing",
   "ready",
+  "pending",
   "active",
   "paused",
 ];
@@ -34,6 +36,7 @@ export function isOfferState(value: unknown): value is OfferState {
   return (
     value === "preparing" ||
     value === "ready" ||
+    value === "pending" ||
     value === "active" ||
     value === "paused" ||
     value === "sold" ||
@@ -41,19 +44,29 @@ export function isOfferState(value: unknown): value is OfferState {
   );
 }
 
-/** Only an `active` offer competes for its copies, so only `active` offers can collide (at most
- * one active offer per Item × platform). `preparing` / `ready` (still being composed or awaiting
- * posting), paused, sold, and withdrawn offers hold no live claim. */
+/** The states that hold a **live claim** on their copies: `active`, and `pending` beside it (#1778).
+ * A pending listing has been submitted and waits for the platform's or group's approval, which can
+ * come at any moment — and a buyer may answer a post the collector sees before anyone else does — so
+ * everything that protects a copy from being sold twice treats it exactly as it treats an active one:
+ * trade commitments, the one-listing-per-platform collision, the needs-action sync. `preparing` /
+ * `ready` (still being composed or awaiting posting), paused, sold and withdrawn offers hold none. */
+export const LIVE_OFFER_STATES: readonly OfferState[] = ["pending", "active"];
+
+/** Whether an offer in this state competes for its copies — see {@link LIVE_OFFER_STATES}. */
 export function isLiveState(state: OfferState): boolean {
-  return state === "active";
+  return state === "active" || state === "pending";
 }
 
 /**
- * The offer state machine (ADR-0012, extended in #246): two pre-live states before an offer goes
- * live — `preparing → ready → active ↔ paused → sold / withdrawn`.
+ * The offer state machine (ADR-0012, extended in #246 and #1778): two pre-live states before an
+ * offer goes live, and an optional wait for approval between posting it and its going up —
+ * `preparing → ready → (pending →) active ↔ paused → sold / withdrawn`.
  *
  *   preparing→ ready | withdrawn         (still being composed — mark Ready once assembled, #246)
- *   ready    → active | preparing | withdrawn   (fully prepared; publish via Activate, or step back)
+ *   ready    → active | pending | preparing | withdrawn   (publish via Activate, submit for
+ *              approval, or step back)
+ *   pending  → active | ready | withdrawn  (approved / rejected / taken back — #1778; and → sold,
+ *              via #166, since a buyer may answer a post before it is approved)
  *   active   → paused | withdrawn        (and → sold, but only via the sale flow, #166)
  *   paused   → active | withdrawn        (and → sold, via #166)
  *   sold     → (terminal)
@@ -67,7 +80,8 @@ export function isLiveState(state: OfferState): boolean {
  */
 const MANUAL_TRANSITIONS: Record<OfferState, readonly OfferState[]> = {
   preparing: ["ready", "withdrawn"],
-  ready: ["active", "preparing", "withdrawn"],
+  ready: ["active", "pending", "preparing", "withdrawn"],
+  pending: ["active", "ready", "withdrawn"],
   active: ["paused", "withdrawn"],
   paused: ["active", "withdrawn"],
   sold: [],
@@ -77,17 +91,18 @@ const MANUAL_TRANSITIONS: Record<OfferState, readonly OfferState[]> = {
 /** A user-reachable manual target (every state except `sold`, which the sale flow owns). */
 export type ManualOfferTarget = Exclude<OfferState, "sold">;
 
-/** A transition into `ready` or `active` requires the offer to actually list something (≥1 set) —
- * you cannot mark an empty draft as ready or publish it (#188, #246). */
+/** A transition into `ready`, `pending` or `active` requires the offer to actually list something
+ * (≥1 set) — you cannot mark an empty draft as ready or publish it (#188, #246), and submitting it
+ * for approval is publishing it (#1778). */
 export function requiresSets(to: OfferState): boolean {
-  return to === "ready" || to === "active";
+  return to === "ready" || to === "pending" || to === "active";
 }
 
-/** A transition into `ready` or `active` requires an asking price (#336) — the same two states
+/** A transition into `ready`, `pending` or `active` requires an asking price (#336) — the states
  * {@link requiresSets} gates. An offer with no price is not prepared: `ready` means "assembled and
  * priced, waiting to be posted", and publishing one with no price is never intentional. */
 export function requiresPrice(to: OfferState): boolean {
-  return to === "ready" || to === "active";
+  return to === "ready" || to === "pending" || to === "active";
 }
 
 /** Whether an offer's stored price counts as *set*. The column is a non-null `Decimal`, so an
@@ -111,7 +126,8 @@ export function manualTransitions(from: OfferState): readonly OfferState[] {
 
 /**
  * The single unambiguous "advance one step" target for a one-click control (#255): the linear,
- * forward part of the lifecycle only — `preparing → ready` and `ready → active`. Returns `null`
+ * forward part of the lifecycle only — `preparing → ready`, `ready → active` and, for a listing
+ * waiting for approval, `pending → active` (#1778): approval is the step it is waiting for. Returns `null`
  * wherever the next move is ambiguous (from `active` / `paused`: pause vs resume vs withdraw vs
  * sell) or the state is terminal, so callers fall back to the manual dropdown instead of guessing.
  * A `ready`/`active` target still requires the offer to list something (see {@link requiresSets})
@@ -119,7 +135,7 @@ export function manualTransitions(from: OfferState): readonly OfferState[] {
  */
 export function quickAdvanceTarget(from: OfferState): ManualOfferTarget | null {
   if (from === "preparing") return "ready";
-  if (from === "ready") return "active";
+  if (from === "ready" || from === "pending") return "active";
   return null;
 }
 
@@ -131,6 +147,7 @@ export function isTerminalState(state: OfferState): boolean {
 export const OFFER_STATE_LABEL: Record<OfferState, string> = {
   preparing: "Preparing",
   ready: "Ready",
+  pending: "Pending",
   active: "Active",
   paused: "Paused",
   sold: "Sold",

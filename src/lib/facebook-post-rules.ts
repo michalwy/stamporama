@@ -303,6 +303,20 @@ export function isFacebookLotPosted(state: string): boolean {
   return state !== "preparing" && state !== "ready";
 }
 
+/** The link of a post holding several lots, read off its lots (#1778): the one most of them carry,
+ *  since publishing writes it into every lot with no link of its own and a lot keeping its photo's
+ *  link is the exception. The first lot's wins a tie; null when none carries a link. */
+export function facebookPostLink(lots: readonly { url: string | null }[]): string | null {
+  const counts = new Map<string, number>();
+  for (const lot of lots) {
+    const url = lot.url?.trim();
+    if (url) counts.set(url, (counts.get(url) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  for (const [url, n] of counts) if (best === null || n > counts.get(best)!) best = url;
+  return best;
+}
+
 /** Why a set of offers cannot be posted together, or null when they can (ADR-0061 §2). The server
  *  asks this before writing anything; the reasons are the collector's to fix, so each is named. */
 export interface FacebookPostCandidate {

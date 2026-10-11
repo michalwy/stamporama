@@ -15,9 +15,10 @@
 // wider set answering a different question — which trade already *names* a copy, so the picker does
 // not offer it twice — and the two are deliberately not merged.)
 //
-// **Live means an `active` offer**, which is `isLiveState`'s own answer rather than a second reading
-// of it: a `preparing` or `ready` offer is being assembled and holds no claim on anything, and a
-// paused, sold or withdrawn one has stopped competing.
+// **Live means an `active` or `pending` offer** (#1778), which is `isLiveState`'s own answer rather
+// than a second reading of it: a `preparing` or `ready` offer is being assembled and holds no claim on
+// anything, a pending one may be approved at any moment, and a paused, sold or withdrawn one has
+// stopped competing.
 //
 // The gate refuses **by name** — #418's shape — because "this copy is committed elsewhere" with no
 // name in it sends the collector hunting through both sides of every section and every set of every

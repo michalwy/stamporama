@@ -34,6 +34,7 @@ import { OfferFormDialog } from "./offer-form-dialog";
 import { DuplicateOfferDialog } from "./duplicate-offer-dialog";
 import { SellOfferFlowDialog } from "./sell-offer-flow-dialog";
 import { OfferRow } from "./offer-row";
+import { ActivateOfferDialog, type PublishTarget } from "./activate-offer-dialog";
 import { QuickOfferFlow } from "./quick-offer-flow";
 import { useLastUsedPlatform } from "./use-last-used-platform";
 import { useLastOfferDefaults, offerDefaultsFromForm } from "./use-last-offer-defaults";
@@ -53,6 +54,8 @@ type DialogState =
   | { kind: "duplicate"; offer: OfferListItem }
   | { kind: "sell"; offer: OfferListItem }
   | { kind: "withdraw"; offer: OfferListItem }
+  /** Submitting a Ready offer for approval, or approving a Pending one (#1778): both ask for a link. */
+  | { kind: "publish"; offer: OfferListItem; target: PublishTarget; approving: boolean }
   | { kind: "delete"; offer: OfferListItem }
   | { kind: "bulkWithdraw" }
   | { kind: "bulkDelete" }
@@ -511,6 +514,17 @@ export function OffersListPanel({
   function setOfferState(offer: OfferListItem, next: ManualOfferTarget) {
     if (next === "withdrawn") {
       setDialog({ kind: "withdraw", offer });
+      return;
+    }
+    // Waiting for approval records a link at both ends (#1778): the pending post's on the way in, the
+    // final one on approval — so both go through the publish dialog rather than straight through.
+    if (next === "pending" || (next === "active" && offer.state === "pending")) {
+      setDialog({
+        kind: "publish",
+        offer,
+        target: next === "pending" ? "pending" : "active",
+        approving: offer.state === "pending",
+      });
       return;
     }
     setActionError(undefined);
@@ -1103,6 +1117,34 @@ export function OffersListPanel({
                 // No link: a withdrawn offer is not somewhere the collector is being sent, and the
                 // row is still in the list under "Show sold/withdrawn".
                 toast({ message: `Offer #${offerNo} withdrawn` });
+              } else setActionError(result.message);
+            });
+          }}
+        />
+      )}
+
+      {dialog.kind === "publish" && (
+        <ActivateOfferDialog
+          offerLabel={dialog.offer.name ?? dialog.offer.label}
+          platformName={dialog.offer.platformName}
+          initialUrl={dialog.offer.url}
+          initialTarget={dialog.target}
+          approving={dialog.approving}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onConfirm={(url, target) => {
+            startTransition(async () => {
+              const { publishOfferAction } = await import("@/app/actions/offers");
+              const offer = dialog.offer;
+              const result = await publishOfferAction(offer.id, url, target);
+              if (result.status === "success") {
+                handleSuccess();
+                toast({
+                  message: `Offer #${offer.offerNo} is now ${OFFER_STATE_LABEL[target].toLowerCase()}`,
+                  href: `/c/${collectionSlug}/offers/${offer.id}`,
+                  linkLabel: "Open offer",
+                });
               } else setActionError(result.message);
             });
           }}

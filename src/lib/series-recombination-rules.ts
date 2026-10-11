@@ -39,8 +39,9 @@ import {
 export const RECOMBINABLE_OFFER_STATES: readonly OfferState[] = OPEN_OFFER_STATES;
 
 /** Of those, the ones up on the platform where a buyer can see them. **Paused counts**: it is
- *  suspended, not taken down, and recombining it changes a listing somebody may be watching. */
-export const LIVE_RECOMBINATION_STATES: readonly OfferState[] = ["active", "paused"];
+ *  suspended, not taken down, and recombining it changes a listing somebody may be watching. So does
+ *  **Pending** (#1778): the post is submitted, and its approval puts it in front of buyers as it is. */
+export const LIVE_RECOMBINATION_STATES: readonly OfferState[] = ["pending", "active", "paused"];
 
 export function isLiveForRecombination(state: OfferState): boolean {
   return LIVE_RECOMBINATION_STATES.includes(state);

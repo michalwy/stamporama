@@ -32,10 +32,11 @@ import { normalizeListingType, type OfferListingType, type OfferState } from "./
 
 /**
  * The states in which a Facebook auction holds its copies (ADR-0061 §5): it is up in its group.
- * Paused counts — a post taken down for a while still has bids under it — and a draft does not: a
- * collector preparing a second auction out of the same stamps competes for nothing until it goes up.
+ * Paused counts — a post taken down for a while still has bids under it — and so does Pending (#1778),
+ * a post the group's administrator may approve at any moment. A draft does not: a collector preparing
+ * a second auction out of the same stamps competes for nothing until it goes up.
  */
-export const FACEBOOK_AUCTION_HOLDING_STATES: readonly OfferState[] = ["active", "paused"];
+export const FACEBOOK_AUCTION_HOLDING_STATES: readonly OfferState[] = ["pending", "active", "paused"];
 
 /** A group row's settings as it posts with them: its own where it holds one, the platform's
  *  otherwise (#1661). The one place a group row is read for its settings. */

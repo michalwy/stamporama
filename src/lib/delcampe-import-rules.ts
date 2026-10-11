@@ -323,7 +323,8 @@ export interface DelcampeReconciliation {
 
 /** What a matched row does to the offer behind it, from the state that offer is in. */
 function actionFor(state: OfferState): DelcampeMatchAction {
-  return state === "ready" ? "activate" : state === "active" ? "confirm" : "record";
+  // A pending listing the file carries has been approved (#1778): the file lists what is up.
+  return state === "ready" || state === "pending" ? "activate" : state === "active" ? "confirm" : "record";
 }
 
 /**
