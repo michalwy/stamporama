@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { FacebookOfferKit } from "@/lib/facebook-auctions";
 import {
   facebookMoney,
@@ -19,10 +18,8 @@ import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
 import { RenderedHtml, sanitizeDescriptionHtml } from "@/app/c/[collectionSlug]/shared/rendered-description";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
-import { ConfirmDialog, DialogPrimaryButton, DialogSecondaryButton } from "@/app/dialog-shell";
+import { DialogSecondaryButton } from "@/app/dialog-shell";
 import { formatInstant, formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
-import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
-import { FacebookResultDialog } from "./facebook-result-dialog";
 import { formControl } from "@/app/control-style";
 
 // A Facebook offer's kit (#1544; ADR-0061 §2, §3): the group it is in, the post that carries it —
@@ -37,9 +34,9 @@ import { formControl } from "@/app/control-style";
 //
 // While an auction is up, the card is also where it is followed (#1545; ADR-0061 §4): nothing reads
 // the comments, so the standing bid is typed here, dated, and once the closing time has passed the card
-// asks for the result — the winner and the winning bid, which records the sale, or *No bids*, which
-// withdraws the offer and frees its copies. A quick buy (#1671) has no bidding: while it is up the
-// card offers only its sale — the buyer and the price, recorded the same way.
+// says so. The result is the offer's own *Sell* — to the winner, found by their Facebook profile — or
+// *Withdraw* when nobody bid, as on every platform (#1777); the card records neither. A quick buy
+// (#1671) has no bidding, so while it is up the card has nothing of its own to follow.
 //
 // The post is only what its template places (#1692): a missing template or an empty placeholder is
 // named under the text, with a link to where it is set, and nothing is filled in to hide it.
@@ -139,14 +136,12 @@ function formatClosesAt(iso: string | null): string {
 }
 
 export function OfferFacebookCard({
-  collectionId,
   collectionSlug,
   offerId,
   kit,
   onChanged,
   onRepost,
 }: {
-  collectionId: string;
   collectionSlug: string;
   offerId: string;
   kit: FacebookOfferKit;
@@ -155,11 +150,7 @@ export function OfferFacebookCard({
   /** Opens the offer screen's *Repost* dialog (#1718) — set only on an active quick buy. */
   onRepost?: () => void;
 }) {
-  const router = useRouter();
-  const { invalidateAll: invalidateSales } = useInvalidateSales();
   const [bid, setBid] = useState("");
-  const [resultOpen, setResultOpen] = useState(false);
-  const [confirmNoBids, setConfirmNoBids] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -213,7 +204,6 @@ export function OfferFacebookCard({
       if (result.status === "error") setError(result.message);
       else {
         setBid("");
-        setConfirmNoBids(false);
         onChanged();
       }
     });
@@ -223,13 +213,6 @@ export function OfferFacebookCard({
     run(async () => {
       const { patchOfferAction } = await import("@/app/actions/offers");
       return patchOfferAction(offerId, "price", bid);
-    });
-  }
-
-  function recordNoBids() {
-    run(async () => {
-      const { recordFacebookAuctionNoBidsAction } = await import("@/app/actions/facebook");
-      return recordFacebookAuctionNoBidsAction(offerId);
     });
   }
 
@@ -398,28 +381,14 @@ export function OfferFacebookCard({
         )}
       </div>
 
-      {/* A quick buy's sale (#1671): nobody bids, so the card asks only who bought it and for how much. */}
-      {up && !auction && (
-        <div style={{ marginTop: "0.875rem" }}>
-          <p style={SECTION_LABEL}>Sale</p>
-          <p style={{ ...MUTED, margin: "0 0 0.375rem" }}>
-            Price{" "}
-            <strong style={{ color: "var(--color-text-primary)" }}>{facebookMoney(self.price, self.currency)}</strong>{" "}
-            — the first buyer to claim it takes it.
-          </p>
-          <DialogPrimaryButton type="button" disabled={isPending} onClick={() => setResultOpen(true)}>
-            Record sale…
-          </DialogPrimaryButton>
-        </div>
-      )}
-
-      {/* The bidding, typed by hand while it runs, and the result once it has closed (#1545). */}
+      {/* The bidding, typed by hand while it runs (#1545). Once it has closed the winning bid can still
+          be typed before selling — the figure *Sell* puts on the sale (#1777). */}
       {up && auction && (
         <div style={{ marginTop: "0.875rem" }}>
           <p style={SECTION_LABEL}>Bidding</p>
           {closed && (
             <p style={{ ...MUTED, margin: "0 0 0.375rem", color: "var(--color-warning)", fontWeight: 600 }}>
-              Closed {formatRelative(self.endsAt!, now)} — record who won, or that nobody bid.
+              Closed {formatRelative(self.endsAt!, now)} — sell it to the winner, or withdraw it if nobody bid.
             </p>
           )}
           <p style={{ ...MUTED, margin: "0 0 0.375rem" }}>
@@ -439,34 +408,18 @@ export function OfferFacebookCard({
               "No bid recorded yet."
             )}
           </p>
-          {!closed && (
-            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <NumericInput
-                kind="amount"
-                placeholder={`Highest bid in ${self.currency}`}
-                value={bid}
-                onChange={(e) => setBid(e.target.value)}
-                disabled={isPending}
-                style={INPUT}
-                aria-label="Highest bid"
-              />
-              <DialogSecondaryButton type="button" disabled={isPending || !bid.trim()} onClick={recordBid}>
-                Record bid
-              </DialogSecondaryButton>
-            </div>
-          )}
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            {closed ? (
-              <DialogPrimaryButton type="button" disabled={isPending} onClick={() => setResultOpen(true)}>
-                Record result…
-              </DialogPrimaryButton>
-            ) : (
-              <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setResultOpen(true)}>
-                Record result…
-              </DialogSecondaryButton>
-            )}
-            <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setConfirmNoBids(true)}>
-              No bids
+            <NumericInput
+              kind="amount"
+              placeholder={`Highest bid in ${self.currency}`}
+              value={bid}
+              onChange={(e) => setBid(e.target.value)}
+              disabled={isPending}
+              style={INPUT}
+              aria-label="Highest bid"
+            />
+            <DialogSecondaryButton type="button" disabled={isPending || !bid.trim()} onClick={recordBid}>
+              {closed ? "Record winning bid" : "Record bid"}
             </DialogSecondaryButton>
           </div>
         </div>
@@ -476,35 +429,6 @@ export function OfferFacebookCard({
         <p role="alert" style={{ color: "var(--color-error)", fontSize: "0.8125rem", margin: "0.375rem 0 0" }}>
           {error}
         </p>
-      )}
-
-      {resultOpen && (
-        <FacebookResultDialog
-          offerId={offerId}
-          listingType={self.listingType}
-          currency={self.currency}
-          standingBid={self.price}
-          endsAt={auction ? self.endsAt : null}
-          onClose={() => setResultOpen(false)}
-          onRecorded={(saleId) => {
-            setResultOpen(false);
-            invalidateSales(collectionId);
-            onChanged();
-            router.push(`/c/${collectionSlug}/sales/${saleId}`);
-          }}
-        />
-      )}
-      {confirmNoBids && (
-        <ConfirmDialog
-          title="No bids"
-          message="End this auction with nobody having bid? The offer is withdrawn and its copies are free to list again."
-          actionLabel="Withdraw offer"
-          pendingLabel="Withdrawing…"
-          isPending={isPending}
-          error={error ?? undefined}
-          onConfirm={recordNoBids}
-          onClose={() => setConfirmNoBids(false)}
-        />
       )}
     </section>
   );

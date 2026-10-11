@@ -9,7 +9,8 @@ bid and the result #1545 (§4), the Assistant filling a post #1546 (§3), and se
 is amended by #1668: the post's link is recorded as the offer's own listing link, asked by *Activate*.
 The whole is amended by #1671 (§8): a Facebook offer can be a quick buy as well as an auction. §6
 is amended by #1689: the standing note is placed by a `{terms}` placeholder, no longer appended. §3
-is amended by #1692: a post is only what its template places.
+is amended by #1692: a post is only what its template places. §4 and §8 are amended by #1777: a
+Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw*.
 
 ## Context
 
@@ -81,6 +82,24 @@ of the comments.
   auction's currency — several lots won by one person are one parcel — or a new one, which is in the
   auction's own currency.
 - **No bids withdraws the offer**, freeing its copies; listing again is a new offer.
+
+**Amended by #1777 (decided with the collector on 2026-10-11): a Facebook offer is sold with the
+ordinary *Sell* and taken down with the ordinary *Withdraw*.** The card's own *Record result…* /
+*Record sale…* and *No bids* did the same jobs as *Sell* and *Withdraw*, which every offer already
+has, and the collector asked why Facebook was different. What Facebook's dialog added is kept, in
+*Sell*:
+
+- **On Facebook, *Sell*'s new sale names its buyer by their Facebook profile** — found by the link
+  first, then by name, a name held by a contact with a different link refused as somebody else, the
+  link kept on the contact — exactly the rule above.
+- Otherwise *Sell* behaves as on any platform: an existing sale on the platform in the offer's
+  currency, or a new one **in the offer's own currency** (so a group's currency still survives the
+  platform's lock); each set at the offer's current price, adjusted on the sale's screen. The lot is no
+  longer split over the sets by the dialog.
+- The winning figure is recorded as on other platforms: typed as the offer's current bid before
+  selling — the card keeps its bid field after the close for that — or on the sale.
+- **A closed Facebook auction still asks for its result**, bid or not; *Sell* or *Withdraw* answers it.
+- Sales recorded through the old dialog are untouched.
 
 ### 5. A copy is in one active Facebook auction at a time
 
@@ -159,6 +178,8 @@ be one.
 - **A quick buy has an asking price** like any quick buy and no increment or closing time; **its sale
   is recorded as an auction's win is** (§4) — the buyer a contact found or created by profile link and
   name, the price split over the sets — except that the offer's own asking price is left as it was.
+  **Amended by #1777:** both are sold with the ordinary *Sell* (§4's amendment), each set at its
+  current price.
 - **A post's lots share one type unless the group allows mixing** — a setting of its own, following
   the same rule, off unless set. Only a post's auctions share its closing time.
 - **§5 covers quick buys too**: a copy is in one Facebook offer that is up at a time, auction or quick

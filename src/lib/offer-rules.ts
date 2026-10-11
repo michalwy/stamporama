@@ -317,7 +317,8 @@ export interface ResolvableAuction {
  *
  * **A Facebook auction drops the second part** (#1545, decided with the collector on 2026-10-03).
  * Nothing reads its bids — they are comments under a post, typed here by hand — so a zero may only mean
- * nobody typed one. It asks for its result once it has closed, and *No bids* is one of the answers.
+ * nobody typed one. It asks for its result once it has closed, answered with *Sell* or *Withdraw*
+ * like any other (#1777).
  *
  * Pure, and `now` is passed in: the offer list, its facet count and the notification centre all read
  * one instant, exactly as the lot list's closing windows do.

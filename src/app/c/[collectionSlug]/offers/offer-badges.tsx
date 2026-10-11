@@ -102,7 +102,7 @@ export function AuctionEndedChip({ facebook = false }: { facebook?: boolean }) {
     "Ended, unresolved",
     // A Facebook auction asks whether or not a bid was typed (#1545), so its hint cannot claim one.
     facebook
-      ? "This Facebook auction has closed — record who won, or that nobody bid, on its Facebook card"
+      ? "This Facebook auction has closed — sell it to the winner, or withdraw it if nobody bid"
       : "This auction closed with a bid on it — record the sale, or mark it unsold and relist"
   );
 }

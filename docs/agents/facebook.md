@@ -220,25 +220,34 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
 - **A closed Facebook auction asks for its result with or without a bid** — `auctionNeedsResolution`
   takes `facebook` and skips the *somebody bid* part for it, and `endedAuctionWhere` adds
   `facebookGroupId: { not: null }` to the bid `OR`: nobody reads Facebook bids, so a zero is no
-  evidence. The integration test fails with that clause removed (checked when written).
+  evidence. The integration test fails with that clause removed (checked when written). Since #1777
+  it is answered with *Sell* or *Withdraw*; `tests/integration/facebook-sales.test.ts` holds it now.
 
-- **The result is `facebook-results.ts`** (imports `offers.ts` and `sales.ts`; nothing imports it but
-  the actions). `recordFacebookSale` records an auction's win and a quick buy's sale alike (#1671) —
-  the one difference is that only an auction's price is patched to the sale's figure; a quick buy's
-  asking price is the seller's own and stays. `cleanFacebookWin` takes the type for its wording, and
-  *No bids* refuses a quick buy. A win: the winner contact is found by `facebookProfileUrl` first, then by name
-  (case-insensitive, any role); a name match carrying a **different** link is refused as somebody
-  else, since `Contact.name` is unique and cannot be taken twice. A found contact gets the buyer role
-  and, where it has none, the link; otherwise a buyer is created with both. The winning bid is written
-  to the offer (`patchOffer`), then every unsold set goes into the chosen sale at the price split in
-  cents (`splitAuctionPrice`, odd cents first) — the winner's open Facebook sale (`ordered | paid |
-  packed`, same platform, buyer and currency, re-checked on save) or a new one, which `createSale`
-  makes in the **offer's** currency through `offerCurrency`, so a group's own currency survives and
-  the platform lock is untouched. A new sale whose lines fail is deleted again. *No bids* is
-  `setOfferState(…, "withdrawn")`. Both refuse anything not `active | paused`.
+- **A Facebook offer is sold with the ordinary *Sell* and taken down with the ordinary *Withdraw***
+  (#1777, decided with the collector on 2026-10-11, amending #1545/#1671; ADR-0061 §4). The card's
+  *Record result…* / *Record sale…* and *No bids* are gone, with `facebook-results.ts`, its dialog and
+  `cleanFacebookWin`/`splitAuctionPrice`. What Facebook adds to *Sell* is `facebook-sales.ts` (imports
+  only `db`, `platform-modules` and the pure `facebook-profile-rules.ts`, so `sale-header-input.ts` can
+  import it without a cycle). **The buyer**: `SellOfferFlowDialog` passes `buyerByFacebookProfile`
+  (the offer has a `facebookGroupId`) to `SaleFormDialog`, which swaps the buyer picker for a name and
+  a profile link, asks `lookupFacebookBuyerAction` while it is typed, and submits
+  `buyerFacebookProfileUrl` — whose presence routes `resolveSaleHeader` to `resolveFacebookBuyer`
+  instead of `resolvePurchaseContact`. Both go through `findFacebookBuyer`: by `facebookProfileUrl`
+  first, then by name (case-insensitive, any role); a name match carrying a **different** link is
+  refused as somebody else, since `Contact.name` is unique. A found contact gets the buyer role and,
+  where it has none, the link; otherwise a buyer is created with both — a link alone that matches
+  nobody is refused, a contact needing a name, and nothing typed is no buyer. It refuses a platform
+  that is not Facebook's. `createSaleAction` checks the collection before that write, since
+  `createSale` would only check it after. **The currency**: `createSaleAction` takes `forOfferId`, and
+  `facebookOfferSaleCurrency` hands a Facebook offer's currency to `createSale` as `offerCurrency`, so
+  a group's own currency survives and the platform lock is neither read nor written — #1545's rule,
+  kept. Everything else is *Sell* as anywhere: an existing sale on the platform in the offer's
+  currency, or a new one; each set at the offer's current price (no split). The card keeps the bid
+  field after the close (*Record winning bid*), which is how the winning figure reaches the price
+  *Sell* uses. Sales recorded through the old dialog are untouched.
 
 - **The profile link is stored normalised** (`normalizeFacebookProfileUrl`, pure in
-  `facebook-result-rules.ts`): `https://www.facebook.com/<path>`, lower case, no trailing slash, no
+  `facebook-profile-rules.ts`): `https://www.facebook.com/<path>`, lower case, no trailing slash, no
   query except `profile.php`'s `id`, the phone and desktop hosts folded together — so the lookup is an
   equality. `contacts.ts` normalises on every write and refuses a non-Facebook address with
   `ContactFieldError`; an update that omits the field leaves it alone.
@@ -257,7 +266,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   increment, shown only on the Facebook platform, the group locked on a lot of a post), the
   **Facebook** card on the offer's screen, directly under the description like every platform's card
   (#1667: the post text is read and copied right after it) (`offer-facebook-card.tsx`, with a **Bidding** part while an
-  auction is up, a **Sale** part while a quick buy is, and the result dialog,
-  `facebook-result-dialog.tsx`, in either's words), and **Post together** in the offers list's
+  auction is up — and nothing of its own for a quick buy, which is sold and withdrawn from the offer's
+  actions (#1777)), and **Post together** in the offers list's
   selection bar, offered while every ticked offer in view is a Facebook offer and numbering the lots
   in tick order.

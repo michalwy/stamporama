@@ -2274,6 +2274,11 @@ Either way, every set the offer still has left to sell is added at its current a
 you land on the sale's detail screen to review or adjust it. An offer with nothing left to sell (
 every set already sold) has no **Sell** action to offer.
 
+A **Facebook** offer is sold the same way, auction or quick buy. Its new sale asks for the buyer as
+Facebook shows them — their name and their profile link — and finds or creates the contact by the
+link first; the sale is in the offer's own currency. See
+[Facebook](facebook.md#selling-a-facebook-offer).
+
 ### Selling a single set
 
 An offer holding several sets — a [quantity](#sets--what-an-offer-is-made-of) of the same stamp, or

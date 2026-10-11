@@ -1471,7 +1471,6 @@ export function OfferDetailPanel({
           that is not a Facebook auction. */}
       {offer.facebook && (
         <OfferFacebookCard
-          collectionId={collectionId}
           collectionSlug={collectionSlug}
           offerId={offerId}
           kit={offer.facebook}
@@ -1619,6 +1618,7 @@ export function OfferDetailPanel({
             platformName: offer.platformName,
             price: offer.price,
             currency: offer.currency,
+            facebookGroupId: offer.facebookGroupId,
           }}
           set={sellingSet ? { id: sellingSet.id, label: sellingSet.label } : undefined}
           onClose={() => {

@@ -15,13 +15,8 @@ import {
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
 import { createFacebookPost, removeFacebookLot } from "@/lib/facebook-posts";
-import {
-  lookupFacebookWinner,
-  recordFacebookAuctionNoBids,
-  recordFacebookSale,
-  type FacebookWinnerLookup,
-} from "@/lib/facebook-results";
-import type { FacebookWinInput } from "@/lib/facebook-result-rules";
+import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
+import { assertCollectionOwner } from "@/lib/platform-category";
 
 // Settings → Facebook (#1543; ADR-0061): which platform contact is Facebook, and the groups under it.
 //
@@ -162,45 +157,16 @@ export async function removeFacebookLotAction(offerId: string): Promise<Facebook
   }
 }
 
-// ── The result (#1545; ADR-0061 §4) ───────────────────────────────────────────────────────────────
+// ── The buyer (#1777; ADR-0061 §4) ────────────────────────────────────────────────────────────────
 
-/** Who the typed winner — or buyer — is and which of their open sales the lot could join — read while the result
- *  dialog is filled in. */
-export async function lookupFacebookWinnerAction(
-  offerId: string,
-  winnerName: string,
+/** Who the buyer typed into a Facebook offer's *Sell* is — read while the sale form is filled in; the
+ *  save resolves them the same way (`resolveFacebookBuyer`). */
+export async function lookupFacebookBuyerAction(
+  collectionId: string,
+  name: string,
   profileUrl: string
-): Promise<FacebookWinnerLookup> {
+): Promise<FacebookBuyerLookup> {
   const session = await getSession();
-  return lookupFacebookWinner(session.user.id, offerId, { winnerName, profileUrl });
-}
-
-export type FacebookWinState =
-  | { status: "success"; saleId: string }
-  | { status: "error"; message: string };
-
-/** Record the winner and the winning bid — or a quick buy's buyer and price (#1671) — which records
- *  the sale. */
-export async function recordFacebookSaleAction(
-  offerId: string,
-  input: FacebookWinInput
-): Promise<FacebookWinState> {
-  const session = await getSession();
-  try {
-    const { saleId } = await recordFacebookSale(session.user.id, offerId, input);
-    return { status: "success", saleId };
-  } catch (err) {
-    return failure(err, "Failed to record the result.");
-  }
-}
-
-/** Record that nobody bid, which withdraws the auction and frees its copies. */
-export async function recordFacebookAuctionNoBidsAction(offerId: string): Promise<FacebookActionState> {
-  const session = await getSession();
-  try {
-    await recordFacebookAuctionNoBids(session.user.id, offerId);
-    return { status: "success" };
-  } catch (err) {
-    return failure(err, "Failed to end the auction.");
-  }
+  await assertCollectionOwner(session.user.id, collectionId);
+  return lookupFacebookBuyer(collectionId, { name, profileUrl });
 }

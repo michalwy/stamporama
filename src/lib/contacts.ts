@@ -6,7 +6,7 @@ import { normalizePhotoSides } from "./offer-photo-config";
 import { normalizePhotoCoverStyle, normalizePlatformCoverColor } from "./photo-cover-rules";
 import { normalizeDescriptionFormat } from "./description-format";
 import { isOfferListingType } from "./offer-rules";
-import { normalizeFacebookProfileUrl } from "./facebook-result-rules";
+import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 import { normalizeMarketCode } from "./market-anchoring";
 import { cleanRefreshQuickBuysAfterDays } from "./offer-refresh-rules";
 

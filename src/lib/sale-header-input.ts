@@ -1,5 +1,6 @@
 import "server-only";
 import { resolvePurchaseContact } from "./contacts";
+import { resolveFacebookBuyer } from "./facebook-sales";
 import { parseAmount, parseSaleDate, CUSTOM_SHIPPING_METHOD } from "./sale-rules";
 // The sale's transaction link (#292) follows the offer link's rule exactly — trim, blank clears —
 // so it reuses that normaliser rather than restating it.
@@ -25,6 +26,10 @@ export interface SaleHeaderRaw {
   platformName: string | null;
   buyerId: string | null;
   buyerName: string | null;
+  /** Set only when the buyer is named by their Facebook profile (#1777) — a Facebook offer's *Sell*:
+   *  the buyer is then `buyerName` with this link, found or created by `resolveFacebookBuyer`, and
+   *  `buyerId` is not read. Blank is a name alone. */
+  buyerFacebookProfileUrl?: string;
   externalRef: string;
   /** Link to the transaction on the marketplace (#292). Blank clears it. */
   transactionUrl: string;
@@ -122,12 +127,23 @@ export async function resolveSaleHeader(
   });
   if (!platformId) return { ok: false, message: "Choose a platform this sale happened on." };
 
-  // The buyer is optional — a blank name/id resolves to null (unknown/anonymous).
-  const buyerId = await resolvePurchaseContact(collectionId, {
-    id: raw.buyerId,
-    name: raw.buyerName,
-    role: "buyer",
-  });
+  // The buyer is optional — a blank name/id resolves to null (unknown/anonymous). On Facebook the
+  // buyer may be named by their profile instead (#1777), found by its link before its name.
+  let buyerId: string | null;
+  if (raw.buyerFacebookProfileUrl !== undefined) {
+    const buyer = await resolveFacebookBuyer(collectionId, platformId, {
+      name: raw.buyerName ?? "",
+      profileUrl: raw.buyerFacebookProfileUrl,
+    });
+    if (!buyer.ok) return { ok: false, message: buyer.message };
+    buyerId = buyer.buyerId;
+  } else {
+    buyerId = await resolvePurchaseContact(collectionId, {
+      id: raw.buyerId,
+      name: raw.buyerName,
+      role: "buyer",
+    });
+  }
 
   return {
     ok: true,
