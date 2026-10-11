@@ -52,8 +52,10 @@ what every listing goes up with — and an offer can name a different one. That 
 profile is for: the standard letter for most lots, something heavier and tracked for the rest.
 
 The **Listing profiles** tab lists your profiles on the left, with the chosen one's settings beside
-them. Click a profile to open it, change what you need and **Save**; **Revert** puts back what was
-saved, and leaving a profile with unsaved changes asks first. **Add profile**, at the top right,
+them, two sections to a row on a wide window: the name and shipping model, the renewal beside the
+auction figures, then the paid promotions beside the minimum bid step. Click a profile to open it,
+change what you need and **Save**; **Revert** puts back what was saved, and leaving a profile with
+unsaved changes asks first. **Add profile**, at the top right,
 opens an empty one. The radio button in front of a profile makes it the default. A profile tagged
 **No auctions** does not yet say how long an auction runs — see [Auctions](#auctions).
 

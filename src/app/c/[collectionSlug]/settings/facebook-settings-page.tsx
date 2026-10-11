@@ -39,8 +39,8 @@ import {
   AddRowAction,
   DetailForm,
   DetailPlaceholder,
+  DetailSections,
   FieldNote,
-  Fields,
   INPUT_STYLE,
   InfoHint,
   ListDetail,
@@ -65,6 +65,10 @@ import {
  * settings every group follows, each of which a group may instead set custom for itself. Groups in
  * use are listed next and the archived ones under their own heading, still editable and brought
  * back from the pane.
+ *
+ * The pane is long, so it takes the width beside the list and lays its sections out in pairs (#1801):
+ * *Every offer* beside *Shipping, payment and terms*, then *New auctions* beside *Quick buys*, so the
+ * two post templates sit level and are compared at a glance.
  */
 
 export function FacebookSettingsBody({
@@ -143,6 +147,7 @@ function GroupsListDetail({ collectionId, list }: { collectionId: string; list: 
     <>
       <AddRowAction label="Add group" onAdd={sel.startAdding} />
       <ListDetail
+        wide
         list={
           <ListPane
             caption={countLabel(inUse.length, "group", "groups")}
@@ -357,6 +362,10 @@ const TEXTAREA_STYLE: React.CSSProperties = {
   lineHeight: 1.5,
 };
 
+/** A post template is as wide as its section and tall enough for a typical post — a title, a few
+ *  lines of description, the price and `{terms}` — without scrolling inside it (#1801). */
+const POST_TEMPLATE_STYLE: React.CSSProperties = { ...TEXTAREA_STYLE, minHeight: "14rem" };
+
 /** The hints the settings carry, said once for Facebook's pane and a group's alike. */
 const HINTS = {
   listingType:
@@ -447,7 +456,7 @@ function DefaultsFields({
   const [texts, setTexts] = useState<PostTexts>(() => postTexts(defaults));
   const setText = (key: keyof PostTexts) => (value: string) => setTexts((t) => ({ ...t, [key]: value }));
   return (
-    <Fields>
+    <DetailSections>
       <div>
         <GroupLabel hint={HINTS.shared}>Every offer</GroupLabel>
         <div style={FIGURE_GRID}>
@@ -525,7 +534,7 @@ function DefaultsFields({
           <FieldNote>{REFRESH_NOTE}</FieldNote>
         </div>
       </div>
-    </Fields>
+    </DetailSections>
   );
 }
 
@@ -588,7 +597,7 @@ function GroupFields({
   });
 
   return (
-    <Fields>
+    <DetailSections>
       <div>
         <LabelWithError htmlFor="facebook-group-name">Name</LabelWithError>
         <TextInput
@@ -663,22 +672,24 @@ function GroupFields({
         </div>
       </div>
 
-      <FollowableSetting
-        label="Shipping, payment and terms"
-        htmlFor="facebook-group-note"
-        hint={HINTS.standingNote}
-        {...setting("standingNote")}
-      >
-        <StandingNoteField
-          id="facebook-group-note"
-          value={texts.standingNote}
-          onChange={setText("standingNote")}
-          unused={standingNoteUnused(posting)}
-        />
-      </FollowableSetting>
-      {/* A followed note no template here uses is said too: the note is Facebook's, the gap is this
-          group's. */}
-      {!own("standingNote") && standingNoteUnused(posting) && <UnusedNote />}
+      <div>
+        <FollowableSetting
+          label="Shipping, payment and terms"
+          htmlFor="facebook-group-note"
+          hint={HINTS.standingNote}
+          {...setting("standingNote")}
+        >
+          <StandingNoteField
+            id="facebook-group-note"
+            value={texts.standingNote}
+            onChange={setText("standingNote")}
+            unused={standingNoteUnused(posting)}
+          />
+        </FollowableSetting>
+        {/* A followed note no template here uses is said too: the note is Facebook's, the gap is this
+            group's. */}
+        {!own("standingNote") && standingNoteUnused(posting) && <UnusedNote />}
+      </div>
 
       <div>
         <GroupLabel hint={HINTS.newAuctions}>New auctions</GroupLabel>
@@ -734,7 +745,7 @@ function GroupFields({
           </FollowableSetting>
         </div>
       </div>
-    </Fields>
+    </DetailSections>
   );
 }
 
@@ -851,7 +862,7 @@ function PostTemplateField({
       listingType={listingType}
       value={value}
       onChange={onChange}
-      style={TEXTAREA_STYLE}
+      style={POST_TEMPLATE_STYLE}
     />
   );
 }
