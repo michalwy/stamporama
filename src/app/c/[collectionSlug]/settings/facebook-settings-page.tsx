@@ -9,6 +9,7 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { FacebookPostTemplateField } from "@/app/c/[collectionSlug]/shared/facebook-post-template-field";
+import { BuyerMessageTemplateField } from "@/app/c/[collectionSlug]/shared/buyer-message-template-field";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import type { FacebookGroupData, FacebookGroupList } from "@/lib/facebook-groups";
@@ -320,6 +321,7 @@ function settingsInput(fd: FormData): FacebookPostingSettings {
     auctionDays: optionalNumber(text("auctionDays")),
     closingTime: text("closingTime") || null,
     refreshQuickBuysAfterDays: optionalNumber(text("refreshQuickBuysAfterDays")),
+    buyerMessageTemplate: text("buyerMessageTemplate"),
   };
 }
 
@@ -397,6 +399,8 @@ const HINTS = {
     "What a new auction starts from. Each can be changed on the auction itself, and changing it here never changes an auction already made. Leave a field blank for no default.",
   quickBuys:
     "A quick buy has a price and no bidding: the first buyer to claim it takes it. Its price is set on each offer.",
+  buyerMessage:
+    "What to pay, where, and what happens next — copied from a sale with Message to buyer. A sale whose offers are all from one group uses that group's message; any other sale uses Facebook's.",
 } as const;
 
 function money(value: number | null, currency: string | null): string {
@@ -416,7 +420,8 @@ function describeSetting(
       return s.mixedListingTypes ? "A post may mix auctions and quick buys" : "A post's lots share one type";
     case "postTemplate":
     case "quickBuyTemplate":
-    case "standingNote": {
+    case "standingNote":
+    case "buyerMessageTemplate": {
       const text = s[key].trim();
       return text ? <span style={{ whiteSpace: "pre-wrap" }}>{text}</span> : "None";
     }
@@ -533,6 +538,16 @@ function DefaultsFields({
           <RefreshDaysField initial={defaults.refreshQuickBuysAfterDays} />
           <FieldNote>{REFRESH_NOTE}</FieldNote>
         </div>
+      </div>
+      <div>
+        <GroupLabel htmlFor="facebook-buyer-message" hint={HINTS.buyerMessage}>
+          Message to buyer
+        </GroupLabel>
+        <BuyerMessageTemplateField
+          id="facebook-buyer-message"
+          defaultValue={defaults.buyerMessageTemplate}
+          style={TEXTAREA_STYLE}
+        />
       </div>
     </DetailSections>
   );
@@ -745,6 +760,19 @@ function GroupFields({
           </FollowableSetting>
         </div>
       </div>
+
+      <FollowableSetting
+        label="Message to buyer"
+        htmlFor="facebook-group-buyer-message"
+        hint={HINTS.buyerMessage}
+        {...setting("buyerMessageTemplate")}
+      >
+        <BuyerMessageTemplateField
+          id="facebook-group-buyer-message"
+          defaultValue={start.buyerMessageTemplate}
+          style={TEXTAREA_STYLE}
+        />
+      </FollowableSetting>
     </DetailSections>
   );
 }

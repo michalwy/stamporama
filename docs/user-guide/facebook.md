@@ -30,10 +30,10 @@ asked of its offers.
 
 ## Facebook defaults
 
-The first row of the list, **Facebook defaults**, holds the settings every group follows, in four
+The first row of the list, **Facebook defaults**, holds the settings every group follows, in five
 sections. They take the width beside the list, two to a row on a wide window: **Every offer** beside
 **Shipping, payment and terms**, then **New auctions** beside **Quick buys**, so the two post
-templates sit level and can be compared at a glance. A group's settings are laid out the same way,
+templates sit level and can be compared at a glance, then **Message to buyer**. A group's settings are laid out the same way,
 under its name and link.
 
 **Every offer** — what applies to auctions and quick buys alike:
@@ -143,6 +143,15 @@ offer's description, which is what `{description}` puts into the post.
 in its place; a group with no template for an offer's type gives an empty post; and the line breaks
 are exactly the template's, around a placeholder that comes out empty too. The offer's Facebook card
 names whatever is missing (below), so you fix it where it is set.
+
+### Message to buyer
+
+**Message to buyer** is the template of what you send a buyer after a sale on Facebook — what to
+pay, the account, what happens next — copied from the sale with **Message to buyer** (see
+[Sales](sales.md#message-to-the-buyer), which lists its placeholders). A group can follow it or
+have its own, like every other setting here. A sale whose offers are all from one group uses that
+group's message; a sale of offers from several groups uses this one. Leave it empty, and every
+group that follows it, and every sale across groups, offers no message.
 
 ## Groups
 
@@ -405,6 +414,9 @@ Facebook platform uses another.
 
 A quick buy never closes by itself, so it never asks for a result: to take one down unsold, withdraw
 it as any offer.
+
+The sale's **Message to buyer** writes what the buyer owes from the group's
+[message template](#message-to-buyer).
 
 ## Refreshing a quick buy
 

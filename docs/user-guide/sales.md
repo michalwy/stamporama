@@ -421,6 +421,40 @@ copies' numbers or where they are filed.
   carries **New link** (the old address stops working) and **Withdraw**. An optional expiry date is
   there if you want one; left blank, the link lives until you withdraw it.
 
+## Message to the buyer
+
+After a sale you write the buyer how much to pay, where to pay it and what happens next. The sale
+already knows the figures, so the platform can write that message for you from a template:
+**Message to buyer** in the detail header shows it, rendered for this sale, and **Copy message**
+copies it — plain text, ready to paste into the chat — with a confirmation at the edge of the
+screen.
+
+The template is set per platform: on the platform's [contact](contacts.md#message-to-buyer), or for
+Facebook under **Settings → Facebook**, where a group can have its own
+([Facebook](facebook.md#message-to-buyer)). A platform without a template offers no message — the
+button is simply not there. The account number and the next steps are ordinary text in the
+template; the rest are placeholders:
+
+| Placeholder | Becomes |
+| --- | --- |
+| `{buyer}` | the buyer's name |
+| `{items}` | the items sold, one per line: the offer's number and title (`#412 Austria 1850 Mercury`) |
+| `{itemsTotal}` | what the items come to |
+| `{shipping}` | the shipping method on the sale and what the buyer pays for it — empty until a method is chosen |
+| `{total}` | what the buyer owes |
+| `{shippingOptions}` | the platform's shipping methods, one per line, each with its price |
+| `{sale}` | the sale's number |
+
+**The total includes the shipping once a shipping method is on the sale**: the items plus the
+postage the buyer pays — the sale's **buyer handling**, or what is left of the **total paid by
+buyer** after the items. Before a method is chosen the total is the items alone, and
+`{shippingOptions}` lists what the buyer can choose from, at each method's price on the platform's
+list. Amounts read `15 PLN`, or `15.50 PLN` when they are not whole. A placeholder the sale has
+nothing for — no buyer recorded, say — comes out empty; nothing is filled in in its place.
+
+The message is written from the sale as it stands, so choose the shipping method or add a sold set
+and the message follows.
+
 ## Printing a packing list
 
 If you'd rather pack from paper than from the screen, the header's **🖨 Packing list** button opens

@@ -6,7 +6,8 @@
 // template for an auction, one for a quick buy (#1671) — the note on shipping, payment and terms that
 // `{terms}` places (#1689), and the figures a new auction there starts from. Each one **follows the
 // Facebook platform's** unless the group marks it custom (#1661): the platform states what most
-// groups want, once, and a group overrides only what differs. Nothing here renders a post — that is
+// groups want, once, and a group overrides only what differs. The message to a buyer after a sale
+// (#1815) is one of them too, though it is a sale's text rather than a post's. Nothing here renders a post — that is
 // the kit's (#1544) — so what this module answers is what a group *says*, and the cleaning every
 // write goes through.
 
@@ -106,6 +107,7 @@ export const FACEBOOK_GROUP_SETTINGS = [
   "closingTime",
   "currency",
   "refreshQuickBuysAfterDays",
+  "buyerMessageTemplate",
 ] as const;
 export type FacebookGroupSetting = (typeof FACEBOOK_GROUP_SETTINGS)[number];
 
@@ -134,6 +136,8 @@ export interface FacebookPostingSettings {
   closingTime: string | null;
   /** After how many days an active quick buy needs posting again (#1718); null is never. */
   refreshQuickBuysAfterDays: number | null;
+  /** The message a buyer is sent after a sale (#1815); empty is none. */
+  buyerMessageTemplate: string;
 }
 
 /** The platform's settings before anybody has stated any — what a platform with no row reads as.
@@ -150,6 +154,7 @@ export const FACEBOOK_BLANK_SETTINGS: FacebookPostingSettings = {
   auctionDays: null,
   closingTime: null,
   refreshQuickBuysAfterDays: null,
+  buyerMessageTemplate: "",
 };
 
 /** A group's values, as the editor holds them and the domain layer stores them. A setting not named
@@ -264,6 +269,7 @@ export function cleanFacebookDefaults(input: FacebookPostingSettings): FacebookP
     auctionDays: cleanAuctionDays(input.auctionDays),
     closingTime: cleanClosingTime(input.closingTime),
     refreshQuickBuysAfterDays: cleanRefreshQuickBuysAfterDays(input.refreshQuickBuysAfterDays),
+    buyerMessageTemplate: input.buyerMessageTemplate.trim(),
   };
 }
 
@@ -305,6 +311,7 @@ export function cleanFacebookGroupValues(input: FacebookGroupValues): FacebookGr
     auctionDays: own("auctionDays") ? input.auctionDays : null,
     closingTime: own("closingTime") ? input.closingTime : null,
     refreshQuickBuysAfterDays: own("refreshQuickBuysAfterDays") ? input.refreshQuickBuysAfterDays : null,
+    buyerMessageTemplate: own("buyerMessageTemplate") ? input.buyerMessageTemplate : "",
   });
 
   let currency: string | null = null;
@@ -348,6 +355,7 @@ export function effectiveFacebookGroupSettings(
     auctionDays: from("auctionDays").auctionDays,
     closingTime: from("closingTime").closingTime,
     refreshQuickBuysAfterDays: from("refreshQuickBuysAfterDays").refreshQuickBuysAfterDays,
+    buyerMessageTemplate: from("buyerMessageTemplate").buyerMessageTemplate,
     currency: own("currency") ? group.currency : null,
   };
 }

@@ -48,6 +48,7 @@ import {
 } from "@/lib/photo-cover-rules";
 import { CoverColorPicker } from "../shared/photo-cover-editor";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { BuyerMessageTemplateField } from "@/app/c/[collectionSlug]/shared/buyer-message-template-field";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -721,6 +722,23 @@ export function ContactFormDialog({
                     <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
                       Marks an active quick buy up this long since it was posted, to post it again.
                     </p>
+                  </div>
+                )}
+
+                {/* The message to a buyer after a sale here (#1815). Not on the Facebook platform:
+                    there it is Facebook's own setting, which its groups follow, on Settings →
+                    Facebook (#1661). */}
+                {contact?.platformModule !== FACEBOOK_PLATFORM_MODULE && (
+                  <div style={FIELD_GAP}>
+                    <LabelWithError htmlFor="contact-buyer-message">
+                      Message to buyer (optional)
+                    </LabelWithError>
+                    <BuyerMessageTemplateField
+                      id="contact-buyer-message"
+                      defaultValue={contact?.buyerMessageTemplate ?? ""}
+                      disabled={isPending}
+                      style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "8rem" }}
+                    />
                   </div>
                 )}
 
