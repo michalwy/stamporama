@@ -1772,7 +1772,7 @@ composing the series offer afterwards.
   keeps other sets or is left with nothing, whether it is **live** (Active or Paused), and what
   happens to it: a live offer left empty says it **stays in its state and appears in Needs action**,
   one never listed says it is **withdrawn**.
-- **Compose.** The offer holding the series opens — the new one, or the one it was added to, which
+- **Compose.** The series goes into the offer — the new one, or the one it was added to, which
   is flagged **Changed since listed** if it is live — holding exactly the copies you chose — from a collapsed line or
   an opened one alike. For every chosen copy that came from a single offer, only **its
   own one-copy set** is taken out of that offer; the offer's other sets stay where they are.
@@ -1801,6 +1801,21 @@ offers that already list the series: if one of them has appeared or gone since t
 the one you are adding to changed its status, its sets or its bidding, the message names that offer
 and nothing is changed. Nothing is written
 halfway, either: the new offer exists only together with the sets leaving their old offers.
+
+### Composing several series in a row
+
+The screen **stays open** after **Compose offer**, with every setting where you left it — the
+platform, the copy filters and what a series may mix, the specialised-checklists switch, and the
+Facebook group the next new offer starts on. A confirmation names the offer (*Offer #412 created*, or
+*Series added to offer #412*); **Open** takes you there, or opens it in a new tab with ⌘ or Ctrl.
+
+The series are then **read again**. The copies you just composed now sit together in one set on this
+platform, so they are no longer proposed for any series — the card you composed goes, unless other
+copies could make up the series again, and any other card that was counting on one of those copies
+is redrawn without it.
+
+**Created in this sitting**, above the series, lists the offers composed since you opened the
+screen, each with the series it took and a link to it. The list is cleared when you leave the screen.
 
 ## Bulk listing — posting a prepared batch
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -40,7 +39,7 @@ import {
   AVAILABLE_LISTING_TOKENS,
   AVAILABLE_TITLE_TOKENS,
 } from "@/lib/offer-title-template";
-import { BAND, Empty, NOTE, SectionHeading } from "./lot-builder-chrome";
+import { BAND, CreatedInSitting, Empty, NOTE, SectionHeading } from "./lot-builder-chrome";
 import { LotFigures } from "./lot-figures";
 import { LotPresetBar, applyLotRecipe } from "./lot-preset-bar";
 import { useLotPoolSummary, useLotProposal } from "../use-offers-query";
@@ -873,35 +872,16 @@ export function LotBuilderPanel({
         {/* What this sitting has made (#1680), above the step that makes the next one, so the count
             and the links are in view while the next lot is being read. Each link is a plain one —
             ⌘ or Ctrl opens it beside — and the list goes when the builder is left. */}
-        {created.length > 0 && (
-          <section style={BAND}>
-            <SectionHeading
-              title="Created in this sitting"
-              note={`${created.length} ${created.length === 1 ? "offer" : "offers"} so far — the list goes when you leave the builder`}
-            />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1.25rem" }}>
-              {created.map((lot) => (
-                <Link
-                  key={lot.id}
-                  href={`/c/${collectionSlug}/offers/${lot.id}`}
-                  style={{
-                    color: "var(--color-accent)",
-                    fontWeight: 600,
-                    fontSize: "0.875rem",
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Offer #{lot.offerNo}
-                  <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>
-                    {" "}
-                    · {lot.copies} {lot.copies === 1 ? "copy" : "copies"}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        <CreatedInSitting
+          collectionSlug={collectionSlug}
+          leaving="the builder"
+          entries={created.map((lot) => ({
+            key: lot.id,
+            offerId: lot.id,
+            offerNo: lot.offerNo,
+            detail: `${lot.copies} ${lot.copies === 1 ? "copy" : "copies"}`,
+          }))}
+        />
 
         {/* **Name the listing before reading the lot, not after** (#773's pass). The block used to
             sit under the proposal, which put the button that finishes the job a hundred rows down

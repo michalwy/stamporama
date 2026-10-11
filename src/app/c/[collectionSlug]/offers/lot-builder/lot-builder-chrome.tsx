@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import Link from "next/link";
 
 // The lot builder's own chrome — the handful of shapes its two halves share (#760).
 //
@@ -154,5 +155,57 @@ export function Callout({
     >
       {children}
     </div>
+  );
+}
+
+/** One offer a screen made in this sitting (#1680, #1830). `detail` follows the number, muted. */
+export interface CreatedInSittingEntry {
+  key: string;
+  offerId: string;
+  offerNo: number;
+  detail: string;
+}
+
+/**
+ * What a composing screen has made since it was opened (#1680) — the Lot builder and *Series from
+ * Singles* (#1830), both of which stay open after creating an offer. Each link is a plain one, so ⌘ or
+ * Ctrl opens it beside; the list is the screen's component state and goes when the screen is left.
+ */
+export function CreatedInSitting({
+  collectionSlug,
+  entries,
+  leaving,
+}: {
+  collectionSlug: string;
+  entries: readonly CreatedInSittingEntry[];
+  /** How the screen is left, for the heading's note: "the builder", "this screen". */
+  leaving: string;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <section style={BAND}>
+      <SectionHeading
+        title="Created in this sitting"
+        note={`${entries.length} ${entries.length === 1 ? "offer" : "offers"} so far — the list goes when you leave ${leaving}`}
+      />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1.25rem" }}>
+        {entries.map((entry) => (
+          <Link
+            key={entry.key}
+            href={`/c/${collectionSlug}/offers/${entry.offerId}`}
+            style={{
+              color: "var(--color-accent)",
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Offer #{entry.offerNo}
+            <span style={{ color: "var(--color-text-muted)", fontWeight: 400 }}> · {entry.detail}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
