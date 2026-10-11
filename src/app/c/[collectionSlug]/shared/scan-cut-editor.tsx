@@ -8,6 +8,8 @@ import {
   DialogPrimaryButton,
   DialogSecondaryButton,
   DialogShell,
+  DIALOG_MAX_HEIGHT,
+  DIALOG_MAX_WIDTH,
 } from "@/app/dialog-shell";
 import {
   MIN_BOX_EDGE_PX,
@@ -698,8 +700,11 @@ export function ScanCutEditor({
     <DialogShell
       title={`${sheet.side === "front" ? "Front" : "Back"} of batch ${sheet.batchNo} — review the cut`}
       onClose={onClose}
-      maxWidth="min(96vw, 88rem)"
-      height="92vh"
+      // The window less the shell's margin, as Measure and mark (#1388) and the tile dialog (#1598):
+      // a box clipping a perforation is only visible as large as the card is, so every rem past the
+      // toolbar is the viewport's, and its `ResizeObserver` re-fits the card to it (#1824).
+      maxWidth={DIALOG_MAX_WIDTH}
+      height={DIALOG_MAX_HEIGHT}
       // The editor owns Escape while a split is armed, and a stray backdrop click mid-drag must not
       // throw away a card's worth of boxes.
       dismissable={false}
