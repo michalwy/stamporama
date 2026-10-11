@@ -11,6 +11,7 @@ import {
   regenerateOfferText,
   patchOffer,
   getOfferDetail,
+  previewNewOfferTitle,
 } from "../../src/lib/offers";
 
 // The offer's generated description (#266) and seller-only private note (#267): produced at creation
@@ -446,5 +447,56 @@ describe("offer description + private note (#266, #267)", () => {
     // The target platform has no description / note template, so the clone gets neither.
     assert.equal(detail?.description, null);
     assert.equal(detail?.privateNote, null);
+  });
+
+  describe("a title given on the New offer form (#1794)", () => {
+    async function offerTitled(platformId: string, name: string | undefined, seedItemIds: string[]) {
+      return createOffer(
+        userId,
+        collectionId,
+        { platformId, url: null, price: "5.00", currency: "EUR", listingDate: null, state: "preparing", name },
+        { seedItemIds }
+      );
+    }
+
+    it("prefills exactly the title an untouched form creates", async () => {
+      const preview = await previewNewOfferTitle(userId, collectionId, fullPlatformId, [mercuryId, venusId]);
+      const offerId = await offerTitled(fullPlatformId, undefined, [mercuryId, venusId]);
+      assert.equal(preview, "Mi 12-13 Mercury / Venus");
+      assert.equal((await getOfferDetail(userId, offerId))?.name, preview);
+      assert.equal((await getOfferDetail(userId, offerId))?.edited.name, false);
+      // No template, no copies: nothing to prefill, as there is nothing generated on creation either.
+      assert.equal(await previewNewOfferTitle(userId, collectionId, noTemplatePlatformId, [mercuryId]), null);
+      assert.equal(await previewNewOfferTitle(userId, collectionId, fullPlatformId, []), null);
+    });
+
+    it("keeps a typed title as the collector's, through later composition changes", async () => {
+      const offerId = await offerTitled(fullPlatformId, "My own title", [mercuryId]);
+      assert.equal((await getOfferDetail(userId, offerId))?.name, "My own title");
+      assert.equal((await getOfferDetail(userId, offerId))?.edited.name, true);
+      await addOfferSet(userId, offerId, [venusId]);
+      assert.equal((await getOfferDetail(userId, offerId))?.name, "My own title");
+    });
+
+    it("saves a cleared title empty, even where the creation re-renders for {offerUrl}", async () => {
+      const linkedPlatformId = (
+        await prisma.contact.create({
+          data: {
+            collectionId,
+            name: "Linked",
+            platform: true,
+            platformCurrency: "EUR",
+            titleTemplate: "{catalog} {name}",
+            descriptionTemplate: "{name} — {offerUrl}",
+          },
+        })
+      ).id;
+      const offerId = await offerTitled(linkedPlatformId, "", [mercuryId]);
+      const detail = await getOfferDetail(userId, offerId);
+      assert.equal(detail?.name, null);
+      assert.equal(detail?.edited.name, false);
+      // The description, which the re-render once the offer has its id is for, is still written.
+      assert.match(detail?.description ?? "", /^Mercury/);
+    });
   });
 });

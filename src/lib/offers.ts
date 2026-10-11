@@ -698,10 +698,33 @@ async function generateListingTexts(
   ]);
   const sets = await templateSets(ownerId, collectionId, composition, language, listedAs);
   return {
-    name: title ? renderTitleTemplate(title, offerTitleCopies(sets)) || null : null,
+    name: title ? renderOfferTitle(title, sets) : null,
     description: description ? renderListingTemplate(description, sets, context) || null : null,
     privateNote: privateNote ? renderListingTemplate(privateNote, sets, context) || null : null,
   };
+}
+
+/** An offer's title over its sets: every copy in it, whatever the packaging. One function for the
+ * creation and for the *New offer* form's prefill (#1794), so the form cannot show a title the
+ * created offer would not get. */
+function renderOfferTitle(template: string, sets: readonly TemplateSet[]): string | null {
+  return renderTitleTemplate(template, offerTitleCopies(sets)) || null;
+}
+
+/** The title an offer created on `platformId` with `itemIds` would be generated, without writing
+ * anything (#1794) — the *New offer* form's prefill. Null where the platform has no title template or
+ * there are no copies, which is when a created offer has no title either. */
+export async function previewNewOfferTitle(
+  ownerId: string,
+  collectionId: string,
+  platformId: string,
+  itemIds: string[]
+): Promise<string | null> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const { titleTemplate, titleLanguage } = await assertPlatform(collectionId, platformId);
+  if (!titleTemplate?.trim() || itemIds.length === 0) return null;
+  const sets = await templateSets(ownerId, collectionId, [{ title: null, itemIds }], titleLanguage);
+  return renderOfferTitle(titleTemplate, sets);
 }
 
 /** The offer-level facts a listing text can resolve (#415) — today just the offer's own link, which
@@ -5263,6 +5286,12 @@ export interface OfferInput {
   facebookGroupId?: string | null;
   /** A Facebook auction's bid increment (#1544), or null/absent for the group's default on create. */
   bidIncrement?: string | null;
+  /** The title the collector gave the offer on the *New offer* form (#1794), create only. Absent is
+   *  *not stated*: the platform's template titles it and keeps following the composition. Stated, it
+   *  is the offer's title exactly as one written on the offer's own screen (#380): wording is
+   *  `nameEdited`, and blank is no title, back on the template — saved empty, never filled in by the
+   *  creation itself. Ignored by {@link updateOffer}, whose form has no title. */
+  name?: string | null;
 }
 
 /**
@@ -5634,7 +5663,10 @@ async function writeOfferCreation(
       // Inside the transaction, so a rolled-back creation returns the number too (#416).
       offerNo: await allocateOfferNumber(tx, collectionId),
       platformId: input.platformId,
-      name: texts.name,
+      // A title stated on the form (#1794) is the collector's, as `patchOffer` would write it.
+      ...(input.name === undefined
+        ? { name: texts.name }
+        : { name: input.name?.trim() || null, nameEdited: !!input.name?.trim() }),
       description: texts.description,
       privateNote: texts.privateNote,
       // The format the description is written in (#319), seeded from the platform for the same
@@ -5701,7 +5733,9 @@ async function syncOfferContextTexts(
   platform: PlatformTemplates
 ): Promise<void> {
   if (!platformTemplatesUseOfferContext(platform)) return;
-  await syncGeneratedTexts(ownerId, offerId);
+  // Only the texts that can name the offer: a title never does, and re-rendering it here would fill
+  // in a title the collector cleared on the form a moment ago (#1794).
+  await syncGeneratedTexts(ownerId, offerId, ["description", "privateNote"]);
 }
 
 export interface DuplicateOfferResult {
@@ -6361,7 +6395,12 @@ export async function markOfferListingSynced(ownerId: string, offerId: string): 
  * copies at all, so nothing was written — composing it now writes the title, for the same reason it
  * refreshes it later.
  */
-export async function syncGeneratedTexts(ownerId: string, offerId: string): Promise<void> {
+export async function syncGeneratedTexts(
+  ownerId: string,
+  offerId: string,
+  /** The fields to bring back in step — all three unless a caller knows only some can have moved. */
+  fields: readonly OfferTextField[] = ["name", "description", "privateNote"]
+): Promise<void> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     select: {
@@ -6388,11 +6427,14 @@ export async function syncGeneratedTexts(ownerId: string, offerId: string): Prom
   // bulk lot is: a hundred unrelated stamps whose title cannot be an enumeration. Null everywhere
   // else, which is what every offer written before this says, so nothing else changes.
   const templates: PlatformTemplates = {
-    titleTemplate: offer.nameEdited ? null : (offer.nameTemplate ?? platform.titleTemplate),
-    descriptionTemplate: offer.descriptionEdited
-      ? null
-      : (offer.descriptionTemplate ?? platform.descriptionTemplate),
-    privateNoteTemplate: offer.privateNoteEdited ? null : platform.privateNoteTemplate,
+    titleTemplate:
+      offer.nameEdited || !fields.includes("name") ? null : (offer.nameTemplate ?? platform.titleTemplate),
+    descriptionTemplate:
+      offer.descriptionEdited || !fields.includes("description")
+        ? null
+        : (offer.descriptionTemplate ?? platform.descriptionTemplate),
+    privateNoteTemplate:
+      offer.privateNoteEdited || !fields.includes("privateNote") ? null : platform.privateNoteTemplate,
     titleLanguage: platform.titleLanguage,
   };
   if (!templates.titleTemplate?.trim() && !templates.descriptionTemplate?.trim() && !templates.privateNoteTemplate?.trim()) {

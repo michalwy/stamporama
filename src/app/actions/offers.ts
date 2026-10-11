@@ -26,6 +26,7 @@ import {
   reorderOfferSetItems,
   resetOfferSetItemOrder,
   previewOfferTitle,
+  previewNewOfferTitle,
   offerTranslationGaps,
   type OfferTitlePreview,
   OfferActionBlockedError,
@@ -212,6 +213,9 @@ async function readOfferInput(
       state,
       facebookGroupId: str(formData, "facebookGroupId") || null,
       bidIncrement: increment.value,
+      // The *New offer* form's title (#1794), sent only once the collector has edited it: absent,
+      // the platform's template titles the offer; blank, the collector cleared it.
+      ...(formData.has("name") ? { name: str(formData, "name") } : {}),
     },
   };
 }
@@ -507,6 +511,22 @@ export async function addOfferSetAction(
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to add the set.");
+  }
+}
+
+/** The title a new offer on `platformId` with `itemIds` would be generated (#1794), for the *New
+ * offer* form's prefill — read-only. Null when there is none to show, an error included: the field
+ * then simply starts empty. */
+export async function previewNewOfferTitleAction(
+  collectionId: string,
+  platformId: string,
+  itemIds: string[]
+): Promise<string | null> {
+  const session = await getSession();
+  try {
+    return await previewNewOfferTitle(session.user.id, collectionId, platformId, itemIds);
+  } catch {
+    return null;
   }
 }
 

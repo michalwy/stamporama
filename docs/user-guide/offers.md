@@ -122,6 +122,9 @@ any of them is.
    price only when the platform states no opening figure of its own. On a **quick buy** the order is
    the other way round and unchanged: the goods decide the price. Every figure is editable on the
    offer either way.
+   The **title** is under the platform. An offer created empty has no generated title yet, so the
+   field starts blank: type one if you already know it, or leave it and the title is generated the
+   moment the offer first lists something (see [Listing title](#listing-title)).
    The dialog also captures three optional fields: the **status** to create the offer in
    (**Preparing** by default, or a live **Ready** / **Active** when you list something up front), the
    **listing date** (when the listing went live — defaults to today), and the **listing URL**. The
@@ -329,6 +332,14 @@ instead — e.g. `Mi 12 Mercury 1850 MNH` — as soon as you compose the offer. 
 and adding lots afterwards works the same way: the title is generated the moment the offer first
 lists something, so it is there for copying and for the
 [bulk listing workspace](#bulk-listing--posting-a-prepared-batch) too, not only on the detail header.
+
+You can also give the title **as you create the offer**: the **New offer** form has a **Title**
+field. Created from copies, it already holds the title the platform's template generates for them,
+and keeps up while you change the platform or take a copy out — until you type in it. Left untouched,
+the offer gets that generated title and keeps following its copies; typed over, your wording is the
+title, exactly as if you had edited it on the offer's screen. Clearing the field creates the offer
+with no title of its own — the derived label stands in, as when you clear it on the offer's screen —
+and the form never quietly puts the generated one back.
 
 The title is yours to change:
 
