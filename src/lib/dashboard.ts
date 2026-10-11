@@ -1,8 +1,10 @@
 import "server-only";
 import { assertCollectionOwner } from "./platform-category";
-import { auctionLotWindows } from "./action-items";
+import { auctionLotWindows, platformSaleGroup } from "./action-items";
 import { countAuctionLots, listAuctionLots, type AuctionLotListItem } from "./auctions";
 import { auctionLotName, NOT_PURCHASED_LABEL } from "./auction-rules";
+import { salesDashboardGroups } from "./dashboard-sales-rules";
+import { listSalesAwaitingFulfilment } from "./sales";
 import {
   auctionLotRowDetail,
   capGroup,
@@ -90,8 +92,20 @@ const wonNotPurchasedProvider: DashboardProvider = async ({ ownerId, collectionI
   ];
 };
 
+/**
+ * A listing sold on Allegro with no sale recorded here yet (#499) — the bell's own group (#1809).
+ * It comes first in Sales because it is the step before one: the sale has yet to be recorded.
+ */
+const platformSales: DashboardProvider = async ({ ownerId, collectionId }) => [
+  dashboardGroupFromBell(await platformSaleGroup(ownerId, collectionId, DASHBOARD_ROW_LIMIT)),
+];
+
+/** Awaiting payment, to pack, to send (#1809) — the Sales list's status chips, one group each. */
+const salesInFlight: DashboardProvider = async ({ ownerId, collectionId }) =>
+  salesDashboardGroups(await listSalesAwaitingFulfilment(ownerId, collectionId));
+
 const SECTION_PROVIDERS: Record<DashboardSectionId, DashboardProvider[]> = {
-  sales: [],
+  sales: [platformSales, salesInFlight],
   "incoming-purchases": [],
   offers: [],
   auctions: [auctionWindowsProvider, wonNotPurchasedProvider],

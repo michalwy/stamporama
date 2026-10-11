@@ -41,6 +41,19 @@ operational dashboard*; read the ADR before changing what the screen is.
   `["dashboard", collectionId, …]` root — nothing invalidates it by hand; it goes stale on the shared
   clock and is read afresh on the next visit.
 
+- **Sales** (#1809): four groups, in this order — the bell's *Sold on Allegro, no sale recorded*
+  (`platformSaleGroup` in `action-items.ts`, handed over with `dashboardGroupFromBell`), first because
+  it is the step before a sale exists; then *Awaiting payment* (`ordered`), *To pack* (`paid`) and *To
+  send* (`packed`). Sent and received sales are done and not shown. The status groups are the Sales
+  list's status chips: `listSalesAwaitingFulfilment` reads through `saleListWhere`, the list's own
+  filter, and each group links to `sales?status=<status>`; grouping and rows are pure, in
+  `dashboard-sales-rules.ts`. A row is aged from when the sale entered its status — the latest
+  `SaleStatusEvent` *of that status*, never simply the latest event (two can share an instant, which
+  the integration test hit), the sale's creation where there is none — oldest first. Its amount is
+  **what the buyer pays**, in the sale's currency (the collector, 2026-10-11): `buyerPaidTotal` where
+  that is the anchor (#205), otherwise the lines plus buyer handling — not the list's net in base
+  currency, because on an unpaid sale this is the money being waited for.
+
 - **Auctions I bid in** (#1812): *Closing soon* and *Waiting to be closed* are the bell's groups,
   read through `auctionLotWindows` (`action-items.ts`) — the bell's own derivation, exported with
   the lots rather than rows so the dashboard draws its rows with the sale beside the seller

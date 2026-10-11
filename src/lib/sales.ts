@@ -37,6 +37,7 @@ import { markListingContentChanged } from "./offer-listing-sync";
 import { assertCarrierInCollection } from "./carriers";
 import { buildTrackingUrl } from "./tracking-rules";
 import { readShareAddress, type ShareAddress } from "./share-address";
+import { SALES_WAITING_STATUSES, type SaleAwaitingFulfilment } from "./dashboard-sales-rules";
 
 // Server-side domain logic for the **sale transaction flow** (ADR-0013, supersedes ADR-0012 §5;
 // §4/§6 carry over). A `Sale` records that one or more `Offer`s sold on a single platform, in a
@@ -1560,6 +1561,83 @@ function saleSearchWhere(search: string): Prisma.SaleWhereInput {
   };
 }
 
+/** The Sales list's filters as a `where` — one place, so a read that names a set of sales the way the
+ * list does (the Dashboard's status groups, #1809) is that list's set and cannot drift from it. */
+function saleListWhere(collectionId: string, filters: SaleListFilters): Prisma.SaleWhereInput {
+  return {
+    collectionId,
+    ...(filters.platformId ? { platformId: filters.platformId } : {}),
+    ...(filters.buyerId ? { buyerId: filters.buyerId } : {}),
+    ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
+    ...(filters.search ? saleSearchWhere(filters.search) : {}),
+    // One line is enough to put the sale on the list (#697): the collector is looking for parcels
+    // that cannot be packed yet, and one undecided line stops the parcel.
+    ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),
+  };
+}
+
+/**
+ * Every sale still waiting on the collector — awaiting payment, to pack, to send — for the
+ * Dashboard's Sales section (#1809; grouped by `dashboard-sales-rules.ts`).
+ *
+ * The set is the Sales list's own status filter (`saleListWhere`), so each group is exactly what its
+ * link opens. Read whole rather than paged: these are the sales in flight, not the history, and a
+ * group is sorted by how long each has sat in its status, which only the timeline knows.
+ *
+ * **When a sale entered its status** is the latest event *of that status* on its timeline (#191) —
+ * every change appends one and a new sale starts with `ordered`'s — with the sale's creation as the
+ * fallback for a timeline that has none.
+ */
+export async function listSalesAwaitingFulfilment(
+  ownerId: string,
+  collectionId: string
+): Promise<SaleAwaitingFulfilment[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.sale.findMany({
+    where: saleListWhere(collectionId, { statuses: [...SALES_WAITING_STATUSES] }),
+    select: {
+      id: true,
+      saleNo: true,
+      status: true,
+      currency: true,
+      buyerHandling: true,
+      buyerPaidTotal: true,
+      createdAt: true,
+      platform: { select: { name: true } },
+      buyer: { select: { name: true } },
+      lines: { select: { price: true } },
+      // Only the waiting statuses' events: a sale in flight has a handful, and its own status's
+      // latest is picked below — "the latest event of all" is ambiguous when two share an instant.
+      statusEvents: {
+        where: { status: { in: [...SALES_WAITING_STATUSES] } },
+        select: { status: true, changedAt: true },
+      },
+    },
+  });
+  return rows.flatMap((row) => {
+    if (!isSaleStatus(row.status)) return [];
+    const gross = row.lines.reduce((s, l) => s + Number(l.price), 0);
+    // What the buyer pays: the total where that is the anchor (#205), else the lines plus handling.
+    const buyerTotal =
+      row.buyerPaidTotal != null ? Number(row.buyerPaidTotal) : gross + num(row.buyerHandling);
+    const entered = row.statusEvents
+      .filter((e) => e.status === row.status)
+      .reduce<Date | null>((max, e) => (max && max > e.changedAt ? max : e.changedAt), null);
+    return [
+      {
+        id: row.id,
+        saleNo: row.saleNo,
+        status: row.status,
+        buyerName: row.buyer?.name ?? null,
+        platformName: row.platform.name,
+        buyerTotal: buyerTotal.toFixed(2),
+        currency: row.currency,
+        since: entered ?? row.createdAt,
+      },
+    ];
+  });
+}
+
 /** Paginated sales list for the Sales screen (ADR-0013). Newest sale first; filters by platform.
  * Offset-paginated to feed the shared infinite scroll. */
 export async function listSalesPaginated(
@@ -1572,16 +1650,7 @@ export async function listSalesPaginated(
   const offset = filters.offset ?? 0;
 
   const rows = await prisma.sale.findMany({
-    where: {
-      collectionId,
-      ...(filters.platformId ? { platformId: filters.platformId } : {}),
-      ...(filters.buyerId ? { buyerId: filters.buyerId } : {}),
-      ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
-      ...(filters.search ? saleSearchWhere(filters.search) : {}),
-      // One line is enough to put the sale on the list (#697): the collector is looking for parcels
-      // that cannot be packed yet, and one undecided line stops the parcel.
-      ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),
-    },
+    where: saleListWhere(collectionId, filters),
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
     take: pageSize + 1,
     skip: offset,

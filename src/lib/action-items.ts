@@ -443,29 +443,38 @@ const endedAuctionProvider: ActionItemProvider = {
  *
  * The row says which order it is and whether Allegro reports it paid, because those ask for
  * different things: an unpaid order may still fall through, a paid one is only waiting on the books.
+ *
+ * Exported because the Dashboard's Sales section shows the same group (#1809) — read here, handed
+ * over with `dashboardGroupFromBell`, so the bell and the dashboard cannot disagree (ADR-0067).
  */
+export async function platformSaleGroup(
+  ownerId: string,
+  collectionId: string,
+  limit: number
+): Promise<LoadedGroup> {
+  const sold = await offersWithPlatformSale(ownerId, collectionId, limit);
+  return {
+    id: "offer-platform-sale" as const,
+    title: "Sold on Allegro, no sale recorded",
+    severity: "warning" as const,
+    count: sold.total,
+    items: sold.offers.map((offer) => ({
+      key: offer.offerId,
+      label: offer.label,
+      detail: `${offer.platformName} · order ${offer.orderId} · ${offer.paymentStatus === "paid" ? "paid" : "not paid"}`,
+      // When it was bought — what the row is about, and what the panel ages.
+      at: offer.boughtAt.toISOString(),
+      href: `offers/${offer.offerId}`,
+    })),
+    // The offers list' own chip, so "see all" is the same set counted here. The worklist is
+    // where the sale is actually recorded, and each row links to its own offer on the way.
+    href: "offers?platformSale=1",
+  };
+}
+
 const platformSaleProvider: ActionItemProvider = {
   async load({ ownerId, collectionId, limit }) {
-    const sold = await offersWithPlatformSale(ownerId, collectionId, limit);
-    return [
-      {
-        id: "offer-platform-sale" as const,
-        title: "Sold on Allegro, no sale recorded",
-        severity: "warning" as const,
-        count: sold.total,
-        items: sold.offers.map((offer) => ({
-          key: offer.offerId,
-          label: offer.label,
-          detail: `${offer.platformName} · order ${offer.orderId} · ${offer.paymentStatus === "paid" ? "paid" : "not paid"}`,
-          // When it was bought — what the row is about, and what the panel ages.
-          at: offer.boughtAt.toISOString(),
-          href: `offers/${offer.offerId}`,
-        })),
-        // The offers list' own chip, so "see all" is the same set counted here. The worklist is
-        // where the sale is actually recorded, and each row links to its own offer on the way.
-        href: "offers?platformSale=1",
-      },
-    ];
+    return [await platformSaleGroup(ownerId, collectionId, limit)];
   },
 };
 
