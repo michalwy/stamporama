@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { ContactsListPanel } from "./contacts-list-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Contacts" };
 
@@ -21,14 +22,7 @@ export default async function ContactsPage({ params }: ContactsPageProps) {
   if (!collection) notFound();
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -40,6 +34,6 @@ export default async function ContactsPage({ params }: ContactsPageProps) {
         Contacts
       </h2>
       <ContactsListPanel collectionId={collection.id} collectionSlug={collectionSlug} />
-    </div>
+    </Screen>
   );
 }

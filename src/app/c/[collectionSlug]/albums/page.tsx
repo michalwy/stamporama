@@ -7,6 +7,7 @@ import { getAlbums } from "@/lib/albums";
 import { getAlbumTemplates } from "@/lib/album-templates";
 import { getCollectionAreas } from "@/lib/areas";
 import { AlbumsPanel } from "./albums-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Albums" };
 
@@ -30,7 +31,7 @@ export default async function AlbumsPage({ params }: AlbumsPageProps) {
   ]);
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "56rem" }}>
+    <Screen>
       <h2
         style={{
           margin: "0 0 0.5rem",
@@ -64,6 +65,6 @@ export default async function AlbumsPage({ params }: AlbumsPageProps) {
         templates={templates}
         areas={areas}
       />
-    </div>
+    </Screen>
   );
 }

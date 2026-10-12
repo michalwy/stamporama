@@ -11,6 +11,7 @@ import { getItemSaleRecord } from "@/lib/sales";
 import { formatItemNo } from "@/lib/item-number";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { CopyDetailPanel } from "./copy-detail-panel";
+import { Screen } from "@/app/screen";
 
 interface CopyDetailPageProps {
   params: Promise<{ collectionSlug: string; itemId: string }>;
@@ -58,7 +59,7 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
   ]);
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <RecordRecentVisit
         collectionId={collection.id}
         kind="item"
@@ -76,6 +77,6 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
         locations={locations}
         sale={sale}
       />
-    </div>
+    </Screen>
   );
 }

@@ -13,6 +13,7 @@ import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent
 import { OfferDetailPanel } from "./offer-detail-panel";
 import { OfferListNav } from "./offer-list-nav";
 import { parseOfferListContext } from "../list-context";
+import { Screen } from "@/app/screen";
 
 interface OfferDetailPageProps {
   params: Promise<{ collectionSlug: string; offerId: string }>;
@@ -63,7 +64,7 @@ export default async function OfferDetailPage({ params, searchParams }: OfferDet
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       {/* The walk through the filtered list (#429), at the right edge: the step controls are pressed
           repeatedly, so they stay put. There is no link back to the list (#1595) — the sidebar and
           the browser's back do that — so an offer opened from anywhere else has no row here at all. */}
@@ -98,6 +99,6 @@ export default async function OfferDetailPage({ params, searchParams }: OfferDet
         locations={locations}
         issueHeaderById={issueHeaderById}
       />
-    </div>
+    </Screen>
   );
 }

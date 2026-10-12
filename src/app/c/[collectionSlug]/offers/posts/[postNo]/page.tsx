@@ -6,6 +6,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { findFacebookPostId } from "@/lib/facebook-posts";
 import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
 import { FacebookPostPanel } from "./facebook-post-panel";
+import { Screen } from "@/app/screen";
 
 // A multi-lot Facebook post's own screen (#1842): every lot with its state, the post kit and the moves
 // the post makes as one. A sub-route of Offers like the bulk listing workspace — the post is a way of
@@ -40,7 +41,7 @@ export default async function FacebookPostPage({ params }: FacebookPostPageProps
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <FacebookPostPanel
         collectionId={collection.id}
         collectionSlug={collectionSlug}
@@ -48,6 +49,6 @@ export default async function FacebookPostPage({ params }: FacebookPostPageProps
         postId={postId}
         today={today}
       />
-    </div>
+    </Screen>
   );
 }

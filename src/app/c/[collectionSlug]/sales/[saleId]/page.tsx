@@ -14,6 +14,7 @@ import { readSaleBuyerMessage } from "@/lib/sale-buyer-message";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { SaleDetailPanel } from "./sale-detail-panel";
+import { Screen } from "@/app/screen";
 
 interface SaleDetailPageProps {
   params: Promise<{ collectionSlug: string; saleId: string }>;
@@ -61,14 +62,7 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <RecordRecentVisit
         collectionId={collection.id}
         kind="sale"
@@ -86,6 +80,6 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
         locations={locations}
         issueHeaderById={issueHeaderById}
       />
-    </div>
+    </Screen>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { Screen } from "@/app/screen";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -655,26 +656,18 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
     // here and it was the only one in the application — on the one screen whose whole subject is
     // looking at a sheet of paper at 1:1.
     //
-    // **`height`, not `minHeight`, and that one word is the whole of #815's amendment.** A floor
-    // leaves the column's height indefinite, and a flex child with `flex: 1` in an indefinite column
-    // has no space to distribute: the card sized to its own content instead, which is a 297 mm sheet
-    // — so the *page* scrolled, and the sheet list and the panel scrolled away with it. Only the
+    // **`Screen`'s `window` — a `height`, not a `minHeight` — and that one word is the whole of #815's
+    // amendment.** A floor leaves the column's height indefinite, and a flex child with `flex: 1` in
+    // an indefinite column has no space to distribute: the card sized to its own content instead,
+    // which is a 297 mm sheet — so the *page* scrolled, and the sheet list and the panel scrolled away with it. Only the
     // canvas is supposed to move. A definite height is what gives the card a share to take and the
     // side columns a height to be stretched to.
     //
-    // `overflow: auto` is where the exception goes. The card keeps a floor (`SCREEN_CARD`), so a
+    // The same frame's `overflow: auto` is where the exception goes. The card keeps a floor (`SCREEN_CARD`), so a
     // window too short for it overflows this column — and it scrolls *here* rather than at the
     // document, which keeps the app's own sidebar where it is and means the browser never grows a
     // second scrollbar beside the canvas's.
-    <div
-      style={{
-        padding: "2rem",
-        height: "100vh",
-        overflow: "auto",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="window">
       <Link
         href={albumScreenReturnHref(albumHref, carriedView)}
         style={{
@@ -1294,7 +1287,7 @@ export function AlbumPageEditor({ collectionSlug, data }: AlbumPageEditorProps) 
           onConfirm={() => savePhotos(photoConfirm.on, photoConfirm.diverging)}
         />
       )}
-    </div>
+    </Screen>
   );
 }
 

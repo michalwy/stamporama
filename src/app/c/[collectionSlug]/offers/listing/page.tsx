@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { ListingWorkspacePanel } from "./listing-workspace-panel";
+import { Screen } from "@/app/screen";
 
 // The bulk listing workspace (#322) — a sub-route of Offers, not a nav page of its own: it is a step
 // in the offer lifecycle rather than a separate area of the app, and the sidebar's Offers entry stays
@@ -29,14 +30,7 @@ export default async function ListingWorkspacePage({ params }: ListingPageProps)
   const areas = await getCollectionAreas(session.user.id, collection.id);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <div
         style={{
           display: "flex",
@@ -61,6 +55,6 @@ export default async function ListingWorkspacePage({ params }: ListingPageProps)
         collectionSlug={collectionSlug}
         areas={areas}
       />
-    </div>
+    </Screen>
   );
 }

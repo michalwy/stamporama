@@ -6,6 +6,7 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getOverviewAreaIds } from "@/lib/overview-areas";
 import { OverviewPanel } from "./overview-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Overview" };
 
@@ -32,7 +33,7 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
   ]);
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh" }}>
+    <Screen>
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -49,6 +50,6 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
         areas={areas}
         initialAreaIds={overviewAreaIds}
       />
-    </div>
+    </Screen>
   );
 }

@@ -18,6 +18,7 @@ import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
 import { SalePackingSheet } from "./sale-packing-sheet";
 import { Icon } from "@/app/icons";
+import { Screen } from "@/app/screen";
 
 interface PackingListPageProps {
   params: Promise<{ collectionSlug: string; saleId: string }>;
@@ -74,7 +75,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
   const status = saleStatusMeta(sale.status);
 
   return (
-    <div className="print-sheet" style={{ padding: "2rem", maxWidth: "56rem" }}>
+    <Screen cap="sheet" className="print-sheet">
       {/* Screen-only controls */}
       <div
         className="no-print"
@@ -181,7 +182,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
           <GeneratedAt iso={new Date().toISOString()} />
         </span>
       </div>
-    </div>
+    </Screen>
   );
 }
 

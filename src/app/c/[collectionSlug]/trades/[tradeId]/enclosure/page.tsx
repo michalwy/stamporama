@@ -18,6 +18,7 @@ import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { Icon } from "@/app/icons";
 import { TradeEnclosureSheet } from "./trade-enclosure-sheet";
 import { SheetFooter, SheetMeta, SHEET_META_ROW, formatSheetDate } from "../sheet-parts";
+import { Screen } from "@/app/screen";
 
 interface PageProps {
   params: Promise<{ collectionSlug: string; tradeId: string }>;
@@ -79,7 +80,7 @@ export default async function TradeEnclosurePage({ params }: PageProps) {
   const valuation = read.valuation;
 
   return (
-    <div className="print-sheet" style={{ padding: "2rem", maxWidth: "56rem" }}>
+    <Screen cap="sheet" className="print-sheet">
       {/* Screen-only controls */}
       <div
         className="no-print"
@@ -234,6 +235,6 @@ export default async function TradeEnclosurePage({ params }: PageProps) {
         lead={`Trade #${trade.tradeNo} · ${collection.name} → ${trade.partnerName}`}
         detail={`${list.totalCopies} ${list.totalCopies === 1 ? "stamp" : "stamps"} enclosed`}
       />
-    </div>
+    </Screen>
   );
 }

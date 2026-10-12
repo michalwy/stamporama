@@ -4,6 +4,7 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { DashboardPanel } from "./dashboard-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Dashboard" };
 
@@ -24,7 +25,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   if (!collection) notFound();
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh" }}>
+    <Screen>
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -36,6 +37,6 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
         Dashboard
       </h2>
       <DashboardPanel collectionId={collection.id} collectionSlug={collectionSlug} />
-    </div>
+    </Screen>
   );
 }

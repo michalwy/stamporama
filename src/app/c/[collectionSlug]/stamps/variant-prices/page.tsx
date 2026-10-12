@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { VariantPricesPanel } from "./variant-prices-panel";
+import { Screen } from "@/app/screen";
 
 // The variant-pricing worklist (#618) — a sub-route of Stamps, since what it lists is stamps, and a
 // screen of its own rather than a filter on that list because it answers a question the list cannot:
@@ -26,14 +27,7 @@ export default async function VariantPricesPage({ params }: VariantPricesPagePro
   if (!collection) notFound();
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <div
         style={{
           display: "flex",
@@ -54,6 +48,6 @@ export default async function VariantPricesPage({ params }: VariantPricesPagePro
         </h2>
       </div>
       <VariantPricesPanel collectionId={collection.id} />
-    </div>
+    </Screen>
   );
 }

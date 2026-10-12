@@ -11,6 +11,7 @@ import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference"
 import { listStampCopyPhotos } from "@/lib/photos";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { StampDetailPanel } from "./stamp-detail-panel";
+import { Screen } from "@/app/screen";
 
 interface StampDetailPageProps {
   params: Promise<{ collectionSlug: string; stampId: string }>;
@@ -70,7 +71,7 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
     : null;
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <RecordRecentVisit
         collectionId={collection.id}
         kind="stamp"
@@ -91,6 +92,6 @@ export default async function StampDetailPage({ params }: StampDetailPageProps) 
         areas={areas}
         copyPhotos={copyPhotos}
       />
-    </div>
+    </Screen>
   );
 }

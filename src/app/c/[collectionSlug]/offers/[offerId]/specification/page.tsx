@@ -10,6 +10,7 @@ import { formatEntityNo } from "@/lib/quick-jump";
 import { specificationLabels } from "@/lib/offer-specification-labels";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { SpecificationDocument, specificationThumbs } from "./specification-document";
+import { Screen } from "@/app/screen";
 
 interface PageProps {
   params: Promise<{ collectionSlug: string; offerId: string }>;
@@ -49,7 +50,7 @@ export default async function OfferSpecificationPage({ params }: PageProps) {
   if (!spec || spec.collectionId !== collection.id) notFound();
 
   return (
-    <div className="print-sheet" style={{ padding: "2rem", maxWidth: "60rem" }}>
+    <Screen cap="specification" className="print-sheet">
       {/* Screen-only controls */}
       <div
         className="no-print"
@@ -74,6 +75,6 @@ export default async function OfferSpecificationPage({ params }: PageProps) {
           (photoId) => `/api/collections/${spec.collectionId}/photos/${photoId}/thumb`
         )}
       />
-    </div>
+    </Screen>
   );
 }

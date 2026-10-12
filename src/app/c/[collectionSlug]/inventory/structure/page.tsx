@@ -10,6 +10,7 @@ import { getLocations } from "@/lib/locations";
 import { getStampFormats } from "@/lib/stamp-formats";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { StructurePanel } from "./structure-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Collection structure" };
 
@@ -39,14 +40,7 @@ export default async function StructurePage({ params }: StructurePageProps) {
   ]);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -67,6 +61,6 @@ export default async function StructurePage({ params }: StructurePageProps) {
         formats={formats}
         subtypes={subtypes}
       />
-    </div>
+    </Screen>
   );
 }

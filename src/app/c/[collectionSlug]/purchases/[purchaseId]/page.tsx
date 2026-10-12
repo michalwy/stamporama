@@ -14,6 +14,7 @@ import { getPurchaseDetail, getPurchaseIssueIds } from "@/lib/lots";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { intakeDocumentName } from "@/lib/purchase-kind";
 import { PurchaseDetailPanel } from "./purchase-detail-panel";
+import { Screen } from "@/app/screen";
 
 interface PurchaseDetailPageProps {
   params: Promise<{ collectionSlug: string; purchaseId: string }>;
@@ -72,14 +73,7 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
   for (const h of issueHeaders) issueHeaderById[h.id] = h;
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <RecordRecentVisit
         collectionId={collection.id}
         kind="purchase"
@@ -104,6 +98,6 @@ export default async function PurchaseDetailPage({ params }: PurchaseDetailPageP
         conditions={conditions}
         certificateStatuses={certificateStatuses}
       />
-    </div>
+    </Screen>
   );
 }

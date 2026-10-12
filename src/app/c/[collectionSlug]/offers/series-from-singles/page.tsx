@@ -9,6 +9,7 @@ import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getStampFormats } from "@/lib/stamp-formats";
 import { getStampSubtypes } from "@/lib/subtypes";
 import { SeriesFromSinglesPanel } from "./series-from-singles-panel";
+import { Screen } from "@/app/screen";
 
 // Series from singles (#1210; #754's design) — a nav entry of its own under Offers, beside the lot
 // builder, on #502's reasoning. It answers one question per platform: which series the singles
@@ -41,7 +42,7 @@ export default async function SeriesFromSinglesPage({ params }: SeriesFromSingle
   const named = (rows: { id: string; name: string }[]) => rows.map((row) => ({ id: row.id, name: row.name }));
 
   return (
-    <div style={{ padding: "2rem", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <Screen height="column">
       <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", margin: "0 0 1.5rem" }}>
         <h2
           style={{
@@ -63,6 +64,6 @@ export default async function SeriesFromSinglesPage({ params }: SeriesFromSingle
         formats={named(formats)}
         subtypes={named(subtypes)}
       />
-    </div>
+    </Screen>
   );
 }

@@ -194,39 +194,21 @@ interface SettingsScreenProps {
 }
 
 /**
- * The entries already laid out in one of ADR-0059's body shapes, so no longer held to today's
- * column (`UNSHAPED_PAGE_WIDTH`). The dictionaries are list beside detail — the Catalog group's with
- * #1471, the rest with #1476; Album templates and Ref card templates are list beside preview (#1474,
- * #1478); the plain forms are the grid of fields (#1473); Allegro is a summary strip over three tabs
- * (#1475), Delcampe over two (#1479) and Colnect over four (#1480).
+ * The entries **not yet** laid out in one of ADR-0059's body shapes, still held to the old column
+ * (`UNSHAPED_PAGE_WIDTH`) because each is a single column of fields that would otherwise run across
+ * the window. Every other entry takes the screen's width — the dictionaries as list beside detail
+ * (#1471, #1476), Album templates and Ref card templates as list beside preview (#1474, #1478), the
+ * plain forms as the grid of fields (#1473), Allegro, Delcampe and Colnect as a summary strip over
+ * tabs (#1475, #1479, #1480).
+ *
+ * A list of the exceptions rather than of the entries already done, so **a new entry is wide unless
+ * it says otherwise** (#1851) — the old list of the reshaped ones held every entry nobody had added to
+ * it at 56rem, a new one included.
  */
-const RESHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
-  "catalogs",
-  "conditions",
-  "certificates",
-  "faults",
-  "formats",
-  "subtypes",
-  "attributes",
-  "size-presets",
-  "scanning",
-  "tags",
-  "hawid-stock",
-  "ornaments",
-  "shipping",
-  "acceptance",
-  "assistant",
-  "album-templates",
-  "refcards",
-  "general",
-  "storage",
-  "duplicates",
-  "philasearch",
-  "allegro",
-  "delcampe",
-  "facebook",
-  "colnect",
-  "bids",
+const UNSHAPED_ENTRIES: ReadonlySet<SettingsEntryKey> = new Set([
+  "collages",
+  "auction-reminder",
+  "email",
 ]);
 
 /** Where the navigation stays put: the window scrolls the page, never the list (#1469). */
@@ -336,7 +318,7 @@ function SettingsScreenBody(props: SettingsScreenProps) {
           group={settingsGroupOf(entry)}
           title={entry.label}
           hint={entry.hint}
-          unshaped={!RESHAPED_ENTRIES.has(entry.key)}
+          unshaped={UNSHAPED_ENTRIES.has(entry.key)}
           summary={entrySummary(entry.key, part, choosePart, props)}
           tabs={
             entry.parts && part ? { parts: entry.parts, active: part, onChoose: choosePart } : undefined

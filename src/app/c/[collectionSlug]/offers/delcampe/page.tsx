@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { DelcampeListingsPanel } from "./delcampe-listings-panel";
+import { Screen } from "@/app/screen";
 
 // *On Delcampe* (#611) — a sub-route of Offers, exactly as the bulk listing workspace and the
 // Allegro worklist are: reconciling what is up on the marketplace is a step in the offer lifecycle
@@ -26,14 +27,7 @@ export default async function DelcampeListingsPage({ params }: DelcampeListingsP
   if (!collection) notFound();
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <div
         style={{
           display: "flex",
@@ -54,6 +48,6 @@ export default async function DelcampeListingsPage({ params }: DelcampeListingsP
         </h2>
       </div>
       <DelcampeListingsPanel collectionId={collection.id} collectionSlug={collectionSlug} />
-    </div>
+    </Screen>
   );
 }

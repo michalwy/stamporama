@@ -120,6 +120,10 @@ there before working against one.
 
 **UI** → `ui-shell.md`, `ui-patterns.md`, `inventory-lists.md`, `offers.md`
 
+- **A screen uses the window's width.** Every collection page is drawn in `Screen`
+  (`src/app/screen.tsx`), full width by default; a cap is a `SCREEN_CAPS` key with a stated reason —
+  "it was narrow before" is not one — and is listed in `ui-shell.md`. Width goes to columns, grids and
+  panes: no single field or line of text runs across the window.
 - Dialogs are built from `src/app/dialog-shell.tsx` — never re-implement the header, close, viewport
   constraint or height behavior. Buttons are one shape: `baseBtn`, imported from
   `src/app/button-style.ts`, never redeclared. There is **no** shared input style (#792), but a form

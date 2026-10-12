@@ -232,7 +232,7 @@ export function FacebookPostPanel({
   const anyMove = moves.activate || moves.submit || moves.approve || moves.reject || moves.withdraw;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: "64rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       <header>
         <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
           Post #{postNo}

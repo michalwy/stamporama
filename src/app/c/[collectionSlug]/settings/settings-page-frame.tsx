@@ -11,12 +11,12 @@ import type { SettingsGroup, SettingsPart } from "./settings-nav";
  *
  * #691's 56rem cap is gone from the screen: a Settings page takes the window's width, and the part
  * of #691 that still holds — a single field never stretches across the window — is each body
- * shape's to keep. But today's pages are a single column of fields, and uncapped they would be
- * exactly the stretched field #691 was about. So each keeps today's width until its own issue lays
- * it out (the dictionaries went with #1471 and #1476, Album templates with #1474, Ref card
- * templates with #1478, the plain forms with #1473, Allegro with #1475, Delcampe with #1479 and
- * Colnect with #1480), and
- * this constant goes when the last of them lands.
+ * shape's to keep. A page still a single column of fields would, uncapped, be exactly the stretched
+ * field #691 was about, so it keeps this width until it is laid out (the dictionaries went with
+ * #1471 and #1476, Album templates with #1474, Ref card templates with #1478, the plain forms with
+ * #1473, Allegro with #1475, Delcampe with #1479 and Colnect with #1480). The ones left are named in
+ * `settings-screen.tsx`'s `UNSHAPED_ENTRIES` — a list of exceptions, so a new entry is wide (#1851)
+ * — and this constant goes when the last of them is laid out.
  */
 export const UNSHAPED_PAGE_WIDTH = "56rem";
 

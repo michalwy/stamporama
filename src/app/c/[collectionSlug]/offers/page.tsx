@@ -8,6 +8,7 @@ import { getCertificateStatuses } from "@/lib/certificate-statuses";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { OffersListPanel } from "./offers-list-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Offers" };
 
@@ -38,14 +39,7 @@ export default async function OffersPage({ params }: OffersPageProps) {
   ]);
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -66,6 +60,6 @@ export default async function OffersPage({ params }: OffersPageProps) {
         conditions={conditions}
         certificateStatuses={certificateStatuses}
       />
-    </div>
+    </Screen>
   );
 }

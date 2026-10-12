@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { AuctionSalesPanel } from "./auction-sales-panel";
+import { Screen } from "@/app/screen";
 
 export const metadata = { title: "Auction sales" };
 
@@ -23,14 +24,7 @@ export default async function AuctionSalesPage({ params }: AuctionSalesPageProps
   if (!collection) notFound();
 
   return (
-    <div
-      style={{
-        padding: "2rem",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Screen height="column">
       <h2
         style={{
           margin: "0 0 1.5rem",
@@ -42,6 +36,6 @@ export default async function AuctionSalesPage({ params }: AuctionSalesPageProps
         Auction sales
       </h2>
       <AuctionSalesPanel collectionId={collection.id} collectionSlug={collectionSlug} />
-    </div>
+    </Screen>
   );
 }

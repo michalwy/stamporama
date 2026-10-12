@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Screen } from "@/app/screen";
 import { ConfirmDialog, DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
 import {
   ALBUM_PRESET_DIALOG_HEIGHT,
@@ -808,7 +809,7 @@ export function AlbumScreen({
   const tabCount = { sheets: summary.sheets, entries: summary.entries, printed: summary.cards };
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <Screen>
 
       {/* ── Header: the album, and what can be done to all of it ── */}
 
@@ -1424,7 +1425,7 @@ export function AlbumScreen({
           onConfirm={() => run(() => removeAlbumEntryAction(confirm.id))}
         />
       )}
-    </div>
+    </Screen>
   );
 }
 
