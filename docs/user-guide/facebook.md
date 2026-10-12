@@ -351,7 +351,8 @@ them to show only that post's lots in the list (a **Post #12** filter chip appea
 click it to show every offer again).
 
 **The post's screen** is where the post is seen and managed as one. It is reached from that chip, from
-**Open post** on each lot's Facebook card, and from the message **Post together** shows. It has:
+**Open post** on each lot's Facebook card, from the message **Post together** shows, and from the
+[list of posts](#the-list-of-posts). It has:
 
 - **The post** — where it stands (being prepared, ready to post, waiting for approval, up in the group,
   or over), the group, the post's link once it has one, and the moves the post makes as one, each
@@ -373,6 +374,16 @@ click it to show every offer again).
   stamps, each marked with its lot and offer: click a photo to download that one, under the same name
   it has in the download. A lot with no photos to put up is named, with a link to it. Everything a post
   needs is here — its text, its photos and, captioned, its captions — so posting needs no lot opened.
+
+### The list of posts
+
+**Marketplaces → Facebook** in the sidebar lists every post of several lots, newest first, headed
+*Facebook posts*. An offer posted on its own is not a post of several lots and stays only on the
+**Offers** screen. Each row shows the post's number and group, where it stands (being prepared, ready
+to post, waiting for approval, up in the group, or over), how many lots it holds and how many of them
+are still for sale — neither sold nor withdrawn — its layout (**Text** or **Captions**), the day it went
+up and its link. Click a row to open the post's screen. Narrow the list with the **group** filter and
+the **stage** chips; click a lit chip again to show every post.
 
 Each lot's own Facebook card no longer repeats the post: it names it — **Post #12 · lot 3 of 5** and
 where the post stands — with **Open post**, and keeps what is the lot's own: its own post template and,

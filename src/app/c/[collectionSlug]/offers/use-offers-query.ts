@@ -19,7 +19,8 @@ import type {
   OfferListNeighbours,
 } from "@/lib/offers";
 import type { OfferListContext } from "./list-context";
-import type { FacebookPostScreen } from "@/lib/facebook-posts";
+import type { FacebookPostListItem, FacebookPostScreen } from "@/lib/facebook-posts";
+import type { FacebookPostStage } from "@/lib/facebook-post-rules";
 import type { ItemListItem } from "@/lib/items";
 import type { OfferPhotoPlanState } from "@/lib/offer-photo-generation";
 import type { TitleFallback } from "@/lib/offer-title-template";
@@ -80,7 +81,16 @@ export const offerKeys = {
    *  refreshes it. */
   facebookPost: (collectionId: string, postId: string) =>
     ["offers", collectionId, "facebook-post", postId] as const,
+  /** The list of multi-lot Facebook posts (#1850) — under the offers key for the same reason. */
+  facebookPosts: (collectionId: string, filters: FacebookPostFilters) =>
+    ["offers", collectionId, "facebook-posts", filters] as const,
 };
+
+export interface FacebookPostFilters {
+  /** Any of these groups; empty is every group. */
+  groupIds: readonly string[];
+  stage?: FacebookPostStage;
+}
 
 export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
   return useInfiniteQuery<OffersPage>({
@@ -138,6 +148,25 @@ export function useFacebookPostScreen(collectionId: string, postId: string) {
       if (!res.ok) throw new Error("Failed to fetch the post");
       return res.json();
     },
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Every multi-lot Facebook post, newest first and a page at a time (#1850). */
+export function useFacebookPostsInfinite(collectionId: string, filters: FacebookPostFilters) {
+  return useInfiniteQuery<{ items: FacebookPostListItem[]; nextCursor: string | null }>({
+    queryKey: offerKeys.facebookPosts(collectionId, filters),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams();
+      if (pageParam) params.set("offset", pageParam as string);
+      if (filters.groupIds.length) params.set("group", filters.groupIds.join(","));
+      if (filters.stage) params.set("stage", filters.stage);
+      const res = await fetch(`/api/collections/${collectionId}/facebook-posts?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch the posts");
+      return res.json();
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     refetchOnWindowFocus: true,
   });
 }
