@@ -714,6 +714,13 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
  *  up in the group, or over (every lot sold or withdrawn). */
 export type FacebookPostStage = "preparing" | "ready" | "pending" | "up" | "over";
 
+/** The stages in the order a post passes through them — the list of posts' filter chips (#1850). */
+export const FACEBOOK_POST_STAGES: readonly FacebookPostStage[] = ["preparing", "ready", "pending", "up", "over"];
+
+export function isFacebookPostStage(value: string): value is FacebookPostStage {
+  return (FACEBOOK_POST_STAGES as readonly string[]).includes(value);
+}
+
 export const FACEBOOK_POST_STAGE_LABEL: Record<FacebookPostStage, string> = {
   preparing: "Being prepared",
   ready: "Ready to post",

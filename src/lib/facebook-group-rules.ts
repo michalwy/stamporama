@@ -94,6 +94,12 @@ export const FACEBOOK_MULTI_LOT_LAYOUT_LABEL: Record<FacebookMultiLotLayout, str
   captions: "Each lot in its photo's caption",
 };
 
+/** The same, in a word — what a row of the list of posts says (#1850). */
+export const FACEBOOK_MULTI_LOT_LAYOUT_SHORT_LABEL: Record<FacebookMultiLotLayout, string> = {
+  text: "Text",
+  captions: "Captions",
+};
+
 /** A stored layout as the rules read it: anything but `captions` is the post's text, which is what
  *  every row older than the column was. */
 export function toFacebookMultiLotLayout(value: string | null | undefined): FacebookMultiLotLayout {

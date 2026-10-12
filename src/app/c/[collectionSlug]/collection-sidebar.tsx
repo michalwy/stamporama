@@ -600,6 +600,7 @@ export function CollectionSidebar({
               `${base}/offers/listing`,
               `${base}/offers/allegro`,
               `${base}/offers/delcampe`,
+              `${base}/offers/posts`,
             ])}
           >
             <NavItem
@@ -658,6 +659,14 @@ export function CollectionSidebar({
               href={`${base}/offers/delcampe`}
               label="Delcampe"
               active={isActive(`${base}/offers/delcampe`)}
+              nested
+            />
+            {/* The posts of several lots put up in the Facebook groups (#1850), and each post's own
+                screen under it — a post was otherwise reached only through one of its lots. */}
+            <NavItem
+              href={`${base}/offers/posts`}
+              label="Facebook"
+              active={isActive(`${base}/offers/posts`)}
               nested
             />
           </NavGroup>

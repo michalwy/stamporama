@@ -12,6 +12,9 @@ import {
   facebookPostMoves,
   facebookPostSource,
   facebookPostStage,
+  FACEBOOK_POST_STAGES,
+  FACEBOOK_POST_STAGE_LABEL,
+  isFacebookPostStage,
   parseFacebookPostNo,
   facebookLotPhotoFileName,
   facebookLotUploadPhotos,
@@ -777,5 +780,17 @@ describe("a multi-lot post's screen (#1842)", () => {
     );
     assert.equal(facebookLotPhotoFileName(3, "penny-black-01.jpg"), "lot-03-penny-black-01.jpg");
     assert.equal(facebookLotPhotoFileName(12, "x.jpg"), "lot-12-x.jpg");
+  });
+});
+
+describe("the list of posts' stage filter (#1850)", () => {
+  it("offers every stage a post can be at, once, in the order a post passes through them", () => {
+    assert.deepEqual([...FACEBOOK_POST_STAGES], ["preparing", "ready", "pending", "up", "over"]);
+    assert.deepEqual([...FACEBOOK_POST_STAGES].sort(), Object.keys(FACEBOOK_POST_STAGE_LABEL).sort());
+  });
+
+  it("reads a stage from the address only when it is one", () => {
+    for (const stage of FACEBOOK_POST_STAGES) assert.equal(isFacebookPostStage(stage), true);
+    for (const bad of ["", "active", "Up", "sold"]) assert.equal(isFacebookPostStage(bad), false, bad);
   });
 });

@@ -9,9 +9,8 @@ import { FacebookPostPanel } from "./facebook-post-panel";
 import { Screen } from "@/app/screen";
 
 // A multi-lot Facebook post's own screen (#1842): every lot with its state, the post kit and the moves
-// the post makes as one. A sub-route of Offers like the bulk listing workspace — the post is a way of
-// putting offers up, not an area of its own, so the sidebar's Offers entry stays current — addressed by
-// the post's short number, the one *Post #N · lot M* names on each lot's row. The static `posts`
+// the post makes as one. Under the list of posts (#1850), so the sidebar's Marketplaces → Facebook entry
+// is the one lit here, as Allegro's is on its worklist — addressed by the post's short number, the one *Post #N · lot M* names on each lot's row. The static `posts`
 // segment takes precedence over `[offerId]`, so no offer can be shadowed by it.
 
 interface FacebookPostPageProps {

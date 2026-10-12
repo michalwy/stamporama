@@ -1,8 +1,10 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import {
   detachFacebookLot,
   facebookGroupMixesTypes,
+  facebookPostLayout,
   getFacebookOfferKit,
   type FacebookOfferKit,
   readFacebookGroupSettings,
@@ -12,12 +14,20 @@ import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./faceb
 import {
   facebookPostLink,
   facebookPostRefusal,
+  facebookPostStage,
   isFacebookLotPosted,
   type FacebookApprovalClosing,
+  type FacebookPostStage,
 } from "./facebook-post-rules";
 import { allocateEntityNumber } from "./items";
 import { OfferActionBlockedError, publishOffer, setOfferState } from "./offers";
-import { isAuctionListing, normalizeListingType } from "./offer-rules";
+import {
+  CLOSED_OFFER_STATES,
+  OFFER_STATES,
+  isAuctionListing,
+  normalizeListingType,
+  type OfferState,
+} from "./offer-rules";
 
 // A post holding several lots in one Facebook group (#1544; ADR-0061 §2, §3).
 //
@@ -178,6 +188,129 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
     platform: post.lots[0].platform,
     sales,
   };
+}
+
+/** One multi-lot post as the list of posts draws it (#1850). */
+export interface FacebookPostListItem {
+  postId: string;
+  postNo: number;
+  group: { id: string; name: string; archived: boolean };
+  lotCount: number;
+  /** Lots neither sold nor withdrawn. */
+  forSaleCount: number;
+  stage: FacebookPostStage;
+  layout: FacebookMultiLotLayout;
+  /** The day the post went up — its earliest lot's listing date, `YYYY-MM-DD` — or null before then. */
+  postedOn: string | null;
+  link: string | null;
+}
+
+export interface FacebookPostListFilters {
+  /** Any of these groups; empty is every group. */
+  groupIds?: readonly string[];
+  stage?: FacebookPostStage;
+  offset?: number;
+  pageSize?: number;
+}
+
+const POSTED_STATES: readonly OfferState[] = OFFER_STATES.filter((s) => isFacebookLotPosted(s));
+
+/** The posts `facebookPostStage` would place at `stage`, as a query over their lots — the same
+ *  precedence, so a filtered page holds exactly the rows whose chip says that stage. */
+function facebookPostStageWhere(stage: FacebookPostStage): Prisma.FacebookPostWhereInput {
+  switch (stage) {
+    case "pending":
+      return { lots: { some: { state: "pending" } } };
+    case "up":
+      return { AND: [{ lots: { none: { state: "pending" } } }, { lots: { some: { state: { in: ["active", "paused"] } } } }] };
+    case "over":
+      return {
+        AND: [
+          { lots: { none: { state: { in: ["pending", "active", "paused"] } } } },
+          { lots: { some: { state: { in: [...POSTED_STATES] } } } },
+        ],
+      };
+    case "ready":
+      return { AND: [{ lots: { every: { state: "ready" } } }, { lots: { some: {} } }] };
+    case "preparing":
+      return { AND: [{ lots: { none: { state: { in: [...POSTED_STATES] } } } }, { lots: { some: { state: { not: "ready" } } } }] };
+  }
+}
+
+/**
+ * Every multi-lot post in a collection, newest first (#1850) — an offer posted alone has no post of
+ * its own (ADR-0061 §2) and stays on the offers list. Paged by offset like the other lists; a post's
+ * stage is read off its lots, so its filter is a query over them rather than a column.
+ */
+export async function listFacebookPostsPaginated(
+  ownerId: string,
+  collectionId: string,
+  filters: FacebookPostListFilters = {}
+): Promise<{ items: FacebookPostListItem[]; nextCursor: string | null }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const pageSize = filters.pageSize ?? 50;
+  const offset = filters.offset ?? 0;
+  const where: Prisma.FacebookPostWhereInput = {
+    collectionId,
+    ...(filters.groupIds?.length ? { groupId: { in: [...filters.groupIds] } } : {}),
+    ...(filters.stage ? facebookPostStageWhere(filters.stage) : {}),
+  };
+  const rows = await prisma.facebookPost.findMany({
+    where,
+    orderBy: { postNo: "desc" },
+    take: pageSize + 1,
+    skip: offset,
+    select: {
+      id: true,
+      postNo: true,
+      layout: true,
+      group: { select: { id: true, name: true, archivedAt: true } },
+      lots: { orderBy: { facebookLotNo: "asc" }, select: { state: true, url: true, listingDate: true } },
+    },
+  });
+  const hasMore = rows.length > pageSize;
+  const page = hasMore ? rows.slice(0, pageSize) : rows;
+
+  // A post following its group's layout reads it live, as its screen does; a page names few groups.
+  const settings = new Map<string, Awaited<ReturnType<typeof readFacebookGroupSettings>>>();
+  for (const row of page) {
+    if (row.layout === null && !settings.has(row.group.id)) {
+      settings.set(row.group.id, await readFacebookGroupSettings(row.group.id));
+    }
+  }
+
+  const items = page.map((row): FacebookPostListItem => {
+    const posted = row.lots
+      .map((l) => l.listingDate)
+      .filter((d): d is Date => d !== null)
+      .sort((a, b) => a.getTime() - b.getTime());
+    return {
+      postId: row.id,
+      postNo: row.postNo,
+      group: { id: row.group.id, name: row.group.name, archived: row.group.archivedAt !== null },
+      lotCount: row.lots.length,
+      forSaleCount: row.lots.filter((l) => !(CLOSED_OFFER_STATES as readonly string[]).includes(l.state)).length,
+      stage: facebookPostStage(row.lots),
+      layout: facebookPostLayout(row, settings.get(row.group.id) ?? { multiLotLayout: "text" }),
+      postedOn: posted.length ? posted[0].toISOString().slice(0, 10) : null,
+      link: facebookPostLink(row.lots),
+    };
+  });
+  return { items, nextCursor: hasMore ? String(offset + pageSize) : null };
+}
+
+/** The groups a collection's posts are in, by name — what the list of posts filters by (#1850). */
+export async function listFacebookPostGroups(
+  ownerId: string,
+  collectionId: string
+): Promise<{ id: string; name: string; archived: boolean }[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const groups = await prisma.facebookGroup.findMany({
+    where: { collectionId, posts: { some: {} } },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, archivedAt: true },
+  });
+  return groups.map((g) => ({ id: g.id, name: g.name, archived: g.archivedAt !== null }));
 }
 
 /**

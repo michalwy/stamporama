@@ -289,6 +289,22 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   the summary and the detail walk (`list-context.ts`) but not the toolbar's counts, as `bidding`. The
   integration test is `tests/integration/facebook-post-screen.test.ts`.
 
+- **A list of every multi-lot post** (#1850, decided with the collector on 2026-10-12): the sidebar's
+  **Marketplaces → Facebook** — there, not under Offers as the issue first proposed, since the
+  *Sold on Allegro* entry it was to sit beside had moved to Marketplaces as *Allegro* (#762, #971) —
+  at `/c/[slug]/offers/posts`, headed *Facebook posts*; the post screens under it light that entry and
+  the Offers group's `except` list yields the route. `listFacebookPostsPaginated` (`facebook-posts.ts`,
+  newest `postNo` first, offset-paged like trades) through `GET …/facebook-posts`, under
+  `offerKeys.facebookPosts` so a write to any offer refreshes it. A row is the number, the group, the
+  lots and those still for sale (not `CLOSED_OFFER_STATES`), `facebookPostStage`, the layout through
+  `facebookPostLayout` (the group's read live when the post follows it), the earliest lot's
+  `listingDate` and `facebookPostLink`. **The stage filter is a query over the lots**
+  (`facebookPostStageWhere`), written to `facebookPostStage`'s precedence — pending, up, over, ready,
+  preparing — since the stage is no column; the integration test
+  (`tests/integration/facebook-posts-list.test.ts`) checks every filtered row's own stage. The group
+  filter's options are the groups holding posts (`listFacebookPostGroups`). Only multi-lot posts are
+  listed — an offer posted alone has no row (ADR-0061 §2).
+
 - **The post's screen shows every photo the post puts up** (#1848, decided with the collector on
   2026-10-12), so posting needs no lot opened. In `FacebookPostKit`, a grid across the card's width
   (`PHOTO_GRID`, 18rem photos drawn from the `full` variant — the 320px thumb is too small to tell
