@@ -260,7 +260,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   image's side, pair and size), within the platform's edge and size limits — **once, in the
   background, and stored since #1861** (below); `buildFacebookPostPhotos` is the post's ZIP — one
   `lot-NN-<offer slug>.jpg` per lot when captioned (the frozen layout first),
-  `buildFacebookPostPhotoArchive` otherwise. The kit
+  `buildFacebookPostPhotoArchive` otherwise. Either ZIP is named `facebookPostPhotoArchiveName` (pure,
+  `facebook-post-rules.ts`, #1871): `<postNo>-<title slug>-photos.zip`, the stem `offerFileSlug`
+  (`offer-rules.ts`) makes for an offer's, so two posts never download under one name. The kit
   (on the post's screen since #1842) shows a **Layout** select (a plain line once posted) and, captioned, each lot's photo
   and caption with its own copy button (in the lot's row since #1863); the repost dialog lists the captions too. The integration
   test is `tests/integration/facebook-captioned-posts.test.ts`.

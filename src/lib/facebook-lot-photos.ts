@@ -7,11 +7,11 @@ import { zip, type ZipEntry } from "./zip";
 import { COLLAGE_MIME, COLLAGE_QUALITY_MAX, COLLAGE_QUALITY_MIN } from "./photos/collage";
 import { isAcceptedMime, thumbnailFor } from "./photos/process";
 import { normalizeCollageGridMode, normalizeCollageGridShape } from "./collage-template-rules";
+import { offerFileSlug } from "./offer-rules";
 import {
   buildFacebookPostPhotoArchive,
   deleteVariants,
   OfferPhotoGenerationError,
-  offerFileSlug,
   readFullBytes,
   readOfferUploadPlan,
   type OfferUploadPlanImage,
@@ -26,7 +26,7 @@ import {
   type FacebookLotPhotoState,
   type LotPhotoCollage,
 } from "./facebook-lot-photo-rules";
-import { facebookLotPhotoFileName, readFacebookFrozenLot } from "./facebook-post-rules";
+import { facebookLotPhotoFileName, facebookPostPhotoArchiveName, readFacebookFrozenLot } from "./facebook-post-rules";
 
 // The photos of a captioned Facebook post (#1841; ADR-0061 §2 as amended): **one photo per lot**,
 // its caption the lot's text. A lot whose upload set is one image contributes it as it is; a lot of
@@ -164,6 +164,8 @@ async function drawLotPhoto(
 
 const POST_SELECT = {
   id: true,
+  postNo: true,
+  title: true,
   layout: true,
   groupId: true,
   collection: { select: { ownerId: true } },
@@ -359,7 +361,7 @@ export async function buildFacebookPostPhotos(
   if (entries.length === 0) {
     throw new OfferPhotoGenerationError("None of this post's lots has images to upload — generate them first.");
   }
-  return { fileName: `facebook-post-${post.lots.length}-lots-photos.zip`, bytes: zip(entries) };
+  return { fileName: facebookPostPhotoArchiveName(post.postNo, post.title), bytes: zip(entries) };
 }
 
 // ── The queue ───────────────────────────────────────────────────────────────────────────────────

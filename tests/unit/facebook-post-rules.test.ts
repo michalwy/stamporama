@@ -19,6 +19,7 @@ import {
   isFacebookPostStage,
   parseFacebookPostNo,
   facebookLotPhotoFileName,
+  facebookPostPhotoArchiveName,
   facebookLotUploadPhotos,
   isFacebookLotPosted,
   isFacebookPendingPostUrl,
@@ -785,6 +786,21 @@ describe("a multi-lot post's screen (#1842)", () => {
     );
     assert.equal(facebookLotPhotoFileName(3, "penny-black-01.jpg"), "lot-03-penny-black-01.jpg");
     assert.equal(facebookLotPhotoFileName(12, "x.jpg"), "lot-12-x.jpg");
+  });
+});
+
+describe("a post's photo archive name (#1871)", () => {
+  it("is the post's number and its title's slug, made as an offer's is", () => {
+    assert.equal(
+      facebookPostPhotoArchiveName(12, "Generalgouvernement 1940–44"),
+      "12-generalgouvernement-1940-44-photos.zip"
+    );
+    assert.equal(facebookPostPhotoArchiveName(7, "Węgry, różne"), "7-wegry-rozne-photos.zip");
+  });
+
+  it("is the number alone for a post with no title", () => {
+    assert.equal(facebookPostPhotoArchiveName(12, null), "12-photos.zip");
+    assert.equal(facebookPostPhotoArchiveName(12, "  —  "), "12-photos.zip");
   });
 });
 
