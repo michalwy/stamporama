@@ -396,8 +396,10 @@ click it to show every offer again).
   one download, each file starting with its lot (`lot-01-…`), so the album uploads in the right order.
 - **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
   post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
-  click a photo to download that one, under the same name it has in the download (a lot with no photos
-  to put up says so in its row) — then the lot number, the offer's number and title (linking to the
+  click a photo to see it enlarged, and step with ← → through every photo of the post in lot order,
+  each named by its lot; to download just that one, use the small download button that appears in the
+  photo's corner when you point at it, which saves it under the same name it has in the download (a lot
+  with no photos to put up says so in its row) — then the lot number, the offer's number and title (linking to the
   offer), its type, its price — an auction's highest bid once one is recorded, else its starting price;
   a quick buy's price — its state, its listing link, and its sale once sold. Each row's **⋮** opens the
   offer, **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up —
@@ -483,7 +485,8 @@ portrait or square; square for a fixed grid). A lot photographed on the front on
 and no line.
 
 The post's screen then shows the post's text with its **Copy** button, and under it each lot's row in
-order: its photo, shown large — click it to download that one — and, beside the lot's offer, price and
+order: its photo, shown large — click it to see it enlarged, or download that one from the small
+button in its corner — and, beside the lot's offer, price and
 state, its caption with its own **Copy**. **↓ Photos,
 one per lot** downloads them all in one ZIP, named `lot-01-…`, `lot-02-…` in the post's order, so the
 album uploads in the right order.

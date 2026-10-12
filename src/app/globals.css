@@ -252,6 +252,18 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   color: var(--color-text-primary);
 }
 
+/* A Facebook post's photo opens enlarged on a click; downloading that one photo is a small button in
+   its corner (#1865), out of sight until the photo is hovered or the button takes keyboard focus —
+   the post's ↓ Photos is the download the collector usually wants. */
+.post-photo .post-photo-download {
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+.post-photo:hover .post-photo-download,
+.post-photo .post-photo-download:focus-within {
+  opacity: 1;
+}
+
 /* One-shot highlight applied to a row/card right after it is added (#158), so the user can
    confirm the action landed without scanning the list. Fades from a warm tint back to the
    surface colour. Under reduced motion the tint holds still and then goes, rather than fading
