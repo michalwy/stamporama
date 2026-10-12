@@ -98,6 +98,12 @@ const TIP_NOTE: React.CSSProperties = {
  * They are the grid's second figure (#519) and the one that says whether a duplicate is a spare,
  * but they are a second number per condition, and a chip line carrying two of each is a line nobody
  * reads.
+ *
+ * **The line opens with *Any*** (#1859) — the stamps held in at least one condition, over the same
+ * filtered copies. A series is sometimes sold complete in mixed conditions, and `MNH 1/12 · MH 11/12`
+ * does not say it is 12/12; the chip that does is the first one read. It is always drawn, even where
+ * a single condition chip states the same figure: a chip that comes and goes would make the line's
+ * first position mean two things.
  */
 function ChecklistCompletenessChips({
   entry,
@@ -112,38 +118,89 @@ function ChecklistCompletenessChips({
       {named && (
         <span style={{ ...MUTED, fontSize: "0.75rem" }}>{markedChecklistName(entry)}</span>
       )}
-      {entry.conditions.map((c) => {
-        const complete = c.owned === entry.requiredCount;
-        return (
-          <Tooltip
-            key={c.conditionId}
-            content={
-              <>
-                <div style={TIP_TITLE}>
-                  {markedChecklistName(entry)} · {c.name} ({c.abbreviation})
-                </div>
-                <div style={TIP_GRID}>
-                  <span style={TIP_LABEL}>Held</span>
-                  <span style={TIP_FIGURE}>
-                    {c.owned}/{entry.requiredCount}
-                  </span>
-                  <span style={TIP_LABEL}>Complete sets</span>
-                  <span style={TIP_FIGURE}>{c.completeSets}</span>
-                </div>
-                <div style={TIP_NOTE}>
-                  Counted over the copies this list is showing — every filter in force applies, so
-                  narrowing the list narrows these figures too.
-                </div>
-              </>
-            }
-          >
-            <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
-              {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
-              {c.abbreviation || c.name} {c.owned}/{entry.requiredCount}
-            </span>
-          </Tooltip>
-        );
-      })}
+      <CompletenessChip
+        entry={entry}
+        label="Any"
+        title={`${markedChecklistName(entry)} · any condition`}
+        owned={entry.owned}
+        completeSets={entry.completeSets}
+        any
+      />
+      {entry.conditions.map((c) => (
+        <CompletenessChip
+          key={c.conditionId}
+          entry={entry}
+          label={c.abbreviation || c.name}
+          title={`${markedChecklistName(entry)} · ${c.name} (${c.abbreviation})`}
+          owned={c.owned}
+          completeSets={c.completeSets}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * The *Any* chip's own mark (#1859): set apart from the condition chips by a bold label and a rule
+ * after it, since it is a different kind of figure — the series regardless of condition, which a
+ * full set sold in mixed conditions needs and no condition chip states. Its full-set marking is the
+ * condition chips' own (#671), so a set complete in any condition reads complete the same way.
+ */
+const ANY_LABEL: React.CSSProperties = { fontWeight: 700 };
+
+const ANY_RULE: React.CSSProperties = {
+  alignSelf: "stretch",
+  width: 1,
+  margin: "0.15rem 0.1rem",
+  background: "var(--color-border)",
+};
+
+/** One completeness chip and its hover (#594/#670/#671) — a condition's, or the *Any* one (#1859). */
+function CompletenessChip({
+  entry,
+  label,
+  title,
+  owned,
+  completeSets,
+  any = false,
+}: {
+  entry: IssueGroupChecklistCompleteness;
+  label: string;
+  title: string;
+  owned: number;
+  completeSets: number;
+  any?: boolean;
+}) {
+  const complete = owned === entry.requiredCount;
+  return (
+    <>
+      <Tooltip
+        content={
+          <>
+            <div style={TIP_TITLE}>{title}</div>
+            <div style={TIP_GRID}>
+              <span style={TIP_LABEL}>Held</span>
+              <span style={TIP_FIGURE}>
+                {owned}/{entry.requiredCount}
+              </span>
+              <span style={TIP_LABEL}>Complete sets</span>
+              <span style={TIP_FIGURE}>{completeSets}</span>
+            </div>
+            <div style={TIP_NOTE}>
+              {any &&
+                "A stamp counts once it is held in any condition, so a set made of mixed conditions reads complete. "}
+              Counted over the copies this list is showing — every filter in force applies, so
+              narrowing the list narrows these figures too.
+            </div>
+          </>
+        }
+      >
+        <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
+          {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
+          <span style={any ? ANY_LABEL : undefined}>{label}</span> {owned}/{entry.requiredCount}
+        </span>
+      </Tooltip>
+      {any && <span aria-hidden style={ANY_RULE} />}
     </>
   );
 }

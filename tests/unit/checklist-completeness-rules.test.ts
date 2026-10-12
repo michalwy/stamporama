@@ -341,6 +341,21 @@ describe("computeConditionCompleteness (#594)", () => {
     assert.deepEqual(r.any, { conditionId: null, owned: 2, completeSets: 3 });
   });
 
+  it("reads a set held in mixed conditions as complete in `any` (#1859)", () => {
+    const stamps = Array.from({ length: 12 }, (_, i) => `s${i}`);
+    const mixed = stamps.map((stampId, i) => ({
+      stampId,
+      conditionId: i === 0 ? MNH : USED,
+      count: 1,
+    }));
+    const r = computeConditionCompleteness(stamps, mixed, CONDITIONS);
+    assert.deepEqual(r.any, { conditionId: null, owned: 12, completeSets: 1 });
+    assert.deepEqual(r.conditions, [
+      { conditionId: MNH, owned: 1, completeSets: 0 },
+      { conditionId: USED, owned: 11, completeSets: 0 },
+    ]);
+  });
+
   it("gives a cell only to the conditions something is held in", () => {
     const r = computeConditionCompleteness(
       ["a"],
