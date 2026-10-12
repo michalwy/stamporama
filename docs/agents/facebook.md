@@ -262,7 +262,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   in the post), and `buildFacebookPostPhotos` is the post's ZIP — one `lot-NN-<offer slug>.jpg` per
   lot when captioned (the frozen layout first), `buildFacebookPostPhotoArchive` otherwise. The kit
   (on the post's screen since #1842) shows a **Layout** select (a plain line once posted) and, captioned, each lot's photo
-  and caption with its own copy button; the repost dialog lists the captions too. The integration
+  and caption with its own copy button (in the lot's row since #1863); the repost dialog lists the captions too. The integration
   test is `tests/integration/facebook-captioned-posts.test.ts`.
 
 - **A multi-lot post has a number and a screen of its own** (#1842, decided with the collector on
@@ -306,17 +306,24 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   listed — an offer posted alone has no row (ADR-0061 §2).
 
 - **The post's screen shows every photo the post puts up** (#1848, decided with the collector on
-  2026-10-12), so posting needs no lot opened. In `FacebookPostKit`, a grid across the card's width
-  (`PHOTO_GRID`, 18rem photos drawn from the `full` variant — the 320px thumb is too small to tell
-  stamps apart): captioned, each lot's one photo with its caption and *Copy* under it; as text
-  (`TextLayoutPhotos`), every lot's upload set in lot order without captions. The text layout reads
-  each lot's photo plan client-side through `useOfferPhotoPlans` (`useQueries` under each offer's own
-  `offerKeys.photoPlan`, shared with the lot's Photos card) and keeps what `facebookLotUploadPhotos`
-  (pure, `facebook-post-rules.ts`: publish and not over the limit — `readOfferUploadSet`'s filter)
-  keeps; a click downloads a photo as `facebookLotPhotoFileName` names it, which
-  `buildFacebookPostPhotoArchive` now uses too, so the one file and the ZIP's agree. A lot with nothing
-  to put up is named with a link to its offer. `FacebookOfferKit.collectionId` is what the photos are
+  2026-10-12), so posting needs no lot opened. Photos are `PHOTO_SIZE` (18rem) drawn from the `full`
+  variant — the 320px thumb is too small to tell stamps apart: captioned, each lot's one photo with its
+  caption and *Copy*; as text (`TextLayoutPhotos`), the lot's upload set without captions. The text
+  layout reads each lot's photo plan client-side through `useOfferPhotoPlans` (`useQueries` under each
+  offer's own `offerKeys.photoPlan`, shared with the lot's Photos card) and keeps what
+  `facebookLotUploadPhotos` (pure, `facebook-post-rules.ts`: publish and not over the limit —
+  `readOfferUploadSet`'s filter) keeps; a click downloads a photo as `facebookLotPhotoFileName` names
+  it, which `buildFacebookPostPhotoArchive` now uses too, so the one file and the ZIP's agree. A lot
+  with nothing to put up says so in its row. `FacebookOfferKit.collectionId` is what the photos are
   read through. An offer posted alone keeps its kit as it was: text and ZIP only.
+
+- **A post's screen lists its lots once** (#1863, decided with the collector on 2026-10-12): #1842's
+  *Lots* table and #1848's per-lot photos and captions were the same lots twice. The kit keeps the
+  post-wide part (layout, text, ZIP, gaps) and takes a `renderLots` prop; its `PostLots` hands the post
+  panel a `lotKit(lot)` → `FacebookLotKit` (`photos`, and `caption` when captioned, under the kit's own
+  Source switch), and the panel's `LotRow` draws one flex-wrapping row per lot — photos, lot and offer
+  with its `⋮`, type, price, state, link, sale, caption — that wraps rather than shrinking the photo.
+  The kit still owns what a lot puts up; the panel owns where it stands and what it can do.
 
 - **Activate takes the whole post live** (#1668). `publishOfferAction` goes through
   `publishOfferOrPost` (`facebook-posts.ts`): an offer in no post is the ordinary `publishOffer`, a lot

@@ -388,21 +388,22 @@ click it to show every offer again).
   or over), the group, the post's link once it has one, and the moves the post makes as one, each
   offered only while it can be made: **Publish…** once every lot is Ready, and **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
   the group's approval. While some lot is not Ready yet, it says which.
-- **Lots** — in lot order: the lot number, the offer's number and title (linking to the offer), its
-  type, its price — an auction's highest bid once one is recorded, else its starting price; a quick
-  buy's price — its state, its listing link, and its sale once sold. Each row's **⋮** opens the offer,
-  **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up — takes
-  the lot out of the post.
 - **Post kit** — the layout (laid out in its text as below, or in captions
   ([below](#a-post-with-several-lots-in-captions))), the **post text** for the whole post — each lot's
   text in lot order, each from its own type's template, or from its offer's own where it has one —
   which shapes that lot's part of the post and no other — the note on shipping, payment and terms
   once, where the last lot's `{terms}` puts it — and **↓ Photos, in lot order**, every lot's photos in
   one download, each file starting with its lot (`lot-01-…`), so the album uploads in the right order.
-  Under the text, **every photo the post puts up**, in lot order and large enough to recognise the
-  stamps, each marked with its lot and offer: click a photo to download that one, under the same name
-  it has in the download. A lot with no photos to put up is named, with a link to it. Everything a post
-  needs is here — its text, its photos and, captioned, its captions — so posting needs no lot opened.
+- **Lots** — under the post text, one row per lot, in lot order, so the screen reads in the order you
+  post: the lot's **photos**, every one the post puts up for it, large enough to recognise the stamps —
+  click a photo to download that one, under the same name it has in the download (a lot with no photos
+  to put up says so in its row) — then the lot number, the offer's number and title (linking to the
+  offer), its type, its price — an auction's highest bid once one is recorded, else its starting price;
+  a quick buy's price — its state, its listing link, and its sale once sold. Each row's **⋮** opens the
+  offer, **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up —
+  takes the lot out of the post. A row wraps onto the next line on a narrow window rather than shrinking
+  the photo. Everything a post needs is here — its text, its photos and, captioned, its captions — so
+  posting needs no lot opened.
 
 ### The list of posts
 
@@ -481,9 +482,9 @@ other, whichever brings the image closer to the shape the offer's collage aims a
 portrait or square; square for a fixed grid). A lot photographed on the front only has no backs half
 and no line.
 
-The post's screen then shows the post's text with its **Copy** button, and under it each lot in order,
-side by side across the screen: its photo, shown large — click it to download that one — and its
-caption under it, each with its own **Copy**. **↓ Photos,
+The post's screen then shows the post's text with its **Copy** button, and under it each lot's row in
+order: its photo, shown large — click it to download that one — and, beside the lot's offer, price and
+state, its caption with its own **Copy**. **↓ Photos,
 one per lot** downloads them all in one ZIP, named `lot-01-…`, `lot-02-…` in the post's order, so the
 album uploads in the right order. What is missing — the post's text, a type's caption template, an
 empty placeholder in a caption — is named under it, as for any post. When the post goes up, its text
