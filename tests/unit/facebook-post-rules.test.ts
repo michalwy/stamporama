@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   describeFacebookAuctionCopies,
+  describeRefusedLots,
+  facebookLotAddRefusal,
   facebookDefaultEndsAt,
   facebookDefaultStartingPrice,
   facebookMixedTypesRefusal,
@@ -410,6 +412,59 @@ describe("facebookPostRefusal (#1544; ADR-0061 §2)", () => {
   });
 });
 
+describe("facebookLotAddRefusal (#1870)", () => {
+  function offer(overrides: Partial<FacebookPostCandidate> = {}): FacebookPostCandidate {
+    return {
+      offerNo: 9,
+      facebookGroupId: "g1",
+      listingType: "auction",
+      facebookPostId: null,
+      state: "ready",
+      url: null,
+      ...overrides,
+    };
+  }
+  const post = { postId: "p1", groupId: "g1", mixedListingTypes: false, lotTypes: ["auction" as const] };
+
+  it("lets an unposted offer of the post's group and type join it", () => {
+    assert.equal(facebookLotAddRefusal(offer(), post), null);
+    assert.equal(facebookLotAddRefusal(offer({ state: "preparing" }), post), null);
+  });
+
+  it("asks what Post together asks: Facebook, the post's group, in no post, not yet up", () => {
+    assert.equal(facebookLotAddRefusal(offer({ facebookGroupId: null }), post), "is not a Facebook offer");
+    assert.equal(facebookLotAddRefusal(offer({ facebookGroupId: "g2" }), post), "is in another group");
+    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p1" }), post), "is already a lot of this post");
+    assert.equal(facebookLotAddRefusal(offer({ facebookPostId: "p2" }), post), "is already a lot of another post");
+    for (const state of ["pending", "active", "paused", "sold", "withdrawn"]) {
+      assert.equal(facebookLotAddRefusal(offer({ state }), post), "is already up or closed", state);
+    }
+  });
+
+  it("keeps the post to its listing type unless the group lets posts mix them", () => {
+    assert.equal(
+      facebookLotAddRefusal(offer({ listingType: "fixed" }), post),
+      "is a quick buy and this post's lots are auctions"
+    );
+    assert.equal(
+      facebookLotAddRefusal(offer(), { ...post, lotTypes: ["fixed"] }),
+      "is an auction and this post's lots are quick buys"
+    );
+    assert.equal(facebookLotAddRefusal(offer({ listingType: "fixed" }), { ...post, mixedListingTypes: true }), null);
+  });
+
+  it("names every offer turned away in one sentence, and nothing when none was", () => {
+    assert.equal(describeRefusedLots([]), null);
+    assert.equal(
+      describeRefusedLots([
+        { offerNo: 4, reason: "is in another group" },
+        { offerNo: 7, reason: "is already up or closed" },
+      ]),
+      "Not added: #4 is in another group; #7 is already up or closed."
+    );
+  });
+});
+
 describe("facebookMixedTypesRefusal (#1671)", () => {
   it("is null for lots of one type", () => {
     assert.equal(facebookMixedTypesRefusal([{ offerNo: 1, listingType: "auction" }]), null);
@@ -724,12 +779,14 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(ready.submit, true);
     assert.equal(ready.approve, false);
     assert.equal(ready.takeOut, true);
+    assert.equal(ready.addLots, true);
     assert.deepEqual(ready.waiting, []);
 
     const short = facebookPostMoves(lots("ready", "preparing", "preparing"));
     assert.equal(short.activate, false);
     assert.equal(short.submit, false);
     assert.deepEqual(short.waiting, [2, 3]);
+    assert.equal(short.addLots, true, "a post still being prepared takes lots too (#1870)");
   });
 
   it("finishes an activation refused halfway, but not a submission into a live post", () => {
@@ -742,16 +799,16 @@ describe("a multi-lot post's screen (#1842)", () => {
   it("offers approve, reject and withdraw while the post waits for approval, and nothing else", () => {
     const pending = facebookPostMoves(lots("pending", "pending"));
     assert.deepEqual(
-      [pending.activate, pending.submit, pending.approve, pending.reject, pending.withdraw, pending.takeOut],
-      [false, false, true, true, true, false]
+      [pending.activate, pending.submit, pending.approve, pending.reject, pending.withdraw, pending.takeOut, pending.addLots],
+      [false, false, true, true, true, false, false]
     );
   });
 
   it("offers no move of the post's own once it is up, and no take-out", () => {
     const up = facebookPostMoves(lots("active", "sold", "withdrawn"));
     assert.deepEqual(
-      [up.activate, up.submit, up.approve, up.reject, up.withdraw, up.takeOut],
-      [false, false, false, false, false, false]
+      [up.activate, up.submit, up.approve, up.reject, up.withdraw, up.takeOut, up.addLots],
+      [false, false, false, false, false, false, false]
     );
     assert.deepEqual(up.waiting, []);
   });

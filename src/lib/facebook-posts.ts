@@ -6,6 +6,8 @@ import {
   facebookGroupMixesTypes,
   facebookPostLayout,
   getFacebookOfferKit,
+  readKitLots,
+  type FacebookKitLot,
   type FacebookOfferKit,
   readFacebookGroupSettings,
   setFrozenFacebookClosing,
@@ -13,6 +15,8 @@ import {
 import { FACEBOOK_MULTI_LOT_LAYOUTS, type FacebookMultiLotLayout } from "./facebook-group-rules";
 import { pruneFacebookLotPhotos, syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import {
+  describeRefusedLots,
+  facebookLotAddRefusal,
   facebookPostLink,
   facebookPostRefusal,
   facebookPostStage,
@@ -127,6 +131,139 @@ export async function createFacebookPost(
   return created;
 }
 
+/** What adding offers to a post did (#1870): the lots they became, in order; each offer turned away,
+ *  with why; and the same as one sentence naming them, null when every offer was added. */
+export interface FacebookLotsAdded {
+  postNo: number;
+  added: { offerId: string; offerNo: number; lotNo: number }[];
+  refused: { offerId: string; offerNo: number; reason: string }[];
+  notAdded: string | null;
+}
+
+/**
+ * Add offers to an existing multi-lot post as its next lots (#1870), **in the order given** — the
+ * order the collector ticked or picked them — before the post is up: a post pending or live keeps the
+ * lots it went up with, and is refused whole.
+ *
+ * Each offer is asked what *Post together* asks of every offer (`facebookLotAddRefusal`): one that
+ * fails is turned away by number with its reason and the rest are added; when none qualifies nothing
+ * is written and the refusal names them all. The auctions among the lots then share one closing time,
+ * the post's — its first auction's that has one, in lot order — as `createFacebookPost` sets it.
+ */
+export async function addFacebookLots(
+  ownerId: string,
+  postId: string,
+  offerIds: readonly string[]
+): Promise<FacebookLotsAdded> {
+  const post = await prisma.facebookPost.findUnique({
+    where: { id: postId },
+    select: {
+      collectionId: true,
+      postNo: true,
+      groupId: true,
+      lots: {
+        orderBy: { facebookLotNo: "asc" },
+        select: { id: true, facebookLotNo: true, listingType: true, state: true, endsAt: true },
+      },
+    },
+  });
+  if (!post) throw new Error("Post not found.");
+  await assertCollectionOwner(ownerId, post.collectionId);
+  if (post.lots.some((l) => isFacebookLotPosted(l.state))) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      `Post #${post.postNo} is up, so it takes no new lots — they go up with a post, not after it.`
+    );
+  }
+
+  const ids = [...new Set(offerIds)];
+  const rows = await prisma.offer.findMany({
+    where: { id: { in: ids }, collectionId: post.collectionId },
+    select: {
+      id: true,
+      offerNo: true,
+      facebookGroupId: true,
+      facebookPostId: true,
+      listingType: true,
+      state: true,
+      url: true,
+      endsAt: true,
+    },
+  });
+  if (rows.length !== ids.length) throw new Error("Offer not found or access denied.");
+  const byId = new Map(rows.map((r) => [r.id, { ...r, listingType: normalizeListingType(r.listingType) }]));
+  const target = {
+    postId,
+    groupId: post.groupId,
+    mixedListingTypes: await facebookGroupMixesTypes(post.groupId),
+    lotTypes: [...new Set(post.lots.map((l) => normalizeListingType(l.listingType)))],
+  };
+  const joining: NonNullable<ReturnType<typeof byId.get>>[] = [];
+  const refused: FacebookLotsAdded["refused"] = [];
+  for (const id of ids) {
+    const offer = byId.get(id)!;
+    const reason = facebookLotAddRefusal(offer, target);
+    if (reason) refused.push({ offerId: offer.id, offerNo: offer.offerNo, reason });
+    else joining.push(offer);
+  }
+  const notAdded = describeRefusedLots(refused);
+  if (joining.length === 0) throw new OfferActionBlockedError("facebook-group", notAdded!);
+
+  const lots = [
+    ...post.lots.map((l) => ({ id: l.id, listingType: normalizeListingType(l.listingType), endsAt: l.endsAt })),
+    ...joining,
+  ];
+  const auctions = lots.filter((l) => isAuctionListing(l.listingType));
+  const endsAt = auctions.find((l) => l.endsAt !== null)?.endsAt ?? null;
+  const first = Math.max(0, ...post.lots.map((l) => l.facebookLotNo ?? 0)) + 1;
+  const added = await prisma.$transaction(async (tx) => {
+    const numbered: FacebookLotsAdded["added"] = [];
+    for (const [index, offer] of joining.entries()) {
+      await tx.offer.update({
+        where: { id: offer.id },
+        data: { facebookPostId: postId, facebookLotNo: first + index },
+      });
+      numbered.push({ offerId: offer.id, offerNo: offer.offerNo, lotNo: first + index });
+    }
+    const retimed = auctions.filter((l) => (l.endsAt?.getTime() ?? null) !== (endsAt?.getTime() ?? null));
+    if (retimed.length > 0) {
+      await tx.offer.updateMany({ where: { id: { in: retimed.map((l) => l.id) } }, data: { endsAt } });
+    }
+    return numbered;
+  });
+  // A captioned post's new lots have their photos queued now, as a new post's are (#1861).
+  await syncFacebookPostLotPhotos(postId);
+  return { postNo: post.postNo, added, refused, notAdded };
+}
+
+/**
+ * The offers that could join a post as further lots (#1870) — what its screen's *Add lots…* picks
+ * from: Facebook offers in the post's group, in no post, not yet up, and of a type the post holds
+ * unless the group's posts may mix them — the same conditions `addFacebookLots` asks again on save.
+ * Empty once the post is up, since it then takes none. In offer order, read as a post's lots are.
+ */
+export async function listFacebookLotCandidates(
+  ownerId: string,
+  collectionId: string,
+  postId: string
+): Promise<FacebookKitLot[]> {
+  const post = await prisma.facebookPost.findFirst({
+    where: { id: postId, collectionId },
+    select: { collectionId: true, groupId: true, lots: { select: { listingType: true, state: true } } },
+  });
+  if (!post) throw new Error("Post not found.");
+  await assertCollectionOwner(ownerId, post.collectionId);
+  if (post.lots.some((l) => isFacebookLotPosted(l.state))) return [];
+  const mixes = await facebookGroupMixesTypes(post.groupId);
+  const types = [...new Set(post.lots.map((l) => normalizeListingType(l.listingType)))];
+  const offers = await readKitLots(post.collectionId, {
+    facebookGroupId: post.groupId,
+    facebookPostId: null,
+    state: { in: OFFER_STATES.filter((s) => !isFacebookLotPosted(s)) },
+  });
+  return mixes ? offers : offers.filter((o) => types.includes(o.listingType));
+}
+
 /** What a multi-lot post's own screen draws (#1842): the post's kit — the group, the lots in lot
  *  order, the text and photos — and, per lot, the sales it left on. */
 export interface FacebookPostScreen {
@@ -226,6 +363,8 @@ export interface FacebookPostListFilters {
   stage?: FacebookPostStage;
   /** Only the posts with no title (#1862) — those made before titles, to be named. */
   untitled?: boolean;
+  /** Only the posts not yet up — being prepared or ready — the ones that still take lots (#1870). */
+  notUp?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -267,10 +406,15 @@ export async function listFacebookPostsPaginated(
   await assertCollectionOwner(ownerId, collectionId);
   const pageSize = filters.pageSize ?? 50;
   const offset = filters.offset ?? 0;
+  // The stage and *not yet up* (#1870) are both queries over the lots, so each is its own AND clause
+  // rather than spread in, where one would overwrite the other's `lots` or `AND`.
   const where: Prisma.FacebookPostWhereInput = {
     collectionId,
     ...(filters.groupIds?.length ? { groupId: { in: [...filters.groupIds] } } : {}),
-    ...(filters.stage ? facebookPostStageWhere(filters.stage) : {}),
+    AND: [
+      ...(filters.stage ? [facebookPostStageWhere(filters.stage)] : []),
+      ...(filters.notUp ? [{ lots: { none: { state: { in: [...POSTED_STATES] } } } }] : []),
+    ],
     ...(filters.untitled ? { OR: [{ title: null }, { title: "" }] } : {}),
   };
   const rows = await prisma.facebookPost.findMany({

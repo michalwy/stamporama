@@ -741,6 +741,7 @@ export function isFacebookLotPosted(state: string): boolean {
  *  - `approve` / `reject` / `withdraw` — while any lot waits for the group's approval: the group
  *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779);
  *  - `takeOut` — a lot may leave the post only until the post is up;
+ *  - `addLots` — offers may join the post as further lots only until it is up, too (#1870);
  *  - `waiting` — the lots still short of Ready before anything has gone up, by lot number. */
 export interface FacebookPostMoves {
   activate: boolean;
@@ -749,6 +750,7 @@ export interface FacebookPostMoves {
   reject: boolean;
   withdraw: boolean;
   takeOut: boolean;
+  addLots: boolean;
   waiting: number[];
 }
 
@@ -764,6 +766,7 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
     reject: pending,
     withdraw: pending,
     takeOut: !posted,
+    addLots: !posted,
     waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),
   };
 }
@@ -881,6 +884,45 @@ export function facebookMixedTypesRefusal(
   const named = (list: readonly { offerNo: number }[], one: string, many: string) =>
     `${list.map((o) => `#${o.offerNo}`).join(", ")} ${list.length === 1 ? `is ${one}` : `are ${many}`}`;
   return `The lots of one post share one listing type here: ${named(auctions, "an auction", "auctions")} and ${named(quickBuys, "a quick buy", "quick buys")}. Post them apart, or let this group's posts mix them in Settings → Facebook.`;
+}
+
+/** The post an offer is being added to (#1870): its group, whether that group's posts may mix
+ *  auctions and quick buys, and the listing types its lots already are. */
+export interface FacebookLotAddTarget {
+  postId: string;
+  groupId: string;
+  mixedListingTypes: boolean;
+  lotTypes: readonly OfferListingType[];
+}
+
+/**
+ * Why one offer cannot become a further lot of an existing post (#1870), or null when it can — the
+ * conditions *Post together* asks of every offer, asked of this one against the post: a Facebook offer
+ * in the post's group, in no post, not yet up, and of a type the post already holds unless its group
+ * lets posts mix them. Phrased to follow the offer's number, which the caller puts before it.
+ */
+export function facebookLotAddRefusal(
+  offer: FacebookPostCandidate,
+  post: FacebookLotAddTarget
+): string | null {
+  if (offer.facebookGroupId === null) return "is not a Facebook offer";
+  if (offer.facebookGroupId !== post.groupId) return "is in another group";
+  if (offer.facebookPostId === post.postId) return "is already a lot of this post";
+  if (offer.facebookPostId !== null) return "is already a lot of another post";
+  if (isFacebookLotPosted(offer.state)) return "is already up or closed";
+  if (!post.mixedListingTypes && !post.lotTypes.includes(offer.listingType)) {
+    const kind = isAuctionListing(offer.listingType) ? "an auction" : "a quick buy";
+    const lots = post.lotTypes.every((t) => isAuctionListing(t)) ? "auctions" : "quick buys";
+    return `is ${kind} and this post's lots are ${lots}`;
+  }
+  return null;
+}
+
+/** The offers an add turned away, as one sentence naming each with its reason (#1870); null when none
+ *  was. */
+export function describeRefusedLots(refused: readonly { offerNo: number; reason: string }[]): string | null {
+  if (refused.length === 0) return null;
+  return `Not added: ${refused.map((r) => `#${r.offerNo} ${r.reason}`).join("; ")}.`;
 }
 
 /** A copy already in an active Facebook offer — an auction or a quick buy (#1671) — and the offer. */

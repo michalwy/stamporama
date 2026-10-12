@@ -19,10 +19,12 @@ import {
 } from "@/lib/facebook-groups";
 import { listFacebookGroupChoices, type FacebookPlatformChoices } from "@/lib/facebook-auctions";
 import {
+  addFacebookLots,
   createFacebookPost,
   removeFacebookLot,
   setFacebookPostLayout,
   setFacebookPostTitle,
+  type FacebookLotsAdded,
 } from "@/lib/facebook-posts";
 import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
@@ -163,6 +165,23 @@ export async function createFacebookPostAction(
     return { status: "success", postId, postNo };
   } catch (err) {
     return failure(err, "Failed to put the offers into one post.");
+  }
+}
+
+export type FacebookLotsAddedState =
+  | ({ status: "success" } & FacebookLotsAdded)
+  | { status: "error"; message: string };
+
+/** Add offers to a post not yet up as its next lots, in the order given (#1870). The ones that cannot
+ *  join are named in `refused`; when none can, nothing is added and the error names them. */
+export async function addFacebookLotsAction(postId: string, offerIds: string[]): Promise<FacebookLotsAddedState> {
+  const session = await getSession();
+  try {
+    const result = await addFacebookLots(session.user.id, postId, offerIds);
+    kickOfferPhotoWorker(); // a captioned post's new lots had their photos queued (#1861)
+    return { status: "success", ...result };
+  } catch (err) {
+    return failure(err, "Failed to add the offers to the post.");
   }
 }
 

@@ -20,6 +20,7 @@ import type {
 } from "@/lib/offers";
 import type { OfferListContext } from "./list-context";
 import type { FacebookPostListItem, FacebookPostScreen } from "@/lib/facebook-posts";
+import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import type { FacebookPostLotPhoto } from "@/lib/facebook-lot-photos";
 import type { FacebookPostStage } from "@/lib/facebook-post-rules";
 import type { ItemListItem } from "@/lib/items";
@@ -86,6 +87,10 @@ export const offerKeys = {
    *  images refreshes them. */
   facebookLotPhotos: (collectionId: string, postId: string) =>
     ["offers", collectionId, "facebook-lot-photos", postId] as const,
+  /** The offers that could join a post as further lots (#1870) — under the offers key, so a write to
+   *  any offer refreshes it. */
+  facebookLotCandidates: (collectionId: string, postId: string) =>
+    ["offers", collectionId, "facebook-lot-candidates", postId] as const,
   /** The list of multi-lot Facebook posts (#1850) — under the offers key for the same reason. */
   facebookPosts: (collectionId: string, filters: FacebookPostFilters) =>
     ["offers", collectionId, "facebook-posts", filters] as const,
@@ -97,6 +102,8 @@ export interface FacebookPostFilters {
   stage?: FacebookPostStage;
   /** Only the posts with no title (#1862). */
   untitled?: boolean;
+  /** Only the posts not yet up, which still take lots (#1870). */
+  notUp?: boolean;
 }
 
 export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
@@ -175,6 +182,18 @@ export function useFacebookPostLotPhotos(collectionId: string, postId: string | 
   });
 }
 
+/** The offers that could join a post as further lots (#1870), what *Add lots…* picks from. */
+export function useFacebookLotCandidates(collectionId: string, postId: string) {
+  return useQuery<FacebookKitLot[]>({
+    queryKey: offerKeys.facebookLotCandidates(collectionId, postId),
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/candidates`);
+      if (!res.ok) throw new Error("Failed to load the offers");
+      return (await res.json()).offers;
+    },
+  });
+}
+
 /** Every multi-lot Facebook post, newest first and a page at a time (#1850). */
 export function useFacebookPostsInfinite(collectionId: string, filters: FacebookPostFilters) {
   return useInfiniteQuery<{ items: FacebookPostListItem[]; nextCursor: string | null }>({
@@ -185,6 +204,7 @@ export function useFacebookPostsInfinite(collectionId: string, filters: Facebook
       if (filters.groupIds.length) params.set("group", filters.groupIds.join(","));
       if (filters.stage) params.set("stage", filters.stage);
       if (filters.untitled) params.set("untitled", "1");
+      if (filters.notUp) params.set("notUp", "1");
       const res = await fetch(`/api/collections/${collectionId}/facebook-posts?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch the posts");
       return res.json();
