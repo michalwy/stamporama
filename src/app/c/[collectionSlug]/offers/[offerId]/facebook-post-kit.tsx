@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import type { FacebookOfferKit } from "@/lib/facebook-auctions";
+import type { FacebookKitLot, FacebookOfferKit } from "@/lib/facebook-auctions";
 import {
   facebookLotPhotoFileName,
   facebookLotUploadPhotos,
@@ -33,6 +33,8 @@ import { FACEBOOK_CASE_PARAM, facebookSettingCase } from "@/app/c/[collectionSlu
 // On the post's screen the kit shows every photo the post puts up, in post order, large enough to
 // recognise the stamps (#1848): captioned, each lot's one photo with its caption and its own *Copy*;
 // as text, every lot's upload set. One click on a photo downloads it, so posting needs no lot opened.
+// Those are drawn in the post's one list of lots (#1863), each lot's row carrying its photos and
+// caption beside its state and actions; the post-wide part — layout, text, ZIP — stays above it.
 //
 // The text is rendered **here**, in the browser, because the closing time it states is a local time
 // and this is the one place the collector's zone is known (#490). It is Markdown limited to Facebook's
@@ -66,22 +68,24 @@ const POST_TEXT: React.CSSProperties = {
   overflowY: "auto",
 };
 
-// The post's photos (#1848): a grid across the screen's width, each photo large enough to tell the
-// stamps apart — not a thumbnail.
-const PHOTO_GRID: React.CSSProperties = {
+// The post's photos (#1848), each large enough to tell the stamps apart — not a thumbnail. Exported for
+// the lot rows that hold them (#1863), which wrap rather than shrink a photo.
+export const PHOTO_SIZE = "18rem";
+
+// A lot's photos laid out as text: side by side, wrapping onto the next line.
+const LOT_PHOTOS: React.CSSProperties = {
   listStyle: "none",
-  margin: "0.75rem 0 0",
+  margin: 0,
   padding: 0,
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(18rem, 1fr))",
-  gap: "0.875rem",
-  alignItems: "start",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.75rem",
 };
 
 const POST_PHOTO: React.CSSProperties = {
   display: "block",
   width: "100%",
-  height: "18rem",
+  height: PHOTO_SIZE,
   objectFit: THUMB_OBJECT_FIT,
   border: "1px solid var(--color-border)",
   borderRadius: "0.375rem",
@@ -125,6 +129,7 @@ export function FacebookPostKit({
   kit,
   selfOfferId,
   onChanged,
+  renderLots,
 }: {
   collectionSlug: string;
   kit: FacebookOfferKit;
@@ -134,6 +139,9 @@ export function FacebookPostKit({
   selfOfferId: string | null;
   /** The screen re-reads itself after a write; the kit holds no copy of its own. */
   onChanged: () => void;
+  /** A multi-lot post's screen draws its list of lots here, under the post-wide part, each row taking
+   *  what the kit puts up for that lot (#1863). */
+  renderLots?: (lotKit: (lot: FacebookKitLot) => FacebookLotKit) => React.ReactNode;
 }) {
   const [showSource, setShowSource] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,46 +237,6 @@ export function FacebookPostKit({
       ) : (
         <p style={{ ...MUTED, margin: 0 }}>The post is empty.</p>
       )}
-      {/* A captioned post (#1841): per lot, in post order, its one photo and the caption under it. */}
-      {captioned && (
-        <ol style={PHOTO_GRID}>
-          {captions.map((caption) => (
-            <li key={caption.offerId} style={{ minWidth: 0 }}>
-              {kit.lotPhotoBase && (
-                <PhotoLink
-                  href={`${kit.lotPhotoBase}${caption.offerId}/photo?download`}
-                  src={`${kit.lotPhotoBase}${caption.offerId}/photo`}
-                  name={`lot ${caption.lotNo}'s photo`}
-                />
-              )}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  margin: "0.375rem 0 0.25rem",
-                }}
-              >
-                <p style={{ ...SECTION_LABEL, margin: 0 }}>
-                  Lot {caption.lotNo} · #{caption.offerNo} caption
-                </p>
-                <CopyButton value={caption.plain} html={caption.html} label="caption" />
-              </div>
-              {caption.source.trim() ? (
-                showSource ? (
-                  <pre style={POST_TEXT}>{caption.source}</pre>
-                ) : (
-                  <RenderedHtml html={caption.html} style={{ ...POST_TEXT, whiteSpace: "normal" }} />
-                )
-              ) : (
-                <p style={{ ...MUTED, margin: 0 }}>The caption is empty.</p>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-      {/* A post of several lots laid out as text (#1848): every lot's photos, in lot order. */}
-      {multiLot && !captioned && <TextLayoutPhotos collectionSlug={collectionSlug} kit={kit} />}
       {frozenAt && (
         <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
           As posted on {formatInstant(frozenAt)} — editing a template no longer changes it.
@@ -358,8 +326,91 @@ export function FacebookPostKit({
           {error}
         </p>
       )}
+      {multiLot && renderLots && (
+        <PostLots kit={kit} captioned={captioned} captions={captions} showSource={showSource} renderLots={renderLots} />
+      )}
     </div>
   );
+}
+
+/** What the kit puts up for one lot of a multi-lot post (#1863), drawn in that lot's row. */
+export type FacebookLotKit = {
+  /** Captioned, the lot's one photo; as text, its upload set — or why there is nothing to show. */
+  photos: React.ReactNode;
+  /** Captioned, the lot's caption with its own *Copy*; null as text, where there are no captions. */
+  caption: React.ReactNode | null;
+};
+
+/**
+ * A multi-lot post's lots, each with its part of the kit (#1863): the kit owns what a lot puts up —
+ * its photos and, captioned, its caption under the post's Source switch — and the post's screen draws
+ * each lot's row around it, so the lots are listed once.
+ */
+function PostLots({
+  kit,
+  captioned,
+  captions,
+  showSource,
+  renderLots,
+}: {
+  kit: FacebookOfferKit;
+  captioned: boolean;
+  captions: ReturnType<typeof renderFacebookKitPost>["captions"];
+  showSource: boolean;
+  renderLots: (lotKit: (lot: FacebookKitLot) => FacebookLotKit) => React.ReactNode;
+}) {
+  const { collectionId, lots } = kit;
+  // The text layout puts up each lot's upload set, read through its photo plan (#1848).
+  const plans = useOfferPhotoPlans(
+    collectionId,
+    lots.map((l) => l.offerId),
+    !captioned
+  );
+
+  function lotKit(lot: FacebookKitLot): FacebookLotKit {
+    const index = lots.findIndex((l) => l.offerId === lot.offerId);
+    const lotNo = lot.lotNo ?? index + 1;
+    if (captioned) {
+      const caption = captions.find((c) => c.offerId === lot.offerId);
+      return {
+        photos: kit.lotPhotoBase ? (
+          <PhotoLink
+            href={`${kit.lotPhotoBase}${lot.offerId}/photo?download`}
+            src={`${kit.lotPhotoBase}${lot.offerId}/photo`}
+            name={`lot ${lotNo}'s photo`}
+          />
+        ) : null,
+        caption: caption ? (
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "0.25rem",
+              }}
+            >
+              <p style={{ ...SECTION_LABEL, margin: 0 }}>Caption</p>
+              <CopyButton value={caption.plain} html={caption.html} label="caption" />
+            </div>
+            {caption.source.trim() ? (
+              showSource ? (
+                <pre style={POST_TEXT}>{caption.source}</pre>
+              ) : (
+                <RenderedHtml html={caption.html} style={{ ...POST_TEXT, whiteSpace: "normal" }} />
+              )
+            ) : (
+              <p style={{ ...MUTED, margin: 0 }}>The caption is empty.</p>
+            )}
+          </div>
+        ) : null,
+      };
+    }
+    const plan = plans[index];
+    return { photos: <TextLayoutPhotos collectionId={collectionId} plan={plan} lotNo={lotNo} />, caption: null };
+  }
+
+  return renderLots(lotKit);
 }
 
 /** One of the post's photos: drawn large, and downloaded by a click (#1848). */
@@ -375,70 +426,51 @@ function PhotoLink({ href, src, name, fileName }: { href: string; src: string; n
 }
 
 /**
- * A post laid out as text (#1848): what each lot puts up — its upload set, the files the post's ZIP
- * carries under the same `lot-NN-` names — in lot order, without captions, since there are none. A lot
- * with nothing to put up is named, with a link to it, rather than left out silently.
+ * One lot of a post laid out as text (#1848): what it puts up — its upload set, the files the post's
+ * ZIP carries under the same `lot-NN-` names — without captions, since there are none. A lot with
+ * nothing to put up says so in its row rather than showing nothing.
  */
-function TextLayoutPhotos({ collectionSlug, kit }: { collectionSlug: string; kit: FacebookOfferKit }) {
-  const { collectionId, lots } = kit;
-  const plans = useOfferPhotoPlans(
-    collectionId,
-    lots.map((l) => l.offerId),
-    true
-  );
+function TextLayoutPhotos({
+  collectionId,
+  plan,
+  lotNo,
+}: {
+  collectionId: string;
+  plan: ReturnType<typeof useOfferPhotoPlans>[number];
+  lotNo: number;
+}) {
+  if (!plan.data) {
+    return plan.isError ? (
+      <p style={{ ...MUTED, margin: 0, color: "var(--color-warning)" }}>Its photos could not be read.</p>
+    ) : (
+      <p style={{ ...MUTED, margin: 0 }}>Loading the photos…</p>
+    );
+  }
+  const photos = facebookLotUploadPhotos(plan.data.images);
+  if (photos.length === 0) {
+    return <p style={{ ...MUTED, margin: 0, color: "var(--color-warning)" }}>No photos to put up.</p>;
+  }
   const photoBase = `/api/collections/${collectionId}/photos/`;
-  const empty: { lotNo: number; offerId: string; offerNo: number; reason: string }[] = [];
-  const tiles = lots.flatMap((lot, index) => {
-    const lotNo = lot.lotNo ?? index + 1;
-    const plan = plans[index];
-    if (!plan.data) {
-      if (plan.isError) empty.push({ lotNo, offerId: lot.offerId, offerNo: lot.offerNo, reason: "its photos could not be read" });
-      return [];
-    }
-    const photos = facebookLotUploadPhotos(plan.data.images);
-    if (photos.length === 0) {
-      empty.push({ lotNo, offerId: lot.offerId, offerNo: lot.offerNo, reason: "no photos to put up" });
-    }
-    return photos.map((image, i) => ({ lot, lotNo, image, nth: i + 1, of: photos.length }));
-  });
-  const loading = plans.some((p) => p.isPending);
-
   return (
-    <>
-      {tiles.length > 0 && (
-        <ol style={PHOTO_GRID}>
-          {tiles.map(({ lot, lotNo, image, nth, of }) => {
-            const fileName = facebookLotPhotoFileName(lotNo, image.fileName);
-            return (
-              <li key={image.photoId} style={{ minWidth: 0 }}>
-                <PhotoLink
-                  href={`${photoBase}${image.photoId}/full?download=${encodeURIComponent(fileName)}`}
-                  src={`${photoBase}${image.photoId}/full`}
-                  name={`lot ${lotNo}'s photo${of > 1 ? ` ${nth}` : ""}`}
-                  fileName={fileName}
-                />
-                <p style={{ ...SECTION_LABEL, margin: "0.375rem 0 0" }}>
-                  Lot {lotNo} · #{lot.offerNo}
-                  {of > 1 && ` · ${nth} of ${of}`}
-                </p>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-      {loading && <p style={{ ...MUTED, margin: "0.5rem 0 0" }}>Loading the photos…</p>}
-      {empty.length > 0 && (
-        <ul style={{ ...MUTED, margin: "0.5rem 0 0", paddingLeft: "1.25rem", color: "var(--color-warning)" }}>
-          {empty.map(({ lotNo, offerId, offerNo, reason }) => (
-            <li key={offerId}>
-              Lot {lotNo}: {reason} —{" "}
-              <Link href={`/c/${collectionSlug}/offers/${offerId}`} style={{ color: "var(--color-accent)" }}>
-                open #{offerNo}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
+    <ol style={LOT_PHOTOS}>
+      {photos.map((image, i) => {
+        const fileName = facebookLotPhotoFileName(lotNo, image.fileName);
+        return (
+          <li key={image.photoId} style={{ width: PHOTO_SIZE }}>
+            <PhotoLink
+              href={`${photoBase}${image.photoId}/full?download=${encodeURIComponent(fileName)}`}
+              src={`${photoBase}${image.photoId}/full`}
+              name={`lot ${lotNo}'s photo${photos.length > 1 ? ` ${i + 1}` : ""}`}
+              fileName={fileName}
+            />
+            {photos.length > 1 && (
+              <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
+                {i + 1} of {photos.length}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
